@@ -4,3 +4,6 @@ parts:
   - caption: Contributing
     chapters:
     - file: contributing/intro
+  - caption: EconomicImpact
+    chapters:
+    - file: EconomicImpact/intro
