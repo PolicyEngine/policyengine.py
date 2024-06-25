@@ -1,0 +1,33 @@
+name: Pull request
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  Test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      
+      - name: install dependencies
+        run: |
+          pip install jupyter-book
+          pip install furo
+      
+      - name: Generate documentation
+        run: make docs
+
+      - name: Check documentation build
+        run: |
+          if [ -d "docs/_build/html" ]; then
+            echo "Documentation built successfully"
+          else
+            echo "Documentation build failed"
+            exit 1
+          fi
