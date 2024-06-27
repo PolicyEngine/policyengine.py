@@ -20,10 +20,10 @@ sphinx:
     pygments_style: default
     html_css_files:
       - style.css
-  extra_extensions:
-    - sphinx.ext.autodoc
-    - sphinxarg.ext
-    - sphinx.ext.viewcode
-    - sphinx.ext.napoleon
-    - sphinx_math_dollar
-    - sphinx.ext.mathjax
+  # extra_extensions:
+  #   - sphinx.ext.autodoc
+  #   - sphinxarg.ext
+  #   - sphinx.ext.viewcode
+  #   - sphinx.ext.napoleon
+  #   - sphinx_math_dollar
+  #   - sphinx.ext.mathjax
