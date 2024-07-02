@@ -98,24 +98,24 @@ class Top1PctShareCalculator(BaseMetricCalculator):
         baseline_personal_hh_equiv_income = self.calculate_baseline("equiv_household_net_income")
         baseline_household_count_people = self.calculate_baseline("household_count_people")
         baseline_personal_hh_equiv_income.weights *= baseline_household_count_people
-        
-        reformed_personal_hh_equiv_income = self.calculate_reformed("equiv_household_net_income")
-        reformed_household_count_people = self.calculate_reformed("household_count_people")
-        reformed_personal_hh_equiv_income.weights *= reformed_household_count_people
-        
         in_top_1_pct = baseline_personal_hh_equiv_income.percentile_rank() == 100
-        in_top_1_pct = reformed_personal_hh_equiv_income.percentile_rank() == 100
-        
-        
         baseline_personal_hh_equiv_income.weights /= baseline_household_count_people
-        reformed_personal_hh_equiv_income.weights /= reformed_household_count_people
-
+        
         baseline_top_1_pct_share = (
             baseline_personal_hh_equiv_income[in_top_1_pct].sum()
             / baseline_personal_hh_equiv_income.sum()
         )
-
         
+        reformed_personal_hh_equiv_income = self.calculate_reformed("equiv_household_net_income")
+        reformed_household_count_people = self.calculate_reformed("household_count_people")
+        reformed_personal_hh_equiv_income.weights *= reformed_household_count_people
+        in_top_1_pct = reformed_personal_hh_equiv_income.percentile_rank() == 100
+        
+        
+        
+        
+
+        reformed_personal_hh_equiv_income.weights /= reformed_household_count_people
         reformed_top_1_pct_share = (
             reformed_personal_hh_equiv_income[in_top_1_pct].sum()
             / reformed_personal_hh_equiv_income.sum()
@@ -138,26 +138,26 @@ class Top10PctShareCalculator(BaseMetricCalculator):
     Inherits from BaseMetricCalculator.
     """
     def calculate(self) -> dict:
+        
         baseline_personal_hh_equiv_income = self.calculate_baseline("equiv_household_net_income")
         baseline_household_count_people = self.calculate_baseline("household_count_people")
         baseline_personal_hh_equiv_income.weights *= baseline_household_count_people
-        
-        reformed_personal_hh_equiv_income = self.calculate_reformed("equiv_household_net_income")
-        reformed_household_count_people = self.calculate_reformed("household_count_people")
-        reformed_personal_hh_equiv_income.weights *= reformed_household_count_people
-        
         in_top_10_pct = baseline_personal_hh_equiv_income.decile_rank() == 10
-        in_top_10_pct = reformed_personal_hh_equiv_income.decile_rank() == 10
-        
-
-        reformed_personal_hh_equiv_income.weights /= reformed_household_count_people
         baseline_personal_hh_equiv_income.weights /= baseline_household_count_people
-        
         baseline_top_10_pct_share = (
             baseline_personal_hh_equiv_income[in_top_10_pct].sum()
             / baseline_personal_hh_equiv_income.sum()
         )
-
+        
+        reformed_personal_hh_equiv_income = self.calculate_reformed("equiv_household_net_income")
+        reformed_household_count_people = self.calculate_reformed("household_count_people")
+        reformed_personal_hh_equiv_income.weights *= reformed_household_count_people
+        in_top_10_pct = reformed_personal_hh_equiv_income.decile_rank() == 10
+        
+        
+        
+        
+        reformed_personal_hh_equiv_income.weights /= reformed_household_count_people
         reformed_top_10_pct_share = (
             reformed_personal_hh_equiv_income[in_top_10_pct].sum()
             / reformed_personal_hh_equiv_income.sum()
