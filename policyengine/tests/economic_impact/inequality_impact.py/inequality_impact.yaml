@@ -1,13 +1,14 @@
+# economic_impact_tests.yaml
 - test_gini_calculator:
     reform:
       gov.hmrc.income_tax.rates.uk[0].rate:
         "2024-01-01.2100-12-31": 0.55
     country: uk
     expected:
-      baseline: 0.4164
-      reform: 0.4047
-      change: -0.0117
-      change_percentage: -2.8016
+      baseline: 0.42
+      reform: 0.40
+      change: -0.01
+      change_percentage: -2.80
 
 - test_top_1_pct_share_calculator:
     reform:
@@ -15,10 +16,10 @@
         "2024-01-01.2100-12-31": 0.55
     country: uk
     expected:
-      baseline: 0.12500093238852833
-      reform: 0.14094821470108967
-      change: 0.015947282312561345
-      change_percentage: 12.757730688755142
+      baseline: 0.12
+      reform: 0.14
+      change: 0.02
+      change_percentage: 12.76
 
 - test_top_10_pct_share_calculator:
     reform:
@@ -26,7 +27,7 @@
         "2024-01-01.2100-12-31": 0.55
     country: uk
     expected:
-      baseline: 0.34679109636213723
-      reform: 0.3595809102507495
-      change: 0.012789813888612278
-      change_percentage: 3.6880456340368357
+      baseline: 0.35
+      reform: 0.36
+      change: 0.01
+      change_percentage: 3.11

@@ -83,10 +83,10 @@ class GiniCalculator(BaseMetricCalculator):
         change_perc = (change_value / baseline_value) * 100
         
         return {
-            "baseline": baseline_value,
-            "reform": reformed_value,
-            "change": change_value,
-            "change_percentage": change_perc
+            "baseline": round(baseline_value,2),
+            "reform": round(reformed_value,2),
+            "change": round(change_value,2),
+            "change_percentage": round(change_perc,2)
         }
 
 class Top1PctShareCalculator(BaseMetricCalculator):
@@ -100,7 +100,6 @@ class Top1PctShareCalculator(BaseMetricCalculator):
         baseline_personal_hh_equiv_income.weights *= baseline_household_count_people
         in_top_1_pct = baseline_personal_hh_equiv_income.percentile_rank() == 100
         baseline_personal_hh_equiv_income.weights /= baseline_household_count_people
-        
         baseline_top_1_pct_share = (
             baseline_personal_hh_equiv_income[in_top_1_pct].sum()
             / baseline_personal_hh_equiv_income.sum()
@@ -110,11 +109,6 @@ class Top1PctShareCalculator(BaseMetricCalculator):
         reformed_household_count_people = self.calculate_reformed("household_count_people")
         reformed_personal_hh_equiv_income.weights *= reformed_household_count_people
         in_top_1_pct = reformed_personal_hh_equiv_income.percentile_rank() == 100
-        
-        
-        
-        
-
         reformed_personal_hh_equiv_income.weights /= reformed_household_count_people
         reformed_top_1_pct_share = (
             reformed_personal_hh_equiv_income[in_top_1_pct].sum()
@@ -126,10 +120,10 @@ class Top1PctShareCalculator(BaseMetricCalculator):
         change_perc = (change_value / baseline_top_1_pct_share) * 100
 
         return {
-            "baseline": baseline_top_1_pct_share,
-            "reform": reformed_top_1_pct_share,
-            "change": change_value,
-            "change_percentage": change_perc
+            "baseline": round(baseline_top_1_pct_share,2),
+            "reform": round(reformed_top_1_pct_share,2),
+            "change": round(change_value,2),
+            "change_percentage": round(change_perc,2)
         }
 
 class Top10PctShareCalculator(BaseMetricCalculator):
@@ -153,10 +147,6 @@ class Top10PctShareCalculator(BaseMetricCalculator):
         reformed_household_count_people = self.calculate_reformed("household_count_people")
         reformed_personal_hh_equiv_income.weights *= reformed_household_count_people
         in_top_10_pct = reformed_personal_hh_equiv_income.decile_rank() == 10
-        
-        
-        
-        
         reformed_personal_hh_equiv_income.weights /= reformed_household_count_people
         reformed_top_10_pct_share = (
             reformed_personal_hh_equiv_income[in_top_10_pct].sum()
@@ -167,8 +157,8 @@ class Top10PctShareCalculator(BaseMetricCalculator):
         change_perc = (change_value / baseline_top_10_pct_share) * 100
 
         return {
-            "baseline": baseline_top_10_pct_share,
-            "reform": reformed_top_10_pct_share,
-            "change": change_value,
-            "change_percentage": change_perc
+            "baseline": round(baseline_top_10_pct_share,2),
+            "reform": round(reformed_top_10_pct_share,2),
+            "change": round(change_value,2),
+            "change_percentage": round(change_perc,2)
         }
