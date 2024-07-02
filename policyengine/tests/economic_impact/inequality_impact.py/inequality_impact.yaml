@@ -1,0 +1,32 @@
+- test_gini_calculator:
+    reform:
+      gov.hmrc.income_tax.rates.uk[0].rate:
+        "2024-01-01.2100-12-31": 0.55
+    country: uk
+    expected:
+      baseline: 0.4164
+      reform: 0.4047
+      change: -0.0117
+      change_percentage: -2.8016
+
+- test_top_1_pct_share_calculator:
+    reform:
+      gov.hmrc.income_tax.rates.uk[0].rate:
+        "2024-01-01.2100-12-31": 0.55
+    country: uk
+    expected:
+      baseline: 0.12500093238852833
+      reform: 0.14094821470108967
+      change: 0.015947282312561345
+      change_percentage: 12.757730688755142
+
+- test_top_10_pct_share_calculator:
+    reform:
+      gov.hmrc.income_tax.rates.uk[0].rate:
+        "2024-01-01.2100-12-31": 0.55
+    country: uk
+    expected:
+      baseline: 0.34679109636213723
+      reform: 0.3595809102507495
+      change: 0.012789813888612278
+      change_percentage: 3.6880456340368357
