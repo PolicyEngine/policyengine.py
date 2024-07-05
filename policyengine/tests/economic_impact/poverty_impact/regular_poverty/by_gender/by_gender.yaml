@@ -1,0 +1,30 @@
+# Regular poverty by age
+- male_poverty_test:
+    reform:
+      gov.hmrc.income_tax.rates.uk[0].rate:
+        "2024-01-01.2100-12-31": 0.55
+    country: uk
+    expected:
+      baseline: 0.18
+      reform: 0.21
+      change: 12.9
+
+- female_poverty_test:
+    reform:
+      gov.hmrc.income_tax.rates.uk[0].rate:
+        "2024-01-01.2100-12-31": 0.55
+    country: uk
+    expected:
+      baseline: 0.21
+      reform: 0.23
+      change: 10.7
+
+- all_poverty_test:
+    reform:
+      gov.hmrc.income_tax.rates.uk[0].rate:
+        "2024-01-01.2100-12-31": 0.55
+    country: uk
+    expected:
+      baseline: 0.2
+      reform: 0.22
+      change: 11.7
