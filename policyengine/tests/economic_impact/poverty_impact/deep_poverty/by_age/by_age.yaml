@@ -1,0 +1,40 @@
+# Regular poverty by age
+- test_child_poverty:
+    reform:
+      gov.hmrc.income_tax.rates.uk[0].rate:
+        "2024-01-01.2100-12-31": 0.55
+    country: uk
+    expected:
+      baseline: 2.44
+      reform: 2.45
+      change: 0.7
+
+- test_adult_poverty:
+    reform:
+      gov.hmrc.income_tax.rates.uk[0].rate:
+        "2024-01-01.2100-12-31": 0.55
+    country: uk
+    expected:
+      baseline: 2.6
+      reform: 2.7
+      change: 3.9
+
+- test_senior_poverty:
+    reform:
+      gov.hmrc.income_tax.rates.uk[0].rate:
+        "2024-01-01.2100-12-31": 0.55
+    country: uk
+    expected:
+      baseline: 1.76
+      reform: 1.76
+      change: 0.5
+  
+- test_all_poverty:
+    reform:
+      gov.hmrc.income_tax.rates.uk[0].rate:
+        "2024-01-01.2100-12-31": 0.55
+    country: uk
+    expected:
+      baseline: 2.41
+      reform: 2.47
+      change: 2.7
