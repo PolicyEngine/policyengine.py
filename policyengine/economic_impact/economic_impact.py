@@ -11,6 +11,17 @@ from .poverty_impact.regular_poverty.by_gender.by_gender import (
     FemalePoverty as RegularFemalePoverty,
     AllPoverty as RegularGenderAllPoverty
 )
+from .poverty_impact.deep_poverty.by_age.by_age import (
+    ChildPoverty as DeepChildPoverty,
+    AdultPoverty as DeepAdultPoverty,
+    SeniorPoverty as DeepSeniorPoverty,
+    AllPoverty as DeepAgeAllPoverty
+)
+from .poverty_impact.deep_poverty.by_gender.by_gender import (
+    MalePoverty as DeepMalePoverty,
+    FemalePoverty as DeepFemalePoverty,
+    AllPoverty as DeepGenderAllPoverty
+)
 from typing import Dict
 
 class EconomicImpact:
@@ -54,6 +65,14 @@ class EconomicImpact:
             "poverty/regular/male": RegularMalePoverty(self.baseline, self.reformed),
             "poverty/regular/female": RegularFemalePoverty(self.baseline, self.reformed),
             "poverty/regular/gender/all": RegularGenderAllPoverty(self.baseline, self.reformed),
+            "poverty/deep/child": DeepChildPoverty(self.baseline, self.reformed),
+            "poverty/deep/adult": DeepAdultPoverty(self.baseline, self.reformed),
+            "poverty/deep/senior": DeepSeniorPoverty(self.baseline, self.reformed),
+            "poverty/deep/age/all": DeepAgeAllPoverty(self.baseline, self.reformed),
+            "poverty/deep/male": DeepMalePoverty(self.baseline, self.reformed),
+            "poverty/deep/female": DeepFemalePoverty(self.baseline, self.reformed),
+            "poverty/deep/gender/all": DeepGenderAllPoverty(self.baseline, self.reformed),
+        
         }
 
     def _get_simulation_class(self) -> type:
