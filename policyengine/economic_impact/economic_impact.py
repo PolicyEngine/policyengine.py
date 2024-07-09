@@ -1,5 +1,16 @@
 from policyengine_core.reforms import Reform
 from .inequality_impact.inequality_impact import GiniCalculator, Top10PctShareCalculator, Top1PctShareCalculator
+from .poverty_impact.regular_poverty.by_age.by_age import (
+    ChildPoverty as RegularChildPoverty,
+    AdultPoverty as RegularAdultPoverty,
+    SeniorPoverty as RegularSeniorPoverty,
+    AllPoverty as RegularAgeAllPoverty
+)
+from .poverty_impact.regular_poverty.by_gender.by_gender import (
+    MalePoverty as RegularMalePoverty,
+    FemalePoverty as RegularFemalePoverty,
+    AllPoverty as RegularGenderAllPoverty
+)
 from typing import Dict
 
 class EconomicImpact:
@@ -36,6 +47,13 @@ class EconomicImpact:
             "inequality/gini": GiniCalculator(self.baseline, self.reformed),
             "inequality/top_1_pct_share": Top1PctShareCalculator(self.baseline, self.reformed),
             "inequality/top_10_pct_share": Top10PctShareCalculator(self.baseline, self.reformed),
+            "poverty/regular/child": RegularChildPoverty(self.baseline, self.reformed),
+            "poverty/regular/adult": RegularAdultPoverty(self.baseline, self.reformed),
+            "poverty/regular/senior": RegularSeniorPoverty(self.baseline, self.reformed),
+            "poverty/regular/age/all": RegularAgeAllPoverty(self.baseline, self.reformed),
+            "poverty/regular/male": RegularMalePoverty(self.baseline, self.reformed),
+            "poverty/regular/female": RegularFemalePoverty(self.baseline, self.reformed),
+            "poverty/regular/gender/all": RegularGenderAllPoverty(self.baseline, self.reformed),
         }
 
     def _get_simulation_class(self) -> type:
