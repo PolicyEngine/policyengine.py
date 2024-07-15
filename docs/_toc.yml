@@ -1,9 +1,19 @@
 format: jb-book
-root: intro
+root: index
 parts:
   - caption: Contributing
     chapters:
-    - file: contributing/intro
+      - file: contributing/index
   - caption: EconomicImpact
     chapters:
-    - file: EconomicImpact/intro
+      - file: EconomicImpact/index
+      - file: Poverty/index
+        sections:
+          - file: Poverty/regular/index
+            sections:
+              - file: Poverty/regular/bygender
+              - file: Poverty/regular/byage
+          - file: Poverty/deep/index
+            sections:
+              - file: Poverty/deep/bygender
+              - file: Poverty/deep/byage
