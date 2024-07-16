@@ -3,7 +3,7 @@ import yaml
 import os
 from policyengine import EconomicImpact
 
-def assert_dict_approx_equal(actual, expected, tolerance=1e3):
+def assert_dict_approx_equal(actual, expected, tolerance=1e-4):
     for key in expected:
         assert abs(actual[key] - expected[key]) < tolerance, f"Key {key}: expected {expected[key]}, got {actual[key]}"
 
