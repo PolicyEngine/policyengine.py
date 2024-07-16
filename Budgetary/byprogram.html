@@ -3,10 +3,10 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" />
+<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="prev" title="Overall" href="overall.html" />
 
     <!-- Generated with Sphinx 7.4.4 and Furo 2024.05.06 -->
-        <title>EconomicImpact Class - PolicyEngine</title>
+        <title>By program - PolicyEngine</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=387cc868" />
     <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=13237357" />
@@ -225,8 +225,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../contributing/index.html">How to contribute</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">EconomicImpact</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="index.html">EconomicImpact Class</a></li>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../EconomicImpact/index.html">EconomicImpact Class</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../Poverty/index.html">Poverty impact</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><div class="visually-hidden">Toggle navigation of Poverty impact</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../Poverty/regular/index.html">Regular poverty</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><div class="visually-hidden">Toggle navigation of Regular poverty</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
 <li class="toctree-l3"><a class="reference internal" href="../Poverty/regular/bygender.html">By gender</a></li>
@@ -240,9 +240,9 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../Budgetary/index.html">Budgetary Impact</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><div class="visually-hidden">Toggle navigation of Budgetary Impact</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
-<li class="toctree-l2"><a class="reference internal" href="../Budgetary/overall.html">Overall</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../Budgetary/byprogram.html">By program</a></li>
+<li class="toctree-l1 current has-children"><a class="reference internal" href="index.html">Budgetary Impact</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><div class="visually-hidden">Toggle navigation of Budgetary Impact</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="overall.html">Overall</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">By program</a></li>
 </ul>
 </li>
 </ul>
@@ -265,7 +265,7 @@
         </a>
         <div class="content-icon-container">
           <div class="view-this-page">
-  <a class="muted-link" href="../_sources/EconomicImpact/intro.md" title="View this page">
+  <a class="muted-link" href="../_sources/Budgetary/byprogram.md" title="View this page">
     <svg><use href="#svg-eye"></use></svg>
     <span class="visually-hidden">View this page</span>
   </a>
@@ -285,59 +285,103 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section class="tex2jax_ignore mathjax_ignore" id="economicimpact-class">
-<h1>EconomicImpact Class<a class="headerlink" href="#economicimpact-class" title="Link to this heading">¶</a></h1>
+          <section class="tex2jax_ignore mathjax_ignore" id="by-program">
+<h1>By program<a class="headerlink" href="#by-program" title="Link to this heading">¶</a></h1>
 <section id="overview">
 <h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">¶</a></h2>
-<p>The <code class="docutils literal notranslate"><span class="pre">EconomicImpact</span></code> class is designed to evaluate the economic impact of a given reform on a specified country. It provides methods to calculate various economic metrics, such as inequality and income distribution, before and after the reform.</p>
+<p>The Budgetary Impact by Program metrics provide detailed insights into how a policy reform affects various government revenue and expenditure programs. These metrics are part of the <code class="docutils literal notranslate"><span class="pre">EconomicImpact</span></code> class and can be calculated for different tax and benefit programs.</p>
 </section>
-<section id="class-initialization">
-<h2>Class Initialization<a class="headerlink" href="#class-initialization" title="Link to this heading">¶</a></h2>
-<section id="economicimpact-reform-country">
-<h3><code class="docutils literal notranslate"><span class="pre">EconomicImpact(reform,</span> <span class="pre">country)</span></code><a class="headerlink" href="#economicimpact-reform-country" title="Link to this heading">¶</a></h3>
-<p>Initializes the <code class="docutils literal notranslate"><span class="pre">EconomicImpact</span></code> class with a specified reform and country.</p>
-<p><strong>Parameters:</strong></p>
+<section id="available-metrics">
+<h2>Available Metrics<a class="headerlink" href="#available-metrics" title="Link to this heading">¶</a></h2>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">budgetary/by_program/income_tax</span></code>: Income Tax revenue</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">budgetary/by_program/national_insurance</span></code>: National Insurance contributions</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">budgetary/by_program/vat</span></code>: Value Added Tax (VAT) revenue</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">budgetary/by_program/council_tax</span></code>: Council Tax revenue</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">budgetary/by_program/fuel_duty</span></code>: Fuel Duty revenue</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">budgetary/by_program/tax_credits</span></code>: Tax Credits expenditure</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">budgetary/by_program/universal_credits</span></code>: Universal Credit expenditure</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">budgetary/by_program/child_benefits</span></code>: Child Benefits expenditure</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">budgetary/by_program/state_pension</span></code>: State Pension expenditure</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">budgetary/by_program/pension_credit</span></code>: Pension Credit expenditure</p></li>
+</ol>
+</section>
+<section id="metric-structure">
+<h2>Metric Structure<a class="headerlink" href="#metric-structure" title="Link to this heading">¶</a></h2>
+<p>Each metric returns a dictionary with the following keys:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">reform</span></code> (dict): A dictionary defining the economic reform. The structure of the dictionary should match the expected format for the <code class="docutils literal notranslate"><span class="pre">Reform</span></code> class.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">country</span></code> (str): The country for which the reform’s impact is to be evaluated. Supported values are <code class="docutils literal notranslate"><span class="pre">&quot;uk&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;us&quot;</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">baseline</span></code>: The amount before the reform (in GBP).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">reform</span></code>: The amount after the reform (in GBP).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">change</span></code>: The percentage change due to the reform.</p></li>
 </ul>
-<p><strong>Example:</strong></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">policyengine</span> <span class="kn">import</span> <span class="n">EconomicImpact</span>
-
-<span class="n">impact</span> <span class="o">=</span> <span class="n">EconomicImpact</span><span class="p">(</span>
-    <span class="n">reform</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;gov.hmrc.income_tax.rates.uk[0].rate&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;2024-01-01&quot;</span><span class="p">:</span> <span class="mf">0.25</span><span class="p">}},</span>
-    <span class="n">country</span><span class="o">=</span><span class="s2">&quot;uk&quot;</span>
-<span class="p">)</span>
-</pre></div>
-</div>
-</section>
+<p>All values are rounded to 2 decimal places for the baseline and reform, and to 1 decimal place for the change.</p>
 </section>
 <section id="example-usage">
 <h2>Example Usage<a class="headerlink" href="#example-usage" title="Link to this heading">¶</a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">policyengine</span> <span class="kn">import</span> <span class="n">EconomicImpact</span>
 
-<span class="c1"># Initialize the EconomicImpact class</span>
-<span class="n">impact</span> <span class="o">=</span> <span class="n">EconomicImpact</span><span class="p">(</span>
-    <span class="n">reform</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;gov.hmrc.income_tax.rates.uk[0].rate&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;2024-01-01&quot;</span><span class="p">:</span> <span class="mf">0.25</span><span class="p">}},</span>
-    <span class="n">country</span><span class="o">=</span><span class="s2">&quot;uk&quot;</span>
-<span class="p">)</span>
+<span class="c1"># Initialize the EconomicImpact class with a reform</span>
+<span class="n">impact</span> <span class="o">=</span> <span class="n">EconomicImpact</span><span class="p">(</span><span class="n">reform</span><span class="o">=</span><span class="p">{</span>
+  <span class="s2">&quot;gov.hmrc.income_tax.rates.uk[0].rate&quot;</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">&quot;2024-01-01.2100-12-31&quot;</span><span class="p">:</span> <span class="mf">0.55</span>
+  <span class="p">}</span>
+<span class="p">},</span> <span class="n">country</span><span class="o">=</span><span class="s2">&quot;uk&quot;</span><span class="p">)</span>
 
-<span class="c1"># Calculate the Gini coefficient</span>
-<span class="n">result_gini</span> <span class="o">=</span> <span class="n">impact</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;inequality/gini&quot;</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">result_gini</span><span class="p">)</span>
-<span class="c1"># Output: {&#39;baseline&#39;: 0.4288962129322326, &#39;reform&#39;: 0.42720356179075414, &#39;change&#39;: -0.001692651141478485}</span>
+<span class="c1"># Calculate budgetary impact for each program</span>
+<span class="n">income_tax</span> <span class="o">=</span> <span class="n">impact</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;budgetary/by_program/income_tax&quot;</span><span class="p">)</span>
+<span class="n">national_insurance</span> <span class="o">=</span> <span class="n">impact</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;budgetary/by_program/national_insurance&quot;</span><span class="p">)</span>
+<span class="n">vat</span> <span class="o">=</span> <span class="n">impact</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;budgetary/by_program/vat&quot;</span><span class="p">)</span>
+<span class="n">council_tax</span> <span class="o">=</span> <span class="n">impact</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;budgetary/by_program/council_tax&quot;</span><span class="p">)</span>
+<span class="n">fuel_duty</span> <span class="o">=</span> <span class="n">impact</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;budgetary/by_program/fuel_duty&quot;</span><span class="p">)</span>
+<span class="n">tax_credits</span> <span class="o">=</span> <span class="n">impact</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;budgetary/by_program/tax_credits&quot;</span><span class="p">)</span>
+<span class="n">universal_credits</span> <span class="o">=</span> <span class="n">impact</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;budgetary/by_program/universal_credits&quot;</span><span class="p">)</span>
+<span class="n">child_benefits</span> <span class="o">=</span> <span class="n">impact</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;budgetary/by_program/child_benefits&quot;</span><span class="p">)</span>
+<span class="n">state_pension</span> <span class="o">=</span> <span class="n">impact</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;budgetary/by_program/state_pension&quot;</span><span class="p">)</span>
+<span class="n">pension_credit</span> <span class="o">=</span> <span class="n">impact</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;budgetary/by_program/pension_credit&quot;</span><span class="p">)</span>
 
-<span class="c1"># Calculate the top 1% income share</span>
-<span class="n">result_top_1</span> <span class="o">=</span> <span class="n">impact</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;inequality/top_1_pct_share&quot;</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">result_top_1</span><span class="p">)</span>
-<span class="c1"># Output: {&#39;baseline&#39;: 0.09121853588608866, &#39;reform&#39;: 0.09301056461517446, &#39;change&#39;: 0.0017920287290857928}</span>
+<span class="c1"># Print the results</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Income Tax: </span><span class="si">{</span><span class="n">income_tax</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;National Insurance: </span><span class="si">{</span><span class="n">national_insurance</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;VAT: </span><span class="si">{</span><span class="n">vat</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Council Tax: </span><span class="si">{</span><span class="n">council_tax</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Fuel Duty: </span><span class="si">{</span><span class="n">fuel_duty</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Tax Credits: </span><span class="si">{</span><span class="n">tax_credits</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Universal Credit: </span><span class="si">{</span><span class="n">universal_credits</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Child Benefits: </span><span class="si">{</span><span class="n">child_benefits</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;State Pension: </span><span class="si">{</span><span class="n">state_pension</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Pension Credit: </span><span class="si">{</span><span class="n">pension_credit</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-<span class="c1"># Calculate the top 10% income share</span>
-<span class="n">result_top_10</span> <span class="o">=</span> <span class="n">impact</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;inequality/top_10_pct_share&quot;</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">result_top_10</span><span class="p">)</span>
-<span class="c1"># Output: {&#39;baseline&#39;: 0.3101681771998754, &#39;reform&#39;: 0.31214840219992496, &#39;change&#39;: 0.0019802250000495736}</span>
 </pre></div>
 </div>
+</section>
+<section id="output">
+<h2>Output<a class="headerlink" href="#output" title="Link to this heading">¶</a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Income</span> <span class="n">Tax</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;baseline&#39;</span><span class="p">:</span> <span class="mf">291090070166.62</span><span class="p">,</span> <span class="s1">&#39;reform&#39;</span><span class="p">:</span> <span class="mf">496242053771.2</span><span class="p">,</span> <span class="s1">&#39;change&#39;</span><span class="p">:</span> <span class="mf">70.5</span><span class="p">}</span>
+<span class="n">National</span> <span class="n">Insurance</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;baseline&#39;</span><span class="p">:</span> <span class="mf">50826792606.89</span><span class="p">,</span> <span class="s1">&#39;reform&#39;</span><span class="p">:</span> <span class="mf">50826792606.89</span><span class="p">,</span> <span class="s1">&#39;change&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">}</span>
+<span class="n">VAT</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;baseline&#39;</span><span class="p">:</span> <span class="mf">175581776889.21</span><span class="p">,</span> <span class="s1">&#39;reform&#39;</span><span class="p">:</span> <span class="mf">175581776889.21</span><span class="p">,</span> <span class="s1">&#39;change&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">}</span>
+<span class="n">Council</span> <span class="n">Tax</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;baseline&#39;</span><span class="p">:</span> <span class="mf">47861314826.79</span><span class="p">,</span> <span class="s1">&#39;reform&#39;</span><span class="p">:</span> <span class="mf">47861314826.79</span><span class="p">,</span> <span class="s1">&#39;change&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">}</span>
+<span class="n">Fuel</span> <span class="n">Duty</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;baseline&#39;</span><span class="p">:</span> <span class="mf">28019829809.09</span><span class="p">,</span> <span class="s1">&#39;reform&#39;</span><span class="p">:</span> <span class="mf">28019829809.09</span><span class="p">,</span> <span class="s1">&#39;change&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">}</span>
+<span class="n">Tax</span> <span class="n">Credits</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;baseline&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">208150256.01</span><span class="p">,</span> <span class="s1">&#39;reform&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">308166663.98</span><span class="p">,</span> <span class="s1">&#39;change&#39;</span><span class="p">:</span> <span class="mf">48.1</span><span class="p">}</span>
+<span class="n">Universal</span> <span class="n">Credit</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;baseline&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">72209672284.1</span><span class="p">,</span> <span class="s1">&#39;reform&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">73780445681.08</span><span class="p">,</span> <span class="s1">&#39;change&#39;</span><span class="p">:</span> <span class="mf">2.2</span><span class="p">}</span>
+<span class="n">Child</span> <span class="n">Benefits</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;baseline&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">15975002346.41</span><span class="p">,</span> <span class="s1">&#39;reform&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">15975002346.41</span><span class="p">,</span> <span class="s1">&#39;change&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">0.0</span><span class="p">}</span>
+<span class="n">State</span> <span class="n">Pension</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;baseline&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">127240166697.26</span><span class="p">,</span> <span class="s1">&#39;reform&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">127240166697.26</span><span class="p">,</span> <span class="s1">&#39;change&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">0.0</span><span class="p">}</span>
+<span class="n">Pension</span> <span class="n">Credit</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;baseline&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">2000983943.05</span><span class="p">,</span> <span class="s1">&#39;reform&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">2181135212.4</span><span class="p">,</span> <span class="s1">&#39;change&#39;</span><span class="p">:</span> <span class="mf">9.0</span><span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="interpretation">
+<h2>Interpretation<a class="headerlink" href="#interpretation" title="Link to this heading">¶</a></h2>
+<p>In this example:</p>
+<ul class="simple">
+<li><p>Income Tax revenue increases significantly by 70.5%, from £291.1 billion to £496.2 billion.</p></li>
+<li><p>National Insurance, VAT, Council Tax, and Fuel Duty revenues remain unchanged.</p></li>
+<li><p>Tax Credits expenditure increases by 48.1%, from £208.2 million to £308.2 million.</p></li>
+<li><p>Universal Credit expenditure increases slightly by 2.2%, from £72.2 billion to £73.8 billion.</p></li>
+<li><p>Child Benefits and State Pension expenditures remain unchanged.</p></li>
+<li><p>Pension Credit expenditure increases by 9.0%, from £2.0 billion to £2.2 billion.</p></li>
+</ul>
+<p>These metrics provide a comprehensive view of how the reform affects various government revenue streams and expenditure programs. They can help policymakers understand the fiscal implications of proposed reforms across different sectors of the budget.
+Note: Negative values for benefits (e.g., Tax Credits, Universal Credit) indicate government expenditure.</p>
 </section>
 </section>
 
@@ -354,7 +398,7 @@
         },
         kernelOptions: {
             name: "python3",
-            path: "./EconomicImpact"
+            path: "./Budgetary"
         },
         predefinedOutput: true
     }
@@ -366,7 +410,17 @@
         
         <div class="related-pages">
           
-          
+          <a class="prev-page" href="overall.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Overall</div>
+                
+              </div>
+            </a>
         </div>
         <div class="bottom-of-page">
           <div class="left-details">
@@ -397,13 +451,13 @@
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">EconomicImpact Class</a><ul>
+<li><a class="reference internal" href="#">By program</a><ul>
 <li><a class="reference internal" href="#overview">Overview</a></li>
-<li><a class="reference internal" href="#class-initialization">Class Initialization</a><ul>
-<li><a class="reference internal" href="#economicimpact-reform-country"><code class="docutils literal notranslate"><span class="pre">EconomicImpact(reform,</span> <span class="pre">country)</span></code></a></li>
-</ul>
-</li>
+<li><a class="reference internal" href="#available-metrics">Available Metrics</a></li>
+<li><a class="reference internal" href="#metric-structure">Metric Structure</a></li>
 <li><a class="reference internal" href="#example-usage">Example Usage</a></li>
+<li><a class="reference internal" href="#output">Output</a></li>
+<li><a class="reference internal" href="#interpretation">Interpretation</a></li>
 </ul>
 </li>
 </ul>
