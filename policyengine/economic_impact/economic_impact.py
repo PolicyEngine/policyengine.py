@@ -22,6 +22,20 @@ from .poverty_impact.deep_poverty.by_gender.by_gender import (
     FemalePoverty as DeepFemalePoverty,
     AllPoverty as DeepGenderAllPoverty
 )
+
+from .budgetary_impact.by_program.by_program import (
+    IncomeTax, 
+    NationalInsurance, 
+    Vat, 
+    CouncilTax, 
+    FuelDuty, 
+    TaxCredits, 
+    UniversalCredit, 
+    ChildBenefit, 
+    StatePension, 
+    PensionCredit
+)
+
 from typing import Dict
 
 class EconomicImpact:
@@ -55,6 +69,16 @@ class EconomicImpact:
 
         # Set up metric calculators
         self.metric_calculators: Dict[str, object] = {
+            "budgetary/by_program/income_tax" : IncomeTax(self.baseline, self.reformed),
+            "budgetary/by_program/national_insurance" : NationalInsurance(self.baseline, self.reformed),
+            "budgetary/by_program/vat" : Vat(self.baseline, self.reformed),
+            "budgetary/by_program/council_tax" : CouncilTax(self.baseline, self.reformed),
+            "budgetary/by_program/fuel_duty" : FuelDuty(self.baseline, self.reformed),
+            "budgetary/by_program/tax_credits" : TaxCredits(self.baseline, self.reformed),
+            "budgetary/by_program/universal_credits" : UniversalCredit(self.baseline, self.reformed),
+            "budgetary/by_program/child_benefits" : ChildBenefit(self.baseline, self.reformed),
+            "budgetary/by_program/state_pension" : StatePension(self.baseline, self.reformed),
+            "budgetary/by_program/pension_credit" : PensionCredit(self.baseline, self.reformed),
             "inequality/gini": GiniCalculator(self.baseline, self.reformed),
             "inequality/top_1_pct_share": Top1PctShareCalculator(self.baseline, self.reformed),
             "inequality/top_10_pct_share": Top10PctShareCalculator(self.baseline, self.reformed),
