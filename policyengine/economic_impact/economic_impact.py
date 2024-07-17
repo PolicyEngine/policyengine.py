@@ -36,6 +36,10 @@ from .budgetary_impact.by_program.by_program import (
     PensionCredit
 )
 
+from .distributional_impact.by_income_decile.average.average import Average
+from .distributional_impact.by_income_decile.relative.relative import Relative
+
+
 from typing import Dict
 
 class EconomicImpact:
@@ -96,7 +100,8 @@ class EconomicImpact:
             "poverty/deep/male": DeepMalePoverty(self.baseline, self.reformed),
             "poverty/deep/female": DeepFemalePoverty(self.baseline, self.reformed),
             "poverty/deep/gender/all": DeepGenderAllPoverty(self.baseline, self.reformed),
-        
+            "distributional/by_income/average": Average(self.baseline, self.reformed),
+            "distributional/by_income/relative": Relative(self.baseline, self.reformed),
         }
 
     def _get_simulation_class(self) -> type:
