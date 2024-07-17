@@ -39,6 +39,11 @@ from .budgetary_impact.by_program.by_program import (
 from .distributional_impact.by_income_decile.average.average import Average
 from .distributional_impact.by_income_decile.relative.relative import Relative
 
+from .budgetary_impact.overall.overall import (
+    BudgetaryImpact, 
+    BenefitSpendingImpact, 
+    TaxRevenueImpact
+)
 
 from typing import Dict
 
@@ -73,6 +78,9 @@ class EconomicImpact:
 
         # Set up metric calculators
         self.metric_calculators: Dict[str, object] = {
+            "budgetary/overall/budgetary_impact" : BudgetaryImpact(self.baseline, self.reformed),
+            "budgetary/overall/benefit_spending_impact" : BenefitSpendingImpact(self.baseline, self.reformed),
+            "budgetary/overall/tax_revenue_impact" : TaxRevenueImpact(self.baseline, self.reformed),
             "budgetary/by_program/income_tax" : IncomeTax(self.baseline, self.reformed),
             "budgetary/by_program/national_insurance" : NationalInsurance(self.baseline, self.reformed),
             "budgetary/by_program/vat" : Vat(self.baseline, self.reformed),
