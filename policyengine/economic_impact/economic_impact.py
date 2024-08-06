@@ -42,6 +42,9 @@ from .budgetary_impact.overall.overall import (
     TaxRevenueImpact
 )
 
+from .winners_and_losers.by_income_decile.by_income_decile import ByIncomeDecile
+from .winners_and_losers.by_wealth_decile.by_wealth_decile import ByWealthDecile
+
 from typing import Dict
 
 class EconomicImpact:
@@ -105,6 +108,8 @@ class EconomicImpact:
             "poverty/deep/male": DeepMalePoverty(self.baseline, self.reformed),
             "poverty/deep/female": DeepFemalePoverty(self.baseline, self.reformed),
             "poverty/deep/gender/all": DeepGenderAllPoverty(self.baseline, self.reformed),
+            "winners_and_losers/by_income_decile": ByIncomeDecile(self.baseline, self.reformed),
+            "winners_and_losers/by_wealth_decile": ByWealthDecile(self.baseline, self.reformed),
         
         }
 
