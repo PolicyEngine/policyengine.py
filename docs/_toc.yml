@@ -31,3 +31,8 @@ parts:
             sections:
               - file: Distributional/ByWealthDecile/average
               - file: Distributional/ByWealthDecile/relative
+      - file: WinnersAndLosers/index
+        sections:
+          - file: WinnersAndLosers/byincomedecile
+          - file: WinnersAndLosers/bywealthdecile
+      
