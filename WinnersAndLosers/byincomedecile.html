@@ -3,10 +3,10 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Poverty impact" href="../Poverty/index.html" /><link rel="prev" title="How to contribute" href="../contributing/index.html" />
+<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="by Wealth Decile" href="bywealthdecile.html" /><link rel="prev" title="Winners and Losers" href="index.html" />
 
     <!-- Generated with Sphinx 7.4.7 and Furo 2024.08.06 -->
-        <title>EconomicImpact Class - PolicyEngine</title>
+        <title>by Income Decile - PolicyEngine</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=354aac6f" />
     <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=13237357" />
@@ -213,7 +213,7 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">EconomicImpact</span></p>
 <ul class="current">
-<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">EconomicImpact Class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../EconomicImpact/index.html">EconomicImpact Class</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../Poverty/index.html">Poverty impact</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><div class="visually-hidden">Toggle navigation of Poverty impact</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../Poverty/regular/index.html">Regular poverty</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><div class="visually-hidden">Toggle navigation of Regular poverty</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
 <li class="toctree-l3"><a class="reference internal" href="../Poverty/regular/bygender.html">By gender</a></li>
@@ -245,9 +245,9 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../WinnersAndLosers/index.html">Winners and Losers</a><input class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><div class="visually-hidden">Toggle navigation of Winners and Losers</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
-<li class="toctree-l2"><a class="reference internal" href="../WinnersAndLosers/byincomedecile.html">by Income Decile</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../WinnersAndLosers/bywealthdecile.html">by Wealth Decile</a></li>
+<li class="toctree-l1 current has-children"><a class="reference internal" href="index.html">Winners and Losers</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><div class="visually-hidden">Toggle navigation of Winners and Losers</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul class="current">
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">by Income Decile</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bywealthdecile.html">by Wealth Decile</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../Inequality/index.html">Inequality</a><input class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><div class="visually-hidden">Toggle navigation of Inequality</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
@@ -274,7 +274,7 @@
         </a>
         <div class="content-icon-container">
           <div class="view-this-page">
-  <a class="muted-link" href="../_sources/EconomicImpact/index.md" title="View this page">
+  <a class="muted-link" href="../_sources/WinnersAndLosers/byincomedecile.md" title="View this page">
     <svg><use href="#svg-eye"></use></svg>
     <span class="visually-hidden">View this page</span>
   </a>
@@ -294,59 +294,94 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section class="tex2jax_ignore mathjax_ignore" id="economicimpact-class">
-<h1>EconomicImpact Class<a class="headerlink" href="#economicimpact-class" title="Link to this heading">¶</a></h1>
+          <section class="tex2jax_ignore mathjax_ignore" id="by-income-decile">
+<h1>by Income Decile<a class="headerlink" href="#by-income-decile" title="Link to this heading">¶</a></h1>
 <section id="overview">
 <h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">¶</a></h2>
-<p>The <code class="docutils literal notranslate"><span class="pre">EconomicImpact</span></code> class is designed to evaluate the economic impact of a given reform on a specified country. It provides methods to calculate various economic metrics, such as inequality and income distribution, before and after the reform.</p>
+<p>The winners and losers by income decile metrics provide insights into how a policy reform affects income changes across different income deciles. These metrics help to understand the distribution of income gains and losses among various income groups. The analysis is categorized based on the percentage change in income and provides a breakdown for each decile.</p>
 </section>
-<section id="class-initialization">
-<h2>Class Initialization<a class="headerlink" href="#class-initialization" title="Link to this heading">¶</a></h2>
-<section id="economicimpact-reform-country">
-<h3><code class="docutils literal notranslate"><span class="pre">EconomicImpact(reform,</span> <span class="pre">country)</span></code><a class="headerlink" href="#economicimpact-reform-country" title="Link to this heading">¶</a></h3>
-<p>Initializes the <code class="docutils literal notranslate"><span class="pre">EconomicImpact</span></code> class with a specified reform and country.</p>
-<p><strong>Parameters:</strong></p>
+<section id="available-metrics">
+<h2>Available Metrics<a class="headerlink" href="#available-metrics" title="Link to this heading">¶</a></h2>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">winners_and_losers/by_income_decile</span></code>: Evaluates the income changes across income deciles and categorizes the population based on the magnitude of income gain or loss.</p></li>
+</ol>
+</section>
+<section id="metric-structure">
+<h2>Metric Structure<a class="headerlink" href="#metric-structure" title="Link to this heading">¶</a></h2>
+<p>Each metric returns a dictionary with the following keys:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">reform</span></code> (dict): A dictionary defining the economic reform. The structure of the dictionary should match the expected format for the <code class="docutils literal notranslate"><span class="pre">Reform</span></code> class.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">country</span></code> (str): The country for which the reform’s impact is to be evaluated. Supported values are <code class="docutils literal notranslate"><span class="pre">&quot;uk&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;us&quot;</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">result</span></code>: Contains two sub-dictionaries:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">deciles</span></code>: Breakdown of the population within each decile into categories based on income change.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">all</span></code>: Summary statistics showing the average percentage of the population in each category across all deciles.</p></li>
 </ul>
-<p><strong>Example:</strong></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">policyengine</span> <span class="kn">import</span> <span class="n">EconomicImpact</span>
-
-<span class="n">impact</span> <span class="o">=</span> <span class="n">EconomicImpact</span><span class="p">(</span>
-    <span class="n">reform</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;gov.hmrc.income_tax.rates.uk[0].rate&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;2024-01-01&quot;</span><span class="p">:</span> <span class="mf">0.25</span><span class="p">}},</span>
-    <span class="n">country</span><span class="o">=</span><span class="s2">&quot;uk&quot;</span>
-<span class="p">)</span>
-</pre></div>
-</div>
+</li>
+</ul>
+<section id="income-change-categories">
+<h3>Income Change Categories<a class="headerlink" href="#income-change-categories" title="Link to this heading">¶</a></h3>
+<p>The categories used for income change are:</p>
+<ul class="simple">
+<li><p><strong>Lose more than 5%</strong>: Percentage of the population experiencing an income loss greater than 5%.</p></li>
+<li><p><strong>Lose less than 5%</strong>: Percentage of the population experiencing an income loss less than 5%.</p></li>
+<li><p><strong>No change</strong>: Percentage of the population experiencing no change in income.</p></li>
+<li><p><strong>Gain less than 5%</strong>: Percentage of the population experiencing an income gain less than 5%.</p></li>
+<li><p><strong>Gain more than 5%</strong>: Percentage of the population experiencing an income gain greater than 5%.</p></li>
+</ul>
 </section>
 </section>
 <section id="example-usage">
 <h2>Example Usage<a class="headerlink" href="#example-usage" title="Link to this heading">¶</a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">policyengine</span> <span class="kn">import</span> <span class="n">EconomicImpact</span>
 
-<span class="c1"># Initialize the EconomicImpact class</span>
-<span class="n">impact</span> <span class="o">=</span> <span class="n">EconomicImpact</span><span class="p">(</span>
-    <span class="n">reform</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;gov.hmrc.income_tax.rates.uk[0].rate&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;2024-01-01&quot;</span><span class="p">:</span> <span class="mf">0.25</span><span class="p">}},</span>
-    <span class="n">country</span><span class="o">=</span><span class="s2">&quot;uk&quot;</span>
-<span class="p">)</span>
+<span class="c1"># Initialize the EconomicImpact class with a reform</span>
+<span class="n">impact</span> <span class="o">=</span> <span class="n">EconomicImpact</span><span class="p">(</span><span class="n">reform</span><span class="o">=</span><span class="p">{</span>
+  <span class="s2">&quot;gov.hmrc.income_tax.rates.uk[0].rate&quot;</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">&quot;2024-01-01.2100-12-31&quot;</span><span class="p">:</span> <span class="mf">0.55</span>
+  <span class="p">}},</span> <span class="n">country</span><span class="o">=</span><span class="s2">&quot;uk&quot;</span><span class="p">)</span>
 
-<span class="c1"># Calculate the Gini coefficient</span>
-<span class="n">result_gini</span> <span class="o">=</span> <span class="n">impact</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;inequality/gini&quot;</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">result_gini</span><span class="p">)</span>
-<span class="c1"># Output: {&#39;baseline&#39;: 0.4288962129322326, &#39;reform&#39;: 0.42720356179075414, &#39;change&#39;: -0.001692651141478485}</span>
+<span class="c1"># Calculate income change metrics by income decile</span>
+<span class="n">by_income</span> <span class="o">=</span> <span class="n">impact</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;winners_and_losers/by_income_decile&quot;</span><span class="p">)</span>
+<span class="n">by_wealth</span> <span class="o">=</span> <span class="n">impact</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;winners_and_losers/by_wealth_decile&quot;</span><span class="p">)</span>
 
-<span class="c1"># Calculate the top 1% income share</span>
-<span class="n">result_top_1</span> <span class="o">=</span> <span class="n">impact</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;inequality/top_1_pct_share&quot;</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">result_top_1</span><span class="p">)</span>
-<span class="c1"># Output: {&#39;baseline&#39;: 0.09121853588608866, &#39;reform&#39;: 0.09301056461517446, &#39;change&#39;: 0.0017920287290857928}</span>
-
-<span class="c1"># Calculate the top 10% income share</span>
-<span class="n">result_top_10</span> <span class="o">=</span> <span class="n">impact</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;inequality/top_10_pct_share&quot;</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">result_top_10</span><span class="p">)</span>
-<span class="c1"># Output: {&#39;baseline&#39;: 0.3101681771998754, &#39;reform&#39;: 0.31214840219992496, &#39;change&#39;: 0.0019802250000495736}</span>
+<span class="c1"># Print the results</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;By Income Decile: </span><span class="si">{</span><span class="n">by_income</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;By Wealth Decile: </span><span class="si">{</span><span class="n">by_wealth</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
+</section>
+<section id="output">
+<h2>Output<a class="headerlink" href="#output" title="Link to this heading">¶</a></h2>
+<section id="id1">
+<h3>By Income Decile<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s1">&#39;result&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;deciles&#39;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s1">&#39;Lose more than 5%&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">16.8</span><span class="p">,</span> <span class="mf">21.8</span><span class="p">,</span> <span class="mf">28.9</span><span class="p">,</span> <span class="mf">52.2</span><span class="p">,</span> <span class="mf">72.4</span><span class="p">,</span> <span class="mf">85.4</span><span class="p">,</span> <span class="mf">91.9</span><span class="p">,</span> <span class="mf">93.0</span><span class="p">,</span> <span class="mf">98.0</span><span class="p">,</span> <span class="mf">95.4</span><span class="p">],</span>
+            <span class="s1">&#39;Lose less than 5%&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">2.7</span><span class="p">,</span> <span class="mf">4.8</span><span class="p">,</span> <span class="mf">5.8</span><span class="p">,</span> <span class="mf">9.0</span><span class="p">,</span> <span class="mf">5.2</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.6</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.4</span><span class="p">],</span>
+            <span class="s1">&#39;No change&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">80.5</span><span class="p">,</span> <span class="mf">73.4</span><span class="p">,</span> <span class="mf">65.3</span><span class="p">,</span> <span class="mf">38.8</span><span class="p">,</span> <span class="mf">22.4</span><span class="p">,</span> <span class="mf">14.3</span><span class="p">,</span> <span class="mf">7.5</span><span class="p">,</span> <span class="mf">6.9</span><span class="p">,</span> <span class="mf">1.9</span><span class="p">,</span> <span class="mf">3.1</span><span class="p">],</span>
+            <span class="s1">&#39;Gain less than 5%&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span>
+            <span class="s1">&#39;Gain more than 5%&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]</span>
+        <span class="p">},</span>
+        <span class="s1">&#39;all&#39;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s1">&#39;Lose more than 5%&#39;</span><span class="p">:</span> <span class="mf">65.6</span><span class="p">,</span>
+            <span class="s1">&#39;Lose less than 5%&#39;</span><span class="p">:</span> <span class="mf">3.0</span><span class="p">,</span>
+            <span class="s1">&#39;No change&#39;</span><span class="p">:</span> <span class="mf">31.4</span><span class="p">,</span>
+            <span class="s1">&#39;Gain less than 5%&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+            <span class="s1">&#39;Gain more than 5%&#39;</span><span class="p">:</span> <span class="mf">0.0</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="interpretation">
+<h2>Interpretation<a class="headerlink" href="#interpretation" title="Link to this heading">¶</a></h2>
+<p>In this example:</p>
+<ul class="simple">
+<li><p>For income deciles, the percentage of people losing more than 5% increases from the lower deciles to the higher deciles, with a substantial concentration of losses in the top deciles. The majority of the population experiences no change in income, with very few gaining or losing within small ranges.</p></li>
+<li><p>For wealth deciles, a similar pattern is observed, with a significant proportion of the population in higher deciles experiencing losses greater than 5%, while most people in lower deciles experience no change.</p></li>
+</ul>
 </section>
 </section>
 
@@ -363,7 +398,7 @@
         },
         kernelOptions: {
             name: "python3",
-            path: "./EconomicImpact"
+            path: "./WinnersAndLosers"
         },
         predefinedOutput: true
     }
@@ -374,23 +409,23 @@
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="../Poverty/index.html">
+          <a class="next-page" href="bywealthdecile.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Poverty impact</div>
+                <div class="title">by Wealth Decile</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          <a class="prev-page" href="../contributing/index.html">
+          <a class="prev-page" href="index.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">How to contribute</div>
+                <div class="title">Winners and Losers</div>
                 
               </div>
             </a>
@@ -424,13 +459,19 @@
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">EconomicImpact Class</a><ul>
+<li><a class="reference internal" href="#">by Income Decile</a><ul>
 <li><a class="reference internal" href="#overview">Overview</a></li>
-<li><a class="reference internal" href="#class-initialization">Class Initialization</a><ul>
-<li><a class="reference internal" href="#economicimpact-reform-country"><code class="docutils literal notranslate"><span class="pre">EconomicImpact(reform,</span> <span class="pre">country)</span></code></a></li>
+<li><a class="reference internal" href="#available-metrics">Available Metrics</a></li>
+<li><a class="reference internal" href="#metric-structure">Metric Structure</a><ul>
+<li><a class="reference internal" href="#income-change-categories">Income Change Categories</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#example-usage">Example Usage</a></li>
+<li><a class="reference internal" href="#output">Output</a><ul>
+<li><a class="reference internal" href="#id1">By Income Decile</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#interpretation">Interpretation</a></li>
 </ul>
 </li>
 </ul>
