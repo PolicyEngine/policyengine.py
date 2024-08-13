@@ -35,4 +35,9 @@ parts:
         sections:
           - file: WinnersAndLosers/byincomedecile
           - file: WinnersAndLosers/bywealthdecile
+      - file: Inequality/index
+        sections:
+          - file: Inequality/inequality
+          
+      
       
