@@ -21,3 +21,23 @@ parts:
         sections:
           - file: Budgetary/overall
           - file: Budgetary/byprogram
+      - file: Distributional/index
+        sections:
+          - file: Distributional/ByIncomeDecile/index
+            sections:
+              - file: Distributional/ByIncomeDecile/average
+              - file: Distributional/ByIncomeDecile/relative
+          - file: Distributional/ByWealthDecile/index
+            sections:
+              - file: Distributional/ByWealthDecile/average
+              - file: Distributional/ByWealthDecile/relative
+      - file: WinnersAndLosers/index
+        sections:
+          - file: WinnersAndLosers/byincomedecile
+          - file: WinnersAndLosers/bywealthdecile
+      - file: Inequality/index
+        sections:
+          - file: Inequality/inequality
+          
+      
+      
