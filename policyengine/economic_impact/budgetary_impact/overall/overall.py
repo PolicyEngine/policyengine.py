@@ -8,22 +8,22 @@ class BudgetaryImpact(BaseMetricCalculator):
         self.reformed = reformed
 
     def calculate(self):
-
+        
         baseline_total_tax = self.baseline.calculate("household_tax").sum()
         reformed_total_tax = self.reformed.calculate("household_tax").sum()
-
+        
         tax_revenue_impact = reformed_total_tax - baseline_total_tax
 
         baseline_total_benefits = self.baseline.calculate("household_benefits").sum()
         reformed_total_benefits = self.reformed.calculate("household_benefits").sum()
 
-
+        
         benefit_spending_impact = reformed_total_benefits - baseline_total_benefits
 
         budgetary_impact = tax_revenue_impact - benefit_spending_impact
 
 
-
+        
         return {
             "budgetary_impact" : round(budgetary_impact,2)
         }
@@ -35,15 +35,15 @@ class BenefitSpendingImpact(BaseMetricCalculator):
         self.reformed = reformed
 
     def calculate(self):
-
+        
         baseline_total_benefits = self.baseline.calculate("household_benefits").sum()
         reformed_total_benefits = self.reformed.calculate("household_benefits").sum()
 
-
+        
         benefit_spending_impact = reformed_total_benefits - baseline_total_benefits
 
-        
 
+        
         return {
             "baseline_total_benefits": round(baseline_total_benefits,2),
             "reformed_total_benefits": round(reformed_total_benefits,2),
@@ -57,12 +57,11 @@ class TaxRevenueImpact(BaseMetricCalculator):
         self.reformed = reformed
 
     def calculate(self):
-
+        
         baseline_total_tax = self.baseline.calculate("household_tax").sum()
         reformed_total_tax = self.reformed.calculate("household_tax").sum()
-
-        tax_revenue_impact = reformed_total_tax - baseline_total_tax
         
+        tax_revenue_impact = reformed_total_tax - baseline_total_tax
 
         return {
             "baseline_total_tax": round(baseline_total_tax,2),
