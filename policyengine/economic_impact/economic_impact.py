@@ -66,27 +66,30 @@ class EconomicImpact:
     Attributes:
         reform (dict): Dictionary representing the reform parameters.
         country (str): Country code in lowercase ('uk' or 'us').
+        dataset (str, optional): Dataset to be used for the simulation.
         Microsimulation (type): Class representing the microsimulation engine based on country.
         baseline (Microsimulation): Instance of Microsimulation for baseline scenario.
         reformed (Microsimulation): Instance of Microsimulation for reformed scenario based on given reform.
         metric_calculators (Dict[str, BaseMetricCalculator]): Dictionary mapping metric names to metric calculators.
     """
     
-    def __init__(self, reform: dict, country: str) -> None:
+    def __init__(self, reform: dict, country: str, dataset: str = None) -> None:
         """
-        Initialize EconomicImpact with reform parameters and country code.
+        Initialize EconomicImpact with reform parameters, country code, and optional dataset.
         
         Args:
             reform (dict): Dictionary representing the reform parameters.
             country (str): Country code in lowercase ('uk' or 'us').
+            dataset (str, optional): Dataset to be used for the simulation. Defaults to None.
         """
         self.reform = reform
         self.country = country.lower()
+        self.dataset = dataset
         self.Microsimulation = self._get_simulation_class()
         
         # Initialize baseline and reformed simulations
-        self.baseline = self.Microsimulation()
-        self.reformed = self.Microsimulation(reform=Reform.from_dict(self.reform, country_id=self.country))
+        self.baseline = self.Microsimulation(dataset=self.dataset)
+        self.reformed = self.Microsimulation(reform=Reform.from_dict(self.reform, country_id=self.country), dataset=self.dataset)
 
         # Set up metric calculators
         self.metric_calculators: Dict[str, object] = {
