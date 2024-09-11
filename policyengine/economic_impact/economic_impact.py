@@ -54,8 +54,27 @@ from .budgetary_impact.overall.overall import (
     TaxRevenueImpact
 )
 
+
+from .labour_supply_impact.earnings.overall.relative.relative import IncomeLSR , SubstitutionLSR , NetLSRChange
+
+from .labour_supply_impact.earnings.overall.absolute.absolute import (
+    IncomeLSR as AbsoluteIncomeLSR,
+    SubstitutionLSR as AbsoluteSubstitutionLSR,
+    NetLSRChange as AbsoluteNetLSRChange
+)
+
+from .labour_supply_impact.earnings.by_decile.relative.substitution_effect.substitutional_effect import SubstitutionEffect
+from .labour_supply_impact.earnings.by_decile.relative.income_effect.income_effect import IncomeEffect
+from .labour_supply_impact.earnings.by_decile.relative.total.total import Total
+
+from .labour_supply_impact.earnings.by_decile.absolute.substitution_effect.substitution_effect import SubstitutionEffect as AbsoluteSubstutionEffect
+from .labour_supply_impact.earnings.by_decile.absolute.income_effect.income_effect import IncomeEffect as AbsoluteIncomeEffect
+from .labour_supply_impact.earnings.by_decile.absolute.total.total import Total as AbsoluteTotal
+
+
 from .winners_and_losers.by_income_decile.by_income_decile import ByIncomeDecile
 from .winners_and_losers.by_wealth_decile.by_wealth_decile import ByWealthDecile
+
 
 from typing import Dict
 
@@ -66,27 +85,30 @@ class EconomicImpact:
     Attributes:
         reform (dict): Dictionary representing the reform parameters.
         country (str): Country code in lowercase ('uk' or 'us').
+        dataset (str, optional): Dataset to be used for the simulation.
         Microsimulation (type): Class representing the microsimulation engine based on country.
         baseline (Microsimulation): Instance of Microsimulation for baseline scenario.
         reformed (Microsimulation): Instance of Microsimulation for reformed scenario based on given reform.
         metric_calculators (Dict[str, BaseMetricCalculator]): Dictionary mapping metric names to metric calculators.
     """
     
-    def __init__(self, reform: dict, country: str) -> None:
+    def __init__(self, reform: dict, country: str, dataset: str = None) -> None:
         """
-        Initialize EconomicImpact with reform parameters and country code.
+        Initialize EconomicImpact with reform parameters, country code, and optional dataset.
         
         Args:
             reform (dict): Dictionary representing the reform parameters.
             country (str): Country code in lowercase ('uk' or 'us').
+            dataset (str, optional): Dataset to be used for the simulation. Defaults to None.
         """
         self.reform = reform
         self.country = country.lower()
+        self.dataset = dataset
         self.Microsimulation = self._get_simulation_class()
         
         # Initialize baseline and reformed simulations
-        self.baseline = self.Microsimulation()
-        self.reformed = self.Microsimulation(reform=Reform.from_dict(self.reform, country_id=self.country))
+        self.baseline = self.Microsimulation(dataset=self.dataset)
+        self.reformed = self.Microsimulation(reform=Reform.from_dict(self.reform, country_id=self.country), dataset=self.dataset)
 
         # Set up metric calculators
         self.metric_calculators: Dict[str, object] = {
@@ -121,6 +143,20 @@ class EconomicImpact:
             "poverty/deep/female": DeepFemalePoverty(self.baseline, self.reformed),
             "poverty/deep/gender/all": DeepGenderAllPoverty(self.baseline, self.reformed),
 
+            "labour_supply_impact/earnings/overall/relative/IncomeLSR" : IncomeLSR(self.baseline,self.reformed),
+            "labour_supply_impact/earnings/overall/relative/SubstitutionLSR" : SubstitutionLSR(self.baseline,self.reformed),
+            "labour_supply_impact/earnings/overall/relative/NetLSRChange" : NetLSRChange(self.baseline,self.reformed),
+            "labour_supply_impact/earnings/overall/absolute/IncomeLSR" : AbsoluteIncomeLSR(self.baseline,self.reformed),
+            "labour_supply_impact/earnings/overall/absolute/SubstitutionLSR" : AbsoluteSubstitutionLSR(self.baseline,self.reformed),
+            "labour_supply_impact/earnings/overall/absolute/NetLSRChange" : AbsoluteNetLSRChange(self.baseline,self.reformed),
+            "labour_supply_impact/earnings/by_decile/relative/IncomeEffect" : IncomeEffect(self.baseline,self.reformed),
+            "labour_supply_impact/earnings/by_decile/relative/SubstitutionEffect" : SubstitutionEffect(self.baseline,self.reformed),
+            "labour_supply_impact/earnings/by_decile/relative/Total" : Total(self.baseline,self.reformed),
+            "labour_supply_impact/earnings/by_decile/absolute/income_effect" : AbsoluteIncomeEffect(self.baseline,self.reformed),
+            "labour_supply_impact/earnings/by_decile/absolute/substitution_effect" : AbsoluteSubstutionEffect(self.baseline,self.reformed),
+            "labour_supply_impact/earnings/by_decile/absolute/total" : AbsoluteTotal(self.baseline,self.reformed),
+
+
             "distributional/by_income/average": AverageByIncome(self.baseline, self.reformed),
             "distributional/by_income/relative": RelativeByIncome(self.baseline, self.reformed),
             "distributional/by_wealth/average": AverageByWealth(self.baseline, self.reformed),
@@ -131,6 +167,7 @@ class EconomicImpact:
 
             "winners_and_losers/by_income_decile": ByIncomeDecile(self.baseline, self.reformed),
             "winners_and_losers/by_wealth_decile": ByWealthDecile(self.baseline, self.reformed),
+
         }
 
     def _get_simulation_class(self) -> type:
