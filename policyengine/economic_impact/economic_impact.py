@@ -78,7 +78,7 @@ from .winners_and_losers.by_wealth_decile.by_wealth_decile import ByWealthDecile
 
 from typing import Dict, Type, Union
 
-from policyengine.charts.inequality import Top1PctImpactChart, GiniImpactChart, Top10PctImpactChart, InequalityImpactChart
+from policyengine.charts.inequality import InequalityImpactChart
 
 
 class EconomicImpact:
@@ -175,9 +175,6 @@ class EconomicImpact:
 
 
         self.chart_generators: Dict[str, Type] = {
-            "inequality/gini": GiniImpactChart,
-            "inequality/top_1_pct_share": Top1PctImpactChart,
-            "inequality/top_10_pct_share": Top10PctImpactChart,
             "inequality": InequalityImpactChart,
         }
 
