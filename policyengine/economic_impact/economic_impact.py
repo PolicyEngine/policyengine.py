@@ -83,6 +83,10 @@ from policyengine.charts.poverty.regular.by_age import RegularPovertyByAgeChart
 from policyengine.charts.poverty.deep.by_age import DeepPovertyByAgeChart
 from policyengine.charts.poverty.regular.by_gender import RegularPovertyByGenderChart
 from policyengine.charts.poverty.deep.by_gender import DeepPovertyByGenderChart
+from policyengine.charts.distributional_impact.by_income_decile.average import ByIncomeDecileAverageChart
+from policyengine.charts.distributional_impact.by_income_decile.relative import ByIncomeDecileRelativeChart
+from policyengine.charts.distributional_impact.by_wealth_decile.average import ByWealthDecileAverageChart
+from policyengine.charts.distributional_impact.by_wealth_decile.relative import ByWealthDecileRelativeChart
 
 
 class EconomicImpact:
@@ -184,6 +188,10 @@ class EconomicImpact:
             "poverty/regular/by_gender": RegularPovertyByGenderChart,
             "poverty/deep/by_age": DeepPovertyByAgeChart,
             "poverty/deep/by_gender": DeepPovertyByGenderChart,
+            "distributional/by_income/average": ByIncomeDecileAverageChart,
+            "distributional/by_income/relative": ByIncomeDecileRelativeChart,
+            "distributional/by_wealth/average": ByWealthDecileAverageChart,
+            "distributional/by_wealth/relative": ByWealthDecileRelativeChart
         }
 
         self.composite_metrics: Dict[str, Dict[str, str]] = {
