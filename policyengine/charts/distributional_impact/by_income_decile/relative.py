@@ -100,3 +100,5 @@ class ByIncomeDecileRelativeChart:
             ),
             title="Relative Change in Household Income by Decile"
         )
+        format_fig(fig)  # Keep the formatting logic from policyengine_core
+        return fig
