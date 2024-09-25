@@ -76,7 +76,10 @@ from .winners_and_losers.by_income_decile.by_income_decile import ByIncomeDecile
 from .winners_and_losers.by_wealth_decile.by_wealth_decile import ByWealthDecile
 
 
-from typing import Dict
+from typing import Dict, Type, Union
+
+from policyengine.charts.inequality import InequalityImpactChart
+
 
 class EconomicImpact:
     """
@@ -170,6 +173,21 @@ class EconomicImpact:
 
         }
 
+
+        self.chart_generators: Dict[str, Type] = {
+            "inequality": InequalityImpactChart,
+        }
+
+        self.composite_metrics: Dict[str, Dict[str, str]] = {
+            "inequality": {
+                "Gini index": "inequality/gini",
+                "Top 1% share": "inequality/top_1_pct_share",
+                "Top 10% share": "inequality/top_10_pct_share",
+            }
+        }
+
+        self.metric_results: Dict[str, any] = {}
+
     def _get_simulation_class(self) -> type:
         """
         Get the appropriate Microsimulation class based on the country code.
@@ -203,4 +221,42 @@ class EconomicImpact:
         """
         if metric not in self.metric_calculators:
             raise ValueError(f"Unknown metric: {metric}")
-        return self.metric_calculators[metric].calculate()
+        
+        if metric not in self.metric_results:
+            result = self.metric_calculators[metric].calculate()
+            self.metric_results[metric] = result
+        
+        return self.metric_results[metric]
+
+    def _calculate_composite_metric(self, metric: str) -> dict:
+        if metric not in self.composite_metrics:
+            raise ValueError(f"Unknown composite metric: {metric}")
+        
+        composite_data = {}
+        for key, sub_metric in self.composite_metrics[metric].items():
+            composite_data[key] = self.calculate(sub_metric)
+        
+        return composite_data
+
+    def chart(self, metric: str) -> dict:
+        if metric in self.composite_metrics:
+            data = self._calculate_composite_metric(metric)
+        elif metric in self.chart_generators:
+            data = self.calculate(metric)
+        else:
+            raise ValueError(f"Unknown metric for charting: {metric}")
+
+        chart_generator = self.chart_generators.get(metric)
+        if not chart_generator:
+            raise ValueError(f"No chart generator found for metric: {metric}")
+
+        return chart_generator(data=data).generate_chart_data()
+
+    def add_metric(self, metric: str, calculator: object, chart_generator: Type = None):
+        self.metric_calculators[metric] = calculator
+        if chart_generator:
+            self.chart_generators[metric] = chart_generator
+
+    def add_composite_metric(self, name: str, components: Dict[str, str], chart_generator: Type):
+        self.composite_metrics[name] = components
+        self.chart_generators[name] = chart_generator
