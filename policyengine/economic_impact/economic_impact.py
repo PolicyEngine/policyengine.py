@@ -79,6 +79,10 @@ from .winners_and_losers.by_wealth_decile.by_wealth_decile import ByWealthDecile
 from typing import Dict, Type, Union
 
 from policyengine.charts.inequality import InequalityImpactChart
+from policyengine.charts.poverty.regular.by_age import RegularPovertyByAgeChart
+from policyengine.charts.poverty.deep.by_age import DeepPovertyByAgeChart
+from policyengine.charts.poverty.regular.by_gender import RegularPovertyByGenderChart
+from policyengine.charts.poverty.deep.by_gender import DeepPovertyByGenderChart
 
 
 class EconomicImpact:
@@ -176,6 +180,10 @@ class EconomicImpact:
 
         self.chart_generators: Dict[str, Type] = {
             "inequality": InequalityImpactChart,
+            "poverty/regular/by_age": RegularPovertyByAgeChart,
+            "poverty/regular/by_gender": RegularPovertyByGenderChart,
+            "poverty/deep/by_age": DeepPovertyByAgeChart,
+            "poverty/deep/by_gender": DeepPovertyByGenderChart,
         }
 
         self.composite_metrics: Dict[str, Dict[str, str]] = {
@@ -183,6 +191,28 @@ class EconomicImpact:
                 "Gini index": "inequality/gini",
                 "Top 1% share": "inequality/top_1_pct_share",
                 "Top 10% share": "inequality/top_10_pct_share",
+            },
+            "poverty/regular/by_age": {
+                "Child": "poverty/regular/child",
+                "Adult": "poverty/regular/adult",
+                "Senior":"poverty/regular/senior",
+                "All": "poverty/regular/age/all"
+            },
+            "poverty/regular/by_gender": {
+                "Male": "poverty/regular/male",
+                "Female": "poverty/regular/female",
+                "All": "poverty/regular/gender/all"
+            },
+            "poverty/deep/by_age": {
+                "Child": "poverty/deep/child",
+                "Adult": "poverty/deep/adult",
+                "Senior":"poverty/deep/senior",
+                "All": "poverty/deep/age/all"
+            },
+            "poverty/deep/by_gender": {
+                "Male": "poverty/deep/male",
+                "Female": "poverty/deep/female",
+                "All": "poverty/deep/gender/all"
             }
         }
 
@@ -250,7 +280,7 @@ class EconomicImpact:
         if not chart_generator:
             raise ValueError(f"No chart generator found for metric: {metric}")
 
-        return chart_generator(data=data).generate_chart_data()
+        return chart_generator(self.country,data=data).generate_chart_data()
 
     def add_metric(self, metric: str, calculator: object, chart_generator: Type = None):
         self.metric_calculators[metric] = calculator
