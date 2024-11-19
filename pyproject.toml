@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "policyengine"
+version = "1.0.0"
+description = "A package to conduct policy analysis using PolicyEngine tax-benefit models."
+readme = "README.md"
+authors = [
+    {name = "PolicyEngine", email = "hello@policyengine.org"},
+]
+license = {file = "LICENSE"}
+requires-python = ">=3.6"
+dependencies = [
+    "policyengine_core",
+    "policyengine-uk",
+    "policyengine-us",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "pytest",
+    "furo",
+    "jupyter-book",
+    "yaml-changelog>=0.1.7",
+    "itables",
+    "build",
+]
+
+[tool.setuptools]
+packages = ["policyengine"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"policyengine" = ["**/*"]
+
+[tool.pytest.ini_options]
+addopts = "-v"
+testpaths = [
+    "tests",
+]
+
+[tool.black]
+line-length = 79
+target-version = ['py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
