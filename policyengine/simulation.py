@@ -1,5 +1,6 @@
 from policyengine_core import Simulation as CountrySimulation
 from policyengine_core.reforms import Reform
+from typing import Tuple
 
 class Simulation:
     """The top-level class through which all PE usage is carried out."""
@@ -16,6 +17,8 @@ class Simulation:
     """The baseline simulation inputs."""
     reform: dict
     """The reform simulation inputs."""
+    custom_data: dict
+    """The custom data for the simulation."""
 
     baseline: CountrySimulation
     reformed: CountrySimulation
@@ -52,6 +55,14 @@ class Simulation:
         self.output_functions, self.outputs = self.get_outputs()
 
     def calculate(self, output: str):
+        """Calculate the given output (path).
+
+        Args:
+            output (str): The output to calculate. Must be a valid path in the output tree.
+
+        Returns:
+            Any: The output of the calculation (using the cache if possible).
+        """
         if output.endswith("/"):
             output = output[:-1]
 
@@ -75,7 +86,12 @@ class Simulation:
 
         return node
 
-    def get_outputs(self) -> tuple:
+    def get_outputs(self) -> Tuple[dict, dict]:
+        """Get all the output functions and construct the output tree.
+
+        Returns:
+            Tuple[dict, dict]: A tuple containing the output functions and the output tree.
+        """
         from pathlib import Path
         import importlib.util
 
@@ -104,3 +120,4 @@ class Simulation:
             current[parts[-1]] = None
         
         return output_functions, outputs
+

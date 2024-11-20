@@ -1,4 +1,3 @@
-
 macro_single = Simulation(
     country="uk",
     type="forecast/macro",
@@ -15,7 +14,7 @@ macro_single.calculate("budget/revenue") # -> £700 billion
 
 macro = Simulation(
     country="uk",
-    type="impact/macro",
+    type="macro",
     data="enhanced_frs_2022_23",
     year=2025,
     reform={
@@ -29,7 +28,7 @@ macro.calculate("budget/revenue_impact") # -> +£100 billion
 
 micro = Simulation(
     country="uk",
-    type="impact/household/general",
+    type="household",
     data={
         "employment_income": {
             2025: 30_000,
