@@ -1,1 +1,1 @@
-from .economic_impact.economic_impact import EconomicImpact
+from .simulation import Simulation
