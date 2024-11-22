@@ -23,7 +23,7 @@ class Simulation:
     baseline: CountrySimulation
     reformed: CountrySimulation
 
-    def __init__(self, country: str, type: str, data: str, time_period: str, reform: dict):
+    def __init__(self, country: str, type: str, data: str = None, time_period: str = None, reform: dict = None, baseline: dict = None):
         """Initialise the simulation with the given parameters.
 
         Args:
@@ -47,9 +47,9 @@ class Simulation:
 
         if country == "uk":
             from policyengine_uk import Microsimulation as UKMicrosimulation
-            self.baseline = UKMicrosimulation()
+            self.baseline = UKMicrosimulation(dataset=data, reform=baseline)
             self.baseline.default_calculation_period = time_period
-            self.reformed = UKMicrosimulation(reform=reform)
+            self.reformed = UKMicrosimulation(dataset=data, reform=reform)
             self.reformed.default_calculation_period = time_period
 
         self.output_functions, self.outputs = self.get_outputs()

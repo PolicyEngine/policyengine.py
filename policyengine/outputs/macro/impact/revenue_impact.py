@@ -9,4 +9,5 @@ def revenue_impact(simulation: Simulation):
     Returns:
         float: The revenue impact of the simulation.
     """
-    return simulation.reformed.calculate("household_tax").sum()/1e9 - simulation.baseline.calculate("household_tax").sum()/1e9
+    if simulation.country == "uk":
+        return simulation.reformed.calculate("gov_balance").sum() - simulation.baseline.calculate("gov_balance").sum()
