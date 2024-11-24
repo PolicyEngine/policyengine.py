@@ -1,5 +1,6 @@
 from policyengine import Simulation
 
+
 def revenue_impact(simulation: Simulation):
     """Calculate the revenue impact of the given simulation.
 
@@ -9,4 +10,6 @@ def revenue_impact(simulation: Simulation):
     Returns:
         float: The revenue impact of the simulation.
     """
-    return simulation.reformed.calculate("household_tax").sum()/1e9 - simulation.baseline.calculate("household_tax").sum()/1e9
+    tax_revenue_baseline = simulation.calculate("macro/baseline/tax_revenue")
+    tax_revenue_reform = simulation.calculate("macro/reform/tax_revenue")
+    return tax_revenue_reform - tax_revenue_baseline
