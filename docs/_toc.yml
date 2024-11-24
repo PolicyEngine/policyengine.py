@@ -1,43 +1,6 @@
 format: jb-book
 root: index
 parts:
-  - caption: Contributing
+  - caption: Maintenance
     chapters:
-      - file: contributing/index
-  - caption: EconomicImpact
-    chapters:
-      - file: EconomicImpact/index
-      - file: Poverty/index
-        sections:
-          - file: Poverty/regular/index
-            sections:
-              - file: Poverty/regular/bygender
-              - file: Poverty/regular/byage
-          - file: Poverty/deep/index
-            sections:
-              - file: Poverty/deep/bygender
-              - file: Poverty/deep/byage
-      - file: Budgetary/index
-        sections:
-          - file: Budgetary/overall
-          - file: Budgetary/byprogram
-      - file: Distributional/index
-        sections:
-          - file: Distributional/ByIncomeDecile/index
-            sections:
-              - file: Distributional/ByIncomeDecile/average
-              - file: Distributional/ByIncomeDecile/relative
-          - file: Distributional/ByWealthDecile/index
-            sections:
-              - file: Distributional/ByWealthDecile/average
-              - file: Distributional/ByWealthDecile/relative
-      - file: WinnersAndLosers/index
-        sections:
-          - file: WinnersAndLosers/byincomedecile
-          - file: WinnersAndLosers/bywealthdecile
-      - file: Inequality/index
-        sections:
-          - file: Inequality/inequality
-          
-      
-      
+    - file: maintaining
