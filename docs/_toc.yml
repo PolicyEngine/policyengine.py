@@ -4,3 +4,6 @@ parts:
   - caption: Maintenance
     chapters:
     - file: maintaining
+  - caption: Schema
+    chapters:
+    - file: schema
