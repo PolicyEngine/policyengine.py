@@ -16,6 +16,7 @@ dependencies = [
     "policyengine_core",
     "policyengine-uk",
     "policyengine-us",
+    "microdf_python",
 ]
 
 [project.optional-dependencies]

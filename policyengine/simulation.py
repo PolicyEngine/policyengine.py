@@ -25,6 +25,8 @@ class Simulation:
     """The tax-benefit simulation for the baseline scenario."""
     reformed: CountrySimulation = None
     """The tax-benefit simulation for the reformed scenario."""
+    verbose: bool = False
+    """Whether to print out progress messages."""
 
     def __init__(
         self,
@@ -34,6 +36,7 @@ class Simulation:
         time_period: str = None,
         reform: dict = None,
         baseline: dict = None,
+        verbose: bool = False,
     ):
         """Initialise the simulation with the given parameters.
 
@@ -48,6 +51,7 @@ class Simulation:
         self.scope = scope
         self.data = data
         self.time_period = time_period
+        self.verbose = verbose
 
         if isinstance(reform, dict):
             reform = Reform.from_dict(reform, country_id=country)
@@ -71,6 +75,8 @@ class Simulation:
         Returns:
             Any: The output of the calculation (using the cache if possible).
         """
+        if self.verbose:
+            print(f"Calculating {output}...")
         if output.endswith("/"):
             output = output[:-1]
 
@@ -84,6 +90,8 @@ class Simulation:
 
         parent = node
         child_key = output.split("/")[-1]
+        if child_key not in parent and int(child_key) in parent:
+            child_key = int(child_key)
         node = parent[child_key]
 
         # Check if any descendants are None
@@ -94,7 +102,7 @@ class Simulation:
 
         if isinstance(node, dict):
             for child_key in node.keys():
-                self.calculate(output + "/" + child_key)
+                self.calculate(output + "/" + str(child_key))
 
         return node
 
