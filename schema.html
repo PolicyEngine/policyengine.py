@@ -3,10 +3,10 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Schema" href="schema.html" /><link rel="prev" title="Introduction" href="index.html" />
+<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="prev" title="Maintainance" href="maintaining.html" />
 
     <!-- Generated with Sphinx 7.4.7 and Furo 2024.08.06 -->
-        <title>Maintainance - PolicyEngine</title>
+        <title>Schema - PolicyEngine</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=354aac6f" />
     <link rel="stylesheet" type="text/css" href="_static/togglebutton.css?v=13237357" />
@@ -208,12 +208,12 @@
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
   <p class="caption" role="heading"><span class="caption-text">Maintenance</span></p>
-<ul class="current">
-<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Maintainance</a></li>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="maintaining.html">Maintainance</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Schema</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="schema.html">Schema</a></li>
+<ul class="current">
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Schema</a></li>
 </ul>
 
 </div>
@@ -234,7 +234,7 @@
         </a>
         <div class="content-icon-container">
           <div class="view-this-page">
-  <a class="muted-link" href="_sources/maintaining.ipynb" title="View this page">
+  <a class="muted-link" href="_sources/schema.ipynb" title="View this page">
     <svg><use href="#svg-eye"></use></svg>
     <span class="visually-hidden">View this page</span>
   </a>
@@ -254,37 +254,33 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section class="tex2jax_ignore mathjax_ignore" id="maintainance">
-<h1>Maintainance<a class="headerlink" href="#maintainance" title="Link to this heading">¶</a></h1>
-<p>This package is intended to be simple for users to use, but also for maintainers to maintain (with some kind of maintenance specifically prioritised).</p>
-<p>There are two ways we might want to improve this package:</p>
-<ol class="arabic simple">
-<li><p>Adding more ‘outputs’ (e.g. more types of results from the simulation inputs, using the underlying tax-benefit models).</p></li>
-<li><p>Everything else related to the underlying way that the package uses the models.</p></li>
-</ol>
-<p>This package is meant to make (1) as easy as possible, which may come at the expense of some ease of maintaining (2).</p>
-<section id="model-outputs">
-<h2>Model outputs<a class="headerlink" href="#model-outputs" title="Link to this heading">¶</a></h2>
-<p>The package is centered around an ‘output tree’: a hierarchical nested dictionary of outputs from the model, of the type that the user asked for. For example, if we are doing a macro analysis, we might expect something like:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">macro</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">baseline</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">tax_revenue</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100 billion</span>
-<span class="w">    </span><span class="nt">reform</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">tax_revenue</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200 billion</span>
-<span class="w">    </span><span class="nt">comparison</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">tax_revenue_impact</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100 billion</span>
-</pre></div>
-</div>
-<p>If you look at the file structure of the repo, you’ll see a folder <code class="docutils literal notranslate"><span class="pre">policyengine/outputs/</span></code>. This is where all the behaviour to deal with the models is housed. It’s designed so that maintainers should be able to add something new, e.g. <code class="docutils literal notranslate"><span class="pre">macro/comparison/deep_poverty_impact</span></code> or <code class="docutils literal notranslate"><span class="pre">macro/single/deep_poverty_rate</span></code>, without needing to know how the rest of the repo works. Each file here is dynamically loaded into the tree (notice how <code class="docutils literal notranslate"><span class="pre">macro/comparison/tax_revenue_impact.py</span></code> aligns with that example- not a coincidence!), and must contain a single function, with the same name as the filename, that takes <code class="docutils literal notranslate"><span class="pre">policyengine.Simulation</span></code> as an argument. <code class="docutils literal notranslate"><span class="pre">policyengine.Simulation</span></code> has all the tax-benefit models initialised that the function might need, as well as all the metadata the user has passing in about their modelling request.</p>
-<p>There’s a slight caveat here that not everything aligns exactly with this folder structure. At the top level, we have household and macro, but one layer down, we have ‘single’ (e.g. ‘poverty rate’) and ‘comparison’ (e.g. ‘change in poverty rate’). At runtime, ‘single’ is duplicated into ‘baseline’ and ‘reform’ with the operations duplicated. For example, here’s the output tree under that example from the introduction.</p>
-<div class="cell docutils container">
+          <section class="tex2jax_ignore mathjax_ignore" id="schema">
+<h1>Schema<a class="headerlink" href="#schema" title="Link to this heading">¶</a></h1>
+<p>This page contains examples of the schema of the returned simulation outputs for given types of simulation. Each subsection specifies the country, scope and whether a reform has been passed. The schema is given in YAML format.</p>
+<section id="uk-macro-reform-comparison">
+<h2>UK, macro, reform-comparison<a class="headerlink" href="#uk-macro-reform-comparison" title="Link to this heading">¶</a></h2>
+<div class="cell tag_hide-input docutils container">
+<details class="hide above-input">
+<summary aria-label="Toggle hidden content">
+<span class="collapsed">Show code cell source</span>
+<span class="expanded">Hide code cell source</span>
+</summary>
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">policyengine</span> <span class="kn">import</span> <span class="n">Simulation</span>
+<span class="kn">from</span> <span class="nn">IPython.display</span> <span class="kn">import</span> <span class="n">Markdown</span>
+<span class="kn">import</span> <span class="nn">yaml</span>
+
+<span class="k">def</span> <span class="nf">replace_value_with_dtype</span><span class="p">(</span><span class="n">tree</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">tree</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tree</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="n">replace_value_with_dtype</span><span class="p">(</span><span class="n">tree</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">tree</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">tree</span><span class="p">[</span><span class="n">key</span><span class="p">]))</span>
+    <span class="k">return</span> <span class="n">tree</span>
 
 <span class="n">sim</span> <span class="o">=</span> <span class="n">Simulation</span><span class="p">(</span>
     <span class="n">country</span><span class="o">=</span><span class="s2">&quot;uk&quot;</span><span class="p">,</span>
     <span class="n">scope</span><span class="o">=</span><span class="s2">&quot;macro&quot;</span><span class="p">,</span>
-    <span class="n">data</span><span class="o">=</span><span class="s2">&quot;enhanced_frs_2022_23&quot;</span><span class="p">,</span>
     <span class="n">time_period</span><span class="o">=</span><span class="mi">2025</span><span class="p">,</span>
     <span class="n">reform</span><span class="o">=</span><span class="p">{</span>
         <span class="s2">&quot;gov.hmrc.income_tax.allowances.personal_allowance.amount&quot;</span><span class="p">:</span> <span class="p">{</span>
@@ -293,13 +289,64 @@
     <span class="p">}</span>
 <span class="p">)</span>
 <span class="n">sim</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;macro&quot;</span><span class="p">)</span>
+<span class="n">tree</span> <span class="o">=</span> <span class="n">replace_value_with_dtype</span><span class="p">(</span><span class="n">sim</span><span class="o">.</span><span class="n">outputs</span><span class="p">)</span>
+
+<span class="n">Markdown</span><span class="p">(</span><span class="s1">&#39;```yaml</span><span class="se">\n</span><span class="s1">&#39;</span> <span class="o">+</span> <span class="n">yaml</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">```&#39;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
+</details>
 <div class="cell_output docutils container">
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>{&#39;comparison&#39;: {&#39;revenue_impact&#39;: 137.95680800660614},
- &#39;baseline&#39;: {&#39;tax_revenue&#39;: 649.7843458774124},
- &#39;reform&#39;: {&#39;tax_revenue&#39;: 787.7411538840186}}
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">macro</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">baseline</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">gov</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">balance</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">total_gov_spending</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">total_state_tax</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;int&#39;&gt;</span>
+<span class="w">        </span><span class="nt">total_tax_revenue</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">      </span><span class="nt">programs</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">child_benefit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">council_tax</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">fuel_duty</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">income_tax</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">national_insurance</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">ni_employer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">pension_credit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">state_pension</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">tax_credits</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">universal_credit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">vat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">    </span><span class="nt">household</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">demographic_values</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">household_count_people</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">household_weight</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">person_weight</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">  </span><span class="nt">comparison</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">revenue_impact</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">tax_revenues</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">  </span><span class="nt">reform</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">gov</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">balance</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">total_gov_spending</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">total_state_tax</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;int&#39;&gt;</span>
+<span class="w">        </span><span class="nt">total_tax_revenue</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">      </span><span class="nt">programs</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">child_benefit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">council_tax</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">fuel_duty</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">income_tax</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">national_insurance</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">ni_employer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">pension_credit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">state_pension</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">tax_credits</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">universal_credit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">vat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">    </span><span class="nt">household</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">demographic_values</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">household_count_people</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">household_weight</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">person_weight</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
 </pre></div>
 </div>
 </div>
@@ -331,23 +378,15 @@
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="schema.html">
-              <div class="page-info">
-                <div class="context">
-                  <span>Next</span>
-                </div>
-                <div class="title">Schema</div>
-              </div>
-              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
-            </a>
-          <a class="prev-page" href="index.html">
+          
+          <a class="prev-page" href="maintaining.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Home</div>
+                <div class="title">Maintainance</div>
                 
               </div>
             </a>
@@ -381,8 +420,8 @@
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">Maintainance</a><ul>
-<li><a class="reference internal" href="#model-outputs">Model outputs</a></li>
+<li><a class="reference internal" href="#">Schema</a><ul>
+<li><a class="reference internal" href="#uk-macro-reform-comparison">UK, macro, reform-comparison</a></li>
 </ul>
 </li>
 </ul>
