@@ -301,9 +301,9 @@
 <span class="w">  </span><span class="nt">baseline</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">gov</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">balance</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">total_gov_spending</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">total_spending</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
 <span class="w">        </span><span class="nt">total_state_tax</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;int&#39;&gt;</span>
-<span class="w">        </span><span class="nt">total_tax_revenue</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">total_tax</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
 <span class="w">      </span><span class="nt">programs</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">child_benefit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
 <span class="w">        </span><span class="nt">council_tax</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
@@ -317,19 +317,51 @@
 <span class="w">        </span><span class="nt">universal_credit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
 <span class="w">        </span><span class="nt">vat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
 <span class="w">    </span><span class="nt">household</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">demographic_values</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">demographics</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">age</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
 <span class="w">        </span><span class="nt">household_count_people</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
 <span class="w">        </span><span class="nt">household_weight</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">is_male</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
 <span class="w">        </span><span class="nt">person_weight</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">race</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;NoneType&#39;&gt;</span>
+<span class="w">      </span><span class="nt">finance</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">deep_poverty_gap</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">employment_income_hh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">equiv_household_net_income</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">household_income_decile</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">household_market_income</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">household_net_income</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">in_poverty</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">person_in_deep_poverty</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">person_in_poverty</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">poverty_gap</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">self_employment_income_hh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">total_net_income</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">wealth</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">wealth_decile</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">      </span><span class="nt">labor_supply</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">budgetary_impact_lsr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;int&#39;&gt;</span>
+<span class="w">        </span><span class="nt">income_lsr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;int&#39;&gt;</span>
+<span class="w">        </span><span class="nt">income_lsr_hh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">substitution_lsr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;int&#39;&gt;</span>
+<span class="w">        </span><span class="nt">substitution_lsr_hh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">weekly_hours</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;int&#39;&gt;</span>
+<span class="w">        </span><span class="nt">weekly_hours_income_effect</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;int&#39;&gt;</span>
+<span class="w">        </span><span class="nt">weekly_hours_substitution_effect</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;int&#39;&gt;</span>
 <span class="w">  </span><span class="nt">comparison</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">revenue_impact</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">tax_revenues</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">    </span><span class="nt">budget</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">baseline_net_income</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">      </span><span class="nt">benefit_spending_impact</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">      </span><span class="nt">budgetary_impact</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">      </span><span class="nt">households</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;float&#39;&gt;</span>
+<span class="w">      </span><span class="nt">state_tax_revenue_impact</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;int&#39;&gt;</span>
+<span class="w">      </span><span class="nt">tax_revenue_impact</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
 <span class="w">  </span><span class="nt">reform</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">gov</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">balance</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">total_gov_spending</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">total_spending</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
 <span class="w">        </span><span class="nt">total_state_tax</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;int&#39;&gt;</span>
-<span class="w">        </span><span class="nt">total_tax_revenue</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">total_tax</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
 <span class="w">      </span><span class="nt">programs</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">child_benefit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
 <span class="w">        </span><span class="nt">council_tax</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
@@ -343,10 +375,37 @@
 <span class="w">        </span><span class="nt">universal_credit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
 <span class="w">        </span><span class="nt">vat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
 <span class="w">    </span><span class="nt">household</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">demographic_values</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">demographics</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">age</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
 <span class="w">        </span><span class="nt">household_count_people</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
 <span class="w">        </span><span class="nt">household_weight</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">is_male</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
 <span class="w">        </span><span class="nt">person_weight</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">race</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;NoneType&#39;&gt;</span>
+<span class="w">      </span><span class="nt">finance</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">deep_poverty_gap</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">employment_income_hh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">equiv_household_net_income</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">household_income_decile</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">household_market_income</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">household_net_income</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">in_poverty</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">person_in_deep_poverty</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">person_in_poverty</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">poverty_gap</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">self_employment_income_hh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">total_net_income</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;numpy.float64&#39;&gt;</span>
+<span class="w">        </span><span class="nt">wealth</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">wealth_decile</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">      </span><span class="nt">labor_supply</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">budgetary_impact_lsr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;int&#39;&gt;</span>
+<span class="w">        </span><span class="nt">income_lsr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;int&#39;&gt;</span>
+<span class="w">        </span><span class="nt">income_lsr_hh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">substitution_lsr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;int&#39;&gt;</span>
+<span class="w">        </span><span class="nt">substitution_lsr_hh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;list&#39;&gt;</span>
+<span class="w">        </span><span class="nt">weekly_hours</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;int&#39;&gt;</span>
+<span class="w">        </span><span class="nt">weekly_hours_income_effect</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;int&#39;&gt;</span>
+<span class="w">        </span><span class="nt">weekly_hours_substitution_effect</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;class &#39;int&#39;&gt;</span>
 </pre></div>
 </div>
 </div>
