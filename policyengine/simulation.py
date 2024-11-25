@@ -73,8 +73,14 @@ class Simulation:
         """
         if output.endswith("/"):
             output = output[:-1]
+        
+        if output == "":
+            output = list(self.outputs.keys())[0]
 
         node = self.outputs
+
+        for child_key in output.split("/")[:-1]:
+            node = node[child_key]
 
         parent = node
         child_key = output.split("/")[-1]

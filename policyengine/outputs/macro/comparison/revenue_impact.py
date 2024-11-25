@@ -10,6 +10,13 @@ def revenue_impact(simulation: Simulation):
     Returns:
         float: The revenue impact of the simulation.
     """
-    tax_revenue_baseline = simulation.calculate("macro/baseline/tax_revenue")
-    tax_revenue_reform = simulation.calculate("macro/reform/tax_revenue")
-    return tax_revenue_reform - tax_revenue_baseline
+    tax_revenue_baseline = simulation.calculate(
+        "macro/baseline/gov/balance"
+    )["total_tax_revenue"]
+    tax_revenue_reform = simulation.calculate(
+        "macro/reform/gov/balance"
+    )["total_tax_revenue"]
+    tax_revenue_impact = tax_revenue_reform - tax_revenue_baseline
+    return {
+        "tax_revenues": tax_revenue_impact,
+    }
