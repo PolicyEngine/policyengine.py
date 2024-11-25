@@ -73,6 +73,9 @@ class Simulation:
         """
         if output.endswith("/"):
             output = output[:-1]
+        
+        if output == "":
+            output = list(self.outputs.keys())[0]
 
         node = self.outputs
 
