@@ -14,7 +14,7 @@ def balance(simulation: Simulation) -> dict:
             "household_state_income_tax"
         ).sum()
     return {
-        "total_tax_revenue": total_tax,
-        "total_gov_spending": total_spending,
+        "total_tax": total_tax,
+        "total_spending": total_spending,
         "total_state_tax": total_state_tax,
     }

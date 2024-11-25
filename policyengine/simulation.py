@@ -73,7 +73,7 @@ class Simulation:
         """
         if output.endswith("/"):
             output = output[:-1]
-        
+
         if output == "":
             output = list(self.outputs.keys())[0]
 
@@ -88,7 +88,7 @@ class Simulation:
 
         # Check if any descendants are None
 
-        if parent[child_key] is None:
+        if parent[child_key] is None and output in self.output_functions:
             output_function = self.output_functions[output]
             parent[child_key] = node = output_function(self)
 
