@@ -76,6 +76,9 @@ class Simulation:
 
         node = self.outputs
 
+        for child_key in output.split("/")[:-1]:
+            node = node[child_key]
+
         parent = node
         child_key = output.split("/")[-1]
         node = parent[child_key]
