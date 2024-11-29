@@ -1,6 +1,12 @@
 from policyengine_core import Simulation as CountrySimulation
+from policyengine_core import Microsimulation as CountryMicrosimulation
+from policyengine_core.data import Dataset
+from policyengine.utils.huggingface import download
+from policyengine_us import CountryTaxBenefitSystem as USSystem
+from policyengine_uk import CountryTaxBenefitSystem as UKSystem
 from policyengine_core.reforms import Reform
 from typing import Tuple
+from policyengine.constants import *
 
 
 class Simulation:
@@ -18,6 +24,8 @@ class Simulation:
     """The baseline simulation inputs."""
     reform: dict
     """The reform simulation inputs."""
+    options: dict
+    """Dynamic options for the simulation type."""
 
     comparison: bool
     """Whether we are comparing two simulations, or analysing a single one."""
@@ -37,6 +45,7 @@ class Simulation:
         reform: dict = None,
         baseline: dict = None,
         verbose: bool = False,
+        options: dict = None,
     ):
         """Initialise the simulation with the given parameters.
 
@@ -49,9 +58,10 @@ class Simulation:
         """
         self.country = country
         self.scope = scope
-        self.data = data
+        self._set_dataset(data)
         self.time_period = time_period
         self.verbose = verbose
+        self.options = options or {}
 
         if isinstance(reform, dict):
             reform = Reform.from_dict(reform, country_id=country)
@@ -65,6 +75,28 @@ class Simulation:
         self.output_functions, self.outputs = self._get_outputs()
 
         self._initialise_simulations()
+
+    def _set_dataset(self, dataset: str):
+        if dataset in DATASETS[self.country]:
+            self.data = DATASETS[self.country][dataset]
+        elif dataset is None:
+            self.data = DEFAULT_DATASETS[self.country]
+        else:
+            self.data = dataset
+        
+        # Short-term hacky fix: handle legacy 'array' datasets that don't specify the year for each variable: we should transition these to variable/period/value format.
+        # But they're used frequently for now, and we need backwards compatibility.
+
+        if self.data is not None and "cps_2023" in self.data:
+            if "hf://" in self.data:
+                owner, repo, filename = self.data.split("/")[-3:]
+                if "@" in filename:
+                    version = filename.split("@")[-1]
+                    filename = filename.split("@")[0]
+                else:
+                    version = None
+                self.data = download(repo=owner + "/" + repo, repo_filename=filename, local_folder=None, version=version)
+                self.data = Dataset.from_file(self.data, 2023)
 
     def calculate(self, output: str):
         """Calculate the given output (path).
@@ -178,30 +210,24 @@ class Simulation:
 
     def _initialise_simulations(self):
         macro = self.scope == "macro"
-        if self.country == "uk":
-            from policyengine_uk import (
-                Microsimulation as UKMicrosim,
-                Simulation as UKSim,
-            )
-
-            self._simulation_type = UKMicrosim if macro else UKSim
-        elif self.country == "us":
-            from policyengine_us import (
-                Microsimulation as USMicrosim,
-                Simulation as USSim,
-            )
-
-            self._simulation_type = USMicrosim if macro else USSim
-        self.baseline = self._simulation_type(
+        _simulation_type = CountryMicrosimulation if macro else CountrySimulation
+        tax_benefit_system = {
+            "uk": UKSystem(),
+            "us": USSystem(),
+        }[self.country]
+        self.baseline = _simulation_type(
             dataset=self.data if macro else None,
             situation=self.data if not macro else None,
             reform=self.baseline,
+            tax_benefit_system=tax_benefit_system,
         )
         self.baseline.default_calculation_period = self.time_period
+        self.baseline.default_input_period = 2023
         if self.comparison:
-            self.reformed = self._simulation_type(
+            self.reformed = _simulation_type(
                 dataset=self.data if macro else None,
                 situation=self.data if not macro else None,
                 reform=self.reform,
+                tax_benefit_system=tax_benefit_system,
             )
             self.reformed.default_calculation_period = self.time_period

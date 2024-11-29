@@ -10,7 +10,7 @@ def balance(simulation: Simulation) -> dict:
     elif simulation.country == "us":
         total_tax = sim.calculate("household_tax").sum()
         total_spending = sim.calculate("household_benefits").sum()
-        total_state_tax = simulation.calculate(
+        total_state_tax = sim.calculate(
             "household_state_income_tax"
         ).sum()
     return {
