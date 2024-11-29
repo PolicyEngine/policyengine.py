@@ -8,7 +8,13 @@ def budget(simulation: Simulation):
         simulation (Simulation): The simulation for which the revenue impact is to be calculated.
 
     Returns:
-        float: The revenue impact of the simulation.
+        dict: A dictionary containing the budgetary impact details with the following keys:
+            - budgetary_impact (float): The overall budgetary impact.
+            - tax_revenue_impact (float): The impact on tax revenue.
+            - state_tax_revenue_impact (float): The impact on state tax revenue.
+            - benefit_spending_impact (float): The impact on benefit spending.
+            - households (int): The number of households.
+            - baseline_net_income (float): The total net income in the baseline scenario.
     """
     baseline = simulation.calculate("macro/baseline")
     reform = simulation.calculate("macro/reform")

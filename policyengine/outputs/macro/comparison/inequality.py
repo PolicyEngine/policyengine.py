@@ -1,7 +1,17 @@
 from policyengine import Simulation
 
-
 def inequality(simulation: Simulation):
+    """Calculate the impact of the reform on inequality.
+
+    Args:
+        simulation (Simulation): The simulation for which the impact is to be calculated.
+
+    Returns:
+        dict: A dictionary containing the inequality impact details with the following keys:
+            - gini (dict): A dictionary with baseline and reform Gini coefficients.
+            - top_10_pct_share (dict): A dictionary with baseline and reform top 10% income share.
+            - top_1_pct_share (dict): A dictionary with baseline and reform top 1% income share.
+    """
     baseline = simulation.calculate("macro/baseline")["household"][
         "inequality"
     ]

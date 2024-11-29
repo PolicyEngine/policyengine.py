@@ -4,6 +4,16 @@ import numpy as np
 
 
 def income_decile(simulation: Simulation):
+    """Calculate the impact of the reform on income deciles.
+
+    Args:
+        simulation (Simulation): The simulation for which the impact is to be calculated.
+
+    Returns:
+        dict: A dictionary containing the impact details with the following keys:
+            - deciles (dict): A dictionary with keys representing outcome labels and values as lists of percentages for each decile.
+            - all (dict): A dictionary with keys representing outcome labels and values as overall percentages.
+    """
     baseline = simulation.calculate("macro/baseline")
     reform = simulation.calculate("macro/reform")
 

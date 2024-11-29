@@ -1,8 +1,17 @@
 from policyengine import Simulation
 from microdf import MicroSeries
 
-
 def gender(simulation: Simulation):
+    """Calculate the impact of the reform on poverty by gender.
+
+    Args:
+        simulation (Simulation): The simulation for which the impact is to be calculated.
+
+    Returns:
+        dict: A dictionary containing the poverty and deep poverty impact details with the following keys:
+            - poverty (dict): A dictionary with keys representing genders and values as dictionaries with baseline and reform poverty rates.
+            - deep_poverty (dict): A dictionary with keys representing genders and values as dictionaries with baseline and reform deep poverty rates.
+    """
     baseline = simulation.calculate("macro/baseline")["household"]["finance"]
     reform = simulation.calculate("macro/reform")["household"]["finance"]
     baseline_demographics = simulation.calculate("macro/baseline")[
