@@ -3,6 +3,16 @@ from microdf import MicroSeries
 
 
 def income(simulation: Simulation):
+    """Calculate the impact of the reform on income deciles.
+
+    Args:
+        simulation (Simulation): The simulation for which the impact is to be calculated.
+
+    Returns:
+        dict: A dictionary containing the impact details with the following keys:
+            - relative (dict): A dictionary with keys representing deciles and values as relative income changes.
+            - average (dict): A dictionary with keys representing deciles and values as average income changes.
+    """
     baseline = simulation.calculate("macro/baseline")
     reform = simulation.calculate("macro/reform")
 

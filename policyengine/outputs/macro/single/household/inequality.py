@@ -2,11 +2,11 @@ from policyengine import Simulation
 
 
 def inequality(simulation: Simulation) -> dict:
-    personal_hh_equiv_income = simulation.baseline.calculate(
+    personal_hh_equiv_income = simulation.selected.calculate(
         "equiv_household_net_income"
     )
     personal_hh_equiv_income[personal_hh_equiv_income < 0] = 0
-    household_count_people = simulation.baseline.calculate(
+    household_count_people = simulation.selected.calculate(
         "household_count_people"
     ).values
     personal_hh_equiv_income.weights *= household_count_people

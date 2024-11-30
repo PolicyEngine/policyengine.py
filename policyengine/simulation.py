@@ -1,6 +1,18 @@
 from policyengine_core import Simulation as CountrySimulation
+from policyengine_core import Microsimulation as CountryMicrosimulation
+from policyengine_core.data import Dataset
+from policyengine.utils.huggingface import download
+from policyengine_us import (
+    Simulation as USSimulation,
+    Microsimulation as USMicrosimulation,
+)
+from policyengine_uk import (
+    Simulation as UKSimulation,
+    Microsimulation as UKMicrosimulation,
+)
 from policyengine_core.reforms import Reform
-from typing import Tuple
+from typing import Tuple, Any
+from policyengine.constants import *
 
 
 class Simulation:
@@ -18,6 +30,8 @@ class Simulation:
     """The baseline simulation inputs."""
     reform: dict
     """The reform simulation inputs."""
+    options: dict
+    """Dynamic options for the simulation type."""
 
     comparison: bool
     """Whether we are comparing two simulations, or analysing a single one."""
@@ -37,6 +51,7 @@ class Simulation:
         reform: dict = None,
         baseline: dict = None,
         verbose: bool = False,
+        options: dict = None,
     ):
         """Initialise the simulation with the given parameters.
 
@@ -49,15 +64,17 @@ class Simulation:
         """
         self.country = country
         self.scope = scope
-        self.data = data
+        self._set_dataset(data)
         self.time_period = time_period
         self.verbose = verbose
+        self.options = options or {}
 
         if isinstance(reform, dict):
             reform = Reform.from_dict(reform, country_id=country)
         elif isinstance(reform, int):
             reform = Reform.from_api(reform, country_id=country)
 
+        self.baseline = baseline
         self.reform = reform
 
         self.comparison = reform is not None
@@ -66,11 +83,40 @@ class Simulation:
 
         self._initialise_simulations()
 
-    def calculate(self, output: str):
+    def _set_dataset(self, dataset: str):
+        if dataset in DATASETS[self.country]:
+            self.data = DATASETS[self.country][dataset]
+        elif dataset is None:
+            self.data = DEFAULT_DATASETS[self.country]
+        else:
+            self.data = dataset
+
+        # Short-term hacky fix: handle legacy 'array' datasets that don't specify the year for each variable: we should transition these to variable/period/value format.
+        # But they're used frequently for now, and we need backwards compatibility.
+
+        if self.data is not None and "cps_2023" in self.data:
+            if "hf://" in self.data:
+                owner, repo, filename = self.data.split("/")[-3:]
+                if "@" in filename:
+                    version = filename.split("@")[-1]
+                    filename = filename.split("@")[0]
+                else:
+                    version = None
+                self.data = download(
+                    repo=owner + "/" + repo,
+                    repo_filename=filename,
+                    local_folder=None,
+                    version=version,
+                )
+                self.data = Dataset.from_file(self.data, 2023)
+
+    def calculate(self, output: str, force: bool = False, **kwargs) -> Any:
         """Calculate the given output (path).
 
         Args:
             output (str): The output to calculate. Must be a valid path in the output tree.
+            force (bool): Whether to force recalculation of the output, even if it has already been calculated.
+            **kwargs: Any additional arguments to pass to the output function.
 
         Returns:
             Any: The output of the calculation (using the cache if possible).
@@ -96,9 +142,11 @@ class Simulation:
 
         # Check if any descendants are None
 
-        if parent[child_key] is None and output in self.output_functions:
+        if (
+            force or parent[child_key] is None or len(kwargs) > 0
+        ) and output in self.output_functions:
             output_function = self.output_functions[output]
-            parent[child_key] = node = output_function(self)
+            parent[child_key] = node = output_function(self, **kwargs)
 
         if isinstance(node, dict):
             for child_key in node.keys():
@@ -144,17 +192,22 @@ class Simulation:
             rest = "/".join(key.split("/")[2:])
             func = output_functions[key]
 
-            def passed_reform_simulation(func):
-                def adjusted_func(simulation):
-                    simulation.baseline = simulation.reformed
-                    return func(simulation)
+            def passed_reform_simulation(func, is_reform):
+                def adjusted_func(simulation, **kwargs):
+                    if is_reform:
+                        simulation.selected = simulation.reformed
+                    else:
+                        simulation.selected = simulation.baseline
+                    return func(simulation, **kwargs)
 
                 return adjusted_func
 
             if self.comparison:
-                output_functions[f"{root}/baseline/{rest}"] = func
+                output_functions[f"{root}/baseline/{rest}"] = (
+                    passed_reform_simulation(func, False)
+                )
                 output_functions[f"{root}/reform/{rest}"] = (
-                    passed_reform_simulation(func)
+                    passed_reform_simulation(func, True)
                 )
             else:
                 output_functions[f"{root}/{rest}"] = func
@@ -178,28 +231,24 @@ class Simulation:
 
     def _initialise_simulations(self):
         macro = self.scope == "macro"
-        if self.country == "uk":
-            from policyengine_uk import (
-                Microsimulation as UKMicrosim,
-                Simulation as UKSim,
-            )
-
-            self._simulation_type = UKMicrosim if macro else UKSim
-        elif self.country == "us":
-            from policyengine_us import (
-                Microsimulation as USMicrosim,
-                Simulation as USSim,
-            )
-
-            self._simulation_type = USMicrosim if macro else USSim
-        self.baseline = self._simulation_type(
+        _simulation_type = {
+            "uk": {
+                True: UKMicrosimulation,
+                False: UKSimulation,
+            },
+            "us": {
+                True: USMicrosimulation,
+                False: USSimulation,
+            },
+        }[self.country][macro]
+        self.baseline = _simulation_type(
             dataset=self.data if macro else None,
             situation=self.data if not macro else None,
             reform=self.baseline,
         )
         self.baseline.default_calculation_period = self.time_period
         if self.comparison:
-            self.reformed = self._simulation_type(
+            self.reformed = _simulation_type(
                 dataset=self.data if macro else None,
                 situation=self.data if not macro else None,
                 reform=self.reform,
