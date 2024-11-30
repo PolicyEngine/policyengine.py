@@ -1,6 +1,7 @@
 from policyengine import Simulation
 from microdf import MicroSeries
 
+
 def race(simulation: Simulation):
     """Calculate the impact of the reform on poverty by race.
 

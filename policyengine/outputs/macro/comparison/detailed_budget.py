@@ -1,5 +1,6 @@
 from policyengine import Simulation
 
+
 def detailed_budget(simulation: Simulation):
     """Calculate the detailed budgetary impact of the given simulation.
 

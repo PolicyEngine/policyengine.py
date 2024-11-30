@@ -2,7 +2,7 @@ from policyengine import Simulation
 
 
 def finance(simulation: Simulation) -> dict:
-    sim = simulation.baseline
+    sim = simulation.selected
 
     total_net_income = sim.calculate("household_net_income").sum()
     employment_income_hh = (

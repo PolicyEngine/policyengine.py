@@ -2,10 +2,16 @@ from policyengine_core import Simulation as CountrySimulation
 from policyengine_core import Microsimulation as CountryMicrosimulation
 from policyengine_core.data import Dataset
 from policyengine.utils.huggingface import download
-from policyengine_us import CountryTaxBenefitSystem as USSystem
-from policyengine_uk import CountryTaxBenefitSystem as UKSystem
+from policyengine_us import (
+    Simulation as USSimulation,
+    Microsimulation as USMicrosimulation,
+)
+from policyengine_uk import (
+    Simulation as UKSimulation,
+    Microsimulation as UKMicrosimulation,
+)
 from policyengine_core.reforms import Reform
-from typing import Tuple
+from typing import Tuple, Any
 from policyengine.constants import *
 
 
@@ -68,6 +74,7 @@ class Simulation:
         elif isinstance(reform, int):
             reform = Reform.from_api(reform, country_id=country)
 
+        self.baseline = baseline
         self.reform = reform
 
         self.comparison = reform is not None
@@ -83,7 +90,7 @@ class Simulation:
             self.data = DEFAULT_DATASETS[self.country]
         else:
             self.data = dataset
-        
+
         # Short-term hacky fix: handle legacy 'array' datasets that don't specify the year for each variable: we should transition these to variable/period/value format.
         # But they're used frequently for now, and we need backwards compatibility.
 
@@ -95,14 +102,21 @@ class Simulation:
                     filename = filename.split("@")[0]
                 else:
                     version = None
-                self.data = download(repo=owner + "/" + repo, repo_filename=filename, local_folder=None, version=version)
+                self.data = download(
+                    repo=owner + "/" + repo,
+                    repo_filename=filename,
+                    local_folder=None,
+                    version=version,
+                )
                 self.data = Dataset.from_file(self.data, 2023)
 
-    def calculate(self, output: str):
+    def calculate(self, output: str, force: bool = False, **kwargs) -> Any:
         """Calculate the given output (path).
 
         Args:
             output (str): The output to calculate. Must be a valid path in the output tree.
+            force (bool): Whether to force recalculation of the output, even if it has already been calculated.
+            **kwargs: Any additional arguments to pass to the output function.
 
         Returns:
             Any: The output of the calculation (using the cache if possible).
@@ -128,9 +142,11 @@ class Simulation:
 
         # Check if any descendants are None
 
-        if parent[child_key] is None and output in self.output_functions:
+        if (
+            force or parent[child_key] is None or len(kwargs) > 0
+        ) and output in self.output_functions:
             output_function = self.output_functions[output]
-            parent[child_key] = node = output_function(self)
+            parent[child_key] = node = output_function(self, **kwargs)
 
         if isinstance(node, dict):
             for child_key in node.keys():
@@ -176,17 +192,22 @@ class Simulation:
             rest = "/".join(key.split("/")[2:])
             func = output_functions[key]
 
-            def passed_reform_simulation(func):
-                def adjusted_func(simulation):
-                    simulation.baseline = simulation.reformed
-                    return func(simulation)
+            def passed_reform_simulation(func, is_reform):
+                def adjusted_func(simulation, **kwargs):
+                    if is_reform:
+                        simulation.selected = simulation.reformed
+                    else:
+                        simulation.selected = simulation.baseline
+                    return func(simulation, **kwargs)
 
                 return adjusted_func
 
             if self.comparison:
-                output_functions[f"{root}/baseline/{rest}"] = func
+                output_functions[f"{root}/baseline/{rest}"] = (
+                    passed_reform_simulation(func, False)
+                )
                 output_functions[f"{root}/reform/{rest}"] = (
-                    passed_reform_simulation(func)
+                    passed_reform_simulation(func, True)
                 )
             else:
                 output_functions[f"{root}/{rest}"] = func
@@ -210,24 +231,26 @@ class Simulation:
 
     def _initialise_simulations(self):
         macro = self.scope == "macro"
-        _simulation_type = CountryMicrosimulation if macro else CountrySimulation
-        tax_benefit_system = {
-            "uk": UKSystem(),
-            "us": USSystem(),
-        }[self.country]
+        _simulation_type = {
+            "uk": {
+                True: UKMicrosimulation,
+                False: UKSimulation,
+            },
+            "us": {
+                True: USMicrosimulation,
+                False: USSimulation,
+            },
+        }[self.country][macro]
         self.baseline = _simulation_type(
             dataset=self.data if macro else None,
             situation=self.data if not macro else None,
             reform=self.baseline,
-            tax_benefit_system=tax_benefit_system,
         )
         self.baseline.default_calculation_period = self.time_period
-        self.baseline.default_input_period = 2023
         if self.comparison:
             self.reformed = _simulation_type(
                 dataset=self.data if macro else None,
                 situation=self.data if not macro else None,
                 reform=self.reform,
-                tax_benefit_system=tax_benefit_system,
             )
             self.reformed.default_calculation_period = self.time_period

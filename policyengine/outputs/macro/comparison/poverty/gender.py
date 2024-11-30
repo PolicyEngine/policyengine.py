@@ -1,6 +1,7 @@
 from policyengine import Simulation
 from microdf import MicroSeries
 
+
 def gender(simulation: Simulation):
     """Calculate the impact of the reform on poverty by gender.
 

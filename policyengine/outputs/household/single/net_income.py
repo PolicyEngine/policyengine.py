@@ -1,2 +1,2 @@
 def net_income(simulation):
-    return simulation.baseline.calculate("household_net_income").sum()
+    return simulation.selected.calculate("household_net_income").sum()
