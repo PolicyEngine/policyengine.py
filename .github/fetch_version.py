@@ -2,9 +2,7 @@ def fetch_version():
     try:
         import pkg_resources
 
-        version = pkg_resources.get_distribution(
-            "policyengine"
-        ).version
+        version = pkg_resources.get_distribution("policyengine").version
         return version
     except Exception as e:
         print(f"Error fetching version: {e}")
