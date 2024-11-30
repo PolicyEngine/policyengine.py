@@ -22,7 +22,6 @@ def parliamentary_constituencies(
         local_folder=None,
         version=None,
     )
-    weights_file_path = "/Users/nikhilwoodruff/policyengine/policyengine-uk-data/policyengine_uk_data/storage/parliamentary_constituency_weights.h5"
     constituency_names_file_path = download(
         repo="policyengine/policyengine-uk-data",
         repo_filename="constituencies_2024.csv",
