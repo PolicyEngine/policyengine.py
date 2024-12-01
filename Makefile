@@ -5,7 +5,7 @@ documentation:
 	jb build docs
 
 install:
-	pip install -e .
+	pip install -e .[dev]
 
 format:
 	black . -l 79
