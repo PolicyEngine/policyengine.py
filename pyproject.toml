@@ -17,6 +17,7 @@ dependencies = [
     "policyengine-uk",
     "policyengine-us",
     "microdf_python",
+    "getpass4",
 ]
 
 [project.optional-dependencies]
