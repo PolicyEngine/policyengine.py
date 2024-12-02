@@ -20,3 +20,9 @@
     - Budget chart.
     - Budget window chart and data.
   date: 2024-12-02 12:12:59
+- bump: minor
+  changes:
+    added:
+    - State level subsets.
+    - Huggingface token CLI entry.
+  date: 2024-12-02 13:48:27

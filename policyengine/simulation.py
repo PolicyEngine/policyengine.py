@@ -210,7 +210,9 @@ class Simulation:
                     passed_reform_simulation(func, True)
                 )
             else:
-                output_functions[f"{root}/{rest}"] = func
+                output_functions[f"{root}/{rest}"] = passed_reform_simulation(
+                    func, False
+                )
 
             del output_functions[key]
 
@@ -251,6 +253,11 @@ class Simulation:
         if "subsample" in self.options:
             self.baseline = self.baseline.subsample(self.options["subsample"])
 
+        if "region" in self.options:
+            self.baseline = self._apply_region_to_simulation(
+                self.baseline, _simulation_type, self.options["region"]
+            )
+
         if self.comparison:
             self.reformed = _simulation_type(
                 dataset=self.data if macro else None,
@@ -263,3 +270,32 @@ class Simulation:
                 self.reformed = self.reformed.subsample(
                     self.options["subsample"]
                 )
+
+            if "region" in self.options:
+                self.reformed = self._apply_region_to_simulation(
+                    self.reformed, _simulation_type, self.options["region"]
+                )
+
+    def _apply_region_to_simulation(
+        self,
+        simulation: CountryMicrosimulation,
+        simulation_type: type,
+        region: str,
+    ):
+        if self.country == "us":
+            df = simulation.to_input_dataframe()
+            state_code = simulation.calculate(
+                "state_code_str", map_to="person"
+            ).values
+            if region == "city/nyc":
+                in_nyc = simulation.calculate("in_nyc", map_to="person").values
+                simulation = simulation_type(
+                    dataset=df[in_nyc], reform=self.reform
+                )
+            elif "state/" in region:
+                state = region.split("/")[1]
+                simulation = simulation_type(
+                    dataset=df[state_code == state.upper()], reform=self.reform
+                )
+
+        return simulation
