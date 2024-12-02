@@ -59,6 +59,19 @@ def format_fig(fig: go.Figure, country: str = "uk") -> go.Figure:
             color="black",
         )
     )
+
+    # set template
+    fig.update_layout(
+        template="plotly_white",
+        height=600,
+        width=800,
+        plot_bgcolor="lightgray",  # set background color to light gray
+        paper_bgcolor="lightgray",  # set paper background color to white
+        # No white grid marks
+        xaxis=dict(gridcolor="lightgray", zerolinecolor="lightgray"),
+        yaxis=dict(gridcolor="lightgray", zerolinecolor="lightgray"),
+    )
+
     fig.add_layout_image(
         dict(
             source="https://raw.githubusercontent.com/PolicyEngine/policyengine-app/master/src/images/logos/policyengine/blue.png",
@@ -80,26 +93,11 @@ def format_fig(fig: go.Figure, country: str = "uk") -> go.Figure:
         text=f"Source: PolicyEngine tax-benefit microsimulation model (version {version})",
         xref="paper",
         yref="paper",
-        x=-0.1,
+        x=0,
         y=-0.15,
         showarrow=False,
-    )
-
-    fig.update_traces(
-        # No border
-        marker=dict(line=dict(width=0)),
-    )
-
-    # set template
-    fig.update_layout(
-        template="plotly_white",
-        height=600,
-        width=800,
-        plot_bgcolor="lightgray",  # set background color to light gray
-        paper_bgcolor="lightgray",  # set paper background color to white
-        # No white grid marks
-        xaxis=dict(gridcolor="lightgray", zerolinecolor="lightgray"),
-        yaxis=dict(gridcolor="lightgray", zerolinecolor="lightgray"),
+        xanchor="left",
+        yanchor="bottom",
     )
     # don't show modebar
     fig.update_layout(

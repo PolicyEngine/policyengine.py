@@ -6,12 +6,12 @@ from policyengine.utils.charts import *
 
 
 def parliamentary_constituencies(
-        simulation: Simulation, 
-        chart: bool = False, 
-        variable: str = None,
-        aggregator: str = None,
-        relative: bool = None,
-    ) -> dict:
+    simulation: Simulation,
+    chart: bool = False,
+    variable: str = None,
+    aggregator: str = None,
+    relative: bool = None,
+) -> dict:
     if not simulation.options.get("include_constituencies"):
         return {}
 
@@ -45,9 +45,11 @@ def parliamentary_constituencies(
     return result
 
 
-
 def heatmap(
     simulation: Simulation,
+    variable: str = None,
+    aggregator: str = None,
+    relative: bool = None,
 ) -> dict:
     if not simulation.options.get("include_constituencies"):
         return {}

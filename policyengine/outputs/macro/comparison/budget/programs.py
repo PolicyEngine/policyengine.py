@@ -1,7 +1,7 @@
 from policyengine import Simulation
 
 
-def detailed_budget(simulation: Simulation):
+def programs(simulation: Simulation):
     """Calculate the detailed budgetary impact of the given simulation.
 
     Args:

@@ -247,6 +247,10 @@ class Simulation:
             reform=self.baseline,
         )
         self.baseline.default_calculation_period = self.time_period
+
+        if "subsample" in self.options:
+            self.baseline = self.baseline.subsample(self.options["subsample"])
+
         if self.comparison:
             self.reformed = _simulation_type(
                 dataset=self.data if macro else None,
@@ -254,3 +258,8 @@ class Simulation:
                 reform=self.reform,
             )
             self.reformed.default_calculation_period = self.time_period
+
+            if "subsample" in self.options:
+                self.reformed = self.reformed.subsample(
+                    self.options["subsample"]
+                )
