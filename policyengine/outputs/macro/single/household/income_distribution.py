@@ -29,7 +29,7 @@ def income_distribution_chart(simulation: Simulation) -> go.Figure:
         color_discrete_sequence=[BLUE],
     )
     fig.update_layout(
-        title="Number of household by net income band",
+        title="Number of households by net income band",
         xaxis_title="Household net income",
         yaxis_title="Number of households",
     )
