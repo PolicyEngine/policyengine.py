@@ -104,6 +104,8 @@ def budget_chart(simulation: Simulation, data: dict) -> go.Figure:
         xaxis_title="",
         yaxis_title="Budgetary impact (£ billions)",
         yaxis_tickformat=",.0f",
+        uniformtext_minsize=12,
+        uniformtext_mode="hide",
     )
 
     return format_fig(fig)
