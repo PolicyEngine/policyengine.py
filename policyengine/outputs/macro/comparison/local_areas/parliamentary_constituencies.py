@@ -5,6 +5,46 @@ import plotly.express as px
 from policyengine.utils.charts import *
 
 
+def parliamentary_constituencies(
+    simulation: Simulation,
+    chart: bool = False,
+    variable: str = None,
+    aggregator: str = None,
+    relative: bool = None,
+) -> dict:
+    if not simulation.options.get("include_constituencies"):
+        return {}
+
+    if chart:
+        return heatmap(
+            simulation=simulation,
+            variable=variable,
+            aggregator=aggregator,
+            relative=relative,
+        )
+
+    constituency_baseline = simulation.calculate(
+        "macro/baseline/gov/local_areas/parliamentary_constituencies"
+    )
+    constituency_reform = simulation.calculate(
+        "macro/reform/gov/local_areas/parliamentary_constituencies"
+    )
+
+    result = {}
+
+    for constituency in constituency_baseline:
+        result[constituency] = {}
+        for key in constituency_baseline[constituency]:
+            result[constituency][key] = {
+                "change": constituency_reform[constituency][key]
+                - constituency_baseline[constituency][key],
+                "baseline": constituency_baseline[constituency][key],
+                "reform": constituency_reform[constituency][key],
+            }
+
+    return result
+
+
 def heatmap(
     simulation: Simulation,
     variable: str = None,
@@ -38,9 +78,6 @@ def heatmap(
         version=None,
     )
     constituency_names = pd.read_csv(constituency_names_file_path)
-    hex_map_locations = pd.read_csv(
-        "/Users/nikhilwoodruff/uk-local-area-calibration/policyengine_uk_local_areas/hex_map/hex_map_2024.csv"
-    ).set_index("code")
 
     if variable is None:
         variable = "household_net_income"
@@ -60,12 +97,6 @@ def heatmap(
                 - constituency_baseline[constituency][variable]
             )
 
-    constituency_names["x"] = hex_map_locations.loc[
-        constituency_names["code"]
-    ]["x"].values
-    constituency_names["y"] = hex_map_locations.loc[
-        constituency_names["code"]
-    ]["y"].values
     x_range = constituency_names["x"].max() - constituency_names["x"].min()
     y_range = constituency_names["y"].max() - constituency_names["y"].min()
     # Expand x range to preserve aspect ratio

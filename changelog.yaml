@@ -14,3 +14,9 @@
     - Major version bump to succeed old versions of the package under a different
       repo.
   date: 2024-12-01 12:38:17
+- bump: minor
+  changes:
+    added:
+    - Budget chart.
+    - Budget window chart and data.
+  date: 2024-12-02 12:12:59
