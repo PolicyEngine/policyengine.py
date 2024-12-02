@@ -74,6 +74,11 @@ class Simulation:
         elif isinstance(reform, int):
             reform = Reform.from_api(reform, country_id=country)
 
+        if isinstance(baseline, dict):
+            baseline = Reform.from_dict(baseline, country_id=country)
+        elif isinstance(baseline, int):
+            baseline = Reform.from_api(baseline, country_id=country)
+
         self.baseline = baseline
         self.reform = reform
 
