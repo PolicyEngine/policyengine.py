@@ -26,3 +26,8 @@
     - State level subsets.
     - Huggingface token CLI entry.
   date: 2024-12-02 13:48:27
+- bump: patch
+  changes:
+    fixed:
+    - Formatting in constituency charts.
+  date: 2024-12-03 13:16:27
