@@ -24,7 +24,7 @@ def plot_hex_map(value_by_constituency_name: dict) -> dict:
     constituency_names.x = (
         constituency_names.x - (constituency_names.y % 2 == 0) * 0.5
     )
-    constituency_names["Relative change"] = (
+    constituency_names["Value"] = (
         pd.Series(
             list(value_by_constituency_name.values()),
             index=list(value_by_constituency_name.keys()),
@@ -37,7 +37,7 @@ def plot_hex_map(value_by_constituency_name: dict) -> dict:
         constituency_names,
         x="x",
         y="y",
-        color="Relative change",
+        color="Value",
         hover_name="name",
     )
 
@@ -68,15 +68,23 @@ def plot_hex_map(value_by_constituency_name: dict) -> dict:
     x_max = fig.data[0]["marker"]["color"].max()
     max_abs = max(abs(x_min), abs(x_max))
 
+    if x_min < 0:
+        colorscale = [
+            [0, DARK_GRAY],
+            [0.5, "lightgray"],
+            [1, BLUE],
+        ]
+    else:
+        colorscale = [
+            [0, "lightgray"],
+            [1, BLUE],
+        ]
+
     fig.update_layout(
         coloraxis=dict(
-            cmin=-max_abs,
+            cmin=-max_abs if x_min < 0 else 0,
             cmax=max_abs,
-            colorscale=[
-                [0, DARK_GRAY],
-                [0.5, "lightgray"],
-                [1, BLUE],
-            ],
+            colorscale=colorscale,
         )
     )
 
