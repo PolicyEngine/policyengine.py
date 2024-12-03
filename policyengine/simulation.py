@@ -39,6 +39,8 @@ class Simulation:
     """The tax-benefit simulation for the baseline scenario."""
     reformed: CountrySimulation = None
     """The tax-benefit simulation for the reformed scenario."""
+    selected: CountryMicrosimulation = None
+    """The selected simulation for the current calculation."""
     verbose: bool = False
     """Whether to print out progress messages."""
 
@@ -73,6 +75,11 @@ class Simulation:
             reform = Reform.from_dict(reform, country_id=country)
         elif isinstance(reform, int):
             reform = Reform.from_api(reform, country_id=country)
+
+        if isinstance(baseline, dict):
+            baseline = Reform.from_dict(baseline, country_id=country)
+        elif isinstance(baseline, int):
+            baseline = Reform.from_api(baseline, country_id=country)
 
         self.baseline = baseline
         self.reform = reform
