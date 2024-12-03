@@ -39,6 +39,8 @@ class Simulation:
     """The tax-benefit simulation for the baseline scenario."""
     reformed: CountrySimulation = None
     """The tax-benefit simulation for the reformed scenario."""
+    selected: CountryMicrosimulation = None
+    """The selected simulation for the current calculation."""
     verbose: bool = False
     """Whether to print out progress messages."""
 

@@ -108,4 +108,4 @@ def budget_chart(simulation: Simulation, data: dict) -> go.Figure:
         uniformtext_mode="hide",
     )
 
-    return format_fig(fig)
+    return format_fig(fig, simulation.country)
