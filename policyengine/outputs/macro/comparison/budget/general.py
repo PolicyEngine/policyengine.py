@@ -36,7 +36,7 @@ def general(simulation: Simulation, chart: bool = False):
         - baseline["gov"]["balance"]["total_spending"]
     )
     budgetary_impact = tax_revenue_impact - benefit_spending_impact
-    households = sum(baseline["household"]["demographics"]["household_weight"])
+    households = baseline["household"]["demographics"]["total_households"]
     baseline_net_income = baseline["household"]["finance"]["total_net_income"]
     result = dict(
         budgetary_impact=budgetary_impact,

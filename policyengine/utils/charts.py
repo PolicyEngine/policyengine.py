@@ -90,7 +90,7 @@ def format_fig(fig: go.Figure, country: str = "uk") -> go.Figure:
 
     # Add bottom left chart description opposite logo
     fig.add_annotation(
-        text=f"Source: PolicyEngine tax-benefit microsimulation model (version {version})",
+        text=f"Source: PolicyEngine {country.upper()} tax-benefit microsimulation model (version {version})",
         xref="paper",
         yref="paper",
         x=0,

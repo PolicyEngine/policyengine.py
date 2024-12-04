@@ -13,6 +13,9 @@ from policyengine_uk import (
 from policyengine_core.reforms import Reform
 from typing import Tuple, Any
 from policyengine.constants import *
+import pandas as pd
+import h5py
+from pathlib import Path
 
 
 class Simulation:
@@ -91,6 +94,9 @@ class Simulation:
         self._initialise_simulations()
 
     def _set_dataset(self, dataset: str):
+        if self.scope == "household":
+            self.data = dataset
+            return
         if dataset in DATASETS[self.country]:
             self.data = DATASETS[self.country][dataset]
         elif dataset is None:
@@ -206,6 +212,9 @@ class Simulation:
                     else:
                         simulation.selected = simulation.baseline
                     return func(simulation, **kwargs)
+                
+                adjusted_func.__name__ = func.__name__
+                adjusted_func.__doc__ = func.__doc__
 
                 return adjusted_func
 
@@ -255,15 +264,17 @@ class Simulation:
             situation=self.data if not macro else None,
             reform=self.baseline,
         )
-        self.baseline.default_calculation_period = self.time_period
 
         if "subsample" in self.options:
             self.baseline = self.baseline.subsample(self.options["subsample"])
 
+
         if "region" in self.options:
             self.baseline = self._apply_region_to_simulation(
-                self.baseline, _simulation_type, self.options["region"]
+                self.baseline, _simulation_type, self.options["region"], reform=self.baseline.reform,
             )
+        
+        self.baseline.default_calculation_period = self.time_period
 
         if self.comparison:
             self.reformed = _simulation_type(
@@ -271,7 +282,6 @@ class Simulation:
                 situation=self.data if not macro else None,
                 reform=self.reform,
             )
-            self.reformed.default_calculation_period = self.time_period
 
             if "subsample" in self.options:
                 self.reformed = self.reformed.subsample(
@@ -280,14 +290,18 @@ class Simulation:
 
             if "region" in self.options:
                 self.reformed = self._apply_region_to_simulation(
-                    self.reformed, _simulation_type, self.options["region"]
+                    self.reformed, _simulation_type, self.options["region"], reform=self.reform,
                 )
+            
+            self.reformed.default_calculation_period = self.time_period
+            
 
     def _apply_region_to_simulation(
         self,
         simulation: CountryMicrosimulation,
         simulation_type: type,
         region: str,
+        reform: Reform = None,
     ):
         if self.country == "us":
             df = simulation.to_input_dataframe()
@@ -297,12 +311,59 @@ class Simulation:
             if region == "city/nyc":
                 in_nyc = simulation.calculate("in_nyc", map_to="person").values
                 simulation = simulation_type(
-                    dataset=df[in_nyc], reform=self.reform
+                    dataset=df[in_nyc], reform=reform
                 )
             elif "state/" in region:
                 state = region.split("/")[1]
                 simulation = simulation_type(
-                    dataset=df[state_code == state.upper()], reform=self.reform
+                    dataset=df[state_code == state.upper()], reform=reform
+                )
+        elif self.country == "uk":
+            if "country/" in region:
+                region = region.split("/")[1]
+                df = simulation.to_input_dataframe()
+                country = simulation.calculate("country", map_to="person").values
+                simulation = simulation_type(
+                    dataset=df[country == region.upper()], reform=reform
+                )
+            elif "constituency/" in region:
+                constituency = region.split("/")[1]
+                constituency_names_file_path = download(
+                    repo="policyengine/policyengine-uk-data",
+                    repo_filename="constituencies_2024.csv",
+                    local_folder=None,
+                    version=None,
+                )
+                constituency_names_file_path = Path(constituency_names_file_path)
+                constituency_names = pd.read_csv(constituency_names_file_path)
+                if constituency in constituency_names.code.values:
+                    constituency_id = constituency_names[
+                        constituency_names.code == constituency
+                    ].index[0]
+                elif constituency in constituency_names.name.values:
+                    constituency_id = constituency_names[
+                        constituency_names.name == constituency
+                    ].index[0]
+                else:
+                    raise ValueError(
+                        f"Constituency {constituency} not found. See {constituency_names_file_path} for the list of available constituencies."
+                    )
+                weights_file_path = download(
+                    repo="policyengine/policyengine-uk-data",
+                    repo_filename="parliamentary_constituency_weights.h5",
+                    local_folder=None,
+                    version=None,
+                )
+
+                with h5py.File(weights_file_path, "r") as f:
+                    weights = f[str(self.time_period)][...]
+
+                simulation.calculate("household_net_income")
+
+                simulation.set_input(
+                    "household_weight",
+                    simulation.default_calculation_period,
+                    weights[constituency_id],
                 )
 
         return simulation

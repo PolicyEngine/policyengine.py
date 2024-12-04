@@ -12,11 +12,9 @@ def race(simulation: Simulation):
         dict: A dictionary containing the poverty impact details with the following keys:
             - poverty (dict): A dictionary with keys representing races and values as dictionaries with baseline and reform poverty rates.
     """
-    baseline = simulation.calculate("macro/baseline")["household"]["finance"]
-    reform = simulation.calculate("macro/reform")["household"]["finance"]
-    baseline_demographics = simulation.calculate("macro/baseline")[
-        "household"
-    ]["demographics"]
+    baseline = simulation.calculate("macro/baseline/household/finance", include_arrays=True)
+    reform = simulation.calculate("macro/reform/household/finance", include_arrays=True)
+    baseline_demographics = simulation.calculate("macro/baseline/household/demographics", include_arrays=True)
 
     if baseline_demographics["race"] is None:
         return {}

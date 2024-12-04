@@ -2,16 +2,10 @@ from policyengine import Simulation
 import plotly.express as px
 from policyengine.utils.charts import *
 import plotly.graph_objects as go
+import pandas as pd
 
 
 def income_distribution(simulation: Simulation, chart: bool = False) -> dict:
-    if chart:
-        return income_distribution_chart(simulation)
-    else:
-        return {}
-
-
-def income_distribution_chart(simulation: Simulation) -> go.Figure:
     income = simulation.baseline.calculate("household_net_income")
     income_upper = income.quantile(0.9)
     BAND_SIZE = 5_000
@@ -21,10 +15,20 @@ def income_distribution_chart(simulation: Simulation) -> go.Figure:
         income_in_band = (income >= i) * (income < i + BAND_SIZE)
         lower_income_bands.append(i)
         counts.append(income_in_band.sum())
+    
+    data = pd.Series(counts, index=lower_income_bands)
+
+    if chart:
+        return income_distribution_chart(data)
+    else:
+        return data.to_dict()
+
+
+def income_distribution_chart(data) -> go.Figure:
 
     fig = px.bar(
-        x=lower_income_bands,
-        y=counts,
+        x=data.index,
+        y=data.values,
         labels={"x": "Income", "y": "Number of Households"},
         color_discrete_sequence=[BLUE],
     )

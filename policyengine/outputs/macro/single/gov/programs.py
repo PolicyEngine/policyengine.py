@@ -33,3 +33,5 @@ def programs(simulation: Simulation) -> dict:
             * (1 if program.is_positive else -1)
             for program in UKPrograms.PROGRAMS
         }
+    else:
+        return {}
