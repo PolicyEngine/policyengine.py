@@ -31,3 +31,8 @@
     fixed:
     - Formatting in constituency charts.
   date: 2024-12-03 13:16:27
+- bump: patch
+  changes:
+    fixed:
+    - Household simulation example broken due to a type error.
+  date: 2024-12-06 14:02:41
