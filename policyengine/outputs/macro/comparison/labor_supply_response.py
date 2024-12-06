@@ -4,37 +4,36 @@ import numpy as np
 
 
 def labor_supply_response(simulation: Simulation) -> dict:
-    baseline_labor_supply = simulation.calculate("macro/baseline/household/labor_supply", include_arrays=True)
-    reform_labor_supply = simulation.calculate("macro/reform/household/labor_supply", include_arrays=True)
-    baseline_finance = simulation.calculate("macro/baseline/household/finance", include_arrays=True)
-    baseline_demographics = simulation.calculate("macro/baseline/household/demographics", include_arrays=True)
+    baseline_labor_supply = simulation.calculate(
+        "macro/baseline/household/labor_supply", include_arrays=True
+    )
+    reform_labor_supply = simulation.calculate(
+        "macro/reform/household/labor_supply", include_arrays=True
+    )
+    baseline_finance = simulation.calculate(
+        "macro/baseline/household/finance", include_arrays=True
+    )
+    baseline_demographics = simulation.calculate(
+        "macro/baseline/household/demographics", include_arrays=True
+    )
 
     substitution_lsr = (
         reform_labor_supply["substitution_lsr"]
         - baseline_labor_supply["substitution_lsr"]
     )
     income_lsr = (
-        reform_labor_supply["income_lsr"]
-        - baseline_labor_supply["income_lsr"]
+        reform_labor_supply["income_lsr"] - baseline_labor_supply["income_lsr"]
     )
     total_change = substitution_lsr + income_lsr
-    revenue_change = (
-        reform_labor_supply["budgetary_impact_lsr"]
-        - baseline_labor_supply["budgetary_impact_lsr"]
-    )
 
     substitution_lsr_hh = np.array(
         reform_labor_supply["substitution_lsr_hh"]
     ) - np.array(baseline_labor_supply["substitution_lsr_hh"])
-    income_lsr_hh = np.array(
-        reform_labor_supply["income_lsr_hh"]
-    ) - np.array(baseline_labor_supply["income_lsr_hh"])
-    decile = np.array(
-        baseline_finance["household_income_decile"]
+    income_lsr_hh = np.array(reform_labor_supply["income_lsr_hh"]) - np.array(
+        baseline_labor_supply["income_lsr_hh"]
     )
-    household_weight = baseline_demographics[
-        "household_weight"
-    ]
+    decile = np.array(baseline_finance["household_income_decile"])
+    household_weight = baseline_demographics["household_weight"]
 
     total_lsr_hh = substitution_lsr_hh + income_lsr_hh
 
@@ -85,16 +84,12 @@ def labor_supply_response(simulation: Simulation) -> dict:
         reform=reform_labor_supply["weekly_hours"],
         change=reform_labor_supply["weekly_hours"]
         - baseline_labor_supply["weekly_hours"],
-        income_effect=reform_labor_supply[
-            "weekly_hours_income_effect"
-        ]
+        income_effect=reform_labor_supply["weekly_hours_income_effect"]
         - baseline_labor_supply["weekly_hours_income_effect"],
         substitution_effect=reform_labor_supply[
             "weekly_hours_substitution_effect"
         ]
-        - baseline_labor_supply[
-            "weekly_hours_substitution_effect"
-        ],
+        - baseline_labor_supply["weekly_hours_substitution_effect"],
     )
 
     return dict(
@@ -102,7 +97,6 @@ def labor_supply_response(simulation: Simulation) -> dict:
         income_lsr=income_lsr,
         relative_lsr=relative_lsr,
         total_change=total_change,
-        revenue_change=revenue_change,
         decile=dict(
             average=decile_avg,
             relative=decile_rel,

@@ -15,7 +15,7 @@ def income_distribution(simulation: Simulation, chart: bool = False) -> dict:
         income_in_band = (income >= i) * (income < i + BAND_SIZE)
         lower_income_bands.append(i)
         counts.append(income_in_band.sum())
-    
+
     data = pd.Series(counts, index=lower_income_bands)
 
     if chart:

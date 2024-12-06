@@ -32,6 +32,7 @@ MEDIUM_DARK_GRAY = "#D2D2D2"
 WHITE = "#FFFFFF"
 TEAL_98 = "#F7FDFC"
 BLACK = "#000000"
+LIGHT_LIGHT_GRAY = "#F4F4F4"
 
 BLUE_COLOUR_SCALE = [
     BLUE_LIGHT,
@@ -65,11 +66,11 @@ def format_fig(fig: go.Figure, country: str = "uk") -> go.Figure:
         template="plotly_white",
         height=600,
         width=800,
-        plot_bgcolor="lightgray",  # set background color to light gray
-        paper_bgcolor="lightgray",  # set paper background color to white
+        plot_bgcolor=LIGHT_LIGHT_GRAY,  # set background color to light gray
+        paper_bgcolor=LIGHT_LIGHT_GRAY,  # set paper background color to white
         # No white grid marks
-        xaxis=dict(gridcolor="lightgray", zerolinecolor="lightgray"),
-        yaxis=dict(gridcolor="lightgray", zerolinecolor="lightgray"),
+        xaxis=dict(gridcolor=LIGHT_LIGHT_GRAY, zerolinecolor=LIGHT_LIGHT_GRAY),
+        yaxis=dict(gridcolor=LIGHT_LIGHT_GRAY, zerolinecolor=DARK_GRAY),
     )
 
     fig.add_layout_image(
@@ -78,7 +79,7 @@ def format_fig(fig: go.Figure, country: str = "uk") -> go.Figure:
             xref="paper",
             yref="paper",
             x=1.1,
-            y=-0.15,
+            y=-0.2,
             sizex=0.15,
             sizey=0.15,
             xanchor="right",
@@ -94,7 +95,7 @@ def format_fig(fig: go.Figure, country: str = "uk") -> go.Figure:
         xref="paper",
         yref="paper",
         x=0,
-        y=-0.15,
+        y=-0.2,
         showarrow=False,
         xanchor="left",
         yanchor="bottom",
@@ -102,10 +103,14 @@ def format_fig(fig: go.Figure, country: str = "uk") -> go.Figure:
     # don't show modebar
     fig.update_layout(
         modebar=dict(
-            bgcolor="lightgray",
-            color="lightgray",
-            activecolor="lightgray",
-        )
+            bgcolor=LIGHT_LIGHT_GRAY,
+            color=LIGHT_LIGHT_GRAY,
+            activecolor=LIGHT_LIGHT_GRAY,
+        ),
+        margin_b=120,
+        margin_t=120,
+        margin_l=120,
+        margin_r=120,
     )
     return fig
 

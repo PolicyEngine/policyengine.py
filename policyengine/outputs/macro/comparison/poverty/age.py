@@ -13,9 +13,15 @@ def age(simulation: Simulation):
             - poverty (dict): A dictionary with keys representing age groups and values as dictionaries with baseline and reform poverty rates.
             - deep_poverty (dict): A dictionary with keys representing age groups and values as dictionaries with baseline and reform deep poverty rates.
     """
-    baseline = simulation.calculate("macro/baseline/household/finance", include_arrays=True)
-    reform = simulation.calculate("macro/reform/household/finance", include_arrays=True)
-    baseline_demographics = simulation.calculate("macro/baseline/household/demographics", include_arrays=True)
+    baseline = simulation.calculate(
+        "macro/baseline/household/finance", include_arrays=True
+    )
+    reform = simulation.calculate(
+        "macro/reform/household/finance", include_arrays=True
+    )
+    baseline_demographics = simulation.calculate(
+        "macro/baseline/household/demographics", include_arrays=True
+    )
 
     baseline_poverty = MicroSeries(
         baseline["person_in_poverty"],
@@ -37,18 +43,31 @@ def age(simulation: Simulation):
         child=dict(
             baseline=float(baseline_poverty[age < 18].mean()),
             reform=float(reform_poverty[age < 18].mean()),
+            change_count=float(
+                (reform_poverty[age < 18] - baseline_poverty[age < 18]).sum()
+            ),
         ),
         adult=dict(
             baseline=float(baseline_poverty[(age >= 18) & (age < 65)].mean()),
             reform=float(reform_poverty[(age >= 18) & (age < 65)].mean()),
+            change_count=float(
+                (
+                    reform_poverty[(age >= 18) & (age < 65)]
+                    - baseline_poverty[(age >= 18) & (age < 65)]
+                ).sum()
+            ),
         ),
         senior=dict(
             baseline=float(baseline_poverty[age >= 65].mean()),
             reform=float(reform_poverty[age >= 65].mean()),
+            change_count=float(
+                (reform_poverty[age >= 65] - baseline_poverty[age >= 65]).sum()
+            ),
         ),
         all=dict(
             baseline=float(baseline_poverty.mean()),
             reform=float(reform_poverty.mean()),
+            change_count=float((reform_poverty - baseline_poverty).sum()),
         ),
     )
 
@@ -59,7 +78,7 @@ def age(simulation: Simulation):
         ),
         adult=dict(
             baseline=float(
-                baseline_deep_poverty[(age >= 18) & (age < 65)].mean()
+                baseline_deep_poverty[(age >= 18) & (age < 65)].mean(),
             ),
             reform=float(reform_deep_poverty[(age >= 18) & (age < 65)].mean()),
         ),

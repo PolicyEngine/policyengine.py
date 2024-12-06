@@ -18,10 +18,18 @@ def wealth(simulation: Simulation):
 
     baseline = simulation.calculate("macro/baseline")
     reform = simulation.calculate("macro/reform")
-    baseline["household"]["finance"] = simulation.calculate("macro/baseline/household/finance", include_arrays=True)
-    baseline["household"]["demographics"] = simulation.calculate("macro/baseline/household/demographics", include_arrays=True)
-    reform["household"]["finance"] = simulation.calculate("macro/reform/household/finance", include_arrays=True)
-    reform["household"]["demographics"] = simulation.calculate("macro/reform/household/demographics", include_arrays=True)
+    baseline["household"]["finance"] = simulation.calculate(
+        "macro/baseline/household/finance", include_arrays=True
+    )
+    baseline["household"]["demographics"] = simulation.calculate(
+        "macro/baseline/household/demographics", include_arrays=True
+    )
+    reform["household"]["finance"] = simulation.calculate(
+        "macro/reform/household/finance", include_arrays=True
+    )
+    reform["household"]["demographics"] = simulation.calculate(
+        "macro/reform/household/demographics", include_arrays=True
+    )
 
     baseline_income = MicroSeries(
         baseline["household"]["finance"]["household_net_income"],

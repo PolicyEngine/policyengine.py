@@ -9,7 +9,6 @@ def labor_supply(simulation: Simulation, include_arrays: bool = False) -> dict:
     result = {
         "substitution_lsr": 0,
         "income_lsr": 0,
-        "budgetary_impact_lsr": 0,
         "income_lsr_hh": (household_count_people * 0).astype(float).tolist(),
         "substitution_lsr_hh": (household_count_people * 0)
         .astype(float)
@@ -51,7 +50,7 @@ def labor_supply(simulation: Simulation, include_arrays: bool = False) -> dict:
                     ).sum(),
                 }
             )
-    
+
     if not include_arrays:
         return {
             key: value

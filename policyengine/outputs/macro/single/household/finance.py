@@ -51,7 +51,9 @@ def finance(simulation: Simulation, include_arrays: bool = False) -> dict:
     deep_poverty_gap = sim.calculate("deep_poverty_gap").sum()
 
     poverty_rate = sim.calculate("in_poverty", map_to="person").mean()
-    deep_poverty_rate = sim.calculate("in_deep_poverty", map_to="person").mean()
+    deep_poverty_rate = sim.calculate(
+        "in_deep_poverty", map_to="person"
+    ).mean()
 
     result = {
         "total_net_income": total_net_income,

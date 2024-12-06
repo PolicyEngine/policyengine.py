@@ -21,7 +21,7 @@ def parliamentary_constituencies(
         metric (Callable[[Microsimulation], [float]]): A custom function to calculate the impact. This must be called on a Microsimulation and return a float (we will call it for each constituency weight set).
         chart (bool): Whether to return a chart or data.
         code_index (bool): Whether to use the constituency code as the index.
-    
+
     Returns:
         dict: A dictionary with the impact of the reform on parliamentary constituencies (keys=constituency names, values=metric values).
     """
@@ -83,8 +83,11 @@ def parliamentary_constituencies(
 
     if chart:
         return plot_hex_map(result)
-    
+
     if code_index:
-        return {constituency_names.set_index("name").loc[name]["code"]: value for name, value in result.items()}
+        return {
+            constituency_names.set_index("name").loc[name]["code"]: value
+            for name, value in result.items()
+        }
 
     return result

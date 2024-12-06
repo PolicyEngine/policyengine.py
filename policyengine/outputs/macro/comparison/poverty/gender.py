@@ -13,9 +13,15 @@ def gender(simulation: Simulation):
             - poverty (dict): A dictionary with keys representing genders and values as dictionaries with baseline and reform poverty rates.
             - deep_poverty (dict): A dictionary with keys representing genders and values as dictionaries with baseline and reform deep poverty rates.
     """
-    baseline = simulation.calculate("macro/baseline/household/finance", include_arrays=True)
-    reform = simulation.calculate("macro/reform/household/finance", include_arrays=True)
-    baseline_demographics = simulation.calculate("macro/baseline/household/demographics", include_arrays=True)
+    baseline = simulation.calculate(
+        "macro/baseline/household/finance", include_arrays=True
+    )
+    reform = simulation.calculate(
+        "macro/reform/household/finance", include_arrays=True
+    )
+    baseline_demographics = simulation.calculate(
+        "macro/baseline/household/demographics", include_arrays=True
+    )
 
     if baseline_demographics["is_male"] is None:
         return {}

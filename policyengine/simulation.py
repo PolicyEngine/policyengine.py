@@ -212,7 +212,7 @@ class Simulation:
                     else:
                         simulation.selected = simulation.baseline
                     return func(simulation, **kwargs)
-                
+
                 adjusted_func.__name__ = func.__name__
                 adjusted_func.__doc__ = func.__doc__
 
@@ -268,15 +268,19 @@ class Simulation:
         if "subsample" in self.options:
             self.baseline = self.baseline.subsample(self.options["subsample"])
 
-
         if "region" in self.options:
             self.baseline = self._apply_region_to_simulation(
-                self.baseline, _simulation_type, self.options["region"], reform=self.baseline.reform,
+                self.baseline,
+                _simulation_type,
+                self.options["region"],
+                reform=self.baseline.reform,
             )
-        
+
         self.baseline.default_calculation_period = self.time_period
 
         if self.comparison:
+            if self.baseline.reform is not None:
+                self.reform = (self.baseline.reform, self.reform)
             self.reformed = _simulation_type(
                 dataset=self.data if macro else None,
                 situation=self.data if not macro else None,
@@ -290,11 +294,17 @@ class Simulation:
 
             if "region" in self.options:
                 self.reformed = self._apply_region_to_simulation(
-                    self.reformed, _simulation_type, self.options["region"], reform=self.reform,
+                    self.reformed,
+                    _simulation_type,
+                    self.options["region"],
+                    reform=self.reform,
                 )
-            
+
             self.reformed.default_calculation_period = self.time_period
-            
+
+            self.reformed.get_branch("baseline").tax_benefit_system = (
+                self.baseline.tax_benefit_system
+            )
 
     def _apply_region_to_simulation(
         self,
@@ -310,9 +320,7 @@ class Simulation:
             ).values
             if region == "city/nyc":
                 in_nyc = simulation.calculate("in_nyc", map_to="person").values
-                simulation = simulation_type(
-                    dataset=df[in_nyc], reform=reform
-                )
+                simulation = simulation_type(dataset=df[in_nyc], reform=reform)
             elif "state/" in region:
                 state = region.split("/")[1]
                 simulation = simulation_type(
@@ -322,7 +330,9 @@ class Simulation:
             if "country/" in region:
                 region = region.split("/")[1]
                 df = simulation.to_input_dataframe()
-                country = simulation.calculate("country", map_to="person").values
+                country = simulation.calculate(
+                    "country", map_to="person"
+                ).values
                 simulation = simulation_type(
                     dataset=df[country == region.upper()], reform=reform
                 )
@@ -334,7 +344,9 @@ class Simulation:
                     local_folder=None,
                     version=None,
                 )
-                constituency_names_file_path = Path(constituency_names_file_path)
+                constituency_names_file_path = Path(
+                    constituency_names_file_path
+                )
                 constituency_names = pd.read_csv(constituency_names_file_path)
                 if constituency in constituency_names.code.values:
                     constituency_id = constituency_names[
