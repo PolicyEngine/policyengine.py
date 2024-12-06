@@ -94,9 +94,10 @@ class Simulation:
         self._initialise_simulations()
 
     def _set_dataset(self, dataset: str):
-        if self.scope == "household":
+        if isinstance(dataset, dict):
             self.data = dataset
             return
+
         if dataset in DATASETS[self.country]:
             self.data = DATASETS[self.country][dataset]
         elif dataset is None:
