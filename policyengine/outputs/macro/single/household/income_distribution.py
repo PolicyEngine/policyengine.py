@@ -12,7 +12,7 @@ def income_distribution(simulation: Simulation, chart: bool = False) -> dict:
 
 
 def income_distribution_chart(simulation: Simulation) -> go.Figure:
-    income = simulation.baseline.calculate("household_net_income")
+    income = simulation.baseline_sim.calculate("household_net_income")
     income_upper = income.quantile(0.9)
     BAND_SIZE = 5_000
     lower_income_bands = []
