@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-      - Household simulation example broken due to a type error.
