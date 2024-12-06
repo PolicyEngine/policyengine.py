@@ -265,9 +265,6 @@ class Simulation:
             reform=self.baseline,
         )
 
-        if "subsample" in self.options:
-            self.baseline = self.baseline.subsample(self.options["subsample"])
-
         if "region" in self.options:
             self.baseline = self._apply_region_to_simulation(
                 self.baseline,
@@ -275,6 +272,9 @@ class Simulation:
                 self.options["region"],
                 reform=self.baseline.reform,
             )
+
+        if "subsample" in self.options:
+            self.baseline = self.baseline.subsample(self.options["subsample"])
 
         self.baseline.default_calculation_period = self.time_period
 
@@ -287,17 +287,17 @@ class Simulation:
                 reform=self.reform,
             )
 
-            if "subsample" in self.options:
-                self.reformed = self.reformed.subsample(
-                    self.options["subsample"]
-                )
-
             if "region" in self.options:
                 self.reformed = self._apply_region_to_simulation(
                     self.reformed,
                     _simulation_type,
                     self.options["region"],
                     reform=self.reform,
+                )
+
+            if "subsample" in self.options:
+                self.reformed = self.reformed.subsample(
+                    self.options["subsample"]
                 )
 
             self.reformed.default_calculation_period = self.time_period

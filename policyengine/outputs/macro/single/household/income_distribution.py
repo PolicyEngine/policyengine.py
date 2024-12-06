@@ -5,8 +5,12 @@ import plotly.graph_objects as go
 import pandas as pd
 
 
-def income_distribution(simulation: Simulation, chart: bool = False) -> dict:
-    income = simulation.baseline.calculate("household_net_income")
+def income_distribution(
+    simulation: Simulation,
+    chart: bool = False,
+    variable: str = "household_net_income",
+) -> dict:
+    income = simulation.baseline.calculate(variable)
     income_upper = income.quantile(0.9)
     BAND_SIZE = 5_000
     lower_income_bands = []
