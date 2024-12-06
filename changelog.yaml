@@ -36,3 +36,9 @@
     fixed:
     - Household simulation example broken due to a type error.
   date: 2024-12-06 14:02:41
+- bump: minor
+  changes:
+    added:
+    - Household variation charts.
+    - Region filtering improvements.
+  date: 2024-12-06 14:07:31
