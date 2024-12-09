@@ -48,7 +48,7 @@ def parliamentary_constituencies(
 
     result = {}
 
-    sim = simulation.selected
+    sim = simulation.selected_sim
     original_hh_weight = sim.calculate("household_weight").values
 
     for constituency_id in range(weights.shape[0]):
@@ -63,7 +63,7 @@ def parliamentary_constituencies(
         sim.get_holder("benunit_weight").delete_arrays(
             sim.default_calculation_period
         )
-        calculation_result = metric(simulation.selected)
+        calculation_result = metric(simulation.selected_sim)
         code = constituency_names.code.iloc[constituency_id]
         result[constituency_names.set_index("code").loc[code]["name"]] = (
             calculation_result

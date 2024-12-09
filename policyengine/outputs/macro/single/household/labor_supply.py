@@ -2,7 +2,7 @@ from policyengine import Simulation
 
 
 def labor_supply(simulation: Simulation) -> dict:
-    sim = simulation.selected
+    sim = simulation.selected_sim
     household_count_people = sim.calculate("household_count_people").values
     result = {
         "substitution_lsr": 0,
@@ -54,7 +54,7 @@ def labor_supply(simulation: Simulation) -> dict:
 
 
 def has_behavioral_response(simulation):
-    sim = simulation.selected
+    sim = simulation.selected_sim
     return (
         "employment_income_behavioral_response"
         in sim.tax_benefit_system.variables
