@@ -4,6 +4,7 @@ parts:
   - caption: Maintenance
     chapters:
     - file: maintaining
-  - caption: Schema
+  - caption: Reference
     chapters:
-    - file: schema
+    - file: reference/simulation
+    - file: reference/calculate

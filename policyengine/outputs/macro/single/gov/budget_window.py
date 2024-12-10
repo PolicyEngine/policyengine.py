@@ -4,7 +4,7 @@ DEFAULT_COUNT_YEARS = 1
 
 
 def budget_window(simulation: Simulation, count_years: int = None) -> dict:
-    sim = simulation.selected
+    sim = simulation.selected_sim
     current_year = simulation.time_period
     if count_years is not None:
         years = list(range(current_year, current_year + count_years))

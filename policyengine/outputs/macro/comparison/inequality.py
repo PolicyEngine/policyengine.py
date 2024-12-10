@@ -13,10 +13,8 @@ def inequality(simulation: Simulation):
             - top_10_pct_share (dict): A dictionary with baseline and reform top 10% income share.
             - top_1_pct_share (dict): A dictionary with baseline and reform top 1% income share.
     """
-    baseline = simulation.calculate("macro/baseline")["household"][
-        "inequality"
-    ]
-    reform = simulation.calculate("macro/reform")["household"]["inequality"]
+    baseline = simulation.calculate("macro/baseline/household/inequality")
+    reform = simulation.calculate("macro/reform/household/inequality")
 
     return dict(
         gini=dict(
