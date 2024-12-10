@@ -308,8 +308,8 @@ class Simulation:
             )
 
         if self.comparison:
-            if self.baseline_sim.reform is not None:
-                self.reform = (self.baseline_sim.reform, self.reform)
+            if self._parsed_baseline is not None:
+                self._parsed_reform = (self._parsed_baseline, self.reform)
             self.reformed_sim = _simulation_type(
                 dataset=self.data if macro else None,
                 situation=self.data if not macro else None,
@@ -322,7 +322,7 @@ class Simulation:
                     self.reformed_sim,
                     _simulation_type,
                     self.options["region"],
-                    reform=self.reform,
+                    reform=self._parsed_reform,
                 )
 
             if "subsample" in self.options:
