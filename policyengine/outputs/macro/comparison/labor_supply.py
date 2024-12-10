@@ -3,7 +3,7 @@ from microdf import MicroSeries
 import numpy as np
 
 
-def labor_supply_response(simulation: Simulation) -> dict:
+def labor_supply(simulation: Simulation) -> dict:
     baseline_labor_supply = simulation.calculate(
         "macro/baseline/household/labor_supply", include_arrays=True
     )
@@ -92,11 +92,35 @@ def labor_supply_response(simulation: Simulation) -> dict:
         - baseline_labor_supply["weekly_hours_substitution_effect"],
     )
 
+    rel_labor_supply_change = (
+        total_change / baseline_labor_supply["total_earnings"]
+    )
+    ftes_baseline = baseline_labor_supply["total_workers"]
+    ftes_reform = baseline_labor_supply["total_workers"] * (
+        1 + rel_labor_supply_change
+    )
+    earnings_change = (
+        reform_labor_supply["total_earnings"]
+        - baseline_labor_supply["total_earnings"]
+    )
+
     return dict(
+        earnings=dict(
+            baseline=baseline_labor_supply["total_earnings"],
+            reform=reform_labor_supply["total_earnings"],
+            change=earnings_change,
+            rel_change=earnings_change
+            / baseline_labor_supply["total_earnings"],
+        ),
+        fte=dict(
+            baseline=ftes_baseline,
+            reform=ftes_reform,
+            change=ftes_reform - ftes_baseline,
+            rel_change=ftes_reform / ftes_baseline - 1,
+        ),
         substitution_lsr=substitution_lsr,
         income_lsr=income_lsr,
         relative_lsr=relative_lsr,
-        total_change=total_change,
         decile=dict(
             average=decile_avg,
             relative=decile_rel,
