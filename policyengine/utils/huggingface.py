@@ -4,7 +4,10 @@ from getpass import getpass
 
 
 def download(
-    repo: str, repo_filename: str, local_folder: str | None = None, version: str | None = None
+    repo: str,
+    repo_filename: str,
+    local_folder: str | None = None,
+    version: str | None = None,
 ):
     token = os.environ.get("HUGGING_FACE_TOKEN")
     if token is None:

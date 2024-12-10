@@ -17,6 +17,7 @@ import pandas as pd
 import h5py
 from pathlib import Path
 
+
 class Simulation:
     """The top-level class through which all PE usage is carried out."""
 
@@ -183,7 +184,9 @@ class Simulation:
             module_name = output.stem
             spec = importlib.util.spec_from_file_location(module_name, output)
             if spec is None:
-                raise RuntimeError(f"Expected to load a spec from file '{output.absolute}'")
+                raise RuntimeError(
+                    f"Expected to load a spec from file '{output.absolute}'"
+                )
             module = importlib.util.module_from_spec(spec)
             relative_path = str(
                 output.relative_to(Path(__file__).parent / "outputs")
@@ -196,7 +199,9 @@ class Simulation:
                 continue
 
             if spec.loader is None:
-                raise RuntimeError(f"Expected module from '{output.absolute}' to have a loader, but it does not")
+                raise RuntimeError(
+                    f"Expected module from '{output.absolute}' to have a loader, but it does not"
+                )
             spec.loader.exec_module(module)
 
             # Only import the function with the same name as the module, enforcing one function per file
@@ -212,7 +217,7 @@ class Simulation:
             func = output_functions[key]
 
             def passed_reform_simulation(func, is_reform):
-                def adjusted_func(simulation:Simulation, **kwargs):
+                def adjusted_func(simulation: Simulation, **kwargs):
                     if is_reform:
                         simulation.selected_sim = simulation.reformed_sim
                     else:
@@ -255,13 +260,19 @@ class Simulation:
 
     def _to_reform(self, value: int | dict):
         if isinstance(value, dict):
-            return Reform.from_dict(value, country_id = self.country)
-        return Reform.from_api(f"{value}", country_id = self.country)
-    
+            return Reform.from_dict(value, country_id=self.country)
+        return Reform.from_api(f"{value}", country_id=self.country)
+
     def _initialise_simulations(self):
-        self._parsed_reform = self._to_reform(self.reform) if self.reform is not None else None
-        self._parsed_baseline = self._to_reform(self.baseline) if self.baseline is not None else None
-        
+        self._parsed_reform = (
+            self._to_reform(self.reform) if self.reform is not None else None
+        )
+        self._parsed_baseline = (
+            self._to_reform(self.baseline)
+            if self.baseline is not None
+            else None
+        )
+
         macro = self.scope == "macro"
         _simulation_type = {
             "uk": {
@@ -279,7 +290,9 @@ class Simulation:
             reform=self._parsed_baseline,
         )
 
-        if "region" in self.options and isinstance(self.baseline_sim, CountryMicrosimulation):
+        if "region" in self.options and isinstance(
+            self.baseline_sim, CountryMicrosimulation
+        ):
             self.baseline_sim = self._apply_region_to_simulation(
                 self.baseline_sim,
                 _simulation_type,
@@ -290,7 +303,9 @@ class Simulation:
             self.baseline_sim.default_calculation_period = self.time_period
 
         if "subsample" in self.options:
-            self.baseline_sim = self.baseline_sim.subsample(self.options["subsample"])
+            self.baseline_sim = self.baseline_sim.subsample(
+                self.options["subsample"]
+            )
 
         if self.comparison:
             if self.baseline_sim.reform is not None:
@@ -300,7 +315,9 @@ class Simulation:
                 situation=self.data if not macro else None,
                 reform=self._parsed_reform,
             )
-            if "region" in self.options and isinstance(self.reformed_sim, CountryMicrosimulation):
+            if "region" in self.options and isinstance(
+                self.reformed_sim, CountryMicrosimulation
+            ):
                 self.reformed_sim = self._apply_region_to_simulation(
                     self.reformed_sim,
                     _simulation_type,
