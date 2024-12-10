@@ -135,8 +135,24 @@ class Simulation:
 
         parent = node
         child_key = output.split("/")[-1]
-        if child_key not in parent and int(child_key) in parent:
-            child_key = int(child_key)
+        if parent is None:
+            parent = self.calculate("/".join(output.split("/")[:-1]))
+        if child_key not in parent:
+            try:
+                is_numeric_key = int(child_key) in parent
+            except KeyError:
+                is_numeric_key = False
+            if is_numeric_key:
+                child_key = int(child_key)
+            else:
+                # Maybe you've requested a key that is only available as a dictionary
+                # item in one of the output functions. Let's try to calculate the full output,
+                # then check the result to see if it's there.
+                self.calculate("/".join(output.split("/")[:-1]))
+                if child_key not in parent:
+                    raise KeyError(
+                        f"Output '{child_key}' not found in '{output}'. Available keys are: {list(parent.keys())}"
+                    )
         node = parent[child_key]
 
         # Check if any descendants are None
