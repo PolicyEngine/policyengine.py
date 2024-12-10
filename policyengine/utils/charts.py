@@ -45,11 +45,15 @@ def get_version_number(package):
     return pkg_resources.get_distribution(package).version
 
 
-def format_fig(fig: go.Figure, country: str = "uk") -> go.Figure:
+def format_fig(
+    fig: go.Figure, country: str = "uk", add_zero_line: bool = False
+) -> go.Figure:
     """Format a plotly figure to match the PolicyEngine style guide.
 
     Args:
         fig (go.Figure): A plotly figure.
+        country (str): The country for which the style guide should be applied.
+        add_zero_line (bool): Whether to add a zero line to the plot.
 
     Returns:
         go.Figure: A plotly figure with the PolicyEngine style guide applied.
@@ -70,7 +74,10 @@ def format_fig(fig: go.Figure, country: str = "uk") -> go.Figure:
         paper_bgcolor=LIGHT_LIGHT_GRAY,  # set paper background color to white
         # No white grid marks
         xaxis=dict(gridcolor=LIGHT_LIGHT_GRAY, zerolinecolor=LIGHT_LIGHT_GRAY),
-        yaxis=dict(gridcolor=LIGHT_LIGHT_GRAY, zerolinecolor=DARK_GRAY),
+        yaxis=dict(
+            gridcolor=LIGHT_LIGHT_GRAY,
+            zerolinecolor=DARK_GRAY if add_zero_line else LIGHT_LIGHT_GRAY,
+        ),
     )
 
     fig.add_layout_image(

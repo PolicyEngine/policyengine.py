@@ -15,6 +15,8 @@ def plot_hex_map(value_by_area_name: dict, location_type: str) -> dict:
             local_folder=None,
             version=None,
         )
+        x_bounds = [30, 85]
+        y_bounds = [-50, 2]
     elif location_type == "local_authorities":
         area_names_file_path = download(
             repo="policyengine/policyengine-uk-data",
@@ -22,6 +24,8 @@ def plot_hex_map(value_by_area_name: dict, location_type: str) -> dict:
             local_folder=None,
             version=None,
         )
+        x_bounds = [-20, 25]
+        y_bounds = [-10, 35]
     else:
         raise ValueError("Invalid location_type: " + location_type)
     area_names = pd.read_csv(area_names_file_path)
@@ -65,11 +69,11 @@ def plot_hex_map(value_by_area_name: dict, location_type: str) -> dict:
         yaxis_title="",
         xaxis_range=[expanded_lower_x_range, expanded_upper_x_range],
         yaxis_range=[
-            constituency_names["y"].min(),
-            constituency_names["y"].max(),
+            area_names["y"].min(),
+            area_names["y"].max(),
         ],
     ).update_traces(marker_size=10).update_layout(
-        xaxis_range=[30, 85], yaxis_range=[-50, 2]
+        xaxis_range=x_bounds, yaxis_range=y_bounds
     )
 
     x_min = fig.data[0]["marker"]["color"].min()

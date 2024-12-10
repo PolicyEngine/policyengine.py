@@ -51,7 +51,7 @@ def local_authorities(
 
     sim = simulation.selected_sim
     original_hh_weight = sim.calculate("household_weight").values
-    metric(simulation.selected)
+    metric(sim)
 
     for constituency_id in range(weights.shape[0]):
         sim.set_input(
