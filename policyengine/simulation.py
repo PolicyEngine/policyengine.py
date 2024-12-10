@@ -126,7 +126,7 @@ class Simulation:
             output = output[:-1]
 
         if output == "":
-            output = list(self.outputs.keys())[0]
+            output = self.scope
 
         node = self.outputs
 

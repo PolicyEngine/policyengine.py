@@ -2,6 +2,8 @@ from policyengine import Simulation
 
 
 def labor_supply(simulation: Simulation, include_arrays: bool = False) -> dict:
+    if not simulation.comparison:
+        return {}
     sim = simulation.selected_sim
     household_count_people = sim.calculate("household_count_people").values
     result = {
