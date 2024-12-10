@@ -44,6 +44,7 @@ def breakdown(
                 reform=reform_subset,
                 time_period=year,
                 options=options,
+                data=simulation.data,
             )
             budget = sim.calculate("macro/comparison/budget/general")[
                 "budgetary_impact"
