@@ -263,7 +263,7 @@ class Simulation:
             reform=self._parsed_baseline,
         )
 
-        if "region" in self.option and isinstance(self.baseline_sim, CountryMicrosimulation):
+        if "region" in self.options and isinstance(self.baseline_sim, CountryMicrosimulation):
             self.baseline_sim = self._apply_region_to_simulation(
                 self.baseline_sim,
                 _simulation_type,
@@ -321,11 +321,11 @@ class Simulation:
             ).values
             if region == "city/nyc":
                 in_nyc = simulation.calculate("in_nyc", map_to="person").values
-                simulation = simulation_type(dataset=df[in_nyc], reform=self._parsed_reform)
+                simulation = simulation_type(dataset=df[in_nyc], reform=reform)
             elif "state/" in region:
                 state = region.split("/")[1]
                 simulation = simulation_type(
-                    dataset=df[state_code == state.upper()], reform=self._parsed_reform
+                    dataset=df[state_code == state.upper()], reform=reform
                 )
         elif self.country == "uk":
             if "country/" in region:
@@ -335,7 +335,7 @@ class Simulation:
                     "country", map_to="person"
                 ).values
                 simulation = simulation_type(
-                    dataset=df[country == region.upper()], reform=self._parsed_reform
+                    dataset=df[country == region.upper()], reform=reform
                 )
             elif "constituency/" in region:
                 constituency = region.split("/")[1]
