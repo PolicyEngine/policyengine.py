@@ -411,5 +411,40 @@ class Simulation:
                     simulation.default_calculation_period,
                     weights[constituency_id],
                 )
+            elif "local_authority/" in region:
+                la = region.split("/")[1]
+                la_names_file_path = download(
+                    repo="policyengine/policyengine-uk-data",
+                    repo_filename="local_authorities_2021.csv",
+                    local_folder=None,
+                    version=None,
+                )
+                la_names_file_path = Path(constituency_names_file_path)
+                la_names = pd.read_csv(la_names_file_path)
+                if la in la_names.code.values:
+                    la_id = la_names[la_names.code == la].index[0]
+                elif la in la_names.name.values:
+                    la_id = la_names[la_names.name == la].index[0]
+                else:
+                    raise ValueError(
+                        f"Local authority {la} not found. See {la_names_file_path} for the list of available local authorities."
+                    )
+                weights_file_path = download(
+                    repo="policyengine/policyengine-uk-data",
+                    repo_filename="local_authority_weights.h5",
+                    local_folder=None,
+                    version=None,
+                )
+
+                with h5py.File(weights_file_path, "r") as f:
+                    weights = f[str(self.time_period)][...]
+
+                simulation.calculate("household_net_income")
+
+                simulation.set_input(
+                    "household_weight",
+                    simulation.default_calculation_period,
+                    weights[la_id],
+                )
 
         return simulation

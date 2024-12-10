@@ -15,7 +15,7 @@ def parliamentary_constituencies(
     metric: Callable[[Microsimulation], MicroSeries] = None,
     comparator: bool = None,
 ) -> dict:
-    if not simulation.options.get("include_constituencies"):
+    if not simulation.options.get("include_local_authorities"):
         return {}
 
     kwargs = {}
@@ -26,10 +26,10 @@ def parliamentary_constituencies(
         comparator = lambda x, y: (y / x) - 1
 
     constituency_baseline = simulation.calculate(
-        "macro/baseline/gov/local_areas/parliamentary_constituencies", **kwargs
+        "macro/baseline/gov/local_areas/local_authorities", **kwargs
     )
     constituency_reform = simulation.calculate(
-        "macro/reform/gov/local_areas/parliamentary_constituencies", **kwargs
+        "macro/reform/gov/local_areas/local_authorities", **kwargs
     )
 
     result = {}
@@ -41,6 +41,6 @@ def parliamentary_constituencies(
         )
 
     if chart:
-        return plot_hex_map(result, "parliamentary_constituencies")
+        return plot_hex_map(result, "local_authorities")
 
     return result
