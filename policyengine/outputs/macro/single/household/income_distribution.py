@@ -10,7 +10,7 @@ def income_distribution(
     chart: bool = False,
     variable: str = "household_net_income",
 ) -> dict:
-    income = simulation.baseline.calculate(variable)
+    income = simulation.baseline_sim.calculate(variable)
     income_upper = income.quantile(0.9)
     BAND_SIZE = 5_000
     lower_income_bands = []

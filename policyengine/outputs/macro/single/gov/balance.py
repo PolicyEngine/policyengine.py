@@ -2,7 +2,7 @@ from policyengine import Simulation
 
 
 def balance(simulation: Simulation) -> dict:
-    sim = simulation.selected
+    sim = simulation.selected_sim
     if simulation.country == "uk":
         total_tax = sim.calculate("gov_tax").sum()
         total_spending = sim.calculate("gov_spending").sum()
