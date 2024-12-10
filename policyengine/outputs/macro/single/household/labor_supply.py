@@ -16,6 +16,10 @@ def labor_supply(simulation: Simulation, include_arrays: bool = False) -> dict:
         "weekly_hours": 0,
         "weekly_hours_income_effect": 0,
         "weekly_hours_substitution_effect": 0,
+        "total_earnings": sim.calculate("employment_income").sum()
+        + sim.calculate("self_employment_income").sum(),
+        "total_workers": (sim.calculate("employment_income") > 0).sum()
+        + (sim.calculate("self_employment_income") > 0).sum(),
     }
 
     if has_behavioral_response(simulation):
