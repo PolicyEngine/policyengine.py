@@ -5,7 +5,8 @@ copyright: "2025"
 logo: logo.png
 
 execute:
-  execute_notebooks: off
+  execute_notebooks: cache
+  allow_errors: false
 
 repository:
   url: https://github.com/policyengine/policyengine.py
@@ -20,3 +21,5 @@ sphinx:
     pygments_style: default
     html_css_files:
       - style.css
+  extra_extensions:
+    - "sphinx.ext.autodoc"

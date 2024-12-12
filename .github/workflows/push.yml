@@ -46,8 +46,11 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: 3.9
+        
+      - name: Install package
+        run: make install
       
-      - name: install dependencies
+      - name: Install dependencies
         run: |
           pip install jupyter-book
           pip install furo

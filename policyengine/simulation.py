@@ -13,6 +13,9 @@ from policyengine_uk import (
 from policyengine_core.reforms import Reform
 from typing import Tuple, Any
 from policyengine.constants import *
+import pandas as pd
+import h5py
+from pathlib import Path
 
 
 class Simulation:
@@ -22,25 +25,25 @@ class Simulation:
     """The country for which the simulation is being run."""
     scope: str
     """The type of simulation being run (macro or household)."""
-    data: str
+    data: dict | str | Dataset
     """The dataset being used for the simulation."""
-    time_period: str
+    time_period: str | None
     """The time period for the simulation. Years are applicable."""
-    baseline: dict
+    baseline: dict | None
     """The baseline simulation inputs."""
-    reform: dict
+    reform: dict | None
     """The reform simulation inputs."""
     options: dict
     """Dynamic options for the simulation type."""
 
     comparison: bool
     """Whether we are comparing two simulations, or analysing a single one."""
-    baseline: CountrySimulation = None
+    baseline_sim: CountrySimulation
     """The tax-benefit simulation for the baseline scenario."""
-    reformed: CountrySimulation = None
-    """The tax-benefit simulation for the reformed scenario."""
-    selected: CountryMicrosimulation = None
-    """The selected simulation for the current calculation."""
+    reformed_sim: CountrySimulation | None = None
+    """The tax-benefit simulation for the reformed scenario. None if no reform has been configured"""
+    selected_sim: CountrySimulation | None = None
+    """The selected simulation for the current calculation. None if not a reform."""
     verbose: bool = False
     """Whether to print out progress messages."""
 
@@ -48,12 +51,12 @@ class Simulation:
         self,
         country: str,
         scope: str,
-        data: str = None,
-        time_period: str = None,
-        reform: dict = None,
-        baseline: dict = None,
+        data: str | dict | None = None,
+        time_period: str | None = None,
+        reform: dict | None = None,
+        baseline: dict | None = None,
         verbose: bool = False,
-        options: dict = None,
+        options: dict | None = None,
     ):
         """Initialise the simulation with the given parameters.
 
@@ -70,17 +73,6 @@ class Simulation:
         self.time_period = time_period
         self.verbose = verbose
         self.options = options or {}
-
-        if isinstance(reform, dict):
-            reform = Reform.from_dict(reform, country_id=country)
-        elif isinstance(reform, int):
-            reform = Reform.from_api(reform, country_id=country)
-
-        if isinstance(baseline, dict):
-            baseline = Reform.from_dict(baseline, country_id=country)
-        elif isinstance(baseline, int):
-            baseline = Reform.from_api(baseline, country_id=country)
-
         self.baseline = baseline
         self.reform = reform
 
@@ -90,17 +82,14 @@ class Simulation:
 
         self._initialise_simulations()
 
-    def _set_dataset(self, dataset: str):
+    def _set_dataset(self, dataset: str | dict | None):
         if isinstance(dataset, dict):
             self.data = dataset
             return
 
+        self.data = DEFAULT_DATASETS[self.country]
         if dataset in DATASETS[self.country]:
             self.data = DATASETS[self.country][dataset]
-        elif dataset is None:
-            self.data = DEFAULT_DATASETS[self.country]
-        else:
-            self.data = dataset
 
         # Short-term hacky fix: handle legacy 'array' datasets that don't specify the year for each variable: we should transition these to variable/period/value format.
         # But they're used frequently for now, and we need backwards compatibility.
@@ -119,7 +108,7 @@ class Simulation:
                     local_folder=None,
                     version=version,
                 )
-                self.data = Dataset.from_file(self.data, 2023)
+                self.data = Dataset.from_file(self.data, "2023")
 
     def calculate(self, output: str, force: bool = False, **kwargs) -> Any:
         """Calculate the given output (path).
@@ -138,7 +127,7 @@ class Simulation:
             output = output[:-1]
 
         if output == "":
-            output = list(self.outputs.keys())[0]
+            output = self.scope
 
         node = self.outputs
 
@@ -147,8 +136,24 @@ class Simulation:
 
         parent = node
         child_key = output.split("/")[-1]
-        if child_key not in parent and int(child_key) in parent:
-            child_key = int(child_key)
+        if parent is None:
+            parent = self.calculate("/".join(output.split("/")[:-1]))
+        if child_key not in parent:
+            try:
+                is_numeric_key = int(child_key) in parent
+            except KeyError:
+                is_numeric_key = False
+            if is_numeric_key:
+                child_key = int(child_key)
+            else:
+                # Maybe you've requested a key that is only available as a dictionary
+                # item in one of the output functions. Let's try to calculate the full output,
+                # then check the result to see if it's there.
+                self.calculate("/".join(output.split("/")[:-1]))
+                if child_key not in parent:
+                    raise KeyError(
+                        f"Output '{child_key}' not found in '{output}'. Available keys are: {list(parent.keys())}"
+                    )
         node = parent[child_key]
 
         # Check if any descendants are None
@@ -178,6 +183,10 @@ class Simulation:
         for output in Path(__file__).parent.glob("outputs/**/*.py"):
             module_name = output.stem
             spec = importlib.util.spec_from_file_location(module_name, output)
+            if spec is None:
+                raise RuntimeError(
+                    f"Expected to load a spec from file '{output.absolute}'"
+                )
             module = importlib.util.module_from_spec(spec)
             relative_path = str(
                 output.relative_to(Path(__file__).parent / "outputs")
@@ -189,6 +198,10 @@ class Simulation:
                 # Don't load household modules for macro comparisons, etc.
                 continue
 
+            if spec.loader is None:
+                raise RuntimeError(
+                    f"Expected module from '{output.absolute}' to have a loader, but it does not"
+                )
             spec.loader.exec_module(module)
 
             # Only import the function with the same name as the module, enforcing one function per file
@@ -204,12 +217,15 @@ class Simulation:
             func = output_functions[key]
 
             def passed_reform_simulation(func, is_reform):
-                def adjusted_func(simulation, **kwargs):
+                def adjusted_func(simulation: Simulation, **kwargs):
                     if is_reform:
-                        simulation.selected = simulation.reformed
+                        simulation.selected_sim = simulation.reformed_sim
                     else:
-                        simulation.selected = simulation.baseline
+                        simulation.selected_sim = simulation.baseline_sim
                     return func(simulation, **kwargs)
+
+                adjusted_func.__name__ = func.__name__
+                adjusted_func.__doc__ = func.__doc__
 
                 return adjusted_func
 
@@ -242,7 +258,21 @@ class Simulation:
 
         return output_functions, outputs
 
+    def _to_reform(self, value: int | dict):
+        if isinstance(value, dict):
+            return Reform.from_dict(value, country_id=self.country)
+        return Reform.from_api(f"{value}", country_id=self.country)
+
     def _initialise_simulations(self):
+        self._parsed_reform = (
+            self._to_reform(self.reform) if self.reform is not None else None
+        )
+        self._parsed_baseline = (
+            self._to_reform(self.baseline)
+            if self.baseline is not None
+            else None
+        )
+
         macro = self.scope == "macro"
         _simulation_type = {
             "uk": {
@@ -254,44 +284,68 @@ class Simulation:
                 False: USSimulation,
             },
         }[self.country][macro]
-        self.baseline = _simulation_type(
+        self.baseline_sim = _simulation_type(
             dataset=self.data if macro else None,
             situation=self.data if not macro else None,
-            reform=self.baseline,
+            reform=self._parsed_baseline,
         )
-        self.baseline.default_calculation_period = self.time_period
+        if self.time_period is not None:
+            self.baseline_sim.default_calculation_period = self.time_period
+
+        if "region" in self.options and isinstance(
+            self.baseline_sim, CountryMicrosimulation
+        ):
+            self.baseline_sim = self._apply_region_to_simulation(
+                self.baseline_sim,
+                _simulation_type,
+                self.options["region"],
+                reform=self.baseline_sim.reform,
+            )
 
         if "subsample" in self.options:
-            self.baseline = self.baseline.subsample(self.options["subsample"])
-
-        if "region" in self.options:
-            self.baseline = self._apply_region_to_simulation(
-                self.baseline, _simulation_type, self.options["region"]
+            self.baseline_sim = self.baseline_sim.subsample(
+                self.options["subsample"]
             )
 
         if self.comparison:
-            self.reformed = _simulation_type(
+            if self._parsed_baseline is not None:
+                self._parsed_reform = (self._parsed_baseline, self.reform)
+            self.reformed_sim = _simulation_type(
                 dataset=self.data if macro else None,
                 situation=self.data if not macro else None,
-                reform=self.reform,
+                reform=self._parsed_reform,
             )
-            self.reformed.default_calculation_period = self.time_period
+
+            if self.time_period is not None:
+                self.reformed_sim.default_calculation_period = self.time_period
+            if "region" in self.options and isinstance(
+                self.reformed_sim, CountryMicrosimulation
+            ):
+                self.reformed_sim = self._apply_region_to_simulation(
+                    self.reformed_sim,
+                    _simulation_type,
+                    self.options["region"],
+                    reform=self._parsed_reform,
+                )
 
             if "subsample" in self.options:
-                self.reformed = self.reformed.subsample(
+                self.reformed_sim = self.reformed_sim.subsample(
                     self.options["subsample"]
                 )
 
-            if "region" in self.options:
-                self.reformed = self._apply_region_to_simulation(
-                    self.reformed, _simulation_type, self.options["region"]
-                )
+            # Set the 'baseline tax-benefit system' to be the actual baseline. For example, when working out an individual's
+            # baseline MTR, it should use the actual policy baseline, not always current law.
+
+            self.reformed_sim.get_branch("baseline").tax_benefit_system = (
+                self.baseline_sim.tax_benefit_system
+            )
 
     def _apply_region_to_simulation(
         self,
         simulation: CountryMicrosimulation,
         simulation_type: type,
         region: str,
+        reform: Reform = None,
     ):
         if self.country == "us":
             df = simulation.to_input_dataframe()
@@ -300,13 +354,102 @@ class Simulation:
             ).values
             if region == "city/nyc":
                 in_nyc = simulation.calculate("in_nyc", map_to="person").values
-                simulation = simulation_type(
-                    dataset=df[in_nyc], reform=self.reform
-                )
+                simulation = simulation_type(dataset=df[in_nyc], reform=reform)
             elif "state/" in region:
                 state = region.split("/")[1]
                 simulation = simulation_type(
-                    dataset=df[state_code == state.upper()], reform=self.reform
+                    dataset=df[state_code == state.upper()], reform=reform
+                )
+        elif self.country == "uk":
+            if "country/" in region:
+                region = region.split("/")[1]
+                df = simulation.to_input_dataframe()
+                country = simulation.calculate(
+                    "country", map_to="person"
+                ).values
+                simulation = simulation_type(
+                    dataset=df[country == region.upper()], reform=reform
+                )
+            elif "constituency/" in region:
+                constituency = region.split("/")[1]
+                constituency_names_file_path = download(
+                    repo="policyengine/policyengine-uk-data",
+                    repo_filename="constituencies_2024.csv",
+                    local_folder=None,
+                    version=None,
+                )
+                constituency_names_file_path = Path(
+                    constituency_names_file_path
+                )
+                constituency_names = pd.read_csv(constituency_names_file_path)
+                if constituency in constituency_names.code.values:
+                    constituency_id = constituency_names[
+                        constituency_names.code == constituency
+                    ].index[0]
+                elif constituency in constituency_names.name.values:
+                    constituency_id = constituency_names[
+                        constituency_names.name == constituency
+                    ].index[0]
+                else:
+                    raise ValueError(
+                        f"Constituency {constituency} not found. See {constituency_names_file_path} for the list of available constituencies."
+                    )
+                weights_file_path = download(
+                    repo="policyengine/policyengine-uk-data",
+                    repo_filename="parliamentary_constituency_weights.h5",
+                    local_folder=None,
+                    version=None,
+                )
+
+                with h5py.File(weights_file_path, "r") as f:
+                    weights = f[str(self.time_period)][...]
+
+                print(
+                    weights[constituency_id],
+                    simulation.default_calculation_period,
+                )
+
+                simulation.calculate("household_net_income")
+
+                simulation.set_input(
+                    "household_weight",
+                    simulation.default_calculation_period,
+                    weights[constituency_id],
+                )
+            elif "local_authority/" in region:
+                la = region.split("/")[1]
+                la_names_file_path = download(
+                    repo="policyengine/policyengine-uk-data",
+                    repo_filename="local_authorities_2021.csv",
+                    local_folder=None,
+                    version=None,
+                )
+                la_names_file_path = Path(la_names_file_path)
+                la_names = pd.read_csv(la_names_file_path)
+                if la in la_names.code.values:
+                    la_id = la_names[la_names.code == la].index[0]
+                elif la in la_names.name.values:
+                    la_id = la_names[la_names.name == la].index[0]
+                else:
+                    raise ValueError(
+                        f"Local authority {la} not found. See {la_names_file_path} for the list of available local authorities."
+                    )
+                weights_file_path = download(
+                    repo="policyengine/policyengine-uk-data",
+                    repo_filename="local_authority_weights.h5",
+                    local_folder=None,
+                    version=None,
+                )
+
+                with h5py.File(weights_file_path, "r") as f:
+                    weights = f[str(self.time_period)][...]
+
+                simulation.calculate("household_net_income")
+
+                simulation.set_input(
+                    "household_weight",
+                    simulation.default_calculation_period,
+                    weights[la_id],
                 )
 
         return simulation
