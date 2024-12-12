@@ -289,6 +289,8 @@ class Simulation:
             situation=self.data if not macro else None,
             reform=self._parsed_baseline,
         )
+        if self.time_period is not None:
+            self.baseline_sim.default_calculation_period = self.time_period
 
         if "region" in self.options and isinstance(
             self.baseline_sim, CountryMicrosimulation
@@ -299,8 +301,6 @@ class Simulation:
                 self.options["region"],
                 reform=self.baseline_sim.reform,
             )
-        if self.time_period is not None:
-            self.baseline_sim.default_calculation_period = self.time_period
 
         if "subsample" in self.options:
             self.baseline_sim = self.baseline_sim.subsample(
@@ -315,6 +315,9 @@ class Simulation:
                 situation=self.data if not macro else None,
                 reform=self._parsed_reform,
             )
+
+            if self.time_period is not None:
+                self.reformed_sim.default_calculation_period = self.time_period
             if "region" in self.options and isinstance(
                 self.reformed_sim, CountryMicrosimulation
             ):
@@ -329,9 +332,6 @@ class Simulation:
                 self.reformed_sim = self.reformed_sim.subsample(
                     self.options["subsample"]
                 )
-
-            if self.time_period is not None:
-                self.reformed_sim.default_calculation_period = self.time_period
 
             # Set the 'baseline tax-benefit system' to be the actual baseline. For example, when working out an individual's
             # baseline MTR, it should use the actual policy baseline, not always current law.
@@ -404,6 +404,11 @@ class Simulation:
                 with h5py.File(weights_file_path, "r") as f:
                     weights = f[str(self.time_period)][...]
 
+                print(
+                    weights[constituency_id],
+                    simulation.default_calculation_period,
+                )
+
                 simulation.calculate("household_net_income")
 
                 simulation.set_input(
@@ -419,7 +424,7 @@ class Simulation:
                     local_folder=None,
                     version=None,
                 )
-                la_names_file_path = Path(constituency_names_file_path)
+                la_names_file_path = Path(la_names_file_path)
                 la_names = pd.read_csv(la_names_file_path)
                 if la in la_names.code.values:
                     la_id = la_names[la_names.code == la].index[0]

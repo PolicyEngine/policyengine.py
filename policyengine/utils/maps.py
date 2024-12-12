@@ -7,7 +7,7 @@ import plotly.express as px
 from policyengine.utils.charts import *
 
 
-def plot_hex_map(value_by_area_name: dict, location_type: str) -> dict:
+def get_location_options_table(location_type: str) -> pd.DataFrame:
     if location_type == "parliamentary_constituencies":
         area_names_file_path = download(
             repo="policyengine/policyengine-uk-data",
@@ -15,8 +15,6 @@ def plot_hex_map(value_by_area_name: dict, location_type: str) -> dict:
             local_folder=None,
             version=None,
         )
-        x_bounds = [30, 85]
-        y_bounds = [-50, 2]
     elif location_type == "local_authorities":
         area_names_file_path = download(
             repo="policyengine/policyengine-uk-data",
@@ -24,11 +22,21 @@ def plot_hex_map(value_by_area_name: dict, location_type: str) -> dict:
             local_folder=None,
             version=None,
         )
+    df = pd.read_csv(area_names_file_path)
+    return df
+
+
+def plot_hex_map(value_by_area_name: dict, location_type: str) -> dict:
+    if location_type == "parliamentary_constituencies":
+        x_bounds = [30, 85]
+        y_bounds = [-50, 2]
+    elif location_type == "local_authorities":
         x_bounds = [-20, 25]
         y_bounds = [-10, 35]
     else:
         raise ValueError("Invalid location_type: " + location_type)
-    area_names = pd.read_csv(area_names_file_path)
+
+    area_names = get_location_options_table(location_type)
 
     x_range = area_names["x"].max() - area_names["x"].min()
     y_range = area_names["y"].max() - area_names["y"].min()
