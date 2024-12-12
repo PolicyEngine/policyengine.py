@@ -6,6 +6,7 @@ logo: logo.png
 
 execute:
   execute_notebooks: cache
+  allow_errors: false
 
 repository:
   url: https://github.com/policyengine/policyengine.py
