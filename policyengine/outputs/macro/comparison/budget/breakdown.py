@@ -5,8 +5,8 @@ import pandas as pd
 
 def breakdown(
     simulation: Simulation,
-    provisions: List[dict] = None,
-    provision_names: List[str] = None,
+    provisions: List[dict] | None = None,
+    provision_names: List[str] | None = None,
     count_years: int = 5,
 ) -> pd.DataFrame:
     """Calculate the budgetary impact of the reform by provision.
