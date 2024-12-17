@@ -8,6 +8,7 @@ def breakdown(
     provisions: List[dict] | None = None,
     provision_names: List[str] | None = None,
     count_years: int = 5,
+    verbose: bool = False,
 ) -> pd.DataFrame:
     """Calculate the budgetary impact of the reform by provision.
 
@@ -16,6 +17,7 @@ def breakdown(
         provisions (List[dict], optional): The provisions to include in the breakdown. Defaults to None.
         provision_names (List[str], optional): The names of the provisions to include in the breakdown. Defaults to None.
         count_years (int, optional): The number of years to include in the breakdown. Defaults to 5.
+        verbose (bool, optional): Whether to print the budgetary impacts. Defaults to False.
 
     Returns:
         pd.DataFrame: A DataFrame (long) containing the budgetary impact of the reform by provision.
@@ -54,9 +56,10 @@ def breakdown(
             year_items.append(year)
             budget_items.append(difference)
 
-            print(
-                f"Year: {year}, Provision: {key_focus}, Budgetary impact: {round(difference/1e6)}"
-            )
+            if verbose:
+                print(
+                    f"Year: {year}, Provision: {key_focus}, Budgetary impact: {round(difference/1e9)}"
+                )
 
     return pd.DataFrame(
         {

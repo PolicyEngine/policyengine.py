@@ -8,8 +8,21 @@ def budget_breakdown(
     years: list,
     baseline: dict,
     options: dict,
+    verbose: bool = False,
 ):
-    """Create a table of per-provision budgetary impacts for a given reform."""
+    """Create a table of per-provision budgetary impacts for a given reform.
+
+    Args:
+        subreforms (list): A list of reform dictionaries.
+        subreform_names (list): A list of names for the provisions in the reform.
+        years (list): A list of years to include in the breakdown.
+        baseline (dict): The baseline reform.
+        options (dict): The simulation options.
+        verbose (bool, optional): Whether to print the budgetary impacts. Defaults to False.
+    
+    Returns:
+        pd.DataFrame: A DataFrame containing the budgetary impact of the reform by provision.
+    """
     subreform_items = []
     year_items = []
     budget_items = []
@@ -35,10 +48,10 @@ def budget_breakdown(
             subreform_items.append(key_focus)
             year_items.append(year)
             budget_items.append(difference)
-
-            print(
-                f"Year: {year}, Provision: {key_focus}, Budgetary impact: {round(difference/1e6)}"
-            )
+            if verbose:
+                print(
+                    f"Year: {year}, Provision: {key_focus}, Budgetary impact: {round(difference/1e9)}"
+                )
 
     df = pd.DataFrame(
         {
