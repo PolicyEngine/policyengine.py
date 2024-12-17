@@ -42,13 +42,13 @@ def variation_chart(
         target_variable, map_to="household"
     )
     reform_values = sim.reformed.calculate(target_variable, map_to="household")
-    variable_values = sim.baseline.calculate(variable, map_to="household")
+    axis_values = sim.baseline.calculate(variable, map_to="household")
 
     if show_baseline:
         fig = go.Figure()
         fig.add_trace(
             go.Line(
-                x=variable_values,
+                x=axis_values,
                 y=baseline_values,
                 mode="lines",
                 name="Baseline",
@@ -57,7 +57,7 @@ def variation_chart(
         )
         fig.add_trace(
             go.Line(
-                x=variable_values,
+                x=axis_values,
                 y=reform_values,
                 mode="lines",
                 name="Reform",
@@ -76,7 +76,7 @@ def variation_chart(
         fig = go.Figure(
             data=[
                 go.Line(
-                    x=variable_values,
+                    x=axis_values,
                     y=reform_values - baseline_values,
                     mode="lines",
                     name="Reform",
