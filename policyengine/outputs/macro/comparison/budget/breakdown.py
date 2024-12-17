@@ -27,7 +27,6 @@ def breakdown(
     )
     baseline = simulation.baseline.reform
     options = simulation.options
-    subreform_names = provision_names
     subreform_items = []
     year_items = []
     budget_items = []
@@ -47,7 +46,7 @@ def breakdown(
             budget = sim.calculate("macro/comparison/budget/general")[
                 "budgetary_impact"
             ]
-            key_focus = subreform_names[i]
+            key_focus = provision_names[i]
             difference = budget - last_budgetary_impact
             last_budgetary_impact = budget
 
