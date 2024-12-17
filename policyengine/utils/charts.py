@@ -32,7 +32,7 @@ MEDIUM_DARK_GRAY = "#D2D2D2"
 WHITE = "#FFFFFF"
 TEAL_98 = "#F7FDFC"
 BLACK = "#000000"
-LIGHT_LIGHT_GRAY = "#F4F4F4"
+FOG_GRAY = "#F4F4F4"
 
 BLUE_COLOUR_SCALE = [
     BLUE_LIGHT,
@@ -70,13 +70,13 @@ def format_fig(
         template="plotly_white",
         height=600,
         width=800,
-        plot_bgcolor=LIGHT_LIGHT_GRAY,  # set background color to light gray
-        paper_bgcolor=LIGHT_LIGHT_GRAY,  # set paper background color to white
+        plot_bgcolor=FOG_GRAY,  # set background color to light gray
+        paper_bgcolor=FOG_GRAY,  # set paper background color to white
         # No white grid marks
-        xaxis=dict(gridcolor=LIGHT_LIGHT_GRAY, zerolinecolor=LIGHT_LIGHT_GRAY),
+        xaxis=dict(gridcolor=FOG_GRAY, zerolinecolor=FOG_GRAY),
         yaxis=dict(
-            gridcolor=LIGHT_LIGHT_GRAY,
-            zerolinecolor=DARK_GRAY if add_zero_line else LIGHT_LIGHT_GRAY,
+            gridcolor=FOG_GRAY,
+            zerolinecolor=DARK_GRAY if add_zero_line else FOG_GRAY,
         ),
     )
 
@@ -110,9 +110,9 @@ def format_fig(
     # don't show modebar
     fig.update_layout(
         modebar=dict(
-            bgcolor=LIGHT_LIGHT_GRAY,
-            color=LIGHT_LIGHT_GRAY,
-            activecolor=LIGHT_LIGHT_GRAY,
+            bgcolor=FOG_GRAY,
+            color=FOG_GRAY,
+            activecolor=FOG_GRAY,
         ),
         margin_b=120,
         margin_t=120,
