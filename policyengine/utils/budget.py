@@ -19,7 +19,7 @@ def budget_breakdown(
         baseline (dict): The baseline reform.
         options (dict): The simulation options.
         verbose (bool, optional): Whether to print the budgetary impacts. Defaults to False.
-    
+
     Returns:
         pd.DataFrame: A DataFrame containing the budgetary impact of the reform by provision.
     """
