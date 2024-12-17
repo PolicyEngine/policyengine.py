@@ -1,12 +1,6 @@
 from policyengine import Simulation
 import plotly.graph_objects as go
-import plotly.express as px
 from policyengine.utils.charts import *
-import pandas as pd
-import warnings
-
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
 
 
 def variation_chart(
