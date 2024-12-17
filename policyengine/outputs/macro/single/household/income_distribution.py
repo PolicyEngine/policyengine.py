@@ -28,7 +28,7 @@ def income_distribution(
         return data.to_dict()
 
 
-def income_distribution_chart(data) -> go.Figure:
+def income_distribution_chart(data: pd.Series) -> go.Figure:
 
     fig = px.bar(
         x=data.index,
