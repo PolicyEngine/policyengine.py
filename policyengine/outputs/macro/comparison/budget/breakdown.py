@@ -22,8 +22,6 @@ def breakdown(
     """
     if provision_names is None:
         return {}
-
-    subreforms = provisions
     years = list(
         range(simulation.time_period, simulation.time_period + count_years)
     )
@@ -35,8 +33,8 @@ def breakdown(
     budget_items = []
     for year in years:
         last_budgetary_impact = 0
-        for i in range(len(subreforms)):
-            reform_subset = subreforms[: i + 1]
+        for i in range(len(provisions)):
+            reform_subset = provisions[: i + 1]
             sim = Simulation(
                 country="uk",
                 scope="macro",
