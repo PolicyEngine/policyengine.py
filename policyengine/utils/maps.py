@@ -7,34 +7,54 @@ import plotly.express as px
 from policyengine.utils.charts import *
 
 
-def plot_hex_map(value_by_constituency_name: dict) -> dict:
-    constituency_names_file_path = download(
-        repo="policyengine/policyengine-uk-data",
-        repo_filename="constituencies_2024.csv",
-        local_folder=None,
-        version=None,
-    )
-    constituency_names = pd.read_csv(constituency_names_file_path)
+def get_location_options_table(location_type: str) -> pd.DataFrame:
+    if location_type == "parliamentary_constituencies":
+        area_names_file_path = download(
+            repo="policyengine/policyengine-uk-data",
+            repo_filename="constituencies_2024.csv",
+            local_folder=None,
+            version=None,
+        )
+    elif location_type == "local_authorities":
+        area_names_file_path = download(
+            repo="policyengine/policyengine-uk-data",
+            repo_filename="local_authorities_2021.csv",
+            local_folder=None,
+            version=None,
+        )
+    df = pd.read_csv(area_names_file_path)
+    return df
 
-    x_range = constituency_names["x"].max() - constituency_names["x"].min()
-    y_range = constituency_names["y"].max() - constituency_names["y"].min()
+
+def plot_hex_map(value_by_area_name: dict, location_type: str) -> dict:
+    if location_type == "parliamentary_constituencies":
+        x_bounds = [30, 85]
+        y_bounds = [-50, 2]
+    elif location_type == "local_authorities":
+        x_bounds = [-20, 25]
+        y_bounds = [-10, 35]
+    else:
+        raise ValueError("Invalid location_type: " + location_type)
+
+    area_names = get_location_options_table(location_type)
+
+    x_range = area_names["x"].max() - area_names["x"].min()
+    y_range = area_names["y"].max() - area_names["y"].min()
     # Expand x range to preserve aspect ratio
     expanded_lower_x_range = -(y_range - x_range) / 2
     expanded_upper_x_range = x_range - expanded_lower_x_range
-    constituency_names.x = (
-        constituency_names.x - (constituency_names.y % 2 == 0) * 0.5
-    )
-    constituency_names["Value"] = (
+    area_names.x = area_names.x - (area_names.y % 2 == 0) * 0.5
+    area_names["Value"] = (
         pd.Series(
-            list(value_by_constituency_name.values()),
-            index=list(value_by_constituency_name.keys()),
+            list(value_by_area_name.values()),
+            index=list(value_by_area_name.keys()),
         )
-        .loc[constituency_names["name"]]
+        .loc[area_names["name"]]
         .values
     )
 
     fig = px.scatter(
-        constituency_names,
+        area_names,
         x="x",
         y="y",
         color="Value",
@@ -57,11 +77,11 @@ def plot_hex_map(value_by_constituency_name: dict) -> dict:
         yaxis_title="",
         xaxis_range=[expanded_lower_x_range, expanded_upper_x_range],
         yaxis_range=[
-            constituency_names["y"].min(),
-            constituency_names["y"].max(),
+            area_names["y"].min(),
+            area_names["y"].max(),
         ],
     ).update_traces(marker_size=10).update_layout(
-        xaxis_range=[30, 85], yaxis_range=[-50, 2]
+        xaxis_range=x_bounds, yaxis_range=y_bounds
     )
 
     x_min = fig.data[0]["marker"]["color"].min()

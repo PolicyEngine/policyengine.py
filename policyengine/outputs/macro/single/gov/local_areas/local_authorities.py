@@ -8,7 +8,7 @@ from policyengine_core import Microsimulation
 from policyengine.utils.maps import plot_hex_map
 
 
-def parliamentary_constituencies(
+def local_authorities(
     simulation: Simulation,
     metric: Callable[[Microsimulation], MicroSeries] = None,
     chart: bool = False,
@@ -25,20 +25,20 @@ def parliamentary_constituencies(
     Returns:
         dict: A dictionary with the impact of the reform on parliamentary constituencies (keys=constituency names, values=metric values).
     """
-    if not simulation.options.get("include_constituencies"):
+    if not simulation.options.get("include_local_authorities"):
         return {}
 
     if metric is None:
         metric = lambda sim: sim.calculate("household_net_income").median()
     weights_file_path = download(
         repo="policyengine/policyengine-uk-data",
-        repo_filename="parliamentary_constituency_weights.h5",
+        repo_filename="local_authority_weights.h5",
         local_folder=None,
         version=None,
     )
     constituency_names_file_path = download(
         repo="policyengine/policyengine-uk-data",
-        repo_filename="constituencies_2024.csv",
+        repo_filename="local_authorities_2021.csv",
         local_folder=None,
         version=None,
     )

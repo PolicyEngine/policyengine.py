@@ -1,10 +1,13 @@
 from policyengine import Simulation
 
 
-def finance(simulation: Simulation) -> dict:
-    sim = simulation.selected
+def finance(simulation: Simulation, include_arrays: bool = False) -> dict:
+    sim = simulation.selected_sim
 
     total_net_income = sim.calculate("household_net_income").sum()
+    total_market_income = sim.calculate("household_market_income").sum()
+    total_tax = sim.calculate("household_tax").sum()
+    total_benefits = sim.calculate("household_benefits").sum()
     employment_income_hh = (
         sim.calculate("employment_income", map_to="household")
         .astype(float)
@@ -47,8 +50,16 @@ def finance(simulation: Simulation) -> dict:
     poverty_gap = sim.calculate("poverty_gap").sum()
     deep_poverty_gap = sim.calculate("deep_poverty_gap").sum()
 
-    return {
+    poverty_rate = sim.calculate("in_poverty", map_to="person").mean()
+    deep_poverty_rate = sim.calculate(
+        "in_deep_poverty", map_to="person"
+    ).mean()
+
+    result = {
         "total_net_income": total_net_income,
+        "total_market_income": total_market_income,
+        "total_tax": total_tax,
+        "total_benefits": total_benefits,
         "employment_income_hh": employment_income_hh,
         "self_employment_income_hh": self_employment_income_hh,
         "household_net_income": household_net_income,
@@ -62,4 +73,15 @@ def finance(simulation: Simulation) -> dict:
         "person_in_deep_poverty": person_in_deep_poverty,
         "poverty_gap": poverty_gap,
         "deep_poverty_gap": deep_poverty_gap,
+        "poverty_rate": poverty_rate,
+        "deep_poverty_rate": deep_poverty_rate,
     }
+
+    if not include_arrays:
+        return {
+            key: value
+            for key, value in result.items()
+            if not isinstance(value, list)
+        }
+    else:
+        return result
