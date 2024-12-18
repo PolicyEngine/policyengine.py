@@ -3,7 +3,7 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Schema" href="schema.html" /><link rel="prev" title="Introduction" href="index.html" />
+<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Simulation" href="reference/simulation.html" /><link rel="prev" title="Introduction" href="index.html" />
 
     <!-- Generated with Sphinx 7.4.7 and Furo 2024.08.06 -->
         <title>Maintainance - PolicyEngine</title>
@@ -211,9 +211,10 @@
 <ul class="current">
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Maintainance</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Schema</span></p>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="schema.html">Schema</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference/simulation.html">Simulation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference/calculate.html">Calculate</a></li>
 </ul>
 
 </div>
@@ -284,7 +285,7 @@
 <span class="n">sim</span> <span class="o">=</span> <span class="n">Simulation</span><span class="p">(</span>
     <span class="n">country</span><span class="o">=</span><span class="s2">&quot;uk&quot;</span><span class="p">,</span>
     <span class="n">scope</span><span class="o">=</span><span class="s2">&quot;macro&quot;</span><span class="p">,</span>
-    <span class="n">data</span><span class="o">=</span><span class="s2">&quot;enhanced_frs_2022_23&quot;</span><span class="p">,</span>
+    <span class="n">data</span><span class="o">=</span><span class="s2">&quot;enhanced_frs&quot;</span><span class="p">,</span>
     <span class="n">time_period</span><span class="o">=</span><span class="mi">2025</span><span class="p">,</span>
     <span class="n">reform</span><span class="o">=</span><span class="p">{</span>
         <span class="s2">&quot;gov.hmrc.income_tax.allowances.personal_allowance.amount&quot;</span><span class="p">:</span> <span class="p">{</span>
@@ -297,9 +298,42 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>{&#39;comparison&#39;: {&#39;revenue_impact&#39;: 137.95680800660614},
- &#39;baseline&#39;: {&#39;tax_revenue&#39;: 649.7843458774124},
- &#39;reform&#39;: {&#39;tax_revenue&#39;: 787.7411538840186}}
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/opt/hostedtoolcache/Python/3.10.15/x64/lib/python3.10/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+  from .autonotebook import tqdm as notebook_tqdm
+</pre></div>
+</div>
+<div class="output traceback highlight-ipythontb notranslate"><div class="highlight"><pre><span></span><span class="gt">---------------------------------------------------------------------------</span>
+<span class="ne">AttributeError</span><span class="g g-Whitespace">                            </span>Traceback (most recent call last)
+<span class="n">Cell</span> <span class="n">In</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">line</span> <span class="mi">3</span>
+<span class="g g-Whitespace">      </span><span class="mi">1</span> <span class="kn">from</span> <span class="nn">policyengine</span> <span class="kn">import</span> <span class="n">Simulation</span>
+<span class="ne">----&gt; </span><span class="mi">3</span> <span class="n">sim</span> <span class="o">=</span> <span class="n">Simulation</span><span class="p">(</span>
+<span class="g g-Whitespace">      </span><span class="mi">4</span>     <span class="n">country</span><span class="o">=</span><span class="s2">&quot;uk&quot;</span><span class="p">,</span>
+<span class="g g-Whitespace">      </span><span class="mi">5</span>     <span class="n">scope</span><span class="o">=</span><span class="s2">&quot;macro&quot;</span><span class="p">,</span>
+<span class="g g-Whitespace">      </span><span class="mi">6</span>     <span class="n">data</span><span class="o">=</span><span class="s2">&quot;enhanced_frs&quot;</span><span class="p">,</span>
+<span class="g g-Whitespace">      </span><span class="mi">7</span>     <span class="n">time_period</span><span class="o">=</span><span class="mi">2025</span><span class="p">,</span>
+<span class="g g-Whitespace">      </span><span class="mi">8</span>     <span class="n">reform</span><span class="o">=</span><span class="p">{</span>
+<span class="g g-Whitespace">      </span><span class="mi">9</span>         <span class="s2">&quot;gov.hmrc.income_tax.allowances.personal_allowance.amount&quot;</span><span class="p">:</span> <span class="p">{</span>
+<span class="g g-Whitespace">     </span><span class="mi">10</span>             <span class="s2">&quot;2025&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">11</span>         <span class="p">}</span>
+<span class="g g-Whitespace">     </span><span class="mi">12</span>     <span class="p">}</span>
+<span class="g g-Whitespace">     </span><span class="mi">13</span> <span class="p">)</span>
+<span class="g g-Whitespace">     </span><span class="mi">14</span> <span class="n">sim</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;macro&quot;</span><span class="p">)</span>
+
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/simulation.py:81,</span> in <span class="ni">Simulation.__init__</span><span class="nt">(self, country, scope, data, time_period, reform, baseline, verbose, options)</span>
+<span class="g g-Whitespace">     </span><span class="mi">77</span> <span class="bp">self</span><span class="o">.</span><span class="n">reform</span> <span class="o">=</span> <span class="n">reform</span>
+<span class="g g-Whitespace">     </span><span class="mi">79</span> <span class="bp">self</span><span class="o">.</span><span class="n">comparison</span> <span class="o">=</span> <span class="n">reform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<span class="ne">---&gt; </span><span class="mi">81</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_functions</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_outputs</span><span class="p">()</span>
+<span class="g g-Whitespace">     </span><span class="mi">83</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialise_simulations</span><span class="p">()</span>
+
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/simulation.py:208,</span> in <span class="ni">Simulation._get_outputs</span><span class="nt">(self)</span>
+<span class="g g-Whitespace">    </span><span class="mi">205</span>     <span class="n">spec</span><span class="o">.</span><span class="n">loader</span><span class="o">.</span><span class="n">exec_module</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">207</span>     <span class="c1"># Only import the function with the same name as the module, enforcing one function per file</span>
+<span class="ne">--&gt; </span><span class="mi">208</span>     <span class="n">output_functions</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">relative_path</span><span class="p">)]</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">module_name</span><span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">210</span> <span class="c1"># If we are just calculating for a single scenario, put all &#39;macro/single/&#39; children under &#39;macro/&#39;.</span>
+<span class="g g-Whitespace">    </span><span class="mi">211</span> <span class="c1"># If not, duplicate them into &#39;macro/baseline/&#39; and &#39;single/reform&#39;.</span>
+<span class="g g-Whitespace">    </span><span class="mi">213</span> <span class="n">single_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">output_functions</span> <span class="k">if</span> <span class="s2">&quot;single/&quot;</span> <span class="ow">in</span> <span class="n">key</span><span class="p">]</span>
+
+<span class="ne">AttributeError</span>: module &#39;local_authorities&#39; has no attribute &#39;local_authorities&#39;
 </pre></div>
 </div>
 </div>
@@ -331,12 +365,12 @@
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="schema.html">
+          <a class="next-page" href="reference/simulation.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Schema</div>
+                <div class="title">Simulation</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>

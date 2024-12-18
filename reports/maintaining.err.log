@@ -1,0 +1,71 @@
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.10.15/x64/lib/python3.10/site-packages/jupyter_cache/executors/utils.py", line 58, in single_nb_execution
+    executenb(
+  File "/opt/hostedtoolcache/Python/3.10.15/x64/lib/python3.10/site-packages/nbclient/client.py", line 1314, in execute
+    return NotebookClient(nb=nb, resources=resources, km=km, **kwargs).execute()
+  File "/opt/hostedtoolcache/Python/3.10.15/x64/lib/python3.10/site-packages/jupyter_core/utils/__init__.py", line 165, in wrapped
+    return loop.run_until_complete(inner)
+  File "/opt/hostedtoolcache/Python/3.10.15/x64/lib/python3.10/asyncio/base_events.py", line 649, in run_until_complete
+    return future.result()
+  File "/opt/hostedtoolcache/Python/3.10.15/x64/lib/python3.10/site-packages/nbclient/client.py", line 709, in async_execute
+    await self.async_execute_cell(
+  File "/opt/hostedtoolcache/Python/3.10.15/x64/lib/python3.10/site-packages/nbclient/client.py", line 1062, in async_execute_cell
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "/opt/hostedtoolcache/Python/3.10.15/x64/lib/python3.10/site-packages/nbclient/client.py", line 918, in _check_raise_for_error
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+from policyengine import Simulation
+
+sim = Simulation(
+    country="uk",
+    scope="macro",
+    data="enhanced_frs",
+    time_period=2025,
+    reform={
+        "gov.hmrc.income_tax.allowances.personal_allowance.amount": {
+            "2025": 0,
+        }
+    }
+)
+sim.calculate("macro")
+------------------
+
+----- stderr -----
+/opt/hostedtoolcache/Python/3.10.15/x64/lib/python3.10/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+  from .autonotebook import tqdm as notebook_tqdm
+------------------
+
+[0;31m---------------------------------------------------------------------------[0m
+[0;31mAttributeError[0m                            Traceback (most recent call last)
+Cell [0;32mIn[1], line 3[0m
+[1;32m      1[0m [38;5;28;01mfrom[39;00m [38;5;21;01mpolicyengine[39;00m [38;5;28;01mimport[39;00m Simulation
+[0;32m----> 3[0m sim [38;5;241m=[39m [43mSimulation[49m[43m([49m
+[1;32m      4[0m [43m    [49m[43mcountry[49m[38;5;241;43m=[39;49m[38;5;124;43m"[39;49m[38;5;124;43muk[39;49m[38;5;124;43m"[39;49m[43m,[49m
+[1;32m      5[0m [43m    [49m[43mscope[49m[38;5;241;43m=[39;49m[38;5;124;43m"[39;49m[38;5;124;43mmacro[39;49m[38;5;124;43m"[39;49m[43m,[49m
+[1;32m      6[0m [43m    [49m[43mdata[49m[38;5;241;43m=[39;49m[38;5;124;43m"[39;49m[38;5;124;43menhanced_frs[39;49m[38;5;124;43m"[39;49m[43m,[49m
+[1;32m      7[0m [43m    [49m[43mtime_period[49m[38;5;241;43m=[39;49m[38;5;241;43m2025[39;49m[43m,[49m
+[1;32m      8[0m [43m    [49m[43mreform[49m[38;5;241;43m=[39;49m[43m{[49m
+[1;32m      9[0m [43m        [49m[38;5;124;43m"[39;49m[38;5;124;43mgov.hmrc.income_tax.allowances.personal_allowance.amount[39;49m[38;5;124;43m"[39;49m[43m:[49m[43m [49m[43m{[49m
+[1;32m     10[0m [43m            [49m[38;5;124;43m"[39;49m[38;5;124;43m2025[39;49m[38;5;124;43m"[39;49m[43m:[49m[43m [49m[38;5;241;43m0[39;49m[43m,[49m
+[1;32m     11[0m [43m        [49m[43m}[49m
+[1;32m     12[0m [43m    [49m[43m}[49m
+[1;32m     13[0m [43m)[49m
+[1;32m     14[0m sim[38;5;241m.[39mcalculate([38;5;124m"[39m[38;5;124mmacro[39m[38;5;124m"[39m)
+
+File [0;32m~/work/policyengine.py/policyengine.py/policyengine/simulation.py:81[0m, in [0;36mSimulation.__init__[0;34m(self, country, scope, data, time_period, reform, baseline, verbose, options)[0m
+[1;32m     77[0m [38;5;28mself[39m[38;5;241m.[39mreform [38;5;241m=[39m reform
+[1;32m     79[0m [38;5;28mself[39m[38;5;241m.[39mcomparison [38;5;241m=[39m reform [38;5;129;01mis[39;00m [38;5;129;01mnot[39;00m [38;5;28;01mNone[39;00m
+[0;32m---> 81[0m [38;5;28mself[39m[38;5;241m.[39moutput_functions, [38;5;28mself[39m[38;5;241m.[39moutputs [38;5;241m=[39m [38;5;28;43mself[39;49m[38;5;241;43m.[39;49m[43m_get_outputs[49m[43m([49m[43m)[49m
+[1;32m     83[0m [38;5;28mself[39m[38;5;241m.[39m_initialise_simulations()
+
+File [0;32m~/work/policyengine.py/policyengine.py/policyengine/simulation.py:208[0m, in [0;36mSimulation._get_outputs[0;34m(self)[0m
+[1;32m    205[0m     spec[38;5;241m.[39mloader[38;5;241m.[39mexec_module(module)
+[1;32m    207[0m     [38;5;66;03m# Only import the function with the same name as the module, enforcing one function per file[39;00m
+[0;32m--> 208[0m     output_functions[[38;5;28mstr[39m(relative_path)] [38;5;241m=[39m [38;5;28;43mgetattr[39;49m[43m([49m[43mmodule[49m[43m,[49m[43m [49m[43mmodule_name[49m[43m)[49m
+[1;32m    210[0m [38;5;66;03m# If we are just calculating for a single scenario, put all 'macro/single/' children under 'macro/'.[39;00m
+[1;32m    211[0m [38;5;66;03m# If not, duplicate them into 'macro/baseline/' and 'single/reform'.[39;00m
+[1;32m    213[0m single_keys [38;5;241m=[39m [key [38;5;28;01mfor[39;00m key [38;5;129;01min[39;00m output_functions [38;5;28;01mif[39;00m [38;5;124m"[39m[38;5;124msingle/[39m[38;5;124m"[39m [38;5;129;01min[39;00m key]
+
+[0;31mAttributeError[0m: module 'local_authorities' has no attribute 'local_authorities'
+
