@@ -5,8 +5,9 @@ copyright: "2025"
 logo: logo.png
 
 execute:
-  execute_notebooks: cache
-  allow_errors: false
+  execute_notebooks: force
+  stderr_output: error
+  timeout: 600
 
 repository:
   url: https://github.com/policyengine/policyengine.py

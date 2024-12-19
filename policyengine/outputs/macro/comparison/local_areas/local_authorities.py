@@ -9,7 +9,7 @@ from policyengine_core import Microsimulation
 from microdf import MicroSeries
 
 
-def parliamentary_constituencies(
+def local_authorities(
     simulation: Simulation,
     chart: bool = False,
     metric: Callable[[Microsimulation], MicroSeries] = None,
