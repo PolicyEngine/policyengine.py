@@ -6,7 +6,7 @@ logo: logo.png
 
 execute:
   execute_notebooks: force
-  allow_errors: false
+  stderr_output: error
   timeout: 600
 
 repository:
