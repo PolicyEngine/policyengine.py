@@ -40,6 +40,7 @@ jobs:
           for notebook in $(find docs/_build/jupyter_execute -name "*.ipynb"); do
             if grep -q '"output_type": "error"' "$notebook"; then
               echo "Error found in $notebook"
+              cat "$notebook"
               exit 1
             fi
           done
