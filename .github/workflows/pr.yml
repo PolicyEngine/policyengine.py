@@ -37,9 +37,9 @@ jobs:
 
       - name: Check documentation build
         run: |
-          if [ -d "docs/_build/html" ]; then
-            echo "Documentation built successfully"
-          else
-            echo "Documentation build failed"
-            exit 1
-          fi
+          for notebook in $(find docs/_build/jupyter_execute -name "*.ipynb"); do
+            if grep -q '"output_type": "error"' "$notebook"; then
+              echo "Error found in $notebook"
+              exit 1
+            fi
+          done
