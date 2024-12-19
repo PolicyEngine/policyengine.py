@@ -205,7 +205,14 @@ class Simulation:
             spec.loader.exec_module(module)
 
             # Only import the function with the same name as the module, enforcing one function per file
-            output_functions[str(relative_path)] = getattr(module, module_name)
+            try:
+                output_functions[str(relative_path)] = getattr(
+                    module, module_name
+                )
+            except AttributeError:
+                raise AttributeError(
+                    f"Each module must contain a function with the same name as the module. Module '{str(relative_path)}.py' does not."
+                )
 
         # If we are just calculating for a single scenario, put all 'macro/single/' children under 'macro/'.
         # If not, duplicate them into 'macro/baseline/' and 'single/reform'.
