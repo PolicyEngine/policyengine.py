@@ -34,6 +34,8 @@ jobs:
       
       - name: Generate documentation
         run: make documentation
+        env:
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
 
       - name: Check documentation build
         run: |
