@@ -322,37 +322,7 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output traceback highlight-ipythontb notranslate"><div class="highlight"><pre><span></span><span class="gt">---------------------------------------------------------------------------</span>
-<span class="ne">AttributeError</span><span class="g g-Whitespace">                            </span>Traceback (most recent call last)
-<span class="n">Cell</span> <span class="n">In</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">line</span> <span class="mi">1</span>
-<span class="ne">----&gt; </span><span class="mi">1</span> <span class="n">sim</span> <span class="o">=</span> <span class="n">Simulation</span><span class="p">(</span>
-<span class="g g-Whitespace">      </span><span class="mi">2</span>     <span class="n">country</span><span class="o">=</span><span class="s2">&quot;uk&quot;</span><span class="p">,</span>
-<span class="g g-Whitespace">      </span><span class="mi">3</span>     <span class="n">scope</span><span class="o">=</span><span class="s2">&quot;macro&quot;</span><span class="p">,</span>
-<span class="g g-Whitespace">      </span><span class="mi">4</span>     <span class="n">data</span><span class="o">=</span><span class="s2">&quot;enhanced_frs&quot;</span><span class="p">,</span>
-<span class="g g-Whitespace">      </span><span class="mi">5</span>     <span class="n">time_period</span><span class="o">=</span><span class="mi">2025</span><span class="p">,</span>
-<span class="g g-Whitespace">      </span><span class="mi">6</span>     <span class="n">reform</span><span class="o">=</span><span class="p">{</span>
-<span class="g g-Whitespace">      </span><span class="mi">7</span>         <span class="s2">&quot;gov.hmrc.income_tax.allowances.personal_allowance.amount&quot;</span><span class="p">:</span> <span class="p">{</span>
-<span class="g g-Whitespace">      </span><span class="mi">8</span>             <span class="s2">&quot;2025&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
-<span class="g g-Whitespace">      </span><span class="mi">9</span>         <span class="p">}</span>
-<span class="g g-Whitespace">     </span><span class="mi">10</span>     <span class="p">}</span>
-<span class="g g-Whitespace">     </span><span class="mi">11</span> <span class="p">)</span>
-<span class="g g-Whitespace">     </span><span class="mi">12</span> <span class="n">sim</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;macro/comparison/budget/general/tax_revenue_impact&quot;</span><span class="p">)</span><span class="o">/</span><span class="mf">1e9</span>
-
-<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/simulation.py:81,</span> in <span class="ni">Simulation.__init__</span><span class="nt">(self, country, scope, data, time_period, reform, baseline, verbose, options)</span>
-<span class="g g-Whitespace">     </span><span class="mi">77</span> <span class="bp">self</span><span class="o">.</span><span class="n">reform</span> <span class="o">=</span> <span class="n">reform</span>
-<span class="g g-Whitespace">     </span><span class="mi">79</span> <span class="bp">self</span><span class="o">.</span><span class="n">comparison</span> <span class="o">=</span> <span class="n">reform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-<span class="ne">---&gt; </span><span class="mi">81</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_functions</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_outputs</span><span class="p">()</span>
-<span class="g g-Whitespace">     </span><span class="mi">83</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialise_simulations</span><span class="p">()</span>
-
-<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/simulation.py:208,</span> in <span class="ni">Simulation._get_outputs</span><span class="nt">(self)</span>
-<span class="g g-Whitespace">    </span><span class="mi">205</span>     <span class="n">spec</span><span class="o">.</span><span class="n">loader</span><span class="o">.</span><span class="n">exec_module</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
-<span class="g g-Whitespace">    </span><span class="mi">207</span>     <span class="c1"># Only import the function with the same name as the module, enforcing one function per file</span>
-<span class="ne">--&gt; </span><span class="mi">208</span>     <span class="n">output_functions</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">relative_path</span><span class="p">)]</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">module_name</span><span class="p">)</span>
-<span class="g g-Whitespace">    </span><span class="mi">210</span> <span class="c1"># If we are just calculating for a single scenario, put all &#39;macro/single/&#39; children under &#39;macro/&#39;.</span>
-<span class="g g-Whitespace">    </span><span class="mi">211</span> <span class="c1"># If not, duplicate them into &#39;macro/baseline/&#39; and &#39;single/reform&#39;.</span>
-<span class="g g-Whitespace">    </span><span class="mi">213</span> <span class="n">single_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">output_functions</span> <span class="k">if</span> <span class="s2">&quot;single/&quot;</span> <span class="ow">in</span> <span class="n">key</span><span class="p">]</span>
-
-<span class="ne">AttributeError</span>: module &#39;local_authorities&#39; has no attribute &#39;local_authorities&#39;
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>130.6718584445243
 </pre></div>
 </div>
 </div>
