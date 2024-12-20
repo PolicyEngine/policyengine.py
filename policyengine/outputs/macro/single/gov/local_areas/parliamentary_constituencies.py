@@ -81,7 +81,7 @@ def parliamentary_constituencies(
     )
 
     if chart:
-        return plot_hex_map(result, "local_authorities")
+        return plot_hex_map(result, "parliamentary_constituencies")
 
     if code_index:
         return {
