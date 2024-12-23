@@ -42,3 +42,8 @@
     - Household variation charts.
     - Region filtering improvements.
   date: 2024-12-06 14:07:31
+- bump: minor
+  changes:
+    fixed:
+    - Bug causing local authority impacts to fail.
+  date: 2024-12-23 08:05:21
