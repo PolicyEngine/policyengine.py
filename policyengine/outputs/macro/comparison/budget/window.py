@@ -20,11 +20,11 @@ def window(
     )
     reform = simulation.calculate("macro/reform/gov/budget_window", **kwargs)
     total_budget_effect = [
-        (y - x) / 1e9
+        (y - x)
         for x, y in zip(baseline["total_budget"], reform["total_budget"])
     ]
     federal_budget_effect = [
-        (y - x) / 1e9
+        (y - x)
         for x, y in zip(
             baseline["total_federal_budget"], reform["total_federal_budget"]
         )

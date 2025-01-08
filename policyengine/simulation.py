@@ -2,14 +2,6 @@ from policyengine_core import Simulation as CountrySimulation
 from policyengine_core import Microsimulation as CountryMicrosimulation
 from policyengine_core.data import Dataset
 from policyengine.utils.huggingface import download
-from policyengine_us import (
-    Simulation as USSimulation,
-    Microsimulation as USMicrosimulation,
-)
-from policyengine_uk import (
-    Simulation as UKSimulation,
-    Microsimulation as UKMicrosimulation,
-)
 from policyengine_core.reforms import Reform
 from typing import Tuple, Any
 from policyengine.constants import *
@@ -135,6 +127,10 @@ class Simulation:
         node = self.outputs
 
         for child_key in output.split("/")[:-1]:
+            if child_key not in node:
+                raise KeyError(
+                    f"Output '{child_key}' not found in '{node}'. Available keys are: {list(node.keys())}"
+                )
             node = node[child_key]
 
         parent = node
@@ -277,6 +273,15 @@ class Simulation:
         return Reform.from_api(f"{value}", country_id=self.country)
 
     def _initialise_simulations(self):
+        from policyengine_us import (
+            Simulation as USSimulation,
+            Microsimulation as USMicrosimulation,
+        )
+        from policyengine_uk import (
+            Simulation as UKSimulation,
+            Microsimulation as UKMicrosimulation,
+        )
+
         self._parsed_reform = (
             self._to_reform(self.reform) if self.reform is not None else None
         )
@@ -464,5 +469,7 @@ class Simulation:
                     simulation.default_calculation_period,
                     weights[la_id],
                 )
+
+        simulation.default_calculation_period = self.time_period
 
         return simulation

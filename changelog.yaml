@@ -47,3 +47,8 @@
     fixed:
     - Bug causing local authority impacts to fail.
   date: 2024-12-23 08:05:21
+- bump: patch
+  changes:
+    fixed:
+    - Subsetting bug with time periods.
+  date: 2025-01-09 10:52:28
