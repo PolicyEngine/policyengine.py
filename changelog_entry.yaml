@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Subsetting bug with time periods.

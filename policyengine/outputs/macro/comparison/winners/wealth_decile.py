@@ -14,6 +14,8 @@ def wealth_decile(simulation: Simulation):
             - deciles (dict): A dictionary with keys representing outcome labels and values as lists of percentages for each decile.
             - all (dict): A dictionary with keys representing outcome labels and values as overall percentages.
     """
+    if simulation.country == "us":
+        return {}
     baseline = simulation.calculate("macro/baseline")
     reform = simulation.calculate("macro/reform")
     baseline["household"]["finance"] = simulation.calculate(
