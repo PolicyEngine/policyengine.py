@@ -7,4 +7,4 @@ parts:
   - caption: Reference
     chapters:
     - file: reference/simulation
-    - file: reference/calculate
+    - file: reference/balance
