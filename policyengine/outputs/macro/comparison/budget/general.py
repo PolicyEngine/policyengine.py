@@ -5,6 +5,12 @@ import pandas as pd
 from policyengine.utils.charts import *
 
 
+def calculate_budgetary_impact(
+    simulation: Simulation, federal_only: bool = True
+) -> float:
+    return 3e9
+
+
 def general(simulation: Simulation, chart: bool = False):
     """Calculate the budgetary impact of the given simulation.
 
