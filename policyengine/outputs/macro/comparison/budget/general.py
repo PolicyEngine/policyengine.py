@@ -1,4 +1,3 @@
-from policyengine import Simulation
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
@@ -6,12 +5,12 @@ from policyengine.utils.charts import *
 
 
 def calculate_budgetary_impact(
-    simulation: Simulation, federal_only: bool = True
+    self, federal_only: bool = True
 ) -> float:
     return 3e9
 
 
-def general(simulation: Simulation, chart: bool = False):
+def general(simulation, chart: bool = False):
     """Calculate the budgetary impact of the given simulation.
 
     Args:
@@ -58,7 +57,7 @@ def general(simulation: Simulation, chart: bool = False):
         return result
 
 
-def budget_chart(simulation: Simulation, data: dict) -> go.Figure:
+def budget_chart(simulation, data: dict) -> go.Figure:
     if simulation.country == "uk":
         x = ["Tax revenues", "Benefit spending", "Budgetary impact"]
         y = [

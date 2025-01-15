@@ -8,7 +8,13 @@ from policyengine.constants import *
 import pandas as pd
 import h5py
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Callable
+
+from policyengine.outputs.macro.comparison.budget.general import calculate_budgetary_impact
+
+FUNCTIONS = (
+    calculate_budgetary_impact,
+)
 
 
 class Simulation:
@@ -304,3 +310,6 @@ class Simulation:
         simulation.default_calculation_period = self.time_period
 
         return simulation
+    
+    def calculate_budgetary_impact(self, federal_only: bool = True) -> float:
+        return calculate_budgetary_impact(self, federal_only=federal_only)
