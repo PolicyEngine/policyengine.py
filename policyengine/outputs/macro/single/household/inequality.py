@@ -1,7 +1,7 @@
 from policyengine import Simulation
 
 
-def inequality(simulation: Simulation) -> dict:
+def calculate_inequality(simulation: Simulation) -> dict:
     personal_hh_equiv_income = simulation.selected_sim.calculate(
         "equiv_household_net_income"
     )

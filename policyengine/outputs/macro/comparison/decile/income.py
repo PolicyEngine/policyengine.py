@@ -1,8 +1,9 @@
 from policyengine import Simulation
 from microdf import MicroSeries
+from ...single import calculate_single_macro_scenario
 
 
-def income(simulation: Simulation):
+def calculate_income_decile_comparison(simulation: Simulation):
     """Calculate the impact of the reform on income deciles.
 
     Args:
@@ -13,8 +14,10 @@ def income(simulation: Simulation):
             - relative (dict): A dictionary with keys representing deciles and values as relative income changes.
             - average (dict): A dictionary with keys representing deciles and values as average income changes.
     """
-    baseline = simulation.calculate("macro/baseline")
-    reform = simulation.calculate("macro/reform")
+    simulation.selected_sim = simulation.baseline_sim
+    baseline = calculate_single_macro_scenario(simulation)
+    simulation.selected_sim = simulation.reformed_sim
+    reform = calculate_single_macro_scenario(simulation)
     baseline["household"]["finance"] = simulation.calculate(
         "macro/baseline/household/finance", include_arrays=True
     )

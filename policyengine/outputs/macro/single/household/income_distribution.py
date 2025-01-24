@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import pandas as pd
 
 
-def income_distribution(
+def calculate_income_distribution(
     simulation: Simulation,
     chart: bool = False,
     variable: str = "household_net_income",
@@ -29,7 +29,6 @@ def income_distribution(
 
 
 def income_distribution_chart(data: pd.Series) -> go.Figure:
-
     fig = px.bar(
         x=data.index,
         y=data.values,

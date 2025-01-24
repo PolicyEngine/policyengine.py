@@ -1,7 +1,7 @@
 from policyengine import Simulation
 
 
-def demographics(simulation: Simulation, include_arrays: bool = False) -> dict:
+def calculate_demographics(simulation: Simulation, include_arrays: bool = False) -> dict:
     sim = simulation.selected_sim
     household_count_people = (
         sim.calculate("household_count_people").astype(int).tolist()

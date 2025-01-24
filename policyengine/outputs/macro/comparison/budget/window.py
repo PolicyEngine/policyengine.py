@@ -3,9 +3,10 @@ import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
 from policyengine.utils.charts import *
+from policyengine.outputs.macro.single.gov.budget_window import calculate_budget_window
 
 
-def window(
+def calculate_budget_window_comparison(
     simulation: Simulation,
     chart: bool = False,
     federal_only: bool = False,
@@ -15,10 +16,10 @@ def window(
         kwargs = {}
     else:
         kwargs = {"count_years": count_years}
-    baseline = simulation.calculate(
-        "macro/baseline/gov/budget_window", **kwargs
-    )
-    reform = simulation.calculate("macro/reform/gov/budget_window", **kwargs)
+    simulation.selected_sim = simulation.baseline_sim
+    baseline = calculate_budget_window(simulation, **kwargs)
+    simulation.selected_sim = simulation.reformed_sim
+    reform = calculate_budget_window(simulation, **kwargs)
     total_budget_effect = [
         (y - x)
         for x, y in zip(baseline["total_budget"], reform["total_budget"])

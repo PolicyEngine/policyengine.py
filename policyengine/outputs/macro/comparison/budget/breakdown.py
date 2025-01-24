@@ -1,9 +1,10 @@
 from policyengine import Simulation
 from typing import List
 import pandas as pd
+from policyengine.outputs.macro.comparison.budget.general import calculate_general_budget
 
 
-def breakdown(
+def calculate_provision_breakdown_comparison(
     simulation: Simulation,
     provisions: List[dict] | None = None,
     provision_names: List[str] | None = None,
@@ -45,7 +46,7 @@ def breakdown(
                 options=options,
                 data=simulation.data,
             )
-            budget = sim.calculate("macro/comparison/budget/general")[
+            budget = calculate_general_budget(sim)[
                 "budgetary_impact"
             ]
             key_focus = provision_names[i]

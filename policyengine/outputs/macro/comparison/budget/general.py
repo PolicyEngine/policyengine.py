@@ -3,9 +3,10 @@ import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
 from policyengine.utils.charts import *
+from policyengine.outputs.macro.single.gov.balance import calculate_balance
 
 
-def general(simulation: Simulation, chart: bool = False):
+def calculate_general_budget_comparison(simulation: Simulation, chart: bool = False):
     """Calculate the budgetary impact of the given simulation.
 
     Args:
@@ -20,8 +21,10 @@ def general(simulation: Simulation, chart: bool = False):
             - households (int): The number of households.
             - baseline_net_income (float): The total net income in the baseline scenario.
     """
-    baseline = simulation.calculate("macro/baseline")
-    reform = simulation.calculate("macro/reform")
+    simulation.selected_sim = simulation.baseline_sim
+    baseline = calculate_balance(simulation)
+    simulation.selected_sim = simulation.reformed_sim
+    reform = calculate_balance(simulation)
 
     tax_revenue_impact = (
         reform["gov"]["balance"]["total_tax"]

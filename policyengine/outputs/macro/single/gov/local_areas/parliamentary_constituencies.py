@@ -8,7 +8,7 @@ from policyengine_core import Microsimulation
 from policyengine.utils.maps import plot_hex_map
 
 
-def parliamentary_constituencies(
+def calculate_parliamentary_constituencies(
     simulation: Simulation,
     metric: Callable[[Microsimulation], MicroSeries] = None,
     chart: bool = False,

@@ -73,8 +73,6 @@ class Simulation:
 
         self.comparison = reform is not None
 
-        self.output_functions, self.outputs = self._get_outputs()
-
         self._initialise_simulations()
 
     def _set_dataset(self, dataset: str | dict | None):
@@ -104,168 +102,6 @@ class Simulation:
                     version=version,
                 )
                 self.data = Dataset.from_file(self.data, "2023")
-
-    def calculate(self, output: str, force: bool = False, **kwargs) -> Any:
-        """Calculate the given output (path).
-
-        Args:
-            output (str): The output to calculate. Must be a valid path in the output tree.
-            force (bool): Whether to force recalculation of the output, even if it has already been calculated.
-            **kwargs: Any additional arguments to pass to the output function.
-
-        Returns:
-            Any: The output of the calculation (using the cache if possible).
-        """
-        if self.verbose:
-            print(f"Calculating {output}...")
-        if output.endswith("/"):
-            output = output[:-1]
-
-        if output == "":
-            output = self.scope
-
-        node = self.outputs
-
-        for child_key in output.split("/")[:-1]:
-            if child_key not in node:
-                raise KeyError(
-                    f"Output '{child_key}' not found in '{node}'. Available keys are: {list(node.keys())}"
-                )
-            node = node[child_key]
-
-        parent = node
-        child_key = output.split("/")[-1]
-        if parent is None:
-            parent = self.calculate("/".join(output.split("/")[:-1]))
-        if child_key not in parent:
-            try:
-                is_numeric_key = int(child_key) in parent
-            except ValueError:
-                is_numeric_key = False
-            if is_numeric_key:
-                child_key = int(child_key)
-            else:
-                # Maybe you've requested a key that is only available as a dictionary
-                # item in one of the output functions. Let's try to calculate the full output,
-                # then check the result to see if it's there.
-                self.calculate("/".join(output.split("/")[:-1]))
-                if child_key not in parent:
-                    raise KeyError(
-                        f"Output '{child_key}' not found in '{output}'. Available keys are: {list(parent.keys())}"
-                    )
-        node = parent[child_key]
-
-        # Check if any descendants are None
-
-        if (
-            force or parent[child_key] is None or len(kwargs) > 0
-        ) and output in self.output_functions:
-            output_function = self.output_functions[output]
-            node = output_function(self, **kwargs)
-            if len(kwargs) == 0:
-                # Only save as part of the larger tree if no non-standard args are passed
-                parent[child_key] = node
-
-        if isinstance(node, dict) and len(kwargs) == 0:
-            for child_key in node.keys():
-                self.calculate(output + "/" + str(child_key))
-
-        return node
-
-    def _get_outputs(self) -> Tuple[dict, dict]:
-        """Get all the output functions and construct the output tree.
-
-        Returns:
-            Tuple[dict, dict]: A tuple containing the output functions and the output tree.
-        """
-        from pathlib import Path
-        import importlib.util
-
-        output_functions = {}
-        for output in Path(__file__).parent.glob("outputs/**/*.py"):
-            module_name = output.stem
-            spec = importlib.util.spec_from_file_location(module_name, output)
-            if spec is None:
-                raise RuntimeError(
-                    f"Expected to load a spec from file '{output.absolute}'"
-                )
-            module = importlib.util.module_from_spec(spec)
-            relative_path = str(
-                output.relative_to(Path(__file__).parent / "outputs")
-            ).replace(".py", "")
-            if not self.comparison and "/comparison/" in relative_path:
-                # If we're just analysing one scenario, skip loading the comparison modules.
-                continue
-            if f"{self.scope}/" not in relative_path:
-                # Don't load household modules for macro comparisons, etc.
-                continue
-
-            if spec.loader is None:
-                raise RuntimeError(
-                    f"Expected module from '{output.absolute}' to have a loader, but it does not"
-                )
-            spec.loader.exec_module(module)
-
-            # Only import the function with the same name as the module, enforcing one function per file
-            try:
-                output_functions[str(relative_path)] = getattr(
-                    module, module_name
-                )
-            except AttributeError:
-                raise AttributeError(
-                    f"Each module must contain a function with the same name as the module. Module '{str(relative_path)}.py' does not."
-                )
-
-        # If we are just calculating for a single scenario, put all 'macro/single/' children under 'macro/'.
-        # If not, duplicate them into 'macro/baseline/' and 'single/reform'.
-
-        single_keys = [key for key in output_functions if "single/" in key]
-        for key in single_keys:
-            root = key.split("/")[0]
-            rest = "/".join(key.split("/")[2:])
-            func = output_functions[key]
-
-            def passed_reform_simulation(func, is_reform):
-                def adjusted_func(simulation: Simulation, **kwargs):
-                    if is_reform:
-                        simulation.selected_sim = simulation.reformed_sim
-                    else:
-                        simulation.selected_sim = simulation.baseline_sim
-                    return func(simulation, **kwargs)
-
-                adjusted_func.__name__ = func.__name__
-                adjusted_func.__doc__ = func.__doc__
-
-                return adjusted_func
-
-            if self.comparison:
-                output_functions[f"{root}/baseline/{rest}"] = (
-                    passed_reform_simulation(func, False)
-                )
-                output_functions[f"{root}/reform/{rest}"] = (
-                    passed_reform_simulation(func, True)
-                )
-            else:
-                output_functions[f"{root}/{rest}"] = passed_reform_simulation(
-                    func, False
-                )
-
-            del output_functions[key]
-
-        # Construct the output tree, fill with Nones for now
-
-        outputs = {}
-
-        for output_path in output_functions.keys():
-            parts = output_path.split("/")
-            current = outputs
-            for part in parts[:-1]:
-                if part not in current:
-                    current[part] = {}
-                current = current[part]
-            current[parts[-1]] = None
-
-        return output_functions, outputs
 
     def _to_reform(self, value: int | dict):
         if isinstance(value, dict):
@@ -357,6 +193,8 @@ class Simulation:
             self.reformed_sim.get_branch("baseline").tax_benefit_system = (
                 self.baseline_sim.tax_benefit_system
             )
+        else:
+            self.selected_sim = self.baseline_sim
 
     def _apply_region_to_simulation(
         self,
@@ -421,11 +259,6 @@ class Simulation:
 
                 with h5py.File(weights_file_path, "r") as f:
                     weights = f[str(self.time_period)][...]
-
-                print(
-                    weights[constituency_id],
-                    simulation.default_calculation_period,
-                )
 
                 simulation.calculate("household_net_income")
 

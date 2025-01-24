@@ -1,8 +1,9 @@
 from policyengine import Simulation
 from microdf import MicroSeries
+from ...single import calculate_single_macro_scenario
 
 
-def wealth(simulation: Simulation):
+def calculate_wealth_decile_comparison(simulation: Simulation):
     """Calculate the impact of the reform on wealth deciles.
 
     Args:
@@ -16,8 +17,10 @@ def wealth(simulation: Simulation):
     if simulation.country != "uk":
         return {}
 
-    baseline = simulation.calculate("macro/baseline")
-    reform = simulation.calculate("macro/reform")
+    simulation.selected_sim = simulation.baseline_sim
+    baseline = calculate_single_macro_scenario(simulation)
+    simulation.selected_sim = simulation.reformed_sim
+    reform = calculate_single_macro_scenario(simulation)
     baseline["household"]["finance"] = simulation.calculate(
         "macro/baseline/household/finance", include_arrays=True
     )

@@ -24,7 +24,7 @@ class UKPrograms:
     ]
 
 
-def programs(simulation: Simulation) -> dict:
+def calculate_programs(simulation: Simulation) -> dict:
     if simulation.country == "uk":
         return {
             program.name: simulation.selected_sim.calculate(
