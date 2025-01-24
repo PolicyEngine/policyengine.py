@@ -2,12 +2,12 @@
 
 name: Versioning updates
 on:
-    pull_request:
-        branches:
-            - main
+  push:
+      branches:
+          - main
 
-        paths:
-            - changelog_entry.yaml
+      paths:
+          - changelog_entry.yaml
 
 jobs:
     Versioning:
