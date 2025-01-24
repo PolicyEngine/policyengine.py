@@ -9,11 +9,15 @@ import pandas as pd
 import h5py
 from pathlib import Path
 from typing import Literal
+from policyengine.utils.typing import add_methods
+from policyengine.outputs.macro.single import calculate_single_economy
 
-from .outputs.macro.single import calculate_single_macro_scenario
-from .outputs.macro.comparison import calculate_macro_comparison
+methods_to_add = [
+    calculate_single_economy,
+]
 
 
+@add_methods(methods_to_add)
 class Simulation:
     """The top-level class through which all PE usage is carried out."""
 
@@ -23,7 +27,7 @@ class Simulation:
     """The type of simulation being run (macro or household)."""
     data: dict | str | Dataset
     """The dataset being used for the simulation."""
-    time_period: str | None
+    time_period: str | int
     """The time period for the simulation. Years are applicable."""
     baseline: dict | None
     """The baseline simulation inputs."""
@@ -38,8 +42,8 @@ class Simulation:
     """The tax-benefit simulation for the baseline scenario."""
     reformed_sim: CountrySimulation | None = None
     """The tax-benefit simulation for the reformed scenario. None if no reform has been configured"""
-    selected_sim: CountrySimulation | None = None
-    """The selected simulation for the current calculation. None if not a reform."""
+    selected_sim: CountrySimulation
+    """The selected simulation for the current calculation."""
     verbose: bool = False
     """Whether to print out progress messages."""
 
@@ -48,7 +52,7 @@ class Simulation:
         country: Literal["uk", "us"],
         scope: Literal["macro", "household"],
         data: str | dict | None = None,
-        time_period: str | None = Literal[
+        time_period: str | int = Literal[
             2024, 2025, 2026, 2027, 2028, 2029, 2030
         ],
         reform: dict | None = None,
@@ -264,8 +268,6 @@ class Simulation:
                 with h5py.File(weights_file_path, "r") as f:
                     weights = f[str(self.time_period)][...]
 
-                simulation.calculate("household_net_income")
-
                 simulation.set_input(
                     "household_weight",
                     simulation.default_calculation_period,
@@ -299,8 +301,6 @@ class Simulation:
                 with h5py.File(weights_file_path, "r") as f:
                     weights = f[str(self.time_period)][...]
 
-                simulation.calculate("household_net_income")
-
                 simulation.set_input(
                     "household_weight",
                     simulation.default_calculation_period,
@@ -310,9 +310,3 @@ class Simulation:
         simulation.default_calculation_period = self.time_period
 
         return simulation
-
-    calculate_macro_comparison = calculate_macro_comparison
-    calculate_single_macro_scenario = calculate_single_macro_scenario
-
-    def calculate_macro(self):
-        return calculate_single_macro_scenario(self)

@@ -1,10 +1,7 @@
 format: jb-book
 root: index
 parts:
-  - caption: Maintenance
-    chapters:
-    - file: maintaining
   - caption: Reference
     chapters:
     - file: reference/simulation
-    - file: reference/calculate
+    - file: reference/calculate/calculate_macro_scenario.md

@@ -1,15 +1,15 @@
-import typing
+from typing import TYPE_CHECKING
+from pydantic import BaseModel
 
-if typing.TYPE_CHECKING:
+if TYPE_CHECKING:
     from policyengine import Simulation
-from .gov import calculate_gov
-from .household import calculate_household
 
+from .household import calculate_single_economy_household_sector, SingleEconomyHouseholdSector
 
-def calculate_single_macro_scenario(
-    simulation: "Simulation",
-) -> dict:
-    return {
-        "gov": calculate_gov(simulation),
-        "household": calculate_household(simulation),
-    }
+class SingleEconomy(BaseModel):
+    household: SingleEconomyHouseholdSector
+
+def calculate_single_economy(sim: "Simulation") -> SingleEconomy:
+    return SingleEconomy(
+        household=calculate_single_economy_household_sector(sim),
+    )

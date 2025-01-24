@@ -25,6 +25,7 @@ dev = [
     "black",
     "pytest",
     "furo",
+    "sphinx-autoapi",
     "jupyter-book",
     "yaml-changelog>=0.1.7",
     "itables",

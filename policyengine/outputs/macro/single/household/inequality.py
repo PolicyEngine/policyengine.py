@@ -3,8 +3,26 @@ import typing
 if typing.TYPE_CHECKING:
     from policyengine import Simulation
 
+from pydantic import BaseModel, Field
 
-def calculate_inequality(simulation: "Simulation") -> dict:
+class SingleEconomyInequality(BaseModel):
+    gini: float = Field(..., description="Gini coefficient of income inequality")
+    top_10_percent_share: float = Field(..., description="Income share of the top 10 percent")
+    top_1_percent_share: float = Field(..., description="Income share of the top 1 percent")
+
+
+def calculate_inequality(simulation: "Simulation") -> SingleEconomyInequality:
+    """
+    Calculate inequality metrics for a given simulation.
+    Args:
+        simulation (Simulation): The simulation object containing the data 
+                                 and methods to perform the calculations.
+    Returns:
+        SingleEconomyInequality: An object containing the calculated Gini 
+                                 coefficient, top 10 percent income share, 
+                                 and top 1 percent income share.
+    """
+
     personal_hh_equiv_income = simulation.selected_sim.calculate(
         "equiv_household_net_income"
     )
@@ -28,8 +46,8 @@ def calculate_inequality(simulation: "Simulation") -> dict:
         / personal_hh_equiv_income.sum()
     )
 
-    return {
-        "gini": gini,
-        "top_10_percent_share": top_10_share,
-        "top_1_percent_share": top_1_share,
-    }
+    return SingleEconomyInequality(
+        gini=gini,
+        top_10_percent_share=top_10_share,
+        top_1_percent_share=top_1_share,
+    )
