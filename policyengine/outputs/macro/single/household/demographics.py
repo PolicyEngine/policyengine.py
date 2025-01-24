@@ -1,18 +1,32 @@
 import typing
 from typing import List
 from pydantic import BaseModel, Field
+
 if typing.TYPE_CHECKING:
     from policyengine import Simulation
 from microdf import MicroSeries
 
+
 class SingleEconomyDemographics(BaseModel):
-    household_count_people: List[int] = Field(..., description="Number of people in each household")
-    person_weight: List[float] = Field(..., description="Weight of each person")
-    household_weight: List[float] = Field(..., description="Weight of each household")
-    total_households: int = Field(..., description="Total number of households")
-    is_male: List[bool] = Field(..., description="Gender indicator for each person")
+    household_count_people: List[int] = Field(
+        ..., description="Number of people in each household"
+    )
+    person_weight: List[float] = Field(
+        ..., description="Weight of each person"
+    )
+    household_weight: List[float] = Field(
+        ..., description="Weight of each household"
+    )
+    total_households: int = Field(
+        ..., description="Total number of households"
+    )
+    is_male: List[bool] = Field(
+        ..., description="Gender indicator for each person"
+    )
     age: List[int] = Field(..., description="Age of each person")
-    race: typing.Optional[List[str]] = Field(None, description="Race of each person, if available")
+    race: typing.Optional[List[str]] = Field(
+        None, description="Race of each person, if available"
+    )
 
 
 def calculate_demographics(

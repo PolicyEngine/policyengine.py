@@ -8,11 +8,21 @@ from .inequality import calculate_inequality, SingleEconomyInequality
 from .labor_supply import calculate_labor_supply, SingleEconomyLaborSupply
 from pydantic import BaseModel, Field
 
+
 class SingleEconomyHouseholdSector(BaseModel):
-    demographics: SingleEconomyDemographics = Field(..., description="Demographics of the household sector")
-    finance: SingleEconomyFinanceOutput = Field(..., description="Finance variables of the household sector")
-    inequality: SingleEconomyInequality = Field(..., description="Inequality of the household sector")
-    labor_supply: SingleEconomyLaborSupply = Field(..., description="Labor supply variables of the household sector")
+    demographics: SingleEconomyDemographics = Field(
+        ..., description="Demographics of the household sector"
+    )
+    finance: SingleEconomyFinanceOutput = Field(
+        ..., description="Finance variables of the household sector"
+    )
+    inequality: SingleEconomyInequality = Field(
+        ..., description="Inequality of the household sector"
+    )
+    labor_supply: SingleEconomyLaborSupply = Field(
+        ..., description="Labor supply variables of the household sector"
+    )
+
 
 def calculate_single_economy_household_sector(
     simulation: "Simulation",

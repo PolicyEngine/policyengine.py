@@ -5,26 +5,63 @@ if typing.TYPE_CHECKING:
 
 from pydantic import BaseModel, Field
 
+
 class SingleEconomyFinanceOutput(BaseModel):
-    total_net_income: float = Field(..., description="Total net income of the household")
-    total_market_income: float = Field(..., description="Total market income of the household")
-    total_tax: float = Field(..., description="Total tax paid by the household")
-    total_benefits: float = Field(..., description="Total benefits received by the household")
-    employment_income_hh: typing.List[float] = Field(..., description="Employment income of the household")
-    self_employment_income_hh: typing.List[float] = Field(..., description="Self-employment income of the household")
-    household_net_income: typing.List[float] = Field(..., description="Net income of the household")
-    equiv_household_net_income: typing.List[float] = Field(..., description="Equivalized net income of the household")
-    household_income_decile: typing.List[int] = Field(..., description="Income decile of the household")
-    household_market_income: typing.List[float] = Field(..., description="Market income of the household")
-    wealth: typing.Optional[typing.List[float]] = Field(None, description="Wealth of the household")
-    wealth_decile: typing.Optional[typing.List[int]] = Field(None, description="Wealth decile of the household")
-    in_poverty: typing.List[bool] = Field(..., description="Poverty status of the household")
-    person_in_poverty: typing.List[bool] = Field(..., description="Poverty status of individuals in the household")
-    person_in_deep_poverty: typing.List[bool] = Field(..., description="Deep poverty status of individuals in the household")
+    total_net_income: float = Field(
+        ..., description="Total net income of the household"
+    )
+    total_market_income: float = Field(
+        ..., description="Total market income of the household"
+    )
+    total_tax: float = Field(
+        ..., description="Total tax paid by the household"
+    )
+    total_benefits: float = Field(
+        ..., description="Total benefits received by the household"
+    )
+    employment_income_hh: typing.List[float] = Field(
+        ..., description="Employment income of the household"
+    )
+    self_employment_income_hh: typing.List[float] = Field(
+        ..., description="Self-employment income of the household"
+    )
+    household_net_income: typing.List[float] = Field(
+        ..., description="Net income of the household"
+    )
+    equiv_household_net_income: typing.List[float] = Field(
+        ..., description="Equivalized net income of the household"
+    )
+    household_income_decile: typing.List[int] = Field(
+        ..., description="Income decile of the household"
+    )
+    household_market_income: typing.List[float] = Field(
+        ..., description="Market income of the household"
+    )
+    wealth: typing.Optional[typing.List[float]] = Field(
+        None, description="Wealth of the household"
+    )
+    wealth_decile: typing.Optional[typing.List[int]] = Field(
+        None, description="Wealth decile of the household"
+    )
+    in_poverty: typing.List[bool] = Field(
+        ..., description="Poverty status of the household"
+    )
+    person_in_poverty: typing.List[bool] = Field(
+        ..., description="Poverty status of individuals in the household"
+    )
+    person_in_deep_poverty: typing.List[bool] = Field(
+        ..., description="Deep poverty status of individuals in the household"
+    )
     poverty_gap: float = Field(..., description="Poverty gap of the household")
-    deep_poverty_gap: float = Field(..., description="Deep poverty gap of the household")
-    poverty_rate: float = Field(..., description="Poverty rate of the household")
-    deep_poverty_rate: float = Field(..., description="Deep poverty rate of the household")
+    deep_poverty_gap: float = Field(
+        ..., description="Deep poverty gap of the household"
+    )
+    poverty_rate: float = Field(
+        ..., description="Poverty rate of the household"
+    )
+    deep_poverty_rate: float = Field(
+        ..., description="Deep poverty rate of the household"
+    )
 
 
 def calculate_finance(
@@ -48,11 +85,13 @@ def calculate_finance(
     total_benefits = sim.calculate("household_benefits").sum()
     employment_income_hh = (
         sim.calculate("employment_income", map_to="household")
-        .astype(float).tolist()
+        .astype(float)
+        .tolist()
     )
     self_employment_income_hh = (
         sim.calculate("self_employment_income", map_to="household")
-        .astype(float).tolist()
+        .astype(float)
+        .tolist()
     )
     household_net_income = (
         sim.calculate("household_net_income").astype(float).tolist()

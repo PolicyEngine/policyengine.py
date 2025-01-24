@@ -5,21 +5,28 @@ if typing.TYPE_CHECKING:
 
 from pydantic import BaseModel, Field
 
+
 class SingleEconomyInequality(BaseModel):
-    gini: float = Field(..., description="Gini coefficient of income inequality")
-    top_10_percent_share: float = Field(..., description="Income share of the top 10 percent")
-    top_1_percent_share: float = Field(..., description="Income share of the top 1 percent")
+    gini: float = Field(
+        ..., description="Gini coefficient of income inequality"
+    )
+    top_10_percent_share: float = Field(
+        ..., description="Income share of the top 10 percent"
+    )
+    top_1_percent_share: float = Field(
+        ..., description="Income share of the top 1 percent"
+    )
 
 
 def calculate_inequality(simulation: "Simulation") -> SingleEconomyInequality:
     """
     Calculate inequality metrics for a given simulation.
     Args:
-        simulation (Simulation): The simulation object containing the data 
+        simulation (Simulation): The simulation object containing the data
                                  and methods to perform the calculations.
     Returns:
-        SingleEconomyInequality: An object containing the calculated Gini 
-                                 coefficient, top 10 percent income share, 
+        SingleEconomyInequality: An object containing the calculated Gini
+                                 coefficient, top 10 percent income share,
                                  and top 1 percent income share.
     """
 
