@@ -1,7 +1,9 @@
 from policyengine import Simulation
 from typing import List
 import pandas as pd
-from policyengine.outputs.macro.comparison.budget.general import calculate_general_budget
+from policyengine.outputs.macro.comparison.budget.general import (
+    calculate_general_budget,
+)
 
 
 def calculate_provision_breakdown_comparison(
@@ -46,9 +48,7 @@ def calculate_provision_breakdown_comparison(
                 options=options,
                 data=simulation.data,
             )
-            budget = calculate_general_budget(sim)[
-                "budgetary_impact"
-            ]
+            budget = calculate_general_budget(sim)["budgetary_impact"]
             key_focus = provision_names[i]
             difference = budget - last_budgetary_impact
             last_budgetary_impact = budget

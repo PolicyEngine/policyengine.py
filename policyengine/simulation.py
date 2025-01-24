@@ -10,6 +10,9 @@ import h5py
 from pathlib import Path
 from typing import Literal
 
+from .outputs.macro.single import calculate_single_macro_scenario
+from .outputs.macro.comparison import calculate_macro_comparison
+
 
 class Simulation:
     """The top-level class through which all PE usage is carried out."""
@@ -193,6 +196,7 @@ class Simulation:
             self.reformed_sim.get_branch("baseline").tax_benefit_system = (
                 self.baseline_sim.tax_benefit_system
             )
+            self.selected_sim = self.reformed_sim
         else:
             self.selected_sim = self.baseline_sim
 
@@ -306,3 +310,6 @@ class Simulation:
         simulation.default_calculation_period = self.time_period
 
         return simulation
+
+    calculate_macro_comparison = calculate_macro_comparison
+    calculate_single_macro_scenario = calculate_single_macro_scenario

@@ -3,7 +3,9 @@ from policyengine import Simulation
 DEFAULT_COUNT_YEARS = 1
 
 
-def calculate_budget_window(simulation: Simulation, count_years: int = None) -> dict:
+def calculate_budget_window(
+    simulation: Simulation, count_years: int = None
+) -> dict:
     sim = simulation.selected_sim
     current_year = simulation.time_period
     if count_years is not None:

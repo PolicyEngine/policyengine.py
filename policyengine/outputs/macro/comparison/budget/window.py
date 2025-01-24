@@ -3,7 +3,9 @@ import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
 from policyengine.utils.charts import *
-from policyengine.outputs.macro.single.gov.budget_window import calculate_budget_window
+from policyengine.outputs.macro.single.gov.budget_window import (
+    calculate_budget_window,
+)
 
 
 def calculate_budget_window_comparison(

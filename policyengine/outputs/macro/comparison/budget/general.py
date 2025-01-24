@@ -6,7 +6,9 @@ from policyengine.utils.charts import *
 from policyengine.outputs.macro.single.gov.balance import calculate_balance
 
 
-def calculate_general_budget_comparison(simulation: Simulation, chart: bool = False):
+def calculate_general_budget_comparison(
+    simulation: Simulation, chart: bool = False
+):
     """Calculate the budgetary impact of the given simulation.
 
     Args:

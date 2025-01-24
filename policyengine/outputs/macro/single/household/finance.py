@@ -1,7 +1,9 @@
 from policyengine import Simulation
 
 
-def calculate_finance(simulation: Simulation, include_arrays: bool = False) -> dict:
+def calculate_finance(
+    simulation: Simulation, include_arrays: bool = False
+) -> dict:
     sim = simulation.selected_sim
 
     total_net_income = sim.calculate("household_net_income").sum()
