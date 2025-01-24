@@ -29,7 +29,7 @@ class UKPrograms:
 def calculate_programs(simulation: "Simulation") -> dict:
     if simulation.country == "uk":
         return {
-            program.name: "Simulation".selected_sim.calculate(
+            program.name: simulation.selected_sim.calculate(
                 program.name, map_to="household"
             ).sum()
             * (1 if program.is_positive else -1)
