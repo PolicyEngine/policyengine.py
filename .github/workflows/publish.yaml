@@ -1,0 +1,29 @@
+name: Push
+on:
+  push:
+    branches: [ main ]
+    paths:
+        - pyproject.toml
+
+jobs:
+  Publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+      - name: Publish a git tag
+        run: ".github/publish-git-tag.sh || true"
+      - name: Install package
+        run: make install
+      - name: Build package
+        run: make
+      - name: Publish a Python distribution to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI }}
+          skip-existing: true
