@@ -1,4 +1,6 @@
-from policyengine import Simulation
+import typing
+if typing.TYPE_CHECKING:
+    from policyengine import Simulation
 import plotly.express as px
 from policyengine.utils.charts import *
 import plotly.graph_objects as go
@@ -6,7 +8,7 @@ import pandas as pd
 
 
 def calculate_income_distribution(
-    simulation: Simulation,
+    simulation: "Simulation",
     chart: bool = False,
     variable: str = "household_net_income",
 ) -> dict:

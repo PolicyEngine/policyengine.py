@@ -1,4 +1,6 @@
-from policyengine import Simulation
+import typing
+if typing.TYPE_CHECKING:
+    from policyengine import Simulation
 from .demographics import calculate_demographics
 from .finance import calculate_finance
 from .income_distribution import calculate_income_distribution
@@ -7,7 +9,7 @@ from .labor_supply import calculate_labor_supply
 
 
 def calculate_household(
-    simulation: Simulation,
+    simulation: "Simulation",
 ) -> dict:
     return {
         "demographics": calculate_demographics(simulation),

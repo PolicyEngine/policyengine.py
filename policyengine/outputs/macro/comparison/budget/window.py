@@ -1,4 +1,6 @@
-from policyengine import Simulation
+import typing
+if typing.TYPE_CHECKING:
+    from policyengine import Simulation
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
@@ -9,7 +11,7 @@ from policyengine.outputs.macro.single.gov.budget_window import (
 
 
 def calculate_budget_window_comparison(
-    simulation: Simulation,
+    simulation: "Simulation",
     chart: bool = False,
     federal_only: bool = False,
     count_years: int = 1,

@@ -1,9 +1,11 @@
-from policyengine import Simulation
+import typing
+if typing.TYPE_CHECKING:
+    from policyengine import Simulation
 from microdf import MicroSeries
 import numpy as np
 
 
-def labor_supply(simulation: Simulation) -> dict:
+def labor_supply(simulation: "Simulation") -> dict:
     baseline_labor_supply = simulation.calculate(
         "macro/baseline/household/labor_supply", include_arrays=True
     )

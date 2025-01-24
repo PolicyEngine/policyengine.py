@@ -1,8 +1,10 @@
-from policyengine import Simulation
+import typing
+if typing.TYPE_CHECKING:
+    from policyengine import Simulation
 
 
 def calculate_demographics(
-    simulation: Simulation, include_arrays: bool = False
+    simulation: "Simulation", include_arrays: bool = False
 ) -> dict:
     sim = simulation.selected_sim
     household_count_people = (

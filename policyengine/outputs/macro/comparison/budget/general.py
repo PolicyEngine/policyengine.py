@@ -1,4 +1,6 @@
-from policyengine import Simulation
+import typing
+if typing.TYPE_CHECKING:
+    from policyengine import Simulation
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
@@ -7,7 +9,7 @@ from policyengine.outputs.macro.single.gov.balance import calculate_balance
 
 
 def calculate_general_budget_comparison(
-    simulation: Simulation, chart: bool = False
+    simulation: "Simulation", chart: bool = False
 ):
     """Calculate the budgetary impact of the given simulation.
 
@@ -57,7 +59,7 @@ def calculate_general_budget_comparison(
         return result
 
 
-def budget_chart(simulation: Simulation, data: dict) -> go.Figure:
+def budget_chart(simulation: "Simulation", data: dict) -> go.Figure:
     if simulation.country == "uk":
         x = ["Tax revenues", "Benefit spending", "Budgetary impact"]
         y = [

@@ -1,8 +1,10 @@
-from policyengine import Simulation
+import typing
+if typing.TYPE_CHECKING:
+    from policyengine import Simulation
 from policyengine.outputs.macro.single import calculate_single_macro_scenario
 
 
-def calculate_program_comparison(simulation: Simulation):
+def calculate_program_comparison(simulation: "Simulation"):
     """Calculate the detailed budgetary impact of the given simulation.
 
     Args:

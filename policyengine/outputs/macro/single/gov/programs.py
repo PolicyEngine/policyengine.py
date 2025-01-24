@@ -1,4 +1,6 @@
-from policyengine import Simulation
+import typing
+if typing.TYPE_CHECKING:
+    from policyengine import Simulation
 from dataclasses import dataclass
 
 
@@ -24,10 +26,10 @@ class UKPrograms:
     ]
 
 
-def calculate_programs(simulation: Simulation) -> dict:
+def calculate_programs(simulation: "Simulation") -> dict:
     if simulation.country == "uk":
         return {
-            program.name: simulation.selected_sim.calculate(
+            program.name: "Simulation".selected_sim.calculate(
                 program.name, map_to="household"
             ).sum()
             * (1 if program.is_positive else -1)

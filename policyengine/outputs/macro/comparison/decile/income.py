@@ -1,9 +1,11 @@
-from policyengine import Simulation
+import typing
+if typing.TYPE_CHECKING:
+    from policyengine import Simulation
 from microdf import MicroSeries
 from ...single import calculate_single_macro_scenario
 
 
-def calculate_income_decile_comparison(simulation: Simulation):
+def calculate_income_decile_comparison(simulation: "Simulation"):
     """Calculate the impact of the reform on income deciles.
 
     Args:

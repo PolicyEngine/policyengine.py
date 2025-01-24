@@ -1,8 +1,10 @@
-from policyengine import Simulation
+import typing
+if typing.TYPE_CHECKING:
+    from policyengine import Simulation
 from microdf import MicroSeries
 
 
-def race(simulation: Simulation):
+def race(simulation: "Simulation"):
     """Calculate the impact of the reform on poverty by race.
 
     Args:

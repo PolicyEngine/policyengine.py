@@ -1,8 +1,10 @@
-from policyengine import Simulation
+import typing
+if typing.TYPE_CHECKING:
+    from policyengine import Simulation
 from microdf import MicroSeries
 
 
-def age(simulation: Simulation):
+def age(simulation: "Simulation"):
     """Calculate the impact of the reform on poverty by age.
 
     Args:

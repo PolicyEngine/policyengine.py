@@ -7,10 +7,11 @@ from policyengine.utils.maps import plot_hex_map
 from typing import Callable
 from policyengine_core import Microsimulation
 from microdf import MicroSeries
+from ...single.gov.local_areas.local_authorities import calculate_local_authorities
 
 
 def local_authorities(
-    simulation: Simulation,
+    simulation: "Simulation",
     chart: bool = False,
     metric: Callable[[Microsimulation], MicroSeries] = None,
     comparator: bool = None,
@@ -25,12 +26,10 @@ def local_authorities(
     if comparator is None:
         comparator = lambda x, y: (y / x) - 1
 
-    constituency_baseline = simulation.calculate(
-        "macro/baseline/gov/local_areas/local_authorities", **kwargs
-    )
-    constituency_reform = simulation.calculate(
-        "macro/reform/gov/local_areas/local_authorities", **kwargs
-    )
+    simulation.selected_sim = simulation.baseline_sim
+    constituency_baseline = calculate_local_authorities(simulation, **kwargs)
+    simulation.selected_sim = simulation.reformed_sim
+    constituency_reform = calculate_local_authorities(simulation, **kwargs)
 
     result = {}
 

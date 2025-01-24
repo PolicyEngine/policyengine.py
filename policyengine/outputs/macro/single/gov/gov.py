@@ -1,4 +1,6 @@
-from policyengine import Simulation
+import typing
+if typing.TYPE_CHECKING:
+    from policyengine import Simulation
 from .local_areas import calculate_local_areas
 from .balance import calculate_balance
 from .budget_window import calculate_budget_window
@@ -6,7 +8,7 @@ from .programs import calculate_programs
 
 
 def calculate_gov(
-    simulation: Simulation,
+    simulation: "Simulation",
 ) -> dict:
     return {
         "balance": calculate_balance(simulation),

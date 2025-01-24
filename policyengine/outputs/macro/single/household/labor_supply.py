@@ -1,8 +1,10 @@
-from policyengine import Simulation
+import typing
+if typing.TYPE_CHECKING:
+    from policyengine import Simulation
 
 
 def calculate_labor_supply(
-    simulation: Simulation, include_arrays: bool = False
+    simulation: "Simulation", include_arrays: bool = False
 ) -> dict:
     if not simulation.comparison:
         return {}

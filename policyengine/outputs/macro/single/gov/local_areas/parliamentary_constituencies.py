@@ -1,4 +1,6 @@
-from policyengine import Simulation
+import typing
+if typing.TYPE_CHECKING:
+    from policyengine import Simulation
 from policyengine.utils.huggingface import download
 import h5py
 from microdf import MicroSeries
@@ -9,7 +11,7 @@ from policyengine.utils.maps import plot_hex_map
 
 
 def calculate_parliamentary_constituencies(
-    simulation: Simulation,
+    simulation: "Simulation",
     metric: Callable[[Microsimulation], MicroSeries] = None,
     chart: bool = False,
     code_index: bool = False,

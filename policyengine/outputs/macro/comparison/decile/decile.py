@@ -1,10 +1,12 @@
-from policyengine import Simulation
+import typing
+if typing.TYPE_CHECKING:
+    from policyengine import Simulation
 from .income import calculate_income_decile_comparison
 from .wealth import calculate_wealth_decile_comparison
 
 
 def calculate_decile_comparison(
-    simulation: Simulation,
+    simulation: "Simulation",
 ) -> dict:
     return {
         "income": calculate_income_decile_comparison(simulation),

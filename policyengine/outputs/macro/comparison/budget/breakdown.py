@@ -1,13 +1,15 @@
-from policyengine import Simulation
+import typing
+if typing.TYPE_CHECKING:
+    from policyengine import Simulation
 from typing import List
 import pandas as pd
 from policyengine.outputs.macro.comparison.budget.general import (
-    calculate_general_budget,
+    calculate_general_budget_comparison,
 )
 
 
 def calculate_provision_breakdown_comparison(
-    simulation: Simulation,
+    simulation: "Simulation",
     provisions: List[dict] | None = None,
     provision_names: List[str] | None = None,
     count_years: int = 5,
@@ -48,7 +50,7 @@ def calculate_provision_breakdown_comparison(
                 options=options,
                 data=simulation.data,
             )
-            budget = calculate_general_budget(sim)["budgetary_impact"]
+            budget = calculate_general_budget_comparison(sim)["budgetary_impact"]
             key_focus = provision_names[i]
             difference = budget - last_budgetary_impact
             last_budgetary_impact = budget

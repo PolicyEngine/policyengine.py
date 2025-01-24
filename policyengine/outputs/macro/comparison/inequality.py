@@ -1,7 +1,9 @@
-from policyengine import Simulation
+import typing
+if typing.TYPE_CHECKING:
+    from policyengine import Simulation
 
 
-def inequality(simulation: Simulation):
+def inequality(simulation: "Simulation"):
     """Calculate the impact of the reform on inequality.
 
     Args:

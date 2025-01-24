@@ -1,4 +1,6 @@
-from policyengine import Simulation
+import typing
+if typing.TYPE_CHECKING:
+    from policyengine import Simulation
 from policyengine.outputs.macro.single.gov.local_areas.local_authorities import (
     calculate_local_authorities,
 )
@@ -8,7 +10,7 @@ from policyengine.outputs.macro.single.gov.local_areas.parliamentary_constituenc
 
 
 def calculate_local_areas(
-    simulation: Simulation,
+    simulation: "Simulation",
 ) -> dict:
     if simulation.country != "uk":
         return None
