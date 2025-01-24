@@ -1,4 +1,5 @@
 import typing
+
 if typing.TYPE_CHECKING:
     from policyengine import Simulation
 import plotly.graph_objects as go

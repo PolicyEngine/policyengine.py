@@ -1,4 +1,5 @@
 import typing
+
 if typing.TYPE_CHECKING:
     from policyengine import Simulation
 from .gov import calculate_gov

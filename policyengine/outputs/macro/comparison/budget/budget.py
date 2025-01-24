@@ -1,4 +1,5 @@
 import typing
+
 if typing.TYPE_CHECKING:
     from policyengine import Simulation
 from .breakdown import calculate_provision_breakdown_comparison

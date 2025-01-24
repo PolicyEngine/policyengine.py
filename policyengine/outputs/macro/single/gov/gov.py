@@ -1,4 +1,5 @@
 import typing
+
 if typing.TYPE_CHECKING:
     from policyengine import Simulation
 from .local_areas import calculate_local_areas

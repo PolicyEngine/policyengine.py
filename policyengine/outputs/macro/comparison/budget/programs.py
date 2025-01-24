@@ -1,4 +1,5 @@
 import typing
+
 if typing.TYPE_CHECKING:
     from policyengine import Simulation
 from policyengine.outputs.macro.single import calculate_single_macro_scenario

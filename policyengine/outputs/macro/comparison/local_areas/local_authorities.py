@@ -7,7 +7,9 @@ from policyengine.utils.maps import plot_hex_map
 from typing import Callable
 from policyengine_core import Microsimulation
 from microdf import MicroSeries
-from ...single.gov.local_areas.local_authorities import calculate_local_authorities
+from ...single.gov.local_areas.local_authorities import (
+    calculate_local_authorities,
+)
 
 
 def local_authorities(

@@ -1,4 +1,5 @@
 import typing
+
 if typing.TYPE_CHECKING:
     from policyengine import Simulation
 from policyengine.outputs.macro.single.gov.local_areas.local_authorities import (

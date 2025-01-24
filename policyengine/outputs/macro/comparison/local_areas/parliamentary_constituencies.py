@@ -1,4 +1,5 @@
 import typing
+
 if typing.TYPE_CHECKING:
     from policyengine import Simulation
 import pandas as pd
@@ -9,7 +10,9 @@ from policyengine.utils.maps import plot_hex_map
 from typing import Callable
 from policyengine_core import Microsimulation
 from microdf import MicroSeries
-from ...single.gov.local_areas.parliamentary_constituencies import calculate_parliamentary_constituencies
+from ...single.gov.local_areas.parliamentary_constituencies import (
+    calculate_parliamentary_constituencies,
+)
 
 
 def parliamentary_constituencies(
@@ -28,9 +31,13 @@ def parliamentary_constituencies(
     if comparator is None:
         comparator = lambda x, y: (y / x) - 1
     simulation.selected_sim = simulation.baseline_sim
-    constituency_baseline = calculate_parliamentary_constituencies(simulation, **kwargs)
+    constituency_baseline = calculate_parliamentary_constituencies(
+        simulation, **kwargs
+    )
     simulation.selected_sim = simulation.reformed_sim
-    constituency_reform = calculate_parliamentary_constituencies(simulation, **kwargs)
+    constituency_reform = calculate_parliamentary_constituencies(
+        simulation, **kwargs
+    )
 
     result = {}
 
