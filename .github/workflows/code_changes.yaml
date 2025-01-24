@@ -3,12 +3,12 @@
 name: Code changes
 on:
     pull_request:
-        branches:
-            - main
+      branches:
+          - main
 
-        paths:
-            - policyengine/
-            - tests/
+      paths:
+          - policyengine/**
+          - tests/**
 
 jobs:
     Lint:

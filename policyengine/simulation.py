@@ -313,3 +313,6 @@ class Simulation:
 
     calculate_macro_comparison = calculate_macro_comparison
     calculate_single_macro_scenario = calculate_single_macro_scenario
+
+    def calculate_macro(self):
+        return calculate_single_macro_scenario(self)
