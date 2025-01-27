@@ -1,7 +1,0 @@
-format: jb-book
-root: index
-parts:
-  - caption: Reference
-    chapters:
-    - file: reference/simulation
-    - file: reference/calculate/calculate_macro_scenario.md

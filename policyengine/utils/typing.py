@@ -21,6 +21,13 @@ def add_methods(methods: list[Callable]) -> Callable[[Type[T]], Type[T]]:
             def wrapped(self: T, *args: P.args, **kwargs: P.kwargs) -> R:
                 return method(self, *args, **kwargs)
 
+            if getattr(method, "_example_simulation_parameters"):
+                setattr(
+                    wrapped,
+                    "_example_simulation_parameters",
+                    method._example_simulation_parameters,
+                )
+
             setattr(cls, method.__name__, wrapped)
         return cls
 
