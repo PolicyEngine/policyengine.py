@@ -28,7 +28,9 @@ def calculate_single_economy(
     """Calculate economy statistics for a single economic scenario."""
     options = simulation.options
     if simulation.is_comparison:
-        raise ValueError("This function is for single economy simulations only.")
+        raise ValueError(
+            "This function is for single economy simulations only."
+        )
 
     fiscal = calculate_government_balance(
         simulation.baseline_simulation, options

@@ -14,6 +14,7 @@ class SingleHousehold(BaseModel):
     household_net_income: float
     """The net income of the household."""
 
+
 def calculate_net_income(
     simulation: CountrySimulation,
 ) -> float:
@@ -25,7 +26,9 @@ def calculate_single_household(
 ) -> SingleHousehold:
     """Calculate household statistics for a single household scenario."""
     if simulation.is_comparison:
-        raise ValueError("This function is for single economy simulations only.")
+        raise ValueError(
+            "This function is for single economy simulations only."
+        )
 
     net_income = calculate_net_income(simulation.baseline_simulation)
 
