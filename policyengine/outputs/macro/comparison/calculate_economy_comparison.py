@@ -123,7 +123,10 @@ def calculate_economy_comparison(
         baseline_poverty_metrics, reform_poverty_metrics
     ):
         change = reform_metric.value - baseline_metric.value
-        rel_change = change / baseline_metric.value
+        if baseline_metric.value == 0:
+            rel_change = 0
+        else:
+            rel_change = change / baseline_metric.value
         poverty_metrics.append(
             PovertyRateMetricComparison(
                 age_group=baseline_metric.age_group,
