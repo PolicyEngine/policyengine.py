@@ -33,9 +33,19 @@ from .outputs.macro.single.calculate_single_economy import (
     calculate_single_economy,
 )
 
+from .outputs.household.single.calculate_single_household import (
+    SingleHousehold,
+    calculate_single_household,
+)
+
+from .outputs.household.comparison.calculate_household_comparison import (
+    HouseholdComparison,
+    calculate_household_comparison,
+)
+
 CountryType = Literal["uk", "us"]
 ScopeType = Literal["household", "macro"]
-DataType = str | None
+DataType = str | dict | None # Needs stricter typing
 TimePeriodType = int
 ReformType = (
     ParametricReform | SimulationAdjustment | Type[StructuralReform] | None
@@ -304,3 +314,11 @@ class Simulation:
     def calculate_single_economy(self) -> SingleEconomy:
         """Calculate economy statistics for a single economic scenario."""
         return calculate_single_economy(self)
+    
+    def calculate_single_household(self) -> SingleHousehold:
+        """Calculate household statistics for a single household scenario."""
+        return calculate_single_household(self)
+    
+    def calculate_household_comparison(self) -> HouseholdComparison:
+        """Calculate comparison statistics between two household scenarios."""
+        return calculate_household_comparison(self)
