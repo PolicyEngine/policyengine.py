@@ -1,3 +1,14 @@
 ## Updating the versioning
 
-Please add to `changelog.yaml` and then run `make changelog` before committing the results ONCE in this PR.
+Please add to `changelog_entry.yaml` an entry in the format:
+
+```yaml
+- bump: minor
+  changes:
+    added:
+    - New feature.
+    fixed:
+    - Bug fix.
+    changed:
+    - Change.
+```

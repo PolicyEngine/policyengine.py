@@ -19,3 +19,6 @@ changelog:
 
 build:
 	python -m build
+
+test:
+	pytest tests

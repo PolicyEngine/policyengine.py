@@ -1,35 +1,19 @@
-from policyengine_core.model_api import *
-from policyengine_core.periods import instant
-from typing import List
+import re
+from pydantic import RootModel, ValidationError, Field, model_validator
+from typing import Dict, TYPE_CHECKING
+from annotated_types import Ge, Le
+from typing_extensions import Annotated
+from typing import Callable
+from policyengine_core.simulations import Simulation
 
 
-def index_parameters(
-    parameters: List[str], index: str, start_year: int, end_year: int
-):
-    """Create a reform that indexes parameters to a given index (e.g. inflation).
+class ParametricReform(RootModel):
+    """A reform that just changes parameter values."""
 
-    Args:
-        parameters (List[str]): The parameters to index.
-        index (str): The index to use.
-        start_year (int): The first year that will be added as an indexed entry.
-        end_year (int): The last year that will be added as an indexed entry.
+    root: Dict[str, Dict | float | bool]
 
-    Returns:
-        Reform: A reform that indexes the given parameters to the index.
-    """
 
-    class reform(Reform):
-        def apply(self):
-            index_p = self.parameters.get_child(index)
-            for parameter in parameters:
-                param = self.parameters.get_child(parameter)
-                for year in range(start_year, end_year + 1):
-                    param.update(
-                        start=instant(year),
-                        stop=instant(year + 1),
-                        value=param(start_year - 1)
-                        * index_p(year)
-                        / index_p(start_year - 1),
-                    )
+class SimulationAdjustment(RootModel):
+    """A reform that changes the simulation in some way."""
 
-    return reform
+    root: object  # Python callable function that takes a Simulation object and returns nothing. Not JSON serialisable. Needs fixing.

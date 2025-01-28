@@ -5,7 +5,7 @@ copyright: "2025"
 logo: logo.png
 
 execute:
-  execute_notebooks: force
+  execute_notebooks: cache
   stderr_output: error
   timeout: 600
 
@@ -13,6 +13,8 @@ repository:
   url: https://github.com/policyengine/policyengine.py
   branch: master
   path_to_book: docs
+
+title: Python documentation
 
 sphinx:
   config:
@@ -24,3 +26,6 @@ sphinx:
       - style.css
   extra_extensions:
     - "sphinx.ext.autodoc"
+    - "sphinxcontrib.autodoc_pydantic"
+
+only_build_toc_files: true

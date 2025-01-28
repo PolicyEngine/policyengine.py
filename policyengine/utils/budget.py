@@ -1,5 +1,4 @@
 import pandas as pd
-from policyengine import Simulation
 
 
 def budget_breakdown(
@@ -23,6 +22,8 @@ def budget_breakdown(
     Returns:
         pd.DataFrame: A DataFrame containing the budgetary impact of the reform by provision.
     """
+    from policyengine import Simulation
+
     subreform_items = []
     year_items = []
     budget_items = []
