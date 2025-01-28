@@ -18,6 +18,7 @@ dependencies = [
     "policyengine-us",
     "microdf_python",
     "getpass4",
+    "pydantic",
 ]
 
 [project.optional-dependencies]
