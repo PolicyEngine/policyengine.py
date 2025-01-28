@@ -1,2 +1,2 @@
-def test_this():
-    assert True
+def test_package_imports():
+    from policyengine import Simulation
