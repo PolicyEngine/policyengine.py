@@ -12,6 +12,7 @@ from .inequality import InequalitySummary, calculate_inequality
 from .poverty import PovertyRateMetric, calculate_poverty
 from typing import List
 
+
 class SingleEconomy(BaseModel):
     fiscal: FiscalSummary
     inequality: InequalitySummary
@@ -24,7 +25,9 @@ def calculate_single_economy(
     """Calculate economy statistics for a single economic scenario."""
     options = simulation.options
 
-    fiscal = calculate_government_balance(simulation.baseline_simulation, options)
+    fiscal = calculate_government_balance(
+        simulation.baseline_simulation, options
+    )
     inequality = calculate_inequality(simulation.baseline_simulation)
     poverty = calculate_poverty(simulation.baseline_simulation, options)
 

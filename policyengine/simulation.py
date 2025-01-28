@@ -28,7 +28,10 @@ from .outputs.macro.comparison.calculate_economy_comparison import (
     calculate_economy_comparison,
     EconomyComparison,
 )
-from .outputs.macro.single.calculate_single_economy import SingleEconomy, calculate_single_economy
+from .outputs.macro.single.calculate_single_economy import (
+    SingleEconomy,
+    calculate_single_economy,
+)
 
 CountryType = Literal["uk", "us"]
 ScopeType = Literal["household", "macro"]
@@ -297,7 +300,7 @@ class Simulation:
     def calculate_economy_comparison(self) -> EconomyComparison:
         """Calculate comparison statistics between two economic scenarios."""
         return calculate_economy_comparison(self)
-    
+
     def calculate_single_economy(self) -> SingleEconomy:
         """Calculate economy statistics for a single economic scenario."""
         return calculate_single_economy(self)

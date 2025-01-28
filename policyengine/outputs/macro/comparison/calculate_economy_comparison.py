@@ -27,6 +27,7 @@ class FiscalComparison(BaseModel):
     change: FiscalSummary
     relative_change: FiscalSummary
 
+
 class InequalityComparison(BaseModel):
     baseline: InequalitySummary
     reform: InequalitySummary
@@ -38,11 +39,14 @@ class PovertyRateMetricComparison(BaseModel):
     age_group: Literal["child", "working_age", "senior", "all"]
     racial_group: Literal["white", "black", "hispanic", "other", "all"]
     relative: bool
-    poverty_rate: Literal["uk_hbai_bhc", "uk_hbai_bhc_half", "us_spm", "us_spm_half"]
+    poverty_rate: Literal[
+        "uk_hbai_bhc", "uk_hbai_bhc_half", "us_spm", "us_spm_half"
+    ]
     baseline: float
     reform: float
     change: float
     relative_change: float
+
 
 class EconomyComparison(BaseModel):
     fiscal: FiscalComparison
@@ -64,18 +68,32 @@ def calculate_economy_comparison(
 
     baseline_balance = calculate_government_balance(baseline, options)
     reform_balance = calculate_government_balance(reform, options)
-    balance_change = get_change(baseline_balance, reform_balance, relative=False)
-    balance_rel_change = get_change(baseline_balance, reform_balance, relative=True)
+    balance_change = get_change(
+        baseline_balance, reform_balance, relative=False
+    )
+    balance_rel_change = get_change(
+        baseline_balance, reform_balance, relative=True
+    )
     fiscal_comparison = FiscalComparison(
-        baseline=baseline_balance, reform=reform_balance, change=balance_change, relative_change=balance_rel_change
+        baseline=baseline_balance,
+        reform=reform_balance,
+        change=balance_change,
+        relative_change=balance_rel_change,
     )
 
     baseline_inequality = calculate_inequality(baseline)
     reform_inequality = calculate_inequality(reform)
-    inequality_change = get_change(baseline_inequality, reform_inequality, relative=False)
-    inequality_rel_change = get_change(baseline_inequality, reform_inequality, relative=True)
+    inequality_change = get_change(
+        baseline_inequality, reform_inequality, relative=False
+    )
+    inequality_rel_change = get_change(
+        baseline_inequality, reform_inequality, relative=True
+    )
     inequality_comparison = InequalityComparison(
-        baseline=baseline_inequality, reform=reform_inequality, change=inequality_change, relative_change=inequality_rel_change
+        baseline=baseline_inequality,
+        reform=reform_inequality,
+        change=inequality_change,
+        relative_change=inequality_rel_change,
     )
 
     decile_impacts = calculate_decile_impacts(baseline, reform, options)
@@ -83,7 +101,9 @@ def calculate_economy_comparison(
     baseline_poverty_metrics = calculate_poverty(baseline, options)
     reform_poverty_metrics = calculate_poverty(reform, options)
     poverty_metrics = []
-    for baseline_metric, reform_metric in zip(baseline_poverty_metrics, reform_poverty_metrics):
+    for baseline_metric, reform_metric in zip(
+        baseline_poverty_metrics, reform_poverty_metrics
+    ):
         change = reform_metric.value - baseline_metric.value
         rel_change = change / baseline_metric.value
         poverty_metrics.append(
@@ -95,12 +115,12 @@ def calculate_economy_comparison(
                 baseline=baseline_metric.value,
                 reform=reform_metric.value,
                 change=change,
-                relative_change=rel_change
+                relative_change=rel_change,
             )
         )
 
     return EconomyComparison(
-        fiscal=fiscal_comparison, 
+        fiscal=fiscal_comparison,
         inequality=inequality_comparison,
         distributional=decile_impacts,
         poverty=poverty_metrics,

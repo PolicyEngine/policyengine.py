@@ -9,11 +9,13 @@ from pydantic import BaseModel
 from typing import Dict
 import numpy as np
 
+
 class IncomeMeasureSpecificDecileIncomeChange(BaseModel):
     relative: Dict[int, float]
     """Relative impacts by income decile."""
     average: Dict[int, float]
     """Average impacts by income decile."""
+
 
 class IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(BaseModel):
     lose_more_than_5_percent_share: float
@@ -31,17 +33,20 @@ class IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(BaseModel):
     gain_more_than_5_percent_share: float
     """Share of households gaining more than 5% of net income."""
 
+
 class IncomeMeasureSpecificDecileWinnersLosers(BaseModel):
     deciles: Dict[int, IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes]
     """Winners and losers by income decile."""
     all: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes
     """Winners and losers for all households."""
 
+
 class IncomeMeasureSpecificDecileImpacts(BaseModel):
     income_change: IncomeMeasureSpecificDecileIncomeChange
     """Income change by income decile."""
     winners_and_losers: IncomeMeasureSpecificDecileWinnersLosers
     """Winners and losers by income decile."""
+
 
 class DecileImpacts(BaseModel):
     income: IncomeMeasureSpecificDecileImpacts
@@ -56,12 +61,17 @@ def calculate_decile_impacts(
     options: "SimulationOptions",
 ) -> DecileImpacts:
     """Calculate changes to households by income and wealth deciles."""
-    income_impacts = calculate_income_specific_decile_impacts(baseline, reform, by_wealth_decile=False)
+    income_impacts = calculate_income_specific_decile_impacts(
+        baseline, reform, by_wealth_decile=False
+    )
     if options.country == "uk":
-        wealth_impacts = calculate_income_specific_decile_impacts(baseline, reform, by_wealth_decile=True)
+        wealth_impacts = calculate_income_specific_decile_impacts(
+            baseline, reform, by_wealth_decile=True
+        )
     else:
         wealth_impacts = None
     return DecileImpacts(income=income_impacts, wealth=wealth_impacts)
+
 
 def calculate_income_specific_decile_impacts(
     baseline: Microsimulation,
@@ -69,9 +79,16 @@ def calculate_income_specific_decile_impacts(
     by_wealth_decile: bool,
 ) -> IncomeMeasureSpecificDecileImpacts:
     """Calculate changes to households by income and wealth deciles."""
-    income_impacts = calculate_income_specific_decile_income_changes(baseline, reform, by_wealth_decile)
-    winners_losers = calculate_income_specific_decile_winners_losers(baseline, reform, by_wealth_decile)
-    return IncomeMeasureSpecificDecileImpacts(income_change=income_impacts, winners_and_losers=winners_losers)
+    income_impacts = calculate_income_specific_decile_income_changes(
+        baseline, reform, by_wealth_decile
+    )
+    winners_losers = calculate_income_specific_decile_winners_losers(
+        baseline, reform, by_wealth_decile
+    )
+    return IncomeMeasureSpecificDecileImpacts(
+        income_change=income_impacts, winners_and_losers=winners_losers
+    )
+
 
 def calculate_income_specific_decile_winners_losers(
     baseline: Microsimulation,
@@ -88,9 +105,7 @@ def calculate_income_specific_decile_winners_losers(
         wealth = baseline.calculate("total_wealth")
         household_count_people = baseline.calculate("household_count_people")
         wealth.weights *= household_count_people
-        decile = (
-            wealth.decile_rank().clip(1, 10).astype(int)
-        )
+        decile = wealth.decile_rank().clip(1, 10).astype(int)
     # Filter out negative decile values due to negative incomes
     absolute_change = (reform_income - baseline_income).values
     capped_baseline_income = np.maximum(baseline_income.values, 1)
@@ -154,9 +169,8 @@ def calculate_income_specific_decile_winners_losers(
             if d not in deciles:
                 deciles[d] = {}
             deciles[d][label] = share_in_group
-    
-    return IncomeMeasureSpecificDecileWinnersLosers(deciles=deciles, all=all)
 
+    return IncomeMeasureSpecificDecileWinnersLosers(deciles=deciles, all=all)
 
 
 def calculate_income_specific_decile_income_changes(
@@ -173,9 +187,7 @@ def calculate_income_specific_decile_income_changes(
         wealth = baseline.calculate("total_wealth")
         household_count_people = baseline.calculate("household_count_people")
         wealth.weights *= household_count_people
-        decile = (
-            wealth.decile_rank().clip(1, 10).astype(int)
-        )
+        decile = wealth.decile_rank().clip(1, 10).astype(int)
     # Filter out negative decile values due to negative incomes
     baseline_income_filtered = baseline_income[decile >= 0]
     reform_income_filtered = reform_income[decile >= 0]
