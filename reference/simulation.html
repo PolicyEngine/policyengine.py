@@ -3,19 +3,20 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Calculate" href="calculate.html" /><link rel="prev" title="Maintainance" href="../maintaining.html" />
+<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="prev" title="PolicyEngine Python interface" href="../index.html" />
 
     <!-- Generated with Sphinx 7.4.7 and Furo 2024.08.06 -->
-        <title>Simulation - PolicyEngine</title>
+        <title>Simulation - Python documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=354aac6f" />
     <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=13237357" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-thebe.css?v=4fa983c6" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=302659d7" />
-    <link rel="stylesheet" type="text/css" href="../_static/style.css?v=20133b5d" />
+    <link rel="stylesheet" type="text/css" href="../_static/style.css?v=241fa771" />
     
     
 
@@ -172,7 +173,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">PolicyEngine</div></a>
+      <a href="../index.html"><div class="brand">Python documentation</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -199,7 +200,7 @@
     <img class="sidebar-logo" src="../_static/logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">PolicyEngine</span>
+  <span class="sidebar-brand-text">Python documentation</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -207,14 +208,9 @@
   <input type="hidden" name="area" value="default">
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
-  <p class="caption" role="heading"><span class="caption-text">Maintenance</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../maintaining.html">Maintainance</a></li>
-</ul>
-<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+  <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
 <ul class="current">
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Simulation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="calculate.html">Calculate</a></li>
 </ul>
 
 </div>
@@ -235,7 +231,7 @@
         </a>
         <div class="content-icon-container">
           <div class="view-this-page">
-  <a class="muted-link" href="../_sources/reference/simulation.md" title="View this page">
+  <a class="muted-link" href="../_sources/reference/simulation.ipynb" title="View this page">
     <svg><use href="#svg-eye"></use></svg>
     <span class="visually-hidden">View this page</span>
   </a>
@@ -257,100 +253,298 @@
         <article role="main" id="furo-main-content">
           <section class="tex2jax_ignore mathjax_ignore" id="simulation">
 <h1>Simulation<a class="headerlink" href="#simulation" title="Link to this heading">¶</a></h1>
-<p>The <code class="docutils literal notranslate"><span class="pre">Simulation</span></code> class is the main interface under <code class="docutils literal notranslate"><span class="pre">policyengine</span></code>. It lets you define a simulation (either of a single policy or a factual-counterfactual pair) and run it.</p>
-<dl class="py class">
-<dt class="sig sig-object py" id="policyengine.Simulation">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">policyengine.</span></span><span class="sig-name descname"><span class="pre">Simulation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">country</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'uk'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'us'</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'macro'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'household'</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_period</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">typing.Literal[2024,</span> <span class="pre">2025,</span> <span class="pre">2026,</span> <span class="pre">2027,</span> <span class="pre">2028,</span> <span class="pre">2029,</span> <span class="pre">2030]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reform</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">baseline</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#policyengine.Simulation" title="Link to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>The top-level class through which all PE usage is carried out.</p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="policyengine.Simulation.baseline">
-<span class="sig-name descname"><span class="pre">baseline</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#policyengine.Simulation.baseline" title="Link to this definition">¶</a></dt>
-<dd><p>The baseline simulation inputs.</p>
-</dd></dl>
+<p>The <code class="docutils literal notranslate"><span class="pre">Simulation</span></code> class is the core interface of this package. You can initialise it by passing in a dictionary that matches the <code class="docutils literal notranslate"><span class="pre">SimulationOptions</span></code> schema, and then use its <code class="docutils literal notranslate"><span class="pre">calculate</span></code> methods to ask it questions.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">policyengine</span><span class="w"> </span><span class="kn">import</span> <span class="n">Simulation</span>
 
+<span class="n">sim</span> <span class="o">=</span> <span class="n">Simulation</span><span class="p">({</span>
+    <span class="s2">&quot;country&quot;</span><span class="p">:</span> <span class="s2">&quot;uk&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;scope&quot;</span><span class="p">:</span> <span class="s2">&quot;macro&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;reform&quot;</span><span class="p">:</span> <span class="p">{},</span>
+    <span class="s2">&quot;time_period&quot;</span><span class="p">:</span> <span class="mi">2025</span><span class="p">,</span>
+<span class="p">})</span>
+
+<span class="n">sim</span><span class="o">.</span><span class="n">calculate_economy_comparison</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/opt/hostedtoolcache/Python/3.12.8/x64/lib/python3.12/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+  from .autonotebook import tqdm as notebook_tqdm
+</pre></div>
+</div>
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>EconomyComparison(fiscal=FiscalComparison(baseline=FiscalSummary(tax_revenue=658911285719.5891, federal_tax=658911285719.5891, state_tax=0.0, government_spending=349822186864.1042, tax_benefit_programs={&#39;income_tax&#39;: 333376287037.05945, &#39;national_insurance&#39;: 52985626776.773834, &#39;ni_employer&#39;: 126330649370.35953, &#39;vat&#39;: 211671832822.39133, &#39;council_tax&#39;: 49007055050.00724, &#39;fuel_duty&#39;: 26506672341.204205, &#39;tax_credits&#39;: -34929879.49872104, &#39;universal_credit&#39;: -73459549194.97665, &#39;child_benefit&#39;: -14311471487.935827, &#39;state_pension&#39;: -132795868621.44594, &#39;pension_credit&#39;: -6252358021.417119}, household_net_income=1566028514855.0789), reform=FiscalSummary(tax_revenue=658911285719.5891, federal_tax=658911285719.5891, state_tax=0.0, government_spending=349822186864.1042, tax_benefit_programs={&#39;income_tax&#39;: 333376287037.05945, &#39;national_insurance&#39;: 52985626776.773834, &#39;ni_employer&#39;: 126330649370.35953, &#39;vat&#39;: 211671832822.39133, &#39;council_tax&#39;: 49007055050.00724, &#39;fuel_duty&#39;: 26506672341.204205, &#39;tax_credits&#39;: -34929879.49872104, &#39;universal_credit&#39;: -73459549194.97665, &#39;child_benefit&#39;: -14311471487.935827, &#39;state_pension&#39;: -132795868621.44594, &#39;pension_credit&#39;: -6252358021.417119}, household_net_income=1566028514855.0789), change=FiscalSummary(tax_revenue=0.0, federal_tax=0.0, state_tax=0.0, government_spending=0.0, tax_benefit_programs={&#39;income_tax&#39;: 0.0, &#39;national_insurance&#39;: 0.0, &#39;ni_employer&#39;: 0.0, &#39;vat&#39;: 0.0, &#39;council_tax&#39;: 0.0, &#39;fuel_duty&#39;: 0.0, &#39;tax_credits&#39;: 0.0, &#39;universal_credit&#39;: 0.0, &#39;child_benefit&#39;: 0.0, &#39;state_pension&#39;: 0.0, &#39;pension_credit&#39;: 0.0}, household_net_income=0.0), relative_change=FiscalSummary(tax_revenue=0.0, federal_tax=0.0, state_tax=0.0, government_spending=0.0, tax_benefit_programs={&#39;income_tax&#39;: 0.0, &#39;national_insurance&#39;: 0.0, &#39;ni_employer&#39;: 0.0, &#39;vat&#39;: 0.0, &#39;council_tax&#39;: 0.0, &#39;fuel_duty&#39;: 0.0, &#39;tax_credits&#39;: -0.0, &#39;universal_credit&#39;: -0.0, &#39;child_benefit&#39;: -0.0, &#39;state_pension&#39;: -0.0, &#39;pension_credit&#39;: -0.0}, household_net_income=0.0)), inequality=InequalityComparison(baseline=InequalitySummary(gini=0.36255397405553097, top_10_share=0.3260927004295773, top_1_share=0.13145609415091833), reform=InequalitySummary(gini=0.36255397405553097, top_10_share=0.3260927004295773, top_1_share=0.13145609415091833), change=InequalitySummary(gini=0.0, top_10_share=0.0, top_1_share=0.0), relative_change=InequalitySummary(gini=0.0, top_10_share=0.0, top_1_share=0.0)), distributional=DecileImpacts(income=IncomeMeasureSpecificDecileImpacts(income_change=IncomeMeasureSpecificDecileIncomeChange(relative={1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0, 6: 0.0, 7: 0.0, 8: 0.0, 9: 0.0, 10: 0.0}, average={1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0, 6: 0.0, 7: 0.0, 8: 0.0, 9: 0.0, 10: 0.0}), winners_and_losers=IncomeMeasureSpecificDecileWinnersLosers(deciles={1: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0), 2: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0), 3: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0), 4: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0), 5: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0), 6: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0), 7: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0), 8: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0), 9: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0), 10: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0)}, all=IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0))), wealth=IncomeMeasureSpecificDecileImpacts(income_change=IncomeMeasureSpecificDecileIncomeChange(relative={1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0, 6: 0.0, 7: 0.0, 8: 0.0, 9: 0.0, 10: 0.0}, average={1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0, 6: 0.0, 7: 0.0, 8: 0.0, 9: 0.0, 10: 0.0}), winners_and_losers=IncomeMeasureSpecificDecileWinnersLosers(deciles={1: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0), 2: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0), 3: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0), 4: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0), 5: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0), 6: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0), 7: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0), 8: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0), 9: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0), 10: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0)}, all=IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=1.0, gain_share=0.0, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0)))), poverty=[PovertyRateMetricComparison(age_group=&#39;child&#39;, racial_group=&#39;all&#39;, relative=True, poverty_rate=&#39;uk_hbai_bhc&#39;, baseline=0.0866740345954895, reform=0.0866740345954895, change=0.0, relative_change=0.0), PovertyRateMetricComparison(age_group=&#39;child&#39;, racial_group=&#39;all&#39;, relative=True, poverty_rate=&#39;uk_hbai_bhc_half&#39;, baseline=0.005887233652174473, reform=0.005887233652174473, change=0.0, relative_change=0.0), PovertyRateMetricComparison(age_group=&#39;child&#39;, racial_group=&#39;all&#39;, relative=False, poverty_rate=&#39;uk_hbai_bhc&#39;, baseline=1636588.5, reform=1636588.5, change=0.0, relative_change=0.0), PovertyRateMetricComparison(age_group=&#39;child&#39;, racial_group=&#39;all&#39;, relative=False, poverty_rate=&#39;uk_hbai_bhc_half&#39;, baseline=111163.3828125, reform=111163.3828125, change=0.0, relative_change=0.0), PovertyRateMetricComparison(age_group=&#39;working_age&#39;, racial_group=&#39;all&#39;, relative=True, poverty_rate=&#39;uk_hbai_bhc&#39;, baseline=0.08067396283149719, reform=0.08067396283149719, change=0.0, relative_change=0.0), PovertyRateMetricComparison(age_group=&#39;working_age&#39;, racial_group=&#39;all&#39;, relative=True, poverty_rate=&#39;uk_hbai_bhc_half&#39;, baseline=0.02040824294090271, reform=0.02040824294090271, change=0.0, relative_change=0.0), PovertyRateMetricComparison(age_group=&#39;working_age&#39;, racial_group=&#39;all&#39;, relative=False, poverty_rate=&#39;uk_hbai_bhc&#39;, baseline=3613979.5, reform=3613979.5, change=0.0, relative_change=0.0), PovertyRateMetricComparison(age_group=&#39;working_age&#39;, racial_group=&#39;all&#39;, relative=False, poverty_rate=&#39;uk_hbai_bhc_half&#39;, baseline=914235.1875, reform=914235.1875, change=0.0, relative_change=0.0), PovertyRateMetricComparison(age_group=&#39;senior&#39;, racial_group=&#39;all&#39;, relative=True, poverty_rate=&#39;uk_hbai_bhc&#39;, baseline=0.03327473625540733, reform=0.03327473625540733, change=0.0, relative_change=0.0), PovertyRateMetricComparison(age_group=&#39;senior&#39;, racial_group=&#39;all&#39;, relative=True, poverty_rate=&#39;uk_hbai_bhc_half&#39;, baseline=0.0007302720914594829, reform=0.0007302720914594829, change=0.0, relative_change=0.0), PovertyRateMetricComparison(age_group=&#39;senior&#39;, racial_group=&#39;all&#39;, relative=False, poverty_rate=&#39;uk_hbai_bhc&#39;, baseline=436231.65625, reform=436231.65625, change=0.0, relative_change=0.0), PovertyRateMetricComparison(age_group=&#39;senior&#39;, racial_group=&#39;all&#39;, relative=False, poverty_rate=&#39;uk_hbai_bhc_half&#39;, baseline=9573.8642578125, reform=9573.8642578125, change=0.0, relative_change=0.0), PovertyRateMetricComparison(age_group=&#39;all&#39;, racial_group=&#39;all&#39;, relative=True, poverty_rate=&#39;uk_hbai_bhc&#39;, baseline=0.07405701279640198, reform=0.07405701279640198, change=0.0, relative_change=0.0), PovertyRateMetricComparison(age_group=&#39;all&#39;, racial_group=&#39;all&#39;, relative=True, poverty_rate=&#39;uk_hbai_bhc_half&#39;, baseline=0.013478054665029049, reform=0.013478054665029049, change=0.0, relative_change=0.0), PovertyRateMetricComparison(age_group=&#39;all&#39;, racial_group=&#39;all&#39;, relative=False, poverty_rate=&#39;uk_hbai_bhc&#39;, baseline=5686797.5, reform=5686797.5, change=0.0, relative_change=0.0), PovertyRateMetricComparison(age_group=&#39;all&#39;, racial_group=&#39;all&#39;, relative=False, poverty_rate=&#39;uk_hbai_bhc_half&#39;, baseline=1034972.5, reform=1034972.5, change=0.0, relative_change=0.0)], labor_supply=[])
+</pre></div>
+</div>
+</div>
+</div>
+<section id="module-policyengine.simulation">
+<span id="module-documentation"></span><h2>Module documentation<a class="headerlink" href="#module-policyengine.simulation" title="Link to this heading">¶</a></h2>
+<p>Simulate tax-benefit policy and derive society-level output statistics.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="policyengine.simulation.Simulation">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">policyengine.simulation.</span></span><span class="sig-name descname"><span class="pre">Simulation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#policyengine.simulation.SimulationOptions" title="policyengine.simulation.SimulationOptions"><span class="pre">SimulationOptions</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#policyengine.simulation.Simulation" title="Link to this definition">¶</a></dt>
+<dd><p>Simulate tax-benefit policy and derive society-level output statistics.</p>
 <dl class="py attribute">
-<dt class="sig sig-object py" id="policyengine.Simulation.baseline_sim">
-<span class="sig-name descname"><span class="pre">baseline_sim</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Simulation</span></em><a class="headerlink" href="#policyengine.Simulation.baseline_sim" title="Link to this definition">¶</a></dt>
-<dd><p>The tax-benefit simulation for the baseline scenario.</p>
+<dt class="sig sig-object py" id="policyengine.simulation.Simulation.baseline_simulation">
+<span class="sig-name descname"><span class="pre">baseline_simulation</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Simulation</span></em><a class="headerlink" href="#policyengine.simulation.Simulation.baseline_simulation" title="Link to this definition">¶</a></dt>
+<dd><p>The baseline tax-benefit simulation.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="policyengine.Simulation.calculate">
-<span class="sig-name descname"><span class="pre">calculate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">force</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#policyengine.Simulation.calculate" title="Link to this definition">¶</a></dt>
-<dd><p>Calculate the given output (path).</p>
-<dl class="simple">
-<dt>Args:</dt><dd><p>output (str): The output to calculate. Must be a valid path in the output tree.
-force (bool): Whether to force recalculation of the output, even if it has already been calculated.
-<a href="#id1"><span class="problematic" id="id2">**</span></a>kwargs: Any additional arguments to pass to the output function.</p>
+<dt class="sig sig-object py" id="policyengine.simulation.Simulation.calculate_economy_comparison">
+<span class="sig-name descname"><span class="pre">calculate_economy_comparison</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">EconomyComparison</span></span></span><a class="headerlink" href="#policyengine.simulation.Simulation.calculate_economy_comparison" title="Link to this definition">¶</a></dt>
+<dd><p>Calculate comparison statistics between two economic scenarios.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="policyengine.simulation.Simulation.calculate_household_comparison">
+<span class="sig-name descname"><span class="pre">calculate_household_comparison</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">HouseholdComparison</span></span></span><a class="headerlink" href="#policyengine.simulation.Simulation.calculate_household_comparison" title="Link to this definition">¶</a></dt>
+<dd><p>Calculate comparison statistics between two household scenarios.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="policyengine.simulation.Simulation.calculate_single_economy">
+<span class="sig-name descname"><span class="pre">calculate_single_economy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">SingleEconomy</span></span></span><a class="headerlink" href="#policyengine.simulation.Simulation.calculate_single_economy" title="Link to this definition">¶</a></dt>
+<dd><p>Calculate economy statistics for a single economic scenario.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="policyengine.simulation.Simulation.calculate_single_household">
+<span class="sig-name descname"><span class="pre">calculate_single_household</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">SingleHousehold</span></span></span><a class="headerlink" href="#policyengine.simulation.Simulation.calculate_single_household" title="Link to this definition">¶</a></dt>
+<dd><p>Calculate household statistics for a single household scenario.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="policyengine.simulation.Simulation.is_comparison">
+<span class="sig-name descname"><span class="pre">is_comparison</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#policyengine.simulation.Simulation.is_comparison" title="Link to this definition">¶</a></dt>
+<dd><p>Whether the simulation is a comparison between two scenarios.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="policyengine.simulation.Simulation.reform_simulation">
+<span class="sig-name descname"><span class="pre">reform_simulation</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Simulation</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#policyengine.simulation.Simulation.reform_simulation" title="Link to this definition">¶</a></dt>
+<dd><p>The reform tax-benefit simulation.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class pydantic_model">
+<dt class="sig sig-object py" id="policyengine.simulation.SimulationOptions">
+<em class="property"><span class="pre">pydantic</span> <span class="pre">model</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">policyengine.simulation.</span></span><span class="sig-name descname"><span class="pre">SimulationOptions</span></span><a class="headerlink" href="#policyengine.simulation.SimulationOptions" title="Link to this definition">¶</a></dt>
+<dd><p><details  class="autodoc_pydantic_collapsable_json">
+<summary>Show JSON schema</summary><div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">   </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;SimulationOptions&quot;</span><span class="p">,</span>
+<span class="w">   </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;object&quot;</span><span class="p">,</span>
+<span class="w">   </span><span class="nt">&quot;properties&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;country&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">         </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;The country to simulate.&quot;</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;enum&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="s2">&quot;uk&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="s2">&quot;us&quot;</span>
+<span class="w">         </span><span class="p">],</span>
+<span class="w">         </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Country&quot;</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;scope&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">         </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;The scope of the simulation.&quot;</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;enum&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="s2">&quot;household&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="s2">&quot;macro&quot;</span>
+<span class="w">         </span><span class="p">],</span>
+<span class="w">         </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Scope&quot;</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">         </span><span class="nt">&quot;anyOf&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="p">{</span>
+<span class="w">               </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span>
+<span class="w">            </span><span class="p">},</span>
+<span class="w">            </span><span class="p">{</span>
+<span class="w">               </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;object&quot;</span>
+<span class="w">            </span><span class="p">},</span>
+<span class="w">            </span><span class="p">{</span>
+<span class="w">               </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;null&quot;</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">         </span><span class="p">],</span>
+<span class="w">         </span><span class="nt">&quot;default&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;The data to simulate.&quot;</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Data&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;time_period&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">         </span><span class="nt">&quot;default&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2025</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;The time period to simulate.&quot;</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;maximum&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2035</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;minimum&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2024</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Time Period&quot;</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;integer&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;reform&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">         </span><span class="nt">&quot;anyOf&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="p">{</span>
+<span class="w">               </span><span class="nt">&quot;$ref&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;#/$defs/ParametricReform&quot;</span>
+<span class="w">            </span><span class="p">},</span>
+<span class="w">            </span><span class="p">{</span>
+<span class="w">               </span><span class="nt">&quot;$ref&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;#/$defs/SimulationAdjustment&quot;</span>
+<span class="w">            </span><span class="p">},</span>
+<span class="w">            </span><span class="p">{},</span>
+<span class="w">            </span><span class="p">{</span>
+<span class="w">               </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;null&quot;</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">         </span><span class="p">],</span>
+<span class="w">         </span><span class="nt">&quot;default&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;The reform to simulate.&quot;</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Reform&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;baseline&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">         </span><span class="nt">&quot;anyOf&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="p">{</span>
+<span class="w">               </span><span class="nt">&quot;$ref&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;#/$defs/ParametricReform&quot;</span>
+<span class="w">            </span><span class="p">},</span>
+<span class="w">            </span><span class="p">{</span>
+<span class="w">               </span><span class="nt">&quot;$ref&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;#/$defs/SimulationAdjustment&quot;</span>
+<span class="w">            </span><span class="p">},</span>
+<span class="w">            </span><span class="p">{},</span>
+<span class="w">            </span><span class="p">{</span>
+<span class="w">               </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;null&quot;</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">         </span><span class="p">],</span>
+<span class="w">         </span><span class="nt">&quot;default&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;The baseline to simulate.&quot;</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Baseline&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;region&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">         </span><span class="nt">&quot;anyOf&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="p">{</span>
+<span class="w">               </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span>
+<span class="w">            </span><span class="p">},</span>
+<span class="w">            </span><span class="p">{</span>
+<span class="w">               </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;null&quot;</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">         </span><span class="p">],</span>
+<span class="w">         </span><span class="nt">&quot;default&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;The region to simulate within the country.&quot;</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Region&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;subsample&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">         </span><span class="nt">&quot;anyOf&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="p">{</span>
+<span class="w">               </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;integer&quot;</span>
+<span class="w">            </span><span class="p">},</span>
+<span class="w">            </span><span class="p">{</span>
+<span class="w">               </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;null&quot;</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">         </span><span class="p">],</span>
+<span class="w">         </span><span class="nt">&quot;default&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;How many, if a subsample, households to randomly simulate.&quot;</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Subsample&quot;</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">   </span><span class="p">},</span>
+<span class="w">   </span><span class="nt">&quot;$defs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;ParametricReform&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">         </span><span class="nt">&quot;additionalProperties&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;anyOf&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">               </span><span class="p">{</span>
+<span class="w">                  </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;object&quot;</span>
+<span class="w">               </span><span class="p">},</span>
+<span class="w">               </span><span class="p">{</span>
+<span class="w">                  </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;number&quot;</span>
+<span class="w">               </span><span class="p">},</span>
+<span class="w">               </span><span class="p">{</span>
+<span class="w">                  </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;boolean&quot;</span>
+<span class="w">               </span><span class="p">}</span>
+<span class="w">            </span><span class="p">]</span>
+<span class="w">         </span><span class="p">},</span>
+<span class="w">         </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;A reform that just changes parameter values.&quot;</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ParametricReform&quot;</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;object&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;SimulationAdjustment&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">         </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;A reform that changes the simulation in some way.&quot;</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;SimulationAdjustment&quot;</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">   </span><span class="p">},</span>
+<span class="w">   </span><span class="nt">&quot;required&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="s2">&quot;country&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">&quot;scope&quot;</span>
+<span class="w">   </span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</details></p><dl class="field-list simple">
+<dt class="field-odd">Fields<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference internal" href="#policyengine.simulation.SimulationOptions.baseline" title="policyengine.simulation.SimulationOptions.baseline"><code class="xref py py-obj docutils literal notranslate"><span class="pre">baseline</span> <span class="pre">(policyengine.utils.reforms.ParametricReform</span> <span class="pre">|</span> <span class="pre">policyengine.utils.reforms.SimulationAdjustment</span> <span class="pre">|</span> <span class="pre">Type[policyengine_core.reforms.reform.Reform]</span> <span class="pre">|</span> <span class="pre">None)</span></code></a></p></li>
+<li><p><a class="reference internal" href="#policyengine.simulation.SimulationOptions.country" title="policyengine.simulation.SimulationOptions.country"><code class="xref py py-obj docutils literal notranslate"><span class="pre">country</span> <span class="pre">(Literal['uk',</span> <span class="pre">'us'])</span></code></a></p></li>
+<li><p><a class="reference internal" href="#policyengine.simulation.SimulationOptions.data" title="policyengine.simulation.SimulationOptions.data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">data</span> <span class="pre">(str</span> <span class="pre">|</span> <span class="pre">dict</span> <span class="pre">|</span> <span class="pre">None)</span></code></a></p></li>
+<li><p><a class="reference internal" href="#policyengine.simulation.SimulationOptions.reform" title="policyengine.simulation.SimulationOptions.reform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reform</span> <span class="pre">(policyengine.utils.reforms.ParametricReform</span> <span class="pre">|</span> <span class="pre">policyengine.utils.reforms.SimulationAdjustment</span> <span class="pre">|</span> <span class="pre">Type[policyengine_core.reforms.reform.Reform]</span> <span class="pre">|</span> <span class="pre">None)</span></code></a></p></li>
+<li><p><a class="reference internal" href="#policyengine.simulation.SimulationOptions.region" title="policyengine.simulation.SimulationOptions.region"><code class="xref py py-obj docutils literal notranslate"><span class="pre">region</span> <span class="pre">(str</span> <span class="pre">|</span> <span class="pre">None)</span></code></a></p></li>
+<li><p><a class="reference internal" href="#policyengine.simulation.SimulationOptions.scope" title="policyengine.simulation.SimulationOptions.scope"><code class="xref py py-obj docutils literal notranslate"><span class="pre">scope</span> <span class="pre">(Literal['household',</span> <span class="pre">'macro'])</span></code></a></p></li>
+<li><p><a class="reference internal" href="#policyengine.simulation.SimulationOptions.subsample" title="policyengine.simulation.SimulationOptions.subsample"><code class="xref py py-obj docutils literal notranslate"><span class="pre">subsample</span> <span class="pre">(int</span> <span class="pre">|</span> <span class="pre">None)</span></code></a></p></li>
+<li><p><a class="reference internal" href="#policyengine.simulation.SimulationOptions.time_period" title="policyengine.simulation.SimulationOptions.time_period"><code class="xref py py-obj docutils literal notranslate"><span class="pre">time_period</span> <span class="pre">(int)</span></code></a></p></li>
+</ul>
 </dd>
-<dt>Returns:</dt><dd><p>Any: The output of the calculation (using the cache if possible).</p>
+</dl>
+<dl class="py attribute pydantic_field">
+<dt class="sig sig-object py" id="policyengine.simulation.SimulationOptions.baseline">
+<em class="property"><span class="pre">field</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">baseline</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ParametricReform</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">SimulationAdjustment</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Type</span><span class="p"><span class="pre">[</span></span><span class="pre">Reform</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#policyengine.simulation.SimulationOptions.baseline" title="Link to this definition">¶</a></dt>
+<dd><p>The baseline to simulate.</p>
+</dd></dl>
+
+<dl class="py attribute pydantic_field">
+<dt class="sig sig-object py" id="policyengine.simulation.SimulationOptions.country">
+<em class="property"><span class="pre">field</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">country</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'uk'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'us'</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"> <span class="pre">[Required]</span></em><a class="headerlink" href="#policyengine.simulation.SimulationOptions.country" title="Link to this definition">¶</a></dt>
+<dd><p>The country to simulate.</p>
+</dd></dl>
+
+<dl class="py attribute pydantic_field">
+<dt class="sig sig-object py" id="policyengine.simulation.SimulationOptions.data">
+<em class="property"><span class="pre">field</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">data</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#policyengine.simulation.SimulationOptions.data" title="Link to this definition">¶</a></dt>
+<dd><p>The data to simulate.</p>
+</dd></dl>
+
+<dl class="py attribute pydantic_field">
+<dt class="sig sig-object py" id="policyengine.simulation.SimulationOptions.reform">
+<em class="property"><span class="pre">field</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">reform</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ParametricReform</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">SimulationAdjustment</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Type</span><span class="p"><span class="pre">[</span></span><span class="pre">Reform</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#policyengine.simulation.SimulationOptions.reform" title="Link to this definition">¶</a></dt>
+<dd><p>The reform to simulate.</p>
+</dd></dl>
+
+<dl class="py attribute pydantic_field">
+<dt class="sig sig-object py" id="policyengine.simulation.SimulationOptions.region">
+<em class="property"><span class="pre">field</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">region</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#policyengine.simulation.SimulationOptions.region" title="Link to this definition">¶</a></dt>
+<dd><p>The region to simulate within the country.</p>
+</dd></dl>
+
+<dl class="py attribute pydantic_field">
+<dt class="sig sig-object py" id="policyengine.simulation.SimulationOptions.scope">
+<em class="property"><span class="pre">field</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">scope</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'household'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'macro'</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"> <span class="pre">[Required]</span></em><a class="headerlink" href="#policyengine.simulation.SimulationOptions.scope" title="Link to this definition">¶</a></dt>
+<dd><p>The scope of the simulation.</p>
+</dd></dl>
+
+<dl class="py attribute pydantic_field">
+<dt class="sig sig-object py" id="policyengine.simulation.SimulationOptions.subsample">
+<em class="property"><span class="pre">field</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">subsample</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#policyengine.simulation.SimulationOptions.subsample" title="Link to this definition">¶</a></dt>
+<dd><p>How many, if a subsample, households to randomly simulate.</p>
+</dd></dl>
+
+<dl class="py attribute pydantic_field">
+<dt class="sig sig-object py" id="policyengine.simulation.SimulationOptions.time_period">
+<em class="property"><span class="pre">field</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">time_period</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">2025</span></em><a class="headerlink" href="#policyengine.simulation.SimulationOptions.time_period" title="Link to this definition">¶</a></dt>
+<dd><p>The time period to simulate.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Constraints<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ge</strong> = 2024</p></li>
+<li><p><strong>le</strong> = 2035</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
 
-<dl class="py attribute">
-<dt class="sig sig-object py" id="policyengine.Simulation.comparison">
-<span class="sig-name descname"><span class="pre">comparison</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#policyengine.Simulation.comparison" title="Link to this definition">¶</a></dt>
-<dd><p>Whether we are comparing two simulations, or analysing a single one.</p>
 </dd></dl>
 
-<dl class="py attribute">
-<dt class="sig sig-object py" id="policyengine.Simulation.country">
-<span class="sig-name descname"><span class="pre">country</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'uk'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'us'</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#policyengine.Simulation.country" title="Link to this definition">¶</a></dt>
-<dd><p>The country for which the simulation is being run.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="policyengine.Simulation.data">
-<span class="sig-name descname"><span class="pre">data</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Dataset</span></em><a class="headerlink" href="#policyengine.Simulation.data" title="Link to this definition">¶</a></dt>
-<dd><p>The dataset being used for the simulation.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="policyengine.Simulation.options">
-<span class="sig-name descname"><span class="pre">options</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></em><a class="headerlink" href="#policyengine.Simulation.options" title="Link to this definition">¶</a></dt>
-<dd><p>Dynamic options for the simulation type.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="policyengine.Simulation.reform">
-<span class="sig-name descname"><span class="pre">reform</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#policyengine.Simulation.reform" title="Link to this definition">¶</a></dt>
-<dd><p>The reform simulation inputs.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="policyengine.Simulation.reformed_sim">
-<span class="sig-name descname"><span class="pre">reformed_sim</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Simulation</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#policyengine.Simulation.reformed_sim" title="Link to this definition">¶</a></dt>
-<dd><p>The tax-benefit simulation for the reformed scenario. None if no reform has been configured</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="policyengine.Simulation.scope">
-<span class="sig-name descname"><span class="pre">scope</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'macro'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'household'</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#policyengine.Simulation.scope" title="Link to this definition">¶</a></dt>
-<dd><p>The type of simulation being run (macro or household).</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="policyengine.Simulation.selected_sim">
-<span class="sig-name descname"><span class="pre">selected_sim</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Simulation</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#policyengine.Simulation.selected_sim" title="Link to this definition">¶</a></dt>
-<dd><p>The selected simulation for the current calculation. None if not a reform.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="policyengine.Simulation.time_period">
-<span class="sig-name descname"><span class="pre">time_period</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#policyengine.Simulation.time_period" title="Link to this definition">¶</a></dt>
-<dd><p>The time period for the simulation. Years are applicable.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="policyengine.Simulation.verbose">
-<span class="sig-name descname"><span class="pre">verbose</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#policyengine.Simulation.verbose" title="Link to this definition">¶</a></dt>
-<dd><p>Whether to print out progress messages.</p>
-</dd></dl>
-
-</dd></dl>
-
+</section>
 </section>
 
     <script type="text/x-thebe-config">
@@ -377,23 +571,15 @@ force (bool): Whether to force recalculation of the output, even if it has alrea
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="calculate.html">
-              <div class="page-info">
-                <div class="context">
-                  <span>Next</span>
-                </div>
-                <div class="title">Calculate</div>
-              </div>
-              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
-            </a>
-          <a class="prev-page" href="../maintaining.html">
+          
+          <a class="prev-page" href="../index.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Maintainance</div>
+                <div class="title">Home</div>
                 
               </div>
             </a>
@@ -428,20 +614,28 @@ force (bool): Whether to force recalculation of the output, even if it has alrea
           <div class="toc-tree">
             <ul>
 <li><a class="reference internal" href="#">Simulation</a><ul>
-<li><a class="reference internal" href="#policyengine.Simulation"><code class="docutils literal notranslate"><span class="pre">Simulation</span></code></a><ul>
-<li><a class="reference internal" href="#policyengine.Simulation.baseline"><code class="docutils literal notranslate"><span class="pre">Simulation.baseline</span></code></a></li>
-<li><a class="reference internal" href="#policyengine.Simulation.baseline_sim"><code class="docutils literal notranslate"><span class="pre">Simulation.baseline_sim</span></code></a></li>
-<li><a class="reference internal" href="#policyengine.Simulation.calculate"><code class="docutils literal notranslate"><span class="pre">Simulation.calculate()</span></code></a></li>
-<li><a class="reference internal" href="#policyengine.Simulation.comparison"><code class="docutils literal notranslate"><span class="pre">Simulation.comparison</span></code></a></li>
-<li><a class="reference internal" href="#policyengine.Simulation.country"><code class="docutils literal notranslate"><span class="pre">Simulation.country</span></code></a></li>
-<li><a class="reference internal" href="#policyengine.Simulation.data"><code class="docutils literal notranslate"><span class="pre">Simulation.data</span></code></a></li>
-<li><a class="reference internal" href="#policyengine.Simulation.options"><code class="docutils literal notranslate"><span class="pre">Simulation.options</span></code></a></li>
-<li><a class="reference internal" href="#policyengine.Simulation.reform"><code class="docutils literal notranslate"><span class="pre">Simulation.reform</span></code></a></li>
-<li><a class="reference internal" href="#policyengine.Simulation.reformed_sim"><code class="docutils literal notranslate"><span class="pre">Simulation.reformed_sim</span></code></a></li>
-<li><a class="reference internal" href="#policyengine.Simulation.scope"><code class="docutils literal notranslate"><span class="pre">Simulation.scope</span></code></a></li>
-<li><a class="reference internal" href="#policyengine.Simulation.selected_sim"><code class="docutils literal notranslate"><span class="pre">Simulation.selected_sim</span></code></a></li>
-<li><a class="reference internal" href="#policyengine.Simulation.time_period"><code class="docutils literal notranslate"><span class="pre">Simulation.time_period</span></code></a></li>
-<li><a class="reference internal" href="#policyengine.Simulation.verbose"><code class="docutils literal notranslate"><span class="pre">Simulation.verbose</span></code></a></li>
+<li><a class="reference internal" href="#module-policyengine.simulation">Module documentation</a><ul>
+<li><a class="reference internal" href="#policyengine.simulation.Simulation"><code class="docutils literal notranslate"><span class="pre">Simulation</span></code></a><ul>
+<li><a class="reference internal" href="#policyengine.simulation.Simulation.baseline_simulation"><code class="docutils literal notranslate"><span class="pre">Simulation.baseline_simulation</span></code></a></li>
+<li><a class="reference internal" href="#policyengine.simulation.Simulation.calculate_economy_comparison"><code class="docutils literal notranslate"><span class="pre">Simulation.calculate_economy_comparison()</span></code></a></li>
+<li><a class="reference internal" href="#policyengine.simulation.Simulation.calculate_household_comparison"><code class="docutils literal notranslate"><span class="pre">Simulation.calculate_household_comparison()</span></code></a></li>
+<li><a class="reference internal" href="#policyengine.simulation.Simulation.calculate_single_economy"><code class="docutils literal notranslate"><span class="pre">Simulation.calculate_single_economy()</span></code></a></li>
+<li><a class="reference internal" href="#policyengine.simulation.Simulation.calculate_single_household"><code class="docutils literal notranslate"><span class="pre">Simulation.calculate_single_household()</span></code></a></li>
+<li><a class="reference internal" href="#policyengine.simulation.Simulation.is_comparison"><code class="docutils literal notranslate"><span class="pre">Simulation.is_comparison</span></code></a></li>
+<li><a class="reference internal" href="#policyengine.simulation.Simulation.reform_simulation"><code class="docutils literal notranslate"><span class="pre">Simulation.reform_simulation</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#policyengine.simulation.SimulationOptions"><code class="docutils literal notranslate"><span class="pre">SimulationOptions</span></code></a><ul>
+<li><a class="reference internal" href="#policyengine.simulation.SimulationOptions.baseline"><code class="docutils literal notranslate"><span class="pre">SimulationOptions.baseline</span></code></a></li>
+<li><a class="reference internal" href="#policyengine.simulation.SimulationOptions.country"><code class="docutils literal notranslate"><span class="pre">SimulationOptions.country</span></code></a></li>
+<li><a class="reference internal" href="#policyengine.simulation.SimulationOptions.data"><code class="docutils literal notranslate"><span class="pre">SimulationOptions.data</span></code></a></li>
+<li><a class="reference internal" href="#policyengine.simulation.SimulationOptions.reform"><code class="docutils literal notranslate"><span class="pre">SimulationOptions.reform</span></code></a></li>
+<li><a class="reference internal" href="#policyengine.simulation.SimulationOptions.region"><code class="docutils literal notranslate"><span class="pre">SimulationOptions.region</span></code></a></li>
+<li><a class="reference internal" href="#policyengine.simulation.SimulationOptions.scope"><code class="docutils literal notranslate"><span class="pre">SimulationOptions.scope</span></code></a></li>
+<li><a class="reference internal" href="#policyengine.simulation.SimulationOptions.subsample"><code class="docutils literal notranslate"><span class="pre">SimulationOptions.subsample</span></code></a></li>
+<li><a class="reference internal" href="#policyengine.simulation.SimulationOptions.time_period"><code class="docutils literal notranslate"><span class="pre">SimulationOptions.time_period</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>

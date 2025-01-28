@@ -3,19 +3,20 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Maintainance" href="maintaining.html" />
+<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Simulation" href="reference/simulation.html" />
 
     <!-- Generated with Sphinx 7.4.7 and Furo 2024.08.06 -->
-        <title>PolicyEngine</title>
+        <title>Python documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=354aac6f" />
     <link rel="stylesheet" type="text/css" href="_static/togglebutton.css?v=13237357" />
     <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
     <link rel="stylesheet" type="text/css" href="_static/sphinx-thebe.css?v=4fa983c6" />
+    <link rel="stylesheet" type="text/css" href="_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=302659d7" />
-    <link rel="stylesheet" type="text/css" href="_static/style.css?v=20133b5d" />
+    <link rel="stylesheet" type="text/css" href="_static/style.css?v=241fa771" />
     
     
 
@@ -172,7 +173,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="#"><div class="brand">PolicyEngine</div></a>
+      <a href="#"><div class="brand">Python documentation</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -184,7 +185,7 @@
           <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
         </button>
       </div>
-      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
         <div class="visually-hidden">Toggle table of contents sidebar</div>
         <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
       </label>
@@ -199,7 +200,7 @@
     <img class="sidebar-logo" src="_static/logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">PolicyEngine</span>
+  <span class="sidebar-brand-text">Python documentation</span>
   
 </a><form class="sidebar-search-container" method="get" action="search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -207,14 +208,9 @@
   <input type="hidden" name="area" value="default">
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
-  <p class="caption" role="heading"><span class="caption-text">Maintenance</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="maintaining.html">Maintainance</a></li>
-</ul>
-<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+  <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="reference/simulation.html">Simulation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="reference/calculate.html">Calculate</a></li>
 </ul>
 
 </div>
@@ -249,86 +245,55 @@
               <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
             </button>
           </div>
-          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
             <div class="visually-hidden">Toggle table of contents sidebar</div>
             <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section class="tex2jax_ignore mathjax_ignore" id="introduction">
-<h1>Introduction<a class="headerlink" href="#introduction" title="Link to this heading">¶</a></h1>
-<p>The PolicyEngine Python package serves as a package unifying all PolicyEngine tax-benefit models and outputs, providing the highest-level interface outside of the web app. It’s aimed to provide a clear, simple interface to specify model inputs and pull out model outputs, both at the household and macro level.</p>
-<p>Generally, PolicyEngine’s models’ usage falls into a 2x2 of categories:</p>
-<ol class="arabic">
-<li><p>Simulating over a specific household</p>
-<p>a. Simulating a particular policy (scenario) over a household (e.g. what benefits am I entitled to now?)</p>
-<p>b. Comparing two policies over a household (how would this tax reform affect my net income?)</p>
-</li>
-<li><p>Simulating over the entire population</p>
-<p>a. Simulating a particular policy over the population (what’s the poverty rate right now?)</p>
-<p>b. Comparing two policies over the population (how would this tax reform affect the poverty rate?)</p>
-</li>
-</ol>
-<p>Here’s an example of how to use it to calculate how abolishing the Personal Allowance in the UK (US- standard deduction) would affect an earner on £30,000.</p>
+          <section class="tex2jax_ignore mathjax_ignore" id="policyengine-python-interface">
+<h1>PolicyEngine Python interface<a class="headerlink" href="#policyengine-python-interface" title="Link to this heading">¶</a></h1>
+<p>Welcome to the documentation for PolicyEngine, a Python package for analyzing tax-benefit policies and estimating their societal impacts.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">¶</a></h2>
+<p>This package enables users to create and simulate different scenarios of specific or representative households in a country, under different tax-benefit rules or economic assumptions.</p>
+<p>We currently support the UK and the US.</p>
+</section>
+<section id="quick-start">
+<h2>Quick start<a class="headerlink" href="#quick-start" title="Link to this heading">¶</a></h2>
+<p>To install the package, run:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>policyengine
+</pre></div>
+</div>
+<p>Then, for example:</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">policyengine</span><span class="w"> </span><span class="kn">import</span> <span class="n">Simulation</span>
 
-<span class="n">sim</span> <span class="o">=</span> <span class="n">Simulation</span><span class="p">(</span>
-    <span class="n">country</span><span class="o">=</span><span class="s2">&quot;uk&quot;</span><span class="p">,</span>
-    <span class="n">scope</span><span class="o">=</span><span class="s2">&quot;household&quot;</span><span class="p">,</span>
-    <span class="n">data</span><span class="o">=</span><span class="p">{</span>
-        <span class="s2">&quot;employment_income&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="mi">2025</span><span class="p">:</span> <span class="mi">30_000</span>
-        <span class="p">},</span>
+<span class="n">sim</span> <span class="o">=</span> <span class="n">Simulation</span><span class="p">({</span>
+    <span class="s2">&quot;scope&quot;</span><span class="p">:</span> <span class="s2">&quot;macro&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;country&quot;</span><span class="p">:</span> <span class="s2">&quot;uk&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;time_period&quot;</span><span class="p">:</span> <span class="mi">2025</span><span class="p">,</span>
+    <span class="s2">&quot;reform&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;gov.hmrc.income_tax.allowances.personal_allowance.amount&quot;</span><span class="p">:</span> <span class="mi">15000</span>
     <span class="p">},</span>
-    <span class="n">time_period</span><span class="o">=</span><span class="mi">2025</span><span class="p">,</span>
-    <span class="n">reform</span><span class="o">=</span><span class="p">{</span>
-        <span class="s2">&quot;gov.hmrc.income_tax.allowances.personal_allowance.amount&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;2025&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
-        <span class="p">}</span>
-    <span class="p">}</span>
-<span class="p">)</span>
-<span class="n">sim</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;household/comparison/net_income_change&quot;</span><span class="p">)</span>
+<span class="p">})</span>
+
+<span class="n">sim</span><span class="o">.</span><span class="n">calculate_economy_comparison</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/opt/hostedtoolcache/Python/3.10.16/x64/lib/python3.10/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/opt/hostedtoolcache/Python/3.12.8/x64/lib/python3.12/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
   from .autonotebook import tqdm as notebook_tqdm
 </pre></div>
 </div>
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>-2514.0
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>EconomyComparison(fiscal=FiscalComparison(baseline=FiscalSummary(tax_revenue=658911285719.5891, federal_tax=658911285719.5891, state_tax=0.0, government_spending=349822186864.1042, tax_benefit_programs={&#39;income_tax&#39;: 333376287037.05945, &#39;national_insurance&#39;: 52985626776.773834, &#39;ni_employer&#39;: 126330649370.35953, &#39;vat&#39;: 211671832822.39133, &#39;council_tax&#39;: 49007055050.00724, &#39;fuel_duty&#39;: 26506672341.204205, &#39;tax_credits&#39;: -34929879.49872104, &#39;universal_credit&#39;: -73459549194.97665, &#39;child_benefit&#39;: -14311471487.935827, &#39;state_pension&#39;: -132795868621.44594, &#39;pension_credit&#39;: -6252358021.417119}, household_net_income=1566028514855.0789), reform=FiscalSummary(tax_revenue=637686731286.3723, federal_tax=637686731286.3723, state_tax=0.0, government_spending=349286515347.9503, tax_benefit_programs={&#39;income_tax&#39;: 312151564998.6612, &#39;national_insurance&#39;: 52985626776.773834, &#39;ni_employer&#39;: 126330649370.35953, &#39;vat&#39;: 211671832822.39133, &#39;council_tax&#39;: 49007055050.00724, &#39;fuel_duty&#39;: 26506672341.204205, &#39;tax_credits&#39;: -34929879.49872104, &#39;universal_credit&#39;: -73099552696.20555, &#39;child_benefit&#39;: -14311471487.935827, &#39;state_pension&#39;: -132795868621.44594, &#39;pension_credit&#39;: -6181432287.167828}, household_net_income=1586717263122.5647), change=FiscalSummary(tax_revenue=-21224554433.216797, federal_tax=-21224554433.216797, state_tax=0.0, government_spending=-535671516.1538696, tax_benefit_programs={&#39;income_tax&#39;: -21224722038.398254, &#39;national_insurance&#39;: 0.0, &#39;ni_employer&#39;: 0.0, &#39;vat&#39;: 0.0, &#39;council_tax&#39;: 0.0, &#39;fuel_duty&#39;: 0.0, &#39;tax_credits&#39;: 0.0, &#39;universal_credit&#39;: 359996498.7711029, &#39;child_benefit&#39;: 0.0, &#39;state_pension&#39;: 0.0, &#39;pension_credit&#39;: 70925734.24929142}, household_net_income=20688748267.48584), relative_change=FiscalSummary(tax_revenue=-0.03221155092227281, federal_tax=-0.03221155092227281, state_tax=0.0, government_spending=-0.0015312679877619157, tax_benefit_programs={&#39;income_tax&#39;: -0.06366596204858095, &#39;national_insurance&#39;: 0.0, &#39;ni_employer&#39;: 0.0, &#39;vat&#39;: 0.0, &#39;council_tax&#39;: 0.0, &#39;fuel_duty&#39;: 0.0, &#39;tax_credits&#39;: -0.0, &#39;universal_credit&#39;: -0.004900608603186478, &#39;child_benefit&#39;: -0.0, &#39;state_pension&#39;: -0.0, &#39;pension_credit&#39;: -0.01134383763795021}, household_net_income=0.013210965235457662)), inequality=InequalityComparison(baseline=InequalitySummary(gini=0.36255397405553097, top_10_share=0.3260927004295773, top_1_share=0.13145609415091833), reform=InequalitySummary(gini=0.36210731670764496, top_10_share=0.32470725674255146, top_1_share=0.1300325825945402), change=InequalitySummary(gini=-0.00044665734788601474, top_10_share=-0.0013854436870258113, top_1_share=-0.0014235115563781264), relative_change=InequalitySummary(gini=-0.0012319747674800056, top_10_share=-0.004248619135603775, top_1_share=-0.010828798509286775)), distributional=DecileImpacts(income=IncomeMeasureSpecificDecileImpacts(income_change=IncomeMeasureSpecificDecileIncomeChange(relative={1: 0.006888474767108438, 2: 0.012069475259054711, 3: 0.01362845736941666, 4: 0.016099117695117186, 5: 0.01374886913709005, 6: 0.016868831714948112, 7: 0.01753355279609095, 8: 0.016653943875645758, 9: 0.016768055951517695, 10: 0.007412182918826308}, average={1: 104.9760740138715, 2: 345.3564489476293, 3: 505.97466813661975, 4: 693.4608276094718, 5: 633.0583755079966, 6: 916.7936598562601, 7: 1160.9595929383368, 8: 1339.97187253835, 9: 1645.9437072259466, 10: 1555.8434910392261}), winners_and_losers=IncomeMeasureSpecificDecileWinnersLosers(deciles={1: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.00017476225639930217, lose_share=0.00016742770708814546, no_change_share=0.7777537048412824, gain_share=0.22207886745162944, gain_less_than_5_percent_share=0.8921570486743442, gain_more_than_5_percent_share=0.10766818906925654), 2: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.008307581771885529, lose_share=0.008307581771885529, no_change_share=0.32972785891469386, gain_share=0.6619645593134206, gain_less_than_5_percent_share=0.8919307246994796, gain_more_than_5_percent_share=0.09976169352863486), 3: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0025641809328194737, lose_share=7.96157411760938e-05, no_change_share=0.24138511806270913, gain_share=0.7585352661961148, gain_less_than_5_percent_share=0.8374054738939318, gain_more_than_5_percent_share=0.16003034517324866), 4: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=0.1274989463786316, gain_share=0.8725010536213684, gain_less_than_5_percent_share=0.9665928912276696, gain_more_than_5_percent_share=0.033407108772330475), 5: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=0.039569164250678565, gain_share=0.9604308357493214, gain_less_than_5_percent_share=0.9972432075567697, gain_more_than_5_percent_share=0.002756792443230341), 6: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=9.233133252574904e-08, lose_share=0.0, no_change_share=0.047391872522306096, gain_share=0.9526081274776939, gain_less_than_5_percent_share=0.9500976924285199, gain_more_than_5_percent_share=0.049902215240147485), 7: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=5.104037721866914e-07, lose_share=5.104037721866914e-07, no_change_share=0.018556113733354175, gain_share=0.9814433758628737, gain_less_than_5_percent_share=0.9532747831120698, gain_more_than_5_percent_share=0.046724706484157955), 8: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=0.0078485273494483, gain_share=0.9921514726505517, gain_less_than_5_percent_share=0.9864864572885578, gain_more_than_5_percent_share=0.013513542711442263), 9: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=3.9720293329414453e-08, lose_share=0.0, no_change_share=0.015484773300234851, gain_share=0.9845152266997651, gain_less_than_5_percent_share=0.9942833742036897, gain_more_than_5_percent_share=0.00571658607601697), 10: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=0.09527409658848911, gain_share=0.9047259034115109, gain_less_than_5_percent_share=1.0, gain_more_than_5_percent_share=0.0)}, all=IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0010923896594263822, lose_share=0.0008383266758003545, no_change_share=0.16458777279036807, gain_share=0.8345739005338316, gain_less_than_5_percent_share=0.9473019426998334, gain_more_than_5_percent_share=0.051605667640740344))), wealth=IncomeMeasureSpecificDecileImpacts(income_change=IncomeMeasureSpecificDecileIncomeChange(relative={1: 0.008709379861137914, 2: 0.009055801198624003, 3: 0.012492298883059996, 4: 0.011526120801509328, 5: 0.013211703237973082, 6: 0.015499285448067033, 7: 0.01507564337455649, 8: 0.013872555873086258, 9: 0.01486308861202786, 10: 0.013423195198765777}, average={1: 369.7032427197275, 2: 348.23782779938443, 3: 552.8656647582718, 4: 568.6862981673706, 5: 788.7199254212952, 6: 1082.0251273410129, 7: 995.5414649462065, 8: 980.0266932010006, 9: 1104.9136440223838, 10: 1148.3564916388677}), winners_and_losers=IncomeMeasureSpecificDecileWinnersLosers(deciles={1: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=2.6088522714454665e-05, lose_share=2.6088522714454665e-05, no_change_share=0.4508804429091072, gain_share=0.5490934685681783, gain_less_than_5_percent_share=0.9848515131823037, gain_more_than_5_percent_share=0.015122398294981835), 2: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=3.6190041582250956e-08, lose_share=0.0, no_change_share=0.494450094962446, gain_share=0.505549905037554, gain_less_than_5_percent_share=0.9931537493063021, gain_more_than_5_percent_share=0.006846214503656335), 3: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=0.02404055636315165, gain_share=0.9759594436368484, gain_less_than_5_percent_share=0.9891467785172058, gain_more_than_5_percent_share=0.010853221482794195), 4: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0021384901223377517, lose_share=8.272884193213454e-07, no_change_share=0.36369619644130957, gain_share=0.6363029762702711, gain_less_than_5_percent_share=0.9597482462129343, gain_more_than_5_percent_share=0.038113263664727975), 5: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0002447588006939626, lose_share=0.00024460254119754784, no_change_share=0.16613074345434808, gain_share=0.8336246540044544, gain_less_than_5_percent_share=0.9833489364919241, gain_more_than_5_percent_share=0.01640630470738194), 6: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=0.025790631489697343, gain_share=0.9742093685103027, gain_less_than_5_percent_share=0.9861761877807416, gain_more_than_5_percent_share=0.013823812219258384), 7: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.00020866319896562508, lose_share=4.163438722119544e-05, no_change_share=0.08407934672412146, gain_share=0.9158790188886573, gain_less_than_5_percent_share=0.9021123857304735, gain_more_than_5_percent_share=0.09767895107056095), 8: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=0.056524409525954916, gain_share=0.9434755904740451, gain_less_than_5_percent_share=0.9366881433479168, gain_more_than_5_percent_share=0.06331185665208312), 9: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.008053685714292545, lose_share=0.008053685714292545, no_change_share=0.027806404912023186, gain_share=0.9641399093736843, gain_less_than_5_percent_share=0.9371641387443307, gain_more_than_5_percent_share=0.05478217554137677), 10: IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0, lose_share=0.0, no_change_share=0.06985295508301145, gain_share=0.9301470449169885, gain_less_than_5_percent_share=0.8067688802773636, gain_more_than_5_percent_share=0.1932311197226364)}, all=IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes(lose_more_than_5_percent_share=0.0, lose_less_than_5_percent_share=0.0010923896594263822, lose_share=0.0008383266758003545, no_change_share=0.16458777279036807, gain_share=0.8345739005338316, gain_less_than_5_percent_share=0.9473019426998334, gain_more_than_5_percent_share=0.051605667640740344)))), poverty=[PovertyRateMetricComparison(age_group=&#39;child&#39;, racial_group=&#39;all&#39;, relative=True, poverty_rate=&#39;uk_hbai_bhc&#39;, baseline=0.0866740345954895, reform=0.08660321682691574, change=-7.081776857376099e-05, relative_change=-0.0008170586370447596), PovertyRateMetricComparison(age_group=&#39;child&#39;, racial_group=&#39;all&#39;, relative=True, poverty_rate=&#39;uk_hbai_bhc_half&#39;, baseline=0.005887233652174473, reform=0.005886665545403957, change=-5.681067705154419e-07, relative_change=-9.649808451302242e-05), PovertyRateMetricComparison(age_group=&#39;child&#39;, racial_group=&#39;all&#39;, relative=False, poverty_rate=&#39;uk_hbai_bhc&#39;, baseline=1636588.5, reform=1635251.25, change=-1337.25, relative_change=-0.0008170960507176972), PovertyRateMetricComparison(age_group=&#39;child&#39;, racial_group=&#39;all&#39;, relative=False, poverty_rate=&#39;uk_hbai_bhc_half&#39;, baseline=111163.3828125, reform=111152.65625, change=-10.7265625, relative_change=-9.649366750643566e-05), PovertyRateMetricComparison(age_group=&#39;working_age&#39;, racial_group=&#39;all&#39;, relative=True, poverty_rate=&#39;uk_hbai_bhc&#39;, baseline=0.08067396283149719, reform=0.07947173714637756, change=-0.001202225685119629, relative_change=-0.014902276309776728), PovertyRateMetricComparison(age_group=&#39;working_age&#39;, racial_group=&#39;all&#39;, relative=True, poverty_rate=&#39;uk_hbai_bhc_half&#39;, baseline=0.02040824294090271, reform=0.020407630130648613, change=-6.128102540969849e-07, relative_change=-3.0027585219929702e-05), PovertyRateMetricComparison(age_group=&#39;working_age&#39;, racial_group=&#39;all&#39;, relative=False, poverty_rate=&#39;uk_hbai_bhc&#39;, baseline=3613979.5, reform=3560123.0, change=-53856.5, relative_change=-0.014902270474970874), PovertyRateMetricComparison(age_group=&#39;working_age&#39;, racial_group=&#39;all&#39;, relative=False, poverty_rate=&#39;uk_hbai_bhc_half&#39;, baseline=914235.1875, reform=914207.75, change=-27.4375, relative_change=-3.001142416649764e-05), PovertyRateMetricComparison(age_group=&#39;senior&#39;, racial_group=&#39;all&#39;, relative=True, poverty_rate=&#39;uk_hbai_bhc&#39;, baseline=0.03327473625540733, reform=0.03287297859787941, change=-0.0004017576575279236, relative_change=-0.012073954679735011), PovertyRateMetricComparison(age_group=&#39;senior&#39;, racial_group=&#39;all&#39;, relative=True, poverty_rate=&#39;uk_hbai_bhc_half&#39;, baseline=0.0007302720914594829, reform=0.0007292248192243278, change=-1.0472722351551056e-06, relative_change=-0.0014340849765490601), PovertyRateMetricComparison(age_group=&#39;senior&#39;, racial_group=&#39;all&#39;, relative=False, poverty_rate=&#39;uk_hbai_bhc&#39;, baseline=436231.65625, reform=430964.59375, change=-5267.0625, relative_change=-0.01207400339828043), PovertyRateMetricComparison(age_group=&#39;senior&#39;, racial_group=&#39;all&#39;, relative=False, poverty_rate=&#39;uk_hbai_bhc_half&#39;, baseline=9573.8642578125, reform=9560.134765625, change=-13.7294921875, relative_change=-0.0014340596250146758), PovertyRateMetricComparison(age_group=&#39;all&#39;, racial_group=&#39;all&#39;, relative=True, poverty_rate=&#39;uk_hbai_bhc&#39;, baseline=0.07405701279640198, reform=0.07326967269182205, change=-0.0007873401045799255, relative_change=-0.01063154014521874), PovertyRateMetricComparison(age_group=&#39;all&#39;, racial_group=&#39;all&#39;, relative=True, poverty_rate=&#39;uk_hbai_bhc_half&#39;, baseline=0.013478054665029049, reform=0.013477379456162453, change=-6.752088665962219e-07, relative_change=-5.0096908150117427e-05), PovertyRateMetricComparison(age_group=&#39;all&#39;, racial_group=&#39;all&#39;, relative=False, poverty_rate=&#39;uk_hbai_bhc&#39;, baseline=5686797.5, reform=5626338.5, change=-60459.0, relative_change=-0.010631467007573243), PovertyRateMetricComparison(age_group=&#39;all&#39;, racial_group=&#39;all&#39;, relative=False, poverty_rate=&#39;uk_hbai_bhc_half&#39;, baseline=1034972.5, reform=1034920.625, change=-51.875, relative_change=-5.012210469360297e-05)], labor_supply=[])
 </pre></div>
 </div>
 </div>
 </div>
-<p>And here’s an example of how to calculate how the same policy would affect the UK government’s tax revenue.</p>
-<div class="cell docutils container">
-<div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">sim</span> <span class="o">=</span> <span class="n">Simulation</span><span class="p">(</span>
-    <span class="n">country</span><span class="o">=</span><span class="s2">&quot;uk&quot;</span><span class="p">,</span>
-    <span class="n">scope</span><span class="o">=</span><span class="s2">&quot;macro&quot;</span><span class="p">,</span>
-    <span class="n">data</span><span class="o">=</span><span class="s2">&quot;enhanced_frs&quot;</span><span class="p">,</span>
-    <span class="n">time_period</span><span class="o">=</span><span class="mi">2025</span><span class="p">,</span>
-    <span class="n">reform</span><span class="o">=</span><span class="p">{</span>
-        <span class="s2">&quot;gov.hmrc.income_tax.allowances.personal_allowance.amount&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;2025&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
-        <span class="p">}</span>
-    <span class="p">}</span>
-<span class="p">)</span>
-<span class="n">sim</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="s2">&quot;macro/comparison/budget/general/tax_revenue_impact&quot;</span><span class="p">)</span><span class="o">/</span><span class="mf">1e9</span>
-</pre></div>
-</div>
-</div>
-<div class="cell_output docutils container">
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>131.3131774099773
-</pre></div>
-</div>
-</div>
-</div>
-<div class="toctree-wrapper compound">
-</div>
+</section>
 <div class="toctree-wrapper compound">
 </div>
 </section>
@@ -357,12 +322,12 @@
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="maintaining.html">
+          <a class="next-page" href="reference/simulation.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Maintainance</div>
+                <div class="title">Simulation</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
@@ -385,8 +350,28 @@
         
       </footer>
     </div>
-    <aside class="toc-drawer no-toc">
+    <aside class="toc-drawer">
       
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">PolicyEngine Python interface</a><ul>
+<li><a class="reference internal" href="#overview">Overview</a></li>
+<li><a class="reference internal" href="#quick-start">Quick start</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
       
       
     </aside>
