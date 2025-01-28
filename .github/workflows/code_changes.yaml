@@ -37,3 +37,5 @@ jobs:
           
           - name: Run tests
             run: make test
+            env:
+              HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
