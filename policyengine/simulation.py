@@ -24,7 +24,7 @@ from pathlib import Path
 import pandas as pd
 from typing import Type
 from functools import wraps
-from .outputs.macro.calculate_economy_comparison import (
+from .outputs.macro.comparison.calculate_economy_comparison import (
     calculate_economy_comparison,
     EconomyComparison,
 )

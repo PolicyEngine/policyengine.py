@@ -525,16 +525,16 @@ def compare_economic_outputs(
         detailed_budgetary_impact_data = detailed_budgetary_impact(  # done
             baseline, reform, country_id
         )
-        decile_impact_data = decile_impact(baseline, reform)
-        inequality_impact_data = inequality_impact(baseline, reform)
+        decile_impact_data = decile_impact(baseline, reform) # done
+        inequality_impact_data = inequality_impact(baseline, reform) # done
         poverty_impact_data = poverty_impact(baseline, reform)
         poverty_by_gender_data = poverty_gender_breakdown(baseline, reform)
         poverty_by_race_data = poverty_racial_breakdown(baseline, reform)
-        intra_decile_impact_data = intra_decile_impact(baseline, reform)
+        intra_decile_impact_data = intra_decile_impact(baseline, reform) # done
         labor_supply_response_data = labor_supply_response(baseline, reform)
         try:
-            wealth_decile_impact_data = wealth_decile_impact(baseline, reform)
-            intra_wealth_decile_impact_data = intra_wealth_decile_impact(
+            wealth_decile_impact_data = wealth_decile_impact(baseline, reform) # done
+            intra_wealth_decile_impact_data = intra_wealth_decile_impact( # done
                 baseline, reform
             )
         except:

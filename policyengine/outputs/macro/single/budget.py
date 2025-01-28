@@ -49,7 +49,7 @@ def calculate_government_balance(
     simulation: Microsimulation,
     options: "SimulationOptions",
 ) -> FiscalSummary:
-    # Calculate the total tax and spending for the government
+    """Calculate government balance metrics for a set of households."""
     if options.country == "uk":
         total_tax = simulation.calculate("gov_tax").sum()
         total_spending = simulation.calculate("gov_spending").sum()
@@ -77,45 +77,4 @@ def calculate_government_balance(
         government_spending=total_spending,
         tax_benefit_programs=tb_programs,
         household_net_income=total_net_income,
-    )
-
-
-class InequalitySummary(BaseModel):
-    gini: float
-    """The Gini coefficient of the household net income distribution."""
-    top_10_share: float
-    """The share of total income held by the top 10% of households."""
-    top_1_share: float
-    """The share of total income held by the top 1% of households."""
-
-
-def calculate_inequality(
-    simulation: Microsimulation,
-):
-    income = simulation.calculate("equiv_household_net_income")
-    income[income < 0] = 0
-    household_count_people = simulation.calculate("household_count_people")
-    income.weights *= household_count_people
-    personal_hh_equiv_income = income
-    gini = personal_hh_equiv_income.gini()
-    in_top_10_pct = personal_hh_equiv_income.decile_rank() == 10
-    in_top_1_pct = personal_hh_equiv_income.percentile_rank() == 100
-
-    personal_hh_equiv_income.weights /= (
-        household_count_people  # Don't double-count people
-    )
-
-    top_10_share = (
-        personal_hh_equiv_income[in_top_10_pct].sum()
-        / personal_hh_equiv_income.sum()
-    )
-    top_1_share = (
-        personal_hh_equiv_income[in_top_1_pct].sum()
-        / personal_hh_equiv_income.sum()
-    )
-
-    return InequalitySummary(
-        gini=gini,
-        top_10_share=top_10_share,
-        top_1_share=top_1_share,
     )
