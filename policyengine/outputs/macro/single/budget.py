@@ -50,10 +50,10 @@ def calculate_government_balance(
     options: "SimulationOptions",
 ) -> FiscalSummary:
     """Calculate government balance metrics for a set of households."""
+    tb_programs = {}
     if options.country == "uk":
         total_tax = simulation.calculate("gov_tax").sum()
         total_spending = simulation.calculate("gov_spending").sum()
-        tb_programs = {}
         for program in UK_PROGRAMS:
             tb_programs[program.name] = simulation.calculate(
                 program.name
