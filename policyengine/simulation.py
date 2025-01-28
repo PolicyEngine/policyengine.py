@@ -3,7 +3,7 @@ from typing import Literal
 from .constants import DEFAULT_DATASETS_BY_COUNTRY
 from policyengine_core.simulations import Simulation as CountrySimulation
 from policyengine_core.simulations import Microsimulation as CountryMicrosimulation
-from .reforms import ParametricReform
+from .reforms import ParametricReform, SimulationAdjustment
 from policyengine_core.reforms import Reform as StructuralReform
 from policyengine_core.data import Dataset
 from .utils.huggingface import download
@@ -24,7 +24,7 @@ CountryType = Literal["uk", "us"]
 ScopeType = Literal["household", "macro"]
 DataType = str | None
 TimePeriodType = int
-ReformType = ParametricReform | None
+ReformType = ParametricReform | SimulationAdjustment | Type[StructuralReform] | None
 RegionType = str | None
 SubsampleType = int | None
 
@@ -56,14 +56,13 @@ class SimulationOptions(BaseModel):
 
 
 class Simulation:
-    """Simulate tax-benefit policy."""
-
+    """Simulate tax-benefit policy and derive society-level output statistics."""
     is_comparison: bool
     """Whether the simulation is a comparison between two scenarios."""
     baseline_simulation: CountrySimulation
-    """The baseline simulation."""
-    reform_simulation: CountrySimulation = None
-    """The reform simulation."""
+    """The baseline tax-benefit simulation."""
+    reform_simulation: CountrySimulation | None = None
+    """The reform tax-benefit simulation."""
 
     def __init__(self, options: SimulationOptions):
         self.options = SimulationOptions(**options)
@@ -85,6 +84,7 @@ class Simulation:
 
     def _initialise_simulations(self):
         self.baseline_simulation = self._initialise_simulation(
+            scope=self.options.scope,
             country=self.options.country,
             reform=self.options.baseline,
             data=self.options.data,
@@ -95,6 +95,7 @@ class Simulation:
 
         if self.options.reform is not None:
             self.reform_simulation = self._initialise_simulation(
+                scope=self.options.scope,
                 country=self.options.country,
                 reform=self.options.reform,
                 data=self.options.data,
@@ -102,6 +103,9 @@ class Simulation:
                 region=self.options.region,
                 subsample=self.options.subsample,
             )
+            self.is_comparison = True
+        else:
+            self.is_comparison = False
 
     def _initialise_simulation(
         self, 
@@ -125,23 +129,38 @@ class Simulation:
             },
         }[country][macro]
 
+        if isinstance(reform, ParametricReform):
+            reform = reform.model_dump()
+        
+        simulation_editing_reform = None
+
+        if isinstance(reform, SimulationAdjustment):
+            simulation_editing_reform = reform.root
+            reform = None
+
         simulation: CountrySimulation = _simulation_type(
             dataset=data if macro else None,
             situation=data if not macro else None,
             reform=reform,
         )
 
-        simulation = self._apply_region_to_simulation(
-            country=country,
-            simulation=simulation,
-            simulation_type=_simulation_type,
-            region=region,
-        )
+        if region is not None:
+            simulation = self._apply_region_to_simulation(
+                country=country,
+                simulation=simulation,
+                simulation_type=_simulation_type,
+                region=region,
+                reform=reform,
+                time_period=time_period,
+            )
 
         simulation.default_calculation_period = time_period
 
         if subsample is not None:
             simulation = simulation.subsample(subsample)
+        
+        if simulation_editing_reform is not None:
+            simulation_editing_reform(simulation)
         
         return simulation
 
