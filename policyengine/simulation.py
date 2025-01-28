@@ -28,6 +28,7 @@ from .outputs.macro.comparison.calculate_economy_comparison import (
     calculate_economy_comparison,
     EconomyComparison,
 )
+from .outputs.macro.single.calculate_single_economy import SingleEconomy, calculate_single_economy
 
 CountryType = Literal["uk", "us"]
 ScopeType = Literal["household", "macro"]
@@ -45,7 +46,7 @@ class SimulationOptions(BaseModel):
     scope: ScopeType = Field(..., description="The scope of the simulation.")
     data: DataType = Field(None, description="The data to simulate.")
     time_period: TimePeriodType = Field(
-        ..., description="The time period to simulate.", ge=2024, le=2035
+        2025, description="The time period to simulate.", ge=2024, le=2035
     )
     reform: ReformType = Field(None, description="The reform to simulate.")
     baseline: ReformType = Field(None, description="The baseline to simulate.")
@@ -296,3 +297,7 @@ class Simulation:
     def calculate_economy_comparison(self) -> EconomyComparison:
         """Calculate comparison statistics between two economic scenarios."""
         return calculate_economy_comparison(self)
+    
+    def calculate_single_economy(self) -> SingleEconomy:
+        """Calculate economy statistics for a single economic scenario."""
+        return calculate_single_economy(self)

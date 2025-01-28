@@ -53,7 +53,7 @@ class DecileImpacts(BaseModel):
 def calculate_decile_impacts(
     baseline: Microsimulation,
     reform: Microsimulation,
-    options: SimulationOptions,
+    options: "SimulationOptions",
 ) -> DecileImpacts:
     """Calculate changes to households by income and wealth deciles."""
     income_impacts = calculate_income_specific_decile_impacts(baseline, reform, by_wealth_decile=False)
@@ -195,4 +195,4 @@ def calculate_income_specific_decile_income_changes(
         relative={int(k): v for k, v in rel_decile_dict.items()},
         average={int(k): v for k, v in avg_decile_dict.items()},
     )
-    return IncomeMeasureSpecificDecileImpacts(**per_decile_changes)
+    return IncomeMeasureSpecificDecileIncomeChange(**per_decile_changes)
