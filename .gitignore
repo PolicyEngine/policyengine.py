@@ -161,4 +161,4 @@ cython_debug/
 
 *.ipynb
 
-old/
+!docs/**/*.ipynb
