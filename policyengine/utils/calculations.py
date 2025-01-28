@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 Output = Dict[str, float]
 
+
 def get_change(
     x: Output | Dict[str, Output],
     y: Output | Dict[str, Output],
@@ -21,5 +22,5 @@ def get_change(
             result[key] = get_change(x[key], y[key])
         else:
             result[key] = y[key] - x[key]
-    
+
     return output_class(**result)

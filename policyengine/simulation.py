@@ -1,9 +1,13 @@
+"""Simulate tax-benefit policy and derive society-level output statistics."""
+
 from pydantic import BaseModel, Field
 from typing import Literal
 from .constants import DEFAULT_DATASETS_BY_COUNTRY
 from policyengine_core.simulations import Simulation as CountrySimulation
-from policyengine_core.simulations import Microsimulation as CountryMicrosimulation
-from .reforms import ParametricReform, SimulationAdjustment
+from policyengine_core.simulations import (
+    Microsimulation as CountryMicrosimulation,
+)
+from .utils.reforms import ParametricReform, SimulationAdjustment
 from policyengine_core.reforms import Reform as StructuralReform
 from policyengine_core.data import Dataset
 from .utils.huggingface import download
@@ -19,44 +23,44 @@ import h5py
 from pathlib import Path
 import pandas as pd
 from typing import Type
+from functools import wraps
+from .outputs.macro.calculate_economy_comparison import (
+    calculate_economy_comparison,
+    EconomyComparison,
+)
 
 CountryType = Literal["uk", "us"]
 ScopeType = Literal["household", "macro"]
 DataType = str | None
 TimePeriodType = int
-ReformType = ParametricReform | SimulationAdjustment | Type[StructuralReform] | None
+ReformType = (
+    ParametricReform | SimulationAdjustment | Type[StructuralReform] | None
+)
 RegionType = str | None
 SubsampleType = int | None
 
+
 class SimulationOptions(BaseModel):
-    country: CountryType = Field(
-        ..., description="The country to simulate."
-    )
-    scope: ScopeType = Field(
-        ..., description="The scope of the simulation."
-    )
-    data: DataType = Field(
-        None, description="The data to simulate."
-    )
+    country: CountryType = Field(..., description="The country to simulate.")
+    scope: ScopeType = Field(..., description="The scope of the simulation.")
+    data: DataType = Field(None, description="The data to simulate.")
     time_period: TimePeriodType = Field(
         ..., description="The time period to simulate.", ge=2024, le=2035
     )
-    reform: ReformType = Field(
-        None, description="The reform to simulate."
-    )
-    baseline: ReformType = Field(
-        None, description="The baseline to simulate."
-    )
+    reform: ReformType = Field(None, description="The reform to simulate.")
+    baseline: ReformType = Field(None, description="The baseline to simulate.")
     region: RegionType = Field(
         None, description="The region to simulate within the country."
     )
     subsample: SubsampleType = Field(
-        None, description="How many, if a subsample, households to randomly simulate."
+        None,
+        description="How many, if a subsample, households to randomly simulate.",
     )
 
 
 class Simulation:
     """Simulate tax-benefit policy and derive society-level output statistics."""
+
     is_comparison: bool
     """Whether the simulation is a comparison between two scenarios."""
     baseline_simulation: CountrySimulation
@@ -71,7 +75,7 @@ class Simulation:
             self.options.data = DEFAULT_DATASETS_BY_COUNTRY[
                 self.options.country
             ]
-        
+
         self._initialise_simulations()
 
     def _set_data(self):
@@ -108,7 +112,7 @@ class Simulation:
             self.is_comparison = False
 
     def _initialise_simulation(
-        self, 
+        self,
         country: CountryType,
         scope: ScopeType,
         reform: ReformType,
@@ -131,7 +135,7 @@ class Simulation:
 
         if isinstance(reform, ParametricReform):
             reform = reform.model_dump()
-        
+
         simulation_editing_reform = None
 
         if isinstance(reform, SimulationAdjustment):
@@ -158,13 +162,12 @@ class Simulation:
 
         if subsample is not None:
             simulation = simulation.subsample(subsample)
-        
+
         if simulation_editing_reform is not None:
             simulation_editing_reform(simulation)
-        
+
         return simulation
 
-    
     def _apply_region_to_simulation(
         self,
         country: CountryType,
@@ -289,3 +292,7 @@ class Simulation:
                     version=version,
                 )
                 self.data = Dataset.from_file(self.data, "2023")
+
+    def calculate_economy_comparison(self) -> EconomyComparison:
+        """Calculate comparison statistics between two economic scenarios."""
+        return calculate_economy_comparison(self)

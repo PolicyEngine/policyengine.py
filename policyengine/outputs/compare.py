@@ -521,8 +521,8 @@ def compare_economic_outputs(
         dict: The comparison of the two economies.
     """
     if baseline.get("type") == "general":
-        budgetary_impact_data = budgetary_impact(baseline, reform)
-        detailed_budgetary_impact_data = detailed_budgetary_impact(
+        budgetary_impact_data = budgetary_impact(baseline, reform)  # done
+        detailed_budgetary_impact_data = detailed_budgetary_impact(  # done
             baseline, reform, country_id
         )
         decile_impact_data = decile_impact(baseline, reform)

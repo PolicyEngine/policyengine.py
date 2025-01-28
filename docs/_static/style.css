@@ -1,0 +1,15 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Serif:opsz@8..144&family=Roboto:wght@300&display=swap');
+
+
+h1, h2, h3, h4, h5, p.rubric {
+    font-family: "Roboto";
+    font-weight: 200;
+}
+
+body {
+    font-family: "Roboto Serif";
+}
+
+.sidebar-brand-text {
+    text-align: left;
+}

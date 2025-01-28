@@ -1,4 +1,5 @@
 import typing
+
 if typing.TYPE_CHECKING:
     from policyengine import Simulation, SimulationOptions
 
@@ -6,11 +7,13 @@ from policyengine_core.simulations import Microsimulation
 
 from pydantic import BaseModel
 
+
 class TaxBenefitProgram(BaseModel):
     name: str
     """The name of the tax-benefit program."""
     is_positive: bool
     """Whether the program is positive on the *government* balance sheet."""
+
 
 UK_PROGRAMS = [
     TaxBenefitProgram(name="income_tax", is_positive=True),
@@ -26,6 +29,7 @@ UK_PROGRAMS = [
     TaxBenefitProgram(name="pension_credit", is_positive=False),
 ]
 
+
 class FiscalSummary(BaseModel):
     tax_revenue: float
     """The total tax revenue collected by the government."""
@@ -40,6 +44,7 @@ class FiscalSummary(BaseModel):
     household_net_income: float
     """The total net income of the households in the simulation."""
 
+
 def calculate_government_balance(
     simulation: Microsimulation,
     options: "SimulationOptions",
@@ -50,23 +55,21 @@ def calculate_government_balance(
         total_spending = simulation.calculate("gov_spending").sum()
         tb_programs = {}
         for program in UK_PROGRAMS:
-            tb_programs[program.name] = simulation.calculate(program.name).sum() * (
-                1 if program.is_positive else -1
-            )
+            tb_programs[program.name] = simulation.calculate(
+                program.name
+            ).sum() * (1 if program.is_positive else -1)
         total_state_tax = 0
     else:
         total_tax = simulation.calculate("household_tax").sum()
-        total_spending = simulation.calculate(
-            "household_benefits"
-        ).sum()
+        total_spending = simulation.calculate("household_benefits").sum()
         total_state_tax = simulation.calculate(
             "household_state_income_tax"
         ).sum()
-    
+
     national_tax = total_tax - total_state_tax
 
     total_net_income = simulation.calculate("household_net_income").sum()
-    
+
     return FiscalSummary(
         tax_revenue=total_tax,
         federal_tax=national_tax,
@@ -74,4 +77,45 @@ def calculate_government_balance(
         government_spending=total_spending,
         tax_benefit_programs=tb_programs,
         household_net_income=total_net_income,
+    )
+
+
+class InequalitySummary(BaseModel):
+    gini: float
+    """The Gini coefficient of the household net income distribution."""
+    top_10_share: float
+    """The share of total income held by the top 10% of households."""
+    top_1_share: float
+    """The share of total income held by the top 1% of households."""
+
+
+def calculate_inequality(
+    simulation: Microsimulation,
+):
+    income = simulation.calculate("equiv_household_net_income")
+    income[income < 0] = 0
+    household_count_people = simulation.calculate("household_count_people")
+    income.weights *= household_count_people
+    personal_hh_equiv_income = income
+    gini = personal_hh_equiv_income.gini()
+    in_top_10_pct = personal_hh_equiv_income.decile_rank() == 10
+    in_top_1_pct = personal_hh_equiv_income.percentile_rank() == 100
+
+    personal_hh_equiv_income.weights /= (
+        household_count_people  # Don't double-count people
+    )
+
+    top_10_share = (
+        personal_hh_equiv_income[in_top_10_pct].sum()
+        / personal_hh_equiv_income.sum()
+    )
+    top_1_share = (
+        personal_hh_equiv_income[in_top_1_pct].sum()
+        / personal_hh_equiv_income.sum()
+    )
+
+    return InequalitySummary(
+        gini=gini,
+        top_10_share=top_10_share,
+        top_1_share=top_1_share,
     )
