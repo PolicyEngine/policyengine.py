@@ -1,9 +1,9 @@
-name: Push
+name: Publish documentation
 on:
   push:
     branches: [ main ]
     paths:
-        - pyproject.toml
+        - docs/** # Only run workflow when documentation changes
 
 jobs:
   Publish:
@@ -19,16 +19,8 @@ jobs:
         run: ".github/publish-git-tag.sh || true"
       - name: Install package
         run: make install
-      - name: Build package
-        run: make
-      - name: Publish a Python distribution to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI }}
-          skip-existing: true
         
-      - name: Test documentation builds
+      - name: Build documentation
         run: make documentation
         env:
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
