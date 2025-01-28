@@ -15,8 +15,11 @@ from typing import List
 
 class SingleEconomy(BaseModel):
     fiscal: FiscalSummary
+    """Government budgets and other top-level fiscal statistics."""
     inequality: InequalitySummary
+    """Inequality statistics for the household sector."""
     poverty: List[PovertyRateMetric]
+    """Poverty rates for different demographic groups and poverty definitions."""
 
 
 def calculate_single_economy(

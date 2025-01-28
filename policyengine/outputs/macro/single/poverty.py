@@ -12,12 +12,17 @@ import numpy as np
 
 class PovertyRateMetric(BaseModel):
     age_group: Literal["child", "working_age", "senior", "all"]
+    """The age group of the population."""
     racial_group: Literal["white", "black", "hispanic", "other", "all"]
+    """The racial group of the population."""
     relative: bool
+    """Whether the poverty rate is relative to the total population, or a headcount."""
     poverty_rate: Literal[
         "uk_hbai_bhc", "uk_hbai_bhc_half", "us_spm", "us_spm_half"
     ]
+    """The poverty rate definition being calculated."""
     value: float
+    """The poverty rate value."""
 
 
 AGE_BOUNDS = {

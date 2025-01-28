@@ -17,6 +17,10 @@ from policyengine.outputs.macro.single import (
 )
 
 from .decile import calculate_decile_impacts, DecileImpacts
+from .labor_supply import (
+    calculate_labor_supply_impact,
+    LaborSupplyMetricImpact,
+)
 
 from typing import Literal, List
 
@@ -37,22 +41,36 @@ class InequalityComparison(BaseModel):
 
 class PovertyRateMetricComparison(BaseModel):
     age_group: Literal["child", "working_age", "senior", "all"]
+    """The age group of the population."""
     racial_group: Literal["white", "black", "hispanic", "other", "all"]
+    """The racial group of the population."""
     relative: bool
+    """Whether the poverty rate is relative to the total population, or a headcount."""
     poverty_rate: Literal[
         "uk_hbai_bhc", "uk_hbai_bhc_half", "us_spm", "us_spm_half"
     ]
+    """The poverty rate definition being calculated."""
     baseline: float
+    """The poverty rate value in the baseline scenario."""
     reform: float
+    """The poverty rate value in the reform scenario."""
     change: float
+    """The change in the poverty rate value."""
     relative_change: float
+    """The relative change in the poverty rate value."""
 
 
 class EconomyComparison(BaseModel):
     fiscal: FiscalComparison
+    """Government budgets and other top-level fiscal statistics."""
     inequality: InequalityComparison
+    """Inequality statistics for the household sector."""
     distributional: DecileImpacts
+    """Distributional impacts of the reform."""
     poverty: List[PovertyRateMetricComparison]
+    """Poverty rates for different demographic groups and poverty definitions."""
+    labor_supply: List[LaborSupplyMetricImpact]
+    """Labor supply impacts for different demographic groups and labor supply metrics."""
 
 
 def calculate_economy_comparison(
@@ -119,9 +137,14 @@ def calculate_economy_comparison(
             )
         )
 
+    labor_supply_metrics = calculate_labor_supply_impact(
+        baseline, reform, options
+    )
+
     return EconomyComparison(
         fiscal=fiscal_comparison,
         inequality=inequality_comparison,
         distributional=decile_impacts,
         poverty=poverty_metrics,
+        labor_supply=labor_supply_metrics,
     )
