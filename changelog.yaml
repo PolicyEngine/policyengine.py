@@ -57,3 +57,8 @@
     changed:
     - Moved to strong typing.
   date: 2025-01-24 00:08:26
+- bump: minor
+  changes:
+    added:
+    - General `calculate` method.
+  date: 2025-01-29 03:14:45
