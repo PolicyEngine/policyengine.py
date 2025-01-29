@@ -307,6 +307,26 @@ class Simulation:
                 )
                 self.data = Dataset.from_file(self.data, "2023")
 
+    def calculate(
+        self,
+    ) -> (
+        SingleEconomy
+        | EconomyComparison
+        | SingleHousehold
+        | HouseholdComparison
+    ):
+        """Calculate the default output statistics for the simulation type."""
+        if self.options.scope == "macro":
+            if self.is_comparison:
+                return self.calculate_economy_comparison()
+            else:
+                return self.calculate_single_economy()
+        elif self.options.scope == "household":
+            if self.is_comparison:
+                return self.calculate_household_comparison()
+            else:
+                return self.calculate_single_household()
+
     def calculate_economy_comparison(self) -> EconomyComparison:
         """Calculate comparison statistics between two economic scenarios."""
         return calculate_economy_comparison(self)
