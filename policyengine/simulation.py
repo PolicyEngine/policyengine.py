@@ -70,6 +70,10 @@ class SimulationOptions(BaseModel):
         None,
         description="How many, if a subsample, households to randomly simulate.",
     )
+    title: str | None = Field(
+        "[Analysis title]",
+        description="The title of the analysis (for charts). If not provided, a default title will be generated.",
+    )
 
 
 class Simulation:
