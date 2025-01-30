@@ -82,12 +82,18 @@ def create_poverty_chart(
 
     if change_relative:
         y_values = [poverty.relative_change for poverty in poverty_rates]
-    else:
+    elif not rate_relative:
         y_values = [poverty.change for poverty in poverty_rates]
+    else:
+        y_values = [poverty.change * 100 for poverty in poverty_rates]
 
     colors = [BLUE if value > 0 else DARK_GRAY for value in y_values]
     text = [
-        f"{value:.1%}" if change_relative else f"{value:,.0f}"
+        (
+            f"{value:.1%}"
+            if change_relative
+            else (f"{value:,.0f}" if not rate_relative else f"{value:.1f}pp")
+        )
         for value in y_values
     ]
 
@@ -102,11 +108,21 @@ def create_poverty_chart(
         ]
     ).update_layout(
         title=f"{simulation.options.title} would {description}",
-        yaxis_title="Poverty rate change",
-        yaxis_tickformat=".0%" if change_relative else ",.0f",
+        yaxis_title="Poverty rate change"
+        + (" (%)" if rate_relative and not change_relative else ""),
+        yaxis_tickformat=(
+            ".0%"
+            if change_relative
+            else (",.0f" if not rate_relative else ".1f")
+        ),
+        yaxis_ticksuffix=(
+            "pp" if (rate_relative and not change_relative) else ""
+        ),
         xaxis_title="Group",
         xaxis_tickvals=x_values,
         xaxis_ticktext=x_titles,
     )
 
-    return format_fig(fig, country=simulation.options.country, add_zero_line=True)
+    return format_fig(
+        fig, country=simulation.options.country, add_zero_line=True
+    )
