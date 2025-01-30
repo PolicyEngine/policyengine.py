@@ -39,6 +39,15 @@ class InequalityComparison(BaseModel):
     relative_change: InequalitySummary
 
 
+class Headlines(BaseModel):
+    budgetary_impact: float
+    """The change in the (federal) government budget balance."""
+    poverty_impact: float
+    """The relative change in the regular poverty rate."""
+    winner_share: float
+    """The share of people that are better off in the reform scenario."""
+
+
 class PovertyRateMetricComparison(BaseModel):
     age_group: Literal["child", "working_age", "senior", "all"]
     """The age group of the population."""
@@ -61,6 +70,8 @@ class PovertyRateMetricComparison(BaseModel):
 
 
 class EconomyComparison(BaseModel):
+    headlines: Headlines
+    """Headline statistics for the comparison."""
     fiscal: FiscalComparison
     """Government budgets and other top-level fiscal statistics."""
     inequality: InequalityComparison
@@ -118,7 +129,7 @@ def calculate_economy_comparison(
 
     baseline_poverty_metrics = calculate_poverty(baseline, options)
     reform_poverty_metrics = calculate_poverty(reform, options)
-    poverty_metrics = []
+    poverty_metrics: List[PovertyRateMetricComparison] = []
     for baseline_metric, reform_metric in zip(
         baseline_poverty_metrics, reform_poverty_metrics
     ):
@@ -144,7 +155,25 @@ def calculate_economy_comparison(
         baseline, reform, options
     )
 
+    # Headlines
+    budgetary_impact = fiscal_comparison.change.federal_balance
+    poverty_impact = next(
+        filter(
+            lambda metric: metric.age_group == "all"
+            and metric.racial_group == "all"
+            and metric.poverty_rate in ("us_spm", "uk_hbai_bhc"),
+            poverty_metrics,
+        )
+    ).relative_change
+    winner_share = decile_impacts.income.winners_and_losers.all.gain_share
+    headlines = Headlines(
+        budgetary_impact=budgetary_impact,
+        poverty_impact=poverty_impact,
+        winner_share=winner_share,
+    )
+
     return EconomyComparison(
+        headlines=headlines,
         fiscal=fiscal_comparison,
         inequality=inequality_comparison,
         distributional=decile_impacts,

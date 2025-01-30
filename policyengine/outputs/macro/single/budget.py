@@ -35,10 +35,12 @@ class FiscalSummary(BaseModel):
     """The total tax revenue collected by the government."""
     federal_tax: float
     """The total tax revenue collected by the federal (or national) government."""
+    federal_balance: float
+    """Federal taxes subtract spending."""
     state_tax: float
     """The total tax revenue collected by the state government."""
     government_spending: float
-    """The total spending by the government on modeled programs."""
+    """The total spending by the (federal) government on modeled programs."""
     tax_benefit_programs: dict[str, float]
     """The total revenue change to the government from each tax-benefit program."""
     household_net_income: float
@@ -73,6 +75,7 @@ def calculate_government_balance(
     return FiscalSummary(
         tax_revenue=total_tax,
         federal_tax=national_tax,
+        federal_balance=national_tax - total_spending,
         state_tax=total_state_tax,
         government_spending=total_spending,
         tax_benefit_programs=tb_programs,
