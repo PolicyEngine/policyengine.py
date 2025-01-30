@@ -118,6 +118,10 @@ def format_fig(
         margin_t=120,
         margin_l=120,
         margin_r=120,
+        uniformtext=dict(
+            mode="hide",
+            minsize=12,
+        ),
     )
 
     # Auto-format currency
@@ -137,6 +141,10 @@ def format_fig(
         ),
     )
 
+    fig.update_layout(
+        title=wrap_text(fig.layout.title.text or ""),
+    )
+
     for trace in fig.data:
         if "text" in trace:
             trace.text = [
@@ -144,6 +152,24 @@ def format_fig(
             ]
 
     return fig
+
+
+def wrap_text(text: str, max_length: int = 80) -> str:
+    """Wrap text to a maximum length, respecting spaces."""
+    if len(text) <= max_length:
+        return text
+
+    split_text = text.split(" ")
+    wrapped_text = ""
+    line_length = 0
+    for word in split_text:
+        if line_length + len(word) > max_length:
+            wrapped_text += "<br>"
+            line_length = 0
+        wrapped_text += word + " "
+        line_length += len(word) + 1
+
+    return wrapped_text
 
 
 def correct_text_currency(text: str, currency: str) -> str:

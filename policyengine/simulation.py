@@ -42,10 +42,13 @@ from .outputs.household.comparison.calculate_household_comparison import (
     HouseholdComparison,
     calculate_household_comparison,
 )
+from typing import Any
 
 CountryType = Literal["uk", "us"]
 ScopeType = Literal["household", "macro"]
-DataType = str | dict | None  # Needs stricter typing
+DataType = (
+    str | dict | Any | None
+)  # Needs stricter typing. Any==policyengine_core.data.Dataset, but pydantic refuses for some reason.
 TimePeriodType = int
 ReformType = (
     ParametricReform | SimulationAdjustment | Type[StructuralReform] | None
