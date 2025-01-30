@@ -86,4 +86,4 @@ def create_budget_comparison_chart(
         ),
     )
 
-    return format_fig(chart)
+    return format_fig(chart, country=simulation.options.country, add_zero_line=True)

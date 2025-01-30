@@ -102,11 +102,11 @@ def create_poverty_chart(
         ]
     ).update_layout(
         title=f"{simulation.options.title} would {description}",
-        yaxis_title="Change in poverty rate",
+        yaxis_title="Poverty rate change",
         yaxis_tickformat=".0%" if change_relative else ",.0f",
         xaxis_title="Group",
         xaxis_tickvals=x_values,
         xaxis_ticktext=x_titles,
     )
 
-    return format_fig(fig)
+    return format_fig(fig, country=simulation.options.country, add_zero_line=True)

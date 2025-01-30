@@ -85,4 +85,4 @@ def create_decile_chart(
         xaxis_tickvals=list(data.keys()),
     )
 
-    return format_fig(chart)
+    return format_fig(chart, country=simulation.options.country, add_zero_line=True)
