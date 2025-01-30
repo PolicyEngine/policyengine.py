@@ -25,6 +25,8 @@ class LaborSupplyMetricImpact(BaseModel):
     """The change in the labor supply metric value."""
     relative_change: float
     """The relative change in the labor supply metric value."""
+    average_change: float
+    """The average change in the labor supply metric value (per household)."""
 
 
 def calculate_labor_supply_impact(
@@ -52,6 +54,8 @@ def calculate_labor_supply_impact(
                         unit,
                     )
                 )
+
+    return lsr_metrics
 
 
 def calculate_specific_lsr_metric(
@@ -82,19 +86,25 @@ def calculate_specific_lsr_metric(
         else:
             variable = "weekly_hours_worked"
 
-    baseline_values = baseline.calculate(baseline_variable)
-    reform_values = reformed.calculate(baseline_variable) + reformed.calculate(
-        variable
-    )
+    baseline_values = baseline.calculate(baseline_variable, map_to="household")
+    reform_values = reformed.calculate(
+        baseline_variable, map_to="household"
+    ) + reformed.calculate(variable, map_to="household")
 
     if decile == "all":
         in_decile = np.ones_like(baseline_values, dtype=bool)
     else:
-        in_decile = reformed.calculate("household_income_decile") == decile
+        in_decile = (
+            reformed.calculate("household_income_decile").values == decile
+        )
 
     baseline_total = (baseline_values * in_decile).sum()
     reform_total = (reform_values * in_decile).sum()
+    households = (
+        in_decile * baseline.calculate("household_weight").values
+    ).sum()
     change = reform_total - baseline_total
+    average_change = change / households
     relative_change = change / baseline_total
 
     return LaborSupplyMetricImpact(
@@ -104,6 +114,7 @@ def calculate_specific_lsr_metric(
         baseline=baseline_total,
         reform=reform_total,
         change=change,
+        average_change=average_change,
         relative_change=relative_change,
     )
 

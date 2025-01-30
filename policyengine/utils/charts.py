@@ -138,8 +138,14 @@ def format_fig(
         yaxis_title=correct_text_currency(
             fig.layout.yaxis.title.text or "", currency
         ),
+        yaxis_ticksuffix=correct_text_currency(
+            fig.layout.yaxis.ticksuffix or "", currency
+        ),
         xaxis_title=correct_text_currency(
             fig.layout.xaxis.title.text or "", currency
+        ),
+        xaxis_ticksuffix=correct_text_currency(
+            fig.layout.xaxis.ticksuffix or "", currency
         ),
     )
 
