@@ -1,5 +1,6 @@
 from typing import Dict
 from pydantic import BaseModel
+import numpy as np
 
 Output = Dict[str, float | None]
 
@@ -22,6 +23,11 @@ def get_change(
     for key in x:
         if isinstance(x[key], dict):
             result[key] = get_change(x[key], y[key], relative=relative)
+        elif isinstance(x[key], list):
+            try:
+                result[key] = list(np.array(y[key]) - np.array(x[key]))
+            except:
+                result[key] = None
         elif x[key] is None and y[key] is None:
             result[key] = None
         elif x[key] is None:

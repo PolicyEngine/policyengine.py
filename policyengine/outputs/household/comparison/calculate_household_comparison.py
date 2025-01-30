@@ -40,14 +40,15 @@ def calculate_household_comparison(
     reform_household = fill_and_calculate(
         simulation.options.data, simulation.reform_simulation
     )
+    change = get_change(
+        baseline_household,
+        reform_household,
+        relative=False,
+        skip_mismatch=True,
+    )
 
     return HouseholdComparison(
         full_household_baseline=baseline_household,
         full_household_reform=reform_household,
-        change=get_change(
-            baseline_household,
-            reform_household,
-            relative=False,
-            skip_mismatch=True,
-        ),
+        change=change,
     )

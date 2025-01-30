@@ -16,9 +16,13 @@ import dpath.util
 import math
 import json
 
-Value = float | str | bool | None
+Value = float | str | bool | list | None
+Axes = List[List[Dict[str, str | int]]]
+TimePeriodValues = Dict[str, Value]
+EntityValues = Dict[str, TimePeriodValues]
+EntityGroupValues = Dict[str, EntityValues]
 FullHouseholdSpecification = Dict[
-    str, Dict[str, Dict[str, Dict[str, Value]]]
+    str, EntityGroupValues | Axes
 ]  # {people: {person: {variable: {time_period: value}}}}
 
 
@@ -53,6 +57,7 @@ def fill_and_calculate(
     household = json.loads(json.dumps(household))
     household = add_yearly_variables(household, simulation)
     household = calculate_all_variables(household, simulation)
+    household.pop("axes", None)
     return household
 
 
@@ -60,9 +65,9 @@ def get_requested_computations(
     household: FullHouseholdSpecification,
 ) -> List[tuple[str, str, str, str]]:
     requested_computations = dpath.util.search(
-        household,
+        {k: v for k, v in household.items() if k != "axes"},
         "*/*/*/*",
-        afilter=lambda t: t is None,
+        # afilter=lambda t: t is None,
         yielded=True,
     )
     requested_computation_data = []
@@ -99,14 +104,20 @@ def calculate_all_variables(
                 if _entity_id == entity_id:
                     break
                 entity_index += 1
+            try:
+                result = result.astype(float)
+            except:
+                pass
             result = (
-                result.astype(float)
-                .reshape((-1, count_entities))
-                .T[entity_index]
-                .tolist()
+                result.reshape((-1, count_entities)).T[entity_index].tolist()
             )
             # If the result contains infinities, throw an error
-            if any([math.isinf(value) for value in result]):
+            if any(
+                [
+                    not isinstance(value, str) and math.isinf(value)
+                    for value in result
+                ]
+            ):
                 raise ValueError("Infinite value")
             else:
                 household[entity_plural][entity_id][variable_name][
