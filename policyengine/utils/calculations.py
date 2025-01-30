@@ -8,6 +8,7 @@ def get_change(
     x: Output | Dict[str, Output],
     y: Output | Dict[str, Output],
     relative: bool,
+    skip_mismatch: bool = False,
 ) -> Output | Dict[str, Output]:
     """Take two objects of nested str-float relations and create a similarly-structured object with the differences."""
     if isinstance(x, BaseModel):
@@ -24,9 +25,20 @@ def get_change(
         elif x[key] is None and y[key] is None:
             result[key] = None
         elif x[key] is None:
-            raise ValueError(f"Key {key} is None in x but not in y")
+            if skip_mismatch:
+                result[key] = None
+            else:
+                raise ValueError(f"Key {key} is None in x but not in y")
         elif y[key] is None:
-            raise ValueError(f"Key {key} is None in y but not in x")
+            if skip_mismatch:
+                result[key] = None
+            else:
+                raise ValueError(f"Key {key} is None in y but not in x")
+        elif isinstance(x[key], str) or isinstance(y[key], str):
+            if x[key] == y[key]:
+                result[key] = 0
+            else:
+                result[key] = f"{x[key]} -> {y[key]}"
         elif not relative:
             result[key] = y[key] - x[key]
         else:
