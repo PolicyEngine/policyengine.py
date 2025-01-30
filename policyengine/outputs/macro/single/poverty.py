@@ -18,7 +18,12 @@ class PovertyRateMetric(BaseModel):
     relative: bool
     """Whether the poverty rate is relative to the total population, or a headcount."""
     poverty_rate: Literal[
-        "uk_hbai_bhc", "uk_hbai_bhc_half", "us_spm", "us_spm_half"
+        "regular",
+        "deep",
+        "uk_hbai_bhc",
+        "uk_hbai_bhc_half",
+        "us_spm",
+        "us_spm_half",
     ]
     """The poverty rate definition being calculated."""
     value: float
@@ -55,28 +60,16 @@ def calculate_poverty(
             else:
                 in_racial_group = np.ones_like(age, dtype=bool)
             for relative in [True, False]:
-                for poverty_rate in [
-                    "uk_hbai_bhc",
-                    "uk_hbai_bhc_half",
-                    "us_spm",
-                    "us_spm_half",
-                ]:
-                    if not poverty_rate.startswith(options.country):
-                        continue
-
-                    if poverty_rate == "uk_hbai_bhc":
+                for poverty_rate in ["regular", "deep"]:
+                    if poverty_rate in ("regular", "uk_hbai_bhc", "us_spm"):
                         in_poverty = simulation.calculate(
                             "in_poverty", map_to="person"
                         )
-                    elif poverty_rate == "uk_hbai_bhc_half":
-                        in_poverty = simulation.calculate(
-                            "in_deep_poverty", map_to="person"
-                        )
-                    elif poverty_rate == "us_spm":
-                        in_poverty = simulation.calculate(
-                            "in_poverty", map_to="person"
-                        )
-                    elif poverty_rate == "us_spm_half":
+                    elif poverty_rate in (
+                        "deep",
+                        "uk_hbai_bhc_half",
+                        "us_spm_half",
+                    ):
                         in_poverty = simulation.calculate(
                             "in_deep_poverty", map_to="person"
                         )

@@ -56,7 +56,12 @@ class PovertyRateMetricComparison(BaseModel):
     relative: bool
     """Whether the poverty rate is relative to the total population, or a headcount."""
     poverty_rate: Literal[
-        "uk_hbai_bhc", "uk_hbai_bhc_half", "us_spm", "us_spm_half"
+        "regular",
+        "deep",
+        "uk_hbai_bhc",
+        "uk_hbai_bhc_half",
+        "us_spm",
+        "us_spm_half",
     ]
     """The poverty rate definition being calculated."""
     baseline: float
@@ -161,7 +166,7 @@ def calculate_economy_comparison(
         filter(
             lambda metric: metric.age_group == "all"
             and metric.racial_group == "all"
-            and metric.poverty_rate in ("us_spm", "uk_hbai_bhc"),
+            and metric.poverty_rate == "regular",
             poverty_metrics,
         )
     ).relative_change

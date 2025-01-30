@@ -148,7 +148,7 @@ def format_fig(
     )
 
     for trace in fig.data:
-        if "text" in trace:
+        if trace.text is not None:
             trace.text = [
                 correct_text_currency(t, currency) for t in trace.text
             ]
