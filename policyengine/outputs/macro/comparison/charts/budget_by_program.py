@@ -9,46 +9,52 @@ from pydantic import BaseModel
 from policyengine.utils.charts import *
 
 
-def create_budget_comparison_chart(
+def create_budget_program_comparison_chart(
     simulation: "Simulation",
 ) -> go.Figure:
     """Create a budget comparison chart."""
     if not simulation.is_comparison:
         raise ValueError("Simulation must be a comparison simulation.")
 
+    if not simulation.options.country == "uk":
+        raise ValueError("This chart is only available for the UK.")
+
     economy = simulation.calculate_economy_comparison()
 
-    if simulation.options.country == "uk":
-        x_values = [
-            "Tax revenues",
-            "Government spending",
-            "Public sector net worth",
-        ]
-        y_values = [
-            economy.fiscal.change.federal_tax,
-            economy.fiscal.change.government_spending,
-            economy.fiscal.change.federal_balance,
-        ]
-    else:
-        x_values = [
-            "Federal tax revenues",
-            "State tax revenues",
-            "Federal government spending",
-        ]
-        y_values = [
-            economy.fiscal.change.federal_tax,
-            economy.fiscal.change.state_tax,
-            economy.fiscal.change.government_spending,
-        ]
+    change_programs = economy.fiscal.change.tax_benefit_programs
 
-    y_values = [value / 1e9 for value in y_values]
+    change_programs = {
+        program: change_programs[program]
+        for program in change_programs
+        if round(change_programs[program] / 1e9, 1) != 0
+    }
 
-    net_change = round(economy.fiscal.change.federal_balance / 1e9, 1)
+    labels = [
+        simulation.baseline_simulation.tax_benefit_system.variables.get(
+            program
+        ).label
+        for program in change_programs
+    ]
 
-    if net_change > 0:
-        description = f"raise ${net_change}bn"
-    elif net_change < 0:
-        description = f"cost ${-net_change}bn"
+    x_values = labels
+    y_values = [
+        round(change_programs[program] / 1e9, 1) for program in change_programs
+    ]
+
+    total_from_programs = round(sum(y_values))
+    total_overall = round(economy.fiscal.change.federal_balance / 1e9)
+
+    if total_from_programs != total_overall:
+        x_values.append("Other")
+        y_values.append(total_overall - total_from_programs)
+
+    x_values.append("Combined")
+    y_values.append(total_overall)
+
+    if total_overall > 0:
+        description = f"raise ${total_overall}bn"
+    elif total_overall < 0:
+        description = f"cost ${-total_overall}bn"
     else:
         description = "have no effect on government finances"
 
@@ -72,14 +78,14 @@ def create_budget_comparison_chart(
                 ),
                 totals=dict(
                     marker=dict(
-                        color=BLUE if net_change > 0 else DARK_GRAY,
+                        color=BLUE if total_overall > 0 else DARK_GRAY,
                     )
                 ),
             ),
         ]
     ).update_layout(
         title=f"{simulation.options.title} would {description}",
-        yaxis_title="Budgetary impact ($bn)",
+        yaxis_title="Budgetary impact (bn)",
         uniformtext=dict(
             mode="hide",
             minsize=12,

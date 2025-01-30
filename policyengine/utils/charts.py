@@ -119,7 +119,36 @@ def format_fig(
         margin_l=120,
         margin_r=120,
     )
+
+    # Auto-format currency
+
+    if country == "uk":
+        currency = "£"
+    else:
+        currency = "$"
+
+    fig.update_layout(
+        title=correct_text_currency(fig.layout.title.text or "", currency),
+        yaxis_title=correct_text_currency(
+            fig.layout.yaxis.title.text or "", currency
+        ),
+        xaxis_title=correct_text_currency(
+            fig.layout.xaxis.title.text or "", currency
+        ),
+    )
+
+    for trace in fig.data:
+        if "text" in trace:
+            trace.text = [
+                correct_text_currency(t, currency) for t in trace.text
+            ]
+
     return fig
+
+
+def correct_text_currency(text: str, currency: str) -> str:
+    """Correct text to match the currency symbol."""
+    return text.replace("$", currency).replace(f"{currency}-", f"-{currency}")
 
 
 def cardinal(n: int) -> int:
