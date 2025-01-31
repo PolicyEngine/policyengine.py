@@ -16,6 +16,7 @@ from typing import Literal
 def create_poverty_chart(
     simulation: "Simulation",
     age_group: str,
+    gender: str,
     racial_group: str,
     poverty_rate: str,
     rate_relative: bool,
@@ -34,6 +35,9 @@ def create_poverty_chart(
         if racial_group is not None:
             if comparison.racial_group != racial_group:
                 return False
+        if gender is not None:
+            if comparison.gender != gender:
+                return False
         if poverty_rate is not None:
             if comparison.poverty_rate != poverty_rate:
                 return False
@@ -42,10 +46,21 @@ def create_poverty_chart(
                 return False
         return True
 
+    poverty_rates = list(
+        filter(
+            poverty_filter,
+            economy.poverty,
+        )
+    )
+
+    if len(poverty_rates) == 0:
+        raise ValueError("No data found for the selected filters.")
+
     overall_poverty_rate = list(
         filter(
             lambda comparison: comparison.age_group == "all"
             and comparison.racial_group == "all"
+            and comparison.gender == "all"
             and comparison.poverty_rate == (poverty_rate or "regular"),
             economy.poverty,
         )
@@ -60,16 +75,12 @@ def create_poverty_chart(
     else:
         description = "have no effect on the poverty rate"
 
-    poverty_rates = list(
-        filter(
-            poverty_filter,
-            economy.poverty,
-        )
-    )
-
     if age_group is None:
         x_values = [poverty.age_group for poverty in poverty_rates]
         x_titles = ["Child", "Working-age", "Senior", "All"]
+    elif gender is None:
+        x_values = [poverty.gender for poverty in poverty_rates]
+        x_titles = ["Male", "Female", "All"]
     elif racial_group is None:
         x_values = [poverty.racial_group for poverty in poverty_rates]
         x_titles = ["White", "Black", "Hispanic", "Other", "All"]

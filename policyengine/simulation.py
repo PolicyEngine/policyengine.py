@@ -42,7 +42,11 @@ from .outputs.household.comparison.calculate_household_comparison import (
     HouseholdComparison,
     calculate_household_comparison,
 )
-from typing import Any
+from .outputs.macro.comparison.charts.create_all_charts import (
+    create_all_charts,
+    MacroCharts,
+)
+from typing import Any, Tuple
 
 CountryType = Literal["uk", "us"]
 ScopeType = Literal["household", "macro"]
@@ -349,3 +353,7 @@ class Simulation:
     def calculate_household_comparison(self) -> HouseholdComparison:
         """Calculate comparison statistics between two household scenarios."""
         return calculate_household_comparison(self)
+
+    def create_all_charts(self) -> MacroCharts:
+        """Create all macro charts for the simulation."""
+        return create_all_charts(self)

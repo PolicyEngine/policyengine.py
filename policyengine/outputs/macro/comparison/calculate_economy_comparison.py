@@ -51,6 +51,8 @@ class Headlines(BaseModel):
 class PovertyRateMetricComparison(BaseModel):
     age_group: Literal["child", "working_age", "senior", "all"]
     """The age group of the population."""
+    gender: Literal["male", "female", "all"]
+    """The gender of the population."""
     racial_group: Literal["white", "black", "hispanic", "other", "all"]
     """The racial group of the population."""
     relative: bool
@@ -146,6 +148,7 @@ def calculate_economy_comparison(
         poverty_metrics.append(
             PovertyRateMetricComparison(
                 age_group=baseline_metric.age_group,
+                gender=baseline_metric.gender,
                 racial_group=baseline_metric.racial_group,
                 relative=baseline_metric.relative,
                 poverty_rate=baseline_metric.poverty_rate,
