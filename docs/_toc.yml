@@ -4,4 +4,8 @@ parts:
   - caption: Reference
     chapters:
     - file: reference/simulation
+    - file: reference/calculate_single_household
+    - file: reference/calculate_household_comparison
+    - file: reference/calculate_single_economy
+    - file: reference/calculate_economy_comparison
  
