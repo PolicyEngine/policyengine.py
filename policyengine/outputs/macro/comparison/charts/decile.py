@@ -52,7 +52,7 @@ def create_decile_chart(
         )
     elif avg_change < 0:
         description = (
-            f"decrease the net income of households by {-avg_change_str}"
+            f"decrease the net income of households by {avg_change_str}"
         )
     else:
         description = "have no effect on household net income"

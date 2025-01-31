@@ -8,4 +8,5 @@ parts:
     - file: reference/calculate_household_comparison
     - file: reference/calculate_single_economy
     - file: reference/calculate_economy_comparison
+    - file: reference/create_charts
  
