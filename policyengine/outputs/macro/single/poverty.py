@@ -48,7 +48,15 @@ def calculate_poverty(
 
     poverty_metrics = []
     age = simulation.calculate("age")
-    gender = simulation.calculate("gender")
+    if simulation.options.country == "uk":
+        gender = simulation.calculate("gender")
+    else:
+        gender = simulation.calculate("is_male").map(
+            {
+                True: "MALE",
+                False: "FEMALE",
+            }
+        )
     person_weight = simulation.calculate("person_weight").values
     if options.country == "us":
         racial_groups = ["white", "black", "hispanic", "other", "all"]
