@@ -48,7 +48,7 @@ def calculate_poverty(
 
     poverty_metrics = []
     age = simulation.calculate("age")
-    if simulation.options.country == "uk":
+    if options.country == "uk":
         gender = simulation.calculate("gender")
     else:
         gender = simulation.calculate("is_male").map(
