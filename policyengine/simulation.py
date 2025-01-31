@@ -42,10 +42,17 @@ from .outputs.household.comparison.calculate_household_comparison import (
     HouseholdComparison,
     calculate_household_comparison,
 )
+from .outputs.macro.comparison.charts.create_all_charts import (
+    create_all_charts,
+    MacroCharts,
+)
+from typing import Any, Tuple
 
 CountryType = Literal["uk", "us"]
 ScopeType = Literal["household", "macro"]
-DataType = str | dict | None  # Needs stricter typing
+DataType = (
+    str | dict | Any | None
+)  # Needs stricter typing. Any==policyengine_core.data.Dataset, but pydantic refuses for some reason.
 TimePeriodType = int
 ReformType = (
     ParametricReform | SimulationAdjustment | Type[StructuralReform] | None
@@ -69,6 +76,10 @@ class SimulationOptions(BaseModel):
     subsample: SubsampleType = Field(
         None,
         description="How many, if a subsample, households to randomly simulate.",
+    )
+    title: str | None = Field(
+        "[Analysis title]",
+        description="The title of the analysis (for charts). If not provided, a default title will be generated.",
     )
 
 
@@ -342,3 +353,7 @@ class Simulation:
     def calculate_household_comparison(self) -> HouseholdComparison:
         """Calculate comparison statistics between two household scenarios."""
         return calculate_household_comparison(self)
+
+    def create_all_charts(self) -> MacroCharts:
+        """Create all macro charts for the simulation."""
+        return create_all_charts(self)

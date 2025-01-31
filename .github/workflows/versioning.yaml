@@ -4,10 +4,11 @@ name: Versioning updates
 on:
   push:
       branches:
-          - main
+        - main
 
       paths:
-          - changelog_entry.yaml
+        - changelog_entry.yaml
+        - "!pyproject.toml"
 
 jobs:
     Versioning:

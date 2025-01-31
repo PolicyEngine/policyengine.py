@@ -125,11 +125,11 @@ def calculate_income_specific_decile_winners_losers(
 
     BOUNDS = [
         (-np.inf, -0.05),
-        (-0.05, 0),
+        (-0.05, -1e-3),
         (-np.inf, -1e-3),
         (-1e-3, 1e-3),
         (1e-3, np.inf),
-        (0, 0.05),
+        (1e-3, 0.05),
         (0.05, np.inf),
     ]
     LABELS = [
