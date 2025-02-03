@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2025-01-31 02:39:31
+
+### Added
+
+- Chart generation for macro charts.
+
 ## [2.6.0] - 2025-01-29 03:14:45
 
 ### Added
@@ -82,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[2.7.0]: https://github.com/PolicyEngine/policyengine.py/compare/2.6.0...2.7.0
 [2.6.0]: https://github.com/PolicyEngine/policyengine.py/compare/2.5.0...2.6.0
 [2.5.0]: https://github.com/PolicyEngine/policyengine.py/compare/2.4.1...2.5.0
 [2.4.1]: https://github.com/PolicyEngine/policyengine.py/compare/2.4.0...2.4.1

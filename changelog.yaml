@@ -62,3 +62,8 @@
     added:
     - General `calculate` method.
   date: 2025-01-29 03:14:45
+- bump: minor
+  changes:
+    added:
+    - Chart generation for macro charts.
+  date: 2025-01-31 02:39:31
