@@ -1,12 +1,18 @@
 format: jb-book
 root: index
 parts:
+  - caption: Basic usage
+    chapters:
+    - file: basic/calculate_single_household
+    - file: basic/calculate_household_comparison
+    - file: basic/calculate_single_economy
+    - file: basic/calculate_economy_comparison
+    - file: basic/create_charts
   - caption: Reference
     chapters:
-    - file: reference/simulation
-    - file: reference/calculate_single_household
-    - file: reference/calculate_household_comparison
-    - file: reference/calculate_single_economy
-    - file: reference/calculate_economy_comparison
-    - file: reference/create_charts
+    - file: reference/parameters_us
+    - file: reference/parameters_uk
+  - caption: Concepts
+    chapters:
+    - file: concepts/simulation
  

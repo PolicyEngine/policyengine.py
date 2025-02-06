@@ -26,7 +26,7 @@ def create_budget_comparison_chart(
         ]
         y_values = [
             economy.fiscal.change.federal_tax,
-            economy.fiscal.change.government_spending,
+            -economy.fiscal.change.government_spending,
             economy.fiscal.change.federal_balance,
         ]
     else:
@@ -38,7 +38,7 @@ def create_budget_comparison_chart(
         y_values = [
             economy.fiscal.change.federal_tax,
             economy.fiscal.change.state_tax,
-            economy.fiscal.change.government_spending,
+            -economy.fiscal.change.government_spending,
         ]
 
     y_values = [value / 1e9 for value in y_values]

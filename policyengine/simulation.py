@@ -173,6 +173,8 @@ class Simulation:
             reform=reform,
         )
 
+        simulation.default_calculation_period = time_period
+
         if region is not None:
             simulation = self._apply_region_to_simulation(
                 country=country,
@@ -182,8 +184,6 @@ class Simulation:
                 reform=reform,
                 time_period=time_period,
             )
-
-        simulation.default_calculation_period = time_period
 
         if subsample is not None:
             simulation = simulation.subsample(subsample)
