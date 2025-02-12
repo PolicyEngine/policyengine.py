@@ -67,3 +67,8 @@
     added:
     - Chart generation for macro charts.
   date: 2025-01-31 02:39:31
+- bump: patch
+  changes:
+    changed:
+    - Updated documentation link in README
+  date: 2025-02-12 09:19:58
