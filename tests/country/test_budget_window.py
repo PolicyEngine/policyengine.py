@@ -1,5 +1,3 @@
-
-
 def test_budget_window():
     from policyengine import Simulation
 
