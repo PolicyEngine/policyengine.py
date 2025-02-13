@@ -1,7 +1,6 @@
 import typing
 
-if typing.TYPE_CHECKING:
-    from policyengine import Simulation, SimulationOptions
+from policyengine import Simulation, SimulationOptions
 
 from policyengine_core.simulations import Microsimulation
 
@@ -17,7 +16,7 @@ class InequalitySummary(BaseModel):
     """The share of total income held by the top 1% of households."""
 
 
-def calculate_inequality(
+def _calculate_inequality(
     simulation: Microsimulation,
 ):
     """Calculate inequality statistics for a set of households."""

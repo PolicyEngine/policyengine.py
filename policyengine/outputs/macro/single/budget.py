@@ -1,7 +1,6 @@
 import typing
 
-if typing.TYPE_CHECKING:
-    from policyengine import Simulation, SimulationOptions
+from policyengine import Simulation, SimulationOptions
 
 from policyengine_core.simulations import Microsimulation
 
@@ -47,7 +46,7 @@ class FiscalSummary(BaseModel):
     """The total net income of the households in the simulation."""
 
 
-def calculate_government_balance(
+def _calculate_government_balance(
     simulation: Microsimulation,
     options: "SimulationOptions",
 ) -> FiscalSummary:

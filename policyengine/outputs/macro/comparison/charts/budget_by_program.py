@@ -2,15 +2,14 @@ import plotly.express as px
 import plotly.graph_objects as go
 import typing
 
-if typing.TYPE_CHECKING:
-    from policyengine import Simulation
+from policyengine import Simulation
 
 from pydantic import BaseModel
 from policyengine.utils.charts import *
 
 
 def create_budget_program_comparison_chart(
-    simulation: "Simulation",
+    simulation: Simulation,
 ) -> go.Figure:
     """Create a budget comparison chart."""
     if not simulation.is_comparison:

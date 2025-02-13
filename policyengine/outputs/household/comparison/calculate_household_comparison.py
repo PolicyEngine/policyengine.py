@@ -2,8 +2,7 @@
 
 import typing
 
-if typing.TYPE_CHECKING:
-    from policyengine import Simulation
+from policyengine import Simulation
 
 from pydantic import BaseModel
 from policyengine.utils.calculations import get_change
@@ -28,7 +27,7 @@ class HouseholdComparison(BaseModel):
 
 
 def calculate_household_comparison(
-    simulation: "Simulation",
+    simulation: Simulation,
 ) -> HouseholdComparison:
     """Calculate comparison statistics between two household scenarios."""
     if not simulation.is_comparison:

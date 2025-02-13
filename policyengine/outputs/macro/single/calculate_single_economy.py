@@ -2,14 +2,12 @@
 
 import typing
 
-if typing.TYPE_CHECKING:
-    from policyengine import Simulation
+from policyengine import Simulation
 
 from pydantic import BaseModel
 
-from .budget import FiscalSummary, calculate_government_balance
-from .inequality import InequalitySummary, calculate_inequality
-from .poverty import PovertyRateMetric, calculate_poverty
+from .budget import FiscalSummary, _calculate_government_balance
+from .inequality import InequalitySummary, _calculate_inequality
 from typing import List
 
 
@@ -18,12 +16,10 @@ class SingleEconomy(BaseModel):
     """Government budgets and other top-level fiscal statistics."""
     inequality: InequalitySummary
     """Inequality statistics for the household sector."""
-    poverty: List[PovertyRateMetric]
-    """Poverty rates for different demographic groups and poverty definitions."""
 
 
 def calculate_single_economy(
-    simulation: "Simulation",
+    simulation: Simulation,
 ) -> SingleEconomy:
     """Calculate economy statistics for a single economic scenario."""
     options = simulation.options
@@ -32,14 +28,12 @@ def calculate_single_economy(
             "This function is for single economy simulations only."
         )
 
-    fiscal = calculate_government_balance(
+    fiscal = _calculate_government_balance(
         simulation.baseline_simulation, options
     )
-    inequality = calculate_inequality(simulation.baseline_simulation)
-    poverty = calculate_poverty(simulation.baseline_simulation, options)
+    inequality = _calculate_inequality(simulation.baseline_simulation)
 
     return SingleEconomy(
         fiscal=fiscal,
         inequality=inequality,
-        poverty=poverty,
     )
