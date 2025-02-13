@@ -38,7 +38,7 @@ def calculate_single_household(
     """Calculate household statistics for a single household scenario."""
     if simulation.is_comparison:
         raise ValueError(
-            "This function is for single economy simulations only."
+            "This function is for single household simulations only."
         )
 
     return SingleHousehold(
