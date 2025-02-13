@@ -10,15 +10,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/checkout@v2
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
         with:
-          python-version: 3.12
+          python-version: '3.10'
+            
+      - name: Install package
+        run: uv pip install .[dev] --system
       - name: Publish a git tag
         run: ".github/publish-git-tag.sh || true"
-      - name: Install package
-        run: make install
       - name: Build package
         run: make
       - name: Publish a Python distribution to PyPI
