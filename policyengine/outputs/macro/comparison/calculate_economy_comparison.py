@@ -36,8 +36,6 @@ class InequalityComparison(BaseModel):
 class Headlines(BaseModel):
     budgetary_impact: float
     """The change in the (federal) government budget balance."""
-    poverty_impact: float
-    """The relative change in the regular poverty rate."""
     winner_share: float
     """The share of people that are better off in the reform scenario."""
 
