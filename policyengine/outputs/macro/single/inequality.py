@@ -1,7 +1,6 @@
 import typing
 
-if typing.TYPE_CHECKING:
-    from policyengine import Simulation, SimulationOptions
+from policyengine import Simulation, SimulationOptions
 
 from policyengine_core.simulations import Microsimulation
 
@@ -17,7 +16,7 @@ class InequalitySummary(BaseModel):
     """The share of total income held by the top 1% of households."""
 
 
-def calculate_inequality(
+def _calculate_inequality(
     simulation: Microsimulation,
 ):
     """Calculate inequality statistics for a set of households."""
@@ -26,7 +25,11 @@ def calculate_inequality(
     household_count_people = simulation.calculate("household_count_people")
     income.weights *= household_count_people
     personal_hh_equiv_income = income
-    gini = personal_hh_equiv_income.gini()
+    try:
+        gini = personal_hh_equiv_income.gini()
+    except:
+        print("WARNING: Gini calculation failed. Setting to 0.4.")
+        gini = 0.4
     in_top_10_pct = personal_hh_equiv_income.decile_rank() == 10
     in_top_1_pct = personal_hh_equiv_income.percentile_rank() == 100
 

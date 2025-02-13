@@ -23,30 +23,9 @@ import h5py
 from pathlib import Path
 import pandas as pd
 from typing import Type
-from functools import wraps
-from .outputs.macro.comparison.calculate_economy_comparison import (
-    calculate_economy_comparison,
-    EconomyComparison,
-)
-from .outputs.macro.single.calculate_single_economy import (
-    SingleEconomy,
-    calculate_single_economy,
-)
-
-from .outputs.household.single.calculate_single_household import (
-    SingleHousehold,
-    calculate_single_household,
-)
-
-from .outputs.household.comparison.calculate_household_comparison import (
-    HouseholdComparison,
-    calculate_household_comparison,
-)
-from .outputs.macro.comparison.charts.create_all_charts import (
-    create_all_charts,
-    MacroCharts,
-)
-from typing import Any, Tuple
+from functools import wraps, partial
+from typing import Dict, Any, Callable
+import importlib
 
 CountryType = Literal["uk", "us"]
 ScopeType = Literal["household", "macro"]
@@ -93,7 +72,7 @@ class Simulation:
     reform_simulation: CountrySimulation | None = None
     """The reform tax-benefit simulation."""
 
-    def __init__(self, options: SimulationOptions):
+    def __init__(self, **options: SimulationOptions):
         self.options = SimulationOptions(**options)
 
         if self.options.data is None:
@@ -102,6 +81,38 @@ class Simulation:
             ]
 
         self._initialise_simulations()
+        self._add_output_functions()
+
+    def _add_output_functions(self):
+        folder = Path(__file__).parent / "outputs"
+
+        for module in folder.glob("**/*.py"):
+            if module.stem == "__init__":
+                continue
+            python_module = (
+                module.relative_to(folder.parent)
+                .with_suffix("")
+                .as_posix()
+                .replace("/", ".")
+            )
+            module = importlib.import_module("policyengine." + python_module)
+            for name in dir(module):
+                func = getattr(module, name)
+                if isinstance(func, Callable):
+                    if hasattr(func, "__annotations__"):
+                        if (
+                            func.__annotations__.get("simulation")
+                            == Simulation
+                        ):
+                            wrapped_func = wraps(func)(
+                                partial(func, simulation=self)
+                            )
+                            wrapped_func.__annotations__ = func.__annotations__
+                            setattr(
+                                self,
+                                func.__name__,
+                                wrapped_func,
+                            )
 
     def _set_data(self):
         if self.options.data is None:
@@ -317,43 +328,3 @@ class Simulation:
                     version=version,
                 )
                 self.data = Dataset.from_file(self.data, "2023")
-
-    def calculate(
-        self,
-    ) -> (
-        SingleEconomy
-        | EconomyComparison
-        | SingleHousehold
-        | HouseholdComparison
-    ):
-        """Calculate the default output statistics for the simulation type."""
-        if self.options.scope == "macro":
-            if self.is_comparison:
-                return self.calculate_economy_comparison()
-            else:
-                return self.calculate_single_economy()
-        elif self.options.scope == "household":
-            if self.is_comparison:
-                return self.calculate_household_comparison()
-            else:
-                return self.calculate_single_household()
-
-    def calculate_economy_comparison(self) -> EconomyComparison:
-        """Calculate comparison statistics between two economic scenarios."""
-        return calculate_economy_comparison(self)
-
-    def calculate_single_economy(self) -> SingleEconomy:
-        """Calculate economy statistics for a single economic scenario."""
-        return calculate_single_economy(self)
-
-    def calculate_single_household(self) -> SingleHousehold:
-        """Calculate household statistics for a single household scenario."""
-        return calculate_single_household(self)
-
-    def calculate_household_comparison(self) -> HouseholdComparison:
-        """Calculate comparison statistics between two household scenarios."""
-        return calculate_household_comparison(self)
-
-    def create_all_charts(self) -> MacroCharts:
-        """Create all macro charts for the simulation."""
-        return create_all_charts(self)

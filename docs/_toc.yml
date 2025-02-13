@@ -15,4 +15,8 @@ parts:
   - caption: Concepts
     chapters:
     - file: concepts/simulation
+    - file: concepts/extending
+  - caption: Outputs
+    chapters:
+    - file: outputs/calculate_average_earnings
  
