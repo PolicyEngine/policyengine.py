@@ -3,10 +3,10 @@
   <head><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Compare outcomes for large population scenarios" href="calculate_economy_comparison.html" /><link rel="prev" title="Compare outcomes for specific household scenarios" href="calculate_household_comparison.html" />
+<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="prev" title="Extending this package" href="../concepts/extending.html" />
 
     <!-- Generated with Sphinx 7.4.7 and Furo 2024.08.06 -->
-        <title>Simulate outcomes for a large population - Python documentation</title>
+        <title>Average earnings - Python documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=354aac6f" />
     <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=13237357" />
@@ -209,12 +209,12 @@
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
   <p class="caption" role="heading"><span class="caption-text">Basic usage</span></p>
-<ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="calculate_single_household.html">Simulate outcomes for specific households</a></li>
-<li class="toctree-l1"><a class="reference internal" href="calculate_household_comparison.html">Compare outcomes for specific household scenarios</a></li>
-<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Simulate outcomes for a large population</a></li>
-<li class="toctree-l1"><a class="reference internal" href="calculate_economy_comparison.html">Compare outcomes for large population scenarios</a></li>
-<li class="toctree-l1"><a class="reference internal" href="create_charts.html">Create charts for an economic comparison</a></li>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../basic/calculate_single_household.html">Simulate outcomes for specific households</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../basic/calculate_household_comparison.html">Compare outcomes for specific household scenarios</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../basic/calculate_single_economy.html">Simulate outcomes for a large population</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../basic/calculate_economy_comparison.html">Compare outcomes for large population scenarios</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../basic/create_charts.html">Create charts for an economic comparison</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
 <ul>
@@ -227,8 +227,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../concepts/extending.html">Extending this package</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Outputs</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../outputs/calculate_average_earnings.html">Average earnings</a></li>
+<ul class="current">
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Average earnings</a></li>
 </ul>
 
 </div>
@@ -249,7 +249,7 @@
         </a>
         <div class="content-icon-container">
           <div class="view-this-page">
-  <a class="muted-link" href="../_sources/basic/calculate_single_economy.ipynb" title="View this page">
+  <a class="muted-link" href="../_sources/outputs/calculate_average_earnings.md" title="View this page">
     <svg><use href="#svg-eye"></use></svg>
     <span class="visually-hidden">View this page</span>
   </a>
@@ -269,85 +269,15 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section class="tex2jax_ignore mathjax_ignore" id="simulate-outcomes-for-a-large-population">
-<h1>Simulate outcomes for a large population<a class="headerlink" href="#simulate-outcomes-for-a-large-population" title="Link to this heading">¶</a></h1>
-<p>Use <code class="docutils literal notranslate"><span class="pre">Simulation.calculate_single_economy()</span></code> to use PolicyEngine’s tax-benefit model to compute taxes, benefits and other household properties for a large dataset (usually representing a country). This notebook demonstrates how to use this function.</p>
-<div class="cell docutils container">
-<div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">policyengine</span><span class="w"> </span><span class="kn">import</span> <span class="n">Simulation</span>
+          <section class="tex2jax_ignore mathjax_ignore" id="average-earnings">
+<h1>Average earnings<a class="headerlink" href="#average-earnings" title="Link to this heading">¶</a></h1>
+<p>This extension calculates the average earnings of a large population.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="policyengine.outputs.macro.single.calculate_average_earnings.calculate_average_earnings">
+<span class="sig-prename descclassname"><span class="pre">policyengine.outputs.macro.single.calculate_average_earnings.</span></span><span class="sig-name descname"><span class="pre">calculate_average_earnings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">simulation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../concepts/simulation.html#policyengine.simulation.Simulation" title="policyengine.simulation.Simulation"><span class="pre">Simulation</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#policyengine.outputs.macro.single.calculate_average_earnings.calculate_average_earnings" title="Link to this definition">¶</a></dt>
+<dd><p>Calculate average earnings.</p>
+</dd></dl>
 
-<span class="n">sim</span> <span class="o">=</span> <span class="n">Simulation</span><span class="p">(</span>
-    <span class="n">scope</span><span class="o">=</span><span class="s2">&quot;macro&quot;</span><span class="p">,</span>
-    <span class="n">country</span><span class="o">=</span><span class="s2">&quot;us&quot;</span><span class="p">,</span>
-    <span class="n">time_period</span><span class="o">=</span><span class="mi">2025</span><span class="p">,</span>
-<span class="p">)</span>
-
-<span class="n">sim</span><span class="o">.</span><span class="n">calculate_single_economy</span><span class="p">()</span>
-</pre></div>
-</div>
-</div>
-<div class="cell_output docutils container">
-<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/opt/hostedtoolcache/Python/3.12.9/x64/lib/python3.12/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
-  from .autonotebook import tqdm as notebook_tqdm
-</pre></div>
-</div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>WARNING: Gini calculation failed. Setting to 0.4.
-</pre></div>
-</div>
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>SingleEconomy(fiscal=FiscalSummary(tax_revenue=3013732345312.57, federal_tax=2583108897831.9077, federal_balance=1160152744600.707, state_tax=430623447480.6619, government_spending=1422956153231.2007, tax_benefit_programs={}, household_net_income=12826400665730.527), inequality=InequalitySummary(gini=0.4, top_10_share=0.30561980197379435, top_1_share=0.07133539442101906))
-</pre></div>
-</div>
-</div>
-</div>
-<section id="output-schema">
-<h2>Output schema<a class="headerlink" href="#output-schema" title="Link to this heading">¶</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">calculate_single_economy</span></code> or <code class="docutils literal notranslate"><span class="pre">calculate</span></code> (when <code class="docutils literal notranslate"><span class="pre">scope=macro</span></code> and <code class="docutils literal notranslate"><span class="pre">reform=None</span></code>) return the following schema.</p>
-<div class="cell docutils container">
-<div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">policyengine.outputs.macro.single.calculate_single_economy</span><span class="w"> </span><span class="kn">import</span> <span class="n">SingleEconomy</span>
-
-<span class="n">SingleEconomy</span><span class="o">.</span><span class="n">model_json_schema</span><span class="p">()</span>
-</pre></div>
-</div>
-</div>
-<div class="cell_output docutils container">
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>{&#39;$defs&#39;: {&#39;FiscalSummary&#39;: {&#39;properties&#39;: {&#39;tax_revenue&#39;: {&#39;title&#39;: &#39;Tax Revenue&#39;,
-     &#39;type&#39;: &#39;number&#39;},
-    &#39;federal_tax&#39;: {&#39;title&#39;: &#39;Federal Tax&#39;, &#39;type&#39;: &#39;number&#39;},
-    &#39;federal_balance&#39;: {&#39;title&#39;: &#39;Federal Balance&#39;, &#39;type&#39;: &#39;number&#39;},
-    &#39;state_tax&#39;: {&#39;title&#39;: &#39;State Tax&#39;, &#39;type&#39;: &#39;number&#39;},
-    &#39;government_spending&#39;: {&#39;title&#39;: &#39;Government Spending&#39;, &#39;type&#39;: &#39;number&#39;},
-    &#39;tax_benefit_programs&#39;: {&#39;additionalProperties&#39;: {&#39;type&#39;: &#39;number&#39;},
-     &#39;title&#39;: &#39;Tax Benefit Programs&#39;,
-     &#39;type&#39;: &#39;object&#39;},
-    &#39;household_net_income&#39;: {&#39;title&#39;: &#39;Household Net Income&#39;,
-     &#39;type&#39;: &#39;number&#39;}},
-   &#39;required&#39;: [&#39;tax_revenue&#39;,
-    &#39;federal_tax&#39;,
-    &#39;federal_balance&#39;,
-    &#39;state_tax&#39;,
-    &#39;government_spending&#39;,
-    &#39;tax_benefit_programs&#39;,
-    &#39;household_net_income&#39;],
-   &#39;title&#39;: &#39;FiscalSummary&#39;,
-   &#39;type&#39;: &#39;object&#39;},
-  &#39;InequalitySummary&#39;: {&#39;properties&#39;: {&#39;gini&#39;: {&#39;title&#39;: &#39;Gini&#39;,
-     &#39;type&#39;: &#39;number&#39;},
-    &#39;top_10_share&#39;: {&#39;title&#39;: &#39;Top 10 Share&#39;, &#39;type&#39;: &#39;number&#39;},
-    &#39;top_1_share&#39;: {&#39;title&#39;: &#39;Top 1 Share&#39;, &#39;type&#39;: &#39;number&#39;}},
-   &#39;required&#39;: [&#39;gini&#39;, &#39;top_10_share&#39;, &#39;top_1_share&#39;],
-   &#39;title&#39;: &#39;InequalitySummary&#39;,
-   &#39;type&#39;: &#39;object&#39;}},
- &#39;properties&#39;: {&#39;fiscal&#39;: {&#39;$ref&#39;: &#39;#/$defs/FiscalSummary&#39;},
-  &#39;inequality&#39;: {&#39;$ref&#39;: &#39;#/$defs/InequalitySummary&#39;}},
- &#39;required&#39;: [&#39;fiscal&#39;, &#39;inequality&#39;],
- &#39;title&#39;: &#39;SingleEconomy&#39;,
- &#39;type&#39;: &#39;object&#39;}
-</pre></div>
-</div>
-</div>
-</div>
-</section>
 </section>
 
     <script type="text/x-thebe-config">
@@ -363,7 +293,7 @@
         },
         kernelOptions: {
             name: "python3",
-            path: "./basic"
+            path: "./outputs"
         },
         predefinedOutput: true
     }
@@ -374,23 +304,15 @@
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="calculate_economy_comparison.html">
-              <div class="page-info">
-                <div class="context">
-                  <span>Next</span>
-                </div>
-                <div class="title">Compare outcomes for large population scenarios</div>
-              </div>
-              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
-            </a>
-          <a class="prev-page" href="calculate_household_comparison.html">
+          
+          <a class="prev-page" href="../concepts/extending.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Compare outcomes for specific household scenarios</div>
+                <div class="title">Extending this package</div>
                 
               </div>
             </a>
@@ -424,8 +346,8 @@
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">Simulate outcomes for a large population</a><ul>
-<li><a class="reference internal" href="#output-schema">Output schema</a></li>
+<li><a class="reference internal" href="#">Average earnings</a><ul>
+<li><a class="reference internal" href="#policyengine.outputs.macro.single.calculate_average_earnings.calculate_average_earnings"><code class="docutils literal notranslate"><span class="pre">calculate_average_earnings()</span></code></a></li>
 </ul>
 </li>
 </ul>
