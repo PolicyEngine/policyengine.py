@@ -1,7 +1,7 @@
-from policyengine import Simulation
+from policyengine import PolicyEngine
 
 
-def calculate_average_earnings(simulation: Simulation) -> float:
+def calculate_average_earnings(engine: PolicyEngine) -> float:
     """Calculate average earnings."""
     employment_income = simulation.baseline_simulation.calculate(
         "employment_income"

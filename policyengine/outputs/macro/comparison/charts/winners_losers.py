@@ -2,7 +2,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import typing
 
-from policyengine import Simulation
+from policyengine import PolicyEngine
 
 from pydantic import BaseModel
 from policyengine.utils.charts import *
@@ -27,7 +27,7 @@ FORMATTED_KEYS = {
 
 
 def create_winners_losers_chart(
-    simulation: Simulation,
+    engine: PolicyEngine,
     decile_variable: Literal["income", "wealth"],
 ) -> go.Figure:
     """Create a budget comparison chart."""

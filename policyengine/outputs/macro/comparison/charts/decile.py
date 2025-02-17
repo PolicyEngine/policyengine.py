@@ -2,7 +2,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import typing
 
-from policyengine import Simulation
+from policyengine import PolicyEngine
 
 from pydantic import BaseModel
 from policyengine.utils.charts import *
@@ -10,7 +10,7 @@ from typing import Literal
 
 
 def create_decile_chart(
-    simulation: Simulation,
+    engine: PolicyEngine,
     decile_variable: Literal["income", "wealth"],
     relative: bool,
 ) -> go.Figure:

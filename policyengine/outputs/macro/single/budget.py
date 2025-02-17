@@ -1,6 +1,6 @@
 import typing
 
-from policyengine import Simulation, SimulationOptions
+from policyengine import PolicyEngine
 
 from policyengine_core.simulations import Microsimulation
 

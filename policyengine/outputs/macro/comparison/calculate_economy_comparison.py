@@ -2,10 +2,11 @@
 
 import typing
 
-from policyengine import Simulation
+from policyengine import PolicyEngine
 
 from pydantic import BaseModel
 from policyengine.utils.calculations import get_change
+from policyengine.constants import DEFAULT_DATASETS_BY_COUNTRY
 
 from policyengine.outputs.macro.single import (
     _calculate_government_balance,
@@ -17,7 +18,24 @@ from policyengine.outputs.macro.single import (
 from .decile import calculate_decile_impacts, DecileImpacts
 
 from typing import Literal, List
+from policyengine.utils.types import *
+from pydantic import Field
 
+class EconomyComparisonOptions(BaseModel):
+    country: CountryType = Field(..., description="The country to simulate.")
+    data: DataType = Field(None, description="The data to simulate.")
+    time_period: TimePeriodType = Field(
+        2025, description="The time period to simulate.", ge=2024, le=2035
+    )
+    reform: PolicyType = Field(None, description="The reform to simulate.")
+    baseline: PolicyType = Field(None, description="The baseline to simulate.")
+    region: RegionType = Field(
+        None, description="The region to simulate within the country."
+    )
+    subsample: SubsampleType = Field(
+        None,
+        description="How many, if a subsample, households to randomly simulate.",
+    )
 
 class FiscalComparison(BaseModel):
     baseline: FiscalSummary
@@ -52,15 +70,37 @@ class EconomyComparison(BaseModel):
 
 
 def calculate_economy_comparison(
-    simulation: Simulation,
+    engine: PolicyEngine,
+    **options,
 ) -> EconomyComparison:
     """Calculate comparison statistics between two economic scenarios."""
-    if not simulation.is_comparison:
-        raise ValueError("Simulation must be a comparison simulation.")
 
-    baseline = simulation.baseline_simulation
-    reform = simulation.reform_simulation
-    options = simulation.options
+    options = EconomyComparisonOptions(**options)
+
+    if options.data is None:
+        options.data = DEFAULT_DATASETS_BY_COUNTRY[
+            options.country
+        ]
+
+    baseline = engine.expect_simulation(
+        name="baseline",
+        country=options.country,
+        scope="macro",
+        policy=options.baseline,
+        data=options.data,
+        time_period=options.time_period,
+        region=options.region,
+    )
+
+    reform = engine.expect_simulation(
+        name="reform",
+        country=options.country,
+        scope="macro",
+        policy=options.reform,
+        data=options.data,
+        time_period=options.time_period,
+        region=options.region,
+    )
 
     baseline_balance = _calculate_government_balance(baseline, options)
     reform_balance = _calculate_government_balance(reform, options)

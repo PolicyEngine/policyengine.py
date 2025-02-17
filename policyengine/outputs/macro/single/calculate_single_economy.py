@@ -2,7 +2,7 @@
 
 import typing
 
-from policyengine import Simulation
+from policyengine import PolicyEngine
 
 from pydantic import BaseModel
 
@@ -19,7 +19,7 @@ class SingleEconomy(BaseModel):
 
 
 def calculate_single_economy(
-    simulation: Simulation,
+    engine: PolicyEngine,
 ) -> SingleEconomy:
     """Calculate economy statistics for a single economic scenario."""
     options = simulation.options
