@@ -1,20 +1,50 @@
 import pandas as pd
-from policyengine import Simulation
-from policyengine_core.simulations import Microsimulation
+from policyengine import Simulation as PolicyEngine # Rename Simulation to PolicyEngine to avoid name conflict
+from policyengine_core.simulations import Simulation
+from pydantic import BaseModel
 
+class ChildPovertyImpactParameters(BaseModel): # Ask extension developers to validate inputs to their functions
+    count_years: int
+    start_year: int
+    country: str
+    reform: dict
 
 def calculate_child_poverty_impacts(
-    simulation: Simulation, count_years: int = 10
+    engine: PolicyEngine, 
+    country: str,
+    reform: dict,
+    count_years: int = 10, 
+    start_year: int = 2024,
+
 ) -> pd.DataFrame:
     """The change in mean child poverty under baseline vs reform.
     Args:
-        simulation: A Simulation object containing baseline and reform scenarios.
+        engine: A PolicyEngine instance.
         is_child(bool): person level
         in_poverty(bool): spm_unit level
     Returns:
         The change in mean child poverty under baseline vs reform.
     """
-    start_year = simulation.options.time_period
+
+    ChildPovertyImpactParameters.model_validate(
+        count_years=count_years,
+        start_year=start_year,
+    )
+
+    baseline_simulation: Simulation = engine.build_simulation(
+        name="baseline", # Optionally, we could cache named simulations so we're not rerunning baseline each time. Or not!
+        country=country,
+        policy={},
+        scope="macro",
+    )
+
+    reform_simulation: Simulation = engine.build_simulation(
+        name="reform",
+        country=country,
+        policy=reform,
+        scope="macro",
+    )
+
     end_year = start_year + count_years
 
     years = []
@@ -24,10 +54,10 @@ def calculate_child_poverty_impacts(
 
     for year in range(start_year, end_year):
         baseline_cp = _get_child_povert_chnage(
-            simulation.baseline_simulation, year
+            baseline_simulation, year
         ).mean()
         reform_cp = _get_child_povert_chnage(
-            simulation.reform_simulation, year
+            reform_simulation, year
         ).mean()
         years.append(year)
         baseline_child_poverty.append(baseline_cp)
