@@ -1,37 +1,30 @@
-[build-system]
-requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "policyengine"
 version = "0.1.0"
-description = "A package to conduct policy analysis using PolicyEngine tax-benefit models."
+description = "Add your description here"
 readme = "README.md"
-authors = [
-    {name = "PolicyEngine", email = "hello@policyengine.org"},
-]
-license = {file = "LICENSE"}
-requires-python = ">=3.6"
+requires-python = ">=3.13"
 dependencies = [
-    "policyengine_core>=3.10",
-    "policyengine-uk",
-    "policyengine-us",
-    "microdf_python",
-    "getpass4",
-    "pydantic",
+    "getpass4>=0.0.14.1",
+    "microdf-python>=0.4.3",
+    "policyengine-core>=3.16.3",
+    "policyengine-uk>=2.19.1",
+    "policyengine-us>=1.199.0",
+    "pydantic>=2.10.6",
+    "tqdm>=4.67.1",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
-    "black",
-    "pytest",
-    "furo",
-    "autodoc_pydantic",
-    "jupyter-book",
-    "yaml-changelog>=0.1.7",
-    "itables",
-    "build",
+    "autodoc-pydantic>=2.2.0",
+    "black>=25.1.0",
+    "build>=1.2.2.post1",
+    "itables>=2.2.4",
+    "jupyter-book>=1.0.3",
+    "pytest>=8.3.4",
+    "yaml-changelog>=0.3.0",
 ]
+
 
 [tool.setuptools]
 packages = ["policyengine"]
