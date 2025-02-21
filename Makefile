@@ -19,7 +19,7 @@ changelog:
 	touch changelog_entry.yaml
 
 build-package:
-	python -m build --sdist
+	python -m build sdist bdist_wheel
 
 test:
 	pytest tests
