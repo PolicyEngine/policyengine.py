@@ -3,3 +3,8 @@
     - Initial version of package.
   date: 2024-11-30 00:00:00
   version: 0.1.0
+- bump: patch
+  changes:
+    fixed:
+    - Dependency for `pkg_resources`.
+  date: 2025-02-21 14:02:22
