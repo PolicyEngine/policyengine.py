@@ -17,15 +17,15 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.13'
+          python-version: '3.11'
+      - name: Publish a git tag
+        run: ".github/publish-git-tag.sh || true"
       - name: Install package
         run: make install
       - name: Build package
         run: make
-      - name: Publish a git tag
-        run: ".github/publish-git-tag.sh || true"
-      - name: Build package
-        run: make
+      - name: Remove .whl files
+        run: rm dist/*.whl
       - name: Publish a Python distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
