@@ -1,6 +1,5 @@
 import plotly.graph_objects as go
 from IPython.core.display import HTML, display_html
-import pkg_resources
 
 
 def add_fonts():
@@ -44,7 +43,9 @@ BLUE_COLOR_SCALE = [
 
 
 def get_version_number(package):
-    return pkg_resources.get_distribution(package).version
+    import importlib
+
+    return importlib.import_module(package).__version__
 
 
 def format_fig(
