@@ -1,12 +1,13 @@
 from .policy import Policy
 from .dataset import Dataset
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Any
 from pydantic import BaseModel
 from policyengine_core.simulations import Simulation as CoreSimulation
 from policyengine_core.experimental.memory_config import MemoryConfig
 from policyengine_core.variables import Variable
 import pandas as pd
 import json
+import importlib
 
 class Simulation(BaseModel):
     country: str
@@ -14,8 +15,11 @@ class Simulation(BaseModel):
     dataset: Dataset
     calculations: List[Tuple[str, str]]
     version: str = None
+    trace: bool = False
 
-    output: Dict[str, Dict[str, Dict[str, list]]] = None
+    output: Dict[str, Dict[str, Dict[str, list]]] | None = None
+    computation_tree: Any = None # Needs stricter typing
+    simulation: Any = None # Needs stricter typing
 
     def __hash__(self):
         return hash((
@@ -33,8 +37,8 @@ class Simulation(BaseModel):
             dataset=self.dataset.data,
             situation=self.dataset.situation,
             reform=self.policy.parameter_changes,
+            trace=self.trace,
         )
-        sim.subsample(1000)
 
         for calculation in self.calculations:
             variable, time_period = calculation
@@ -61,6 +65,8 @@ class Simulation(BaseModel):
                 data[variable.entity.key][time_period][variable.name] = values
         
         self.output = data
+        self.simulation = sim
+        self.computation_tree = sim.tracer
     
     def dataframe(self, entity: str, time_period: str) -> pd.DataFrame:
         data = self.output[entity][time_period]
