@@ -12,14 +12,6 @@ class BarChart(Chart):
 
     def create(self):
         df = self.df
-        for attribute in ["x", "y", "color"]:
-            column = getattr(self, attribute)
-            if column is None:
-                continue
-            if isinstance(df[column].values[0], Policy):
-                df[column] = df[column].apply(lambda x: x.label)
-            elif isinstance(df[column].values[0], Dataset):
-                df[column] = df[column].apply(lambda x: x.label)
         fig = px.bar(
             df,
             x=self.x,

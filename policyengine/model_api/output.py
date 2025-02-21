@@ -7,8 +7,6 @@ class Output(BaseModel):
 
     simulations: Dict[str, Simulation] = {}
 
-    output: Any = None
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
     

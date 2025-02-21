@@ -32,22 +32,21 @@ class ResultSet(BaseModel):
 
         simulation_hashes = [hash(simulation) for simulation in simulations]
 
-        for output in self.outputs:
+        for output in (tqdm if verbose else list)(self.outputs):
             for name, instance in output.simulations.items():
                 instance_hash = hash(instance)
                 if instance_hash in simulation_hashes:
                     output.simulations[name] = simulations[simulation_hashes.index(instance_hash)]
             output.compute()
 
-    def dataframe(self, columns: List[str] | None = None, exclude_types: List[type] = [dict, Policy, Dataset]) -> pd.DataFrame:
+    def dataframe(self, columns: List[str] | None = None, replacements: dict = {}) -> pd.DataFrame:
         # First, check if the outputs all have the same type (are from the same table)
         df = pd.DataFrame([vars(output) for output in self.outputs])
 
         if columns is None:
             columns = list(vars(self.outputs[0]))
-
-            if len(exclude_types) > 0:
-                for exclude_type in exclude_types:
-                    columns = [column for column in columns if not isinstance(df[column].values[0], exclude_type)]
+        
+        for column in columns:
+            df[column] = df[column].replace(replacements)
 
         return df[columns]

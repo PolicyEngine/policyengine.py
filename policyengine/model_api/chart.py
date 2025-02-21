@@ -2,7 +2,7 @@ from pydantic import BaseModel
 import pandas as pd
 import plotly.graph_objects as go
 from IPython.core.display import HTML, display_html
-import pkg_resources
+import importlib
 
 class Chart(BaseModel):
     df: pd.DataFrame
@@ -60,7 +60,7 @@ BLUE_COLOR_SCALE = [
 
 
 def get_version_number(package):
-    return pkg_resources.get_distribution(package).version
+    return importlib.metadata.version(package)
 
 
 def format_fig(

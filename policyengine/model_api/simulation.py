@@ -3,6 +3,7 @@ from .dataset import Dataset
 from typing import List, Tuple, Dict
 from pydantic import BaseModel
 from policyengine_core.simulations import Simulation as CoreSimulation
+from policyengine_core.experimental.memory_config import MemoryConfig
 from policyengine_core.variables import Variable
 import pandas as pd
 import json
@@ -33,6 +34,7 @@ class Simulation(BaseModel):
             situation=self.dataset.situation,
             reform=self.policy.parameter_changes,
         )
+        sim.subsample(1000)
 
         for calculation in self.calculations:
             variable, time_period = calculation
