@@ -7,7 +7,7 @@ from policyengine_core.simulations import Simulation as CountrySimulation
 from policyengine_core.simulations import (
     Microsimulation as CountryMicrosimulation,
 )
-from .utils.reforms import ParametricReform, SimulationAdjustment
+from .utils.reforms import ParametricReform
 from policyengine_core.reforms import Reform as StructuralReform
 from policyengine_core.data import Dataset
 from .utils.huggingface import download
@@ -33,9 +33,7 @@ DataType = (
     str | dict | Any | None
 )  # Needs stricter typing. Any==policyengine_core.data.Dataset, but pydantic refuses for some reason.
 TimePeriodType = int
-ReformType = (
-    ParametricReform | SimulationAdjustment | Type[StructuralReform] | None
-)
+ReformType = ParametricReform | Type[StructuralReform] | None
 RegionType = str | None
 SubsampleType = int | None
 
@@ -172,12 +170,6 @@ class Simulation:
         if isinstance(reform, ParametricReform):
             reform = reform.model_dump()
 
-        simulation_editing_reform = None
-
-        if isinstance(reform, SimulationAdjustment):
-            simulation_editing_reform = reform.root
-            reform = None
-
         simulation: CountrySimulation = _simulation_type(
             dataset=data if macro else None,
             situation=data if not macro else None,
@@ -198,9 +190,6 @@ class Simulation:
 
         if subsample is not None:
             simulation = simulation.subsample(subsample)
-
-        if simulation_editing_reform is not None:
-            simulation_editing_reform(simulation)
 
         return simulation
 

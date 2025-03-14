@@ -11,9 +11,3 @@ class ParametricReform(RootModel):
     """A reform that just changes parameter values."""
 
     root: Dict[str, Dict | float | bool]
-
-
-class SimulationAdjustment(RootModel):
-    """A reform that changes the simulation in some way."""
-
-    root: object  # Python callable function that takes a Simulation object and returns nothing. Not JSON serialisable. Needs fixing.
