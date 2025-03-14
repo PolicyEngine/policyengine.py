@@ -51,7 +51,6 @@ class SingleEconomy(BaseModel):
     programs: Dict[str, float] | None
 
 
-
 @dataclass
 class UKProgram:
     name: str
@@ -72,6 +71,7 @@ class UKPrograms:
         UKProgram("pension_credit", False),
         UKProgram("ni_employer", True),
     ]
+
 
 class GeneralEconomyTask:
     def __init__(self, simulation: Microsimulation, country_id: str):
@@ -328,8 +328,17 @@ class GeneralEconomyTask:
         }
 
 
-def calculate_single_economy(simulation: Simulation, reform: bool = False) -> Dict:
-    task_manager = GeneralEconomyTask(simulation.baseline_simulation if not reform else simulation.reform_simulation, simulation.options.country)
+def calculate_single_economy(
+    simulation: Simulation, reform: bool = False
+) -> Dict:
+    task_manager = GeneralEconomyTask(
+        (
+            simulation.baseline_simulation
+            if not reform
+            else simulation.reform_simulation
+        ),
+        simulation.options.country,
+    )
     country_id = simulation.options.country
 
     total_tax, total_spending = task_manager.calculate_tax_and_spending()
@@ -373,37 +382,39 @@ def calculate_single_economy(simulation: Simulation, reform: bool = False) -> Di
         except:
             total_state_tax = 0
 
-    return SingleEconomy(**{
-        "total_net_income": total_net_income,
-        "employment_income_hh": employment_income_hh,
-        "self_employment_income_hh": self_employment_income_hh,
-        "total_tax": total_tax,
-        "total_state_tax": total_state_tax,
-        "total_benefits": total_spending,
-        "household_net_income": household_net_income,
-        "equiv_household_net_income": equiv_household_net_income,
-        "household_income_decile": household_income_decile,
-        "household_market_income": household_market_income,
-        "household_wealth_decile": wealth_decile,
-        "household_wealth": wealth,
-        "in_poverty": in_poverty,
-        "person_in_poverty": person_in_poverty,
-        "person_in_deep_poverty": person_in_deep_poverty,
-        "poverty_gap": poverty_gap,
-        "deep_poverty_gap": deep_poverty_gap,
-        "person_weight": person_weight,
-        "household_weight": household_weight,
-        "household_count_people": task_manager.household_count_people.astype(
-            int
-        ).tolist(),
-        "gini": float(gini),
-        "top_10_percent_share": float(top_10_share),
-        "top_1_percent_share": float(top_1_share),
-        "is_male": is_male,
-        "race": race,
-        "age": age,
-        **labor_supply_responses,
-        **lsr_working_hours,
-        "type": "general",
-        "programs": uk_programs,
-    })
+    return SingleEconomy(
+        **{
+            "total_net_income": total_net_income,
+            "employment_income_hh": employment_income_hh,
+            "self_employment_income_hh": self_employment_income_hh,
+            "total_tax": total_tax,
+            "total_state_tax": total_state_tax,
+            "total_benefits": total_spending,
+            "household_net_income": household_net_income,
+            "equiv_household_net_income": equiv_household_net_income,
+            "household_income_decile": household_income_decile,
+            "household_market_income": household_market_income,
+            "household_wealth_decile": wealth_decile,
+            "household_wealth": wealth,
+            "in_poverty": in_poverty,
+            "person_in_poverty": person_in_poverty,
+            "person_in_deep_poverty": person_in_deep_poverty,
+            "poverty_gap": poverty_gap,
+            "deep_poverty_gap": deep_poverty_gap,
+            "person_weight": person_weight,
+            "household_weight": household_weight,
+            "household_count_people": task_manager.household_count_people.astype(
+                int
+            ).tolist(),
+            "gini": float(gini),
+            "top_10_percent_share": float(top_10_share),
+            "top_1_percent_share": float(top_1_share),
+            "is_male": is_male,
+            "race": race,
+            "age": age,
+            **labor_supply_responses,
+            **lsr_working_hours,
+            "type": "general",
+            "programs": uk_programs,
+        }
+    )

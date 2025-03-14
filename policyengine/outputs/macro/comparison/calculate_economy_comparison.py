@@ -1,4 +1,5 @@
 """Calculate comparison statistics between two economic scenarios."""
+
 from microdf import MicroSeries
 import numpy as np
 from policyengine_core.tools.hugging_face import download_huggingface_dataset
@@ -6,7 +7,9 @@ import pandas as pd
 import h5py
 from pydantic import BaseModel
 from policyengine import Simulation
-from policyengine.outputs.macro.single.calculate_single_economy import SingleEconomy
+from policyengine.outputs.macro.single.calculate_single_economy import (
+    SingleEconomy,
+)
 from typing import List, Dict
 
 
@@ -19,14 +22,14 @@ class BudgetaryImpact(BaseModel):
     baseline_net_income: float
 
 
-def budgetary_impact(baseline: SingleEconomy, reform: SingleEconomy) -> BudgetaryImpact:
+def budgetary_impact(
+    baseline: SingleEconomy, reform: SingleEconomy
+) -> BudgetaryImpact:
     tax_revenue_impact = reform.total_tax - baseline.total_tax
     state_tax_revenue_impact = (
         reform.total_state_tax - baseline.total_state_tax
     )
-    benefit_spending_impact = (
-        reform.total_benefits - baseline.total_benefits
-    )
+    benefit_spending_impact = reform.total_benefits - baseline.total_benefits
     budgetary_impact = tax_revenue_impact - benefit_spending_impact
     return BudgetaryImpact(
         budgetary_impact=budgetary_impact,
@@ -37,7 +40,9 @@ def budgetary_impact(baseline: SingleEconomy, reform: SingleEconomy) -> Budgetar
         baseline_net_income=baseline.total_net_income,
     )
 
+
 DecileValues = Dict[int, float]
+
 
 class HoursResponse(BaseModel):
     baseline: float
@@ -45,6 +50,7 @@ class HoursResponse(BaseModel):
     change: float
     income_effect: float
     substitution_effect: float
+
 
 class LaborSupplyResponse(BaseModel):
     substitution_lsr: float
@@ -56,10 +62,10 @@ class LaborSupplyResponse(BaseModel):
     hours: HoursResponse
 
 
-def labor_supply_response(baseline: SingleEconomy, reform: SingleEconomy) -> LaborSupplyResponse:
-    substitution_lsr = (
-        reform.substitution_lsr - baseline.substitution_lsr
-    )
+def labor_supply_response(
+    baseline: SingleEconomy, reform: SingleEconomy
+) -> LaborSupplyResponse:
+    substitution_lsr = reform.substitution_lsr - baseline.substitution_lsr
     income_lsr = reform.income_lsr - baseline.income_lsr
     total_change = substitution_lsr + income_lsr
     revenue_change = (
@@ -140,10 +146,12 @@ def labor_supply_response(baseline: SingleEconomy, reform: SingleEconomy) -> Lab
         hours=hours,
     )
 
+
 class ProgramSpecificImpact(BaseModel):
     baseline: float
     reform: float
     difference: float
+
 
 DetailedBudgetaryImpact = Dict[str, ProgramSpecificImpact] | None
 
@@ -163,12 +171,15 @@ def detailed_budgetary_impact(
             )
     return result
 
+
 class DecileImpact(BaseModel):
     relative: DecileValues
     average: DecileValues
 
 
-def decile_impact(baseline: SingleEconomy, reform: SingleEconomy) -> DecileImpact:
+def decile_impact(
+    baseline: SingleEconomy, reform: SingleEconomy
+) -> DecileImpact:
     """
     Compare the impact of a reform on the deciles of the population.
 
@@ -208,14 +219,18 @@ def decile_impact(baseline: SingleEconomy, reform: SingleEconomy) -> DecileImpac
         average={int(k): v for k, v in avg_decile_dict.items()},
     )
 
+
 class WealthDecileImpactWithValues(BaseModel):
     relative: DecileValues
     average: DecileValues
 
+
 WealthDecileImpact = WealthDecileImpactWithValues | None
 
 
-def wealth_decile_impact(baseline: SingleEconomy, reform: SingleEconomy, country_id: str) -> WealthDecileImpact:
+def wealth_decile_impact(
+    baseline: SingleEconomy, reform: SingleEconomy, country_id: str
+) -> WealthDecileImpact:
     """
     Compare the impact of a reform on the deciles of the population.
 
@@ -256,9 +271,11 @@ def wealth_decile_impact(baseline: SingleEconomy, reform: SingleEconomy, country
         average={int(k): v for k, v in avg_decile_dict.items()},
     )
 
+
 class BaselineReformValues(BaseModel):
     baseline: float
     reform: float
+
 
 class InequalityImpact(BaseModel):
     gini: BaselineReformValues
@@ -266,7 +283,9 @@ class InequalityImpact(BaseModel):
     top_1_pct_share: BaselineReformValues
 
 
-def inequality_impact(baseline: SingleEconomy, reform: SingleEconomy) -> InequalityImpact:
+def inequality_impact(
+    baseline: SingleEconomy, reform: SingleEconomy
+) -> InequalityImpact:
     """
     Compare the impact of a reform on inequality.
 
@@ -295,15 +314,18 @@ def inequality_impact(baseline: SingleEconomy, reform: SingleEconomy) -> Inequal
 
     return InequalityImpact(**values)
 
+
 class AgeGroupBaselineReformValues(BaseModel):
     child: BaselineReformValues
     adult: BaselineReformValues
     senior: BaselineReformValues
     all: BaselineReformValues
 
+
 class PovertyImpact(BaseModel):
     poverty: AgeGroupBaselineReformValues
     deep_poverty: AgeGroupBaselineReformValues
+
 
 def poverty_impact(baseline: SingleEconomy, reform: SingleEconomy) -> dict:
     """
@@ -375,12 +397,15 @@ def poverty_impact(baseline: SingleEconomy, reform: SingleEconomy) -> dict:
         deep_poverty=deep_poverty,
     )
 
+
 class IntraDecileImpact(BaseModel):
     deciles: Dict[str, List[float]]
     all: Dict[str, float]
 
 
-def intra_decile_impact(baseline: SingleEconomy, reform: SingleEconomy) -> IntraDecileImpact:
+def intra_decile_impact(
+    baseline: SingleEconomy, reform: SingleEconomy
+) -> IntraDecileImpact:
     baseline_income = MicroSeries(
         baseline.household_net_income, weights=baseline.household_weight
     )
@@ -441,13 +466,18 @@ def intra_decile_impact(baseline: SingleEconomy, reform: SingleEconomy) -> Intra
         all_outcomes[label] = sum(outcome_groups[label]) / 10
     return IntraDecileImpact(deciles=outcome_groups, all=all_outcomes)
 
+
 class IntraWealthDecileImpactWithValues(BaseModel):
     deciles: Dict[str, List[float]]
     all: Dict[str, float]
 
+
 IntraWealthDecileImpact = IntraWealthDecileImpactWithValues | None
 
-def intra_wealth_decile_impact(baseline: SingleEconomy, reform: SingleEconomy, country_id: str) -> IntraWealthDecileImpact:
+
+def intra_wealth_decile_impact(
+    baseline: SingleEconomy, reform: SingleEconomy, country_id: str
+) -> IntraWealthDecileImpact:
     if country_id != "uk":
         return None
     baseline_income = MicroSeries(
@@ -508,17 +538,24 @@ def intra_wealth_decile_impact(baseline: SingleEconomy, reform: SingleEconomy, c
             outcome_groups[label].append(people_in_proportion)
 
         all_outcomes[label] = sum(outcome_groups[label]) / 10
-    return IntraWealthDecileImpactWithValues(deciles=outcome_groups, all=all_outcomes)
+    return IntraWealthDecileImpactWithValues(
+        deciles=outcome_groups, all=all_outcomes
+    )
+
 
 class GenderBaselineReformValues(BaseModel):
     male: BaselineReformValues
     female: BaselineReformValues
 
+
 class PovertyGenderBreakdown(BaseModel):
     poverty: GenderBaselineReformValues
     deep_poverty: GenderBaselineReformValues
 
-def poverty_gender_breakdown(baseline: SingleEconomy, reform: SingleEconomy) -> PovertyGenderBreakdown:
+
+def poverty_gender_breakdown(
+    baseline: SingleEconomy, reform: SingleEconomy
+) -> PovertyGenderBreakdown:
     """
     Compare the impact of a reform on poverty.
 
@@ -572,18 +609,24 @@ def poverty_gender_breakdown(baseline: SingleEconomy, reform: SingleEconomy) -> 
         deep_poverty=deep_poverty,
     )
 
+
 class RacialBaselineReformValues(BaseModel):
     white: BaselineReformValues
     black: BaselineReformValues
     hispanic: BaselineReformValues
     other: BaselineReformValues
 
+
 class PovertyRacialBreakdownWithValues(BaseModel):
     poverty: RacialBaselineReformValues
 
+
 PovertyRacialBreakdown = PovertyRacialBreakdownWithValues | None
 
-def poverty_racial_breakdown(baseline: SingleEconomy, reform: SingleEconomy) -> PovertyRacialBreakdown:
+
+def poverty_racial_breakdown(
+    baseline: SingleEconomy, reform: SingleEconomy
+) -> PovertyRacialBreakdown:
     """
     Compare the impact of a reform on poverty.
 
@@ -640,6 +683,7 @@ class UKConstituencyBreakdownByConstituency(BaseModel):
 class UKConstituencyBreakdownWithValues(BaseModel):
     by_constituency: dict[str, UKConstituencyBreakdownByConstituency]
     outcomes_by_region: dict[str, dict[str, int]]
+
 
 UKConstituencyBreakdown = UKConstituencyBreakdownWithValues | None
 
@@ -769,7 +813,9 @@ def calculate_economy_comparison(
         constituency_impact_data: UKConstituencyBreakdown = (
             uk_constituency_breakdown(baseline, reform, country_id)
         )
-        wealth_decile_impact_data = wealth_decile_impact(baseline, reform, country_id)
+        wealth_decile_impact_data = wealth_decile_impact(
+            baseline, reform, country_id
+        )
         intra_wealth_decile_impact_data = intra_wealth_decile_impact(
             baseline, reform, country_id
         )
