@@ -33,9 +33,7 @@ DataType = (
     str | dict | Any | None
 )  # Needs stricter typing. Any==policyengine_core.data.Dataset, but pydantic refuses for some reason.
 TimePeriodType = int
-ReformType = (
-    ParametricReform | Type[StructuralReform] | None
-)
+ReformType = ParametricReform | Type[StructuralReform] | None
 RegionType = str | None
 SubsampleType = int | None
 
