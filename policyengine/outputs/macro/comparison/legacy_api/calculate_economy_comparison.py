@@ -1,49 +1,12 @@
-"""Calculate comparison statistics between two economic scenarios."""
 from microdf import MicroSeries
 import numpy as np
 from policyengine_core.tools.hugging_face import download_huggingface_dataset
 import pandas as pd
 import h5py
 from pydantic import BaseModel
-from policyengine import Simulation
-from policyengine.outputs.macro.single.calculate_single_economy import SingleEconomy
-
-class EconomyComparison(BaseModel):
-    budget: None
-    detailed_budget: None
-    decile: None
-    inequality: None
-    poverty: None
-    poverty_by_gender: None
-    poverty_by_race: None
-    intra_decile: None
-    wealth_decile: None
-    intra_wealth_decile: None
-    labor_supply_response: None
-    constituency_impact: None
 
 
-def calculate_economy_comparison(
-    simulation: Simulation,
-) -> EconomyComparison:
-    """Calculate comparison statistics between two economic scenarios."""
-    if not simulation.is_comparison:
-        raise ValueError("Simulation must be a comparison simulation.")
-
-    baseline = simulation.baseline_simulation
-    reform = simulation.reform_simulation
-    options = simulation.options
-
-class BudgetaryImpact(BaseModel):
-    budgetary_impact: float
-    tax_revenue_impact: float
-    state_tax_revenue_impact: float
-    benefit_spending_impact: float
-    households: int
-    baseline_net_income: float
-
-
-def budgetary_impact(baseline: SingleEconomy, reform: SingleEconomy) -> BudgetaryImpact:
+def budgetary_impact(baseline: dict, reform: dict) -> dict:
     tax_revenue_impact = reform["total_tax"] - baseline["total_tax"]
     state_tax_revenue_impact = (
         reform["total_state_tax"] - baseline["total_state_tax"]
@@ -52,7 +15,7 @@ def budgetary_impact(baseline: SingleEconomy, reform: SingleEconomy) -> Budgetar
         reform["total_benefits"] - baseline["total_benefits"]
     )
     budgetary_impact = tax_revenue_impact - benefit_spending_impact
-    return BudgetaryImpact(
+    return dict(
         budgetary_impact=budgetary_impact,
         tax_revenue_impact=tax_revenue_impact,
         state_tax_revenue_impact=state_tax_revenue_impact,
@@ -62,7 +25,7 @@ def budgetary_impact(baseline: SingleEconomy, reform: SingleEconomy) -> Budgetar
     )
 
 
-def labor_supply_response(baseline: SingleEconomy, reform: SingleEconomy) -> dict:
+def labor_supply_response(baseline: dict, reform: dict) -> dict:
     substitution_lsr = (
         reform["substitution_lsr"] - baseline["substitution_lsr"]
     )
@@ -148,7 +111,7 @@ def labor_supply_response(baseline: SingleEconomy, reform: SingleEconomy) -> dic
 
 
 def detailed_budgetary_impact(
-    baseline: SingleEconomy, reform: SingleEconomy, country_id: str
+    baseline: dict, reform: dict, country_id: str
 ) -> dict:
     result = {}
     if country_id == "uk":
@@ -163,7 +126,7 @@ def detailed_budgetary_impact(
     return result
 
 
-def decile_impact(baseline: SingleEconomy, reform: SingleEconomy) -> dict:
+def decile_impact(baseline: dict, reform: dict) -> dict:
     """
     Compare the impact of a reform on the deciles of the population.
 
@@ -205,7 +168,7 @@ def decile_impact(baseline: SingleEconomy, reform: SingleEconomy) -> dict:
     return result
 
 
-def wealth_decile_impact(baseline: SingleEconomy, reform: SingleEconomy) -> dict:
+def wealth_decile_impact(baseline: dict, reform: dict) -> dict:
     """
     Compare the impact of a reform on the deciles of the population.
 
@@ -246,7 +209,7 @@ def wealth_decile_impact(baseline: SingleEconomy, reform: SingleEconomy) -> dict
     return result
 
 
-def inequality_impact(baseline: SingleEconomy, reform: SingleEconomy) -> dict:
+def inequality_impact(baseline: dict, reform: dict) -> dict:
     """
     Compare the impact of a reform on inequality.
 
@@ -274,7 +237,7 @@ def inequality_impact(baseline: SingleEconomy, reform: SingleEconomy) -> dict:
     )
 
 
-def poverty_impact(baseline: SingleEconomy, reform: SingleEconomy) -> dict:
+def poverty_impact(baseline: dict, reform: dict) -> dict:
     """
     Compare the impact of a reform on poverty.
 
@@ -345,7 +308,7 @@ def poverty_impact(baseline: SingleEconomy, reform: SingleEconomy) -> dict:
     )
 
 
-def intra_decile_impact(baseline: SingleEconomy, reform: SingleEconomy) -> dict:
+def intra_decile_impact(baseline: dict, reform: dict) -> dict:
     baseline_income = MicroSeries(
         baseline["household_net_income"], weights=baseline["household_weight"]
     )
@@ -407,7 +370,7 @@ def intra_decile_impact(baseline: SingleEconomy, reform: SingleEconomy) -> dict:
     return dict(deciles=outcome_groups, all=all_outcomes)
 
 
-def intra_wealth_decile_impact(baseline: SingleEconomy, reform: SingleEconomy) -> dict:
+def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
     baseline_income = MicroSeries(
         baseline["household_net_income"], weights=baseline["household_weight"]
     )
@@ -469,7 +432,7 @@ def intra_wealth_decile_impact(baseline: SingleEconomy, reform: SingleEconomy) -
     return dict(deciles=outcome_groups, all=all_outcomes)
 
 
-def poverty_gender_breakdown(baseline: SingleEconomy, reform: SingleEconomy) -> dict:
+def poverty_gender_breakdown(baseline: dict, reform: dict) -> dict:
     """
     Compare the impact of a reform on poverty.
 
@@ -524,7 +487,7 @@ def poverty_gender_breakdown(baseline: SingleEconomy, reform: SingleEconomy) -> 
     )
 
 
-def poverty_racial_breakdown(baseline: SingleEconomy, reform: SingleEconomy) -> dict:
+def poverty_racial_breakdown(baseline: dict, reform: dict) -> dict:
     """
     Compare the impact of a reform on poverty.
 
@@ -584,7 +547,7 @@ class UKConstituencyBreakdown(BaseModel):
 
 
 def uk_constituency_breakdown(
-    baseline: SingleEconomy, reform: SingleEconomy, country_id: str
+    baseline: dict, reform: dict, country_id: str
 ) -> UKConstituencyBreakdown | None:
     if country_id != "uk":
         return None
@@ -668,7 +631,7 @@ def uk_constituency_breakdown(
 
 
 def compare_economic_outputs(
-    baseline: SingleEconomy, reform: SingleEconomy, country_id: str = None
+    baseline: dict, reform: dict, country_id: str = None
 ) -> dict:
     """
     Compare the economic outputs of two economies.
