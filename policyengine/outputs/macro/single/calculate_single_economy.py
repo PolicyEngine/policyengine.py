@@ -23,8 +23,8 @@ class SingleEconomy(BaseModel):
     equiv_household_net_income: List[float]
     household_income_decile: List[int]
     household_market_income: List[float]
-    household_wealth_decile: List[int]
-    household_wealth: List[float]
+    household_wealth_decile: List[int] | None
+    household_wealth: List[float] | None
     in_poverty: List[bool]
     person_in_poverty: List[bool]
     person_in_deep_poverty: List[bool]
