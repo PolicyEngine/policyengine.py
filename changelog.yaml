@@ -13,3 +13,8 @@
     fixed:
     - Gracefully handle data download 429s.
   date: 2025-04-26 16:21:55
+- bump: patch
+  changes:
+    fixed:
+    - Gracefully handle HuggingFace 429s.
+  date: 2025-04-26 16:25:19

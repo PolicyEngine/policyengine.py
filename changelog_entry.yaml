@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Gracefully handle HuggingFace 429s.
