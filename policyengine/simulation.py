@@ -1,5 +1,5 @@
 """Simulate tax-benefit policy and derive society-level output statistics."""
-
+ 
 from pydantic import BaseModel, Field
 from typing import Literal
 from .constants import DEFAULT_DATASETS_BY_COUNTRY
