@@ -8,3 +8,8 @@
     fixed:
     - Dependency for `pkg_resources`.
   date: 2025-02-21 14:02:22
+- bump: patch
+  changes:
+    fixed:
+    - Gracefully handle data download 429s.
+  date: 2025-04-26 16:21:55

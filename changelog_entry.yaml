@@ -1,5 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Gracefully handle data download 429s.
- 
