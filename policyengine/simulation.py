@@ -26,6 +26,7 @@ from typing import Type
 from functools import wraps, partial
 from typing import Dict, Any, Callable
 import importlib
+from policyengine.utils.google_cloud_bucket import download_file_from_gcs
 
 CountryType = Literal["uk", "us"]
 ScopeType = Literal["household", "macro"]
@@ -78,6 +79,7 @@ class Simulation:
                 self.options.country
             ]
 
+        self._set_data()
         self._initialise_simulations()
         self._add_output_functions()
 
@@ -118,7 +120,20 @@ class Simulation:
                 self.options.country
             ]
 
-        self._data_handle_cps_special_case()
+        if isinstance(self.options.data, str):
+            if "gs://" in self.options.data:
+                bucket, filename = self.options.data.split("gs://")[-1].split("/")
+                download_file_from_gcs(
+                    bucket_name=bucket,
+                    file_name=filename,
+                    destination_path=filename,
+                )
+                if "cps_2023" in filename:
+                    time_period = 2023
+                else:
+                    time_period = None
+                self.options.data = Dataset.from_file(filename, time_period=time_period)
+
 
     def _initialise_simulations(self):
         self.baseline_simulation = self._initialise_simulation(
