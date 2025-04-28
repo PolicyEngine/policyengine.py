@@ -1,5 +1,5 @@
 """Simulate tax-benefit policy and derive society-level output statistics."""
- 
+
 from pydantic import BaseModel, Field
 from typing import Literal
 from .constants import DEFAULT_DATASETS_BY_COUNTRY
@@ -122,7 +122,9 @@ class Simulation:
 
         if isinstance(self.options.data, str):
             if "gs://" in self.options.data:
-                bucket, filename = self.options.data.split("gs://")[-1].split("/")
+                bucket, filename = self.options.data.split("gs://")[-1].split(
+                    "/"
+                )
                 download_file_from_gcs(
                     bucket_name=bucket,
                     file_name=filename,
@@ -132,8 +134,9 @@ class Simulation:
                     time_period = 2023
                 else:
                     time_period = None
-                self.options.data = Dataset.from_file(filename, time_period=time_period)
-
+                self.options.data = Dataset.from_file(
+                    filename, time_period=time_period
+                )
 
     def _initialise_simulations(self):
         self.baseline_simulation = self._initialise_simulation(

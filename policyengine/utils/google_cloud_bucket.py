@@ -1,6 +1,6 @@
-
-
-def download_file_from_gcs(bucket_name: str, file_name: str, destination_path: str) -> None:
+def download_file_from_gcs(
+    bucket_name: str, file_name: str, destination_path: str
+) -> None:
     """
     Download a file from Google Cloud Storage to a local path.
 
