@@ -9,14 +9,14 @@ from pydantic import BaseModel
 class DataFile(BaseModel):
     filepath: str
     huggingface_org: str
-    huggingface_repo: str
-    gcs_bucket: str
+    huggingface_repo: str = None
+    gcs_bucket: str = None
 
 
 def download(
     filepath: str,
-    huggingface_repo: str,
-    gcs_bucket: str,
+    huggingface_repo: str = None,
+    gcs_bucket: str = None,
     huggingface_org: str = "policyengine",
 ):
     data_file = DataFile(
@@ -31,22 +31,27 @@ def download(
         logging.info(f"File {filepath} already exists. Skipping download.")
         return filepath
 
-    logging.info("Using Hugging Face for download.")
-    try:
-        raise ValueError()
-        return download_from_hf(
-            repo=data_file.huggingface_org + "/" + data_file.huggingface_repo,
-            repo_filename=data_file.filepath,
-        )
-    except:
-        logging.info(
-            "Failed to download from Hugging Face. Retrying with Google Cloud Storage."
-        )
+    if data_file.huggingface_repo is not None:
+        logging.info("Using Hugging Face for download.")
+        try:
+            return download_from_hf(
+                repo=data_file.huggingface_org
+                + "/"
+                + data_file.huggingface_repo,
+                repo_filename=data_file.filepath,
+            )
+        except:
+            logging.info("Failed to download from Hugging Face.")
 
-    logging.info("Using Google Cloud Storage for download.")
-    download_file_from_gcs(
-        bucket_name=data_file.gcs_bucket,
-        file_name=filepath,
-        destination_path=filepath,
+    if data_file.gcs_bucket is not None:
+        logging.info("Using Google Cloud Storage for download.")
+        download_file_from_gcs(
+            bucket_name=data_file.gcs_bucket,
+            file_name=filepath,
+            destination_path=filepath,
+        )
+        return filepath
+
+    raise ValueError(
+        "No valid download method specified. Please provide either a Hugging Face repo or a Google Cloud Storage bucket."
     )
-    return filepath
