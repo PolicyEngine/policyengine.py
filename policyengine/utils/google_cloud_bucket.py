@@ -25,3 +25,5 @@ def download_file_from_gcs(
 
     # Download the file to a local path
     blob.download_to_filename(destination_path)
+
+    return destination_path

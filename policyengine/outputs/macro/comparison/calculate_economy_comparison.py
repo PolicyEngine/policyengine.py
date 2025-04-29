@@ -2,7 +2,7 @@
 
 from microdf import MicroSeries
 import numpy as np
-from policyengine_core.tools.hugging_face import download_huggingface_dataset
+from policyengine.utils.data_download import download
 import pandas as pd
 import h5py
 from pydantic import BaseModel
@@ -709,18 +709,20 @@ def uk_constituency_breakdown(
     baseline_hnet = baseline.household_net_income
     reform_hnet = reform.household_net_income
 
-    constituency_weights_path = download_huggingface_dataset(
-        repo="policyengine/policyengine-uk-data",
-        repo_filename="parliamentary_constituency_weights.h5",
+    constituency_weights_path = download(
+        huggingface_repo="policyengine-uk-data",
+        gcs_bucket="policyengine-uk-data-private",
+        filepath="parliamentary_constituency_weights.h5",
     )
     with h5py.File(constituency_weights_path, "r") as f:
         weights = f["2025"][
             ...
         ]  # {2025: array(650, 100180) where cell i, j is the weight of household record i in constituency j}
 
-    constituency_names_path = download_huggingface_dataset(
-        repo="policyengine/policyengine-uk-data",
-        repo_filename="constituencies_2024.csv",
+    constituency_names_path = download(
+        huggingface_repo="policyengine-uk-data",
+        gcs_bucket="policyengine-uk-data-private",
+        filepath="constituencies_2024.csv",
     )
     constituency_names = pd.read_csv(
         constituency_names_path

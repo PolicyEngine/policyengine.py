@@ -19,6 +19,7 @@ dependencies = [
     "microdf_python",
     "getpass4",
     "pydantic",
+    "google-cloud-storage",
 ]
 
 [project.optional-dependencies]

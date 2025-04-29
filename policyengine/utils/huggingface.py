@@ -4,7 +4,7 @@ from getpass import getpass
 import time
 
 
-def download(
+def download_from_hf(
     repo: str,
     repo_filename: str,
     local_folder: str | None = None,
