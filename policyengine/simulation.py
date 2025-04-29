@@ -141,7 +141,7 @@ class Simulation:
                         huggingface_repo=hf_repo,
                         gcs_bucket=bucket,
                     )
-                    filename = Path(file_path)
+                    filename = str(Path(file_path))
             if "cps_2023" in filename:
                 time_period = 2023
             else:
