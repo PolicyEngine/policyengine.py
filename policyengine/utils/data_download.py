@@ -9,8 +9,8 @@ from pydantic import BaseModel
 class DataFile(BaseModel):
     filepath: str
     huggingface_org: str
-    huggingface_repo: str = None
-    gcs_bucket: str = None
+    huggingface_repo: str | None = None
+    gcs_bucket: str | None = None
 
 
 def download(
