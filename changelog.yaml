@@ -18,3 +18,8 @@
     fixed:
     - Gracefully handle HuggingFace 429s.
   date: 2025-04-26 16:25:19
+- bump: minor
+  changes:
+    added:
+    - Google Cloud Storage data downloads.
+  date: 2025-04-29 13:08:11
