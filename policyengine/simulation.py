@@ -1,5 +1,5 @@
 """Simulate tax-benefit policy and derive society-level output statistics."""
- 
+
 from pydantic import BaseModel, Field
 from typing import Literal
 from .constants import DEFAULT_DATASETS_BY_COUNTRY
@@ -10,7 +10,6 @@ from policyengine_core.simulations import (
 from .utils.reforms import ParametricReform
 from policyengine_core.reforms import Reform as StructuralReform
 from policyengine_core.data import Dataset
-from .utils.huggingface import download
 from policyengine_us import (
     Simulation as USSimulation,
     Microsimulation as USMicrosimulation,
@@ -26,6 +25,7 @@ from typing import Type
 from functools import wraps, partial
 from typing import Dict, Any, Callable
 import importlib
+from policyengine.utils.data_download import download
 
 CountryType = Literal["uk", "us"]
 ScopeType = Literal["household", "macro"]
@@ -78,6 +78,7 @@ class Simulation:
                 self.options.country
             ]
 
+        self._set_data()
         self._initialise_simulations()
         self._add_output_functions()
 
@@ -118,7 +119,36 @@ class Simulation:
                 self.options.country
             ]
 
-        self._data_handle_cps_special_case()
+        if isinstance(self.options.data, str):
+            filename = self.options.data
+            if "://" in self.options.data:
+                bucket = None
+                hf_repo = None
+                hf_org = None
+                if "gs://" in self.options.data:
+                    bucket, filename = self.options.data.split("://")[
+                        -1
+                    ].split("/")
+                elif "hf://" in self.options.data:
+                    hf_org, hf_repo, filename = self.options.data.split("://")[
+                        -1
+                    ].split("/", 2)
+
+                if not Path(filename).exists():
+                    file_path = download(
+                        filepath=filename,
+                        huggingface_org=hf_org,
+                        huggingface_repo=hf_repo,
+                        gcs_bucket=bucket,
+                    )
+                    filename = str(Path(file_path))
+            if "cps_2023" in filename:
+                time_period = 2023
+            else:
+                time_period = None
+            self.options.data = Dataset.from_file(
+                filename, time_period=time_period
+            )
 
     def _initialise_simulations(self):
         self.baseline_simulation = self._initialise_simulation(
@@ -228,10 +258,9 @@ class Simulation:
             elif "constituency/" in region:
                 constituency = region.split("/")[1]
                 constituency_names_file_path = download(
-                    repo="policyengine/policyengine-uk-data",
-                    repo_filename="constituencies_2024.csv",
-                    local_folder=None,
-                    version=None,
+                    huggingface_repo="policyengine-uk-data",
+                    gcs_bucket="policyengine-uk-data-private",
+                    filepath="constituencies_2024.csv",
                 )
                 constituency_names_file_path = Path(
                     constituency_names_file_path
@@ -250,10 +279,9 @@ class Simulation:
                         f"Constituency {constituency} not found. See {constituency_names_file_path} for the list of available constituencies."
                     )
                 weights_file_path = download(
-                    repo="policyengine/policyengine-uk-data",
-                    repo_filename="parliamentary_constituency_weights.h5",
-                    local_folder=None,
-                    version=None,
+                    huggingface_repo="policyengine-uk-data",
+                    gcs_bucket="policyengine-uk-data-private",
+                    filepath="parliamentary_constituency_weights.h5",
                 )
 
                 with h5py.File(weights_file_path, "r") as f:
@@ -267,10 +295,9 @@ class Simulation:
             elif "local_authority/" in region:
                 la = region.split("/")[1]
                 la_names_file_path = download(
-                    repo="policyengine/policyengine-uk-data",
-                    repo_filename="local_authorities_2021.csv",
-                    local_folder=None,
-                    version=None,
+                    huggingface_repo="policyengine-uk-data",
+                    gcs_bucket="policyengine-uk-data-private",
+                    filepath="local_authorities_2021.csv",
                 )
                 la_names_file_path = Path(la_names_file_path)
                 la_names = pd.read_csv(la_names_file_path)
@@ -283,10 +310,9 @@ class Simulation:
                         f"Local authority {la} not found. See {la_names_file_path} for the list of available local authorities."
                     )
                 weights_file_path = download(
-                    repo="policyengine/policyengine-uk-data",
-                    repo_filename="local_authority_weights.h5",
-                    local_folder=None,
-                    version=None,
+                    huggingface_repo="policyengine-uk-data",
+                    gcs_bucket="policyengine-uk-data-private",
+                    filepath="local_authority_weights.h5",
                 )
 
                 with h5py.File(weights_file_path, "r") as f:
@@ -299,21 +325,3 @@ class Simulation:
                 )
 
         return simulation
-
-    def _data_handle_cps_special_case(self):
-        """Handle special case for CPS data- this data doesn't specify time periods for each variable, but we still use it intensively."""
-        if self.data is not None and "cps_2023" in self.data:
-            if "hf://" in self.data:
-                owner, repo, filename = self.data.split("/")[-3:]
-                if "@" in filename:
-                    version = filename.split("@")[-1]
-                    filename = filename.split("@")[0]
-                else:
-                    version = None
-                self.data = download(
-                    repo=owner + "/" + repo,
-                    repo_filename=filename,
-                    local_folder=None,
-                    version=version,
-                )
-                self.data = Dataset.from_file(self.data, "2023")

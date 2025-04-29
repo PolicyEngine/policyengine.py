@@ -1,7 +1,7 @@
 import pandas as pd
 import plotly.express as px
 import pandas as pd
-from policyengine.utils.huggingface import download
+from policyengine.utils.data_download import download
 import plotly.express as px
 from policyengine.utils.charts import *
 
@@ -10,16 +10,12 @@ def get_location_options_table(location_type: str) -> pd.DataFrame:
     if location_type == "parliamentary_constituencies":
         area_names_file_path = download(
             repo="policyengine/policyengine-uk-data",
-            repo_filename="constituencies_2024.csv",
-            local_folder=None,
-            version=None,
+            filepath="constituencies_2024.csv",
         )
     elif location_type == "local_authorities":
         area_names_file_path = download(
             repo="policyengine/policyengine-uk-data",
-            repo_filename="local_authorities_2021.csv",
-            local_folder=None,
-            version=None,
+            filepath="local_authorities_2021.csv",
         )
     df = pd.read_csv(area_names_file_path)
     return df
