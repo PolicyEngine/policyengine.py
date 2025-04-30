@@ -23,3 +23,10 @@
     added:
     - Google Cloud Storage data downloads.
   date: 2025-04-29 13:08:11
+- bump: patch
+  changes:
+    added:
+    - Default dataset handling (extra backups added).
+    fixed:
+    - Bug in state tax revenue calculation.
+  date: 2025-04-30 11:33:36
