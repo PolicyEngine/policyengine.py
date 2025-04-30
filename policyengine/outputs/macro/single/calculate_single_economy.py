@@ -376,7 +376,7 @@ def calculate_single_economy(
 
     if country_id == "us":
         try:
-            total_state_tax = simulation.calculate(
+            total_state_tax = task_manager.simulation.calculate(
                 "household_state_income_tax"
             ).sum()
         except:
