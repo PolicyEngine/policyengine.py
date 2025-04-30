@@ -1,0 +1,6 @@
+- bump: patch
+  changes:
+    fixed:
+    - Bug in state tax revenue calculation.
+    added:
+    - Default dataset handling (extra backups added).

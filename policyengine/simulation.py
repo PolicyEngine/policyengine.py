@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 from typing import Literal
-from .constants import DEFAULT_DATASETS_BY_COUNTRY
+from .constants import get_default_dataset
 from policyengine_core.simulations import Simulation as CountrySimulation
 from policyengine_core.simulations import (
     Microsimulation as CountryMicrosimulation,
@@ -73,11 +73,6 @@ class Simulation:
     def __init__(self, **options: SimulationOptions):
         self.options = SimulationOptions(**options)
 
-        if self.options.data is None:
-            self.options.data = DEFAULT_DATASETS_BY_COUNTRY[
-                self.options.country
-            ]
-
         self._set_data()
         self._initialise_simulations()
         self._add_output_functions()
@@ -115,11 +110,12 @@ class Simulation:
 
     def _set_data(self):
         if self.options.data is None:
-            self.options.data = DEFAULT_DATASETS_BY_COUNTRY[
-                self.options.country
-            ]
+            self.options.data = get_default_dataset(
+                country=self.options.country,
+                region=self.options.region,
+            )
 
-        if isinstance(self.options.data, str):
+        elif isinstance(self.options.data, str):
             filename = self.options.data
             if "://" in self.options.data:
                 bucket = None
@@ -129,6 +125,7 @@ class Simulation:
                     bucket, filename = self.options.data.split("://")[
                         -1
                     ].split("/")
+                    hf_org = "policyengine"
                 elif "hf://" in self.options.data:
                     hf_org, hf_repo, filename = self.options.data.split("://")[
                         -1
@@ -220,6 +217,8 @@ class Simulation:
 
         if subsample is not None:
             simulation = simulation.subsample(subsample)
+
+        simulation.default_calculation_period = time_period
 
         return simulation
 
