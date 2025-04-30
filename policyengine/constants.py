@@ -11,6 +11,7 @@ ENHANCED_CPS = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
 CPS = "hf://policyengine/policyengine-us-data/cps_2023.h5"
 POOLED_CPS = "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5"
 
+
 def get_default_dataset(country: str, region: str):
     if country == "uk":
         data_file = download(
@@ -34,7 +35,7 @@ def get_default_dataset(country: str, region: str):
                 gcs_bucket="policyengine-us-data",
             )
             time_period = 2023
-    
+
     return Dataset.from_file(
         file_path=data_file,
         time_period=time_period,
