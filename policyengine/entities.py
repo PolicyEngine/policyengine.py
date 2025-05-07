@@ -221,7 +221,7 @@ def add_uk_sim(
 
         
         # Tag dataset
-        dataset_tag = DatasetTag(
+        dataset_tag = Dataset(
             id=1, # Doesn't seem to work without this
             dataset=dataset,
             dataset_series=dataset_series,
@@ -232,7 +232,7 @@ def add_uk_sim(
 
         # Add simulation run
 
-        sim_run = SimulationRun(
+        sim_run = Simulation(
             country=uk,
             reform=None,
             package_version="1.0.0",
