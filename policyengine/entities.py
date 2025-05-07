@@ -62,20 +62,6 @@ class Reform(BaseModel, table=True):
     )
     simulations: List["Simulation"] = Relationship(back_populates="reform")
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-        if "parameters_dict" in kwargs:
-            # Create ParameterChange objects from the provided dictionary
-            for parameter_name, changes in kwargs["parameters_dict"].items():
-                for time_period, value in changes.items():
-                    parameter_change = ParameterChange(
-                        parameter_name=parameter_name,
-                        time_period=time_period,
-                        value=value,
-                    )
-                    self.parameter_changes.append(parameter_change)
-
 
 class Parameter(BaseModel, table=True):
     """Tax or benefit parameter definition"""
@@ -190,14 +176,14 @@ class VariableState(BaseModel, table=True):
     entity_id: int = Field(foreign_key="entity.id")
     time_period: str  # '2025'
     value: str  # '30000'
-    simulation_run_id: Optional[int] = Field(
-        default=None, foreign_key="simulationrun.id"
+    simulation_id: Optional[int] = Field(
+        default=None, foreign_key="simulation.id"
     )
 
     # Relationships
     variable: Variable = Relationship(back_populates="variable_states")
     entity: Entity = Relationship(back_populates="variable_states")
-    simulation_run: Optional["Simulation"] = Relationship(
+    simulation: Optional["Simulation"] = Relationship(
         back_populates="variable_states"
     )
 
@@ -227,136 +213,3 @@ def create_db_and_tables(connection_string="sqlite:///tax_policy.db"):
     engine = create_engine(connection_string)
     SQLModel.metadata.create_all(engine)
     return engine
-
-
-# Example data creation for UK tax parameter change
-def add_uk_sim():
-    """Create example data for the UK tax rate change scenario"""
-    Path("tax_policy.db").unlink(missing_ok=True)
-    engine = create_db_and_tables()
-
-    from policyengine import Simulation
-
-    sim = Simulation(
-        country="uk",
-        scope="macro",
-        subsample=1000,
-    )
-
-    person_df = sim.baseline_simulation.calculate_dataframe(
-        ["person_id", "age"]
-    )
-    household_df = sim.baseline_simulation.calculate_dataframe(
-        ["household_id", "household_net_income"]
-    )
-
-    with Session(engine) as session:
-        # Create countries
-        uk = Country(code="uk", name="United Kingdom")
-        us = Country(code="us", name="United States")
-        session.add(uk)
-        session.add(us)
-        session.commit()
-
-        # Create dataset and series
-        dataset_series = DatasetSeries(
-            name="Enhanced FRS", description="Enhanced Family Resources Survey"
-        )
-        session.add(dataset_series)
-
-        dataset = Dataset(
-            name="EFRS 2022",
-            description="Enhanced Family Resources Survey 2022",
-        )
-        session.add(dataset)
-        session.commit()
-
-        # Tag dataset
-        dataset_tag = Dataset(
-            id=1,  # Doesn't seem to work without this
-            dataset=dataset,
-            dataset_series=dataset_series,
-            version="2025.1",
-        )
-        session.add(dataset_tag)
-        session.commit()
-
-        # Add simulation run
-
-        sim_run = Simulation(
-            country=uk,
-            reform=None,
-            package_version="1.0.0",
-            dataset=dataset,
-            run_date=datetime.utcnow(),
-        )
-        session.add(sim_run)
-        session.commit()
-
-        # Create variables
-        variable_names = list(person_df.columns) + list(household_df.columns)
-        for variable_name in variable_names:
-            variable = Variable(
-                country=uk,
-                name=variable_name,
-                description=f"Variable {variable_name} for UK tax simulation",
-            )
-            session.add(variable)
-        session.commit()
-
-        # Create all person entities
-        for i in range(len(person_df)):
-            person = Entity(
-                country=uk,
-                entity_type="person",
-                dataset_tag_id=dataset_tag.id,
-            )
-            session.add(person)
-            for variable_name in list(person_df.columns):
-                # Get the variable object by name
-                variable = session.exec(
-                    select(Variable)
-                    .where(Variable.name == variable_name)
-                    .where(Variable.country_id == uk.id)
-                ).one()
-                variable_state = VariableState(
-                    variable=variable,
-                    entity=person,
-                    time_period="2025",
-                    value=str(
-                        person_df[variable_name].iloc[i]
-                    ),  # Convert to string as value is expected to be str
-                    simulation_run=sim_run,
-                )
-                session.add(variable_state)
-        session.commit()
-
-        # Create all household entities
-        for i in range(len(household_df)):
-            household = Entity(
-                country=uk,
-                entity_type="household",
-                dataset_tag_id=dataset_tag.id,
-            )
-            session.add(household)
-            for variable_name in list(household_df.columns):
-                # Get the variable object by name
-                variable = session.exec(
-                    select(Variable)
-                    .where(Variable.name == variable_name)
-                    .where(Variable.country_id == uk.id)
-                ).one()
-                variable_state = VariableState(
-                    variable=variable,
-                    entity=household,
-                    time_period="2025",
-                    value=household_df[variable_name].iloc[i],
-                )
-                session.add(variable_state)
-        session.commit()
-
-        print("Successfully created example data for UK tax parameter change.")
-
-
-if __name__ == "__main__":
-    add_uk_sim()
