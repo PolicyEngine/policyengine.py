@@ -32,7 +32,7 @@ class Country(BaseModel, table=True):
     reforms: List["Reform"] = Relationship(back_populates="country")
     entities: List["Entity"] = Relationship(back_populates="country")
     variables: List["Variable"] = Relationship(back_populates="country")
-    simulation_runs: List["SimulationRun"] = Relationship(back_populates="country")
+    simulation: List["Simulation"] = Relationship(back_populates="country")
 
 
 class Reform(BaseModel, table=True):
@@ -46,7 +46,7 @@ class Reform(BaseModel, table=True):
     # Relationships
     country: Optional[Country] = Relationship(back_populates="reforms")
     parameter_changes: List["ParameterChange"] = Relationship(back_populates="reform")
-    simulation_runs: List["SimulationRun"] = Relationship(back_populates="reform")
+    simulations: List["Simulation"] = Relationship(back_populates="reform")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -126,7 +126,7 @@ class Dataset(BaseModel, table=True):
     # Relationships
     entities: List[Entity] = Relationship(back_populates="dataset")
     versioned_dataset: VersionedDataset = Relationship(back_populates="datasets")
-    simulation_runs: List["SimulationRun"] = Relationship(back_populates="dataset")
+    simulations: List["Simulation"] = Relationship(back_populates="dataset")
 
 
 # Variable models
@@ -152,10 +152,10 @@ class VariableState(BaseModel, table=True):
     # Relationships
     variable: Variable = Relationship(back_populates="variable_states")
     entity: Entity = Relationship(back_populates="variable_states")
-    simulation_run: Optional["SimulationRun"] = Relationship(back_populates="variable_states")
+    simulation_run: Optional["Simulation"] = Relationship(back_populates="variable_states")
 
 
-class SimulationRun(BaseModel, table=True):
+class Simulation(BaseModel, table=True):
     """Record of a specific policy simulation"""
     country_id: int = Field(foreign_key="country.id")
     
@@ -165,10 +165,10 @@ class SimulationRun(BaseModel, table=True):
     run_date: datetime = Field(default_factory=datetime.utcnow)
     
     # Relationships
-    reform: Optional[Reform] = Relationship(back_populates="simulation_runs")
-    country: Country = Relationship(back_populates="simulation_runs")
-    dataset: Dataset = Relationship(back_populates="simulation_runs")
-    variable_states: List["VariableState"] = Relationship(back_populates="simulation_run")
+    reform: Optional[Reform] = Relationship(back_populates="simulations")
+    country: Country = Relationship(back_populates="simulations")
+    dataset: Dataset = Relationship(back_populates="simulations")
+    variable_states: List["VariableState"] = Relationship(back_populates="simulation")
 
 
 # Database management functions
