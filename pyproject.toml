@@ -20,6 +20,7 @@ dependencies = [
     "getpass4",
     "pydantic",
     "google-cloud-storage",
+    "sqlmodel",
 ]
 
 [project.optional-dependencies]
