@@ -1,11 +1,8 @@
 from pydantic import (
     RootModel,
-    Field,
     field_validator,
 )
 from typing import Dict, Any
-from typing_extensions import Annotated
-from policyengine_core.simulations import Simulation
 
 
 class ParameterChangeValue(RootModel):
@@ -37,26 +34,6 @@ class ParameterChangeValue(RootModel):
         return value
 
 
-class ParameterChangePeriod(RootModel):
-    """A period for a parameter change, which can be a single year or a date range"""
-
-    root: Annotated[
-        str,
-        Field(
-            pattern=r"^\d{4}$|^\d{4}-\d{2}-\d{2}\.\d{4}-\d{2}-\d{2}$",
-            description="A single year (YYYY) or a date range (YYYY-MM-DD.YYYY-MM-DD)",
-        ),
-    ]
-
-    def __hash__(self):
-        return hash(self.root)
-
-    def __eq__(self, other):
-        if isinstance(other, ParameterChangePeriod):
-            return self.root == other.root
-        return False
-
-
 class ParameterChangeDict(RootModel):
     """
     A dict of changes to a parameter, with custom date string as keys
@@ -67,7 +44,25 @@ class ParameterChangeDict(RootModel):
     2. A date range (e.g., "YYYY-MM-DD.YYYY-MM-DD")
     """
 
-    root: Dict[ParameterChangePeriod, ParameterChangeValue]
+    root: Dict[str, ParameterChangeValue]
+
+    @field_validator("root", mode="after")
+    @classmethod
+    def validate_dates(
+        cls, value: Dict[str, ParameterChangeValue]
+    ) -> Dict[str, ParameterChangeValue]:
+
+        year_keys_re = r"^\d{4}$"
+        date_range_keys_re = r"^\d{4}-\d{2}-\d{2}\.\d{4}-\d{2}-\d{2}$"
+
+        for key in value.keys():
+            if not year_keys_re.match(key) and not date_range_keys_re.match(
+                key
+            ):
+                raise ValueError(
+                    f"Key '{key}' must be a single year (YYYY) or a date range (YYYY-MM-DD.YYYY-MM-DD)"
+                )
+        return value
 
 
 class ParametricReform(RootModel):

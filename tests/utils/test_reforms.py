@@ -18,12 +18,8 @@ class TestParameterChangeDict:
         }
 
         expected_output_data = {
-            ParameterChangePeriod(
-                root="2023-01-01.2023-12-31"
-            ): ParameterChangeValue(root=0.1),
-            ParameterChangePeriod(
-                root="2024-01-01.2024-12-31"
-            ): ParameterChangeValue(root=0.2),
+            "2023-01-01.2023-12-31": ParameterChangeValue(root=0.1),
+            "2024-01-01.2024-12-31": ParameterChangeValue(root=0.2),
         }
 
         result = ParameterChangeDict(root=input_data)
@@ -38,12 +34,8 @@ class TestParameterChangeDict:
         }
 
         expected_output_data = {
-            ParameterChangePeriod(
-                root="2023-01-01.2023-12-31"
-            ): ParameterChangeValue(root="0.1"),
-            ParameterChangePeriod(
-                root="2024-01-01.2024-12-31"
-            ): ParameterChangeValue(root="0.2"),
+            "2023-01-01.2023-12-31": ParameterChangeValue(root="0.1"),
+            "2024-01-01.2024-12-31": ParameterChangeValue(root="0.2"),
         }
 
         result = ParameterChangeDict(root=input_data)
@@ -58,12 +50,8 @@ class TestParameterChangeDict:
         }
 
         expected_output_data = {
-            ParameterChangePeriod(
-                root="2023-01-01.2023-12-31"
-            ): ParameterChangeValue(root=np.inf),
-            ParameterChangePeriod(
-                root="2024-01-01.2024-12-31"
-            ): ParameterChangeValue(root=-np.inf),
+            "2023-01-01.2023-12-31": ParameterChangeValue(root=np.inf),
+            "2024-01-01.2024-12-31": ParameterChangeValue(root=-np.inf),
         }
 
         result = ParameterChangeDict(root=input_data)
@@ -78,8 +66,8 @@ class TestParameterChangeDict:
         }
 
         expected_output_data = {
-            ParameterChangePeriod(root="2023"): ParameterChangeValue(root=0.1),
-            ParameterChangePeriod(root="2024"): ParameterChangeValue(root=0.2),
+            "2023": ParameterChangeValue(root=0.1),
+            "2024": ParameterChangeValue(root=0.2),
         }
 
         result = ParameterChangeDict(root=input_data)
@@ -96,7 +84,7 @@ class TestParameterChangeDict:
         ):
             ParameterChangeDict(root=input_data)
 
-    def test_schema__given_invalid_key_type__raises_validation_error(self):
+    def test_schema__given_non_date_key_type__raises_validation_error(self):
         input_data = {123: 0.1, "2024-01-01.2024-12-31": 0.2}
 
         with pytest.raises(
@@ -104,32 +92,19 @@ class TestParameterChangeDict:
         ):
             ParameterChangeDict(root=input_data)
 
-
-class TestParameterChangePeriod:
-    def test_schema__given_valid_year__returns_valid_period(self):
-        input_data = "2023"
-
-        result = ParameterChangePeriod(root=input_data)
-
-        assert isinstance(result, ParameterChangePeriod)
-        assert result.root == input_data
-
-    def test_schema__given_valid_date_range__returns_valid_period(self):
-        input_data = "2023-01-01.2023-12-31"
-
-        result = ParameterChangePeriod(root=input_data)
-
-        assert isinstance(result, ParameterChangePeriod)
-        assert result.root == input_data
-
-    def test_schema__given_invalid_date_format__raises_validation_error(self):
-        input_data = "2023.01.01-2024.12.31"
+    def test_schema__given_incorrect_date_key_type__raises_validation_error(
+        self,
+    ):
+        input_data = {
+            "2023-01-01.2023-12-31": 0.1,
+            "2024-01-01.2024-12-31": 0.2,
+            "2024.01.01-2025.12.31": 0.3,
+        }
 
         with pytest.raises(
-            ValidationError,
-            match=r"validation errors? for ParameterChangePeriod",
+            ValidationError, match="validation error for ParameterChangeDict"
         ):
-            ParameterChangePeriod(root=input_data)
+            ParameterChangeDict(root=input_data)
 
 
 class TestParameterChangeValue:
