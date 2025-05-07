@@ -6,7 +6,6 @@ from policyengine.utils.reforms import (
     ParameterChangeDict,
     ParametricReform,
     ParameterChangeValue,
-    ParameterChangePeriod,
 )
 
 

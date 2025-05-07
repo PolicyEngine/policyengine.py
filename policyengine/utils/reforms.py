@@ -1,3 +1,4 @@
+import re
 from pydantic import (
     RootModel,
     field_validator,
@@ -56,8 +57,8 @@ class ParameterChangeDict(RootModel):
         date_range_keys_re = r"^\d{4}-\d{2}-\d{2}\.\d{4}-\d{2}-\d{2}$"
 
         for key in value.keys():
-            if not year_keys_re.match(key) and not date_range_keys_re.match(
-                key
+            if not re.match(year_keys_re, key) and not re.match(
+                date_range_keys_re, key
             ):
                 raise ValueError(
                     f"Key '{key}' must be a single year (YYYY) or a date range (YYYY-MM-DD.YYYY-MM-DD)"
