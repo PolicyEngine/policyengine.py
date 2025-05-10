@@ -195,7 +195,6 @@ class Simulation:
         }[country][macro]
 
         if isinstance(reform, ParametricReform):
-            print("Dumping reform model")
             reform = reform.model_dump()
 
         simulation: CountrySimulation = _simulation_type(
