@@ -181,7 +181,7 @@ class Simulation:
         time_period: TimePeriodType,
         region: RegionType,
         subsample: SubsampleType,
-    ):
+    ) -> CountrySimulation:
         macro = scope == "macro"
         _simulation_type: Type[CountrySimulation] = {
             "uk": {

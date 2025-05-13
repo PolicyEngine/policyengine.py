@@ -3,6 +3,29 @@
 from policyengine_core.data import Dataset
 from policyengine.utils.data_download import download
 
+SUPPORTED_COUNTRY_IDS = [
+    "us",
+    "uk",
+]
+
+UNSUPPORTED_COUNTRY_IDS = [
+    "ca",
+    "il",
+    "ng",
+]
+
+SUPPORTED_COUNTRY_PACKAGES = [
+    f"policyengine_{country}" for country in SUPPORTED_COUNTRY_IDS
+]
+UNSUPPORTED_COUNTRY_PACKAGES = [
+    f"policyengine_{country}" if country != "ca" else "policyengine_canada"
+    for country in UNSUPPORTED_COUNTRY_IDS
+]
+
+ALL_COUNTRY_PACKAGES = (
+    SUPPORTED_COUNTRY_PACKAGES + UNSUPPORTED_COUNTRY_PACKAGES
+)
+
 # Datasets
 
 ENHANCED_FRS = "hf://policyengine/policyengine-uk-data/enhanced_frs_2022_23.h5"
