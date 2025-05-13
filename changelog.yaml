@@ -30,3 +30,8 @@
     fixed:
     - Bug in state tax revenue calculation.
   date: 2025-04-30 11:33:36
+- bump: minor
+  changes:
+    changed:
+    - Economy simulation comparisons now include country package version
+  date: 2025-05-13 23:23:01

@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    changed:
-    - Economy simulation comparisons now include country package version
