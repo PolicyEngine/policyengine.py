@@ -17,9 +17,18 @@ UNSUPPORTED_COUNTRY_IDS = [
 SUPPORTED_COUNTRY_PACKAGES = [
     f"policyengine_{country}" for country in SUPPORTED_COUNTRY_IDS
 ]
+
+
+def _package_name_for(country_id: str) -> str:
+    return (
+        f"policyengine_{country_id}"
+        if country_id != "ca"
+        else "policyengine_canada"
+    )
+
+
 UNSUPPORTED_COUNTRY_PACKAGES = [
-    f"policyengine_{country}" if country != "ca" else "policyengine_canada"
-    for country in UNSUPPORTED_COUNTRY_IDS
+    _package_name_for(country) for country in UNSUPPORTED_COUNTRY_IDS
 ]
 
 ALL_COUNTRY_PACKAGES = (
