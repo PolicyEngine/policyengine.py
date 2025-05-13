@@ -10,6 +10,7 @@ from policyengine import Simulation
 from policyengine.outputs.macro.single.calculate_single_economy import (
     SingleEconomy,
 )
+from policyengine.utils.packages import get_country_package_version
 from typing import List, Dict
 
 
@@ -775,6 +776,7 @@ def uk_constituency_breakdown(
 
 
 class EconomyComparison(BaseModel):
+    country_package_version: str
     budget: BudgetaryImpact
     detailed_budget: DetailedBudgetaryImpact
     decile: DecileImpact
@@ -823,6 +825,7 @@ def calculate_economy_comparison(
         )
 
         return EconomyComparison(
+            country_package_version=get_country_package_version(country_id),
             budget=budgetary_impact_data,
             detailed_budget=detailed_budgetary_impact_data,
             decile=decile_impact_data,

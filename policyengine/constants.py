@@ -4,7 +4,6 @@ from policyengine_core.data import Dataset
 from policyengine.utils.data_download import download
 
 # Datasets
-
 ENHANCED_FRS = "hf://policyengine/policyengine-uk-data/enhanced_frs_2022_23.h5"
 FRS = "hf://policyengine/policyengine-uk-data/frs_2022_23.h5"
 ENHANCED_CPS = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
