@@ -776,7 +776,7 @@ def uk_constituency_breakdown(
 
 
 class EconomyComparison(BaseModel):
-    country_packge_version: str
+    country_package_version: str
     budget: BudgetaryImpact
     detailed_budget: DetailedBudgetaryImpact
     decile: DecileImpact
