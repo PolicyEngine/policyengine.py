@@ -10,7 +10,7 @@ from policyengine import Simulation
 from policyengine.outputs.macro.single.calculate_single_economy import (
     SingleEconomy,
 )
-from policyengine.utils.versioning import get_country_package_version
+from policyengine.utils.packages import get_country_package_version
 from typing import List, Dict
 
 
