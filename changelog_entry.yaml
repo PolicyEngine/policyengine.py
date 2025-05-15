@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+      - downloads from google storage should now be properly cached.
