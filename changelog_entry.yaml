@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    added:
-      - new class CachingGoogleStorageClient for locally caching gs files to disk.
