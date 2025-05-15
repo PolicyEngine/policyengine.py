@@ -16,10 +16,11 @@ dependencies = [
     "policyengine_core>=3.10",
     "policyengine-uk",
     "policyengine-us>=1.213.1",
+    "diskcache (>=5.6.3,<6.0.0)",
+    "google-cloud-storage (>=3.1.0,<4.0.0)",
     "microdf_python",
     "getpass4",
-    "pydantic",
-    "google-cloud-storage",
+    "pydantic"
 ]
 
 [project.optional-dependencies]
@@ -32,6 +33,7 @@ dev = [
     "yaml-changelog>=0.1.7",
     "itables",
     "build",
+    "pytest-asyncio>=0.26.0",
 ]
 
 [tool.setuptools]
