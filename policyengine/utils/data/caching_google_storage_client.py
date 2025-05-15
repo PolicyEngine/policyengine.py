@@ -23,14 +23,14 @@ class CachingGoogleStorageClient(AbstractContextManager):
 
     # To absolutely 100% avoid any possible issue with file corruption or thread contention
     # always replace the current target file with whatever we have cached as an atomic write.
-    async def download(self, bucket: str, key: str, target: Path):
+    def download(self, bucket: str, key: str, target: Path):
         """
         Atomically write the latest version of the cloud storage blob to the target path.
         """
-        await self.sync(bucket, key)
+        self.sync(bucket, key)
         data = self.cache.get(self._data_key(bucket, key))
         if type(data) is bytes:
-            logger.debug(
+            logger.info(
                 f"Copying downloaded data for {bucket}, {key} to {target}"
             )
             atomic_write(target, data)
@@ -39,7 +39,7 @@ class CachingGoogleStorageClient(AbstractContextManager):
 
     # If the crc has changed from what we downloaded last time download it again.
     # then update the CRC to whatever we actually downloaded.
-    async def sync(self, bucket: str, key: str) -> None:
+    def sync(self, bucket: str, key: str) -> None:
         """
         Cache the resource if the CRC has changed.
         """
@@ -59,7 +59,7 @@ class CachingGoogleStorageClient(AbstractContextManager):
             )
             return
 
-        [content, downloaded_crc] = await self.client.download(bucket, key)
+        [content, downloaded_crc] = self.client.download(bucket, key)
         logger.info(
             f"Downloaded new version of {bucket}, {key} with crc {downloaded_crc}"
         )

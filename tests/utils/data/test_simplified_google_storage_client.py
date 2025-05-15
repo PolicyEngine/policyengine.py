@@ -21,12 +21,11 @@ class TestSimplifiedGoogleStorageClient:
         bucket.blob.assert_called_with("content.txt")
         blob.reload.assert_called()
 
-    @pytest.mark.asyncio
     @patch(
         "policyengine.utils.data.simplified_google_storage_client.Client",
         autospec=True,
     )
-    async def test_download__downloads_content(self, mock_client_class):
+    def test_download__downloads_content(self, mock_client_class):
         mock_instance = mock_client_class.return_value
         bucket = mock_instance.bucket.return_value
         blob = bucket.blob.return_value
@@ -35,7 +34,7 @@ class TestSimplifiedGoogleStorageClient:
         blob.crc32c = "TEST_CRC"
 
         client = SimplifiedGoogleStorageClient()
-        [data, crc] = await client.download("bucket", "blob.txt")
+        [data, crc] = client.download("bucket", "blob.txt")
         assert data == "hello, world".encode()
         assert crc == "TEST_CRC"
 
