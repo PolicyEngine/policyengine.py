@@ -793,16 +793,21 @@ class EconomyComparison(BaseModel):
 
 def calculate_economy_comparison(
     simulation: Simulation,
+    include_cliffs: bool = False,
 ) -> EconomyComparison:
     """Calculate comparison statistics between two economic scenarios."""
     if not simulation.is_comparison:
         raise ValueError("Simulation must be a comparison simulation.")
 
-    baseline: SingleEconomy = simulation.calculate_single_economy(reform=False)
-    reform: SingleEconomy = simulation.calculate_single_economy(reform=True)
+    baseline: SingleEconomy = simulation.calculate_single_economy(
+        reform=False, include_cliffs=include_cliffs
+    )
+    reform: SingleEconomy = simulation.calculate_single_economy(
+        reform=True, include_cliffs=include_cliffs
+    )
     options = simulation.options
     country_id = options.country
-    if baseline.type == "general":
+    if not include_cliffs:
         budgetary_impact_data = budgetary_impact(baseline, reform)
         detailed_budgetary_impact_data = detailed_budgetary_impact(
             baseline, reform, country_id
@@ -839,7 +844,7 @@ def calculate_economy_comparison(
             labor_supply_response=labor_supply_response_data,
             constituency_impact=constituency_impact_data,
         )
-    elif baseline.type == "cliff":
+    elif include_cliffs:
         return dict(
             baseline=dict(
                 cliff_gap=baseline.cliff_gap,

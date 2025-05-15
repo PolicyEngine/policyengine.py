@@ -49,6 +49,8 @@ class SingleEconomy(BaseModel):
     weekly_hours_substitution_effect: float | None
     type: str
     programs: Dict[str, float] | None
+    cliff_gap: float | None = None
+    cliff_share: float | None = None
 
 
 @dataclass
@@ -329,7 +331,7 @@ class GeneralEconomyTask:
 
 
 def calculate_single_economy(
-    simulation: Simulation, reform: bool = False
+    simulation: Simulation, reform: bool = False, include_cliffs: bool = False
 ) -> Dict:
     task_manager = GeneralEconomyTask(
         (
@@ -382,6 +384,13 @@ def calculate_single_economy(
         except:
             total_state_tax = 0
 
+    if include_cliffs:
+        cliff_gap = task_manager.simulation.calculate("cliff_gap")
+        is_on_cliff = task_manager.simulation.calculate("is_on_cliff")
+        total_cliff_gap = cliff_gap.sum()
+        total_adults = task_manager.simulation.calculate("is_adult").sum()
+        cliff_share = is_on_cliff.sum() / total_adults
+
     return SingleEconomy(
         **{
             "total_net_income": total_net_income,
@@ -414,7 +423,9 @@ def calculate_single_economy(
             "age": age,
             **labor_supply_responses,
             **lsr_working_hours,
-            "type": "general",
+            "type": "general" if include_cliffs else "cliff",
             "programs": uk_programs,
+            "cliff_gap": float(total_cliff_gap) if include_cliffs else None,
+            "cliff_share": float(cliff_share) if include_cliffs else None,
         }
     )
