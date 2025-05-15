@@ -331,8 +331,9 @@ class GeneralEconomyTask:
 
 
 def calculate_single_economy(
-    simulation: Simulation, reform: bool = False, include_cliffs: bool = False
+    simulation: Simulation, reform: bool = False
 ) -> Dict:
+    include_cliffs = simulation.options.include_cliffs
     task_manager = GeneralEconomyTask(
         (
             simulation.baseline_simulation
