@@ -1,5 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Refactored ParametricReform schema into clearer subschemas.
-    - Added conversion of Infinity and -Infinity to np.inf and -np.inf.

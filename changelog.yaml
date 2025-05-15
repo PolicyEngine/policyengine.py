@@ -35,3 +35,9 @@
     changed:
     - Economy simulation comparisons now include country package version
   date: 2025-05-13 23:23:01
+- bump: patch
+  changes:
+    changed:
+    - Refactored ParametricReform schema into clearer subschemas.
+    - Added conversion of Infinity and -Infinity to np.inf and -np.inf.
+  date: 2025-05-15 15:52:24
