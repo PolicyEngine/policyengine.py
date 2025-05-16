@@ -1,5 +1,6 @@
 import plotly.graph_objects as go
 from IPython.core.display import HTML, display_html
+from policyengine.utils.packages import get_country_package_version
 
 
 def add_fonts():
@@ -40,12 +41,6 @@ BLUE_COLOR_SCALE = [
     BLUE_PRIMARY,
     BLUE_PRESSED,
 ]
-
-
-def get_version_number(package):
-    import importlib
-
-    return importlib.import_module(package).__version__
 
 
 def format_fig(
@@ -97,7 +92,7 @@ def format_fig(
         )
     )
 
-    version = get_version_number(f"policyengine-{country}")
+    version = get_country_package_version(country)
 
     # Add bottom left chart description opposite logo
     fig.add_annotation(
