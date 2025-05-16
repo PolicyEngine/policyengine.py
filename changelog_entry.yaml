@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Removed max and min year bounds for Simulations.
