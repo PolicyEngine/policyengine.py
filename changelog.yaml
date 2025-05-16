@@ -51,3 +51,8 @@
     added:
     - Changelog entry check.
   date: 2025-05-16 12:23:45
+- bump: patch
+  changes:
+    fixed:
+    - Fixed `format_fig` to work with Python 3.11.
+  date: 2025-05-16 12:55:50
