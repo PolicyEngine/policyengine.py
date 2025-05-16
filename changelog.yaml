@@ -46,3 +46,8 @@
     added:
     - new class CachingGoogleStorageClient for locally caching gs files to disk.
   date: 2025-05-15 21:56:02
+- bump: patch
+  changes:
+    added:
+    - Changelog entry check.
+  date: 2025-05-16 12:23:45
