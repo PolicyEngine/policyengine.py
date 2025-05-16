@@ -10,6 +10,8 @@ from typing import List
 from policyengine_core.simulations import Microsimulation
 from typing import Dict
 from dataclasses import dataclass
+from typing import Literal
+from microdf import MicroSeries
 
 
 class SingleEconomy(BaseModel):
@@ -47,7 +49,7 @@ class SingleEconomy(BaseModel):
     weekly_hours: float | None
     weekly_hours_income_effect: float | None
     weekly_hours_substitution_effect: float | None
-    type: str
+    type: Literal["general", "cliff"]
     programs: Dict[str, float] | None
     cliff_gap: float | None = None
     cliff_share: float | None = None
@@ -386,11 +388,15 @@ def calculate_single_economy(
             total_state_tax = 0
 
     if include_cliffs:
-        cliff_gap = task_manager.simulation.calculate("cliff_gap")
-        is_on_cliff = task_manager.simulation.calculate("is_on_cliff")
-        total_cliff_gap = cliff_gap.sum()
-        total_adults = task_manager.simulation.calculate("is_adult").sum()
-        cliff_share = is_on_cliff.sum() / total_adults
+        cliff_gap: MicroSeries = task_manager.simulation.calculate("cliff_gap")
+        is_on_cliff: MicroSeries = task_manager.simulation.calculate(
+            "is_on_cliff"
+        )
+        total_cliff_gap: float = cliff_gap.sum()
+        total_adults: float = task_manager.simulation.calculate(
+            "is_adult"
+        ).sum()
+        cliff_share: float = is_on_cliff.sum() / total_adults
 
     return SingleEconomy(
         **{
