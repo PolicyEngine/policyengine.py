@@ -1,4 +1,4 @@
-name: Changelog entry
+name: Versioning
 
 on:
   pull_request:
@@ -6,6 +6,7 @@ on:
 
 jobs:
   check-changelog-entry:
+    name: Changelog entry check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
