@@ -43,7 +43,7 @@ class SimulationOptions(BaseModel):
     scope: ScopeType = Field(..., description="The scope of the simulation.")
     data: DataType = Field(None, description="The data to simulate.")
     time_period: TimePeriodType = Field(
-        2025, description="The time period to simulate.", ge=2024, le=2035
+        2025, description="The time period to simulate."
     )
     reform: ReformType = Field(None, description="The reform to simulate.")
     baseline: ReformType = Field(None, description="The baseline to simulate.")
