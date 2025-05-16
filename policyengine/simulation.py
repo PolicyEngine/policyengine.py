@@ -43,7 +43,7 @@ class SimulationOptions(BaseModel):
     scope: ScopeType = Field(..., description="The scope of the simulation.")
     data: DataType = Field(None, description="The data to simulate.")
     time_period: TimePeriodType = Field(
-        2025, description="The time period to simulate.", ge=2024, le=2035
+        2025, description="The time period to simulate.", ge=2023, le=2040
     )
     reform: ReformType = Field(None, description="The reform to simulate.")
     baseline: ReformType = Field(None, description="The baseline to simulate.")
@@ -172,6 +172,14 @@ class Simulation:
         else:
             self.is_comparison = False
 
+    def _handle_legacy_ecps_region_specification(
+        self,
+    ):
+        options = self.options
+        if "enhanced_us" in options.region:
+            options.region = None
+            options.data = "gs://policyengine-us-data/enhanced_cps_2024.h5"
+
     def _initialise_simulation(
         self,
         country: CountryType,
@@ -193,6 +201,8 @@ class Simulation:
                 False: USSimulation,
             },
         }[country][macro]
+
+        self._handle_legacy_ecps_region_specification()
 
         if isinstance(reform, ParametricReform):
             reform = reform.model_dump()
