@@ -424,7 +424,7 @@ def calculate_single_economy(
             "age": age,
             **labor_supply_responses,
             **lsr_working_hours,
-            "type": "general" if include_cliffs else "cliff",
+            "type": "general" if not include_cliffs else "cliff",
             "programs": uk_programs,
             "cliff_gap": float(total_cliff_gap) if include_cliffs else None,
             "cliff_share": float(cliff_share) if include_cliffs else None,
