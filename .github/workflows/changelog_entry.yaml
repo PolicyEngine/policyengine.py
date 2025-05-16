@@ -1,4 +1,4 @@
-name: Changelog Entry Check
+name: Changelog entry
 
 on:
   pull_request:
