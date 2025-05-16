@@ -176,7 +176,7 @@ class Simulation:
         self,
     ):
         options = self.options
-        if "enhanced_us" in options.region:
+        if options.region is not None and "enhanced_us" in options.region:
             options.region = None
             options.data = "gs://policyengine-us-data/enhanced_cps_2024.h5"
 
