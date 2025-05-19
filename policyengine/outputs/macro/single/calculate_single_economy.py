@@ -331,6 +331,22 @@ class GeneralEconomyTask:
             for program in UKPrograms.PROGRAMS
         }
 
+    def calculate_cliffs(self):
+        cliff_gap: MicroSeries = self.simulation.calculate("cliff_gap")
+        is_on_cliff: MicroSeries = self.simulation.calculate("is_on_cliff")
+        total_cliff_gap: float = cliff_gap.sum()
+        total_adults: float = self.simulation.calculate("is_adult").sum()
+        cliff_share: float = is_on_cliff.sum() / total_adults
+        return CliffImpactInSimulation(
+            cliff_gap=total_cliff_gap,
+            cliff_share=cliff_share,
+        )
+
+
+class CliffImpactInSimulation(BaseModel):
+    cliff_gap: float
+    cliff_share: float
+
 
 def calculate_single_economy(
     simulation: Simulation, reform: bool = False
@@ -388,15 +404,12 @@ def calculate_single_economy(
             total_state_tax = 0
 
     if include_cliffs:
-        cliff_gap: MicroSeries = task_manager.simulation.calculate("cliff_gap")
-        is_on_cliff: MicroSeries = task_manager.simulation.calculate(
-            "is_on_cliff"
-        )
-        total_cliff_gap: float = cliff_gap.sum()
-        total_adults: float = task_manager.simulation.calculate(
-            "is_adult"
-        ).sum()
-        cliff_share: float = is_on_cliff.sum() / total_adults
+        cliffs = task_manager.calculate_cliffs()
+        cliff_gap = cliffs.cliff_gap
+        cliff_share = cliffs.cliff_share
+    else:
+        cliff_gap = None
+        cliff_share = None
 
     return SingleEconomy(
         **{
@@ -432,7 +445,7 @@ def calculate_single_economy(
             **lsr_working_hours,
             "type": "general" if not include_cliffs else "cliff",
             "programs": uk_programs,
-            "cliff_gap": float(total_cliff_gap) if include_cliffs else None,
-            "cliff_share": float(cliff_share) if include_cliffs else None,
+            "cliff_gap": cliff_gap if include_cliffs else None,
+            "cliff_share": cliff_share if include_cliffs else None,
         }
     )
