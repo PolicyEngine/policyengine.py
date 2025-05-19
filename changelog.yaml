@@ -71,3 +71,8 @@
     fixed:
     - revert cached downloads from google storage
   date: 2025-05-19 16:53:05
+- bump: patch
+  changes:
+    fixed:
+    - google storage caching is now fully sync, not async and reenabled.
+  date: 2025-05-19 22:42:39

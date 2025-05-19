@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.8] - 2025-05-19 22:42:39
+
+### Fixed
+
+- google storage caching is now fully sync, not async and reenabled.
+
 ## [0.3.7] - 2025-05-19 16:53:05
 
 ### Fixed
@@ -96,6 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[0.3.8]: https://github.com/PolicyEngine/policyengine.py/compare/0.3.7...0.3.8
 [0.3.7]: https://github.com/PolicyEngine/policyengine.py/compare/0.3.6...0.3.7
 [0.3.6]: https://github.com/PolicyEngine/policyengine.py/compare/0.3.5...0.3.6
 [0.3.5]: https://github.com/PolicyEngine/policyengine.py/compare/0.3.4...0.3.5
