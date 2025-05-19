@@ -27,19 +27,14 @@ class SimplifiedGoogleStorageClient:
         logger.debug(f"Crc is {blob.crc32c}")
         return blob.crc32c
 
-    async def download(self, bucket: str, key: str) -> tuple[bytes, str]:
+    def download(self, bucket: str, key: str) -> tuple[bytes, str]:
         """
         get the blob content and associated CRC from google storage.
         """
         logger.debug(f"Downloading {bucket}, {key}")
         blob = self.client.bucket(bucket).blob(key)
 
-        # async implmentation as per https://github.com/googleapis/python-storage/blob/main/samples/snippets/storage_async_download.py
-        def download():
-            return blob.download_as_bytes()
-
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(None, download)
+        result = blob.download_as_bytes()
         # According to documentation blob.crc32c is updated as a side effect of
         # downloading the content. As a result this should now be the crc of the downloaded
         # content (i.e. there is not a race condition where it's getting the CRC from the cloud)

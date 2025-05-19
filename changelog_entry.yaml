@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+      - google storage caching is now fully sync, not async and reenabled.

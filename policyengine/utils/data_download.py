@@ -27,10 +27,7 @@ def download(
     )
 
     logging.info = print
-    if Path(filepath).exists():
-        logging.info(f"File {filepath} already exists. Skipping download.")
-        return filepath
-
+    # NOTE: tests will break on build if you don't default to huggingface.
     if data_file.huggingface_repo is not None:
         logging.info("Using Hugging Face for download.")
         try:
@@ -42,6 +39,10 @@ def download(
             )
         except:
             logging.info("Failed to download from Hugging Face.")
+
+    if Path(filepath).exists():
+        logging.info(f"File {filepath} already exists. Skipping download.")
+        return filepath
 
     if data_file.gcs_bucket is not None:
         logging.info("Using Google Cloud Storage for download.")
