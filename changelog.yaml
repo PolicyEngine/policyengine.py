@@ -41,3 +41,28 @@
     - Refactored ParametricReform schema into clearer subschemas.
     - Added conversion of Infinity and -Infinity to np.inf and -np.inf.
   date: 2025-05-15 15:52:24
+- bump: patch
+  changes:
+    added:
+    - new class CachingGoogleStorageClient for locally caching gs files to disk.
+  date: 2025-05-15 21:56:02
+- bump: patch
+  changes:
+    added:
+    - Changelog entry check.
+  date: 2025-05-16 12:23:45
+- bump: patch
+  changes:
+    fixed:
+    - Fixed `format_fig` to work with Python 3.11.
+  date: 2025-05-16 12:55:50
+- bump: patch
+  changes:
+    fixed:
+    - downloads from google storage should now be properly cached.
+  date: 2025-05-16 14:00:30
+- bump: patch
+  changes:
+    fixed:
+    - Removed max and min year bounds for Simulations.
+  date: 2025-05-16 16:18:15
