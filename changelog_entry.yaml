@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-      - revert cached downloads from google storage
