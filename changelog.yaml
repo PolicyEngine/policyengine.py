@@ -76,3 +76,8 @@
     fixed:
     - google storage caching is now fully sync, not async and reenabled.
   date: 2025-05-19 22:42:39
+- bump: patch
+  changes:
+    fixed:
+    - Added cliff impacts.
+  date: 2025-05-20 08:28:29
