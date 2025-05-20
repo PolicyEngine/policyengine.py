@@ -775,6 +775,16 @@ def uk_constituency_breakdown(
     return UKConstituencyBreakdownWithValues(**output)
 
 
+class CliffImpactInSimulation(BaseModel):
+    cliff_gap: float
+    cliff_share: float
+
+
+class CliffImpact(BaseModel):
+    baseline: CliffImpactInSimulation
+    reform: CliffImpactInSimulation
+
+
 class EconomyComparison(BaseModel):
     country_package_version: str
     budget: BudgetaryImpact
@@ -789,6 +799,7 @@ class EconomyComparison(BaseModel):
     intra_wealth_decile: IntraWealthDecileImpact
     labor_supply_response: LaborSupplyResponse
     constituency_impact: UKConstituencyBreakdown
+    cliff_impact: CliffImpact | None
 
 
 def calculate_economy_comparison(
@@ -802,51 +813,54 @@ def calculate_economy_comparison(
     reform: SingleEconomy = simulation.calculate_single_economy(reform=True)
     options = simulation.options
     country_id = options.country
-    if baseline.type == "general":
-        budgetary_impact_data = budgetary_impact(baseline, reform)
-        detailed_budgetary_impact_data = detailed_budgetary_impact(
-            baseline, reform, country_id
-        )
-        decile_impact_data = decile_impact(baseline, reform)
-        inequality_impact_data = inequality_impact(baseline, reform)
-        poverty_impact_data = poverty_impact(baseline, reform)
-        poverty_by_gender_data = poverty_gender_breakdown(baseline, reform)
-        poverty_by_race_data = poverty_racial_breakdown(baseline, reform)
-        intra_decile_impact_data = intra_decile_impact(baseline, reform)
-        labor_supply_response_data = labor_supply_response(baseline, reform)
-        constituency_impact_data: UKConstituencyBreakdown = (
-            uk_constituency_breakdown(baseline, reform, country_id)
-        )
-        wealth_decile_impact_data = wealth_decile_impact(
-            baseline, reform, country_id
-        )
-        intra_wealth_decile_impact_data = intra_wealth_decile_impact(
-            baseline, reform, country_id
-        )
+    budgetary_impact_data = budgetary_impact(baseline, reform)
+    detailed_budgetary_impact_data = detailed_budgetary_impact(
+        baseline, reform, country_id
+    )
+    decile_impact_data = decile_impact(baseline, reform)
+    inequality_impact_data = inequality_impact(baseline, reform)
+    poverty_impact_data = poverty_impact(baseline, reform)
+    poverty_by_gender_data = poverty_gender_breakdown(baseline, reform)
+    poverty_by_race_data = poverty_racial_breakdown(baseline, reform)
+    intra_decile_impact_data = intra_decile_impact(baseline, reform)
+    labor_supply_response_data = labor_supply_response(baseline, reform)
+    constituency_impact_data: UKConstituencyBreakdown = (
+        uk_constituency_breakdown(baseline, reform, country_id)
+    )
+    wealth_decile_impact_data = wealth_decile_impact(
+        baseline, reform, country_id
+    )
+    intra_wealth_decile_impact_data = intra_wealth_decile_impact(
+        baseline, reform, country_id
+    )
 
-        return EconomyComparison(
-            country_package_version=get_country_package_version(country_id),
-            budget=budgetary_impact_data,
-            detailed_budget=detailed_budgetary_impact_data,
-            decile=decile_impact_data,
-            inequality=inequality_impact_data,
-            poverty=poverty_impact_data,
-            poverty_by_gender=poverty_by_gender_data,
-            poverty_by_race=poverty_by_race_data,
-            intra_decile=intra_decile_impact_data,
-            wealth_decile=wealth_decile_impact_data,
-            intra_wealth_decile=intra_wealth_decile_impact_data,
-            labor_supply_response=labor_supply_response_data,
-            constituency_impact=constituency_impact_data,
-        )
-    elif baseline.type == "cliff":
-        return dict(
-            baseline=dict(
+    if simulation.options.include_cliffs:
+        cliff_impact = CliffImpact(
+            baseline=CliffImpactInSimulation(
                 cliff_gap=baseline.cliff_gap,
                 cliff_share=baseline.cliff_share,
             ),
-            reform=dict(
+            reform=CliffImpactInSimulation(
                 cliff_gap=reform.cliff_gap,
                 cliff_share=reform.cliff_share,
             ),
         )
+    else:
+        cliff_impact = None
+
+    return EconomyComparison(
+        country_package_version=get_country_package_version(country_id),
+        budget=budgetary_impact_data,
+        detailed_budget=detailed_budgetary_impact_data,
+        decile=decile_impact_data,
+        inequality=inequality_impact_data,
+        poverty=poverty_impact_data,
+        poverty_by_gender=poverty_by_gender_data,
+        poverty_by_race=poverty_by_race_data,
+        intra_decile=intra_decile_impact_data,
+        wealth_decile=wealth_decile_impact_data,
+        intra_wealth_decile=intra_wealth_decile_impact_data,
+        labor_supply_response=labor_supply_response_data,
+        constituency_impact=constituency_impact_data,
+        cliff_impact=cliff_impact,
+    )

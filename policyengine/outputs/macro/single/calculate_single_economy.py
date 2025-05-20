@@ -10,6 +10,8 @@ from typing import List
 from policyengine_core.simulations import Microsimulation
 from typing import Dict
 from dataclasses import dataclass
+from typing import Literal
+from microdf import MicroSeries
 
 
 class SingleEconomy(BaseModel):
@@ -47,8 +49,10 @@ class SingleEconomy(BaseModel):
     weekly_hours: float | None
     weekly_hours_income_effect: float | None
     weekly_hours_substitution_effect: float | None
-    type: str
+    type: Literal["general", "cliff"]
     programs: Dict[str, float] | None
+    cliff_gap: float | None = None
+    cliff_share: float | None = None
 
 
 @dataclass
@@ -327,10 +331,27 @@ class GeneralEconomyTask:
             for program in UKPrograms.PROGRAMS
         }
 
+    def calculate_cliffs(self):
+        cliff_gap: MicroSeries = self.simulation.calculate("cliff_gap")
+        is_on_cliff: MicroSeries = self.simulation.calculate("is_on_cliff")
+        total_cliff_gap: float = cliff_gap.sum()
+        total_adults: float = self.simulation.calculate("is_adult").sum()
+        cliff_share: float = is_on_cliff.sum() / total_adults
+        return CliffImpactInSimulation(
+            cliff_gap=total_cliff_gap,
+            cliff_share=cliff_share,
+        )
+
+
+class CliffImpactInSimulation(BaseModel):
+    cliff_gap: float
+    cliff_share: float
+
 
 def calculate_single_economy(
     simulation: Simulation, reform: bool = False
 ) -> Dict:
+    include_cliffs = simulation.options.include_cliffs
     task_manager = GeneralEconomyTask(
         (
             simulation.baseline_simulation
@@ -382,6 +403,14 @@ def calculate_single_economy(
         except:
             total_state_tax = 0
 
+    if include_cliffs:
+        cliffs = task_manager.calculate_cliffs()
+        cliff_gap = cliffs.cliff_gap
+        cliff_share = cliffs.cliff_share
+    else:
+        cliff_gap = None
+        cliff_share = None
+
     return SingleEconomy(
         **{
             "total_net_income": total_net_income,
@@ -414,7 +443,9 @@ def calculate_single_economy(
             "age": age,
             **labor_supply_responses,
             **lsr_working_hours,
-            "type": "general",
+            "type": "general" if not include_cliffs else "cliff",
             "programs": uk_programs,
+            "cliff_gap": cliff_gap if include_cliffs else None,
+            "cliff_share": cliff_share if include_cliffs else None,
         }
     )

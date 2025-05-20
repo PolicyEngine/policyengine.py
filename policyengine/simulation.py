@@ -58,6 +58,10 @@ class SimulationOptions(BaseModel):
         "[Analysis title]",
         description="The title of the analysis (for charts). If not provided, a default title will be generated.",
     )
+    include_cliffs: bool | None = Field(
+        False,
+        description="Whether to include tax-benefit cliffs in the simulation analyses. If True, cliffs will be included.",
+    )
 
 
 class Simulation:
