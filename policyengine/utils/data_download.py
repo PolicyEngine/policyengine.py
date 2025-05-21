@@ -27,18 +27,6 @@ def download(
     )
 
     logging.info = print
-    # NOTE: tests will break on build if you don't default to huggingface.
-    if data_file.huggingface_repo is not None:
-        logging.info("Using Hugging Face for download.")
-        try:
-            return download_from_hf(
-                repo=data_file.huggingface_org
-                + "/"
-                + data_file.huggingface_repo,
-                repo_filename=data_file.filepath,
-            )
-        except:
-            logging.info("Failed to download from Hugging Face.")
 
     if Path(filepath).exists():
         logging.info(f"File {filepath} already exists. Skipping download.")
@@ -52,6 +40,20 @@ def download(
             destination_path=filepath,
         )
         return filepath
+
+
+    # NOTE: tests will break on build if you don't default to huggingface.
+    elif data_file.huggingface_repo is not None:
+        logging.info("Using Hugging Face for download.")
+        try:
+            return download_from_hf(
+                repo=data_file.huggingface_org
+                + "/"
+                + data_file.huggingface_repo,
+                repo_filename=data_file.filepath,
+            )
+        except:
+            logging.info("Failed to download from Hugging Face.")
 
     raise ValueError(
         "No valid download method specified. Please provide either a Hugging Face repo or a Google Cloud Storage bucket."
