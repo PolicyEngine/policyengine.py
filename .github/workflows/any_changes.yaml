@@ -23,6 +23,10 @@ jobs:
               
         - name: Install package
           run: uv pip install .[dev] --system
+        - uses: "google-github-actions/auth@v2"
+          with:
+            workload_identity_provider: "projects/322898545428/locations/global/workloadIdentityPools/policyengine-research-id-pool/providers/prod-github-provider"
+            service_account: "policyengine-research@policyengine-research.iam.gserviceaccount.com"
         
         - name: Test documentation builds
           run: make documentation

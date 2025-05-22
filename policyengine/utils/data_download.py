@@ -41,7 +41,6 @@ def download(
         )
         return filepath
 
-
     # NOTE: tests will break on build if you don't default to huggingface.
     elif data_file.huggingface_repo is not None:
         logging.info("Using Hugging Face for download.")
