@@ -63,12 +63,12 @@ def download(
             destination_path=filepath,
         )
         if return_version:
-            version_file = download_file_from_gcs(
+            download_file_from_gcs(
                 bucket_name=data_file.gcs_bucket,
                 file_name="version.json",
                 destination_path="version.json",
             )
-            with open(version_file, "r") as f:
+            with open("version.json", "r") as f:
                 version = json.load(f).get("version")
             return filepath, version
         return filepath
