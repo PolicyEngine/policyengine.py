@@ -7,10 +7,11 @@ from typing import Tuple
 
 def get_default_dataset(country: str, region: str) -> Tuple[Dataset, str]:
     if country == "uk":
-        data_file = download(
+        data_file, version = download(
             filepath="enhanced_frs_2022_23.h5",
             huggingface_repo="policyengine-uk-data",
             gcs_bucket="policyengine-uk-data-private",
+            return_version=True,
         )
         time_period = None
     elif country == "us":
