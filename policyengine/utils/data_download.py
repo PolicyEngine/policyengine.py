@@ -27,8 +27,18 @@ def download(
     )
 
     logging.info = print
+
+    if data_file.gcs_bucket is not None:
+        logging.info("Using Google Cloud Storage for download.")
+        download_file_from_gcs(
+            bucket_name=data_file.gcs_bucket,
+            file_name=filepath,
+            destination_path=filepath,
+        )
+        return filepath
+
     # NOTE: tests will break on build if you don't default to huggingface.
-    if data_file.huggingface_repo is not None:
+    elif data_file.huggingface_repo is not None:
         logging.info("Using Hugging Face for download.")
         try:
             return download_from_hf(
@@ -39,15 +49,6 @@ def download(
             )
         except:
             logging.info("Failed to download from Hugging Face.")
-
-    if data_file.gcs_bucket is not None:
-        logging.info("Using Google Cloud Storage for download.")
-        download_file_from_gcs(
-            bucket_name=data_file.gcs_bucket,
-            file_name=filepath,
-            destination_path=filepath,
-        )
-        return filepath
 
     raise ValueError(
         "No valid download method specified. Please provide either a Hugging Face repo or a Google Cloud Storage bucket."
