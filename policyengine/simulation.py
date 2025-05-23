@@ -135,14 +135,13 @@ class Simulation:
                         -1
                     ].split("/", 2)
 
-                if not Path(filename).exists():
-                    file_path = download(
-                        filepath=filename,
-                        huggingface_org=hf_org,
-                        huggingface_repo=hf_repo,
-                        gcs_bucket=bucket,
-                    )
-                    filename = str(Path(file_path))
+                file_path = download(
+                    filepath=filename,
+                    huggingface_org=hf_org,
+                    huggingface_repo=hf_repo,
+                    gcs_bucket=bucket,
+                )
+                filename = str(Path(file_path))
             if "cps_2023" in filename:
                 time_period = 2023
             else:

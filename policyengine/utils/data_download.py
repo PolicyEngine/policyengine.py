@@ -40,10 +40,6 @@ def download(
         except:
             logging.info("Failed to download from Hugging Face.")
 
-    if Path(filepath).exists():
-        logging.info(f"File {filepath} already exists. Skipping download.")
-        return filepath
-
     if data_file.gcs_bucket is not None:
         logging.info("Using Google Cloud Storage for download.")
         download_file_from_gcs(
