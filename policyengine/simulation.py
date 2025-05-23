@@ -18,6 +18,7 @@ from policyengine_uk import (
     Simulation as UKSimulation,
     Microsimulation as UKMicrosimulation,
 )
+from importlib import metadata
 import h5py
 from pathlib import Path
 import pandas as pd
@@ -62,6 +63,14 @@ class SimulationOptions(BaseModel):
         False,
         description="Whether to include tax-benefit cliffs in the simulation analyses. If True, cliffs will be included.",
     )
+    package_versions: Dict[str, str] | None = Field(
+        None,
+        description="The versions of the packages used in the simulation. If not provided, the current package versions will be used. If provided, this package will throw an error if the package versions do not match.",
+    )
+    data_versions: Dict[str, str] | None = Field(
+        None,
+        description="The versions of the data used in the simulation. If not provided, the current data versions will be used. If provided, this package will throw an error if the data versions do not match.",
+    )
 
 
 class Simulation:
@@ -73,6 +82,7 @@ class Simulation:
     """The baseline tax-benefit simulation."""
     reform_simulation: CountrySimulation | None = None
     """The reform tax-benefit simulation."""
+    data_versions: Dict[str, str] | None = None
 
     def __init__(self, **options: SimulationOptions):
         self.options = SimulationOptions(**options)
@@ -113,8 +123,9 @@ class Simulation:
                             )
 
     def _set_data(self):
+        self.data_versions = {}
         if self.options.data is None:
-            self.options.data = get_default_dataset(
+            self.options.data, version = get_default_dataset(
                 country=self.options.country,
                 region=self.options.region,
             )
@@ -135,13 +146,17 @@ class Simulation:
                         -1
                     ].split("/", 2)
 
-                file_path = download(
+                file_path, version = download(
                     filepath=filename,
                     huggingface_org=hf_org,
                     huggingface_repo=hf_repo,
                     gcs_bucket=bucket,
+                    return_version=True,
                 )
                 filename = str(Path(file_path))
+            else:
+                # If it's a local file, we can't infer the version.
+                version = None
             if "cps_2023" in filename:
                 time_period = 2023
             else:
@@ -149,6 +164,8 @@ class Simulation:
             self.options.data = Dataset.from_file(
                 filename, time_period=time_period
             )
+
+        self.data_versions[self.options.data.file_path.name] = version
 
     def _initialise_simulations(self):
         self.baseline_simulation = self._initialise_simulation(
@@ -327,3 +344,21 @@ class Simulation:
                 )
 
         return simulation
+
+    def check_package_versions(self) -> None:
+        """
+        Check the package versions of the simulation against the current package versions.
+        """
+        if self.options.package_versions is not None:
+            for package, version in self.options.package_versions.items():
+                try:
+                    installed_version = metadata.version(package)
+                except metadata.PackageNotFoundError:
+                    raise ValueError(f"Package {package} not found.")
+                if installed_version != version:
+                    raise ValueError(
+                        f"Package {package} version {installed_version} does not match expected version {version}."
+                    )
+
+    def check_data_versions(self) -> None:
+        pass
