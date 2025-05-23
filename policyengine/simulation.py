@@ -361,4 +361,16 @@ class Simulation:
                     )
 
     def check_data_versions(self) -> None:
-        pass
+        """
+        Check the data versions of the simulation against the current data versions.
+        """
+        if self.options.data_versions is not None:
+            for file, version in self.options.data_versions.items():
+                if file not in self.data_versions:
+                    raise ValueError(
+                        f"Data file {file} not found in simulation."
+                    )
+                if self.data_versions[file] != version:
+                    raise ValueError(
+                        f"Data file {file} version {self.data_versions[file]} does not match expected version {version}."
+                    )
