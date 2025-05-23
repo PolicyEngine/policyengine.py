@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Always look for new data file versions even if we have a local copy of one.
