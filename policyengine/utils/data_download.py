@@ -4,13 +4,13 @@ import os
 from policyengine.utils.google_cloud_bucket import download_file_from_gcs
 from pydantic import BaseModel
 import json
-from typing import Tuple
+from typing import Tuple, Optional
 
 
 def download(
     filepath: str,
     gcs_bucket: str,
-    version: str | None = None,
+    version: Optional[str] = None,
 ) -> str | Tuple[str, str]:
     logging.info("Using Google Cloud Storage for download.")
     download_file_from_gcs(

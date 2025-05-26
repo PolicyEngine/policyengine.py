@@ -22,7 +22,7 @@ from importlib import metadata
 import h5py
 from pathlib import Path
 import pandas as pd
-from typing import Type
+from typing import Type, Optional
 from functools import wraps, partial
 from typing import Dict, Any, Callable
 import importlib
@@ -35,8 +35,8 @@ DataType = (
 )  # Needs stricter typing. Any==policyengine_core.data.Dataset, but pydantic refuses for some reason.
 TimePeriodType = int
 ReformType = ParametricReform | Type[StructuralReform] | None
-RegionType = str | None
-SubsampleType = int | None
+RegionType = Optional[str]
+SubsampleType = Optional[int]
 
 
 class SimulationOptions(BaseModel):
@@ -55,19 +55,19 @@ class SimulationOptions(BaseModel):
         None,
         description="How many, if a subsample, households to randomly simulate.",
     )
-    title: str | None = Field(
+    title: Optional[str] = Field(
         "[Analysis title]",
         description="The title of the analysis (for charts). If not provided, a default title will be generated.",
     )
-    include_cliffs: bool | None = Field(
+    include_cliffs: Optional[bool] = Field(
         False,
         description="Whether to include tax-benefit cliffs in the simulation analyses. If True, cliffs will be included.",
     )
-    model_version: str | None = Field(
+    model_version: Optional[str] = Field(
         None,
         description="The version of the country model used in the simulation. If not provided, the current package version will be used. If provided, this package will throw an error if the package version does not match. Use this as an extra safety check.",
     )
-    data_version: str | None = Field(
+    data_version: Optional[str] = Field(
         None,
         description="The version of the data used in the simulation. If not provided, the current data version will be used. If provided, this package will throw an error if the data version does not match. Use this as an extra safety check.",
     )
@@ -82,9 +82,9 @@ class Simulation:
     """The baseline tax-benefit simulation."""
     reform_simulation: CountrySimulation | None = None
     """The reform tax-benefit simulation."""
-    data_version: str | None = None
+    data_version: Optional[str] = None
     """The version of the data used in the simulation."""
-    model_version: str | None = None
+    model_version: Optional[str] = None
 
     def __init__(self, **options: SimulationOptions):
         self.options = SimulationOptions(**options)

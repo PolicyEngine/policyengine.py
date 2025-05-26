@@ -4,6 +4,7 @@ from pathlib import Path
 from policyengine_core.data.dataset import atomic_write
 import logging
 from .simplified_google_storage_client import SimplifiedGoogleStorageClient
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -18,13 +19,13 @@ class CachingGoogleStorageClient(AbstractContextManager):
         self.client = SimplifiedGoogleStorageClient()
         self.cache = diskcache.Cache()
 
-    def _data_key(self, bucket: str, key: str, version: str | None) -> str:
+    def _data_key(self, bucket: str, key: str, version: Optional[str] = None) -> str:
         return f"{bucket}.{key}.{version}.data"
 
     # To absolutely 100% avoid any possible issue with file corruption or thread contention
     # always replace the current target file with whatever we have cached as an atomic write.
     def download(
-        self, bucket: str, key: str, target: Path, version: str | None = None
+        self, bucket: str, key: str, target: Path, version: Optional[str] = None
     ):
         """
         Atomically write the latest version of the cloud storage blob to the target path.
@@ -47,7 +48,7 @@ class CachingGoogleStorageClient(AbstractContextManager):
 
     # If the crc has changed from what we downloaded last time download it again.
     # then update the CRC to whatever we actually downloaded.
-    def sync(self, bucket: str, key: str, version: str | None = None) -> None:
+    def sync(self, bucket: str, key: str, Optional[str] = None) -> None:
         """
         Cache the resource if the CRC has changed.
         """

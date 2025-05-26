@@ -2,7 +2,7 @@ import asyncio
 from policyengine_core.data.dataset import atomic_write
 import logging
 from google.cloud.storage import Client, Blob
-from typing import Iterable
+from typing import Iterable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ class SimplifiedGoogleStorageClient:
         self.client = Client()
 
     def get_versioned_blob(
-        self, bucket: str, key: str, version: str | None = None
+        self, bucket: str, key: str, version: Optional[str] = None
     ) -> Blob:
         """
         Get a versioned blob from the specified bucket and key.
@@ -40,8 +40,8 @@ class SimplifiedGoogleStorageClient:
             )
 
     def crc32c(
-        self, bucket: str, key: str, version: str | None = None
-    ) -> str | None:
+        self, bucket: str, key: str, version: Optional[str] = None
+    ) -> Optional[str]:
         """
         get the current CRC of the specified blob. None if it doesn't exist.
         """
@@ -54,7 +54,7 @@ class SimplifiedGoogleStorageClient:
         return blob.crc32c
 
     def download(
-        self, bucket: str, key: str, version: str | None = None
+        self, bucket: str, key: str, version: Optional[str] = None
     ) -> tuple[bytes, str]:
         """
         get the blob content and associated CRC from google storage.
@@ -68,7 +68,7 @@ class SimplifiedGoogleStorageClient:
         # content (i.e. there is not a race condition where it's getting the CRC from the cloud)
         return (result, blob.crc32c)
 
-    def _get_latest_version(self, bucket: str, key: str) -> str | None:
+    def _get_latest_version(self, bucket: str, key: str) -> Optional[str]:
         """
         Get the latest version of a blob in the specified bucket and key.
         If no version is specified, return None.
