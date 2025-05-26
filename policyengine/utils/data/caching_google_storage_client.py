@@ -26,11 +26,14 @@ class CachingGoogleStorageClient(AbstractContextManager):
         Get the latest version of a blob in the specified bucket and key.
         If no version is specified, return None.
         """
-        return (
-            self.client.client.get_bucket(bucket)
-            .get_blob(key)
-            .metadata.get("version")
-        )
+        blob = self.client.client.get_bucket(bucket).get_blob(key)
+        if blob.metadata is None:
+            logging.warning(
+                "No metadata found for blob, so it has no version attached."
+            )
+            return None
+        else:
+            return blob.metadata.get("version")
 
     # To absolutely 100% avoid any possible issue with file corruption or thread contention
     # always replace the current target file with whatever we have cached as an atomic write.
