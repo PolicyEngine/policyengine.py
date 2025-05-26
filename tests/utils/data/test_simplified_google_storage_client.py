@@ -2,6 +2,8 @@ from unittest.mock import patch, call
 import pytest
 from policyengine.utils.data import SimplifiedGoogleStorageClient
 
+VALID_VERSION = "1.2.3"
+
 
 class TestSimplifiedGoogleStorageClient:
     @patch(
@@ -53,12 +55,12 @@ class TestSimplifiedGoogleStorageClient:
         blob = bucket.get_blob.return_value
 
         # Test case where metadata exists with version
-        blob.metadata = {"version": "v1.2.3"}
+        blob.metadata = {"version": VALID_VERSION}
 
         client = SimplifiedGoogleStorageClient()
         result = client._get_latest_version("test_bucket", "test_key")
 
-        assert result == "v1.2.3"
+        assert result == VALID_VERSION
         mock_instance.get_bucket.assert_called_with("test_bucket")
         bucket.get_blob.assert_called_with("test_key")
 
