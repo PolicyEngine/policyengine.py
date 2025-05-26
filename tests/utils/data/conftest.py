@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 VALID_VERSION = "1.2.3"
 
+
 class MockedStorageSupport:
     def __init__(self, mock_simple_storage_client):
         self.mock_simple_storage_client = mock_simple_storage_client

@@ -1,5 +1,6 @@
 import pytest
 
+
 def test_uk_macro_single():
     from policyengine import Simulation
 
@@ -51,4 +52,3 @@ def test_uk_macro_bad_data_version_fails():
             },
             data_version="a",
         )
-
