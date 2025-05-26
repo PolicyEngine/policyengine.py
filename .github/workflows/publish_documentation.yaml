@@ -7,6 +7,9 @@ on:
 
 jobs:
   Publish:
+    permissions:
+      contents: "read"
+      id-token: "write"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -15,6 +18,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: 3.12
+      - uses: "google-github-actions/auth@v2"
+        with:
+          workload_identity_provider: "projects/322898545428/locations/global/workloadIdentityPools/policyengine-research-id-pool/providers/prod-github-provider"
+          service_account: "policyengine-research@policyengine-research.iam.gserviceaccount.com"
       - name: Publish a git tag
         run: ".github/publish-git-tag.sh || true"
       - name: Install package
@@ -22,8 +29,6 @@ jobs:
         
       - name: Build documentation
         run: make documentation
-        env:
-          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
       
       - name: Deploy documentation
         uses: JamesIves/github-pages-deploy-action@releases/v3

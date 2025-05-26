@@ -18,10 +18,11 @@ from policyengine_uk import (
     Simulation as UKSimulation,
     Microsimulation as UKMicrosimulation,
 )
+from importlib import metadata
 import h5py
 from pathlib import Path
 import pandas as pd
-from typing import Type
+from typing import Type, Optional
 from functools import wraps, partial
 from typing import Dict, Any, Callable
 import importlib
@@ -34,8 +35,8 @@ DataType = (
 )  # Needs stricter typing. Any==policyengine_core.data.Dataset, but pydantic refuses for some reason.
 TimePeriodType = int
 ReformType = ParametricReform | Type[StructuralReform] | None
-RegionType = str | None
-SubsampleType = int | None
+RegionType = Optional[str]
+SubsampleType = Optional[int]
 
 
 class SimulationOptions(BaseModel):
@@ -54,13 +55,21 @@ class SimulationOptions(BaseModel):
         None,
         description="How many, if a subsample, households to randomly simulate.",
     )
-    title: str | None = Field(
+    title: Optional[str] = Field(
         "[Analysis title]",
         description="The title of the analysis (for charts). If not provided, a default title will be generated.",
     )
-    include_cliffs: bool | None = Field(
+    include_cliffs: Optional[bool] = Field(
         False,
         description="Whether to include tax-benefit cliffs in the simulation analyses. If True, cliffs will be included.",
+    )
+    model_version: Optional[str] = Field(
+        None,
+        description="The version of the country model used in the simulation. If not provided, the current package version will be used. If provided, this package will throw an error if the package version does not match. Use this as an extra safety check.",
+    )
+    data_version: Optional[str] = Field(
+        None,
+        description="The version of the data used in the simulation. If not provided, the current data version will be used. If provided, this package will throw an error if the data version does not match. Use this as an extra safety check.",
     )
 
 
@@ -73,12 +82,16 @@ class Simulation:
     """The baseline tax-benefit simulation."""
     reform_simulation: CountrySimulation | None = None
     """The reform tax-benefit simulation."""
+    data_version: Optional[str] = None
+    """The version of the data used in the simulation."""
+    model_version: Optional[str] = None
 
     def __init__(self, **options: SimulationOptions):
         self.options = SimulationOptions(**options)
-
+        self.check_model_version()
         self._set_data()
         self._initialise_simulations()
+        self.check_data_version()
         self._add_output_functions()
 
     def _add_output_functions(self):
@@ -119,29 +132,23 @@ class Simulation:
                 region=self.options.region,
             )
 
-        elif isinstance(self.options.data, str):
+        if isinstance(self.options.data, str):
             filename = self.options.data
-            if "://" in self.options.data:
-                bucket = None
-                hf_repo = None
-                hf_org = None
-                if "gs://" in self.options.data:
-                    bucket, filename = self.options.data.split("://")[
-                        -1
-                    ].split("/")
-                    hf_org = "policyengine"
-                elif "hf://" in self.options.data:
-                    hf_org, hf_repo, filename = self.options.data.split("://")[
-                        -1
-                    ].split("/", 2)
+            if self.options.data[:6] == "gcs://":
+                bucket, filename = self.options.data.split("://")[-1].split(
+                    "/"
+                )
+                version = self.options.data_version
 
                 file_path = download(
                     filepath=filename,
-                    huggingface_org=hf_org,
-                    huggingface_repo=hf_repo,
                     gcs_bucket=bucket,
+                    version=version,
                 )
                 filename = str(Path(file_path))
+            else:
+                # If it's a local file, we can't infer the version.
+                version = None
             if "cps_2023" in filename:
                 time_period = 2023
             else:
@@ -260,7 +267,6 @@ class Simulation:
             elif "constituency/" in region:
                 constituency = region.split("/")[1]
                 constituency_names_file_path = download(
-                    huggingface_repo="policyengine-uk-data",
                     gcs_bucket="policyengine-uk-data-private",
                     filepath="constituencies_2024.csv",
                 )
@@ -281,7 +287,6 @@ class Simulation:
                         f"Constituency {constituency} not found. See {constituency_names_file_path} for the list of available constituencies."
                     )
                 weights_file_path = download(
-                    huggingface_repo="policyengine-uk-data",
                     gcs_bucket="policyengine-uk-data-private",
                     filepath="parliamentary_constituency_weights.h5",
                 )
@@ -297,7 +302,6 @@ class Simulation:
             elif "local_authority/" in region:
                 la = region.split("/")[1]
                 la_names_file_path = download(
-                    huggingface_repo="policyengine-uk-data",
                     gcs_bucket="policyengine-uk-data-private",
                     filepath="local_authorities_2021.csv",
                 )
@@ -312,7 +316,6 @@ class Simulation:
                         f"Local authority {la} not found. See {la_names_file_path} for the list of available local authorities."
                     )
                 weights_file_path = download(
-                    huggingface_repo="policyengine-uk-data",
                     gcs_bucket="policyengine-uk-data-private",
                     filepath="local_authority_weights.h5",
                 )
@@ -327,3 +330,32 @@ class Simulation:
                 )
 
         return simulation
+
+    def check_model_version(self) -> None:
+        """
+        Check the package versions of the simulation against the current package versions.
+        """
+        if self.options.model_version is not None:
+            target_version = self.options.model_version
+            package = f"policyengine-{self.options.country}"
+            try:
+                installed_version = metadata.version(package)
+                self.model_version = installed_version
+            except metadata.PackageNotFoundError:
+                raise ValueError(
+                    f"Package {package} not found. Try running `pip install {package}`."
+                )
+            if installed_version != target_version:
+                raise ValueError(
+                    f"Package {package} version {installed_version} does not match expected version {target_version}. Try running `pip install {package}=={target_version}`."
+                )
+
+    def check_data_version(self) -> None:
+        """
+        Check the data versions of the simulation against the current data versions.
+        """
+        if self.options.data_version is not None:
+            if self.data_version != self.options.data_version:
+                raise ValueError(
+                    f"Data version {self.data_version} does not match expected version {self.options.data_version}."
+                )

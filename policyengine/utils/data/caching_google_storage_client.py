@@ -4,6 +4,7 @@ from pathlib import Path
 from policyengine_core.data.dataset import atomic_write
 import logging
 from .simplified_google_storage_client import SimplifiedGoogleStorageClient
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -18,17 +19,31 @@ class CachingGoogleStorageClient(AbstractContextManager):
         self.client = SimplifiedGoogleStorageClient()
         self.cache = diskcache.Cache()
 
-    def _data_key(self, bucket: str, key: str) -> str:
-        return f"{bucket}.{key}.data"
+    def _data_key(
+        self, bucket: str, key: str, version: Optional[str] = None
+    ) -> str:
+        return f"{bucket}.{key}.{version}.data"
 
     # To absolutely 100% avoid any possible issue with file corruption or thread contention
     # always replace the current target file with whatever we have cached as an atomic write.
-    def download(self, bucket: str, key: str, target: Path):
+    def download(
+        self,
+        bucket: str,
+        key: str,
+        target: Path,
+        version: Optional[str] = None,
+    ):
         """
         Atomically write the latest version of the cloud storage blob to the target path.
         """
-        self.sync(bucket, key)
-        data = self.cache.get(self._data_key(bucket, key))
+        if version is None:
+            # If no version is specified, get the latest version from the cache
+            version = self.client._get_latest_version(bucket, key)
+            logging.warning(
+                f"No version specified for {bucket}, {key}. Using latest version: {version}"
+            )
+        self.sync(bucket, key, version)
+        data = self.cache.get(self._data_key(bucket, key, version))
         if type(data) is bytes:
             logger.info(
                 f"Copying downloaded data for {bucket}, {key} to {target}"
@@ -39,15 +54,17 @@ class CachingGoogleStorageClient(AbstractContextManager):
 
     # If the crc has changed from what we downloaded last time download it again.
     # then update the CRC to whatever we actually downloaded.
-    def sync(self, bucket: str, key: str) -> None:
+    def sync(
+        self, bucket: str, key: str, version: Optional[str] = None
+    ) -> None:
         """
         Cache the resource if the CRC has changed.
         """
-        logger.info(f"Syncing {bucket}, {key} to cache")
-        datakey = f"{bucket}.{key}.data"
-        crckey = f"{bucket}.{key}.crc"
+        logger.info(f"Syncing {bucket}, {key}, {version} to cache")
+        datakey = f"{bucket}.{key}.{version}.data"
+        crckey = f"{bucket}.{key}.{version}.crc"
 
-        crc = self.client.crc32c(bucket, key)
+        crc = self.client.crc32c(bucket, key, version=version)
         if crc is None:
             raise Exception(f"Unable to find {key} in bucket {bucket}")
 
@@ -59,8 +76,10 @@ class CachingGoogleStorageClient(AbstractContextManager):
             )
             return
 
-        [content, downloaded_crc] = self.client.download(bucket, key)
-        logger.info(
+        [content, downloaded_crc] = self.client.download(
+            bucket, key, version=version
+        )
+        logger.debug(
             f"Downloaded new version of {bucket}, {key} with crc {downloaded_crc}"
         )
 

@@ -10,8 +10,7 @@ from policyengine import Simulation
 from policyengine.outputs.macro.single.calculate_single_economy import (
     SingleEconomy,
 )
-from policyengine.utils.packages import get_country_package_version
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 
 class BudgetaryImpact(BaseModel):
@@ -711,7 +710,6 @@ def uk_constituency_breakdown(
     reform_hnet = reform.household_net_income
 
     constituency_weights_path = download(
-        huggingface_repo="policyengine-uk-data",
         gcs_bucket="policyengine-uk-data-private",
         filepath="parliamentary_constituency_weights.h5",
     )
@@ -721,7 +719,6 @@ def uk_constituency_breakdown(
         ]  # {2025: array(650, 100180) where cell i, j is the weight of household record i in constituency j}
 
     constituency_names_path = download(
-        huggingface_repo="policyengine-uk-data",
         gcs_bucket="policyengine-uk-data-private",
         filepath="constituencies_2024.csv",
     )
@@ -786,7 +783,10 @@ class CliffImpact(BaseModel):
 
 
 class EconomyComparison(BaseModel):
-    country_package_version: str
+    model_version: Optional[str] = (
+        None  # Optional while some datasets have no tagged version.
+    )
+    data_version: Optional[str] = None
     budget: BudgetaryImpact
     detailed_budget: DetailedBudgetaryImpact
     decile: DecileImpact
@@ -849,7 +849,8 @@ def calculate_economy_comparison(
         cliff_impact = None
 
     return EconomyComparison(
-        country_package_version=get_country_package_version(country_id),
+        model_version=simulation.model_version,
+        data_version=simulation.data_version,
         budget=budgetary_impact_data,
         detailed_budget=detailed_budgetary_impact_data,
         decile=decile_impact_data,
