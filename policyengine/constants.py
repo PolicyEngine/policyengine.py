@@ -9,7 +9,6 @@ def get_default_dataset(country: str, region: str) -> Tuple[Dataset, str]:
     if country == "uk":
         data_file, version = download(
             filepath="enhanced_frs_2022_23.h5",
-            huggingface_repo="policyengine-uk-data",
             gcs_bucket="policyengine-uk-data-private",
             return_version=True,
         )
@@ -18,7 +17,6 @@ def get_default_dataset(country: str, region: str) -> Tuple[Dataset, str]:
         if region is not None and region != "us":
             data_file, version = download(
                 filepath="pooled_3_year_cps_2023.h5",
-                huggingface_repo="policyengine-us-data",
                 gcs_bucket="policyengine-us-data",
                 return_version=True,
             )
@@ -26,7 +24,6 @@ def get_default_dataset(country: str, region: str) -> Tuple[Dataset, str]:
         else:
             data_file, version = download(
                 filepath="cps_2023.h5",
-                huggingface_repo="policyengine-us-data",
                 gcs_bucket="policyengine-us-data",
                 return_version=True,
             )
