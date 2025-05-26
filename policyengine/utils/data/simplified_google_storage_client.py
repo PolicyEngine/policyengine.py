@@ -40,13 +40,13 @@ class SimplifiedGoogleStorageClient:
             )
 
     def crc32c(
-        self, bucket: str, key: str, version: Optional[str] = None
+        self, bucket_name: str, key: str, version: Optional[str] = None
     ) -> Optional[str]:
         """
         get the current CRC of the specified blob. None if it doesn't exist.
         """
-        logger.debug(f"Getting crc for {bucket}, {key}")
-        bucket = self.client.bucket(bucket)
+        logger.debug(f"Getting crc for {bucket_name}, {key}")
+        bucket = self.client.bucket(bucket_name)
         blob = self.get_versioned_blob(bucket.name, key, version)
 
         blob.reload()

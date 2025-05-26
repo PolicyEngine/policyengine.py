@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import patch, call
 import pytest
 from policyengine.utils.data import SimplifiedGoogleStorageClient
 
@@ -17,7 +17,11 @@ class TestSimplifiedGoogleStorageClient:
 
         client = SimplifiedGoogleStorageClient()
         assert client.crc32c("bucket_name", "content.txt") == "TEST_CRC"
-        mock_instance.bucket.assert_called_with("bucket_name")
+        assert (
+            mock_instance.bucket.call_count >= 1
+        )  # There is a second call in get_versioned_blob
+        first_call = mock_instance.bucket.call_args_list[0]
+        assert first_call == call("bucket_name")
         bucket.blob.assert_called_with("content.txt")
         blob.reload.assert_called()
 
