@@ -91,6 +91,7 @@ class Simulation:
         self.check_model_version()
         self._set_data()
         self._initialise_simulations()
+        self.check_data_version()
         self._add_output_functions()
 
     def _add_output_functions(self):
@@ -349,17 +350,12 @@ class Simulation:
                     f"Package {package} version {installed_version} does not match expected version {target_version}. Try running `pip install {package}=={target_version}`."
                 )
 
-    def check_data_versions(self) -> None:
+    def check_data_version(self) -> None:
         """
         Check the data versions of the simulation against the current data versions.
         """
-        if self.options.data_versions is not None:
-            for file, version in self.options.data_versions.items():
-                if file not in self.data_versions:
-                    raise ValueError(
-                        f"Data file {file} not found in simulation."
-                    )
-                if self.data_versions[file] != version:
-                    raise ValueError(
-                        f"Data file {file} version {self.data_versions[file]} does not match expected version {version}."
+        if self.options.data_version is not None:
+            if self.data_version != self.options.data_version:
+                raise ValueError(
+                    f"Data version {self.data_version} does not match expected version {self.options.data_version}."
                     )
