@@ -88,7 +88,7 @@ class Simulation:
 
     def __init__(self, **options: SimulationOptions):
         self.options = SimulationOptions(**options)
-
+        self.check_package_version()
         self._set_data()
         self._initialise_simulations()
         self._add_output_functions()
