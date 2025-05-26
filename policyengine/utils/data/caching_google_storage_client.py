@@ -61,7 +61,7 @@ class CachingGoogleStorageClient(AbstractContextManager):
             raise Exception(f"Unable to find {key} in bucket {bucket}")
 
         prev_crc = self.cache.get(crckey, default=None)
-        logger.info(f"Previous crc for {bucket}, {key} was {prev_crc}")
+        logger.debug(f"Previous crc for {bucket}, {key} was {prev_crc}")
         if prev_crc == crc:
             logger.info(
                 f"Cache exists and crc is unchanged for {bucket}, {key}."
