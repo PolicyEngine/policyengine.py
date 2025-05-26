@@ -345,7 +345,9 @@ class Simulation:
                     installed_version = metadata.version(package)
                     self.model_version = installed_version
                 except metadata.PackageNotFoundError:
-                    raise ValueError(f"Package {package} not found.")
+                    raise ValueError(
+                        f"Package {package} not found. Try running `pip install {package}`."
+                    )
                 if installed_version != version:
                     raise ValueError(
                         f"Package {package} version {installed_version} does not match expected version {version}."
