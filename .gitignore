@@ -162,3 +162,5 @@ cython_debug/
 *.ipynb
 
 !docs/**/*.ipynb
+
+**/*.h5

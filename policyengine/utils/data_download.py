@@ -1,7 +1,6 @@
 from pathlib import Path
 import logging
 import os
-from policyengine.utils.huggingface import download_from_hf
 from policyengine.utils.google_cloud_bucket import download_file_from_gcs
 from pydantic import BaseModel
 import json

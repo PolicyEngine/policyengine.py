@@ -33,9 +33,7 @@ def test_uk_macro_bad_package_versions_fail():
             reform={
                 "gov.hmrc.income_tax.allowances.personal_allowance.amount": 15_000,
             },
-            package_versions={
-                "policyengine-uk": "-1.0.0",
-            },
+            model_version="a",
         )
         raise ValueError(
             "Simulation should have failed with a bad package version."
@@ -44,7 +42,7 @@ def test_uk_macro_bad_package_versions_fail():
         pass
 
 
-def test_uk_macro_bad_data_versions_fail():
+def test_uk_macro_bad_data_version_fails():
     from policyengine import Simulation
 
     try:
@@ -54,9 +52,7 @@ def test_uk_macro_bad_data_versions_fail():
             reform={
                 "gov.hmrc.income_tax.allowances.personal_allowance.amount": 15_000,
             },
-            data_versions={
-                "enhanced_frs_2022_23.h5": "-1.0.0",
-            },
+            data_version="a",
         )
         raise ValueError(
             "Simulation should have failed with a bad data version."

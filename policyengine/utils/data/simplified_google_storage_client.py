@@ -67,3 +67,17 @@ class SimplifiedGoogleStorageClient:
         # downloading the content. As a result this should now be the crc of the downloaded
         # content (i.e. there is not a race condition where it's getting the CRC from the cloud)
         return (result, blob.crc32c)
+
+    def _get_latest_version(self, bucket: str, key: str) -> str | None:
+        """
+        Get the latest version of a blob in the specified bucket and key.
+        If no version is specified, return None.
+        """
+        blob = self.client.get_bucket(bucket).get_blob(key)
+        if blob.metadata is None:
+            logging.warning(
+                "No metadata found for blob, so it has no version attached."
+            )
+            return None
+        else:
+            return blob.metadata.get("version")

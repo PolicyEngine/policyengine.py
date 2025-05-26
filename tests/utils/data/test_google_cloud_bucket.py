@@ -19,10 +19,13 @@ class TestGoogleCloudBucket(TestCase):
     def test_download_uses_storage_client(self, client_class):
         client_instance = client_class.return_value
         download_file_from_gcs(
-            "TEST_BUCKET", "TEST/FILE/NAME.TXT", "TARGET/PATH"
+            "TEST_BUCKET", "TEST/FILE/NAME.TXT", "TARGET/PATH", version=None
         )
         client_instance.download.assert_called_with(
-            "TEST_BUCKET", "TEST/FILE/NAME.TXT", Path("TARGET/PATH")
+            "TEST_BUCKET",
+            "TEST/FILE/NAME.TXT",
+            Path("TARGET/PATH"),
+            version=None,
         )
 
     @patch(
@@ -31,9 +34,9 @@ class TestGoogleCloudBucket(TestCase):
     )
     def test_download_only_creates_client_once(self, client_class):
         download_file_from_gcs(
-            "TEST_BUCKET", "TEST/FILE/NAME.TXT", "TARGET/PATH"
+            "TEST_BUCKET", "TEST/FILE/NAME.TXT", "TARGET/PATH", version=None
         )
         download_file_from_gcs(
-            "TEST_BUCKET", "TEST/FILE/NAME.TXT", "ANOTHER/PATH"
+            "TEST_BUCKET", "TEST/FILE/NAME.TXT", "ANOTHER/PATH", version=None
         )
         client_class.assert_called_once()

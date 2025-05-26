@@ -12,6 +12,10 @@ class MockedStorageSupport:
             data.encode(),
             crc,
         )
+        print("Setting latest version")
+        self.mock_simple_storage_client._get_latest_version.return_value = (
+            "1.2.3"
+        )
 
     def given_crc_changes_on_download(
         self, data: str, initial_crc: str, download_crc: str
@@ -20,6 +24,9 @@ class MockedStorageSupport:
         self.mock_simple_storage_client.download.return_value = (
             data.encode(),
             download_crc,
+        )
+        self.mock_simple_storage_client._get_latest_version.return_value = (
+            "1.2.3"
         )
 
 

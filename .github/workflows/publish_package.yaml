@@ -36,8 +36,6 @@ jobs:
         
       - name: Test documentation builds
         run: make documentation
-        env:
-          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
       
       - name: Deploy documentation
         uses: JamesIves/github-pages-deploy-action@releases/v3

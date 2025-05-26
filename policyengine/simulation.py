@@ -67,6 +67,10 @@ class SimulationOptions(BaseModel):
         None,
         description="The version of the country model used in the simulation. If not provided, the current package version will be used. If provided, this package will throw an error if the package version does not match. Use this as an extra safety check.",
     )
+    data_version: str | None = Field(
+        None,
+        description="The version of the data used in the simulation. If not provided, the current data version will be used. If provided, this package will throw an error if the data version does not match. Use this as an extra safety check.",
+    )
 
 
 class Simulation:
@@ -133,12 +137,7 @@ class Simulation:
                 bucket, filename = self.options.data.split("://")[-1].split(
                     "/"
                 )
-
-                if "@" in filename:
-                    filename, version = filename.split("@")
-                    self.data_version = version
-                else:
-                    version = None
+                version = self.options.data_version
 
                 file_path = download(
                     filepath=filename,
@@ -267,7 +266,6 @@ class Simulation:
             elif "constituency/" in region:
                 constituency = region.split("/")[1]
                 constituency_names_file_path = download(
-                    huggingface_repo="policyengine-uk-data",
                     gcs_bucket="policyengine-uk-data-private",
                     filepath="constituencies_2024.csv",
                 )
@@ -288,7 +286,6 @@ class Simulation:
                         f"Constituency {constituency} not found. See {constituency_names_file_path} for the list of available constituencies."
                     )
                 weights_file_path = download(
-                    huggingface_repo="policyengine-uk-data",
                     gcs_bucket="policyengine-uk-data-private",
                     filepath="parliamentary_constituency_weights.h5",
                 )
@@ -304,7 +301,6 @@ class Simulation:
             elif "local_authority/" in region:
                 la = region.split("/")[1]
                 la_names_file_path = download(
-                    huggingface_repo="policyengine-uk-data",
                     gcs_bucket="policyengine-uk-data-private",
                     filepath="local_authorities_2021.csv",
                 )
@@ -319,7 +315,6 @@ class Simulation:
                         f"Local authority {la} not found. See {la_names_file_path} for the list of available local authorities."
                     )
                 weights_file_path = download(
-                    huggingface_repo="policyengine-uk-data",
                     gcs_bucket="policyengine-uk-data-private",
                     filepath="local_authority_weights.h5",
                 )

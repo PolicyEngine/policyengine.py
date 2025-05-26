@@ -711,7 +711,6 @@ def uk_constituency_breakdown(
     reform_hnet = reform.household_net_income
 
     constituency_weights_path = download(
-        huggingface_repo="policyengine-uk-data",
         gcs_bucket="policyengine-uk-data-private",
         filepath="parliamentary_constituency_weights.h5",
     )
@@ -721,7 +720,6 @@ def uk_constituency_breakdown(
         ]  # {2025: array(650, 100180) where cell i, j is the weight of household record i in constituency j}
 
     constituency_names_path = download(
-        huggingface_repo="policyengine-uk-data",
         gcs_bucket="policyengine-uk-data-private",
         filepath="constituencies_2024.csv",
     )
