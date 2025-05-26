@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    added:
-    - Error handling for data and package version mismatches.
