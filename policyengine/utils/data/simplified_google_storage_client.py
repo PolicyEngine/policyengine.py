@@ -1,7 +1,8 @@
 import asyncio
 from policyengine_core.data.dataset import atomic_write
 import logging
-from google.cloud.storage import Client
+from google.cloud.storage import Client, Blob
+from typing import Iterable
 
 logger = logging.getLogger(__name__)
 
@@ -17,22 +18,50 @@ class SimplifiedGoogleStorageClient:
     def __init__(self):
         self.client = Client()
 
-    def crc32c(self, bucket: str, key: str) -> str | None:
+    def get_versioned_blob(
+        self, bucket: str, key: str, version: str | None = None
+    ) -> Blob:
+        """
+        Get a versioned blob from the specified bucket and key.
+        If version is None, returns the latest version of the blob.
+        """
+        bucket = self.client.bucket(bucket)
+        if version is None:
+            return bucket.blob(key)
+        else:
+            versions: Iterable[Blob] = bucket.list_blobs(
+                prefix=key, versions=True
+            )
+            for v in versions:
+                if v.metadata.get("version") == version:
+                    return v
+            raise ValueError(
+                f"Could not find version {version} of blob {key} in bucket {bucket.name}"
+            )
+
+    def crc32c(
+        self, bucket: str, key: str, version: str | None = None
+    ) -> str | None:
         """
         get the current CRC of the specified blob. None if it doesn't exist.
         """
         logger.debug(f"Getting crc for {bucket}, {key}")
-        blob = self.client.bucket(bucket).blob(key)
+        bucket = self.client.bucket(bucket)
+        blob = self.get_versioned_blob(bucket.name, key, version)
+
         blob.reload()
         logger.debug(f"Crc is {blob.crc32c}")
         return blob.crc32c
 
-    def download(self, bucket: str, key: str) -> tuple[bytes, str]:
+    def download(
+        self, bucket: str, key: str, version: str | None = None
+    ) -> tuple[bytes, str]:
         """
         get the blob content and associated CRC from google storage.
         """
         logger.debug(f"Downloading {bucket}, {key}")
-        blob = self.client.bucket(bucket).blob(key)
+        blob = self.get_versioned_blob(bucket, key, version)
+        print(blob, blob.exists())
 
         result = blob.download_as_bytes()
         # According to documentation blob.crc32c is updated as a side effect of

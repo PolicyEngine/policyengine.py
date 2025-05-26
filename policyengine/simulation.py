@@ -65,11 +65,7 @@ class SimulationOptions(BaseModel):
     )
     package_versions: Dict[str, str] | None = Field(
         None,
-        description="The versions of the packages used in the simulation. If not provided, the current package versions will be used. If provided, this package will throw an error if the package versions do not match.",
-    )
-    data_versions: Dict[str, str] | None = Field(
-        None,
-        description="The versions of the data used in the simulation. If not provided, the current data versions will be used. If provided, this package will throw an error if the data versions do not match.",
+        description="The versions of the packages used in the simulation. If not provided, the current package versions will be used. If provided, this package will throw an error if the package versions do not match. Use this as an extra safety check.",
     )
 
 
@@ -82,7 +78,9 @@ class Simulation:
     """The baseline tax-benefit simulation."""
     reform_simulation: CountrySimulation | None = None
     """The reform tax-benefit simulation."""
-    data_versions: Dict[str, str] | None = None
+    data_version: str | None = None
+    """The version of the data used in the simulation."""
+    model_version: str | None = None
 
     def __init__(self, **options: SimulationOptions):
         self.options = SimulationOptions(**options)
@@ -123,35 +121,29 @@ class Simulation:
                             )
 
     def _set_data(self):
-        self.data_versions = {}
         if self.options.data is None:
-            self.options.data, version = get_default_dataset(
+            self.options.data = get_default_dataset(
                 country=self.options.country,
                 region=self.options.region,
             )
 
         elif isinstance(self.options.data, str):
             filename = self.options.data
-            if "://" in self.options.data:
-                bucket = None
-                hf_repo = None
-                hf_org = None
-                if "gs://" in self.options.data:
-                    bucket, filename = self.options.data.split("://")[
-                        -1
-                    ].split("/")
-                    hf_org = "policyengine"
-                elif "hf://" in self.options.data:
-                    hf_org, hf_repo, filename = self.options.data.split("://")[
-                        -1
-                    ].split("/", 2)
+            if "gcs://" in self.options.data:
+                bucket, filename = self.options.data.split("://")[-1].split(
+                    "/"
+                )
 
-                file_path, version = download(
+                if "@" in filename:
+                    filename, version = filename.split("@")
+                    self.data_version = version
+                else:
+                    version = None
+
+                file_path = download(
                     filepath=filename,
-                    huggingface_org=hf_org,
-                    huggingface_repo=hf_repo,
                     gcs_bucket=bucket,
-                    return_version=True,
+                    version=version,
                 )
                 filename = str(Path(file_path))
             else:
@@ -164,8 +156,6 @@ class Simulation:
             self.options.data = Dataset.from_file(
                 filename, time_period=time_period
             )
-
-        self.data_versions[self.options.data.file_path.name] = version
 
     def _initialise_simulations(self):
         self.baseline_simulation = self._initialise_simulation(
@@ -353,6 +343,7 @@ class Simulation:
             for package, version in self.options.package_versions.items():
                 try:
                     installed_version = metadata.version(package)
+                    self.model_version = installed_version
                 except metadata.PackageNotFoundError:
                     raise ValueError(f"Package {package} not found.")
                 if installed_version != version:

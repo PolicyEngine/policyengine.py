@@ -11,20 +11,13 @@ from typing import Tuple
 def download(
     filepath: str,
     gcs_bucket: str,
+    version: str | None = None,
 ) -> str | Tuple[str, str]:
     logging.info("Using Google Cloud Storage for download.")
     download_file_from_gcs(
         bucket_name=gcs_bucket,
         file_name=filepath,
         destination_path=filepath,
+        version=version,
     )
-    if return_version:
-        download_file_from_gcs(
-            bucket_name=gcs_bucket,
-            file_name="version.json",
-            destination_path="version.json",
-        )
-        with open("version.json", "r") as f:
-            version = json.load(f).get("version")
-        return filepath, version
     return filepath
