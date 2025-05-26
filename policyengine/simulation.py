@@ -133,7 +133,7 @@ class Simulation:
 
         if isinstance(self.options.data, str):
             filename = self.options.data
-            if "gcs://" in self.options.data:
+            if self.options.data[:6] == "gcs://":
                 bucket, filename = self.options.data.split("://")[-1].split(
                     "/"
                 )
