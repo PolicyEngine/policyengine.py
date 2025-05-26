@@ -63,9 +63,9 @@ class SimulationOptions(BaseModel):
         False,
         description="Whether to include tax-benefit cliffs in the simulation analyses. If True, cliffs will be included.",
     )
-    package_versions: Dict[str, str] | None = Field(
+    model_version: str | None = Field(
         None,
-        description="The versions of the packages used in the simulation. If not provided, the current package versions will be used. If provided, this package will throw an error if the package versions do not match. Use this as an extra safety check.",
+        description="The version of the country model used in the simulation. If not provided, the current package version will be used. If provided, this package will throw an error if the package version does not match. Use this as an extra safety check.",
     )
 
 
@@ -127,7 +127,7 @@ class Simulation:
                 region=self.options.region,
             )
 
-        elif isinstance(self.options.data, str):
+        if isinstance(self.options.data, str):
             filename = self.options.data
             if "gcs://" in self.options.data:
                 bucket, filename = self.options.data.split("://")[-1].split(
@@ -335,23 +335,24 @@ class Simulation:
 
         return simulation
 
-    def check_package_versions(self) -> None:
+    def check_package_version(self) -> None:
         """
         Check the package versions of the simulation against the current package versions.
         """
-        if self.options.package_versions is not None:
-            for package, version in self.options.package_versions.items():
-                try:
-                    installed_version = metadata.version(package)
-                    self.model_version = installed_version
-                except metadata.PackageNotFoundError:
-                    raise ValueError(
-                        f"Package {package} not found. Try running `pip install {package}`."
-                    )
-                if installed_version != version:
-                    raise ValueError(
-                        f"Package {package} version {installed_version} does not match expected version {version}."
-                    )
+        if self.options.model_version is not None:
+            target_version = self.options.model_version
+            package = f"policyengine-{self.options.country}"
+            try:
+                installed_version = metadata.version(package)
+                self.model_version = installed_version
+            except metadata.PackageNotFoundError:
+                raise ValueError(
+                    f"Package {package} not found. Try running `pip install {package}`."
+                )
+            if installed_version != target_version:
+                raise ValueError(
+                    f"Package {package} version {installed_version} does not match expected version {target_version}. Try running `pip install {package}=={target_version}`."
+                )
 
     def check_data_versions(self) -> None:
         """

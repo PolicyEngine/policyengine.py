@@ -59,9 +59,8 @@ class SimplifiedGoogleStorageClient:
         """
         get the blob content and associated CRC from google storage.
         """
-        logger.debug(f"Downloading {bucket}, {key}")
+        logger.info(f"Downloading {bucket}, {key}")
         blob = self.get_versioned_blob(bucket, key, version)
-        print(blob, blob.exists())
 
         result = blob.download_as_bytes()
         # According to documentation blob.crc32c is updated as a side effect of

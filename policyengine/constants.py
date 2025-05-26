@@ -7,31 +7,15 @@ from typing import Tuple
 
 def get_default_dataset(
     country: str, region: str, version: str | None = None
-) -> Dataset:
+) -> str:
     if country == "uk":
-        data_file = download(
-            filepath="enhanced_frs_2022_23.h5",
-            gcs_bucket="policyengine-uk-data-private",
-            version=version,
-        )
-        time_period = None
+        return "gcs://policyengine-uk-data-private/enhanced_frs_2022_23.h5"
     elif country == "us":
         if region is not None and region != "us":
-            data_file = download(
-                filepath="pooled_3_year_cps_2023.h5",
-                gcs_bucket="policyengine-us-data",
-                version=version,
-            )
-            time_period = 2023
+            return "gcs://policyengine-us-data/pooled_3_year_cps_2023.h5"
         else:
-            data_file = download(
-                filepath="cps_2023.h5",
-                gcs_bucket="policyengine-us-data",
-                version=version,
-            )
-            time_period = 2023
+            return "gcs://policyengine-us-data/cps_2023.h5"
 
-    return Dataset.from_file(
-        file_path=data_file,
-        time_period=time_period,
+    raise ValueError(
+        f"Unable to select a default dataset for country {country} and region {region}."
     )

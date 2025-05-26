@@ -62,6 +62,7 @@ class CachingGoogleStorageClient(AbstractContextManager):
         """
         Cache the resource if the CRC has changed.
         """
+        logger.info(f"Syncing {bucket}, {key}, {version} to cache")
         datakey = f"{bucket}.{key}.{version}.data"
         crckey = f"{bucket}.{key}.{version}.crc"
 
@@ -70,9 +71,9 @@ class CachingGoogleStorageClient(AbstractContextManager):
             raise Exception(f"Unable to find {key} in bucket {bucket}")
 
         prev_crc = self.cache.get(crckey, default=None)
-        logger.debug(f"Previous crc for {bucket}, {key} was {prev_crc}")
+        logger.info(f"Previous crc for {bucket}, {key} was {prev_crc}")
         if prev_crc == crc:
-            logger.debug(
+            logger.info(
                 f"Cache exists and crc is unchanged for {bucket}, {key}."
             )
             return
