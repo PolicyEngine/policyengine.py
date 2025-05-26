@@ -10,7 +10,7 @@ from policyengine import Simulation
 from policyengine.outputs.macro.single.calculate_single_economy import (
     SingleEconomy,
 )
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 
 class BudgetaryImpact(BaseModel):
@@ -783,8 +783,10 @@ class CliffImpact(BaseModel):
 
 
 class EconomyComparison(BaseModel):
-    model_version: str
-    data_version: str
+    model_version: Optional[
+        str
+    ]  # Optional while some datasets have no tagged version.
+    data_version: Optional[str]
     budget: BudgetaryImpact
     detailed_budget: DetailedBudgetaryImpact
     decile: DecileImpact
