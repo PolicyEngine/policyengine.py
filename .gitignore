@@ -164,3 +164,4 @@ cython_debug/
 !docs/**/*.ipynb
 
 **/*.h5
+**/*.csv
