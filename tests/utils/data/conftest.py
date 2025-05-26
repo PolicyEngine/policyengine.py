@@ -12,7 +12,6 @@ class MockedStorageSupport:
             data.encode(),
             crc,
         )
-        print("Setting latest version")
         self.mock_simple_storage_client._get_latest_version.return_value = (
             "1.2.3"
         )
