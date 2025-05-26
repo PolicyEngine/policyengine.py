@@ -88,7 +88,7 @@ class Simulation:
 
     def __init__(self, **options: SimulationOptions):
         self.options = SimulationOptions(**options)
-        self.check_package_version()
+        self.check_model_version()
         self._set_data()
         self._initialise_simulations()
         self._add_output_functions()
@@ -330,7 +330,7 @@ class Simulation:
 
         return simulation
 
-    def check_package_version(self) -> None:
+    def check_model_version(self) -> None:
         """
         Check the package versions of the simulation against the current package versions.
         """
