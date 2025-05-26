@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import patch
 
+VALID_VERSION = "1.2.3"
 
 class MockedStorageSupport:
     def __init__(self, mock_simple_storage_client):
@@ -13,7 +14,7 @@ class MockedStorageSupport:
             crc,
         )
         self.mock_simple_storage_client._get_latest_version.return_value = (
-            "1.2.3"
+            VALID_VERSION
         )
 
     def given_crc_changes_on_download(
@@ -25,7 +26,7 @@ class MockedStorageSupport:
             download_crc,
         )
         self.mock_simple_storage_client._get_latest_version.return_value = (
-            "1.2.3"
+            VALID_VERSION
         )
 
 
