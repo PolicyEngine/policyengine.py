@@ -295,10 +295,151 @@
   from .autonotebook import tqdm as notebook_tqdm
 </pre></div>
 </div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Using Hugging Face for download.
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>INFO:root:Using Google Cloud Storage for download.
 </pre></div>
 </div>
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>EconomyComparison(country_package_version=&#39;1.289.1&#39;, budget=BudgetaryImpact(budgetary_impact=11110138897.939941, tax_revenue_impact=-8460553.759765625, state_tax_revenue_impact=-8460556.114990234, benefit_spending_impact=-11118599451.699707, households=135135901.96484375, baseline_net_income=13750220550758.488), detailed_budget={}, decile=DecileImpact(relative={1: -0.0032933950201064753, 2: -0.004602875582563952, 3: -0.0039681644654201795, 4: -0.002311367959858112, 5: -0.0011144297764489502, 6: -0.00028435845367330266, 7: -9.968060235252682e-05, 8: -4.033793592991293e-05, 9: -2.217430315261985e-06, 10: -1.9039724770703555e-05}, average={1: -58.71749866945088, 2: -174.40061909063255, 3: -208.151887907769, 4: -152.87597789872487, 5: -91.37441839669155, 6: -28.548241091225474, 7: -12.106781647659918, 8: -5.988260063518748, 9: -0.4280994408557803, 10: -6.959560892093119}), inequality=InequalityImpact(gini=BaselineReformValues(baseline=0.4075100559141027, reform=0.40851209371537256), top_10_pct_share=BaselineReformValues(baseline=0.3124672519208058, reform=0.31267116599494904), top_1_pct_share=BaselineReformValues(baseline=0.07923104913351141, reform=0.07928377707100837)), poverty=PovertyImpact(poverty=AgeGroupBaselineReformValues(child=BaselineReformValues(baseline=0.11636263103695389, reform=0.12493090092611214), adult=BaselineReformValues(baseline=0.11528681104381337, reform=0.11968800429057734), senior=BaselineReformValues(baseline=0.12573396986088123, reform=0.12636029101823715), all=BaselineReformValues(baseline=0.11747354814795145, reform=0.12205215495014128)), deep_poverty=AgeGroupBaselineReformValues(child=BaselineReformValues(baseline=0.029712548316502448, reform=0.029919845164242412), adult=BaselineReformValues(baseline=0.04112670548138903, reform=0.04139566728666175), senior=BaselineReformValues(baseline=0.02959367414007554, reform=0.02959367414007554), all=BaselineReformValues(baseline=0.03654080389758766, reform=0.03674625419906671))), poverty_by_gender=PovertyGenderBreakdown(poverty=GenderBaselineReformValues(male=BaselineReformValues(baseline=0.11257817920800106, reform=0.11662688454177665), female=BaselineReformValues(baseline=0.1220966727767961, reform=0.1271757118363985)), deep_poverty=GenderBaselineReformValues(male=BaselineReformValues(baseline=0.03646856214273632, reform=0.03664984745426419), female=BaselineReformValues(baseline=0.03660902809890548, reform=0.03683729951184098))), poverty_by_race=PovertyRacialBreakdownWithValues(poverty=RacialBaselineReformValues(white=BaselineReformValues(baseline=0.07887945998444881, reform=0.08091409845320091), black=BaselineReformValues(baseline=0.18590537526585513, reform=0.1893732970854798), hispanic=BaselineReformValues(baseline=0.18976109207345374, reform=0.1978763745374249), other=BaselineReformValues(baseline=0.12503798188956264, reform=0.13947128541382622))), intra_decile=IntraDecileImpact(deciles={&#39;Lose more than 5%&#39;: [0.05944829615126987, 0.1517018777577648, 0.15576781770248024, 0.09835825282319459, 0.039336562347781975, 0.00939932450659146, 0.003664614454934193, 0.0, 0.0, 0.0], &#39;Lose less than 5%&#39;: [0.06210355510897461, 0.0743838027232316, 0.05863335771936685, 0.05658164801112181, 0.027887861524920808, 0.01321779987751425, 0.014511873241539403, 0.005575935408766136, 0.0026416203513319643, 0.002787967784374329], &#39;No change&#39;: [0.8777105768320445, 0.7739143195190036, 0.7855988245781529, 0.8450600991656836, 0.9327755761272972, 0.9773828756158943, 0.9818235123035264, 0.9944240645912339, 0.997358379648668, 0.9972120322156257], &#39;Gain less than 5%&#39;: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], &#39;Gain more than 5%&#39;: [0.0007375719077110151, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]}, all={&#39;Lose more than 5%&#39;: 0.05176767457440171, &#39;Lose less than 5%&#39;: 0.03183254217511418, &#39;No change&#39;: 0.9163260260597129, &#39;Gain less than 5%&#39;: 0.0, &#39;Gain more than 5%&#39;: 7.37571907711015e-05}), wealth_decile=None, intra_wealth_decile=None, labor_supply_response=LaborSupplyResponse(substitution_lsr=0.0, income_lsr=0.0, relative_lsr={&#39;income&#39;: 0.0, &#39;substitution&#39;: 0.0}, total_change=0.0, revenue_change=0.0, decile={&#39;average&#39;: {&#39;income&#39;: {-1: 0.0, 1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0, 6: 0.0, 7: 0.0, 8: 0.0, 9: 0.0, 10: 0.0}, &#39;substitution&#39;: {-1: 0.0, 1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0, 6: 0.0, 7: 0.0, 8: 0.0, 9: 0.0, 10: 0.0}}, &#39;relative&#39;: {&#39;income&#39;: {1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0, 6: 0.0, 7: 0.0, 8: 0.0, 9: 0.0, 10: 0.0}, &#39;substitution&#39;: {1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0, 6: 0.0, 7: 0.0, 8: 0.0, 9: 0.0, 10: 0.0}}}, hours=HoursResponse(baseline=6184211579.073981, reform=6184211579.073981, change=0.0, income_effect=0.0, substitution_effect=0.0)), constituency_impact=None, cliff_impact=None)
+<div class="output traceback highlight-ipythontb notranslate"><div class="highlight"><pre><span></span><span class="gt">---------------------------------------------------------------------------</span>
+<span class="ne">DefaultCredentialsError</span><span class="g g-Whitespace">                   </span>Traceback (most recent call last)
+<span class="n">Cell</span> <span class="n">In</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">line</span> <span class="mi">3</span>
+<span class="g g-Whitespace">      </span><span class="mi">1</span> <span class="kn">from</span><span class="w"> </span><span class="nn">policyengine</span><span class="w"> </span><span class="kn">import</span> <span class="n">Simulation</span>
+<span class="ne">----&gt; </span><span class="mi">3</span> <span class="n">sim</span> <span class="o">=</span> <span class="n">Simulation</span><span class="p">(</span>
+<span class="g g-Whitespace">      </span><span class="mi">4</span>     <span class="n">scope</span><span class="o">=</span><span class="s2">&quot;macro&quot;</span><span class="p">,</span> <span class="c1"># Required for this</span>
+<span class="g g-Whitespace">      </span><span class="mi">5</span>     <span class="n">country</span><span class="o">=</span><span class="s2">&quot;us&quot;</span><span class="p">,</span> <span class="c1"># or &quot;us&quot;</span>
+<span class="g g-Whitespace">      </span><span class="mi">6</span>     <span class="n">time_period</span><span class="o">=</span><span class="mi">2025</span><span class="p">,</span> <span class="c1"># Defaults to 2025</span>
+<span class="g g-Whitespace">      </span><span class="mi">7</span>     <span class="n">reform</span><span class="o">=</span><span class="p">{</span>
+<span class="g g-Whitespace">      </span><span class="mi">8</span>         <span class="s2">&quot;gov.usda.snap.income.deductions.earned_income&quot;</span><span class="p">:</span> <span class="p">{</span>
+<span class="g g-Whitespace">      </span><span class="mi">9</span>             <span class="s2">&quot;2025&quot;</span><span class="p">:</span> <span class="mf">0.05</span>
+<span class="g g-Whitespace">     </span><span class="mi">10</span>         <span class="p">}</span>
+<span class="g g-Whitespace">     </span><span class="mi">11</span>     <span class="p">}</span>
+<span class="g g-Whitespace">     </span><span class="mi">12</span> <span class="p">)</span>
+<span class="g g-Whitespace">     </span><span class="mi">14</span> <span class="n">sim</span><span class="o">.</span><span class="n">calculate_economy_comparison</span><span class="p">()</span>
+
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/simulation.py:92,</span> in <span class="ni">Simulation.__init__</span><span class="nt">(self, **options)</span>
+<span class="g g-Whitespace">     </span><span class="mi">90</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span> <span class="o">=</span> <span class="n">SimulationOptions</span><span class="p">(</span><span class="o">**</span><span class="n">options</span><span class="p">)</span>
+<span class="g g-Whitespace">     </span><span class="mi">91</span> <span class="bp">self</span><span class="o">.</span><span class="n">check_model_version</span><span class="p">()</span>
+<span class="ne">---&gt; </span><span class="mi">92</span> <span class="bp">self</span><span class="o">.</span><span class="n">_set_data</span><span class="p">()</span>
+<span class="g g-Whitespace">     </span><span class="mi">93</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialise_simulations</span><span class="p">()</span>
+<span class="g g-Whitespace">     </span><span class="mi">94</span> <span class="bp">self</span><span class="o">.</span><span class="n">check_data_version</span><span class="p">()</span>
+
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/simulation.py:143,</span> in <span class="ni">Simulation._set_data</span><span class="nt">(self)</span>
+<span class="g g-Whitespace">    </span><span class="mi">138</span>     <span class="n">bucket</span><span class="p">,</span> <span class="n">filename</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;://&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
+<span class="g g-Whitespace">    </span><span class="mi">139</span>         <span class="s2">&quot;/&quot;</span>
+<span class="g g-Whitespace">    </span><span class="mi">140</span>     <span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">141</span>     <span class="n">version</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">data_version</span>
+<span class="ne">--&gt; </span><span class="mi">143</span>     <span class="n">file_path</span> <span class="o">=</span> <span class="n">download</span><span class="p">(</span>
+<span class="g g-Whitespace">    </span><span class="mi">144</span>         <span class="n">filepath</span><span class="o">=</span><span class="n">filename</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">145</span>         <span class="n">gcs_bucket</span><span class="o">=</span><span class="n">bucket</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">146</span>         <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">147</span>     <span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">148</span>     <span class="n">filename</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">file_path</span><span class="p">))</span>
+<span class="g g-Whitespace">    </span><span class="mi">149</span> <span class="k">else</span><span class="p">:</span>
+<span class="g g-Whitespace">    </span><span class="mi">150</span>     <span class="c1"># If it&#39;s a local file, we can&#39;t infer the version.</span>
+
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/utils/data_download.py:16,</span> in <span class="ni">download</span><span class="nt">(filepath, gcs_bucket, version)</span>
+<span class="g g-Whitespace">     </span><span class="mi">10</span> <span class="k">def</span><span class="w"> </span><span class="nf">download</span><span class="p">(</span>
+<span class="g g-Whitespace">     </span><span class="mi">11</span>     <span class="n">filepath</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">12</span>     <span class="n">gcs_bucket</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">13</span>     <span class="n">version</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">14</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="g g-Whitespace">     </span><span class="mi">15</span>     <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using Google Cloud Storage for download.&quot;</span><span class="p">)</span>
+<span class="ne">---&gt; </span><span class="mi">16</span>     <span class="n">download_file_from_gcs</span><span class="p">(</span>
+<span class="g g-Whitespace">     </span><span class="mi">17</span>         <span class="n">bucket_name</span><span class="o">=</span><span class="n">gcs_bucket</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">18</span>         <span class="n">file_name</span><span class="o">=</span><span class="n">filepath</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">19</span>         <span class="n">destination_path</span><span class="o">=</span><span class="n">filepath</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">20</span>         <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">21</span>     <span class="p">)</span>
+<span class="g g-Whitespace">     </span><span class="mi">22</span>     <span class="k">return</span> <span class="n">filepath</span>
+
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/utils/google_cloud_bucket.py:41,</span> in <span class="ni">download_file_from_gcs</span><span class="nt">(bucket_name, file_name, destination_path, version)</span>
+<span class="g g-Whitespace">     </span><span class="mi">23</span> <span class="k">def</span><span class="w"> </span><span class="nf">download_file_from_gcs</span><span class="p">(</span>
+<span class="g g-Whitespace">     </span><span class="mi">24</span>     <span class="n">bucket_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">25</span>     <span class="n">file_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">26</span>     <span class="n">destination_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">27</span>     <span class="n">version</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">28</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="g g-Whitespace">     </span><span class="mi">29</span><span class="w">     </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="g g-Whitespace">     </span><span class="mi">30</span><span class="sd">     Download a file from Google Cloud Storage to a local path.</span>
+<span class="g g-Whitespace">     </span><span class="mi">31</span><span class="sd"> </span>
+<span class="sd">   (...)</span>
+<span class="g g-Whitespace">     </span><span class="mi">38</span><span class="sd">         None</span>
+<span class="g g-Whitespace">     </span><span class="mi">39</span><span class="sd">     &quot;&quot;&quot;</span>
+<span class="ne">---&gt; </span><span class="mi">41</span>     <span class="k">return</span> <span class="n">_get_client</span><span class="p">()</span><span class="o">.</span><span class="n">download</span><span class="p">(</span>
+<span class="g g-Whitespace">     </span><span class="mi">42</span>         <span class="n">bucket_name</span><span class="p">,</span> <span class="n">file_name</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="n">destination_path</span><span class="p">),</span> <span class="n">version</span><span class="o">=</span><span class="n">version</span>
+<span class="g g-Whitespace">     </span><span class="mi">43</span>     <span class="p">)</span>
+
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/utils/google_cloud_bucket.py:14,</span> in <span class="ni">_get_client</span><span class="nt">()</span>
+<span class="g g-Whitespace">     </span><span class="mi">12</span> <span class="k">if</span> <span class="n">_caching_client</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<span class="g g-Whitespace">     </span><span class="mi">13</span>     <span class="k">return</span> <span class="n">_caching_client</span>
+<span class="ne">---&gt; </span><span class="mi">14</span> <span class="n">_caching_client</span> <span class="o">=</span> <span class="n">CachingGoogleStorageClient</span><span class="p">()</span>
+<span class="g g-Whitespace">     </span><span class="mi">15</span> <span class="k">return</span> <span class="n">_caching_client</span>
+
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/utils/data/caching_google_storage_client.py:19,</span> in <span class="ni">CachingGoogleStorageClient.__init__</span><span class="nt">(self)</span>
+<span class="g g-Whitespace">     </span><span class="mi">18</span> <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="ne">---&gt; </span><span class="mi">19</span>     <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">SimplifiedGoogleStorageClient</span><span class="p">()</span>
+<span class="g g-Whitespace">     </span><span class="mi">20</span>     <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="o">=</span> <span class="n">diskcache</span><span class="o">.</span><span class="n">Cache</span><span class="p">()</span>
+
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/utils/data/simplified_google_storage_client.py:19,</span> in <span class="ni">SimplifiedGoogleStorageClient.__init__</span><span class="nt">(self)</span>
+<span class="g g-Whitespace">     </span><span class="mi">18</span> <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="ne">---&gt; </span><span class="mi">19</span>     <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">Client</span><span class="p">()</span>
+
+<span class="nn">File /opt/hostedtoolcache/Python/3.11.12/x64/lib/python3.11/site-packages/google/cloud/storage/client.py:247,</span> in <span class="ni">Client.__init__</span><span class="nt">(self, project, credentials, _http, client_info, client_options, use_auth_w_custom_endpoint, extra_headers, api_key)</span>
+<span class="g g-Whitespace">    </span><span class="mi">244</span>             <span class="n">no_project</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="g g-Whitespace">    </span><span class="mi">245</span>             <span class="n">project</span> <span class="o">=</span> <span class="s2">&quot;&lt;none&gt;&quot;</span>
+<span class="ne">--&gt; </span><span class="mi">247</span> <span class="nb">super</span><span class="p">(</span><span class="n">Client</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+<span class="g g-Whitespace">    </span><span class="mi">248</span>     <span class="n">project</span><span class="o">=</span><span class="n">project</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">249</span>     <span class="n">credentials</span><span class="o">=</span><span class="n">credentials</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">250</span>     <span class="n">client_options</span><span class="o">=</span><span class="n">client_options</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">251</span>     <span class="n">_http</span><span class="o">=</span><span class="n">_http</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">252</span> <span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">254</span> <span class="c1"># Validate that the universe domain of the credentials matches the</span>
+<span class="g g-Whitespace">    </span><span class="mi">255</span> <span class="c1"># universe domain of the client.</span>
+<span class="g g-Whitespace">    </span><span class="mi">256</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_credentials</span><span class="o">.</span><span class="n">universe_domain</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">universe_domain</span><span class="p">:</span>
+
+<span class="nn">File /opt/hostedtoolcache/Python/3.11.12/x64/lib/python3.11/site-packages/google/cloud/client/__init__.py:338,</span> in <span class="ni">ClientWithProject.__init__</span><span class="nt">(self, project, credentials, client_options, _http)</span>
+<span class="g g-Whitespace">    </span><span class="mi">337</span> <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">project</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">credentials</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">client_options</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">_http</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="ne">--&gt; </span><span class="mi">338</span>     <span class="n">_ClientProjectMixin</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">project</span><span class="o">=</span><span class="n">project</span><span class="p">,</span> <span class="n">credentials</span><span class="o">=</span><span class="n">credentials</span><span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">339</span>     <span class="n">Client</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+<span class="g g-Whitespace">    </span><span class="mi">340</span>         <span class="bp">self</span><span class="p">,</span> <span class="n">credentials</span><span class="o">=</span><span class="n">credentials</span><span class="p">,</span> <span class="n">client_options</span><span class="o">=</span><span class="n">client_options</span><span class="p">,</span> <span class="n">_http</span><span class="o">=</span><span class="n">_http</span>
+<span class="g g-Whitespace">    </span><span class="mi">341</span>     <span class="p">)</span>
+
+<span class="nn">File /opt/hostedtoolcache/Python/3.11.12/x64/lib/python3.11/site-packages/google/cloud/client/__init__.py:286,</span> in <span class="ni">_ClientProjectMixin.__init__</span><span class="nt">(self, project, credentials)</span>
+<span class="g g-Whitespace">    </span><span class="mi">283</span>     <span class="n">project</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">credentials</span><span class="p">,</span> <span class="s2">&quot;project_id&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">285</span> <span class="k">if</span> <span class="n">project</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<span class="ne">--&gt; </span><span class="mi">286</span>     <span class="n">project</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_determine_default</span><span class="p">(</span><span class="n">project</span><span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">288</span> <span class="k">if</span> <span class="n">project</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<span class="g g-Whitespace">    </span><span class="mi">289</span>     <span class="k">raise</span> <span class="ne">EnvironmentError</span><span class="p">(</span>
+<span class="g g-Whitespace">    </span><span class="mi">290</span>         <span class="s2">&quot;Project was not passed and could not be &quot;</span>
+<span class="g g-Whitespace">    </span><span class="mi">291</span>         <span class="s2">&quot;determined from the environment.&quot;</span>
+<span class="g g-Whitespace">    </span><span class="mi">292</span>     <span class="p">)</span>
+
+<span class="nn">File /opt/hostedtoolcache/Python/3.11.12/x64/lib/python3.11/site-packages/google/cloud/client/__init__.py:305,</span> in <span class="ni">_ClientProjectMixin._determine_default</span><span class="nt">(project)</span>
+<span class="g g-Whitespace">    </span><span class="mi">302</span> <span class="nd">@staticmethod</span>
+<span class="g g-Whitespace">    </span><span class="mi">303</span> <span class="k">def</span><span class="w"> </span><span class="nf">_determine_default</span><span class="p">(</span><span class="n">project</span><span class="p">):</span>
+<span class="g g-Whitespace">    </span><span class="mi">304</span><span class="w">     </span><span class="sd">&quot;&quot;&quot;Helper:  use default project detection.&quot;&quot;&quot;</span>
+<span class="ne">--&gt; </span><span class="mi">305</span>     <span class="k">return</span> <span class="n">_determine_default_project</span><span class="p">(</span><span class="n">project</span><span class="p">)</span>
+
+<span class="nn">File /opt/hostedtoolcache/Python/3.11.12/x64/lib/python3.11/site-packages/google/cloud/_helpers/__init__.py:152,</span> in <span class="ni">_determine_default_project</span><span class="nt">(project)</span>
+<span class="g g-Whitespace">    </span><span class="mi">140</span><span class="w"> </span><span class="sd">&quot;&quot;&quot;Determine default project ID explicitly or implicitly as fall-back.</span>
+<span class="g g-Whitespace">    </span><span class="mi">141</span><span class="sd"> </span>
+<span class="g g-Whitespace">    </span><span class="mi">142</span><span class="sd"> See :func:`google.auth.default` for details on how the default project</span>
+<span class="sd">   (...)</span>
+<span class="g g-Whitespace">    </span><span class="mi">149</span><span class="sd"> :returns: Default project if it can be determined.</span>
+<span class="g g-Whitespace">    </span><span class="mi">150</span><span class="sd"> &quot;&quot;&quot;</span>
+<span class="g g-Whitespace">    </span><span class="mi">151</span> <span class="k">if</span> <span class="n">project</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<span class="ne">--&gt; </span><span class="mi">152</span>     <span class="n">_</span><span class="p">,</span> <span class="n">project</span> <span class="o">=</span> <span class="n">google</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">default</span><span class="p">()</span>
+<span class="g g-Whitespace">    </span><span class="mi">153</span> <span class="k">return</span> <span class="n">project</span>
+
+<span class="nn">File /opt/hostedtoolcache/Python/3.11.12/x64/lib/python3.11/site-packages/google/auth/_default.py:685,</span> in <span class="ni">default</span><span class="nt">(scopes, request, quota_project_id, default_scopes)</span>
+<span class="g g-Whitespace">    </span><span class="mi">677</span>             <span class="n">_LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+<span class="g g-Whitespace">    </span><span class="mi">678</span>                 <span class="s2">&quot;No project ID could be determined. Consider running &quot;</span>
+<span class="g g-Whitespace">    </span><span class="mi">679</span>                 <span class="s2">&quot;`gcloud config set project` or setting the </span><span class="si">%s</span><span class="s2"> &quot;</span>
+<span class="g g-Whitespace">    </span><span class="mi">680</span>                 <span class="s2">&quot;environment variable&quot;</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">681</span>                 <span class="n">environment_vars</span><span class="o">.</span><span class="n">PROJECT</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">682</span>             <span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">683</span>         <span class="k">return</span> <span class="n">credentials</span><span class="p">,</span> <span class="n">effective_project_id</span>
+<span class="ne">--&gt; </span><span class="mi">685</span> <span class="k">raise</span> <span class="n">exceptions</span><span class="o">.</span><span class="n">DefaultCredentialsError</span><span class="p">(</span><span class="n">_CLOUD_SDK_MISSING_CREDENTIALS</span><span class="p">)</span>
+
+<span class="ne">DefaultCredentialsError</span>: Your default credentials were not found. To set up Application Default Credentials, see https://cloud.google.com/docs/authentication/external/set-up-adc for more information.
 </pre></div>
 </div>
 </div>
@@ -315,219 +456,176 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>{&#39;$defs&#39;: {&#39;AgeGroupBaselineReformValues&#39;: {&#39;properties&#39;: {&#39;child&#39;: {&#39;$ref&#39;: &#39;#/$defs/BaselineReformValues&#39;},
-    &#39;adult&#39;: {&#39;$ref&#39;: &#39;#/$defs/BaselineReformValues&#39;},
-    &#39;senior&#39;: {&#39;$ref&#39;: &#39;#/$defs/BaselineReformValues&#39;},
-    &#39;all&#39;: {&#39;$ref&#39;: &#39;#/$defs/BaselineReformValues&#39;}},
-   &#39;required&#39;: [&#39;child&#39;, &#39;adult&#39;, &#39;senior&#39;, &#39;all&#39;],
-   &#39;title&#39;: &#39;AgeGroupBaselineReformValues&#39;,
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>{&#39;$defs&#39;: {&#39;DecileImpacts&#39;: {&#39;properties&#39;: {&#39;income&#39;: {&#39;$ref&#39;: &#39;#/$defs/IncomeMeasureSpecificDecileImpacts&#39;},
+    &#39;wealth&#39;: {&#39;anyOf&#39;: [{&#39;$ref&#39;: &#39;#/$defs/IncomeMeasureSpecificDecileImpacts&#39;},
+      {&#39;type&#39;: &#39;null&#39;}]}},
+   &#39;required&#39;: [&#39;income&#39;, &#39;wealth&#39;],
+   &#39;title&#39;: &#39;DecileImpacts&#39;,
    &#39;type&#39;: &#39;object&#39;},
-  &#39;BaselineReformValues&#39;: {&#39;properties&#39;: {&#39;baseline&#39;: {&#39;title&#39;: &#39;Baseline&#39;,
-     &#39;type&#39;: &#39;number&#39;},
-    &#39;reform&#39;: {&#39;title&#39;: &#39;Reform&#39;, &#39;type&#39;: &#39;number&#39;}},
-   &#39;required&#39;: [&#39;baseline&#39;, &#39;reform&#39;],
-   &#39;title&#39;: &#39;BaselineReformValues&#39;,
+  &#39;FiscalComparison&#39;: {&#39;properties&#39;: {&#39;baseline&#39;: {&#39;$ref&#39;: &#39;#/$defs/FiscalSummary&#39;},
+    &#39;reform&#39;: {&#39;$ref&#39;: &#39;#/$defs/FiscalSummary&#39;},
+    &#39;change&#39;: {&#39;$ref&#39;: &#39;#/$defs/FiscalSummary&#39;},
+    &#39;relative_change&#39;: {&#39;$ref&#39;: &#39;#/$defs/FiscalSummary&#39;}},
+   &#39;required&#39;: [&#39;baseline&#39;, &#39;reform&#39;, &#39;change&#39;, &#39;relative_change&#39;],
+   &#39;title&#39;: &#39;FiscalComparison&#39;,
    &#39;type&#39;: &#39;object&#39;},
-  &#39;BudgetaryImpact&#39;: {&#39;properties&#39;: {&#39;budgetary_impact&#39;: {&#39;title&#39;: &#39;Budgetary Impact&#39;,
+  &#39;FiscalSummary&#39;: {&#39;properties&#39;: {&#39;tax_revenue&#39;: {&#39;title&#39;: &#39;Tax Revenue&#39;,
      &#39;type&#39;: &#39;number&#39;},
-    &#39;tax_revenue_impact&#39;: {&#39;title&#39;: &#39;Tax Revenue Impact&#39;, &#39;type&#39;: &#39;number&#39;},
-    &#39;state_tax_revenue_impact&#39;: {&#39;title&#39;: &#39;State Tax Revenue Impact&#39;,
-     &#39;type&#39;: &#39;number&#39;},
-    &#39;benefit_spending_impact&#39;: {&#39;title&#39;: &#39;Benefit Spending Impact&#39;,
-     &#39;type&#39;: &#39;number&#39;},
-    &#39;households&#39;: {&#39;title&#39;: &#39;Households&#39;, &#39;type&#39;: &#39;number&#39;},
-    &#39;baseline_net_income&#39;: {&#39;title&#39;: &#39;Baseline Net Income&#39;, &#39;type&#39;: &#39;number&#39;}},
-   &#39;required&#39;: [&#39;budgetary_impact&#39;,
-    &#39;tax_revenue_impact&#39;,
-    &#39;state_tax_revenue_impact&#39;,
-    &#39;benefit_spending_impact&#39;,
-    &#39;households&#39;,
-    &#39;baseline_net_income&#39;],
-   &#39;title&#39;: &#39;BudgetaryImpact&#39;,
+    &#39;federal_tax&#39;: {&#39;title&#39;: &#39;Federal Tax&#39;, &#39;type&#39;: &#39;number&#39;},
+    &#39;federal_balance&#39;: {&#39;title&#39;: &#39;Federal Balance&#39;, &#39;type&#39;: &#39;number&#39;},
+    &#39;state_tax&#39;: {&#39;title&#39;: &#39;State Tax&#39;, &#39;type&#39;: &#39;number&#39;},
+    &#39;government_spending&#39;: {&#39;title&#39;: &#39;Government Spending&#39;, &#39;type&#39;: &#39;number&#39;},
+    &#39;tax_benefit_programs&#39;: {&#39;additionalProperties&#39;: {&#39;type&#39;: &#39;number&#39;},
+     &#39;title&#39;: &#39;Tax Benefit Programs&#39;,
+     &#39;type&#39;: &#39;object&#39;},
+    &#39;household_net_income&#39;: {&#39;title&#39;: &#39;Household Net Income&#39;,
+     &#39;type&#39;: &#39;number&#39;}},
+   &#39;required&#39;: [&#39;tax_revenue&#39;,
+    &#39;federal_tax&#39;,
+    &#39;federal_balance&#39;,
+    &#39;state_tax&#39;,
+    &#39;government_spending&#39;,
+    &#39;tax_benefit_programs&#39;,
+    &#39;household_net_income&#39;],
+   &#39;title&#39;: &#39;FiscalSummary&#39;,
    &#39;type&#39;: &#39;object&#39;},
-  &#39;CliffImpact&#39;: {&#39;properties&#39;: {&#39;baseline&#39;: {&#39;$ref&#39;: &#39;#/$defs/CliffImpactInSimulation&#39;},
-    &#39;reform&#39;: {&#39;$ref&#39;: &#39;#/$defs/CliffImpactInSimulation&#39;}},
-   &#39;required&#39;: [&#39;baseline&#39;, &#39;reform&#39;],
-   &#39;title&#39;: &#39;CliffImpact&#39;,
-   &#39;type&#39;: &#39;object&#39;},
-  &#39;CliffImpactInSimulation&#39;: {&#39;properties&#39;: {&#39;cliff_gap&#39;: {&#39;title&#39;: &#39;Cliff Gap&#39;,
+  &#39;Headlines&#39;: {&#39;properties&#39;: {&#39;budgetary_impact&#39;: {&#39;title&#39;: &#39;Budgetary Impact&#39;,
      &#39;type&#39;: &#39;number&#39;},
-    &#39;cliff_share&#39;: {&#39;title&#39;: &#39;Cliff Share&#39;, &#39;type&#39;: &#39;number&#39;}},
-   &#39;required&#39;: [&#39;cliff_gap&#39;, &#39;cliff_share&#39;],
-   &#39;title&#39;: &#39;CliffImpactInSimulation&#39;,
+    &#39;poverty_impact&#39;: {&#39;title&#39;: &#39;Poverty Impact&#39;, &#39;type&#39;: &#39;number&#39;},
+    &#39;winner_share&#39;: {&#39;title&#39;: &#39;Winner Share&#39;, &#39;type&#39;: &#39;number&#39;}},
+   &#39;required&#39;: [&#39;budgetary_impact&#39;, &#39;poverty_impact&#39;, &#39;winner_share&#39;],
+   &#39;title&#39;: &#39;Headlines&#39;,
    &#39;type&#39;: &#39;object&#39;},
-  &#39;DecileImpact&#39;: {&#39;properties&#39;: {&#39;relative&#39;: {&#39;additionalProperties&#39;: {&#39;type&#39;: &#39;number&#39;},
+  &#39;IncomeMeasureSpecificDecileImpacts&#39;: {&#39;properties&#39;: {&#39;income_change&#39;: {&#39;$ref&#39;: &#39;#/$defs/IncomeMeasureSpecificDecileIncomeChange&#39;},
+    &#39;winners_and_losers&#39;: {&#39;$ref&#39;: &#39;#/$defs/IncomeMeasureSpecificDecileWinnersLosers&#39;}},
+   &#39;required&#39;: [&#39;income_change&#39;, &#39;winners_and_losers&#39;],
+   &#39;title&#39;: &#39;IncomeMeasureSpecificDecileImpacts&#39;,
+   &#39;type&#39;: &#39;object&#39;},
+  &#39;IncomeMeasureSpecificDecileIncomeChange&#39;: {&#39;properties&#39;: {&#39;relative&#39;: {&#39;additionalProperties&#39;: {&#39;type&#39;: &#39;number&#39;},
      &#39;title&#39;: &#39;Relative&#39;,
      &#39;type&#39;: &#39;object&#39;},
     &#39;average&#39;: {&#39;additionalProperties&#39;: {&#39;type&#39;: &#39;number&#39;},
      &#39;title&#39;: &#39;Average&#39;,
      &#39;type&#39;: &#39;object&#39;}},
    &#39;required&#39;: [&#39;relative&#39;, &#39;average&#39;],
-   &#39;title&#39;: &#39;DecileImpact&#39;,
+   &#39;title&#39;: &#39;IncomeMeasureSpecificDecileIncomeChange&#39;,
    &#39;type&#39;: &#39;object&#39;},
-  &#39;GenderBaselineReformValues&#39;: {&#39;properties&#39;: {&#39;male&#39;: {&#39;$ref&#39;: &#39;#/$defs/BaselineReformValues&#39;},
-    &#39;female&#39;: {&#39;$ref&#39;: &#39;#/$defs/BaselineReformValues&#39;}},
-   &#39;required&#39;: [&#39;male&#39;, &#39;female&#39;],
-   &#39;title&#39;: &#39;GenderBaselineReformValues&#39;,
+  &#39;IncomeMeasureSpecificDecileWinnersLosers&#39;: {&#39;properties&#39;: {&#39;deciles&#39;: {&#39;additionalProperties&#39;: {&#39;$ref&#39;: &#39;#/$defs/IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes&#39;},
+     &#39;title&#39;: &#39;Deciles&#39;,
+     &#39;type&#39;: &#39;object&#39;},
+    &#39;all&#39;: {&#39;$ref&#39;: &#39;#/$defs/IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes&#39;}},
+   &#39;required&#39;: [&#39;deciles&#39;, &#39;all&#39;],
+   &#39;title&#39;: &#39;IncomeMeasureSpecificDecileWinnersLosers&#39;,
    &#39;type&#39;: &#39;object&#39;},
-  &#39;HoursResponse&#39;: {&#39;properties&#39;: {&#39;baseline&#39;: {&#39;title&#39;: &#39;Baseline&#39;,
+  &#39;IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes&#39;: {&#39;properties&#39;: {&#39;lose_more_than_5_percent_share&#39;: {&#39;title&#39;: &#39;Lose More Than 5 Percent Share&#39;,
      &#39;type&#39;: &#39;number&#39;},
+    &#39;lose_less_than_5_percent_share&#39;: {&#39;title&#39;: &#39;Lose Less Than 5 Percent Share&#39;,
+     &#39;type&#39;: &#39;number&#39;},
+    &#39;lose_share&#39;: {&#39;title&#39;: &#39;Lose Share&#39;, &#39;type&#39;: &#39;number&#39;},
+    &#39;no_change_share&#39;: {&#39;title&#39;: &#39;No Change Share&#39;, &#39;type&#39;: &#39;number&#39;},
+    &#39;gain_share&#39;: {&#39;title&#39;: &#39;Gain Share&#39;, &#39;type&#39;: &#39;number&#39;},
+    &#39;gain_less_than_5_percent_share&#39;: {&#39;title&#39;: &#39;Gain Less Than 5 Percent Share&#39;,
+     &#39;type&#39;: &#39;number&#39;},
+    &#39;gain_more_than_5_percent_share&#39;: {&#39;title&#39;: &#39;Gain More Than 5 Percent Share&#39;,
+     &#39;type&#39;: &#39;number&#39;}},
+   &#39;required&#39;: [&#39;lose_more_than_5_percent_share&#39;,
+    &#39;lose_less_than_5_percent_share&#39;,
+    &#39;lose_share&#39;,
+    &#39;no_change_share&#39;,
+    &#39;gain_share&#39;,
+    &#39;gain_less_than_5_percent_share&#39;,
+    &#39;gain_more_than_5_percent_share&#39;],
+   &#39;title&#39;: &#39;IncomeMeasureSpecificDecileWinnersLosersGroupOutcomes&#39;,
+   &#39;type&#39;: &#39;object&#39;},
+  &#39;InequalityComparison&#39;: {&#39;properties&#39;: {&#39;baseline&#39;: {&#39;$ref&#39;: &#39;#/$defs/InequalitySummary&#39;},
+    &#39;reform&#39;: {&#39;$ref&#39;: &#39;#/$defs/InequalitySummary&#39;},
+    &#39;change&#39;: {&#39;$ref&#39;: &#39;#/$defs/InequalitySummary&#39;},
+    &#39;relative_change&#39;: {&#39;$ref&#39;: &#39;#/$defs/InequalitySummary&#39;}},
+   &#39;required&#39;: [&#39;baseline&#39;, &#39;reform&#39;, &#39;change&#39;, &#39;relative_change&#39;],
+   &#39;title&#39;: &#39;InequalityComparison&#39;,
+   &#39;type&#39;: &#39;object&#39;},
+  &#39;InequalitySummary&#39;: {&#39;properties&#39;: {&#39;gini&#39;: {&#39;title&#39;: &#39;Gini&#39;,
+     &#39;type&#39;: &#39;number&#39;},
+    &#39;top_10_share&#39;: {&#39;title&#39;: &#39;Top 10 Share&#39;, &#39;type&#39;: &#39;number&#39;},
+    &#39;top_1_share&#39;: {&#39;title&#39;: &#39;Top 1 Share&#39;, &#39;type&#39;: &#39;number&#39;}},
+   &#39;required&#39;: [&#39;gini&#39;, &#39;top_10_share&#39;, &#39;top_1_share&#39;],
+   &#39;title&#39;: &#39;InequalitySummary&#39;,
+   &#39;type&#39;: &#39;object&#39;},
+  &#39;LaborSupplyMetricImpact&#39;: {&#39;properties&#39;: {&#39;elasticity&#39;: {&#39;enum&#39;: [&#39;income&#39;,
+      &#39;substitution&#39;,
+      &#39;all&#39;],
+     &#39;title&#39;: &#39;Elasticity&#39;,
+     &#39;type&#39;: &#39;string&#39;},
+    &#39;decile&#39;: {&#39;enum&#39;: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, &#39;all&#39;],
+     &#39;title&#39;: &#39;Decile&#39;},
+    &#39;unit&#39;: {&#39;enum&#39;: [&#39;earnings&#39;, &#39;hours&#39;], &#39;title&#39;: &#39;Unit&#39;, &#39;type&#39;: &#39;string&#39;},
+    &#39;baseline&#39;: {&#39;title&#39;: &#39;Baseline&#39;, &#39;type&#39;: &#39;number&#39;},
     &#39;reform&#39;: {&#39;title&#39;: &#39;Reform&#39;, &#39;type&#39;: &#39;number&#39;},
     &#39;change&#39;: {&#39;title&#39;: &#39;Change&#39;, &#39;type&#39;: &#39;number&#39;},
-    &#39;income_effect&#39;: {&#39;title&#39;: &#39;Income Effect&#39;, &#39;type&#39;: &#39;number&#39;},
-    &#39;substitution_effect&#39;: {&#39;title&#39;: &#39;Substitution Effect&#39;, &#39;type&#39;: &#39;number&#39;}},
-   &#39;required&#39;: [&#39;baseline&#39;,
+    &#39;relative_change&#39;: {&#39;title&#39;: &#39;Relative Change&#39;, &#39;type&#39;: &#39;number&#39;},
+    &#39;average_change&#39;: {&#39;title&#39;: &#39;Average Change&#39;, &#39;type&#39;: &#39;number&#39;}},
+   &#39;required&#39;: [&#39;elasticity&#39;,
+    &#39;decile&#39;,
+    &#39;unit&#39;,
+    &#39;baseline&#39;,
     &#39;reform&#39;,
     &#39;change&#39;,
-    &#39;income_effect&#39;,
-    &#39;substitution_effect&#39;],
-   &#39;title&#39;: &#39;HoursResponse&#39;,
+    &#39;relative_change&#39;,
+    &#39;average_change&#39;],
+   &#39;title&#39;: &#39;LaborSupplyMetricImpact&#39;,
    &#39;type&#39;: &#39;object&#39;},
-  &#39;InequalityImpact&#39;: {&#39;properties&#39;: {&#39;gini&#39;: {&#39;$ref&#39;: &#39;#/$defs/BaselineReformValues&#39;},
-    &#39;top_10_pct_share&#39;: {&#39;$ref&#39;: &#39;#/$defs/BaselineReformValues&#39;},
-    &#39;top_1_pct_share&#39;: {&#39;$ref&#39;: &#39;#/$defs/BaselineReformValues&#39;}},
-   &#39;required&#39;: [&#39;gini&#39;, &#39;top_10_pct_share&#39;, &#39;top_1_pct_share&#39;],
-   &#39;title&#39;: &#39;InequalityImpact&#39;,
-   &#39;type&#39;: &#39;object&#39;},
-  &#39;IntraDecileImpact&#39;: {&#39;properties&#39;: {&#39;deciles&#39;: {&#39;additionalProperties&#39;: {&#39;items&#39;: {&#39;type&#39;: &#39;number&#39;},
-      &#39;type&#39;: &#39;array&#39;},
-     &#39;title&#39;: &#39;Deciles&#39;,
-     &#39;type&#39;: &#39;object&#39;},
-    &#39;all&#39;: {&#39;additionalProperties&#39;: {&#39;type&#39;: &#39;number&#39;},
-     &#39;title&#39;: &#39;All&#39;,
-     &#39;type&#39;: &#39;object&#39;}},
-   &#39;required&#39;: [&#39;deciles&#39;, &#39;all&#39;],
-   &#39;title&#39;: &#39;IntraDecileImpact&#39;,
-   &#39;type&#39;: &#39;object&#39;},
-  &#39;IntraWealthDecileImpactWithValues&#39;: {&#39;properties&#39;: {&#39;deciles&#39;: {&#39;additionalProperties&#39;: {&#39;items&#39;: {&#39;type&#39;: &#39;number&#39;},
-      &#39;type&#39;: &#39;array&#39;},
-     &#39;title&#39;: &#39;Deciles&#39;,
-     &#39;type&#39;: &#39;object&#39;},
-    &#39;all&#39;: {&#39;additionalProperties&#39;: {&#39;type&#39;: &#39;number&#39;},
-     &#39;title&#39;: &#39;All&#39;,
-     &#39;type&#39;: &#39;object&#39;}},
-   &#39;required&#39;: [&#39;deciles&#39;, &#39;all&#39;],
-   &#39;title&#39;: &#39;IntraWealthDecileImpactWithValues&#39;,
-   &#39;type&#39;: &#39;object&#39;},
-  &#39;LaborSupplyResponse&#39;: {&#39;properties&#39;: {&#39;substitution_lsr&#39;: {&#39;title&#39;: &#39;Substitution Lsr&#39;,
-     &#39;type&#39;: &#39;number&#39;},
-    &#39;income_lsr&#39;: {&#39;title&#39;: &#39;Income Lsr&#39;, &#39;type&#39;: &#39;number&#39;},
-    &#39;relative_lsr&#39;: {&#39;additionalProperties&#39;: True,
-     &#39;title&#39;: &#39;Relative Lsr&#39;,
-     &#39;type&#39;: &#39;object&#39;},
-    &#39;total_change&#39;: {&#39;title&#39;: &#39;Total Change&#39;, &#39;type&#39;: &#39;number&#39;},
-    &#39;revenue_change&#39;: {&#39;title&#39;: &#39;Revenue Change&#39;, &#39;type&#39;: &#39;number&#39;},
-    &#39;decile&#39;: {&#39;additionalProperties&#39;: {&#39;additionalProperties&#39;: {&#39;additionalProperties&#39;: {&#39;type&#39;: &#39;number&#39;},
-       &#39;type&#39;: &#39;object&#39;},
-      &#39;type&#39;: &#39;object&#39;},
-     &#39;title&#39;: &#39;Decile&#39;,
-     &#39;type&#39;: &#39;object&#39;},
-    &#39;hours&#39;: {&#39;$ref&#39;: &#39;#/$defs/HoursResponse&#39;}},
-   &#39;required&#39;: [&#39;substitution_lsr&#39;,
-    &#39;income_lsr&#39;,
-    &#39;relative_lsr&#39;,
-    &#39;total_change&#39;,
-    &#39;revenue_change&#39;,
-    &#39;decile&#39;,
-    &#39;hours&#39;],
-   &#39;title&#39;: &#39;LaborSupplyResponse&#39;,
-   &#39;type&#39;: &#39;object&#39;},
-  &#39;PovertyGenderBreakdown&#39;: {&#39;properties&#39;: {&#39;poverty&#39;: {&#39;$ref&#39;: &#39;#/$defs/GenderBaselineReformValues&#39;},
-    &#39;deep_poverty&#39;: {&#39;$ref&#39;: &#39;#/$defs/GenderBaselineReformValues&#39;}},
-   &#39;required&#39;: [&#39;poverty&#39;, &#39;deep_poverty&#39;],
-   &#39;title&#39;: &#39;PovertyGenderBreakdown&#39;,
-   &#39;type&#39;: &#39;object&#39;},
-  &#39;PovertyImpact&#39;: {&#39;properties&#39;: {&#39;poverty&#39;: {&#39;$ref&#39;: &#39;#/$defs/AgeGroupBaselineReformValues&#39;},
-    &#39;deep_poverty&#39;: {&#39;$ref&#39;: &#39;#/$defs/AgeGroupBaselineReformValues&#39;}},
-   &#39;required&#39;: [&#39;poverty&#39;, &#39;deep_poverty&#39;],
-   &#39;title&#39;: &#39;PovertyImpact&#39;,
-   &#39;type&#39;: &#39;object&#39;},
-  &#39;PovertyRacialBreakdownWithValues&#39;: {&#39;properties&#39;: {&#39;poverty&#39;: {&#39;$ref&#39;: &#39;#/$defs/RacialBaselineReformValues&#39;}},
-   &#39;required&#39;: [&#39;poverty&#39;],
-   &#39;title&#39;: &#39;PovertyRacialBreakdownWithValues&#39;,
-   &#39;type&#39;: &#39;object&#39;},
-  &#39;ProgramSpecificImpact&#39;: {&#39;properties&#39;: {&#39;baseline&#39;: {&#39;title&#39;: &#39;Baseline&#39;,
-     &#39;type&#39;: &#39;number&#39;},
+  &#39;PovertyRateMetricComparison&#39;: {&#39;properties&#39;: {&#39;age_group&#39;: {&#39;enum&#39;: [&#39;child&#39;,
+      &#39;working_age&#39;,
+      &#39;senior&#39;,
+      &#39;all&#39;],
+     &#39;title&#39;: &#39;Age Group&#39;,
+     &#39;type&#39;: &#39;string&#39;},
+    &#39;gender&#39;: {&#39;enum&#39;: [&#39;male&#39;, &#39;female&#39;, &#39;all&#39;],
+     &#39;title&#39;: &#39;Gender&#39;,
+     &#39;type&#39;: &#39;string&#39;},
+    &#39;racial_group&#39;: {&#39;enum&#39;: [&#39;white&#39;, &#39;black&#39;, &#39;hispanic&#39;, &#39;other&#39;, &#39;all&#39;],
+     &#39;title&#39;: &#39;Racial Group&#39;,
+     &#39;type&#39;: &#39;string&#39;},
+    &#39;relative&#39;: {&#39;title&#39;: &#39;Relative&#39;, &#39;type&#39;: &#39;boolean&#39;},
+    &#39;poverty_rate&#39;: {&#39;enum&#39;: [&#39;regular&#39;,
+      &#39;deep&#39;,
+      &#39;uk_hbai_bhc&#39;,
+      &#39;uk_hbai_bhc_half&#39;,
+      &#39;us_spm&#39;,
+      &#39;us_spm_half&#39;],
+     &#39;title&#39;: &#39;Poverty Rate&#39;,
+     &#39;type&#39;: &#39;string&#39;},
+    &#39;baseline&#39;: {&#39;title&#39;: &#39;Baseline&#39;, &#39;type&#39;: &#39;number&#39;},
     &#39;reform&#39;: {&#39;title&#39;: &#39;Reform&#39;, &#39;type&#39;: &#39;number&#39;},
-    &#39;difference&#39;: {&#39;title&#39;: &#39;Difference&#39;, &#39;type&#39;: &#39;number&#39;}},
-   &#39;required&#39;: [&#39;baseline&#39;, &#39;reform&#39;, &#39;difference&#39;],
-   &#39;title&#39;: &#39;ProgramSpecificImpact&#39;,
-   &#39;type&#39;: &#39;object&#39;},
-  &#39;RacialBaselineReformValues&#39;: {&#39;properties&#39;: {&#39;white&#39;: {&#39;$ref&#39;: &#39;#/$defs/BaselineReformValues&#39;},
-    &#39;black&#39;: {&#39;$ref&#39;: &#39;#/$defs/BaselineReformValues&#39;},
-    &#39;hispanic&#39;: {&#39;$ref&#39;: &#39;#/$defs/BaselineReformValues&#39;},
-    &#39;other&#39;: {&#39;$ref&#39;: &#39;#/$defs/BaselineReformValues&#39;}},
-   &#39;required&#39;: [&#39;white&#39;, &#39;black&#39;, &#39;hispanic&#39;, &#39;other&#39;],
-   &#39;title&#39;: &#39;RacialBaselineReformValues&#39;,
-   &#39;type&#39;: &#39;object&#39;},
-  &#39;UKConstituencyBreakdownByConstituency&#39;: {&#39;properties&#39;: {&#39;average_household_income_change&#39;: {&#39;title&#39;: &#39;Average Household Income Change&#39;,
-     &#39;type&#39;: &#39;number&#39;},
-    &#39;relative_household_income_change&#39;: {&#39;title&#39;: &#39;Relative Household Income Change&#39;,
-     &#39;type&#39;: &#39;number&#39;},
-    &#39;x&#39;: {&#39;title&#39;: &#39;X&#39;, &#39;type&#39;: &#39;integer&#39;},
-    &#39;y&#39;: {&#39;title&#39;: &#39;Y&#39;, &#39;type&#39;: &#39;integer&#39;}},
-   &#39;required&#39;: [&#39;average_household_income_change&#39;,
-    &#39;relative_household_income_change&#39;,
-    &#39;x&#39;,
-    &#39;y&#39;],
-   &#39;title&#39;: &#39;UKConstituencyBreakdownByConstituency&#39;,
-   &#39;type&#39;: &#39;object&#39;},
-  &#39;UKConstituencyBreakdownWithValues&#39;: {&#39;properties&#39;: {&#39;by_constituency&#39;: {&#39;additionalProperties&#39;: {&#39;$ref&#39;: &#39;#/$defs/UKConstituencyBreakdownByConstituency&#39;},
-     &#39;title&#39;: &#39;By Constituency&#39;,
-     &#39;type&#39;: &#39;object&#39;},
-    &#39;outcomes_by_region&#39;: {&#39;additionalProperties&#39;: {&#39;additionalProperties&#39;: {&#39;type&#39;: &#39;integer&#39;},
-      &#39;type&#39;: &#39;object&#39;},
-     &#39;title&#39;: &#39;Outcomes By Region&#39;,
-     &#39;type&#39;: &#39;object&#39;}},
-   &#39;required&#39;: [&#39;by_constituency&#39;, &#39;outcomes_by_region&#39;],
-   &#39;title&#39;: &#39;UKConstituencyBreakdownWithValues&#39;,
-   &#39;type&#39;: &#39;object&#39;},
-  &#39;WealthDecileImpactWithValues&#39;: {&#39;properties&#39;: {&#39;relative&#39;: {&#39;additionalProperties&#39;: {&#39;type&#39;: &#39;number&#39;},
-     &#39;title&#39;: &#39;Relative&#39;,
-     &#39;type&#39;: &#39;object&#39;},
-    &#39;average&#39;: {&#39;additionalProperties&#39;: {&#39;type&#39;: &#39;number&#39;},
-     &#39;title&#39;: &#39;Average&#39;,
-     &#39;type&#39;: &#39;object&#39;}},
-   &#39;required&#39;: [&#39;relative&#39;, &#39;average&#39;],
-   &#39;title&#39;: &#39;WealthDecileImpactWithValues&#39;,
+    &#39;change&#39;: {&#39;title&#39;: &#39;Change&#39;, &#39;type&#39;: &#39;number&#39;},
+    &#39;relative_change&#39;: {&#39;title&#39;: &#39;Relative Change&#39;, &#39;type&#39;: &#39;number&#39;}},
+   &#39;required&#39;: [&#39;age_group&#39;,
+    &#39;gender&#39;,
+    &#39;racial_group&#39;,
+    &#39;relative&#39;,
+    &#39;poverty_rate&#39;,
+    &#39;baseline&#39;,
+    &#39;reform&#39;,
+    &#39;change&#39;,
+    &#39;relative_change&#39;],
+   &#39;title&#39;: &#39;PovertyRateMetricComparison&#39;,
    &#39;type&#39;: &#39;object&#39;}},
- &#39;properties&#39;: {&#39;country_package_version&#39;: {&#39;title&#39;: &#39;Country Package Version&#39;,
-   &#39;type&#39;: &#39;string&#39;},
-  &#39;budget&#39;: {&#39;$ref&#39;: &#39;#/$defs/BudgetaryImpact&#39;},
-  &#39;detailed_budget&#39;: {&#39;anyOf&#39;: [{&#39;additionalProperties&#39;: {&#39;$ref&#39;: &#39;#/$defs/ProgramSpecificImpact&#39;},
-     &#39;type&#39;: &#39;object&#39;},
-    {&#39;type&#39;: &#39;null&#39;}],
-   &#39;title&#39;: &#39;Detailed Budget&#39;},
-  &#39;decile&#39;: {&#39;$ref&#39;: &#39;#/$defs/DecileImpact&#39;},
-  &#39;inequality&#39;: {&#39;$ref&#39;: &#39;#/$defs/InequalityImpact&#39;},
-  &#39;poverty&#39;: {&#39;$ref&#39;: &#39;#/$defs/PovertyImpact&#39;},
-  &#39;poverty_by_gender&#39;: {&#39;$ref&#39;: &#39;#/$defs/PovertyGenderBreakdown&#39;},
-  &#39;poverty_by_race&#39;: {&#39;anyOf&#39;: [{&#39;$ref&#39;: &#39;#/$defs/PovertyRacialBreakdownWithValues&#39;},
-    {&#39;type&#39;: &#39;null&#39;}]},
-  &#39;intra_decile&#39;: {&#39;$ref&#39;: &#39;#/$defs/IntraDecileImpact&#39;},
-  &#39;wealth_decile&#39;: {&#39;anyOf&#39;: [{&#39;$ref&#39;: &#39;#/$defs/WealthDecileImpactWithValues&#39;},
-    {&#39;type&#39;: &#39;null&#39;}]},
-  &#39;intra_wealth_decile&#39;: {&#39;anyOf&#39;: [{&#39;$ref&#39;: &#39;#/$defs/IntraWealthDecileImpactWithValues&#39;},
-    {&#39;type&#39;: &#39;null&#39;}]},
-  &#39;labor_supply_response&#39;: {&#39;$ref&#39;: &#39;#/$defs/LaborSupplyResponse&#39;},
-  &#39;constituency_impact&#39;: {&#39;anyOf&#39;: [{&#39;$ref&#39;: &#39;#/$defs/UKConstituencyBreakdownWithValues&#39;},
-    {&#39;type&#39;: &#39;null&#39;}]},
-  &#39;cliff_impact&#39;: {&#39;anyOf&#39;: [{&#39;$ref&#39;: &#39;#/$defs/CliffImpact&#39;},
-    {&#39;type&#39;: &#39;null&#39;}]}},
- &#39;required&#39;: [&#39;country_package_version&#39;,
-  &#39;budget&#39;,
-  &#39;detailed_budget&#39;,
-  &#39;decile&#39;,
+ &#39;properties&#39;: {&#39;headlines&#39;: {&#39;$ref&#39;: &#39;#/$defs/Headlines&#39;},
+  &#39;fiscal&#39;: {&#39;$ref&#39;: &#39;#/$defs/FiscalComparison&#39;},
+  &#39;inequality&#39;: {&#39;$ref&#39;: &#39;#/$defs/InequalityComparison&#39;},
+  &#39;distributional&#39;: {&#39;$ref&#39;: &#39;#/$defs/DecileImpacts&#39;},
+  &#39;poverty&#39;: {&#39;items&#39;: {&#39;$ref&#39;: &#39;#/$defs/PovertyRateMetricComparison&#39;},
+   &#39;title&#39;: &#39;Poverty&#39;,
+   &#39;type&#39;: &#39;array&#39;},
+  &#39;labor_supply&#39;: {&#39;items&#39;: {&#39;$ref&#39;: &#39;#/$defs/LaborSupplyMetricImpact&#39;},
+   &#39;title&#39;: &#39;Labor Supply&#39;,
+   &#39;type&#39;: &#39;array&#39;}},
+ &#39;required&#39;: [&#39;headlines&#39;,
+  &#39;fiscal&#39;,
   &#39;inequality&#39;,
+  &#39;distributional&#39;,
   &#39;poverty&#39;,
-  &#39;poverty_by_gender&#39;,
-  &#39;poverty_by_race&#39;,
-  &#39;intra_decile&#39;,
-  &#39;wealth_decile&#39;,
-  &#39;intra_wealth_decile&#39;,
-  &#39;labor_supply_response&#39;,
-  &#39;constituency_impact&#39;,
-  &#39;cliff_impact&#39;],
+  &#39;labor_supply&#39;],
  &#39;title&#39;: &#39;EconomyComparison&#39;,
  &#39;type&#39;: &#39;object&#39;}
 </pre></div>
