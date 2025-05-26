@@ -33,6 +33,8 @@ class SimplifiedGoogleStorageClient:
                 prefix=key, versions=True
             )
             for v in versions:
+                if v.metadata is None:
+                    continue  # Skip blobs without metadata
                 if v.metadata.get("version") == version:
                     return v
             raise ValueError(
