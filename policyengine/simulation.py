@@ -358,4 +358,4 @@ class Simulation:
             if self.data_version != self.options.data_version:
                 raise ValueError(
                     f"Data version {self.data_version} does not match expected version {self.options.data_version}."
-                    )
+                )
