@@ -783,10 +783,10 @@ class CliffImpact(BaseModel):
 
 
 class EconomyComparison(BaseModel):
-    model_version: Optional[
-        str
-    ]  # Optional while some datasets have no tagged version.
-    data_version: Optional[str]
+    model_version: Optional[str] = (
+        None  # Optional while some datasets have no tagged version.
+    )
+    data_version: Optional[str] = None
     budget: BudgetaryImpact
     detailed_budget: DetailedBudgetaryImpact
     decile: DecileImpact
