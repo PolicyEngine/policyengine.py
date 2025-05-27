@@ -5,6 +5,7 @@ from policyengine_core.data.dataset import atomic_write
 import logging
 from .simplified_google_storage_client import SimplifiedGoogleStorageClient
 from typing import Optional
+from platformdirs import user_cache_dir
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,8 @@ class CachingGoogleStorageClient(AbstractContextManager):
 
     def __init__(self):
         self.client = SimplifiedGoogleStorageClient()
-        self.cache = diskcache.Cache()
+        cache_folder = user_cache_dir("policyengine.py")
+        self.cache = diskcache.Cache(directory=cache_folder)
 
     def _data_key(
         self, bucket: str, key: str, version: Optional[str] = None

@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Persistent cache location for data files.
