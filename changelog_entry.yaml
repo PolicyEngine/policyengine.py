@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Model and data versions are always available.

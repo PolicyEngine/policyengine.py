@@ -91,3 +91,8 @@
     added:
     - Error handling for data and package version mismatches.
   date: 2025-05-26 21:26:48
+- bump: patch
+  changes:
+    fixed:
+    - Model and data versions are always available.
+  date: 2025-05-27 11:10:28
