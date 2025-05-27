@@ -25,7 +25,7 @@ def download_file_from_gcs(
     file_name: str,
     destination_path: str,
     version: str = None,
-) -> None:
+) -> str:
     """
     Download a file from Google Cloud Storage to a local path.
 
@@ -35,9 +35,13 @@ def download_file_from_gcs(
         destination_path (str): The local path where the file will be saved.
 
     Returns:
-        None
+        version (str): The version of the file that was downloaded, if available.
     """
 
     return _get_client().download(
-        bucket_name, file_name, Path(destination_path), version=version
+        bucket_name,
+        file_name,
+        Path(destination_path),
+        version=version,
+        return_version=True,
     )

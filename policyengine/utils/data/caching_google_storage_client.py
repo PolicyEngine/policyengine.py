@@ -32,6 +32,7 @@ class CachingGoogleStorageClient(AbstractContextManager):
         key: str,
         target: Path,
         version: Optional[str] = None,
+        return_version: bool = False,
     ):
         """
         Atomically write the latest version of the cloud storage blob to the target path.
@@ -49,6 +50,8 @@ class CachingGoogleStorageClient(AbstractContextManager):
                 f"Copying downloaded data for {bucket}, {key} to {target}"
             )
             atomic_write(target, data)
+            if return_version:
+                return version
             return
         raise Exception("Expected data for blob to be cached as bytes")
 
