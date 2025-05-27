@@ -64,33 +64,35 @@ File [0;32m~/work/policyengine.py/policyengine.py/policyengine/simulation.py:92
 [1;32m     94[0m [38;5;28mself[39m[38;5;241m.[39mcheck_data_version()
 
 File [0;32m~/work/policyengine.py/policyengine.py/policyengine/simulation.py:143[0m, in [0;36mSimulation._set_data[0;34m(self)[0m
-[1;32m    138[0m     bucket, filename [38;5;241m=[39m [38;5;28mself[39m[38;5;241m.[39moptions[38;5;241m.[39mdata[38;5;241m.[39msplit([38;5;124m"[39m[38;5;124m://[39m[38;5;124m"[39m)[[38;5;241m-[39m[38;5;241m1[39m][38;5;241m.[39msplit(
-[1;32m    139[0m         [38;5;124m"[39m[38;5;124m/[39m[38;5;124m"[39m
-[1;32m    140[0m     )
-[1;32m    141[0m     version [38;5;241m=[39m [38;5;28mself[39m[38;5;241m.[39moptions[38;5;241m.[39mdata_version
-[0;32m--> 143[0m     file_path [38;5;241m=[39m [43mdownload[49m[43m([49m
-[1;32m    144[0m [43m        [49m[43mfilepath[49m[38;5;241;43m=[39;49m[43mfilename[49m[43m,[49m
-[1;32m    145[0m [43m        [49m[43mgcs_bucket[49m[38;5;241;43m=[39;49m[43mbucket[49m[43m,[49m
-[1;32m    146[0m [43m        [49m[43mversion[49m[38;5;241;43m=[39;49m[43mversion[49m[43m,[49m
-[1;32m    147[0m [43m    [49m[43m)[49m
-[1;32m    148[0m     filename [38;5;241m=[39m [38;5;28mstr[39m(Path(file_path))
-[1;32m    149[0m [38;5;28;01melse[39;00m:
-[1;32m    150[0m     [38;5;66;03m# If it's a local file, we can't infer the version.[39;00m
+[1;32m    138[0m bucket, filename [38;5;241m=[39m [38;5;28mself[39m[38;5;241m.[39moptions[38;5;241m.[39mdata[38;5;241m.[39msplit([38;5;124m"[39m[38;5;124m://[39m[38;5;124m"[39m)[[38;5;241m-[39m[38;5;241m1[39m][38;5;241m.[39msplit(
+[1;32m    139[0m     [38;5;124m"[39m[38;5;124m/[39m[38;5;124m"[39m
+[1;32m    140[0m )
+[1;32m    141[0m version [38;5;241m=[39m [38;5;28mself[39m[38;5;241m.[39moptions[38;5;241m.[39mdata_version
+[0;32m--> 143[0m file_path, version [38;5;241m=[39m [43mdownload[49m[43m([49m
+[1;32m    144[0m [43m    [49m[43mfilepath[49m[38;5;241;43m=[39;49m[43mfilename[49m[43m,[49m
+[1;32m    145[0m [43m    [49m[43mgcs_bucket[49m[38;5;241;43m=[39;49m[43mbucket[49m[43m,[49m
+[1;32m    146[0m [43m    [49m[43mversion[49m[38;5;241;43m=[39;49m[43mversion[49m[43m,[49m
+[1;32m    147[0m [43m    [49m[43mreturn_version[49m[38;5;241;43m=[39;49m[38;5;28;43;01mTrue[39;49;00m[43m,[49m
+[1;32m    148[0m [43m[49m[43m)[49m
+[1;32m    149[0m [38;5;28mself[39m[38;5;241m.[39mdata_version [38;5;241m=[39m version
+[1;32m    150[0m filename [38;5;241m=[39m [38;5;28mstr[39m(Path(file_path))
 
-File [0;32m~/work/policyengine.py/policyengine.py/policyengine/utils/data_download.py:16[0m, in [0;36mdownload[0;34m(filepath, gcs_bucket, version)[0m
+File [0;32m~/work/policyengine.py/policyengine.py/policyengine/utils/data_download.py:17[0m, in [0;36mdownload[0;34m(filepath, gcs_bucket, version, return_version)[0m
 [1;32m     10[0m [38;5;28;01mdef[39;00m[38;5;250m [39m[38;5;21mdownload[39m(
 [1;32m     11[0m     filepath: [38;5;28mstr[39m,
 [1;32m     12[0m     gcs_bucket: [38;5;28mstr[39m,
 [1;32m     13[0m     version: Optional[[38;5;28mstr[39m] [38;5;241m=[39m [38;5;28;01mNone[39;00m,
-[1;32m     14[0m ) [38;5;241m-[39m[38;5;241m>[39m [38;5;28mstr[39m:
-[1;32m     15[0m     logging[38;5;241m.[39minfo([38;5;124m"[39m[38;5;124mUsing Google Cloud Storage for download.[39m[38;5;124m"[39m)
-[0;32m---> 16[0m     [43mdownload_file_from_gcs[49m[43m([49m
-[1;32m     17[0m [43m        [49m[43mbucket_name[49m[38;5;241;43m=[39;49m[43mgcs_bucket[49m[43m,[49m
-[1;32m     18[0m [43m        [49m[43mfile_name[49m[38;5;241;43m=[39;49m[43mfilepath[49m[43m,[49m
-[1;32m     19[0m [43m        [49m[43mdestination_path[49m[38;5;241;43m=[39;49m[43mfilepath[49m[43m,[49m
-[1;32m     20[0m [43m        [49m[43mversion[49m[38;5;241;43m=[39;49m[43mversion[49m[43m,[49m
-[1;32m     21[0m [43m    [49m[43m)[49m
-[1;32m     22[0m     [38;5;28;01mreturn[39;00m filepath
+[1;32m     14[0m     return_version: [38;5;28mbool[39m [38;5;241m=[39m [38;5;28;01mFalse[39;00m,
+[1;32m     15[0m ) [38;5;241m-[39m[38;5;241m>[39m Tuple[[38;5;28mstr[39m, Optional[[38;5;28mstr[39m]]:
+[1;32m     16[0m     logging[38;5;241m.[39minfo([38;5;124m"[39m[38;5;124mUsing Google Cloud Storage for download.[39m[38;5;124m"[39m)
+[0;32m---> 17[0m     version [38;5;241m=[39m [43mdownload_file_from_gcs[49m[43m([49m
+[1;32m     18[0m [43m        [49m[43mbucket_name[49m[38;5;241;43m=[39;49m[43mgcs_bucket[49m[43m,[49m
+[1;32m     19[0m [43m        [49m[43mfile_name[49m[38;5;241;43m=[39;49m[43mfilepath[49m[43m,[49m
+[1;32m     20[0m [43m        [49m[43mdestination_path[49m[38;5;241;43m=[39;49m[43mfilepath[49m[43m,[49m
+[1;32m     21[0m [43m        [49m[43mversion[49m[38;5;241;43m=[39;49m[43mversion[49m[43m,[49m
+[1;32m     22[0m [43m    [49m[43m)[49m
+[1;32m     23[0m     [38;5;28;01mif[39;00m return_version:
+[1;32m     24[0m         [38;5;28;01mreturn[39;00m filepath, version
 
 File [0;32m~/work/policyengine.py/policyengine.py/policyengine/utils/google_cloud_bucket.py:41[0m, in [0;36mdownload_file_from_gcs[0;34m(bucket_name, file_name, destination_path, version)[0m
 [1;32m     23[0m [38;5;28;01mdef[39;00m[38;5;250m [39m[38;5;21mdownload_file_from_gcs[39m(
@@ -98,16 +100,20 @@ File [0;32m~/work/policyengine.py/policyengine.py/policyengine/utils/google_clo
 [1;32m     25[0m     file_name: [38;5;28mstr[39m,
 [1;32m     26[0m     destination_path: [38;5;28mstr[39m,
 [1;32m     27[0m     version: [38;5;28mstr[39m [38;5;241m=[39m [38;5;28;01mNone[39;00m,
-[1;32m     28[0m ) [38;5;241m-[39m[38;5;241m>[39m [38;5;28;01mNone[39;00m:
+[1;32m     28[0m ) [38;5;241m-[39m[38;5;241m>[39m [38;5;28mstr[39m:
 [1;32m     29[0m [38;5;250m    [39m[38;5;124;03m"""[39;00m
 [1;32m     30[0m [38;5;124;03m    Download a file from Google Cloud Storage to a local path.[39;00m
 [1;32m     31[0m 
 [0;32m   (...)[0m
-[1;32m     38[0m [38;5;124;03m        None[39;00m
+[1;32m     38[0m [38;5;124;03m        version (str): The version of the file that was downloaded, if available.[39;00m
 [1;32m     39[0m [38;5;124;03m    """[39;00m
 [0;32m---> 41[0m     [38;5;28;01mreturn[39;00m [43m_get_client[49m[43m([49m[43m)[49m[38;5;241m.[39mdownload(
-[1;32m     42[0m         bucket_name, file_name, Path(destination_path), version[38;5;241m=[39mversion
-[1;32m     43[0m     )
+[1;32m     42[0m         bucket_name,
+[1;32m     43[0m         file_name,
+[1;32m     44[0m         Path(destination_path),
+[1;32m     45[0m         version[38;5;241m=[39mversion,
+[1;32m     46[0m         return_version[38;5;241m=[39m[38;5;28;01mTrue[39;00m,
+[1;32m     47[0m     )
 
 File [0;32m~/work/policyengine.py/policyengine.py/policyengine/utils/google_cloud_bucket.py:14[0m, in [0;36m_get_client[0;34m()[0m
 [1;32m     12[0m [38;5;28;01mif[39;00m _caching_client [38;5;129;01mis[39;00m [38;5;129;01mnot[39;00m [38;5;28;01mNone[39;00m:

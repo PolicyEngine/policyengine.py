@@ -330,33 +330,35 @@
 <span class="g g-Whitespace">     </span><span class="mi">94</span> <span class="bp">self</span><span class="o">.</span><span class="n">check_data_version</span><span class="p">()</span>
 
 <span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/simulation.py:143,</span> in <span class="ni">Simulation._set_data</span><span class="nt">(self)</span>
-<span class="g g-Whitespace">    </span><span class="mi">138</span>     <span class="n">bucket</span><span class="p">,</span> <span class="n">filename</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;://&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
-<span class="g g-Whitespace">    </span><span class="mi">139</span>         <span class="s2">&quot;/&quot;</span>
-<span class="g g-Whitespace">    </span><span class="mi">140</span>     <span class="p">)</span>
-<span class="g g-Whitespace">    </span><span class="mi">141</span>     <span class="n">version</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">data_version</span>
-<span class="ne">--&gt; </span><span class="mi">143</span>     <span class="n">file_path</span> <span class="o">=</span> <span class="n">download</span><span class="p">(</span>
-<span class="g g-Whitespace">    </span><span class="mi">144</span>         <span class="n">filepath</span><span class="o">=</span><span class="n">filename</span><span class="p">,</span>
-<span class="g g-Whitespace">    </span><span class="mi">145</span>         <span class="n">gcs_bucket</span><span class="o">=</span><span class="n">bucket</span><span class="p">,</span>
-<span class="g g-Whitespace">    </span><span class="mi">146</span>         <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span>
-<span class="g g-Whitespace">    </span><span class="mi">147</span>     <span class="p">)</span>
-<span class="g g-Whitespace">    </span><span class="mi">148</span>     <span class="n">filename</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">file_path</span><span class="p">))</span>
-<span class="g g-Whitespace">    </span><span class="mi">149</span> <span class="k">else</span><span class="p">:</span>
-<span class="g g-Whitespace">    </span><span class="mi">150</span>     <span class="c1"># If it&#39;s a local file, we can&#39;t infer the version.</span>
+<span class="g g-Whitespace">    </span><span class="mi">138</span> <span class="n">bucket</span><span class="p">,</span> <span class="n">filename</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;://&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
+<span class="g g-Whitespace">    </span><span class="mi">139</span>     <span class="s2">&quot;/&quot;</span>
+<span class="g g-Whitespace">    </span><span class="mi">140</span> <span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">141</span> <span class="n">version</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">data_version</span>
+<span class="ne">--&gt; </span><span class="mi">143</span> <span class="n">file_path</span><span class="p">,</span> <span class="n">version</span> <span class="o">=</span> <span class="n">download</span><span class="p">(</span>
+<span class="g g-Whitespace">    </span><span class="mi">144</span>     <span class="n">filepath</span><span class="o">=</span><span class="n">filename</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">145</span>     <span class="n">gcs_bucket</span><span class="o">=</span><span class="n">bucket</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">146</span>     <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">147</span>     <span class="n">return_version</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">148</span> <span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">149</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_version</span> <span class="o">=</span> <span class="n">version</span>
+<span class="g g-Whitespace">    </span><span class="mi">150</span> <span class="n">filename</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">file_path</span><span class="p">))</span>
 
-<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/utils/data_download.py:16,</span> in <span class="ni">download</span><span class="nt">(filepath, gcs_bucket, version)</span>
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/utils/data_download.py:17,</span> in <span class="ni">download</span><span class="nt">(filepath, gcs_bucket, version, return_version)</span>
 <span class="g g-Whitespace">     </span><span class="mi">10</span> <span class="k">def</span><span class="w"> </span><span class="nf">download</span><span class="p">(</span>
 <span class="g g-Whitespace">     </span><span class="mi">11</span>     <span class="n">filepath</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
 <span class="g g-Whitespace">     </span><span class="mi">12</span>     <span class="n">gcs_bucket</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
 <span class="g g-Whitespace">     </span><span class="mi">13</span>     <span class="n">version</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">14</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="g g-Whitespace">     </span><span class="mi">15</span>     <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using Google Cloud Storage for download.&quot;</span><span class="p">)</span>
-<span class="ne">---&gt; </span><span class="mi">16</span>     <span class="n">download_file_from_gcs</span><span class="p">(</span>
-<span class="g g-Whitespace">     </span><span class="mi">17</span>         <span class="n">bucket_name</span><span class="o">=</span><span class="n">gcs_bucket</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">18</span>         <span class="n">file_name</span><span class="o">=</span><span class="n">filepath</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">19</span>         <span class="n">destination_path</span><span class="o">=</span><span class="n">filepath</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">20</span>         <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">21</span>     <span class="p">)</span>
-<span class="g g-Whitespace">     </span><span class="mi">22</span>     <span class="k">return</span> <span class="n">filepath</span>
+<span class="g g-Whitespace">     </span><span class="mi">14</span>     <span class="n">return_version</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">15</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+<span class="g g-Whitespace">     </span><span class="mi">16</span>     <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using Google Cloud Storage for download.&quot;</span><span class="p">)</span>
+<span class="ne">---&gt; </span><span class="mi">17</span>     <span class="n">version</span> <span class="o">=</span> <span class="n">download_file_from_gcs</span><span class="p">(</span>
+<span class="g g-Whitespace">     </span><span class="mi">18</span>         <span class="n">bucket_name</span><span class="o">=</span><span class="n">gcs_bucket</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">19</span>         <span class="n">file_name</span><span class="o">=</span><span class="n">filepath</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">20</span>         <span class="n">destination_path</span><span class="o">=</span><span class="n">filepath</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">21</span>         <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">22</span>     <span class="p">)</span>
+<span class="g g-Whitespace">     </span><span class="mi">23</span>     <span class="k">if</span> <span class="n">return_version</span><span class="p">:</span>
+<span class="g g-Whitespace">     </span><span class="mi">24</span>         <span class="k">return</span> <span class="n">filepath</span><span class="p">,</span> <span class="n">version</span>
 
 <span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/utils/google_cloud_bucket.py:41,</span> in <span class="ni">download_file_from_gcs</span><span class="nt">(bucket_name, file_name, destination_path, version)</span>
 <span class="g g-Whitespace">     </span><span class="mi">23</span> <span class="k">def</span><span class="w"> </span><span class="nf">download_file_from_gcs</span><span class="p">(</span>
@@ -364,16 +366,20 @@
 <span class="g g-Whitespace">     </span><span class="mi">25</span>     <span class="n">file_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
 <span class="g g-Whitespace">     </span><span class="mi">26</span>     <span class="n">destination_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
 <span class="g g-Whitespace">     </span><span class="mi">27</span>     <span class="n">version</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">28</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="g g-Whitespace">     </span><span class="mi">28</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="g g-Whitespace">     </span><span class="mi">29</span><span class="w">     </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="g g-Whitespace">     </span><span class="mi">30</span><span class="sd">     Download a file from Google Cloud Storage to a local path.</span>
 <span class="g g-Whitespace">     </span><span class="mi">31</span><span class="sd"> </span>
 <span class="sd">   (...)</span>
-<span class="g g-Whitespace">     </span><span class="mi">38</span><span class="sd">         None</span>
+<span class="g g-Whitespace">     </span><span class="mi">38</span><span class="sd">         version (str): The version of the file that was downloaded, if available.</span>
 <span class="g g-Whitespace">     </span><span class="mi">39</span><span class="sd">     &quot;&quot;&quot;</span>
 <span class="ne">---&gt; </span><span class="mi">41</span>     <span class="k">return</span> <span class="n">_get_client</span><span class="p">()</span><span class="o">.</span><span class="n">download</span><span class="p">(</span>
-<span class="g g-Whitespace">     </span><span class="mi">42</span>         <span class="n">bucket_name</span><span class="p">,</span> <span class="n">file_name</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="n">destination_path</span><span class="p">),</span> <span class="n">version</span><span class="o">=</span><span class="n">version</span>
-<span class="g g-Whitespace">     </span><span class="mi">43</span>     <span class="p">)</span>
+<span class="g g-Whitespace">     </span><span class="mi">42</span>         <span class="n">bucket_name</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">43</span>         <span class="n">file_name</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">44</span>         <span class="n">Path</span><span class="p">(</span><span class="n">destination_path</span><span class="p">),</span>
+<span class="g g-Whitespace">     </span><span class="mi">45</span>         <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">46</span>         <span class="n">return_version</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">47</span>     <span class="p">)</span>
 
 <span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/utils/google_cloud_bucket.py:14,</span> in <span class="ni">_get_client</span><span class="nt">()</span>
 <span class="g g-Whitespace">     </span><span class="mi">12</span> <span class="k">if</span> <span class="n">_caching_client</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
