@@ -11,6 +11,7 @@ def download(
     filepath: str,
     gcs_bucket: str,
     version: Optional[str] = None,
+    return_version: bool = False,
 ) -> Tuple[str, Optional[str]]:
     logging.info("Using Google Cloud Storage for download.")
     version = download_file_from_gcs(
@@ -19,4 +20,6 @@ def download(
         destination_path=filepath,
         version=version,
     )
-    return filepath, version
+    if return_version:
+        return filepath, version
+    return filepath

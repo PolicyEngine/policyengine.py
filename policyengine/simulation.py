@@ -144,6 +144,7 @@ class Simulation:
                     filepath=filename,
                     gcs_bucket=bucket,
                     version=version,
+                    return_version=True,
                 )
                 self.data_version = version
                 filename = str(Path(file_path))
