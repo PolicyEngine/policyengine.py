@@ -23,7 +23,6 @@ class TestGoogleCloudBucket(TestCase):
             "TEST/FILE/NAME.TXT",
             "TARGET/PATH",
             version=None,
-            return_version=True,
         )
         client_instance.download.assert_called_with(
             "TEST_BUCKET",
