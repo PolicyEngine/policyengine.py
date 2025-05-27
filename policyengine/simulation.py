@@ -140,11 +140,12 @@ class Simulation:
                 )
                 version = self.options.data_version
 
-                file_path = download(
+                file_path, version = download(
                     filepath=filename,
                     gcs_bucket=bucket,
                     version=version,
                 )
+                self.data_version = version
                 filename = str(Path(file_path))
             else:
                 # If it's a local file, we can't infer the version.
@@ -335,16 +336,16 @@ class Simulation:
         """
         Check the package versions of the simulation against the current package versions.
         """
+        package = f"policyengine-{self.options.country}"
+        try:
+            installed_version = metadata.version(package)
+            self.model_version = installed_version
+        except metadata.PackageNotFoundError:
+            raise ValueError(
+                f"Package {package} not found. Try running `pip install {package}`."
+            )
         if self.options.model_version is not None:
             target_version = self.options.model_version
-            package = f"policyengine-{self.options.country}"
-            try:
-                installed_version = metadata.version(package)
-                self.model_version = installed_version
-            except metadata.PackageNotFoundError:
-                raise ValueError(
-                    f"Package {package} not found. Try running `pip install {package}`."
-                )
             if installed_version != target_version:
                 raise ValueError(
                     f"Package {package} version {installed_version} does not match expected version {target_version}. Try running `pip install {package}=={target_version}`."
