@@ -28,7 +28,7 @@ from importlib import metadata
 import h5py
 from pathlib import Path
 import pandas as pd
-from typing import Type, Optional
+from typing import Type, Any, Optional
 from functools import wraps, partial
 from typing import Callable
 import importlib
@@ -37,7 +37,7 @@ from policyengine.utils.data_download import download
 CountryType = Literal["uk", "us"]
 ScopeType = Literal["household", "macro"]
 DataType = (
-    str | dict | Dataset | None
+    str | dict[Any, Any] | Dataset | None
 )  # Needs stricter typing. Any==policyengine_core.data.Dataset, but pydantic refuses for some reason.
 TimePeriodType = int
 ReformType = ParametricReform | Type[StructuralReform] | None
@@ -99,7 +99,10 @@ class Simulation:
     def __init__(self, **options: SimulationOptions):
         self.options = SimulationOptions(**options)
         self.check_model_version()
-        if not isinstance(self.options.data, Dataset):
+        if not isinstance(self.options.data, dict) and not isinstance(
+            self.options.data, Dataset
+        ):
+            print(type(self.options.data), sys.stderr)
             self._set_data(self.options.data)
         self._initialise_simulations()
         self.check_data_version()
