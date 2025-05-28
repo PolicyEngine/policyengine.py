@@ -30,13 +30,15 @@ from pathlib import Path
 import pandas as pd
 from typing import Type, Optional
 from functools import wraps, partial
-from typing import Dict, Any, Callable
+from typing import Callable
 import importlib
 from policyengine.utils.data_download import download
 
 CountryType = Literal["uk", "us"]
 ScopeType = Literal["household", "macro"]
-DataType = str | Dataset | None
+DataType = (
+    str | dict | Dataset | None
+)  # Needs stricter typing. Any==policyengine_core.data.Dataset, but pydantic refuses for some reason.
 TimePeriodType = int
 ReformType = ParametricReform | Type[StructuralReform] | None
 RegionType = Optional[str]
