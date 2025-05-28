@@ -23,6 +23,7 @@ DATASET_TIME_PERIODS = {
     ECPS_2024: 2023,
 }
 
+
 def get_default_dataset(
     country: str, region: str, version: Optional[str] = None
 ) -> str:
@@ -38,11 +39,12 @@ def get_default_dataset(
         f"Unable to select a default dataset for country {country} and region {region}."
     )
 
+
 def process_gs_path(path: str) -> Tuple[str, str]:
     """Process a GS path to return bucket and object."""
     if not path.startswith("gs://"):
         raise ValueError(f"Invalid GS path: {path}")
-    
+
     path = path[5:]  # Remove 'gs://'
     bucket, obj = path.split("/", 1)
     return bucket, obj

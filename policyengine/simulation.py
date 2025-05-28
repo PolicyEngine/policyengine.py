@@ -3,7 +3,12 @@
 import sys
 from pydantic import BaseModel, Field
 from typing import Literal
-from .utils.data.datasets import get_default_dataset, process_gs_path, POLICYENGINE_DATASETS, DATASET_TIME_PERIODS
+from .utils.data.datasets import (
+    get_default_dataset,
+    process_gs_path,
+    POLICYENGINE_DATASETS,
+    DATASET_TIME_PERIODS,
+)
 from policyengine_core.simulations import Simulation as CountrySimulation
 from policyengine_core.simulations import (
     Microsimulation as CountryMicrosimulation,
@@ -31,9 +36,7 @@ from policyengine.utils.data_download import download
 
 CountryType = Literal["uk", "us"]
 ScopeType = Literal["household", "macro"]
-DataType = (
-    str | Dataset | None
-)
+DataType = str | Dataset | None
 TimePeriodType = int
 ReformType = ParametricReform | Type[StructuralReform] | None
 RegionType = Optional[str]
@@ -95,7 +98,7 @@ class Simulation:
         self.options = SimulationOptions(**options)
         self.check_model_version()
         if not isinstance(self.options.data, Dataset):
-          self._set_data(self.options.data)
+            self._set_data(self.options.data)
         self._initialise_simulations()
         self.check_data_version()
         self._add_output_functions()
@@ -139,8 +142,7 @@ class Simulation:
         # If None is passed, user wants default dataset; get URL, then continue initializing.
         if file_address is None:
             file_address = get_default_dataset(
-                country=self.options.country,
-                region=self.options.region
+                country=self.options.country, region=self.options.region
             )
             print(
                 f"No data provided, using default dataset: {file_address}",
@@ -155,15 +157,11 @@ class Simulation:
         else:
             # All official PolicyEngine datasets are stored in GCS;
             # load accordingly
-            filename, version = self._set_data_from_gs(
-                file_address
-            )
+            filename, version = self._set_data_from_gs(file_address)
             self.data_version = version
 
-        time_period = self._set_data_time_period(
-            file_address
-        )
-            
+        time_period = self._set_data_time_period(file_address)
+
         self.options.data = Dataset.from_file(
             filename, time_period=time_period
         )
@@ -370,7 +368,7 @@ class Simulation:
                 raise ValueError(
                     f"Data version {self.data_version} does not match expected version {self.options.data_version}."
                 )
-            
+
     def _set_data_time_period(self, file_address: str) -> Optional[int]:
         """
         Set the time period based on the file address.
@@ -383,9 +381,7 @@ class Simulation:
             # Local file, no time period available
             return None
 
-    def _set_data_from_gs(
-        self, file_address: str
-    ) -> tuple[str, str | None]:
+    def _set_data_from_gs(self, file_address: str) -> tuple[str, str | None]:
         """
         Set the data from a GCS path and return the filename and version.
         """
@@ -403,4 +399,3 @@ class Simulation:
         )
 
         return filename, version
-    
