@@ -295,7 +295,9 @@
   from .autonotebook import tqdm as notebook_tqdm
 </pre></div>
 </div>
-<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>INFO:root:Using Google Cloud Storage for download.
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>No data provided, using default dataset: gs://policyengine-us-data/cps_2023.h5
+Downloading cps_2023.h5 from bucket policyengine-us-data
+INFO:root:Using Google Cloud Storage for download.
 </pre></div>
 </div>
 <div class="output traceback highlight-ipythontb notranslate"><div class="highlight"><pre><span></span><span class="gt">---------------------------------------------------------------------------</span>
@@ -314,26 +316,34 @@
 <span class="g g-Whitespace">     </span><span class="mi">12</span> <span class="p">)</span>
 <span class="g g-Whitespace">     </span><span class="mi">14</span> <span class="n">sim</span><span class="o">.</span><span class="n">calculate_economy_comparison</span><span class="p">()</span>
 
-<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/simulation.py:92,</span> in <span class="ni">Simulation.__init__</span><span class="nt">(self, **options)</span>
-<span class="g g-Whitespace">     </span><span class="mi">90</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span> <span class="o">=</span> <span class="n">SimulationOptions</span><span class="p">(</span><span class="o">**</span><span class="n">options</span><span class="p">)</span>
-<span class="g g-Whitespace">     </span><span class="mi">91</span> <span class="bp">self</span><span class="o">.</span><span class="n">check_model_version</span><span class="p">()</span>
-<span class="ne">---&gt; </span><span class="mi">92</span> <span class="bp">self</span><span class="o">.</span><span class="n">_set_data</span><span class="p">()</span>
-<span class="g g-Whitespace">     </span><span class="mi">93</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialise_simulations</span><span class="p">()</span>
-<span class="g g-Whitespace">     </span><span class="mi">94</span> <span class="bp">self</span><span class="o">.</span><span class="n">check_data_version</span><span class="p">()</span>
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/simulation.py:105,</span> in <span class="ni">Simulation.__init__</span><span class="nt">(self, **options)</span>
+<span class="g g-Whitespace">    </span><span class="mi">101</span> <span class="bp">self</span><span class="o">.</span><span class="n">check_model_version</span><span class="p">()</span>
+<span class="g g-Whitespace">    </span><span class="mi">102</span> <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
+<span class="g g-Whitespace">    </span><span class="mi">103</span>     <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">Dataset</span>
+<span class="g g-Whitespace">    </span><span class="mi">104</span> <span class="p">):</span>
+<span class="ne">--&gt; </span><span class="mi">105</span>     <span class="bp">self</span><span class="o">.</span><span class="n">_set_data</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">106</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialise_simulations</span><span class="p">()</span>
+<span class="g g-Whitespace">    </span><span class="mi">107</span> <span class="bp">self</span><span class="o">.</span><span class="n">check_data_version</span><span class="p">()</span>
 
-<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/simulation.py:143,</span> in <span class="ni">Simulation._set_data</span><span class="nt">(self)</span>
-<span class="g g-Whitespace">    </span><span class="mi">138</span> <span class="n">bucket</span><span class="p">,</span> <span class="n">filename</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;://&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
-<span class="g g-Whitespace">    </span><span class="mi">139</span>     <span class="s2">&quot;/&quot;</span>
-<span class="g g-Whitespace">    </span><span class="mi">140</span> <span class="p">)</span>
-<span class="g g-Whitespace">    </span><span class="mi">141</span> <span class="n">version</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">data_version</span>
-<span class="ne">--&gt; </span><span class="mi">143</span> <span class="n">file_path</span><span class="p">,</span> <span class="n">version</span> <span class="o">=</span> <span class="n">download</span><span class="p">(</span>
-<span class="g g-Whitespace">    </span><span class="mi">144</span>     <span class="n">filepath</span><span class="o">=</span><span class="n">filename</span><span class="p">,</span>
-<span class="g g-Whitespace">    </span><span class="mi">145</span>     <span class="n">gcs_bucket</span><span class="o">=</span><span class="n">bucket</span><span class="p">,</span>
-<span class="g g-Whitespace">    </span><span class="mi">146</span>     <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span>
-<span class="g g-Whitespace">    </span><span class="mi">147</span>     <span class="n">return_version</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="g g-Whitespace">    </span><span class="mi">148</span> <span class="p">)</span>
-<span class="g g-Whitespace">    </span><span class="mi">149</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_version</span> <span class="o">=</span> <span class="n">version</span>
-<span class="g g-Whitespace">    </span><span class="mi">150</span> <span class="n">filename</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">file_path</span><span class="p">))</span>
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/simulation.py:164,</span> in <span class="ni">Simulation._set_data</span><span class="nt">(self, file_address)</span>
+<span class="g g-Whitespace">    </span><span class="mi">159</span>     <span class="n">version</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="g g-Whitespace">    </span><span class="mi">161</span> <span class="k">else</span><span class="p">:</span>
+<span class="g g-Whitespace">    </span><span class="mi">162</span>     <span class="c1"># All official PolicyEngine datasets are stored in GCS;</span>
+<span class="g g-Whitespace">    </span><span class="mi">163</span>     <span class="c1"># load accordingly</span>
+<span class="ne">--&gt; </span><span class="mi">164</span>     <span class="n">filename</span><span class="p">,</span> <span class="n">version</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_set_data_from_gs</span><span class="p">(</span><span class="n">file_address</span><span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">165</span>     <span class="bp">self</span><span class="o">.</span><span class="n">data_version</span> <span class="o">=</span> <span class="n">version</span>
+<span class="g g-Whitespace">    </span><span class="mi">167</span> <span class="n">time_period</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_set_data_time_period</span><span class="p">(</span><span class="n">file_address</span><span class="p">)</span>
+
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/simulation.py:398,</span> in <span class="ni">Simulation._set_data_from_gs</span><span class="nt">(self, file_address)</span>
+<span class="g g-Whitespace">    </span><span class="mi">394</span> <span class="n">version</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">data_version</span>
+<span class="g g-Whitespace">    </span><span class="mi">396</span> <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Downloading </span><span class="si">{</span><span class="n">filename</span><span class="si">}</span><span class="s2"> from bucket </span><span class="si">{</span><span class="n">bucket</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
+<span class="ne">--&gt; </span><span class="mi">398</span> <span class="n">filepath</span><span class="p">,</span> <span class="n">version</span> <span class="o">=</span> <span class="n">download</span><span class="p">(</span>
+<span class="g g-Whitespace">    </span><span class="mi">399</span>     <span class="n">filepath</span><span class="o">=</span><span class="n">filename</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">400</span>     <span class="n">gcs_bucket</span><span class="o">=</span><span class="n">bucket</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">401</span>     <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">402</span>     <span class="n">return_version</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">403</span> <span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">405</span> <span class="k">return</span> <span class="n">filename</span><span class="p">,</span> <span class="n">version</span>
 
 <span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/utils/data_download.py:17,</span> in <span class="ni">download</span><span class="nt">(filepath, gcs_bucket, version, return_version)</span>
 <span class="g g-Whitespace">     </span><span class="mi">10</span> <span class="k">def</span><span class="w"> </span><span class="nf">download</span><span class="p">(</span>
