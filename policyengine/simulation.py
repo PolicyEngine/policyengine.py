@@ -1,8 +1,14 @@
 """Simulate tax-benefit policy and derive society-level output statistics."""
 
+import sys
 from pydantic import BaseModel, Field
 from typing import Literal
-from .constants import get_default_dataset
+from .utils.data.datasets import (
+    get_default_dataset,
+    process_gs_path,
+    POLICYENGINE_DATASETS,
+    DATASET_TIME_PERIODS,
+)
 from policyengine_core.simulations import Simulation as CountrySimulation
 from policyengine_core.simulations import (
     Microsimulation as CountryMicrosimulation,
@@ -22,16 +28,16 @@ from importlib import metadata
 import h5py
 from pathlib import Path
 import pandas as pd
-from typing import Type, Optional
+from typing import Type, Any, Optional
 from functools import wraps, partial
-from typing import Dict, Any, Callable
+from typing import Callable
 import importlib
 from policyengine.utils.data_download import download
 
 CountryType = Literal["uk", "us"]
 ScopeType = Literal["household", "macro"]
 DataType = (
-    str | dict | Any | None
+    str | dict[Any, Any] | Dataset | None
 )  # Needs stricter typing. Any==policyengine_core.data.Dataset, but pydantic refuses for some reason.
 TimePeriodType = int
 ReformType = ParametricReform | Type[StructuralReform] | None
@@ -72,6 +78,10 @@ class SimulationOptions(BaseModel):
         description="The version of the data used in the simulation. If not provided, the current data version will be used. If provided, this package will throw an error if the data version does not match. Use this as an extra safety check.",
     )
 
+    model_config = {
+        "arbitrary_types_allowed": True,
+    }
+
 
 class Simulation:
     """Simulate tax-benefit policy and derive society-level output statistics."""
@@ -89,7 +99,10 @@ class Simulation:
     def __init__(self, **options: SimulationOptions):
         self.options = SimulationOptions(**options)
         self.check_model_version()
-        self._set_data()
+        if not isinstance(self.options.data, dict) and not isinstance(
+            self.options.data, Dataset
+        ):
+            self._set_data(self.options.data)
         self._initialise_simulations()
         self.check_data_version()
         self._add_output_functions()
@@ -125,39 +138,37 @@ class Simulation:
                                 wrapped_func,
                             )
 
-    def _set_data(self):
-        if self.options.data is None:
-            self.options.data = get_default_dataset(
-                country=self.options.country,
-                region=self.options.region,
+    def _set_data(self, file_address: str | None = None) -> None:
+
+        # filename refers to file's unique name + extension;
+        # file_address refers to URI + filename
+
+        # If None is passed, user wants default dataset; get URL, then continue initializing.
+        if file_address is None:
+            file_address = get_default_dataset(
+                country=self.options.country, region=self.options.region
+            )
+            print(
+                f"No data provided, using default dataset: {file_address}",
+                file=sys.stderr,
             )
 
-        if isinstance(self.options.data, str):
-            filename = self.options.data
-            if self.options.data[:6] == "gcs://":
-                bucket, filename = self.options.data.split("://")[-1].split(
-                    "/"
-                )
-                version = self.options.data_version
+        if file_address not in POLICYENGINE_DATASETS:
+            # If it's a local file, no URI present and unable to infer version.
+            filename = file_address
+            version = None
 
-                file_path, version = download(
-                    filepath=filename,
-                    gcs_bucket=bucket,
-                    version=version,
-                    return_version=True,
-                )
-                self.data_version = version
-                filename = str(Path(file_path))
-            else:
-                # If it's a local file, we can't infer the version.
-                version = None
-            if "cps_2023" in filename:
-                time_period = 2023
-            else:
-                time_period = None
-            self.options.data = Dataset.from_file(
-                filename, time_period=time_period
-            )
+        else:
+            # All official PolicyEngine datasets are stored in GCS;
+            # load accordingly
+            filename, version = self._set_data_from_gs(file_address)
+            self.data_version = version
+
+        time_period = self._set_data_time_period(file_address)
+
+        self.options.data = Dataset.from_file(
+            filename, time_period=time_period
+        )
 
     def _initialise_simulations(self):
         self.baseline_simulation = self._initialise_simulation(
@@ -361,3 +372,34 @@ class Simulation:
                 raise ValueError(
                     f"Data version {self.data_version} does not match expected version {self.options.data_version}."
                 )
+
+    def _set_data_time_period(self, file_address: str) -> Optional[int]:
+        """
+        Set the time period based on the file address.
+        If the file address is a PE dataset, return the time period from the dataset.
+        If it's a local file, return None.
+        """
+        if file_address in DATASET_TIME_PERIODS:
+            return DATASET_TIME_PERIODS[file_address]
+        else:
+            # Local file, no time period available
+            return None
+
+    def _set_data_from_gs(self, file_address: str) -> tuple[str, str | None]:
+        """
+        Set the data from a GCS path and return the filename and version.
+        """
+
+        bucket, filename = process_gs_path(file_address)
+        version = self.options.data_version
+
+        print(f"Downloading {filename} from bucket {bucket}", file=sys.stderr)
+
+        filepath, version = download(
+            filepath=filename,
+            gcs_bucket=bucket,
+            version=version,
+            return_version=True,
+        )
+
+        return filename, version
