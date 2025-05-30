@@ -1,8 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Disambiguated filepath management in Simulation._set_data()
-    - Refactored Simulation._set_data() to divide functionality into smaller methods
-    - Prevented passage of non-Path URIs to Dataset.from_file() at end of Simulation._set_data() execution
-    added:
-    - Tests for Simulation._set_data()

@@ -96,3 +96,13 @@
     fixed:
     - Model and data versions are always available.
   date: 2025-05-27 11:10:28
+- bump: patch
+  changes:
+    added:
+    - Tests for Simulation._set_data()
+    changed:
+    - Disambiguated filepath management in Simulation._set_data()
+    - Refactored Simulation._set_data() to divide functionality into smaller methods
+    - Prevented passage of non-Path URIs to Dataset.from_file() at end of Simulation._set_data()
+      execution
+  date: 2025-05-30 21:12:45
