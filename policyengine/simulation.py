@@ -102,7 +102,6 @@ class Simulation:
         if not isinstance(self.options.data, dict) and not isinstance(
             self.options.data, Dataset
         ):
-            print(type(self.options.data), sys.stderr)
             self._set_data(self.options.data)
         self._initialise_simulations()
         self.check_data_version()
