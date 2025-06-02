@@ -37,7 +37,7 @@ from policyengine.utils.data_download import download
 CountryType = Literal["uk", "us"]
 ScopeType = Literal["household", "macro"]
 DataType = (
-    str | dict[Any, Any] | Dataset | None
+    str | dict[Any, Any] | Any | None
 )  # Needs stricter typing. Any==policyengine_core.data.Dataset, but pydantic refuses for some reason.
 TimePeriodType = int
 ReformType = ParametricReform | Type[StructuralReform] | None
