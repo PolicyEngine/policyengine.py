@@ -106,3 +106,8 @@
     - Prevented passage of non-Path URIs to Dataset.from_file() at end of Simulation._set_data()
       execution
   date: 2025-05-30 21:12:45
+- bump: patch
+  changes:
+    fixed:
+    - Removed bad type check.
+  date: 2025-06-02 07:53:55
