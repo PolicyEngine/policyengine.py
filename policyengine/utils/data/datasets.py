@@ -6,7 +6,7 @@ EFRS_2022 = "gs://policyengine-uk-data-private/enhanced_frs_2022_23.h5"
 FRS_2022 = "gs://policyengine-uk-data-private/frs_2022_23.h5"
 CPS_2023 = "gs://policyengine-us-data/cps_2023.h5"
 CPS_2023_POOLED = "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
-ECPS_2024 = "gs://policyengine-us-data/ecps_2024.h5"
+ECPS_2024 = "gs://policyengine-us-data/enhanced_cps_2024.h5"
 
 POLICYENGINE_DATASETS = [
     EFRS_2022,
