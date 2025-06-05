@@ -116,3 +116,8 @@
     fixed:
     - ECPS handling issue.
   date: 2025-06-04 07:35:40
+- bump: patch
+  changes:
+    fixed:
+    - Added more log messages.
+  date: 2025-06-05 05:08:16
