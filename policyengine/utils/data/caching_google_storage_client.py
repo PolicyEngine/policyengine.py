@@ -50,9 +50,15 @@ class CachingGoogleStorageClient(AbstractContextManager):
                 f"Copying downloaded data for {bucket}, {key} to {target}"
             )
             atomic_write(target, data)
+            logger.info(
+                f"Data successfully copied to {target} with version {version}"
+            )
             if return_version:
                 return version
             return
+        logger.error(
+            f"Cached data for {bucket}, {key}{', ' + version if version is not None else ''} is not bytes."
+        )
         raise Exception("Expected data for blob to be cached as bytes")
 
     # If the crc has changed from what we downloaded last time download it again.
@@ -68,22 +74,22 @@ class CachingGoogleStorageClient(AbstractContextManager):
         crckey = f"{bucket}.{key}.{version}.crc"
 
         crc = self.client.crc32c(bucket, key, version=version)
+        id_string = (
+            f"{bucket}, {key}{', ' + version if version is not None else ''}"
+        )
         if crc is None:
-            raise Exception(f"Unable to find {key} in bucket {bucket}")
+            raise Exception(f"Unable to find {id_string}")
 
         prev_crc = self.cache.get(crckey, default=None)
-        logger.debug(f"Previous crc for {bucket}, {key} was {prev_crc}")
+        logger.debug(f"Previous crc for {id_string} was {prev_crc}")
         if prev_crc == crc:
-            logger.info(
-                f"Cache exists and crc is unchanged for {bucket}, {key}."
-            )
+            logger.info(f"Cache exists and crc is unchanged for {id_string} .")
             return
-
         [content, downloaded_crc] = self.client.download(
             bucket, key, version=version
         )
-        logger.debug(
-            f"Downloaded new version of {bucket}, {key} with crc {downloaded_crc}"
+        logger.info(
+            f"Downloaded new version of {id_string} with crc {downloaded_crc}"
         )
 
         # atomic transaction to update both the data and the metadata
@@ -94,6 +100,7 @@ class CachingGoogleStorageClient(AbstractContextManager):
             # Whatever the CRC was before we downloaded, we set the cache CRC
             # to the CRC reported by the download itself to avoid race conditions.
             self.cache.set(crckey, downloaded_crc)
+        logger.info("Cache updated for {id_string}")
 
     def clear(self):
         self.cache.clear()

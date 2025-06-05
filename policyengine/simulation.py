@@ -33,6 +33,9 @@ from functools import wraps, partial
 from typing import Callable
 import importlib
 from policyengine.utils.data_download import download
+import logging
+
+logger = logging.getLogger(__file__)
 
 CountryType = Literal["uk", "us"]
 ScopeType = Literal["household", "macro"]
@@ -102,10 +105,14 @@ class Simulation:
         if not isinstance(self.options.data, dict) and not isinstance(
             self.options.data, Dataset
         ):
+            logging.debug("Loading data")
             self._set_data(self.options.data)
+            logging.info("Data loaded")
         self._initialise_simulations()
+        logging.info("Simulations initialised")
         self.check_data_version()
         self._add_output_functions()
+        logging.info("Output functions loaded")
 
     def _add_output_functions(self):
         folder = Path(__file__).parent / "outputs"

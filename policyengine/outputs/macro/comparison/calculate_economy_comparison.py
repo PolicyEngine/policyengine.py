@@ -11,6 +11,9 @@ from policyengine.outputs.macro.single.calculate_single_economy import (
     SingleEconomy,
 )
 from typing import List, Dict, Optional
+import logging
+
+logger = logging.getLogger(__file__)
 
 
 class BudgetaryImpact(BaseModel):
@@ -809,7 +812,9 @@ def calculate_economy_comparison(
     if not simulation.is_comparison:
         raise ValueError("Simulation must be a comparison simulation.")
 
+    logging.info("Calculating baseline econonmy")
     baseline: SingleEconomy = simulation.calculate_single_economy(reform=False)
+    logging.info("Calculating reform economy")
     reform: SingleEconomy = simulation.calculate_single_economy(reform=True)
     options = simulation.options
     country_id = options.country
@@ -835,6 +840,7 @@ def calculate_economy_comparison(
     )
 
     if simulation.options.include_cliffs:
+        logging.info("Calculating cliff impacts")
         cliff_impact = CliffImpact(
             baseline=CliffImpactInSimulation(
                 cliff_gap=baseline.cliff_gap,
@@ -848,6 +854,7 @@ def calculate_economy_comparison(
     else:
         cliff_impact = None
 
+    logging.info("Comparison complete")
     return EconomyComparison(
         model_version=simulation.model_version,
         data_version=simulation.data_version,
