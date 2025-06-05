@@ -2,7 +2,7 @@ from .data.caching_google_storage_client import CachingGoogleStorageClient
 import asyncio
 from pathlib import Path
 from google.cloud.storage import Blob
-from typing import Iterable
+from typing import Iterable, Optional
 
 _caching_client: CachingGoogleStorageClient | None = None
 
@@ -24,8 +24,8 @@ def download_file_from_gcs(
     bucket_name: str,
     file_name: str,
     destination_path: str,
-    version: str = None,
-) -> str:
+    version: Optional[str] = None,
+) -> str | None:
     """
     Download a file from Google Cloud Storage to a local path.
 
@@ -38,10 +38,11 @@ def download_file_from_gcs(
         version (str): The version of the file that was downloaded, if available.
     """
 
-    return _get_client().download(
+    version = _get_client().download(
         bucket_name,
         file_name,
         Path(destination_path),
         version=version,
         return_version=True,
     )
+    return version
