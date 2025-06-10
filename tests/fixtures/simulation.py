@@ -61,3 +61,15 @@ def mock_dataset():
         mock_instance.file_path = SAMPLE_DATASET_FILENAME
         mock_dataset_class.from_file.return_value = mock_instance
         yield mock_instance
+
+
+@pytest.fixture
+def mock_simulation_with_cliff_vars():
+
+    mock_sim = Mock()
+    mock_sim.calculate.side_effect = lambda var: {
+        "cliff_gap": Mock(sum=Mock(return_value=100.0)),
+        "is_on_cliff": Mock(sum=Mock(return_value=40.0)),
+        "is_adult": Mock(sum=Mock(return_value=80.0)),
+    }[var]
+    return mock_sim
