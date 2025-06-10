@@ -1,4 +1,4 @@
-- bump: patch
+- bump: minor
   changes:
     added:
     - Unit test for GeneralEconomyTask.calculate_cliffs() and fixture for the test
