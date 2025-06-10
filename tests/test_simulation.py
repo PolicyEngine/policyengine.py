@@ -11,7 +11,9 @@ import sys
 from copy import deepcopy
 
 from policyengine import Simulation
-from policyengine.outputs.macro.single.calculate_single_economy import GeneralEconomyTask
+from policyengine.outputs.macro.single.calculate_single_economy import (
+    GeneralEconomyTask,
+)
 
 
 class TestSimulation:
@@ -73,9 +75,10 @@ class TestSimulation:
                 == None
             )
 
-
     class TestCalculateCliffs:
-        def test__calculates_correct_cliff_metrics(self, mock_simulation_with_cliff_vars):
+        def test__calculates_correct_cliff_metrics(
+            self, mock_simulation_with_cliff_vars
+        ):
 
             task = object.__new__(GeneralEconomyTask)
             task.simulation = mock_simulation_with_cliff_vars
