@@ -5,11 +5,13 @@ from .fixtures.simulation import (
     mock_get_default_dataset,
     mock_dataset,
     SAMPLE_DATASET_FILENAME,
+    mock_simulation_with_cliff_vars,
 )
 import sys
 from copy import deepcopy
 
 from policyengine import Simulation
+from policyengine.outputs.macro.single.calculate_single_economy import GeneralEconomyTask
 
 
 class TestSimulation:
@@ -70,3 +72,15 @@ class TestSimulation:
                 sim._set_data_time_period(uk_sim_options_pe_dataset.data)
                 == None
             )
+
+
+    class TestCalculateCliffs:
+        def test__calculates_correct_cliff_metrics(self, mock_simulation_with_cliff_vars):
+
+            task = object.__new__(GeneralEconomyTask)
+            task.simulation = mock_simulation_with_cliff_vars
+
+            cliff_result = task.calculate_cliffs()
+
+            assert cliff_result.cliff_gap == 100.0
+            assert cliff_result.cliff_share == 0.5
