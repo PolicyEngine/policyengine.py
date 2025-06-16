@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - Support for base64-encoded Google service account keys.

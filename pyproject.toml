@@ -11,7 +11,7 @@ authors = [
     {name = "PolicyEngine", email = "hello@policyengine.org"},
 ]
 license = {file = "LICENSE"}
-requires-python = ">=3.6"
+requires-python = ">=3.10"
 dependencies = [
     "policyengine_core>=3.10",
     "policyengine-uk",
@@ -20,7 +20,12 @@ dependencies = [
     "google-cloud-storage (>=3.1.0,<4.0.0)",
     "microdf_python",
     "getpass4",
-    "pydantic"
+    "pydantic",
+    "google-auth>=2.40.3",
+    "google-auth-oauthlib>=1.2.2",
+    "google-auth-httplib2>=0.2.0",
+    "google-api-python-client>=2.172.0",
+    "click>=8.2.1",
 ]
 
 [project.optional-dependencies]

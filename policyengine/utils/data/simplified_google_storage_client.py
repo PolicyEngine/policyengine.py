@@ -2,7 +2,11 @@ import asyncio
 from policyengine_core.data.dataset import atomic_write
 import logging
 from google.cloud.storage import Client, Blob
+from google.oauth2 import service_account
 from typing import Iterable, Optional
+import os
+import json
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +20,18 @@ class SimplifiedGoogleStorageClient:
     """
 
     def __init__(self):
-        self.client = Client()
+        credentials = None
+        if os.getenv("POLICYENGINE_RESEARCH_TOKEN"):
+            # This will have b64-encoded JSON credentials in it
+            token = os.getenv("POLICYENGINE_RESEARCH_TOKEN")
+            decoded_token = base64.b64decode(token).decode("utf-8")
+            json_token = json.loads(decoded_token)
+            credentials = (
+                service_account.Credentials.from_service_account_info(
+                    json_token
+                )
+            )
+        self.client = Client(credentials=credentials)
 
     def get_versioned_blob(
         self, bucket_name: str, key: str, version: Optional[str] = None
