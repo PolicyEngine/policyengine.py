@@ -8,6 +8,9 @@ from sqlmodel import (
     create_engine,
     Relationship,
     select,
+    Column,
+    LargeBinary,
+    BLOB
 )
 from enum import Enum
 from pydantic import validator
@@ -163,6 +166,8 @@ class Variable(BaseModel, table=True):
     country_id: int = Field(foreign_key="country.id")
     name: str = Field(index=True)
     description: Optional[str] = None
+    # data: Optional[bytes] = Field(sa_column=Column(LargeBinary))
+    results: Optional[bytes] = Field(sa_column=Column(BLOB, nullable=True))
 
     # Relationships
     # country: Country = Relationship(back_populates="variables")

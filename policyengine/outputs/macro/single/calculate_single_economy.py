@@ -12,7 +12,7 @@ from typing import Dict
 from dataclasses import dataclass
 from typing import Literal
 from microdf import MicroSeries
-from sqlmodel import create_engine, Session
+from sqlmodel import create_engine, Session, insert
 from policyengine.entities import Variable, VariableState
 
 
@@ -88,7 +88,7 @@ class GeneralEconomyTask:
             "household_count_people"
         )
         self._write_var_to_db(
-            "household_count_people", self.household_count_people
+            "household_count_people", self.household_count_people, "blob_sql"
         )
 
     def _connect_db(self, connection_string: str = "sqlite:///tax_policy.db"):
@@ -113,10 +113,129 @@ class GeneralEconomyTask:
             if not variable_id:
                 raise ValueError(f"Variable '{var_name}' not found in the database.")
         
-            print(f"Variable '{var_name}' found with ID: {variable_id}")
             return variable_id
-            
+        
     def _write_var_to_db(
+        self, var_name: str, data: MicroSeries, strategy: Literal["sql", "batched_sql", "blob_sql", "json"] = "sql"
+    ) -> None:
+        """Write a variable to the database"""
+        match strategy:
+            case "sql":
+                self._write_var_to_db_sql(var_name, data)
+            case "batched_sql":
+                self._write_var_to_db_batched_sql(var_name, data)
+            case "blob_sql":
+                self._write_var_to_db_blob_sql(var_name, data)
+            case "json":
+                self._write_var_to_db_json(var_name, data)
+            case _:
+                raise ValueError(f"Unknown strategy: {strategy}")
+        print(f"Variable '{var_name}' written to database with strategy '{strategy}'")
+
+    def _write_var_to_db_blob_sql(
+        self, var_name: str, data: MicroSeries
+    ) -> None:
+        
+        import time
+        from sqlmodel import select, SQLModel
+
+        engine = self._connect_db()
+
+        SQLModel.metadata.clear()
+        # Dispose the engine to close all connections
+        engine.dispose()
+
+        # Recreate the engine
+        engine = create_engine("sqlite:///tax_policy_sqlite_blob.db")
+
+        # Recreate all tables with the new schema
+        SQLModel.metadata.create_all(engine)
+
+        start_time = time.time()
+        with Session(engine) as session:
+            statement = select(Variable).where(
+                Variable.name == var_name
+            )
+            variable = session.exec(statement).first()
+            if not variable:
+                raise ValueError(f"Variable '{var_name}' not found in the database.")
+            variable.results = data.to_json().encode("utf-8")
+            print(variable.results)
+            session.add(variable)
+            session.commit()
+            session.refresh(variable)
+        end_time = time.time()
+        total_time = end_time - start_time
+        self._total_var_write_time += total_time
+        print(
+            f"Variable '{var_name}' written to database in {total_time:.2f} seconds"
+        )
+
+    def _write_var_to_db_json(
+        self, var_name: str, data: MicroSeries
+    ) -> None:
+        """Write a variable to the database in JSON format"""
+        import json
+        import time
+
+        start_time = time.time()
+        with open(f"{var_name}.json", "w") as f:
+            for index, value in enumerate(data):
+                # Assuming 'time_period' is a fixed value for simplicity
+                time_period = "2025"
+                # Create a record in JSON format
+                record = {
+                    "variable_id": self._get_var_id_from_db(var_name),
+                    "entity_id": index,
+                    "time_period": time_period,
+                    "value": json.dumps(value),
+                    "simulation_id": 1
+                }
+
+                f.write(json.dumps(record) + "\n")
+        end_time = time.time()
+        total_time = end_time - start_time
+        self._total_var_write_time += total_time
+        print(
+            f"Variable '{var_name}' written to JSON file in {total_time:.2f} seconds"
+        )
+
+    def _write_var_to_db_batched_sql(
+        self, var_name: str, data: MicroSeries, batch_size: int = 1000 
+    ) -> None:
+        """Write a variable to the database in batches"""
+        import time
+
+        start_time = time.time()
+        engine = self._connect_db()
+        with Session(engine) as session:
+            for i in range(0, len(data), batch_size):
+                batch = data[i:i + batch_size]
+                records = []
+                for index, value in enumerate(batch):
+                    # Assuming 'time_period' is a fixed value for simplicity
+                    time_period = "2025"
+
+                    record = {
+                        "variable_id": self._get_var_id_from_db(var_name),
+                        "entity_id": index + i,
+                        "time_period": time_period,
+                        "value": str(value),
+                        "simulation_id": 1
+                    }
+                    records.append(record)
+                session.execute(
+                    insert(VariableState).values(records)
+                )
+            session.commit()
+        end_time = time.time()
+        total_time = end_time - start_time
+        self._total_var_write_time += total_time
+        print(
+            f"Variable '{var_name}' written to database in {total_time:.2f} seconds"
+        )
+
+    def _write_var_to_db_sql(
         self, var_name: str, data: MicroSeries
     ) -> None:
         import time
@@ -125,7 +244,6 @@ class GeneralEconomyTask:
         engine = self._connect_db()
         with Session(engine) as session:
             for index, value in enumerate(data):
-                print(f"Writing variable '{var_name}' for entity {index} with value {value}")
                 # Assuming 'time_period' is a fixed value for simplicity
                 time_period = "2025"
                 record = VariableState(
@@ -135,7 +253,6 @@ class GeneralEconomyTask:
                     value=str(value),
                     simulation_id=1
                 )
-                print(f"Prepared record for variable '{var_name}': {record}")
                 session.add(record)
             session.commit()
         end_time = time.time()
@@ -151,17 +268,17 @@ class GeneralEconomyTask:
             total_tax = total_tax_raw.sum()
             total_spending_raw = self.simulation.calculate("gov_spending")
             total_spending = total_spending_raw.sum()
-            self._write_var_to_db("gov_tax", total_tax_raw)
-            self._write_var_to_db("gov_spending", total_spending_raw)
+            self._write_var_to_db("gov_tax", total_tax_raw, "blob_sql")
+            self._write_var_to_db("gov_spending", total_spending_raw, "blob_sql")
         else:
             total_tax_raw = self.simulation.calculate("household_tax")
             total_tax = total_tax_raw.sum()
-            self._write_var_to_db("household_tax", total_tax_raw)
+            self._write_var_to_db("household_tax", total_tax_raw, "blob_sql")
             total_spending_raw = self.simulation.calculate(
                 "household_benefits"
             )
             total_spending = total_spending_raw.sum()
-            self._write_var_to_db("household_benefits", total_spending_raw)
+            self._write_var_to_db("household_benefits", total_spending_raw, "blob_sql")
         return total_tax, total_spending
 
     def calculate_inequality_metrics(self):
@@ -195,7 +312,7 @@ class GeneralEconomyTask:
     def _get_weighted_household_income(self):
         income = self.simulation.calculate("equiv_household_net_income")
         self._write_var_to_db(
-            "equiv_household_net_income", income
+            "equiv_household_net_income", income, "blob_sql"
         )
         income[income < 0] = 0
         income.weights *= self.household_count_people
@@ -206,7 +323,7 @@ class GeneralEconomyTask:
             "household_net_income"
         )
         total_net_income = total_net_income_raw.sum()
-        self._write_var_to_db("household_net_income", total_net_income_raw)
+        self._write_var_to_db("household_net_income", total_net_income_raw, "blob_sql")
         employment_income_hh = (
             self.simulation.calculate("employment_income", map_to="household")
             .astype(float)
@@ -220,10 +337,10 @@ class GeneralEconomyTask:
             .tolist()
         )
         self._write_var_to_db(
-            "employment_income_hh", employment_income_hh
+            "employment_income_hh", employment_income_hh, "blob_sql"
         )
         self._write_var_to_db(
-            "self_employment_income_hh", self_employment_income_hh
+            "self_employment_income_hh", self_employment_income_hh, "blob_sql"
         )
 
         return (
@@ -254,16 +371,16 @@ class GeneralEconomyTask:
             .tolist()
         )
         self._write_var_to_db(
-            "household_net_income", household_net_income
+            "household_net_income", household_net_income, "blob_sql"
         )
         self._write_var_to_db(
-            "equiv_household_net_income", equiv_household_net_income
+            "equiv_household_net_income", equiv_household_net_income, "blob_sql"
         )
         self._write_var_to_db(
-            "household_income_decile", household_income_decile  
+            "household_income_decile", household_income_decile, "blob_sql"
         )
         self._write_var_to_db(
-            "household_market_income", household_market_income
+            "household_market_income", household_market_income, "blob_sql"
         )
 
         return (
@@ -276,7 +393,7 @@ class GeneralEconomyTask:
     def calculate_wealth_metrics(self):
         try:
             wealth = self.simulation.calculate("total_wealth")
-            self._write_var_to_db("total_wealth", wealth)
+            self._write_var_to_db("total_wealth", wealth, "blob_sql")
 
             wealth.weights *= self.household_count_people
             wealth_decile = (
@@ -294,7 +411,7 @@ class GeneralEconomyTask:
                 self.simulation.calculate("is_male").astype(bool).tolist()
             )
             self._write_var_to_db(
-                "is_male", is_male
+                "is_male", is_male, "blob_sql"
             )
         except Exception:
             is_male = None
@@ -302,13 +419,13 @@ class GeneralEconomyTask:
         try:
             race = self.simulation.calculate("race").astype(str).tolist()
             self._write_var_to_db(
-                "race", race
+                "race", race, "blob_sql"
             )
         except Exception:
             race = None
 
         age = self.simulation.calculate("age").astype(int).tolist()
-        self._write_var_to_db("age", age)
+        self._write_var_to_db("age", age, "blob_sql")
 
         return is_male, race, age
 
@@ -330,10 +447,10 @@ class GeneralEconomyTask:
         poverty_gap = poverty_gap_raw.sum()
         deep_poverty_gap_raw = self.simulation.calculate("deep_poverty_gap")
         deep_poverty_gap = deep_poverty_gap_raw.sum()
-        self._write_var_to_db("in_poverty", in_poverty)
-        self._write_var_to_db("in_deep_poverty", person_in_deep_poverty)
-        self._write_var_to_db("poverty_gap", poverty_gap_raw)
-        self._write_var_to_db("deep_poverty_gap", deep_poverty_gap_raw)
+        self._write_var_to_db("in_poverty", in_poverty, "blob_sql")
+        self._write_var_to_db("in_deep_poverty", person_in_deep_poverty, "blob_sql")
+        self._write_var_to_db("poverty_gap", poverty_gap_raw, "blob_sql")
+        self._write_var_to_db("deep_poverty_gap", deep_poverty_gap_raw, "blob_sql")
         return (
             in_poverty,
             person_in_poverty,
@@ -351,8 +468,8 @@ class GeneralEconomyTask:
             .astype(float)
             .tolist()
         )
-        self._write_var_to_db("person_weight", person_weight)
-        self._write_var_to_db("household_weight", household_weight)
+        self._write_var_to_db("person_weight", person_weight, "blob_sql")
+        self._write_var_to_db("household_weight", household_weight, "blob_sql")
 
         return person_weight, household_weight
 
