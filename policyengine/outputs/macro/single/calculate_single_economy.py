@@ -12,6 +12,8 @@ from typing import Dict
 from dataclasses import dataclass
 from typing import Literal
 from microdf import MicroSeries
+from sqlmodel import create_engine, Session
+from policyengine.entities import Variable, VariableState
 
 
 class SingleEconomy(BaseModel):
@@ -79,21 +81,87 @@ class UKPrograms:
 
 class GeneralEconomyTask:
     def __init__(self, simulation: Microsimulation, country_id: str):
+        self._total_var_write_time = 0
         self.simulation = simulation
         self.country_id = country_id
         self.household_count_people = self.simulation.calculate(
             "household_count_people"
         )
+        self._write_var_to_db(
+            "household_count_people", self.household_count_people
+        )
 
+    def _connect_db(self, connection_string: str = "sqlite:///tax_policy.db"):
+        """Connect to the database"""
+
+        engine = create_engine(connection_string)
+        return engine
+    
+    def _get_var_id_from_db(
+        self, var_name: str
+    ) -> int:
+        """Retrieve a variable from the database"""
+        engine = self._connect_db()
+        with Session(engine) as session:
+            query = (
+                session.query(Variable)
+                .filter(
+                    Variable.name == var_name,
+                )
+            )
+            variable_id = query.first().id
+            if not variable_id:
+                raise ValueError(f"Variable '{var_name}' not found in the database.")
+        
+            print(f"Variable '{var_name}' found with ID: {variable_id}")
+            return variable_id
+            
+    def _write_var_to_db(
+        self, var_name: str, data: MicroSeries
+    ) -> None:
+        import time
+
+        start_time = time.time()
+        engine = self._connect_db()
+        with Session(engine) as session:
+            for index, value in enumerate(data):
+                print(f"Writing variable '{var_name}' for entity {index} with value {value}")
+                # Assuming 'time_period' is a fixed value for simplicity
+                time_period = "2025"
+                record = VariableState(
+                    variable_id=self._get_var_id_from_db(var_name),
+                    entity_id=index,
+                    time_period=time_period,
+                    value=str(value),
+                    simulation_id=1
+                )
+                print(f"Prepared record for variable '{var_name}': {record}")
+                session.add(record)
+            session.commit()
+        end_time = time.time()
+        total_time = end_time - start_time
+        self._total_var_write_time += total_time
+        print(
+            f"Variable '{var_name}' written to database in {total_time:.2f} seconds"
+        )
+    
     def calculate_tax_and_spending(self):
         if self.country_id == "uk":
-            total_tax = self.simulation.calculate("gov_tax").sum()
-            total_spending = self.simulation.calculate("gov_spending").sum()
+            total_tax_raw = self.simulation.calculate("gov_tax")
+            total_tax = total_tax_raw.sum()
+            total_spending_raw = self.simulation.calculate("gov_spending")
+            total_spending = total_spending_raw.sum()
+            self._write_var_to_db("gov_tax", total_tax_raw)
+            self._write_var_to_db("gov_spending", total_spending_raw)
         else:
-            total_tax = self.simulation.calculate("household_tax").sum()
-            total_spending = self.simulation.calculate(
+            total_tax_raw = self.simulation.calculate("household_tax")
+            total_tax = total_tax_raw.sum()
+            self._write_var_to_db("household_tax", total_tax_raw)
+            total_spending_raw = self.simulation.calculate(
                 "household_benefits"
-            ).sum()
+            )
+            total_spending = total_spending_raw.sum()
+            self._write_var_to_db("household_benefits", total_spending_raw)
         return total_tax, total_spending
 
     def calculate_inequality_metrics(self):
@@ -126,14 +194,19 @@ class GeneralEconomyTask:
 
     def _get_weighted_household_income(self):
         income = self.simulation.calculate("equiv_household_net_income")
+        self._write_var_to_db(
+            "equiv_household_net_income", income
+        )
         income[income < 0] = 0
         income.weights *= self.household_count_people
         return income
 
     def calculate_income_breakdown_metrics(self):
-        total_net_income = self.simulation.calculate(
+        total_net_income_raw = self.simulation.calculate(
             "household_net_income"
-        ).sum()
+        )
+        total_net_income = total_net_income_raw.sum()
+        self._write_var_to_db("household_net_income", total_net_income_raw)
         employment_income_hh = (
             self.simulation.calculate("employment_income", map_to="household")
             .astype(float)
@@ -145,6 +218,12 @@ class GeneralEconomyTask:
             )
             .astype(float)
             .tolist()
+        )
+        self._write_var_to_db(
+            "employment_income_hh", employment_income_hh
+        )
+        self._write_var_to_db(
+            "self_employment_income_hh", self_employment_income_hh
         )
 
         return (
@@ -174,6 +253,18 @@ class GeneralEconomyTask:
             .astype(float)
             .tolist()
         )
+        self._write_var_to_db(
+            "household_net_income", household_net_income
+        )
+        self._write_var_to_db(
+            "equiv_household_net_income", equiv_household_net_income
+        )
+        self._write_var_to_db(
+            "household_income_decile", household_income_decile  
+        )
+        self._write_var_to_db(
+            "household_market_income", household_market_income
+        )
 
         return (
             household_net_income,
@@ -185,6 +276,8 @@ class GeneralEconomyTask:
     def calculate_wealth_metrics(self):
         try:
             wealth = self.simulation.calculate("total_wealth")
+            self._write_var_to_db("total_wealth", wealth)
+
             wealth.weights *= self.household_count_people
             wealth_decile = (
                 wealth.decile_rank().clip(1, 10).astype(int).tolist()
@@ -200,15 +293,22 @@ class GeneralEconomyTask:
             is_male = (
                 self.simulation.calculate("is_male").astype(bool).tolist()
             )
+            self._write_var_to_db(
+                "is_male", is_male
+            )
         except Exception:
             is_male = None
 
         try:
             race = self.simulation.calculate("race").astype(str).tolist()
+            self._write_var_to_db(
+                "race", race
+            )
         except Exception:
             race = None
 
         age = self.simulation.calculate("age").astype(int).tolist()
+        self._write_var_to_db("age", age)
 
         return is_male, race, age
 
@@ -226,8 +326,14 @@ class GeneralEconomyTask:
             .astype(bool)
             .tolist()
         )
-        poverty_gap = self.simulation.calculate("poverty_gap").sum()
-        deep_poverty_gap = self.simulation.calculate("deep_poverty_gap").sum()
+        poverty_gap_raw = self.simulation.calculate("poverty_gap")
+        poverty_gap = poverty_gap_raw.sum()
+        deep_poverty_gap_raw = self.simulation.calculate("deep_poverty_gap")
+        deep_poverty_gap = deep_poverty_gap_raw.sum()
+        self._write_var_to_db("in_poverty", in_poverty)
+        self._write_var_to_db("in_deep_poverty", person_in_deep_poverty)
+        self._write_var_to_db("poverty_gap", poverty_gap_raw)
+        self._write_var_to_db("deep_poverty_gap", deep_poverty_gap_raw)
         return (
             in_poverty,
             person_in_poverty,
@@ -245,6 +351,8 @@ class GeneralEconomyTask:
             .astype(float)
             .tolist()
         )
+        self._write_var_to_db("person_weight", person_weight)
+        self._write_var_to_db("household_weight", household_weight)
 
         return person_weight, household_weight
 
