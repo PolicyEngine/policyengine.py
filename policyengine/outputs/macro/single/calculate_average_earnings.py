@@ -1,7 +1,7 @@
-from policyengine import Simulation
+from policyengine.simulation_results import MacroContext
 
 
-def calculate_average_earnings(simulation: Simulation) -> float:
+def calculate_average_earnings(simulation: MacroContext) -> float:
     """Calculate average earnings."""
     employment_income = simulation.baseline_simulation.calculate(
         "employment_income"

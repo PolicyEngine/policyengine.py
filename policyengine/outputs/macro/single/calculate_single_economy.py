@@ -13,6 +13,11 @@ from dataclasses import dataclass
 from typing import Literal
 from microdf import MicroSeries
 
+from policyengine.simulation_results import (
+    AbstractSimulationResults,
+    MacroContext,
+)
+
 
 class SingleEconomy(BaseModel):
     total_net_income: float
@@ -78,7 +83,7 @@ class UKPrograms:
 
 
 class GeneralEconomyTask:
-    def __init__(self, simulation: Microsimulation, country_id: str):
+    def __init__(self, simulation: AbstractSimulationResults, country_id: str):
         self.simulation = simulation
         self.country_id = country_id
         self.household_count_people = self.simulation.calculate(
@@ -288,15 +293,11 @@ class GeneralEconomyTask:
         return result
 
     def _has_behavioral_response(self) -> bool:
-        return (
+        return self.simulation.variable_exists(
             "employment_income_behavioral_response"
-            in self.simulation.tax_benefit_system.variables
-            and any(
-                self.simulation.calculate(
-                    "employment_income_behavioral_response"
-                )
-                != 0
-            )
+        ) and any(
+            self.simulation.calculate("employment_income_behavioral_response")
+            != 0
         )
 
     def calculate_lsr_working_hours(self):
@@ -332,8 +333,8 @@ class GeneralEconomyTask:
         }
 
     def calculate_cliffs(self):
-        cliff_gap: MicroSeries = self.simulation.calculate("cliff_gap")
-        is_on_cliff: MicroSeries = self.simulation.calculate("is_on_cliff")
+        cliff_gap: Series = self.simulation.calculate("cliff_gap")
+        is_on_cliff: Series = self.simulation.calculate("is_on_cliff")
         total_cliff_gap: float = cliff_gap.sum()
         total_adults: float = self.simulation.calculate("is_adult").sum()
         cliff_share: float = is_on_cliff.sum() / total_adults
@@ -349,15 +350,20 @@ class CliffImpactInSimulation(BaseModel):
 
 
 def calculate_single_economy(
-    simulation: Simulation, reform: bool = False
+    simulation: MacroContext, reform: bool = False
 ) -> Dict:
     include_cliffs = simulation.options.include_cliffs
+    country_simulation = (
+        simulation.baseline_simulation
+        if not reform
+        else simulation.reform_simulation
+    )
+    if country_simulation is None:
+        raise ValueError(
+            "Simulation data is not available for the specified context."
+        )
     task_manager = GeneralEconomyTask(
-        (
-            simulation.baseline_simulation
-            if not reform
-            else simulation.reform_simulation
-        ),
+        country_simulation,
         simulation.options.country,
     )
     country_id = simulation.options.country
