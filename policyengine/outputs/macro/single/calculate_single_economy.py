@@ -293,11 +293,15 @@ class GeneralEconomyTask:
         return result
 
     def _has_behavioral_response(self) -> bool:
-        return self.simulation.variable_exists(
+        return (
             "employment_income_behavioral_response"
-        ) and any(
-            self.simulation.calculate("employment_income_behavioral_response")
-            != 0
+            in self.simulation.tax_benefit_system.variables
+            and any(
+                self.simulation.calculate(
+                    "employment_income_behavioral_response"
+                )
+                != 0
+            )
         )
 
     def calculate_lsr_working_hours(self):
