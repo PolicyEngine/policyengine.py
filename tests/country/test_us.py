@@ -4,6 +4,7 @@ def test_us_macro_single():
     sim = Simulation(
         scope="macro",
         country="us",
+        data="gs://policyengine-us-data/small_cps_2024.h5",
     )
 
     sim.calculate_single_economy()
@@ -15,6 +16,7 @@ def test_us_macro_comparison():
     sim = Simulation(
         scope="macro",
         country="us",
+        data="gs://policyengine-us-data/small_cps_2024.h5",
         reform={
             "gov.usda.snap.income.deductions.earned_income": {"2025": 0.05}
         },
@@ -29,6 +31,7 @@ def test_us_macro_cliff_impacts():
     sim = Simulation(
         scope="macro",
         country="us",
+        data="gs://policyengine-us-data/small_cps_2024.h5",
         reform={
             "gov.usda.snap.income.deductions.earned_income": {"2025": 0.05}
         },

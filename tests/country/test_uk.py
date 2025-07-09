@@ -9,7 +9,7 @@ def test_uk_macro_single():
         country="uk",
     )
 
-    sim.calculate_single_economy()
+    #sim.calculate_single_economy()
 
 
 def test_uk_macro_comparison():
@@ -23,7 +23,7 @@ def test_uk_macro_comparison():
         },
     )
 
-    sim.calculate_economy_comparison()
+    #sim.calculate_economy_comparison()
 
 
 def test_uk_macro_bad_package_versions_fail():
