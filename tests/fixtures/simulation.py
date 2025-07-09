@@ -45,7 +45,7 @@ uk_sim_options_pe_dataset = SimulationOptions.model_validate(
 @pytest.fixture
 def mock_get_default_dataset():
     with patch(
-        "policyengine.simulation.get_default_dataset",
+        "policyengine.simulation.simulation.get_default_dataset",
         return_value=SAMPLE_DATASET_FILE_ADDRESS,
     ) as mock_get_default_dataset:
         yield mock_get_default_dataset
@@ -54,7 +54,9 @@ def mock_get_default_dataset():
 @pytest.fixture
 def mock_dataset():
     """Simple Dataset mock fixture"""
-    with patch("policyengine.simulation.Dataset") as mock_dataset_class:
+    with patch(
+        "policyengine.simulation.simulation.Dataset"
+    ) as mock_dataset_class:
         mock_instance = Mock()
         # Set file_path to mimic Dataset's behavior of clipping URI and bucket name from GCS paths
         mock_instance.from_file = Mock()

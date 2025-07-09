@@ -1,9 +1,26 @@
 """Simulate tax-benefit policy and derive society-level output statistics."""
 
+from copy import deepcopy
 import sys
 from pydantic import BaseModel, Field
 from typing import Literal
-from .utils.data.datasets import (
+
+from .simulation_options import (
+    CountryType,
+    DataType,
+    ReformType,
+    RegionType,
+    ScopeType,
+    SimulationOptions,
+    SubsampleType,
+    TimePeriodType,
+)
+
+from policyengine.simulation_results import (
+    AbstractSimulationResults,
+    MacroContext,
+)
+from policyengine.utils.data.datasets import (
     get_default_dataset,
     process_gs_path,
     POLICYENGINE_DATASETS,
@@ -13,8 +30,8 @@ from policyengine_core.simulations import Simulation as CountrySimulation
 from policyengine_core.simulations import (
     Microsimulation as CountryMicrosimulation,
 )
-from .utils.reforms import ParametricReform
-from policyengine_core.reforms import Reform as StructuralReform
+from policyengine.utils.reforms import ParametricReform
+
 from policyengine_core.data import Dataset
 from policyengine_us import (
     Simulation as USSimulation,
@@ -37,54 +54,6 @@ import logging
 
 logger = logging.getLogger(__file__)
 
-CountryType = Literal["uk", "us"]
-ScopeType = Literal["household", "macro"]
-DataType = (
-    str | dict[Any, Any] | Any | None
-)  # Needs stricter typing. Any==policyengine_core.data.Dataset, but pydantic refuses for some reason.
-TimePeriodType = int
-ReformType = ParametricReform | Type[StructuralReform] | None
-RegionType = Optional[str]
-SubsampleType = Optional[int]
-
-
-class SimulationOptions(BaseModel):
-    country: CountryType = Field(..., description="The country to simulate.")
-    scope: ScopeType = Field(..., description="The scope of the simulation.")
-    data: DataType = Field(None, description="The data to simulate.")
-    time_period: TimePeriodType = Field(
-        2025, description="The time period to simulate."
-    )
-    reform: ReformType = Field(None, description="The reform to simulate.")
-    baseline: ReformType = Field(None, description="The baseline to simulate.")
-    region: RegionType = Field(
-        None, description="The region to simulate within the country."
-    )
-    subsample: SubsampleType = Field(
-        None,
-        description="How many, if a subsample, households to randomly simulate.",
-    )
-    title: Optional[str] = Field(
-        "[Analysis title]",
-        description="The title of the analysis (for charts). If not provided, a default title will be generated.",
-    )
-    include_cliffs: Optional[bool] = Field(
-        False,
-        description="Whether to include tax-benefit cliffs in the simulation analyses. If True, cliffs will be included.",
-    )
-    model_version: Optional[str] = Field(
-        None,
-        description="The version of the country model used in the simulation. If not provided, the current package version will be used. If provided, this package will throw an error if the package version does not match. Use this as an extra safety check.",
-    )
-    data_version: Optional[str] = Field(
-        None,
-        description="The version of the data used in the simulation. If not provided, the current data version will be used. If provided, this package will throw an error if the data version does not match. Use this as an extra safety check.",
-    )
-
-    model_config = {
-        "arbitrary_types_allowed": True,
-    }
-
 
 class Simulation:
     """Simulate tax-benefit policy and derive society-level output statistics."""
@@ -98,9 +67,10 @@ class Simulation:
     data_version: Optional[str] = None
     """The version of the data used in the simulation."""
     model_version: Optional[str] = None
+    options: SimulationOptions
 
-    def __init__(self, **options: SimulationOptions):
-        self.options = SimulationOptions(**options)
+    def __init__(self, **kwargs):
+        self.options = SimulationOptions.model_validate(kwargs)
         self.check_model_version()
         if not isinstance(self.options.data, dict) and not isinstance(
             self.options.data, Dataset
@@ -115,7 +85,8 @@ class Simulation:
         logging.info("Output functions loaded")
 
     def _add_output_functions(self):
-        folder = Path(__file__).parent / "outputs"
+        logger.debug("Adding output functions to simulation")
+        folder = Path(__file__).parent.parent / "outputs"
 
         for module in folder.glob("**/*.py"):
             if module.stem == "__init__":
@@ -128,13 +99,18 @@ class Simulation:
             )
             module = importlib.import_module("policyengine." + python_module)
             for name in dir(module):
+                logging.debug(f"Looking for modules in {python_module}.{name}")
                 func = getattr(module, name)
                 if isinstance(func, Callable):
+                    logging.debug(f"Found function {name} in {python_module}")
                     if hasattr(func, "__annotations__"):
                         if (
                             func.__annotations__.get("simulation")
                             == Simulation
                         ):
+                            logging.info(
+                                f"Function {name} is an old macro function"
+                            )
                             wrapped_func = wraps(func)(
                                 partial(func, simulation=self)
                             )
@@ -143,6 +119,28 @@ class Simulation:
                                 self,
                                 func.__name__,
                                 wrapped_func,
+                            )
+                        elif (
+                            func.__annotations__.get("simulation")
+                            == MacroContext
+                        ):
+                            logging.info(
+                                f"Function {name} is a new macro function"
+                            )
+                            wrapped_func = wraps(func)(
+                                partial(
+                                    func, simulation=self
+                                )  # _macro_context(self))
+                            )
+                            wrapped_func.__annotations__ = func.__annotations__
+                            setattr(
+                                self,
+                                func.__name__,
+                                wrapped_func,
+                            )
+                        else:
+                            logging.debug(
+                                f"Function {name} is not a macro function, skipping"
                             )
 
     def _set_data(self, file_address: str | None = None) -> None:
@@ -410,3 +408,40 @@ class Simulation:
         )
 
         return filename, version
+
+
+class SimpleSimulationResults(AbstractSimulationResults):
+    def __init__(self, simulation: CountrySimulation):
+        self._country_simulation = simulation
+
+    def calculate(
+        self,
+        variable_name: str,
+        period: pd.Period | None = None,
+        map_to: str | None = None,
+        decode_enums: bool = False,
+    ) -> pd.Series:
+        """
+        Calculate a variable from the simulation results.
+        """
+        return self._country_simulation.calculate(
+            variable_name, period=period, map_to=map_to, decode_enums=decode_enums  # type: ignore
+        )
+
+    def variable_exists(self, variable_name: str) -> bool:
+        return (
+            variable_name
+            in self._country_simulation.tax_benefit_system.variables
+        )
+
+
+def _macro_context(simulation: Simulation):
+    return MacroContext(
+        simulation.options,
+        SimpleSimulationResults(simulation.baseline_simulation),
+        (
+            SimpleSimulationResults(simulation.reform_simulation)
+            if simulation.reform_simulation is not None
+            else None
+        ),
+    )
