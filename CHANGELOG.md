@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2025-07-17 10:27:55
+
+### Fixed
+
+- Updated the UK data to the latest survey year.
+
 ## [0.5.0] - 2025-06-26 20:04:46
 
 ### Added
@@ -163,6 +169,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[0.6.0]: https://github.com/PolicyEngine/policyengine.py/compare/0.5.0...0.6.0
 [0.5.0]: https://github.com/PolicyEngine/policyengine.py/compare/0.4.5...0.5.0
 [0.4.5]: https://github.com/PolicyEngine/policyengine.py/compare/0.4.4...0.4.5
 [0.4.4]: https://github.com/PolicyEngine/policyengine.py/compare/0.4.3...0.4.4

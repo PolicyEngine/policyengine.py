@@ -127,3 +127,8 @@
     - Unit test for GeneralEconomyTask.calculate_cliffs() and fixture for the test
     - Test for calculate_single_economy with cliff impacts
   date: 2025-06-26 20:04:46
+- bump: minor
+  changes:
+    fixed:
+    - Updated the UK data to the latest survey year.
+  date: 2025-07-17 10:27:55
