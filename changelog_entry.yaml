@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    fixed:
+    - Updated the UK data to the latest survey year.
