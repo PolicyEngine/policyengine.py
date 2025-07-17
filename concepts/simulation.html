@@ -11,7 +11,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=354aac6f" />
     <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=13237357" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
-    <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-thebe.css?v=4fa983c6" />
     <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
@@ -299,12 +299,12 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/opt/hostedtoolcache/Python/3.11.12/x64/lib/python3.11/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/opt/hostedtoolcache/Python/3.11.13/x64/lib/python3.11/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
   from .autonotebook import tqdm as notebook_tqdm
 </pre></div>
 </div>
-<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>No data provided, using default dataset: gs://policyengine-uk-data-private/enhanced_frs_2022_23.h5
-Downloading enhanced_frs_2022_23.h5 from bucket policyengine-uk-data-private
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>No data provided, using default dataset: gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5
+Downloading enhanced_frs_2023_24.h5 from bucket policyengine-uk-data-private
 INFO:root:Using Google Cloud Storage for download.
 </pre></div>
 </div>
@@ -403,7 +403,7 @@ INFO:root:Using Google Cloud Storage for download.
 <span class="g g-Whitespace">     </span><span class="mi">18</span> <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="ne">---&gt; </span><span class="mi">19</span>     <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">Client</span><span class="p">()</span>
 
-<span class="nn">File /opt/hostedtoolcache/Python/3.11.12/x64/lib/python3.11/site-packages/google/cloud/storage/client.py:247,</span> in <span class="ni">Client.__init__</span><span class="nt">(self, project, credentials, _http, client_info, client_options, use_auth_w_custom_endpoint, extra_headers, api_key)</span>
+<span class="nn">File /opt/hostedtoolcache/Python/3.11.13/x64/lib/python3.11/site-packages/google/cloud/storage/client.py:247,</span> in <span class="ni">Client.__init__</span><span class="nt">(self, project, credentials, _http, client_info, client_options, use_auth_w_custom_endpoint, extra_headers, api_key)</span>
 <span class="g g-Whitespace">    </span><span class="mi">244</span>             <span class="n">no_project</span> <span class="o">=</span> <span class="kc">True</span>
 <span class="g g-Whitespace">    </span><span class="mi">245</span>             <span class="n">project</span> <span class="o">=</span> <span class="s2">&quot;&lt;none&gt;&quot;</span>
 <span class="ne">--&gt; </span><span class="mi">247</span> <span class="nb">super</span><span class="p">(</span><span class="n">Client</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
@@ -416,14 +416,14 @@ INFO:root:Using Google Cloud Storage for download.
 <span class="g g-Whitespace">    </span><span class="mi">255</span> <span class="c1"># universe domain of the client.</span>
 <span class="g g-Whitespace">    </span><span class="mi">256</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_credentials</span><span class="o">.</span><span class="n">universe_domain</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">universe_domain</span><span class="p">:</span>
 
-<span class="nn">File /opt/hostedtoolcache/Python/3.11.12/x64/lib/python3.11/site-packages/google/cloud/client/__init__.py:338,</span> in <span class="ni">ClientWithProject.__init__</span><span class="nt">(self, project, credentials, client_options, _http)</span>
+<span class="nn">File /opt/hostedtoolcache/Python/3.11.13/x64/lib/python3.11/site-packages/google/cloud/client/__init__.py:338,</span> in <span class="ni">ClientWithProject.__init__</span><span class="nt">(self, project, credentials, client_options, _http)</span>
 <span class="g g-Whitespace">    </span><span class="mi">337</span> <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">project</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">credentials</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">client_options</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">_http</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="ne">--&gt; </span><span class="mi">338</span>     <span class="n">_ClientProjectMixin</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">project</span><span class="o">=</span><span class="n">project</span><span class="p">,</span> <span class="n">credentials</span><span class="o">=</span><span class="n">credentials</span><span class="p">)</span>
 <span class="g g-Whitespace">    </span><span class="mi">339</span>     <span class="n">Client</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
 <span class="g g-Whitespace">    </span><span class="mi">340</span>         <span class="bp">self</span><span class="p">,</span> <span class="n">credentials</span><span class="o">=</span><span class="n">credentials</span><span class="p">,</span> <span class="n">client_options</span><span class="o">=</span><span class="n">client_options</span><span class="p">,</span> <span class="n">_http</span><span class="o">=</span><span class="n">_http</span>
 <span class="g g-Whitespace">    </span><span class="mi">341</span>     <span class="p">)</span>
 
-<span class="nn">File /opt/hostedtoolcache/Python/3.11.12/x64/lib/python3.11/site-packages/google/cloud/client/__init__.py:286,</span> in <span class="ni">_ClientProjectMixin.__init__</span><span class="nt">(self, project, credentials)</span>
+<span class="nn">File /opt/hostedtoolcache/Python/3.11.13/x64/lib/python3.11/site-packages/google/cloud/client/__init__.py:286,</span> in <span class="ni">_ClientProjectMixin.__init__</span><span class="nt">(self, project, credentials)</span>
 <span class="g g-Whitespace">    </span><span class="mi">283</span>     <span class="n">project</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">credentials</span><span class="p">,</span> <span class="s2">&quot;project_id&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 <span class="g g-Whitespace">    </span><span class="mi">285</span> <span class="k">if</span> <span class="n">project</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
 <span class="ne">--&gt; </span><span class="mi">286</span>     <span class="n">project</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_determine_default</span><span class="p">(</span><span class="n">project</span><span class="p">)</span>
@@ -433,13 +433,13 @@ INFO:root:Using Google Cloud Storage for download.
 <span class="g g-Whitespace">    </span><span class="mi">291</span>         <span class="s2">&quot;determined from the environment.&quot;</span>
 <span class="g g-Whitespace">    </span><span class="mi">292</span>     <span class="p">)</span>
 
-<span class="nn">File /opt/hostedtoolcache/Python/3.11.12/x64/lib/python3.11/site-packages/google/cloud/client/__init__.py:305,</span> in <span class="ni">_ClientProjectMixin._determine_default</span><span class="nt">(project)</span>
+<span class="nn">File /opt/hostedtoolcache/Python/3.11.13/x64/lib/python3.11/site-packages/google/cloud/client/__init__.py:305,</span> in <span class="ni">_ClientProjectMixin._determine_default</span><span class="nt">(project)</span>
 <span class="g g-Whitespace">    </span><span class="mi">302</span> <span class="nd">@staticmethod</span>
 <span class="g g-Whitespace">    </span><span class="mi">303</span> <span class="k">def</span><span class="w"> </span><span class="nf">_determine_default</span><span class="p">(</span><span class="n">project</span><span class="p">):</span>
 <span class="g g-Whitespace">    </span><span class="mi">304</span><span class="w">     </span><span class="sd">&quot;&quot;&quot;Helper:  use default project detection.&quot;&quot;&quot;</span>
 <span class="ne">--&gt; </span><span class="mi">305</span>     <span class="k">return</span> <span class="n">_determine_default_project</span><span class="p">(</span><span class="n">project</span><span class="p">)</span>
 
-<span class="nn">File /opt/hostedtoolcache/Python/3.11.12/x64/lib/python3.11/site-packages/google/cloud/_helpers/__init__.py:152,</span> in <span class="ni">_determine_default_project</span><span class="nt">(project)</span>
+<span class="nn">File /opt/hostedtoolcache/Python/3.11.13/x64/lib/python3.11/site-packages/google/cloud/_helpers/__init__.py:152,</span> in <span class="ni">_determine_default_project</span><span class="nt">(project)</span>
 <span class="g g-Whitespace">    </span><span class="mi">140</span><span class="w"> </span><span class="sd">&quot;&quot;&quot;Determine default project ID explicitly or implicitly as fall-back.</span>
 <span class="g g-Whitespace">    </span><span class="mi">141</span><span class="sd"> </span>
 <span class="g g-Whitespace">    </span><span class="mi">142</span><span class="sd"> See :func:`google.auth.default` for details on how the default project</span>
@@ -450,7 +450,7 @@ INFO:root:Using Google Cloud Storage for download.
 <span class="ne">--&gt; </span><span class="mi">152</span>     <span class="n">_</span><span class="p">,</span> <span class="n">project</span> <span class="o">=</span> <span class="n">google</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">default</span><span class="p">()</span>
 <span class="g g-Whitespace">    </span><span class="mi">153</span> <span class="k">return</span> <span class="n">project</span>
 
-<span class="nn">File /opt/hostedtoolcache/Python/3.11.12/x64/lib/python3.11/site-packages/google/auth/_default.py:685,</span> in <span class="ni">default</span><span class="nt">(scopes, request, quota_project_id, default_scopes)</span>
+<span class="nn">File /opt/hostedtoolcache/Python/3.11.13/x64/lib/python3.11/site-packages/google/auth/_default.py:685,</span> in <span class="ni">default</span><span class="nt">(scopes, request, quota_project_id, default_scopes)</span>
 <span class="g g-Whitespace">    </span><span class="mi">677</span>             <span class="n">_LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
 <span class="g g-Whitespace">    </span><span class="mi">678</span>                 <span class="s2">&quot;No project ID could be determined. Consider running &quot;</span>
 <span class="g g-Whitespace">    </span><span class="mi">679</span>                 <span class="s2">&quot;`gcloud config set project` or setting the </span><span class="si">%s</span><span class="s2"> &quot;</span>
