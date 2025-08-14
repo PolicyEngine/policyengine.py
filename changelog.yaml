@@ -132,3 +132,8 @@
     fixed:
     - Updated the UK data to the latest survey year.
   date: 2025-07-17 10:27:55
+- bump: patch
+  changes:
+    fixed:
+    - Fixed UK dataset loading issue.
+  date: 2025-08-14 08:11:19
