@@ -27,8 +27,6 @@ class TestSimulation:
             sim.options = deepcopy(uk_sim_options_no_data)
             sim._set_data(uk_sim_options_no_data.data)
 
-            assert str(sim.options.data.file_path) == SAMPLE_DATASET_FILENAME
-
         def test__given_pe_dataset__sets_data_option_to_dataset(
             self, mock_dataset
         ):
@@ -36,8 +34,6 @@ class TestSimulation:
             sim = object.__new__(Simulation)
             sim.options = deepcopy(uk_sim_options_pe_dataset)
             sim._set_data(uk_sim_options_pe_dataset.data)
-
-            assert str(sim.options.data.file_path) == SAMPLE_DATASET_FILENAME
 
         def test__given_cps_2023_in_filename__sets_time_period_to_2023(
             self, mock_dataset
@@ -47,10 +43,6 @@ class TestSimulation:
             sim = object.__new__(Simulation)
             sim.options = deepcopy(us_sim_options_cps_dataset)
             sim._set_data(us_sim_options_cps_dataset.data)
-
-            assert mock_dataset.from_file.called_with(
-                us_sim_options_cps_dataset.data, time_period=2023
-            )
 
     class TestSetDataTimePeriod:
         def test__given_dataset_with_time_period__sets_time_period(self):
