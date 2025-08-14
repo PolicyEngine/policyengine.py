@@ -173,9 +173,17 @@ class Simulation:
 
         time_period = self._set_data_time_period(file_address)
 
-        self.options.data = Dataset.from_file(
-            filename, time_period=time_period
-        )
+        # UK needs custom loading
+        if self.options.country == "us":
+            self.options.data = Dataset.from_file(
+                filename, time_period=time_period
+            )
+        else:
+            from policyengine_uk.data import UKSingleYearDataset
+
+            self.options.data = UKSingleYearDataset(
+                file_path=filename,
+            )
 
     def _initialise_simulations(self):
         self.baseline_simulation = self._initialise_simulation(
