@@ -32,7 +32,7 @@ us_sim_options_cps_dataset = SimulationOptions.model_validate(
     {**non_data_us_sim_options, "data": CPS_2023}
 )
 
-SAMPLE_DATASET_FILENAME = "sample_value.h5"
+SAMPLE_DATASET_FILENAME = "frs_2023_24.h5"
 SAMPLE_DATASET_BUCKET_NAME = "policyengine-uk-data-private"
 SAMPLE_DATASET_URI_PREFIX = "gs://"
 SAMPLE_DATASET_FILE_ADDRESS = f"{SAMPLE_DATASET_URI_PREFIX}{SAMPLE_DATASET_BUCKET_NAME}/{SAMPLE_DATASET_FILENAME}"
