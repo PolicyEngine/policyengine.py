@@ -1,9 +1,9 @@
+.PHONY: docs
+
 all: build-package
 
-documentation:
-	jb clean docs
-	jb build docs
-	python docs/add_plotly_to_book.py docs/
+docs:
+	jupyter book start
 
 install:
 	pip install -e .[dev]

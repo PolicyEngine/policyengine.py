@@ -16,11 +16,15 @@ dependencies = [
     "policyengine_core>=3.10",
     "policyengine-uk",
     "policyengine-us>=1.213.1",
-    "diskcache (>=5.6.3,<6.0.0)",
-    "google-cloud-storage (>=3.1.0,<4.0.0)",
+    "sqlalchemy>=2.0.0",
+    "alembic>=1.13.0",
+    "psycopg2-binary>=2.9.0",
+    "pymysql>=1.1.0",
+    "google-cloud-storage>=2.10.0",
     "microdf_python",
     "getpass4",
-    "pydantic"
+    "pydantic>=2.0.0",
+    "pandas>=2.0.0"
 ]
 
 [project.optional-dependencies]
