@@ -95,8 +95,6 @@ class SimulationDataModel(Base):
     # Relationships
     scenario = relationship("ScenarioDataModel", back_populates="simulations")
     population = relationship("PopulationDataModel", back_populates="simulations")
-    budgetary_impacts = relationship("BudgetaryImpactDataModel", back_populates="simulation", cascade="all, delete-orphan")
-    decile_impacts = relationship("DecileImpactDataModel", back_populates="simulation", cascade="all, delete-orphan")
 
 
 # Schema tracking models
@@ -132,32 +130,3 @@ class VariableDataModel(Base):
     # Relationships
     entity_type = relationship("EntityTypeDataModel", back_populates="variables")
 
-
-# Analysis result models
-
-class BudgetaryImpactDataModel(Base):
-    """Budgetary impact analysis results."""
-    __tablename__ = "budgetary_impacts"
-    
-    id = Column(String, primary_key=True, default=generate_uuid)
-    simulation_id = Column(String, ForeignKey("simulations.id"), nullable=False)
-    value = Column(Float, nullable=False)
-    created_at = Column(DateTime, default=datetime.now)
-    
-    # Relationships
-    simulation = relationship("SimulationDataModel", back_populates="budgetary_impacts")
-
-
-class DecileImpactDataModel(Base):
-    """Decile impact analysis results."""
-    __tablename__ = "decile_impacts"
-    
-    id = Column(String, primary_key=True, default=generate_uuid)
-    simulation_id = Column(String, ForeignKey("simulations.id"), nullable=False)
-    decile = Column(Integer, nullable=False)  # 1-10
-    decile_variable = Column(String, nullable=False)  # e.g., "income", "wealth"
-    value = Column(Float, nullable=False)
-    created_at = Column(DateTime, default=datetime.now)
-    
-    # Relationships
-    simulation = relationship("SimulationDataModel", back_populates="decile_impacts")

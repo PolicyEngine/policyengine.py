@@ -3,6 +3,7 @@
 from typing import Dict, List, Any
 import importlib
 from sqlalchemy import Column, String, Integer, Float, Boolean, Text
+from policyengine_core.enums import Enum
 
 
 def get_country_schema_from_package(country: str) -> Dict[str, List[Dict[str, Any]]]:
@@ -56,6 +57,8 @@ def get_country_schema_from_package(country: str) -> Dict[str, List[Dict[str, An
             data_type = 'boolean'
         elif value_type == str:
             data_type = 'string'
+        elif value_type == Enum:
+            data_type = 'string'  # Store enums as strings
         else:
             # Default to float for numeric types
             data_type = 'float'

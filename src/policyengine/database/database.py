@@ -1,11 +1,12 @@
 """Main database class for PolicyEngine."""
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 from sqlalchemy import create_engine, Table, MetaData, Column, String, Integer, Float, Boolean, Text
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 from pydantic import BaseModel, Field
 import warnings
+import os
 
 from .models import Base, EntityTypeDataModel, VariableDataModel
 from .schema_helpers import get_country_schema_from_package
@@ -16,11 +17,12 @@ class DatabaseConfig(BaseModel):
     
     connection_string: Optional[str] = Field(
         None, 
-        description="Database connection string (defaults to SQLite)"
+        description="Database connection string (defaults to SQLite with WAL mode)"
     )
     echo: bool = Field(False, description="Echo SQL statements")
     pool_size: int = Field(5, description="Connection pool size")
     max_overflow: int = Field(10, description="Maximum overflow connections")
+    use_sqlite: bool = Field(True, description="Use SQLite instead of PostgreSQL")
 
 
 class SchemaDefinition(BaseModel):
@@ -68,20 +70,51 @@ class Database:
     def _create_engine(self):
         """Create SQLAlchemy engine."""
         if self.config.connection_string:
-            # Cloud database connection
+            # Custom connection string provided
             return create_engine(
                 self.config.connection_string,
                 echo=self.config.echo,
                 pool_size=self.config.pool_size,
                 max_overflow=self.config.max_overflow
             )
-        else:
-            # Local SQLite database
-            return create_engine(
+        elif self.config.use_sqlite:
+            # Local SQLite database with WAL mode for better concurrency
+            from sqlalchemy import event
+            
+            engine = create_engine(
                 "sqlite:///policyengine.db",
                 echo=self.config.echo,
                 connect_args={"check_same_thread": False},
                 poolclass=StaticPool
+            )
+            
+            # Enable WAL mode for better concurrent access
+            @event.listens_for(engine, "connect")
+            def set_sqlite_pragma(dbapi_conn, connection_record):
+                cursor = dbapi_conn.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.execute("PRAGMA temp_store=MEMORY")
+                cursor.execute("PRAGMA mmap_size=30000000000")  # 30GB memory-mapped I/O
+                cursor.close()
+            
+            return engine
+        else:
+            # Fallback to PostgreSQL if explicitly disabled SQLite
+            # Get connection details from environment or use defaults
+            db_host = os.getenv('POSTGRES_HOST', 'localhost')
+            db_port = os.getenv('POSTGRES_PORT', '5432')
+            db_name = os.getenv('POSTGRES_DB', 'policyengine')
+            db_user = os.getenv('POSTGRES_USER', 'policyengine')
+            db_password = os.getenv('POSTGRES_PASSWORD', 'policyengine')
+            
+            connection_string = f"postgresql+psycopg2://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+            
+            return create_engine(
+                connection_string,
+                echo=self.config.echo,
+                pool_size=self.config.pool_size,
+                max_overflow=self.config.max_overflow
             )
     
     def get_session(self) -> Session:
@@ -255,11 +288,7 @@ class Database:
                 
                 # Compare schemas
                 if current_schema.entities != stored_schema:
-                    raise RuntimeError(
-                        f"Schema mismatch for {country}. "
-                        f"Database schema differs from country package schema. "
-                        f"Run migrate_schema('{country}') to update."
-                    )
+                    self.migrate_schema(country)
             except NotImplementedError:
                 # Skip validation if country schema extraction not implemented
                 pass
@@ -432,14 +461,24 @@ class Database:
         with self.engine.connect() as conn:
             data_type = var_def['data_type']
             
-            # Map to SQL types
-            sql_type_map = {
-                'string': 'VARCHAR(255)',
-                'integer': 'INTEGER',
-                'float': 'REAL',
-                'boolean': 'BOOLEAN',
-                'text': 'TEXT'
-            }
+            # Map to SQL types (PostgreSQL compatible)
+            if self.is_postgres:
+                sql_type_map = {
+                    'string': 'VARCHAR(255)',
+                    'integer': 'INTEGER',
+                    'float': 'DOUBLE PRECISION',
+                    'boolean': 'BOOLEAN',
+                    'text': 'TEXT'
+                }
+            else:
+                # SQLite types
+                sql_type_map = {
+                    'string': 'VARCHAR(255)',
+                    'integer': 'INTEGER',
+                    'float': 'REAL',
+                    'boolean': 'BOOLEAN',
+                    'text': 'TEXT'
+                }
             sql_type = sql_type_map.get(data_type, 'VARCHAR(255)')
             
             # Build ALTER TABLE statement
@@ -541,9 +580,39 @@ class Database:
     @property
     def is_cloud(self) -> bool:
         """Check if using cloud database."""
-        return self.config.connection_string is not None
+        return self.config.connection_string is not None and 'sqlite' not in (self.config.connection_string or '').lower()
     
     @property
     def is_local(self) -> bool:
         """Check if using local database."""
-        return self.config.connection_string is None
+        return self.config.use_sqlite or (self.config.connection_string and 'sqlite' in self.config.connection_string.lower())
+    
+    @property
+    def is_postgres(self) -> bool:
+        """Check if using PostgreSQL."""
+        if self.config.connection_string:
+            return 'postgresql' in self.config.connection_string.lower() or 'postgres' in self.config.connection_string.lower()
+        return not self.config.use_sqlite
+    
+    def add_simulation(
+        self,
+        scenario_name: str,
+        simulation,
+        source_dataset: str,
+        year: Optional[int] = None,
+        variables: Optional[Union[str, List[str]]] = "default"
+    ):
+        """Add a simulation to the database using pandas for fast insertion.
+        
+        Args:
+            scenario_name: Name of the scenario (creates new or overwrites existing)
+            simulation: Microsimulation object with calculated data
+            source_dataset: ID of the source dataset (creates if not exists)
+            year: Year for the simulation (defaults to current year)
+            variables: Variables to calculate and store. Options:
+                - "default": Use default variable set for the country (DEFAULT_VARIABLES_UK or DEFAULT_VARIABLES_US)
+                - List[str]: Custom list of variable names to calculate
+        """
+        from .simulation import add_simulation
+        add_simulation(self, scenario_name, simulation, source_dataset, year, variables)
+    
