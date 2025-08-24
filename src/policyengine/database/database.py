@@ -11,8 +11,9 @@ from sqlalchemy.pool import StaticPool
 from pydantic import BaseModel, Field
 from .models import (
     Base, SimulationMetadata, SimulationStatus,
-    DatasetMetadata
+    DatasetMetadata, ScenarioMetadata, ParameterMetadata, ParameterChangeMetadata
 )
+from .parameter_utils import import_parameters_from_tax_benefit_system
 import h5py
 import json
 import numpy as np
@@ -81,19 +82,7 @@ class Database:
             
             engine = create_engine(
                 f"sqlite:///{db_path}",
-                echo=self.config.echo,
-                connect_args={"check_same_thread": False},
-                poolclass=StaticPool
             )
-            
-            # Enable WAL mode for better concurrent access
-            @event.listens_for(engine, "connect")
-            def set_sqlite_pragma(dbapi_conn, connection_record):
-                cursor = dbapi_conn.cursor()
-                cursor.execute("PRAGMA journal_mode=WAL")
-                cursor.execute("PRAGMA synchronous=NORMAL")
-                cursor.execute("PRAGMA temp_store=MEMORY")
-                cursor.close()
             
             return engine
     
@@ -139,3 +128,64 @@ class Database:
     def drop_all(self) -> None:
         """Drop all tables (use with caution)."""
         Base.metadata.drop_all(bind=self.engine)
+    
+    def initialize_with_current_law(
+        self,
+        country: str = "uk",
+        max_parameters: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Initialize database with current law parameters.
+        
+        Args:
+            country: Country code ('uk' or 'us')
+            max_parameters: Maximum number of parameters to import (None = all)
+            
+        Returns:
+            Created current law scenario
+        """
+        
+        # Import the appropriate country system
+        if country.lower() == "uk":
+            from policyengine_uk import CountryTaxBenefitSystem
+            system = CountryTaxBenefitSystem()
+        elif country.lower() == "us":
+            from policyengine_us import CountryTaxBenefitSystem
+            system = CountryTaxBenefitSystem()
+        else:
+            raise ValueError(f"Unsupported country: {country}")
+        
+        # Import parameters into database
+        with self.session() as session:
+            import_parameters_from_tax_benefit_system(
+                session=session,
+                tax_benefit_system=system,
+                country=country.lower(),
+                scenario_name=f"current_law",
+                scenario_description=f"Current model baseline",
+                max_parameters=max_parameters
+            )
+    
+    def get_current_law_scenario(
+        self,
+        country: str,
+        year: Optional[int] = None
+    ) -> Optional[ScenarioMetadata]:
+        """Get the current law scenario for a country and year.
+        
+        Args:
+            country: Country code
+            year: Year (defaults to current year)
+            
+        Returns:
+            Current law scenario or None if not found
+        """
+        if year is None:
+            year = datetime.now().year
+            
+        with self.session() as session:
+            scenario = session.query(ScenarioMetadata).filter_by(
+                name=f"current law",
+                country=country.lower()
+            ).first()
+            
+            return scenario

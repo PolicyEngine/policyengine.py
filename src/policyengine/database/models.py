@@ -2,7 +2,7 @@
 
 from sqlalchemy import (
     Column, String, Integer, Float, Boolean, Text, 
-    DateTime, JSON, ForeignKey, Enum
+    DateTime, JSON, ForeignKey, Enum, UniqueConstraint
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -79,7 +79,7 @@ class ScenarioMetadata(Base):
     __tablename__ = "scenarios"
     
     id = Column(String, primary_key=True, default=generate_uuid)
-    name = Column(String, nullable=False, unique=True, index=True)
+    name = Column(String, nullable=False, index=True)
     country = Column(String, nullable=False, index=True)
     model_version = Column(String, nullable=True)  # e.g., "0.5.2"
     
@@ -91,7 +91,12 @@ class ScenarioMetadata(Base):
     created_by = Column(String, nullable=True)
     
     # Relationships
-    parameter_changes = relationship("ParameterChange", back_populates="scenario", cascade="all, delete-orphan")
+    parameter_changes = relationship("ParameterChangeMetadata", back_populates="scenario", cascade="all, delete-orphan")
+    
+    # Unique constraint on (name, country) - same name allowed across countries
+    __table_args__ = (
+        UniqueConstraint('name', 'country', name='_scenario_name_country_uc'),
+    )
 
 
 class ParameterMetadata(Base):
@@ -99,7 +104,7 @@ class ParameterMetadata(Base):
     __tablename__ = "parameters"
     
     id = Column(String, primary_key=True, default=generate_uuid)
-    name = Column(String, nullable=False, unique=True, index=True)  # e.g., "gov.basic_rate"
+    name = Column(String, nullable=False, index=True)  # e.g., "gov.basic_rate"
     country = Column(String, nullable=False, index=True)
     parent_id = Column(String, ForeignKey("parameters.id"), nullable=True)
 
@@ -114,7 +119,7 @@ class ParameterMetadata(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     
     # Relationships
-    changes = relationship("ParameterChange", back_populates="parameter", cascade="all, delete-orphan")
+    changes = relationship("ParameterChangeMetadata", back_populates="parameter", cascade="all, delete-orphan")
 
 
 class ParameterChangeMetadata(Base):
@@ -144,5 +149,5 @@ class ParameterChangeMetadata(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     
     # Relationships
-    scenario = relationship("Scenario", back_populates="parameter_changes")
-    parameter = relationship("Parameter", back_populates="changes")
+    scenario = relationship("ScenarioMetadata", back_populates="parameter_changes")
+    parameter = relationship("ParameterMetadata", back_populates="changes")
