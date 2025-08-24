@@ -1,18 +1,12 @@
-"""Database abstraction for PolicyEngine."""
+"""Database abstraction for PolicyEngine with hybrid storage."""
 
 from .database import Database, DatabaseConfig
-from .schema_helpers import (
-    get_country_schema_from_package,
-    create_columns_from_country_schema,
-    populate_schema_tables,
-    initialize_country_tables,
-)
+from .simulation import save_simulation, load_simulation, list_simulations
 
 __all__ = [
     "Database",
     "DatabaseConfig",
-    "get_country_schema_from_package",
-    "create_columns_from_country_schema",
-    "populate_schema_tables",
-    "initialize_country_tables",
+    "save_simulation",
+    "load_simulation",
+    "list_simulations",
 ]
