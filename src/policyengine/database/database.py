@@ -186,6 +186,11 @@ class Database:
         """Drop all tables (use with caution)."""
         Base.metadata.drop_all(bind=self.engine)
     
+    def run_migrations(self) -> None:
+        """Run all database migrations to update schema."""
+        from .migrations import run_all_migrations
+        run_all_migrations(self.engine)
+    
     # Parameter initialization
     def initialize_with_current_law(
         self,

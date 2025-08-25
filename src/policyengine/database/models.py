@@ -23,6 +23,31 @@ class SimulationStatus(enum.Enum):
     FAILED = "failed"
 
 
+class User(Base):
+    """User accounts for tracking who creates and modifies data."""
+    __tablename__ = "users"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    email = Column(String, nullable=False, unique=True, index=True)
+    name = Column(String, nullable=True)
+    
+    # Authentication (optional - can integrate with external auth)
+    is_active = Column(Boolean, default=True, nullable=False)
+    is_admin = Column(Boolean, default=False, nullable=False)
+    
+    # Metadata
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    last_login = Column(DateTime, nullable=True)
+    
+    # API access (optional)
+    api_key = Column(String, nullable=True, unique=True, index=True)
+    api_key_created_at = Column(DateTime, nullable=True)
+    
+    # Additional metadata
+    metadata_json = Column(JSON, nullable=True)  # For storing additional user data
+
+
 # Metadata models only - actual data stored in .h5 files
 
 class SimulationMetadata(Base):
@@ -50,7 +75,7 @@ class SimulationMetadata(Base):
     # Optional metadata
     description = Column(Text, nullable=True)
     tags = Column(JSON, nullable=True)  # List of tags for filtering
-    created_by = Column(String, nullable=True)  # User/system that created it
+    created_by = Column(String, ForeignKey("users.id"), nullable=True)  # User/system that created it
 
 
 class DatasetMetadata(Base):
@@ -71,6 +96,7 @@ class DatasetMetadata(Base):
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    created_by = Column(String, ForeignKey("users.id"), nullable=True)
 
 
 class ScenarioMetadata(Base):
@@ -87,7 +113,7 @@ class ScenarioMetadata(Base):
     
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-    created_by = Column(String, nullable=True)
+    created_by = Column(String, ForeignKey("users.id"), nullable=True)
     
     # Relationships
     parameter_changes = relationship("ParameterChangeMetadata", back_populates="scenario", cascade="all, delete-orphan")
@@ -116,6 +142,7 @@ class ParameterMetadata(Base):
     # Metadata
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    created_by = Column(String, ForeignKey("users.id"), nullable=True)
     
     # Relationships
     changes = relationship("ParameterChangeMetadata", back_populates="parameter", cascade="all, delete-orphan")
@@ -146,6 +173,7 @@ class ParameterChangeMetadata(Base):
     description = Column(Text, nullable=True)  # Optional description of this specific change
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    created_by = Column(String, ForeignKey("users.id"), nullable=True)
     
     # Relationships
     scenario = relationship("ScenarioMetadata", back_populates="parameter_changes")
