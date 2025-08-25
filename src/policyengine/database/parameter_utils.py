@@ -164,6 +164,11 @@ def import_parameters_from_tax_benefit_system(
         )
         session.add(scenario)
         session.flush()
+    else:
+        # Update existing scenario's model version
+        scenario.model_version = get_model_version(country)
+        scenario.updated_at = datetime.now()
+        session.flush()
     
     # Track parameters by name to avoid duplicates
     param_map = {}
@@ -225,7 +230,12 @@ def import_parameters_from_tax_benefit_system(
                 ).first()
                 
                 if not existing_change:
+                    # Add new parameter change
                     session.add(change)
+                else:
+                    # Update model version for existing change, preserve value
+                    existing_change.model_version = get_model_version(country)
+                    existing_change.updated_at = datetime.now()
     
     # Start processing from root
     params = tax_benefit_system.parameters
