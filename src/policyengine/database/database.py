@@ -159,6 +159,94 @@ class Database:
                         print(f"Note: policyengine-{country} not installed, skipping initialization")
                     except Exception as e:
                         print(f"Warning: Could not initialize {country} parameters: {e}")
+            
+            # Initialize default datasets
+            self._initialize_default_datasets(country)
+    
+    def _initialize_default_datasets(self, country: str):
+        """Initialize default datasets for a country with DataFile references.
+        
+        Args:
+            country: Country code ('uk' or 'us')
+        """
+        from .models import DataFile, DatasetMetadata
+        
+        # Define default datasets for each country
+        default_datasets = {
+            "uk": [
+                {
+                    "name": "frs_2023_24",
+                    "year": 2023,
+                    "source": "FRS",
+                    "description": "Family Resources Survey 2023-24",
+                    "filename": "frs_2023_24.h5",
+                    "gcs_bucket": "policyengine-uk-data-private",
+                    "gcs_path": "frs_2023_24.h5"
+                },
+                {
+                    "name": "enhanced_frs_2023_24",
+                    "year": 2023,
+                    "source": "FRS",
+                    "description": "Enhanced Family Resources Survey 2023-24 with imputed wealth",
+                    "filename": "enhanced_frs_2023_24.h5",
+                    "gcs_bucket": "policyengine-uk-data-private",
+                    "gcs_path": "enhanced_frs_2023_24.h5"
+                }
+            ],
+            "us": [
+                {
+                    "name": "cps_2023",
+                    "year": 2023,
+                    "source": "CPS",
+                    "description": "Current Population Survey 2023",
+                    "filename": "cps_2023.h5",
+                    "gcs_bucket": "policyengine-us-data",
+                    "gcs_path": "cps_2023.h5"
+                },
+                {
+                    "name": "enhanced_cps_2024",
+                    "year": 2024,
+                    "source": "CPS",
+                    "description": "Enhanced Current Population Survey 2024",
+                    "filename": "enhanced_cps_2024.h5",
+                    "gcs_bucket": "policyengine-us-data",
+                    "gcs_path": "enhanced_cps_2024.h5"
+                }
+            ]
+        }
+        
+        datasets = default_datasets.get(country.lower(), [])
+        
+        if not datasets:
+            return
+        
+        with self.session() as session:
+            for dataset_info in datasets:
+                # Check if dataset already exists
+                existing = session.query(DatasetMetadata).filter_by(
+                    name=dataset_info["name"],
+                    country=country.lower()
+                ).first()
+                
+                if not existing:
+                    # Create DataFile entry
+                    datafile = self.datasets.create_datafile(
+                        session=session,
+                        filename=dataset_info["filename"],
+                        gcs_bucket=dataset_info["gcs_bucket"],
+                        gcs_path=dataset_info["gcs_path"]
+                    )
+                    
+                    # Create dataset with datafile reference
+                    self.datasets.add_dataset(
+                        session=session,
+                        name=dataset_info["name"],
+                        country=country,
+                        year=dataset_info["year"],
+                        source=dataset_info["source"],
+                        description=dataset_info["description"],
+                        datafile=datafile
+                    )
     
     @contextmanager
     def session(self) -> Session:
@@ -270,7 +358,7 @@ class Database:
             return scenario
     
     # Scenario management (delegated to ScenarioManager)
-    def add_parametric_scenario(
+    def add_scenario(
         self,
         name: str,
         parameter_changes: dict = None,
@@ -283,7 +371,7 @@ class Database:
         Returns ScenarioMetadata object.
         """
         with self.session() as session:
-            return self.scenarios.add_parametric_scenario(
+            return self.scenarios.add_scenario(
                 session, name, parameter_changes, country, description
             )
     
@@ -340,20 +428,46 @@ class Database:
     # Simulation management (delegated to SimulationManager)
     def add_simulation(
         self,
-        scenario: str,
+        scenario: Any,  # Can be ScenarioMetadata object or string
         simulation: Any,
-        dataset: str = None,
+        dataset: Any = None,  # Can be DatasetMetadata object or string
         country: str = None,
         year: int = None,
         tags: List[str] = None,
     ):
         """Store simulation results from a policyengine_core Simulation object.
         
-        Returns SimulationMetadata object.
+        Args:
+            scenario: ScenarioMetadata object or scenario name string
+            simulation: Simulation object from policyengine_core
+            dataset: DatasetMetadata object or dataset name string (optional)
+            country: Country code (optional, extracted from scenario/dataset if objects provided)
+            year: Year of simulation
+            tags: Optional tags for filtering
+        
+        Returns:
+            SimulationMetadata object with get_data() method
         """
+        # Extract names and country from objects if provided
+        if hasattr(scenario, 'name'):
+            # It's a ScenarioMetadata object
+            scenario_name = scenario.name
+            country = country or scenario.country
+        else:
+            # It's a string
+            scenario_name = scenario
+        
+        if dataset and hasattr(dataset, 'name'):
+            # It's a DatasetMetadata object
+            dataset_name = dataset.name
+            country = country or dataset.country
+        else:
+            # It's a string or None
+            dataset_name = dataset
+        
         with self.session() as session:
             return self.simulations.add_simulation(
-                session, scenario, simulation, dataset, 
+                session, scenario_name, simulation, dataset_name, 
                 country, year, tags
             )
     
@@ -364,13 +478,13 @@ class Database:
         country: str = None,
         year: int = None,
     ):
-        """Retrieve simulation results.
+        """Retrieve simulation metadata.
         
         Returns:
-            UKModelOutput or USModelOutput object depending on country, or None if not found
+            SimulationMetadata object with get_data() method, or None if not found
         """
         with self.session() as session:
-            return self.simulations.get_simulation(
+            return self.simulations.get_simulation_metadata(
                 session, scenario, dataset, country, year
             )
     

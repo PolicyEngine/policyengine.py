@@ -20,7 +20,7 @@ class ScenarioManager:
         """
         self.default_country = default_country
     
-    def add_parametric_scenario(
+    def add_scenario(
         self,
         session: Session,
         name: str,

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 from sqlalchemy.orm import Session
-from .models import DatasetMetadata, get_model_version
+from .models import DatasetMetadata, DataFile, get_model_version
 
 
 class DatasetManager:
@@ -18,6 +18,49 @@ class DatasetManager:
         """
         self.default_country = default_country
     
+    def create_datafile(
+        self,
+        session: Session,
+        filename: str,
+        local_path: str = None,
+        gcs_bucket: str = None,
+        gcs_path: str = None,
+        huggingface_repo: str = None,
+        huggingface_path: str = None,
+        file_size_mb: float = None,
+        checksum: str = None,
+    ) -> DataFile:
+        """Create a DataFile entry.
+        
+        Args:
+            session: Database session
+            filename: Name of the file
+            local_path: Local file path
+            gcs_bucket: Google Cloud Storage bucket name
+            gcs_path: Path within GCS bucket
+            huggingface_repo: HuggingFace repository
+            huggingface_path: Path within HuggingFace repo
+            file_size_mb: File size in MB
+            checksum: File checksum for integrity
+            
+        Returns:
+            Created DataFile object
+        """
+        datafile = DataFile(
+            id=str(uuid.uuid4()),
+            filename=filename,
+            local_path=local_path,
+            gcs_bucket=gcs_bucket,
+            gcs_path=gcs_path,
+            huggingface_repo=huggingface_repo,
+            huggingface_path=huggingface_path,
+            file_size_mb=file_size_mb,
+            checksum=checksum
+        )
+        session.add(datafile)
+        session.flush()
+        return datafile
+    
     def add_dataset(
         self,
         session: Session,
@@ -27,6 +70,7 @@ class DatasetManager:
         source: str = None,
         version: str = None,
         description: str = None,
+        datafile: DataFile = None,
     ) -> DatasetMetadata:
         """Register a dataset in the database.
         
@@ -38,6 +82,7 @@ class DatasetManager:
             source: Source of the dataset (e.g., "FRS", "CPS")
             version: Version of the dataset
             description: Optional description
+            datafile: Optional DataFile object to link to this dataset
             
         Returns:
             Created DatasetMetadata object
@@ -62,6 +107,8 @@ class DatasetManager:
             existing.version = version or existing.version
             existing.model_version = get_model_version(country)
             existing.description = description or existing.description
+            if datafile:
+                existing.datafile = datafile
             existing.updated_at = datetime.now()
             dataset = existing
         else:
@@ -74,7 +121,8 @@ class DatasetManager:
                 source=source,
                 version=version,
                 model_version=get_model_version(country),
-                description=description
+                description=description,
+                datafile=datafile
             )
             session.add(dataset)
         

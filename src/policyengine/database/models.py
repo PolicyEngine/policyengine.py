@@ -82,6 +82,9 @@ class SimulationMetadata(Base):
     scenario = Column(String, nullable=False)  # e.g., "baseline"
     model_version = Column(String, nullable=True)  # e.g., "0.5.2"
 
+    # DataFile reference
+    datafile_id = Column(String, ForeignKey("datafiles.id"), nullable=True)
+    
     # Processing metadata
     status = Column(Enum(SimulationStatus), default=SimulationStatus.PENDING, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
@@ -92,6 +95,74 @@ class SimulationMetadata(Base):
     description = Column(Text, nullable=True)
     tags = Column(JSON, nullable=True)  # List of tags for filtering
     created_by = Column(String, ForeignKey("users.id"), nullable=True)  # User/system that created it
+    
+    # Relationships
+    datafile = relationship("DataFile", back_populates="simulations")
+    
+    def get_data(self):
+        """Load the simulation data and return a ModelOutput object.
+        
+        Returns:
+            UKModelOutput or USModelOutput object, or None if data not found
+        """
+        if not hasattr(self, '_storage'):
+            raise RuntimeError("SimulationMetadata was not loaded through Database.get_simulation()")
+        
+        # Import here to avoid circular imports
+        from ..countries.uk import UKModelOutput
+        from ..countries.us import USModelOutput
+        
+        # Load simulation data using storage backend
+        data = self._storage.load_simulation(
+            sim_id=self.id,
+            country=self.country,
+            scenario=self.scenario,
+            dataset=self.dataset,
+            year=self.year
+        )
+        
+        if data is None:
+            return None
+        
+        # Return the appropriate model output type
+        if self.country.lower() == 'uk':
+            return UKModelOutput.from_tables(data)
+        elif self.country.lower() == 'us':
+            return USModelOutput.from_tables(data)
+        else:
+            raise ValueError(f"Unsupported country: {self.country}")
+
+
+class DataFile(Base):
+    """Storage locations for data files across different backends."""
+    __tablename__ = "datafiles"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    filename = Column(String, nullable=False, index=True)  # e.g., "cps_2023.h5"
+    
+    # Local storage
+    local_path = Column(String, nullable=True)  # e.g., "./simulations/cps_2023.h5"
+    
+    # Google Cloud Storage
+    gcs_bucket = Column(String, nullable=True)  # e.g., "policyengine-us-data"
+    gcs_path = Column(String, nullable=True)  # e.g., "cps_2023.h5"
+    
+    # HuggingFace
+    huggingface_repo = Column(String, nullable=True)  # e.g., "PolicyEngine/us-data"
+    huggingface_path = Column(String, nullable=True)  # e.g., "cps_2023.h5"
+    
+    # File metadata
+    file_size_mb = Column(Float, nullable=True)
+    checksum = Column(String, nullable=True)  # For integrity checks
+    
+    # Metadata
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    created_by = Column(String, ForeignKey("users.id"), nullable=True)
+    
+    # Relationships
+    datasets = relationship("DatasetMetadata", back_populates="datafile")
+    simulations = relationship("SimulationMetadata", back_populates="datafile")
 
 
 class DatasetMetadata(Base):
@@ -108,11 +179,17 @@ class DatasetMetadata(Base):
     version = Column(String, nullable=True)
     model_version = Column(String, nullable=True)  # e.g., "0.5.2"
     
+    # DataFile reference
+    datafile_id = Column(String, ForeignKey("datafiles.id"), nullable=True)
+    
     # Metadata
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     created_by = Column(String, ForeignKey("users.id"), nullable=True)
+    
+    # Relationships
+    datafile = relationship("DataFile", back_populates="datasets")
 
 
 class ScenarioMetadata(Base):

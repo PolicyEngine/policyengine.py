@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional, List, Union
 from sqlalchemy.orm import Session
-from .models import SimulationMetadata, SimulationStatus, ScenarioMetadata, DatasetMetadata, get_model_version
+from .models import SimulationMetadata, SimulationStatus, ScenarioMetadata, DatasetMetadata, DataFile, get_model_version
 from .storage_backend import StorageBackend
 from ..countries.uk import UKModelOutput
 from ..countries.us import USModelOutput
@@ -104,6 +104,28 @@ class SimulationManager:
             data=model_output
         )
         
+        # Create DataFile entry for the simulation
+        datafile = None
+        if filepath:
+            # Create datafile entry
+            datafile = DataFile(
+                id=str(uuid.uuid4()),
+                filename=f"{sim_id}.h5",
+                local_path=filepath if self.storage.config.storage_mode == "local" else None,
+                gcs_bucket=self.storage.config.gcs_bucket if self.storage.config.storage_mode == "cloud" else None,
+                gcs_path=filepath if self.storage.config.storage_mode == "cloud" else None,
+                file_size_mb=file_size_mb
+            )
+            session.add(datafile)
+            session.flush()
+        
+        # Link dataset's datafile to simulation if available
+        if dataset_obj and hasattr(dataset_obj, 'datafile') and dataset_obj.datafile:
+            # Simulation uses the same datafile as its source dataset
+            simulation_datafile = dataset_obj.datafile
+        else:
+            simulation_datafile = datafile
+        
         # Create simulation metadata
         simulation = SimulationMetadata(
             id=sim_id,
@@ -115,23 +137,26 @@ class SimulationManager:
             model_version=get_model_version(country),
             status=SimulationStatus.COMPLETED,
             completed_at=datetime.now(),
-            tags=tags
+            tags=tags,
+            datafile=simulation_datafile
         )
         session.add(simulation)
         session.commit()
         session.refresh(simulation)
+        # Attach storage backend for get_data() method
+        simulation._storage = self.storage
         session.expunge(simulation)
         return simulation
     
-    def get_simulation(
+    def get_simulation_metadata(
         self,
         session: Session,
         scenario: str,
         dataset: str,
         country: str = None,
         year: int = None,
-    ) -> Optional[Union[UKModelOutput, USModelOutput]]:
-        """Retrieve simulation results.
+    ) -> Optional[SimulationMetadata]:
+        """Retrieve simulation metadata.
         
         Args:
             session: Database session
@@ -141,7 +166,7 @@ class SimulationManager:
             year: Year of simulation (optional filter)
             
         Returns:
-            UKModelOutput or USModelOutput object, or None if not found
+            SimulationMetadata object with get_data() method, or None if not found
         """
         country = country or self.default_country
         if not country:
@@ -160,13 +185,42 @@ class SimulationManager:
         # Get most recent simulation matching criteria
         simulation = query.order_by(SimulationMetadata.created_at.desc()).first()
         
+        if simulation:
+            # Store storage backend reference for get_data() method
+            simulation._storage = self.storage
+            session.expunge(simulation)
+        
+        return simulation
+    
+    def get_simulation(
+        self,
+        session: Session,
+        scenario: str,
+        dataset: str,
+        country: str = None,
+        year: int = None,
+    ) -> Optional[Union[UKModelOutput, USModelOutput]]:
+        """Retrieve simulation results (legacy method, returns model output directly).
+        
+        Args:
+            session: Database session
+            scenario: Name of the scenario
+            dataset: Name of the dataset
+            country: Country code (uses default if not specified)
+            year: Year of simulation (optional filter)
+            
+        Returns:
+            UKModelOutput or USModelOutput object, or None if not found
+        """
+        simulation = self.get_simulation_metadata(session, scenario, dataset, country, year)
+        
         if not simulation:
             return None
         
-        # Load simulation data
+        # Load and return the data directly
         data = self.storage.load_simulation(
             sim_id=simulation.id,
-            country=country,
+            country=simulation.country,
             scenario=scenario,
             dataset=dataset,
             year=simulation.year
@@ -175,13 +229,13 @@ class SimulationManager:
         if data is None:
             return None
         
-        # Convert loaded data to appropriate ModelOutput object
-        if country.lower() == 'uk':
+        # Return the appropriate model output type
+        if simulation.country.lower() == 'uk':
             return UKModelOutput.from_tables(data)
-        elif country.lower() == 'us':
+        elif simulation.country.lower() == 'us':
             return USModelOutput.from_tables(data)
         else:
-            raise ValueError(f"Unsupported country: {country}")
+            raise ValueError(f"Unsupported country: {simulation.country}")
     
     def list_simulations(
         self,

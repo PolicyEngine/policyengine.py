@@ -4,6 +4,7 @@ from .database import Database
 from .models import (
     SimulationMetadata,
     DatasetMetadata,
+    DataFile,
     ScenarioMetadata,
     ParameterMetadata,
     ParameterChangeMetadata,
@@ -34,6 +35,7 @@ __all__ = [
     # Models
     "SimulationMetadata",
     "DatasetMetadata",
+    "DataFile",
     "ScenarioMetadata",
     "ParameterMetadata",
     "ParameterChangeMetadata",

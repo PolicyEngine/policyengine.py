@@ -119,19 +119,37 @@ class StorageBackend:
         with h5py.File(filepath, 'w') as f:
             for key, value in data.items():
                 if isinstance(value, pd.DataFrame):
-                    # Save DataFrame
+                    # Save DataFrame as a dictionary of columns
                     group = f.create_group(key)
+                    
+                    # Store each column as a dataset
                     for col in value.columns:
-                        group.create_dataset(col, data=value[col].values)
-                    # Store column names and index
-                    group.attrs['columns'] = list(value.columns)
-                    group.attrs['index'] = list(value.index)
+                        col_str = str(col)  # Ensure column name is a string
+                        group.create_dataset(f"col_{col_str}", data=value[col].values)
+                    
+                    # Store column names and index as datasets (not attributes) to avoid size limits
+                    columns_data = np.array([str(c) for c in value.columns], dtype='S')
+                    group.create_dataset('_columns', data=columns_data)
+                    
+                    # Store index as dataset
+                    group.create_dataset('_index', data=value.index.values)
+                    
+                    # Store metadata about the DataFrame
+                    group.attrs['is_dataframe'] = True
+                    group.attrs['shape'] = value.shape
+                    
                 elif isinstance(value, (np.ndarray, list)):
                     # Save array
                     f.create_dataset(key, data=np.array(value))
                 elif isinstance(value, dict):
-                    # Save dict as JSON in attributes
-                    f.attrs[key] = json.dumps(value)
+                    # For small dicts, save as JSON in attributes
+                    # For large dicts, save as a group
+                    json_str = json.dumps(value)
+                    if len(json_str) < 64000:  # HDF5 attribute size limit is ~64KB
+                        f.attrs[key] = json_str
+                    else:
+                        # Save large dict as a dataset
+                        f.create_dataset(key, data=np.array(json_str, dtype='S'))
                 else:
                     # Save scalar
                     f.attrs[key] = value
@@ -143,7 +161,7 @@ class StorageBackend:
         """Load data from HDF5 file."""
         data = {}
         with h5py.File(filepath, 'r') as f:
-            # Load attributes (scalars and JSON)
+            # Load attributes (scalars and small JSON)
             for key, value in f.attrs.items():
                 if isinstance(value, str) and value.startswith('{'):
                     # Try to parse as JSON
@@ -158,21 +176,57 @@ class StorageBackend:
             for key in f.keys():
                 item = f[key]
                 if isinstance(item, h5py.Group):
-                    # Reconstruct DataFrame
-                    df_data = {}
-                    for col in item.keys():
-                        df_data[col] = item[col][:]
-                    
-                    if 'columns' in item.attrs and 'index' in item.attrs:
-                        df = pd.DataFrame(df_data, columns=item.attrs['columns'])
-                        df.index = item.attrs['index']
+                    # Check if it's a DataFrame
+                    if item.attrs.get('is_dataframe', False):
+                        # Reconstruct DataFrame
+                        # Load column names
+                        if '_columns' in item:
+                            columns = [col.decode('utf-8') if isinstance(col, bytes) else col 
+                                     for col in item['_columns'][:]]
+                        else:
+                            columns = []
+                        
+                        # Load data for each column
+                        df_data = {}
+                        for col in columns:
+                            col_key = f"col_{col}"
+                            if col_key in item:
+                                df_data[col] = item[col_key][:]
+                        
+                        # Create DataFrame
+                        if df_data:
+                            df = pd.DataFrame(df_data)
+                            
+                            # Restore index if available
+                            if '_index' in item:
+                                df.index = item['_index'][:]
+                            
+                            data[key] = df
                     else:
-                        df = pd.DataFrame(df_data)
-                    
-                    data[key] = df
+                        # Handle other group types (shouldn't happen with current save logic)
+                        group_data = {}
+                        for subkey in item.keys():
+                            if not subkey.startswith('_'):
+                                group_data[subkey] = np.array(item[subkey])
+                        data[key] = group_data
                 else:
-                    # Load array
-                    data[key] = np.array(item)
+                    # Load dataset
+                    arr = np.array(item)
+                    # Check if it's a JSON string stored as dataset (for large dicts)
+                    if arr.dtype.kind in ['S', 'U'] and len(arr.shape) == 0:
+                        # It's a scalar string, might be JSON
+                        try:
+                            str_val = arr.item()
+                            if isinstance(str_val, bytes):
+                                str_val = str_val.decode('utf-8')
+                            if str_val.startswith('{') or str_val.startswith('['):
+                                data[key] = json.loads(str_val)
+                            else:
+                                data[key] = str_val
+                        except:
+                            data[key] = arr
+                    else:
+                        data[key] = arr
         
         return data
     
