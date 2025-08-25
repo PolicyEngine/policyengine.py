@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime
-from typing import Any, Optional, List, Union
+from typing import Any, Optional, List, Union, Dict
 from sqlalchemy.orm import Session
 from .models import SimulationMetadata, SimulationStatus, ScenarioMetadata, DatasetMetadata, DataFile, get_model_version
 from .storage_backend import StorageBackend
@@ -31,7 +31,10 @@ class SimulationManager:
         dataset: str = None,
         country: str = None,
         year: int = None,
+        years: List[int] = None,
         tags: List[str] = None,
+        calculate_default_variables: bool = True,
+        save_all_variables: bool = False,
     ) -> SimulationMetadata:
         """Store simulation results.
         
@@ -41,8 +44,11 @@ class SimulationManager:
             simulation: Simulation object from policyengine_core
             dataset: Name of the dataset used (optional, extracted from simulation if not provided)
             country: Country code (uses default if not specified)
-            year: Year of simulation
+            year: Single year to save (if specified, only saves this year)
+            years: Multiple years to save (if specified, saves all these years)
             tags: Optional tags for filtering
+            calculate_default_variables: If True, calculates household net income etc.
+            save_all_variables: If True, saves all calculated variables for all periods
             
         Returns:
             Created SimulationMetadata object
@@ -51,17 +57,36 @@ class SimulationManager:
         if not country:
             raise ValueError("Country must be specified or set as default")
         
-        if year is None:
-            year = datetime.now().year
-        
-        # Import the correct country-specific process_simulation
-        if country == 'us':
-            from ..countries.us import process_us_simulation as process_simulation
+        # Determine which years to process
+        if year is not None:
+            years_to_process = [year]
+        elif years is not None:
+            years_to_process = years
         else:
-            from ..countries.uk import process_uk_simulation as process_simulation
+            # Default to current year
+            years_to_process = [datetime.now().year]
         
-        # Process the simulation to get model output
-        model_output = process_simulation(simulation, year).get_tables()
+        # Collect data for all years
+        all_data = {}
+        
+        if calculate_default_variables:
+            # Import the correct country-specific process_simulation
+            if country == 'us':
+                from ..countries.us import process_us_simulation as process_simulation
+            else:
+                from ..countries.uk import process_uk_simulation as process_simulation
+            
+            # Process for each year
+            for process_year in years_to_process:
+                model_output = process_simulation(simulation, process_year).get_tables()
+                all_data[process_year] = model_output
+        elif save_all_variables:
+            # Save all calculated variables organized by year and entity
+            all_data = self._extract_all_variables(simulation, years_to_process)
+        else:
+            # Save specific variables for the requested years
+            for process_year in years_to_process:
+                all_data[process_year] = self._extract_year_data(simulation, process_year)
         
         # Verify scenario exists
         scenario_obj = session.query(ScenarioMetadata).filter_by(
@@ -73,6 +98,7 @@ class SimulationManager:
             raise ValueError(f"Scenario '{scenario}' not found for country '{country}'")
         
         # Verify dataset if specified
+        dataset_obj = None
         if dataset:
             dataset_obj = session.query(DatasetMetadata).filter_by(
                 name=dataset,
@@ -85,7 +111,7 @@ class SimulationManager:
                     id=str(uuid.uuid4()),
                     name=dataset,
                     country=country.lower(),
-                    year=year,
+                    year=years_to_process[0] if years_to_process else datetime.now().year,
                     model_version=get_model_version(country)
                 )
                 session.add(dataset_obj)
@@ -94,14 +120,14 @@ class SimulationManager:
         # Generate unique ID for simulation
         sim_id = str(uuid.uuid4())
         
-        # Save simulation data
+        # Save simulation data (now with multi-year structure)
         filepath, file_size_mb = self.storage.save_simulation(
             sim_id=sim_id,
             country=country,
             scenario=scenario,
             dataset=dataset,
-            year=year,
-            data=model_output
+            year=years_to_process[0] if len(years_to_process) == 1 else None,  # For backward compat
+            data=all_data  # Now contains {year: data} structure
         )
         
         # Create DataFile entry for the simulation
@@ -127,10 +153,11 @@ class SimulationManager:
             simulation_datafile = datafile
         
         # Create simulation metadata
+        # Store the first year for backward compatibility, but data contains all years
         simulation = SimulationMetadata(
             id=sim_id,
             country=country.lower(),
-            year=year,
+            year=years_to_process[0] if years_to_process else datetime.now().year,
             file_size_mb=file_size_mb,
             dataset=dataset,
             scenario=scenario,
@@ -236,6 +263,75 @@ class SimulationManager:
             return USModelOutput.from_tables(data)
         else:
             raise ValueError(f"Unsupported country: {simulation.country}")
+    
+    def _extract_all_variables(self, simulation: Any, years: List[int]) -> Dict[int, Dict[str, Dict[str, Any]]]:
+        """Extract all calculated variables from simulation, organized by year and entity.
+        
+        Returns:
+            Dictionary with structure: {year: {entity: {variable: values}}}
+        """
+        result = {}
+        
+        # Get all entities in the simulation
+        entities = simulation.tax_benefit_system.entities
+        
+        for year in years:
+            year_data = {}
+            
+            for entity_key, entity in entities.items():
+                entity_data = {}
+                
+                # Get all variables for this entity
+                for variable_name, variable in simulation.tax_benefit_system.variables.items():
+                    if variable.entity.key == entity_key:
+                        try:
+                            # Try to calculate the variable for this year
+                            values = simulation.calculate(variable_name, year)
+                            entity_data[variable_name] = values
+                        except:
+                            # Variable not calculable for this year/scenario
+                            pass
+                
+                if entity_data:
+                    year_data[entity_key] = entity_data
+            
+            result[year] = year_data
+        
+        return result
+    
+    def _extract_year_data(self, simulation: Any, year: int) -> Dict[str, Any]:
+        """Extract basic data for a specific year from simulation.
+        
+        Returns:
+            Dictionary with entity-level data for the year
+        """
+        result = {}
+        
+        # Get key variables for each entity
+        entities = simulation.tax_benefit_system.entities
+        
+        for entity_key, entity in entities.items():
+            entity_data = {}
+            
+            # Define key variables to extract per entity type
+            if entity_key == 'household':
+                key_vars = ['household_net_income', 'household_benefits', 'household_tax']
+            elif entity_key == 'person':
+                key_vars = ['employment_income', 'total_income', 'age']
+            else:
+                key_vars = []
+            
+            for var_name in key_vars:
+                try:
+                    values = simulation.calculate(var_name, year)
+                    entity_data[var_name] = values
+                except:
+                    pass
+            
+            if entity_data:
+                result[entity_key] = entity_data
+        
+        return result
     
     def list_simulations(
         self,

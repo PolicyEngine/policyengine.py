@@ -118,7 +118,12 @@ class StorageBackend:
         """
         with h5py.File(filepath, 'w') as f:
             for key, value in data.items():
-                if isinstance(value, pd.DataFrame):
+                # Check if this is a year key with nested data
+                if isinstance(key, (int, str)) and str(key).isdigit() and isinstance(value, dict):
+                    # This is year-structured data
+                    year_group = f.create_group(str(key))
+                    self._save_year_data(year_group, value)
+                elif isinstance(value, pd.DataFrame):
                     # Save DataFrame as a dictionary of columns
                     group = f.create_group(key)
                     
@@ -157,6 +162,40 @@ class StorageBackend:
         # Return file size in MB
         return os.path.getsize(filepath) / (1024 * 1024)
     
+    def _save_year_data(self, group: h5py.Group, data: Dict[str, Any]):
+        """Save year-level data to HDF5 group."""
+        for key, value in data.items():
+            if isinstance(value, pd.DataFrame):
+                # Save DataFrame
+                df_group = group.create_group(key)
+                
+                # Store each column as a dataset
+                for col in value.columns:
+                    col_str = str(col)
+                    df_group.create_dataset(f"col_{col_str}", data=value[col].values)
+                
+                # Store column names and index as datasets
+                columns_data = np.array([str(c) for c in value.columns], dtype='S')
+                df_group.create_dataset('_columns', data=columns_data)
+                df_group.create_dataset('_index', data=value.index.values)
+                
+                # Store metadata
+                df_group.attrs['is_dataframe'] = True
+                df_group.attrs['shape'] = value.shape
+            
+            elif isinstance(value, dict):
+                # Nested dict - create subgroup
+                subgroup = group.create_group(key)
+                self._save_year_data(subgroup, value)
+            
+            elif isinstance(value, (np.ndarray, list)):
+                # Save array
+                group.create_dataset(key, data=np.array(value))
+            
+            else:
+                # Save scalar as attribute
+                group.attrs[key] = value
+    
     def _load_from_h5(self, filepath: str) -> Dict[str, Any]:
         """Load data from HDF5 file."""
         data = {}
@@ -176,8 +215,12 @@ class StorageBackend:
             for key in f.keys():
                 item = f[key]
                 if isinstance(item, h5py.Group):
+                    # Check if this is a year group (numeric key)
+                    if key.isdigit():
+                        # Load year data
+                        data[int(key)] = self._load_year_data(item)
                     # Check if it's a DataFrame
-                    if item.attrs.get('is_dataframe', False):
+                    elif item.attrs.get('is_dataframe', False):
                         # Reconstruct DataFrame
                         # Load column names
                         if '_columns' in item:
@@ -227,6 +270,51 @@ class StorageBackend:
                             data[key] = arr
                     else:
                         data[key] = arr
+        
+        return data
+    
+    def _load_year_data(self, group: h5py.Group) -> Dict[str, Any]:
+        """Load year-level data from HDF5 group."""
+        data = {}
+        
+        # Load attributes
+        for key, value in group.attrs.items():
+            data[key] = value
+        
+        # Load subgroups and datasets
+        for key in group.keys():
+            item = group[key]
+            if isinstance(item, h5py.Group):
+                if item.attrs.get('is_dataframe', False):
+                    # Reconstruct DataFrame
+                    if '_columns' in item:
+                        columns = [col.decode('utf-8') if isinstance(col, bytes) else col 
+                                 for col in item['_columns'][:]]
+                    else:
+                        columns = []
+                    
+                    # Load data for each column
+                    df_data = {}
+                    for col in columns:
+                        col_key = f"col_{col}"
+                        if col_key in item:
+                            df_data[col] = item[col_key][:]
+                    
+                    # Create DataFrame
+                    if df_data:
+                        df = pd.DataFrame(df_data)
+                        
+                        # Restore index if available
+                        if '_index' in item:
+                            df.index = item['_index'][:]
+                        
+                        data[key] = df
+                else:
+                    # Recursively load nested group
+                    data[key] = self._load_year_data(item)
+            else:
+                # Load dataset
+                data[key] = np.array(item)
         
         return data
     

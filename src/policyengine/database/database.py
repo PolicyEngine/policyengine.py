@@ -433,7 +433,10 @@ class Database:
         dataset: Any = None,  # Can be DatasetMetadata object or string
         country: str = None,
         year: int = None,
+        years: List[int] = None,
         tags: List[str] = None,
+        calculate_default_variables: bool = True,
+        save_all_variables: bool = False,
     ):
         """Store simulation results from a policyengine_core Simulation object.
         
@@ -442,8 +445,11 @@ class Database:
             simulation: Simulation object from policyengine_core
             dataset: DatasetMetadata object or dataset name string (optional)
             country: Country code (optional, extracted from scenario/dataset if objects provided)
-            year: Year of simulation
+            year: Single year to save (if specified, only saves this year)
+            years: Multiple years to save (if specified, saves all these years)
             tags: Optional tags for filtering
+            calculate_default_variables: If True, calculates household net income etc.
+            save_all_variables: If True, saves all calculated variables for all periods
         
         Returns:
             SimulationMetadata object with get_data() method
@@ -468,7 +474,8 @@ class Database:
         with self.session() as session:
             return self.simulations.add_simulation(
                 session, scenario_name, simulation, dataset_name, 
-                country, year, tags
+                country, year, years, tags, 
+                calculate_default_variables, save_all_variables
             )
     
     def get_simulation(

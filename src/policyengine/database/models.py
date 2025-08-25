@@ -99,11 +99,15 @@ class SimulationMetadata(Base):
     # Relationships
     datafile = relationship("DataFile", back_populates="simulations")
     
-    def get_data(self):
+    def get_data(self, year: int = None):
         """Load the simulation data and return a ModelOutput object.
         
+        Args:
+            year: Optional year to retrieve. If None and only one year exists, returns that.
+                 If None and multiple years exist, returns all years as dict.
+        
         Returns:
-            UKModelOutput or USModelOutput object, or None if data not found
+            UKModelOutput/USModelOutput object for single year, or dict of {year: ModelOutput} for multiple years
         """
         if not hasattr(self, '_storage'):
             raise RuntimeError("SimulationMetadata was not loaded through Database.get_simulation()")
@@ -118,19 +122,61 @@ class SimulationMetadata(Base):
             country=self.country,
             scenario=self.scenario,
             dataset=self.dataset,
-            year=self.year
+            year=self.year  # This is for backward compat with file naming
         )
         
         if data is None:
             return None
         
-        # Return the appropriate model output type
-        if self.country.lower() == 'uk':
-            return UKModelOutput.from_tables(data)
-        elif self.country.lower() == 'us':
-            return USModelOutput.from_tables(data)
+        # Check if data has year structure
+        if isinstance(data, dict) and all(isinstance(k, (int, str)) and str(k).isdigit() for k in data.keys()):
+            # Data is organized by year
+            years_available = list(data.keys())
+            
+            if year is not None:
+                # Return specific year
+                year_data = data.get(year) or data.get(str(year))
+                if year_data is None:
+                    raise ValueError(f"Year {year} not found in simulation data. Available years: {years_available}")
+                
+                # Convert to ModelOutput
+                if self.country.lower() == 'uk':
+                    return UKModelOutput.from_tables(year_data)
+                elif self.country.lower() == 'us':
+                    return USModelOutput.from_tables(year_data)
+                else:
+                    raise ValueError(f"Unsupported country: {self.country}")
+            
+            elif len(years_available) == 1:
+                # Only one year available, return it
+                year_data = data[years_available[0]]
+                if self.country.lower() == 'uk':
+                    return UKModelOutput.from_tables(year_data)
+                elif self.country.lower() == 'us':
+                    return USModelOutput.from_tables(year_data)
+                else:
+                    raise ValueError(f"Unsupported country: {self.country}")
+            
+            else:
+                # Multiple years, return all as dict
+                result = {}
+                for yr, yr_data in data.items():
+                    if self.country.lower() == 'uk':
+                        result[yr] = UKModelOutput.from_tables(yr_data)
+                    elif self.country.lower() == 'us':
+                        result[yr] = USModelOutput.from_tables(yr_data)
+                    else:
+                        raise ValueError(f"Unsupported country: {self.country}")
+                return result
+        
         else:
-            raise ValueError(f"Unsupported country: {self.country}")
+            # Legacy format - single year data without year key
+            if self.country.lower() == 'uk':
+                return UKModelOutput.from_tables(data)
+            elif self.country.lower() == 'us':
+                return USModelOutput.from_tables(data)
+            else:
+                raise ValueError(f"Unsupported country: {self.country}")
 
 
 class DataFile(Base):
