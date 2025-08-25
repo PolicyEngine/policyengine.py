@@ -9,7 +9,8 @@ from .models import (
     ParameterMetadata,
     ParameterChangeMetadata,
     ScenarioMetadata,
-    Base
+    Base,
+    get_model_version
 )
 import json
 import uuid
@@ -67,7 +68,8 @@ def extract_parameter_metadata(
 def extract_parameter_changes(
     param: Parameter,
     parameter_id: str,
-    scenario_id: str
+    scenario_id: str,
+    country: str = None
 ) -> List[ParameterChangeMetadata]:
     """Extract parameter changes from a policyengine-core parameter.
     
@@ -75,6 +77,7 @@ def extract_parameter_changes(
         param: Parameter from policyengine-core
         parameter_id: ID of the parameter in database
         scenario_id: ID of the scenario these changes belong to
+        country: Country code for getting model version
         
     Returns:
         List of ParameterChangeMetadata instances
@@ -118,7 +121,8 @@ def extract_parameter_changes(
             start_date=start_date,
             end_date=end_date,
             value=json.dumps(value_at_instant.value) if not isinstance(value_at_instant.value, (bool, int, float, str)) else value_at_instant.value,
-            order_index=len(param.values_list) - idx - 1  # Most recent first
+            order_index=len(param.values_list) - idx - 1,  # Most recent first
+            model_version=get_model_version(country) if country else None
         )
         changes.append(change)
     
@@ -155,6 +159,7 @@ def import_parameters_from_tax_benefit_system(
             id=str(uuid.uuid4()),
             name=scenario_name,
             country=country,
+            model_version=get_model_version(country),
             description=scenario_description
         )
         session.add(scenario)
@@ -210,7 +215,7 @@ def import_parameters_from_tax_benefit_system(
             param_map[node.name] = param_id
             
             # Extract and add parameter changes
-            changes = extract_parameter_changes(node, param_id, scenario.id)
+            changes = extract_parameter_changes(node, param_id, scenario.id, country)
             for change in changes:
                 # Check if change already exists
                 existing_change = session.query(ParameterChangeMetadata).filter_by(

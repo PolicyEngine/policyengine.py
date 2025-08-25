@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 from sqlalchemy.orm import Session
-from .models import DatasetMetadata
+from .models import DatasetMetadata, get_model_version
 
 
 class DatasetManager:
@@ -60,6 +60,7 @@ class DatasetManager:
             existing.year = year
             existing.source = source or existing.source
             existing.version = version or existing.version
+            existing.model_version = get_model_version(country)
             existing.description = description or existing.description
             existing.updated_at = datetime.now()
             dataset = existing
@@ -72,6 +73,7 @@ class DatasetManager:
                 year=year,
                 source=source,
                 version=version,
+                model_version=get_model_version(country),
                 description=description
             )
             session.add(dataset)

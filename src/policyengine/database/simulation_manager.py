@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional, List, Union
 from sqlalchemy.orm import Session
-from .models import SimulationMetadata, SimulationStatus, ScenarioMetadata, DatasetMetadata
+from .models import SimulationMetadata, SimulationStatus, ScenarioMetadata, DatasetMetadata, get_model_version
 from .storage_backend import StorageBackend
 from ..countries.uk import UKModelOutput
 from ..countries.us import USModelOutput
@@ -85,7 +85,8 @@ class SimulationManager:
                     id=str(uuid.uuid4()),
                     name=dataset,
                     country=country.lower(),
-                    year=year
+                    year=year,
+                    model_version=get_model_version(country)
                 )
                 session.add(dataset_obj)
                 session.flush()
@@ -111,6 +112,7 @@ class SimulationManager:
             file_size_mb=file_size_mb,
             dataset=dataset,
             scenario=scenario,
+            model_version=get_model_version(country),
             status=SimulationStatus.COMPLETED,
             completed_at=datetime.now(),
             tags=tags

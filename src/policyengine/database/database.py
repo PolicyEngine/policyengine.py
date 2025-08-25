@@ -52,7 +52,7 @@ class Database:
             gcs_prefix: str = "simulations/",
             # Other options
             countries: Optional[List[str]] = None,
-            initialize: bool = True,
+            initialize: bool = False,
         ):
         """Initialize database with configuration.
         
@@ -138,11 +138,6 @@ class Database:
         """Ensure local storage directories exist."""
         storage_path = Path(self.config.local_storage_path)
         storage_path.mkdir(parents=True, exist_ok=True)
-        
-        # Create subdirectories for organization
-        for country in self.countries:
-            (storage_path / country.lower()).mkdir(exist_ok=True)
-        (storage_path / "temp").mkdir(exist_ok=True)
     
     def _auto_initialize(self):
         """Automatically initialize database with current law parameters for each country."""
@@ -158,7 +153,6 @@ class Database:
                 
                 if not existing:
                     try:
-                        print(f"Initializing {country.upper()} current law parameters...")
                         self.initialize_with_current_law(country)
                     except ImportError:
                         print(f"Note: policyengine-{country} not installed, skipping initialization")
@@ -197,11 +191,6 @@ class Database:
     def drop_all(self) -> None:
         """Drop all tables (use with caution)."""
         Base.metadata.drop_all(bind=self.engine)
-    
-    def run_migrations(self) -> None:
-        """Run all database migrations to update schema."""
-        from .migrations import run_all_migrations
-        run_all_migrations(self.engine)
     
     # Parameter initialization
     def initialize_with_current_law(

@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session, joinedload
 from policyengine_core.periods import period as parse_period
-from .models import ScenarioMetadata, ParameterMetadata, ParameterChangeMetadata
+from .models import ScenarioMetadata, ParameterMetadata, ParameterChangeMetadata, get_model_version
 
 
 class ScenarioManager:
@@ -54,6 +54,8 @@ class ScenarioManager:
         
         if existing:
             # Update existing scenario - clear old parameter changes
+            existing.model_version = get_model_version(country)
+            existing.updated_at = datetime.now()
             session.query(ParameterChangeMetadata).filter_by(
                 scenario_id=existing.id
             ).delete()
@@ -64,6 +66,7 @@ class ScenarioManager:
                 id=str(uuid.uuid4()),
                 name=name,
                 country=country.lower(),
+                model_version=get_model_version(country),
                 description=description or f"Parametric reform scenario: {name}"
             )
             session.add(scenario)
@@ -99,7 +102,8 @@ class ScenarioManager:
                         parameter_id=param.id,
                         start_date=start_date,
                         end_date=end_date,
-                        value=value if isinstance(value, (bool, int, float, str)) else json.dumps(value)
+                        value=value if isinstance(value, (bool, int, float, str)) else json.dumps(value),
+                        model_version=get_model_version(country)
                     )
                     session.add(change)
             else:
@@ -110,7 +114,8 @@ class ScenarioManager:
                     parameter_id=param.id,
                     start_date=datetime(2000, 1, 1),
                     end_date=datetime(2100, 1, 1),
-                    value=value_spec if isinstance(value_spec, (bool, int, float, str)) else json.dumps(value_spec)
+                    value=value_spec if isinstance(value_spec, (bool, int, float, str)) else json.dumps(value_spec),
+                    model_version=get_model_version(country)
                 )
                 session.add(change)
         

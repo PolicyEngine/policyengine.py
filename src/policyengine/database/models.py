@@ -9,11 +9,27 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
 import enum
+import importlib.metadata
 
 Base = declarative_base()
 
 def generate_uuid():
     return str(uuid.uuid4())
+
+def get_model_version(country: str) -> str:
+    """Get the installed version of policyengine for a given country.
+    
+    Args:
+        country: Country code (e.g., 'uk', 'us')
+        
+    Returns:
+        Version string or None if package not found
+    """
+    try:
+        package_name = f"policyengine-{country.lower()}"
+        return importlib.metadata.version(package_name)
+    except importlib.metadata.PackageNotFoundError:
+        return None
 
 class SimulationStatus(enum.Enum):
     """Status of simulation processing."""
