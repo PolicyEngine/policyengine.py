@@ -130,8 +130,7 @@ def import_parameters_from_tax_benefit_system(
     tax_benefit_system,
     country: str,
     scenario_name: str = "current_law",
-    scenario_description: str = "Current law parameters",
-    max_parameters: Optional[int] = None
+    scenario_description: str = "Current law parameters"
 ) -> ScenarioMetadata:
     """Import all parameters from a tax benefit system into the database.
     
@@ -141,7 +140,6 @@ def import_parameters_from_tax_benefit_system(
         country: Country code
         scenario_name: Name for the scenario
         scenario_description: Description for the scenario
-        max_parameters: Maximum number of parameters to import (None = all)
         
     Returns:
         Created scenario with parameters
@@ -164,16 +162,10 @@ def import_parameters_from_tax_benefit_system(
     
     # Track parameters by name to avoid duplicates
     param_map = {}
-    param_count = 0
     
     # Process parameter tree recursively
     def process_parameter_tree(node, parent_id=None):
         """Recursively process parameter tree."""
-        nonlocal param_count
-        
-        # Check if we've hit the limit
-        if max_parameters and param_count >= max_parameters:
-            return
         
         if isinstance(node, ParameterNode):
             # Create parameter for node
@@ -189,7 +181,6 @@ def import_parameters_from_tax_benefit_system(
                 session.add(param_meta)
                 session.flush()
                 param_id = param_meta.id
-                param_count += 1
             else:
                 param_id = existing.id
             
@@ -197,8 +188,6 @@ def import_parameters_from_tax_benefit_system(
             
             # Process children
             for _, child in node.children.items():
-                if max_parameters and param_count >= max_parameters:
-                    break
                 process_parameter_tree(child, param_id)
                 
         elif isinstance(node, Parameter):
@@ -215,7 +204,6 @@ def import_parameters_from_tax_benefit_system(
                 session.add(param_meta)
                 session.flush()
                 param_id = param_meta.id
-                param_count += 1
             else:
                 param_id = existing.id
             

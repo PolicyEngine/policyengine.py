@@ -24,39 +24,56 @@ class DatabaseConfig(BaseModel):
     # Database configuration
     connection_string: Optional[str] = Field(
         None, 
-        description="Database connection string for metadata (defaults to local SQLite)"
+        description="Database connection string (SQLite, PostgreSQL, MySQL, etc. - defaults to local SQLite)"
     )
     echo: bool = Field(False, description="Echo SQL statements")
     
-    # Storage configuration
-    storage_mode: str = Field("local", description="Storage mode: 'local' or 'cloud'")
+    # Storage configuration for .h5 simulation files
+    storage_mode: str = Field("local", description="Storage mode for .h5 files: 'local' or 'cloud'")
     local_storage_path: str = Field("./simulations", description="Local path for .h5 files")
     
-    # Cloud configuration (optional)
-    gcs_bucket: Optional[str] = Field(None, description="Google Cloud Storage bucket name")
+    # Cloud storage configuration for .h5 files (optional)
+    gcs_bucket: Optional[str] = Field(None, description="Google Cloud Storage bucket name for .h5 files")
     gcs_prefix: Optional[str] = Field("simulations/", description="Prefix for GCS objects")
-    cloud_db_url: Optional[str] = Field(None, description="Cloud database URL for metadata")
 
 
 class Database:
     """Main database manager for PolicyEngine."""
     
     def __init__(
-            self, 
-            config: Optional[DatabaseConfig] = None,
+            self,
+            # Database configuration
+            connection_string: Optional[str] = None,
+            echo: bool = False,
+            # Storage configuration
+            storage_mode: str = "local",
+            local_storage_path: str = "./simulations",
+            gcs_bucket: Optional[str] = None,
+            gcs_prefix: str = "simulations/",
+            # Other options
             countries: Optional[List[str]] = None,
             initialize: bool = True,
-            max_init_parameters: Optional[int] = None
         ):
         """Initialize database with configuration.
         
         Args:
-            config: Database configuration
+            connection_string: Database connection string (SQLite, PostgreSQL, MySQL, etc)
+            echo: Echo SQL statements
+            storage_mode: Storage mode for .h5 files ('local' or 'cloud')
+            local_storage_path: Local path for .h5 files
+            gcs_bucket: Google Cloud Storage bucket name for .h5 files
+            gcs_prefix: Prefix for GCS objects
             countries: List of supported countries (defaults to ["uk"])
             initialize: Whether to automatically initialize with current law parameters
-            max_init_parameters: Maximum parameters to import during initialization (None = all)
         """
-        self.config = config or DatabaseConfig()
+        self.config = DatabaseConfig(
+            connection_string=connection_string,
+            echo=echo,
+            storage_mode=storage_mode,
+            local_storage_path=local_storage_path,
+            gcs_bucket=gcs_bucket,
+            gcs_prefix=gcs_prefix
+        )
         self.engine = self._create_engine()
         self.SessionLocal = sessionmaker(bind=self.engine)
         
@@ -89,34 +106,33 @@ class Database:
         
         # Automatically initialize with current law parameters if requested
         if initialize:
-            self._auto_initialize(max_init_parameters)
+            self._auto_initialize()
     
     def _create_engine(self):
-        """Create SQLAlchemy engine for metadata storage."""
-        if self.config.storage_mode == "cloud" and self.config.cloud_db_url:
-            # Use cloud database for metadata
-            return create_engine(
-                self.config.cloud_db_url,
-                echo=self.config.echo,
-                pool_size=5,
-                max_overflow=10
-            )
-        elif self.config.connection_string:
-            # Custom connection string provided
+        """Create SQLAlchemy engine for metadata storage.
+        
+        The database stores metadata only - actual simulation data is in .h5 files.
+        Supports any SQLAlchemy-compatible database (SQLite, PostgreSQL, MySQL, etc).
+        """
+        if self.config.connection_string:
+            # Use provided connection string (can be local or cloud database)
+            # Examples:
+            # - sqlite:///path/to/db.sqlite
+            # - postgresql://user:pass@host/dbname
+            # - mysql+pymysql://user:pass@host/dbname
             return create_engine(
                 self.config.connection_string,
                 echo=self.config.echo
             )
         else:
-            # Default to local SQLite
+            # Default to local SQLite in the storage path
             db_path = os.path.join(self.config.local_storage_path, "metadata.db")
             os.makedirs(os.path.dirname(db_path), exist_ok=True)
             
-            engine = create_engine(
+            return create_engine(
                 f"sqlite:///{db_path}",
+                echo=self.config.echo
             )
-            
-            return engine
     
     def _setup_local_storage(self):
         """Ensure local storage directories exist."""
@@ -128,12 +144,8 @@ class Database:
             (storage_path / country.lower()).mkdir(exist_ok=True)
         (storage_path / "temp").mkdir(exist_ok=True)
     
-    def _auto_initialize(self, max_parameters: Optional[int] = None):
-        """Automatically initialize database with current law parameters for each country.
-        
-        Args:
-            max_parameters: Maximum parameters to import per country
-        """
+    def _auto_initialize(self):
+        """Automatically initialize database with current law parameters for each country."""
         from .models import ScenarioMetadata
         
         for country in self.countries:
@@ -147,7 +159,7 @@ class Database:
                 if not existing:
                     try:
                         print(f"Initializing {country.upper()} current law parameters...")
-                        self.initialize_with_current_law(country, max_parameters)
+                        self.initialize_with_current_law(country)
                     except ImportError:
                         print(f"Note: policyengine-{country} not installed, skipping initialization")
                     except Exception as e:
@@ -194,14 +206,12 @@ class Database:
     # Parameter initialization
     def initialize_with_current_law(
         self,
-        country: str = None,
-        max_parameters: Optional[int] = None
+        country: str = None
     ) -> None:
         """Initialize database with current law parameters.
         
         Args:
             country: Country code (uses default if not specified)
-            max_parameters: Maximum number of parameters to import (None = all)
         """
         country = country or self.default_country
         if not country:
@@ -224,8 +234,7 @@ class Database:
                 tax_benefit_system=system,
                 country=country.lower(),
                 scenario_name="current_law",
-                scenario_description="Current model baseline",
-                max_parameters=max_parameters
+                scenario_description="Current model baseline"
             )
     
     def get_current_law_scenario(
