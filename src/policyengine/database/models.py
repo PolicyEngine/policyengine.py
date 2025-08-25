@@ -67,12 +67,12 @@ class User(Base):
 # Metadata models only - actual data stored in .h5 files
 
 class SimulationMetadata(Base):
-    """Metadata for simulation stored in .h5 file. e.g. 'current law, EFRS 2023/24 based, 2026'"""
+    """Metadata for simulation stored in .h5 file. Can contain data for multiple years."""
     __tablename__ = "simulations"
     
     id = Column(String, primary_key=True, default=generate_uuid)
     country = Column(String, nullable=False, index=True)
-    year = Column(Integer, nullable=False, index=True)
+    years = Column(JSON, nullable=True)  # List of years contained in this simulation
     
     # Storage information
     file_size_mb = Column(Float, nullable=True)
@@ -122,7 +122,7 @@ class SimulationMetadata(Base):
             country=self.country,
             scenario=self.scenario,
             dataset=self.dataset,
-            year=self.year  # This is for backward compat with file naming
+            year=None  # Year no longer relevant for file naming
         )
         
         if data is None:
@@ -218,7 +218,7 @@ class DatasetMetadata(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     name = Column(String, nullable=False, unique=True, index=True)
     country = Column(String, nullable=False, index=True)
-    year = Column(Integer, nullable=False, index=True)
+    year = Column(Integer, nullable=True, index=True)  # Nullable for multi-year datasets
     
     # Dataset characteristics
     source = Column(String, nullable=True)  # "FRS", "CPS", etc.

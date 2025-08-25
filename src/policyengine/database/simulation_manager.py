@@ -111,7 +111,7 @@ class SimulationManager:
                     id=str(uuid.uuid4()),
                     name=dataset,
                     country=country.lower(),
-                    year=years_to_process[0] if years_to_process else datetime.now().year,
+                    year=years_to_process[0] if len(years_to_process) == 1 else None,  # None for multi-year
                     model_version=get_model_version(country)
                 )
                 session.add(dataset_obj)
@@ -153,11 +153,10 @@ class SimulationManager:
             simulation_datafile = datafile
         
         # Create simulation metadata
-        # Store the first year for backward compatibility, but data contains all years
         simulation = SimulationMetadata(
             id=sim_id,
             country=country.lower(),
-            year=years_to_process[0] if years_to_process else datetime.now().year,
+            years=years_to_process,  # Store list of years
             file_size_mb=file_size_mb,
             dataset=dataset,
             scenario=scenario,
@@ -190,7 +189,7 @@ class SimulationManager:
             scenario: Name of the scenario
             dataset: Name of the dataset
             country: Country code (uses default if not specified)
-            year: Year of simulation (optional filter)
+            year: Year filter - returns simulations containing this year (optional)
             
         Returns:
             SimulationMetadata object with get_data() method, or None if not found
@@ -207,7 +206,12 @@ class SimulationManager:
         )
         
         if year:
-            query = query.filter_by(year=year)
+            # Filter for simulations that contain this year
+            # Since years is a JSON column containing a list, we need to use JSON operations
+            from sqlalchemy import cast, String
+            query = query.filter(
+                cast(SimulationMetadata.years, String).contains(str(year))
+            )
         
         # Get most recent simulation matching criteria
         simulation = query.order_by(SimulationMetadata.created_at.desc()).first()
@@ -250,7 +254,7 @@ class SimulationManager:
             country=simulation.country,
             scenario=scenario,
             dataset=dataset,
-            year=simulation.year
+            year=None  # Year no longer stored as single value
         )
         
         if data is None:
@@ -349,7 +353,7 @@ class SimulationManager:
             country: Filter by country
             scenario: Filter by scenario
             dataset: Filter by dataset
-            year: Filter by year
+            year: Filter by year (returns simulations containing this year)
             tags: Filter by tags
             
         Returns:
@@ -369,7 +373,11 @@ class SimulationManager:
             query = query.filter_by(dataset=dataset)
         
         if year:
-            query = query.filter_by(year=year)
+            # Filter for simulations that contain this year
+            from sqlalchemy import cast, String
+            query = query.filter(
+                cast(SimulationMetadata.years, String).contains(str(year))
+            )
         
         if tags:
             # Filter by tags (assuming tags are stored as JSON array)
