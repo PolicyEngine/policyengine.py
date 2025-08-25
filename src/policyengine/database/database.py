@@ -153,6 +153,7 @@ class Database:
                 
                 if not existing:
                     try:
+                        print(f"Initializing {country.upper()} current law parameters and variables...")
                         self.initialize_with_current_law(country)
                     except ImportError:
                         print(f"Note: policyengine-{country} not installed, skipping initialization")
@@ -216,8 +217,11 @@ class Database:
         else:
             raise ValueError(f"Unsupported country: {country}")
         
-        # Import parameters into database
+        # Import parameters and variables into database
         with self.session() as session:
+            from .variable_utils import import_variables_from_tax_benefit_system
+            
+            # Import parameters
             import_parameters_from_tax_benefit_system(
                 session=session,
                 tax_benefit_system=system,
@@ -225,6 +229,16 @@ class Database:
                 scenario_name="current_law",
                 scenario_description="Current model baseline"
             )
+            
+            # Import variables
+            variable_count = import_variables_from_tax_benefit_system(
+                session=session,
+                tax_benefit_system=system,
+                country=country.lower()
+            )
+            
+            if variable_count > 0:
+                print(f"Imported {variable_count} new variables for {country.upper()}")
     
     def get_current_law_scenario(
         self,
@@ -262,7 +276,6 @@ class Database:
         parameter_changes: dict = None,
         country: str = None,
         description: str = None,
-        base_scenario: str = "current_law",
     ):
         """Add a parametric scenario with parameter changes.
         
@@ -271,7 +284,7 @@ class Database:
         """
         with self.session() as session:
             return self.scenarios.add_parametric_scenario(
-                session, name, parameter_changes, country, description, base_scenario
+                session, name, parameter_changes, country, description
             )
     
     def get_scenario(
@@ -374,3 +387,66 @@ class Database:
             return self.simulations.list_simulations(
                 session, country, scenario, dataset, year, tags
             )
+    
+    # Variable management
+    def get_variable(
+        self,
+        name: str,
+        country: str = None
+    ):
+        """Get a variable by name and country.
+        
+        Returns:
+            VariableMetadata object or None if not found
+        """
+        from .models import VariableMetadata
+        country = country or self.default_country
+        
+        with self.session() as session:
+            variable = session.query(VariableMetadata).filter_by(
+                name=name,
+                country=country.lower()
+            ).first()
+            
+            if variable:
+                session.expunge(variable)
+            
+            return variable
+    
+    def list_variables(
+        self,
+        country: str = None,
+        entity: str = None,
+        value_type: str = None
+    ):
+        """List variables matching criteria.
+        
+        Args:
+            country: Filter by country
+            entity: Filter by entity (e.g., 'person', 'household')
+            value_type: Filter by value type (e.g., 'float', 'bool')
+            
+        Returns:
+            List of VariableMetadata objects
+        """
+        from .models import VariableMetadata
+        country = country or self.default_country
+        
+        with self.session() as session:
+            query = session.query(VariableMetadata)
+            
+            if country:
+                query = query.filter_by(country=country.lower())
+            
+            if entity:
+                query = query.filter_by(entity=entity)
+            
+            if value_type:
+                query = query.filter_by(value_type=value_type)
+            
+            variables = query.order_by(VariableMetadata.name).all()
+            
+            for var in variables:
+                session.expunge(var)
+            
+            return variables

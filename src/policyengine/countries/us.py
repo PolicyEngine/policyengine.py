@@ -1,8 +1,9 @@
-from policyengine_us import Simulation, Microsimulation
 from .general import process_simulation, ModelOutput
 from pydantic import BaseModel, ConfigDict
 import pandas as pd
-from typing import List
+from typing import List, TYPE_CHECKING
+if TYPE_CHECKING:
+    from policyengine_us import Simulation
 
 class USModelOutput(ModelOutput):
     person: pd.DataFrame
@@ -20,7 +21,7 @@ US_VARIABLE_WHITELIST = [
     "household_net_income",
 ]
 
-def process_us_simulation(simulation: Simulation, year: int) -> USModelOutput:
+def process_us_simulation(simulation: "Simulation", year: int) -> USModelOutput:
     entity_tables = process_simulation(simulation, year, variable_whitelist=US_VARIABLE_WHITELIST)
 
     return USModelOutput(

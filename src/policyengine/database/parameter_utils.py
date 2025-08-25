@@ -113,6 +113,15 @@ def extract_parameter_changes(
                 except:
                     pass
         
+        # Handle special float values that PostgreSQL JSON doesn't support
+        value = value_at_instant.value
+        if isinstance(value, float):
+            import math
+            if math.isinf(value):
+                value = str(value)  # Store as string "Infinity" or "-Infinity"
+            elif math.isnan(value):
+                value = "NaN"  # Store as string "NaN"
+        
         # Create change record
         change = ParameterChangeMetadata(
             id=str(uuid.uuid4()),
@@ -120,7 +129,7 @@ def extract_parameter_changes(
             parameter_id=parameter_id,
             start_date=start_date,
             end_date=end_date,
-            value=json.dumps(value_at_instant.value) if not isinstance(value_at_instant.value, (bool, int, float, str)) else value_at_instant.value,
+            value=json.dumps(value) if not isinstance(value, (bool, int, float, str)) else value,
             order_index=len(param.values_list) - idx - 1,  # Most recent first
             model_version=get_model_version(country) if country else None
         )

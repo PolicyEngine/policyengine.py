@@ -140,6 +140,36 @@ class ScenarioMetadata(Base):
     )
 
 
+class VariableMetadata(Base):
+    """Registry of all variables that can be calculated."""
+    __tablename__ = "variables"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    name = Column(String, nullable=False, index=True)  # e.g., "household_net_income"
+    country = Column(String, nullable=False, index=True)
+    
+    # Variable metadata
+    label = Column(String, nullable=True)  # Human-readable name
+    description = Column(Text, nullable=True)
+    unit = Column(String, nullable=True)  # e.g., "GBP", "USD", "person", "boolean"
+    value_type = Column(String, nullable=False)  # "float", "int", "bool", "string", "enum"
+    entity = Column(String, nullable=False)  # "person", "household", "tax_unit", etc.
+    definition_period = Column(String, nullable=True)  # "year", "month", "eternity"
+    
+    # Model version tracking
+    model_version = Column(String, nullable=True)  # Version when this variable was added/updated
+    
+    # Metadata
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    created_by = Column(String, ForeignKey("users.id"), nullable=True)
+    
+    # Unique constraint on (name, country)
+    __table_args__ = (
+        UniqueConstraint('name', 'country', name='_variable_name_country_uc'),
+    )
+
+
 class ParameterMetadata(Base):
     """Registry of all parameters that can be modified."""
     __tablename__ = "parameters"

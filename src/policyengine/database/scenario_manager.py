@@ -96,6 +96,15 @@ class ScenarioManager:
                 # Multiple time periods specified
                 for period_str, value in value_spec.items():
                     start_date, end_date = self._parse_period_string(period_str)
+                    
+                    # Handle special float values
+                    if isinstance(value, float):
+                        import math
+                        if math.isinf(value):
+                            value = str(value)
+                        elif math.isnan(value):
+                            value = "NaN"
+                    
                     change = ParameterChangeMetadata(
                         id=str(uuid.uuid4()),
                         scenario_id=scenario.id,
@@ -108,13 +117,22 @@ class ScenarioManager:
                     session.add(change)
             else:
                 # Single value for default period (2000-2100)
+                # Handle special float values
+                value = value_spec
+                if isinstance(value, float):
+                    import math
+                    if math.isinf(value):
+                        value = str(value)
+                    elif math.isnan(value):
+                        value = "NaN"
+                
                 change = ParameterChangeMetadata(
                     id=str(uuid.uuid4()),
                     scenario_id=scenario.id,
                     parameter_id=param.id,
                     start_date=datetime(2000, 1, 1),
                     end_date=datetime(2100, 1, 1),
-                    value=value_spec if isinstance(value_spec, (bool, int, float, str)) else json.dumps(value_spec),
+                    value=value if isinstance(value, (bool, int, float, str)) else json.dumps(value),
                     model_version=get_model_version(country)
                 )
                 session.add(change)

@@ -2,9 +2,8 @@
 
 __version__ = "0.6.1"
 
-from .database import Database, DatabaseConfig
+from .database import Database
 
 __all__ = [
     "Database",
-    "DatabaseConfig",
 ]
