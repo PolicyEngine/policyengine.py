@@ -30,7 +30,6 @@ class SimulationMetadata(Base):
     __tablename__ = "simulations"
     
     id = Column(String, primary_key=True, default=generate_uuid)
-    name = Column(String, nullable=False, index=True)
     country = Column(String, nullable=False, index=True)
     year = Column(Integer, nullable=False, index=True)
     

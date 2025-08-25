@@ -17,6 +17,26 @@ class ModelOutput(BaseModel):
             table_name: getattr(self, table_name)
             for table_name in self.table_names
         }
+    
+    def to_dict(self):
+        tables = self.get_tables()
+        return {name: {
+            col: df[col].values
+            for col in df.columns
+        } for name, df in tables.items()}
+    
+    @classmethod
+    def from_tables(cls, data: Dict[str, pd.DataFrame]) -> "ModelOutput":
+        """Reconstruct ModelOutput from dictionary of DataFrames.
+        
+        Args:
+            data: Dictionary mapping table names to DataFrames
+            
+        Returns:
+            Instance of the appropriate ModelOutput subclass
+        """
+        # Create instance with the dataframes as attributes
+        return cls(**data)
 
 def process_simulation(simulation: Simulation, year: int, variable_whitelist: List[str] = []) -> Dict[str, pd.DataFrame]:
     variables = list(simulation.tax_benefit_system.variables.values())
@@ -38,11 +58,7 @@ def process_simulation(simulation: Simulation, year: int, variable_whitelist: Li
             entity_tables[variable.entity.key] = pd.DataFrame()
 
         try:
-            start = time.time()
             result = simulation.calculate(variable.name, year)
-            end = time.time()
-            if end - start > 1.0:
-                print(f"Time taken to calculate {variable.name} for {year}: {end - start} seconds")
         except Exception as e:
             print(f"Error calculating {variable.name} for {year}: {e}")
             continue
@@ -50,19 +66,3 @@ def process_simulation(simulation: Simulation, year: int, variable_whitelist: Li
         entity_tables[variable.entity.key][variable.name] = result
 
     return entity_tables
-
-
-def create_default_parameters(simulation: Simulation, country: str) -> List[ParameterMetadata]:
-    """Create default parameters for the simulation."""
-    parameter_tree = simulation.tax_benefit_system.parameters
-    parameters = []
-
-    for parameter in parameter_tree.get_descendants():
-        parameter_meta = ParameterMetadata(
-            name=parameter.name,
-            country=country,
-            #parent somehow link to the parameter.parent Parameter object
-            # rest of relevant attributes, look at policyengine_core.parameters.Parameter
-        )
-
-        # add parameterchanges as well?

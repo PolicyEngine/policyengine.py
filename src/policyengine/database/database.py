@@ -1,22 +1,21 @@
 """Database management for PolicyEngine simulations and metadata."""
 
 import os
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Any, List
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from sqlalchemy import create_engine, and_, or_, event
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 from pydantic import BaseModel, Field
-from .models import (
-    Base, SimulationMetadata, SimulationStatus,
-    DatasetMetadata, ScenarioMetadata, ParameterMetadata, ParameterChangeMetadata
-)
+
+from .models import Base
 from .parameter_utils import import_parameters_from_tax_benefit_system
-import h5py
-import json
-import numpy as np
+from .storage_backend import StorageBackend
+from .scenario_manager import ScenarioManager
+from .dataset_manager import DatasetManager
+from .simulation_manager import SimulationManager
 
 
 class DatabaseConfig(BaseModel):
@@ -42,15 +41,44 @@ class DatabaseConfig(BaseModel):
 class Database:
     """Main database manager for PolicyEngine."""
     
-    def __init__(self, config: Optional[DatabaseConfig] = None):
+    def __init__(
+            self, 
+            config: Optional[DatabaseConfig] = None,
+            countries: Optional[List[str]] = None,
+            initialize: bool = True,
+            max_init_parameters: Optional[int] = None
+        ):
         """Initialize database with configuration.
         
         Args:
             config: Database configuration
+            countries: List of supported countries (defaults to ["uk"])
+            initialize: Whether to automatically initialize with current law parameters
+            max_init_parameters: Maximum parameters to import during initialization (None = all)
         """
         self.config = config or DatabaseConfig()
         self.engine = self._create_engine()
         self.SessionLocal = sessionmaker(bind=self.engine)
+        
+        # Set default countries and default_country
+        if countries is None:
+            self.countries = ["uk"]
+            self.default_country = "uk"
+        else:
+            self.countries = countries
+            # If only one country, use it as default. Otherwise default to UK if in list, else first
+            if len(countries) == 1:
+                self.default_country = countries[0]
+            elif "uk" in countries:
+                self.default_country = "uk"
+            else:
+                self.default_country = countries[0]
+        
+        # Initialize managers
+        self.storage = StorageBackend(self.config)
+        self.scenarios = ScenarioManager(self.default_country)
+        self.datasets = DatasetManager(self.default_country)
+        self.simulations = SimulationManager(self.storage, self.default_country)
         
         # Create tables if they don't exist
         Base.metadata.create_all(bind=self.engine)
@@ -58,6 +86,10 @@ class Database:
         # Ensure storage directories exist
         if self.config.storage_mode == "local":
             self._setup_local_storage()
+        
+        # Automatically initialize with current law parameters if requested
+        if initialize:
+            self._auto_initialize(max_init_parameters)
     
     def _create_engine(self):
         """Create SQLAlchemy engine for metadata storage."""
@@ -92,9 +124,34 @@ class Database:
         storage_path.mkdir(parents=True, exist_ok=True)
         
         # Create subdirectories for organization
-        (storage_path / "uk").mkdir(exist_ok=True)
-        (storage_path / "us").mkdir(exist_ok=True)
+        for country in self.countries:
+            (storage_path / country.lower()).mkdir(exist_ok=True)
         (storage_path / "temp").mkdir(exist_ok=True)
+    
+    def _auto_initialize(self, max_parameters: Optional[int] = None):
+        """Automatically initialize database with current law parameters for each country.
+        
+        Args:
+            max_parameters: Maximum parameters to import per country
+        """
+        from .models import ScenarioMetadata
+        
+        for country in self.countries:
+            # Check if current_law scenario already exists
+            with self.session() as session:
+                existing = session.query(ScenarioMetadata).filter_by(
+                    name="current_law",
+                    country=country.lower()
+                ).first()
+                
+                if not existing:
+                    try:
+                        print(f"Initializing {country.upper()} current law parameters...")
+                        self.initialize_with_current_law(country, max_parameters)
+                    except ImportError:
+                        print(f"Note: policyengine-{country} not installed, skipping initialization")
+                    except Exception as e:
+                        print(f"Warning: Could not initialize {country} parameters: {e}")
     
     @contextmanager
     def session(self) -> Session:
@@ -129,20 +186,21 @@ class Database:
         """Drop all tables (use with caution)."""
         Base.metadata.drop_all(bind=self.engine)
     
+    # Parameter initialization
     def initialize_with_current_law(
         self,
-        country: str = "uk",
+        country: str = None,
         max_parameters: Optional[int] = None
-    ) -> Dict[str, Any]:
+    ) -> None:
         """Initialize database with current law parameters.
         
         Args:
-            country: Country code ('uk' or 'us')
+            country: Country code (uses default if not specified)
             max_parameters: Maximum number of parameters to import (None = all)
-            
-        Returns:
-            Created current law scenario
         """
+        country = country or self.default_country
+        if not country:
+            raise ValueError("Country must be specified or set as default")
         
         # Import the appropriate country system
         if country.lower() == "uk":
@@ -160,32 +218,156 @@ class Database:
                 session=session,
                 tax_benefit_system=system,
                 country=country.lower(),
-                scenario_name=f"current_law",
-                scenario_description=f"Current model baseline",
+                scenario_name="current_law",
+                scenario_description="Current model baseline",
                 max_parameters=max_parameters
             )
     
     def get_current_law_scenario(
         self,
-        country: str,
-        year: Optional[int] = None
-    ) -> Optional[ScenarioMetadata]:
-        """Get the current law scenario for a country and year.
+        country: str = None
+    ):
+        """Get the current law scenario for a country.
         
         Args:
-            country: Country code
-            year: Year (defaults to current year)
+            country: Country code (uses default if not specified)
             
         Returns:
-            Current law scenario or None if not found
+            ScenarioMetadata object or None if not found
         """
-        if year is None:
-            year = datetime.now().year
-            
+        from .models import ScenarioMetadata
+        country = country or self.default_country
+        
         with self.session() as session:
-            scenario = session.query(ScenarioMetadata).filter_by(
-                name=f"current law",
+            from sqlalchemy.orm import joinedload
+            scenario = session.query(ScenarioMetadata).options(
+                joinedload(ScenarioMetadata.parameter_changes)
+            ).filter_by(
+                name="current_law",
                 country=country.lower()
             ).first()
             
+            if scenario:
+                session.expunge_all()
+            
             return scenario
+    
+    # Scenario management (delegated to ScenarioManager)
+    def add_parametric_scenario(
+        self,
+        name: str,
+        parameter_changes: dict = None,
+        country: str = None,
+        description: str = None,
+        base_scenario: str = "current_law",
+    ):
+        """Add a parametric scenario with parameter changes.
+        
+        See ScenarioManager for documentation on parameter change formats.
+        Returns ScenarioMetadata object.
+        """
+        with self.session() as session:
+            return self.scenarios.add_parametric_scenario(
+                session, name, parameter_changes, country, description, base_scenario
+            )
+    
+    def get_scenario(
+        self,
+        name: str,
+        country: str = None
+    ):
+        """Get a scenario by name and country.
+        
+        Returns:
+            ScenarioMetadata object or None if not found
+        """
+        with self.session() as session:
+            return self.scenarios.get_scenario(
+                session, name, country
+            )
+    
+    # Dataset management (delegated to DatasetManager)
+    def add_dataset(
+        self,
+        name: str,
+        country: str = None,
+        year: int = None,
+        source: str = None,
+        version: str = None,
+        description: str = None,
+    ):
+        """Register a dataset in the database. Returns DatasetMetadata object."""
+        with self.session() as session:
+            return self.datasets.add_dataset(
+                session, name, country, year, source, version, description
+            )
+    
+    def get_dataset(
+        self,
+        name: str,
+        country: str = None
+    ):
+        """Get a dataset by name and country. Returns DatasetMetadata object or None."""
+        with self.session() as session:
+            return self.datasets.get_dataset(session, name, country)
+    
+    def list_datasets(
+        self,
+        country: str = None,
+        year: int = None,
+        source: str = None
+    ):
+        """List datasets matching criteria. Returns list of DatasetMetadata objects."""
+        with self.session() as session:
+            return self.datasets.list_datasets(session, country, year, source)
+    
+    # Simulation management (delegated to SimulationManager)
+    def add_simulation(
+        self,
+        scenario: str,
+        simulation: Any,
+        dataset: str = None,
+        country: str = None,
+        year: int = None,
+        tags: List[str] = None,
+    ):
+        """Store simulation results from a policyengine_core Simulation object.
+        
+        Returns SimulationMetadata object.
+        """
+        with self.session() as session:
+            return self.simulations.add_simulation(
+                session, scenario, simulation, dataset, 
+                country, year, tags
+            )
+    
+    def get_simulation(
+        self,
+        scenario: str,
+        dataset: str,
+        country: str = None,
+        year: int = None,
+    ):
+        """Retrieve simulation results.
+        
+        Returns:
+            UKModelOutput or USModelOutput object depending on country, or None if not found
+        """
+        with self.session() as session:
+            return self.simulations.get_simulation(
+                session, scenario, dataset, country, year
+            )
+    
+    def list_simulations(
+        self,
+        country: str = None,
+        scenario: str = None,
+        dataset: str = None,
+        year: int = None,
+        tags: List[str] = None
+    ):
+        """List simulations matching criteria. Returns list of SimulationMetadata objects."""
+        with self.session() as session:
+            return self.simulations.list_simulations(
+                session, country, scenario, dataset, year, tags
+            )
