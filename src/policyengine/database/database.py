@@ -169,7 +169,7 @@ class Database:
         Args:
             country: Country code ('uk' or 'us')
         """
-        from .models import DataFile, DatasetMetadata
+        from .models import DatasetMetadata
         
         # Define default datasets for each country
         default_datasets = {
@@ -229,15 +229,7 @@ class Database:
                 ).first()
                 
                 if not existing:
-                    # Create DataFile entry
-                    datafile = self.datasets.create_datafile(
-                        session=session,
-                        filename=dataset_info["filename"],
-                        gcs_bucket=dataset_info["gcs_bucket"],
-                        gcs_path=dataset_info["gcs_path"]
-                    )
-                    
-                    # Create dataset with datafile reference
+                    # Create dataset with file information
                     self.datasets.add_dataset(
                         session=session,
                         name=dataset_info["name"],
@@ -245,7 +237,9 @@ class Database:
                         year=dataset_info["year"],
                         source=dataset_info["source"],
                         description=dataset_info["description"],
-                        datafile=datafile
+                        filename=dataset_info["filename"],
+                        gcs_bucket=dataset_info["gcs_bucket"],
+                        gcs_path=dataset_info["gcs_path"]
                     )
     
     @contextmanager

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 from sqlalchemy.orm import Session
-from .models import DatasetMetadata, DataFile, get_model_version
+from .models import DatasetMetadata, get_model_version
 
 
 class DatasetManager:
@@ -18,10 +18,12 @@ class DatasetManager:
         """
         self.default_country = default_country
     
-    def create_datafile(
+    def create_dataset_with_file(
         self,
         session: Session,
-        filename: str,
+        name: str,
+        country: str = None,
+        filename: str = None,
         local_path: str = None,
         gcs_bucket: str = None,
         gcs_path: str = None,
@@ -29,11 +31,13 @@ class DatasetManager:
         huggingface_path: str = None,
         file_size_mb: float = None,
         checksum: str = None,
-    ) -> DataFile:
-        """Create a DataFile entry.
+    ) -> DatasetMetadata:
+        """Create a Dataset entry with file information.
         
         Args:
             session: Database session
+            name: Name of the dataset
+            country: Country code
             filename: Name of the file
             local_path: Local file path
             gcs_bucket: Google Cloud Storage bucket name
@@ -44,10 +48,16 @@ class DatasetManager:
             checksum: File checksum for integrity
             
         Returns:
-            Created DataFile object
+            Created DatasetMetadata object
         """
-        datafile = DataFile(
+        country = country or self.default_country
+        if not country:
+            raise ValueError("Country must be specified or set as default")
+        
+        dataset = DatasetMetadata(
             id=str(uuid.uuid4()),
+            name=name,
+            country=country.lower(),
             filename=filename,
             local_path=local_path,
             gcs_bucket=gcs_bucket,
@@ -55,11 +65,12 @@ class DatasetManager:
             huggingface_repo=huggingface_repo,
             huggingface_path=huggingface_path,
             file_size_mb=file_size_mb,
-            checksum=checksum
+            checksum=checksum,
+            model_version=get_model_version(country)
         )
-        session.add(datafile)
+        session.add(dataset)
         session.flush()
-        return datafile
+        return dataset
     
     def add_dataset(
         self,
@@ -70,7 +81,14 @@ class DatasetManager:
         source: str = None,
         version: str = None,
         description: str = None,
-        datafile: DataFile = None,
+        filename: str = None,
+        local_path: str = None,
+        gcs_bucket: str = None,
+        gcs_path: str = None,
+        huggingface_repo: str = None,
+        huggingface_path: str = None,
+        file_size_mb: float = None,
+        checksum: str = None,
     ) -> DatasetMetadata:
         """Register a dataset in the database.
         
@@ -82,7 +100,14 @@ class DatasetManager:
             source: Source of the dataset (e.g., "FRS", "CPS")
             version: Version of the dataset
             description: Optional description
-            datafile: Optional DataFile object to link to this dataset
+            filename: Optional filename
+            local_path: Optional local file path
+            gcs_bucket: Optional GCS bucket
+            gcs_path: Optional GCS path
+            huggingface_repo: Optional HuggingFace repo
+            huggingface_path: Optional HuggingFace path
+            file_size_mb: Optional file size in MB
+            checksum: Optional file checksum
             
         Returns:
             Created DatasetMetadata object
@@ -107,8 +132,23 @@ class DatasetManager:
             existing.version = version or existing.version
             existing.model_version = get_model_version(country)
             existing.description = description or existing.description
-            if datafile:
-                existing.datafile = datafile
+            # Update file information if provided
+            if filename:
+                existing.filename = filename
+            if local_path:
+                existing.local_path = local_path
+            if gcs_bucket:
+                existing.gcs_bucket = gcs_bucket
+            if gcs_path:
+                existing.gcs_path = gcs_path
+            if huggingface_repo:
+                existing.huggingface_repo = huggingface_repo
+            if huggingface_path:
+                existing.huggingface_path = huggingface_path
+            if file_size_mb:
+                existing.file_size_mb = file_size_mb
+            if checksum:
+                existing.checksum = checksum
             existing.updated_at = datetime.now()
             dataset = existing
         else:
@@ -122,7 +162,14 @@ class DatasetManager:
                 version=version,
                 model_version=get_model_version(country),
                 description=description,
-                datafile=datafile
+                filename=filename,
+                local_path=local_path,
+                gcs_bucket=gcs_bucket,
+                gcs_path=gcs_path,
+                huggingface_repo=huggingface_repo,
+                huggingface_path=huggingface_path,
+                file_size_mb=file_size_mb,
+                checksum=checksum
             )
             session.add(dataset)
         

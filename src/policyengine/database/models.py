@@ -72,18 +72,15 @@ class SimulationMetadata(Base):
     
     id = Column(String, primary_key=True, default=generate_uuid)
     country = Column(String, nullable=False, index=True)
-    years = Column(JSON, nullable=True)  # List of years contained in this simulation
+    year = Column(Integer, nullable=True, index=True)  # Null for multi-year simulations
     
     # Storage information
     file_size_mb = Column(Float, nullable=True)
     
-    # Scenario information
-    dataset = Column(String, nullable=False)  # e.g., "frs_2023_24"
-    scenario = Column(String, nullable=False)  # e.g., "baseline"
+    # Foreign key references
+    dataset_id = Column(String, ForeignKey("datasets.id"), nullable=False)
+    scenario_id = Column(String, ForeignKey("scenarios.id"), nullable=False)
     model_version = Column(String, nullable=True)  # e.g., "0.5.2"
-
-    # DataFile reference
-    datafile_id = Column(String, ForeignKey("datafiles.id"), nullable=True)
     
     # Processing metadata
     status = Column(Enum(SimulationStatus), default=SimulationStatus.PENDING, nullable=False)
@@ -97,7 +94,8 @@ class SimulationMetadata(Base):
     created_by = Column(String, ForeignKey("users.id"), nullable=True)  # User/system that created it
     
     # Relationships
-    datafile = relationship("DataFile", back_populates="simulations")
+    dataset = relationship("DatasetMetadata", backref="simulations")
+    scenario = relationship("ScenarioMetadata", backref="simulations")
     
     def get_data(self, year: int = None):
         """Load the simulation data and return a ModelOutput object.
@@ -120,8 +118,8 @@ class SimulationMetadata(Base):
         data = self._storage.load_simulation(
             sim_id=self.id,
             country=self.country,
-            scenario=self.scenario,
-            dataset=self.dataset,
+            scenario=self.scenario.name if self.scenario else None,
+            dataset=self.dataset.name if self.dataset else None,
             year=None  # Year no longer relevant for file naming
         )
         
@@ -179,12 +177,22 @@ class SimulationMetadata(Base):
                 raise ValueError(f"Unsupported country: {self.country}")
 
 
-class DataFile(Base):
-    """Storage locations for data files across different backends."""
-    __tablename__ = "datafiles"
+class DatasetMetadata(Base):
+    """Metadata for source datasets. e.g. 'EFRS 2023/24'"""
+    __tablename__ = "datasets"
     
     id = Column(String, primary_key=True, default=generate_uuid)
-    filename = Column(String, nullable=False, index=True)  # e.g., "cps_2023.h5"
+    name = Column(String, nullable=False, unique=True, index=True)
+    country = Column(String, nullable=False, index=True)
+    year = Column(Integer, nullable=True, index=True)  # Nullable for multi-year datasets
+    
+    # Dataset characteristics
+    source = Column(String, nullable=True)  # "FRS", "CPS", etc.
+    version = Column(String, nullable=True)
+    model_version = Column(String, nullable=True)  # e.g., "0.5.2"
+    
+    # File storage information (merged from DataFile)
+    filename = Column(String, nullable=True)  # e.g., "cps_2023.h5"
     
     # Local storage
     local_path = Column(String, nullable=True)  # e.g., "./simulations/cps_2023.h5"
@@ -202,40 +210,10 @@ class DataFile(Base):
     checksum = Column(String, nullable=True)  # For integrity checks
     
     # Metadata
-    created_at = Column(DateTime, default=datetime.now)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-    created_by = Column(String, ForeignKey("users.id"), nullable=True)
-    
-    # Relationships
-    datasets = relationship("DatasetMetadata", back_populates="datafile")
-    simulations = relationship("SimulationMetadata", back_populates="datafile")
-
-
-class DatasetMetadata(Base):
-    """Metadata for source datasets. e.g. 'EFRS 2023/24'"""
-    __tablename__ = "datasets"
-    
-    id = Column(String, primary_key=True, default=generate_uuid)
-    name = Column(String, nullable=False, unique=True, index=True)
-    country = Column(String, nullable=False, index=True)
-    year = Column(Integer, nullable=True, index=True)  # Nullable for multi-year datasets
-    
-    # Dataset characteristics
-    source = Column(String, nullable=True)  # "FRS", "CPS", etc.
-    version = Column(String, nullable=True)
-    model_version = Column(String, nullable=True)  # e.g., "0.5.2"
-    
-    # DataFile reference
-    datafile_id = Column(String, ForeignKey("datafiles.id"), nullable=True)
-    
-    # Metadata
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     created_by = Column(String, ForeignKey("users.id"), nullable=True)
-    
-    # Relationships
-    datafile = relationship("DataFile", back_populates="datasets")
 
 
 class ScenarioMetadata(Base):
@@ -247,6 +225,9 @@ class ScenarioMetadata(Base):
     country = Column(String, nullable=False, index=True)
     model_version = Column(String, nullable=True)  # e.g., "0.5.2"
     
+    # Parent scenario reference (usually current_law)
+    parent_scenario_id = Column(String, ForeignKey("scenarios.id"), nullable=True)
+    
     # Metadata
     description = Column(Text, nullable=True)
     
@@ -256,6 +237,7 @@ class ScenarioMetadata(Base):
     
     # Relationships
     parameter_changes = relationship("ParameterChangeMetadata", back_populates="scenario", cascade="all, delete-orphan")
+    parent_scenario = relationship("ScenarioMetadata", remote_side=[id], backref="child_scenarios")
     
     # Unique constraint on (name, country) - same name allowed across countries
     __table_args__ = (

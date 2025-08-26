@@ -61,13 +61,20 @@ class ScenarioManager:
             ).delete()
             scenario = existing
         else:
+            # Get current_law scenario as parent
+            parent_scenario = session.query(ScenarioMetadata).filter_by(
+                name="current_law",
+                country=country.lower()
+            ).first()
+            
             # Create new scenario
             scenario = ScenarioMetadata(
                 id=str(uuid.uuid4()),
                 name=name,
                 country=country.lower(),
                 model_version=get_model_version(country),
-                description=description or f"Parametric reform scenario: {name}"
+                description=description or f"Parametric reform scenario: {name}",
+                parent_scenario_id=parent_scenario.id if parent_scenario else None
             )
             session.add(scenario)
             session.flush()

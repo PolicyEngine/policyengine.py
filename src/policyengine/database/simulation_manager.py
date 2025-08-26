@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional, List, Union, Dict
 from sqlalchemy.orm import Session
-from .models import SimulationMetadata, SimulationStatus, ScenarioMetadata, DatasetMetadata, DataFile, get_model_version
+from .models import SimulationMetadata, SimulationStatus, ScenarioMetadata, DatasetMetadata, get_model_version
 from .storage_backend import StorageBackend
 from ..countries.uk import UKModelOutput
 from ..countries.us import USModelOutput
@@ -130,41 +130,30 @@ class SimulationManager:
             data=all_data  # Now contains {year: data} structure
         )
         
-        # Create DataFile entry for the simulation
-        datafile = None
-        if filepath:
-            # Create datafile entry
-            datafile = DataFile(
-                id=str(uuid.uuid4()),
-                filename=f"{sim_id}.h5",
-                local_path=filepath if self.storage.config.storage_mode == "local" else None,
-                gcs_bucket=self.storage.config.gcs_bucket if self.storage.config.storage_mode == "cloud" else None,
-                gcs_path=filepath if self.storage.config.storage_mode == "cloud" else None,
-                file_size_mb=file_size_mb
-            )
-            session.add(datafile)
+        # Update dataset with file information if it was created
+        if dataset_obj and filepath:
+            # Update dataset with storage information
+            dataset_obj.filename = f"{sim_id}.h5"
+            dataset_obj.file_size_mb = file_size_mb
+            if self.storage.config.storage_mode == "local":
+                dataset_obj.local_path = filepath
+            elif self.storage.config.storage_mode == "cloud":
+                dataset_obj.gcs_bucket = self.storage.config.gcs_bucket
+                dataset_obj.gcs_path = filepath
             session.flush()
-        
-        # Link dataset's datafile to simulation if available
-        if dataset_obj and hasattr(dataset_obj, 'datafile') and dataset_obj.datafile:
-            # Simulation uses the same datafile as its source dataset
-            simulation_datafile = dataset_obj.datafile
-        else:
-            simulation_datafile = datafile
         
         # Create simulation metadata
         simulation = SimulationMetadata(
             id=sim_id,
             country=country.lower(),
-            years=years_to_process,  # Store list of years
+            year=years_to_process[0] if len(years_to_process) == 1 else None,  # Null for multi-year
             file_size_mb=file_size_mb,
-            dataset=dataset,
-            scenario=scenario,
+            dataset_id=dataset_obj.id if dataset_obj else None,
+            scenario_id=scenario_obj.id,
             model_version=get_model_version(country),
             status=SimulationStatus.COMPLETED,
             completed_at=datetime.now(),
-            tags=tags,
-            datafile=simulation_datafile
+            tags=tags
         )
         session.add(simulation)
         session.commit()
@@ -198,19 +187,35 @@ class SimulationManager:
         if not country:
             raise ValueError("Country must be specified or set as default")
         
+        # First get the scenario and dataset objects
+        scenario_obj = session.query(ScenarioMetadata).filter_by(
+            name=scenario,
+            country=country.lower()
+        ).first()
+        
+        dataset_obj = session.query(DatasetMetadata).filter_by(
+            name=dataset,
+            country=country.lower()
+        ).first()
+        
+        if not scenario_obj or not dataset_obj:
+            return None
+        
         query = session.query(SimulationMetadata).filter_by(
-            scenario=scenario,
-            dataset=dataset,
+            scenario_id=scenario_obj.id,
+            dataset_id=dataset_obj.id,
             country=country.lower(),
             status=SimulationStatus.COMPLETED
         )
         
         if year:
-            # Filter for simulations that contain this year
-            # Since years is a JSON column containing a list, we need to use JSON operations
-            from sqlalchemy import cast, String
+            # Filter for simulations with this specific year or multi-year (null)
+            from sqlalchemy import or_
             query = query.filter(
-                cast(SimulationMetadata.years, String).contains(str(year))
+                or_(
+                    SimulationMetadata.year == year,
+                    SimulationMetadata.year.is_(None)  # Multi-year simulations
+                )
             )
         
         # Get most recent simulation matching criteria
@@ -252,9 +257,9 @@ class SimulationManager:
         data = self.storage.load_simulation(
             sim_id=simulation.id,
             country=simulation.country,
-            scenario=scenario,
-            dataset=dataset,
-            year=None  # Year no longer stored as single value
+            scenario=scenario,  # Using the name passed in, not from simulation object
+            dataset=dataset,  # Using the name passed in, not from simulation object
+            year=None  # Year no longer relevant for file naming
         )
         
         if data is None:
@@ -367,16 +372,29 @@ class SimulationManager:
             query = query.filter_by(country=self.default_country.lower())
         
         if scenario:
-            query = query.filter_by(scenario=scenario)
+            scenario_obj = session.query(ScenarioMetadata).filter_by(
+                name=scenario,
+                country=country.lower() if country else self.default_country.lower()
+            ).first()
+            if scenario_obj:
+                query = query.filter_by(scenario_id=scenario_obj.id)
         
         if dataset:
-            query = query.filter_by(dataset=dataset)
+            dataset_obj = session.query(DatasetMetadata).filter_by(
+                name=dataset,
+                country=country.lower() if country else self.default_country.lower()
+            ).first()
+            if dataset_obj:
+                query = query.filter_by(dataset_id=dataset_obj.id)
         
         if year:
-            # Filter for simulations that contain this year
-            from sqlalchemy import cast, String
+            # Filter for simulations with this specific year or multi-year (null)
+            from sqlalchemy import or_
             query = query.filter(
-                cast(SimulationMetadata.years, String).contains(str(year))
+                or_(
+                    SimulationMetadata.year == year,
+                    SimulationMetadata.year.is_(None)  # Multi-year simulations
+                )
             )
         
         if tags:

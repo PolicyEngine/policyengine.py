@@ -3,3 +3,6 @@
 **/*.egg-info
 *.ipynb
 _build/
+simulations/
+test_*
+supabase/
