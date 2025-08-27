@@ -13,12 +13,12 @@ from .models import (
     ReportMetadata,
     SimulationMetadata,
     SimulationStatus,
-    DecileImpact,
-    PovertyImpact,
-    InequalityImpact,
-    BudgetaryImpact,
-    LaborSupplyImpact,
-    ProgramSpecificImpact,
+    UKGovernmentBudget,
+    UKHouseholdIncome,
+    UKDecileImpact,
+    UKPovertyImpact,
+    UKInequalityImpact,
+    UKWinnersLosers,
 )
 
 
@@ -57,20 +57,53 @@ class ReportManager:
             created_by: User ID who created the report
             
         Returns:
-            Created report metadata
+            Created or updated report metadata
         """
-        report = ReportMetadata(
+        # Check if report already exists with same name and country
+        existing = self.session.query(ReportMetadata).filter_by(
             name=name,
-            baseline_simulation_id=baseline_simulation_id,
-            comparison_simulation_id=comparison_simulation_id,
-            country=country,
-            year=year,
-            description=description,
-            tags=tags,
-            created_by=created_by,
-        )
-        self.session.add(report)
+            country=country
+        ).first()
+        
+        if existing:
+            # Delete old report impact data first
+            print(f"Warning: Report '{name}' for country '{country}' already exists. Overwriting...")
+            
+            # Delete UK-specific impact tables
+            if country.lower() == "uk":
+                self.session.query(UKGovernmentBudget).filter_by(report_id=existing.id).delete()
+                self.session.query(UKHouseholdIncome).filter_by(report_id=existing.id).delete()
+                self.session.query(UKDecileImpact).filter_by(report_id=existing.id).delete()
+                self.session.query(UKPovertyImpact).filter_by(report_id=existing.id).delete()
+                self.session.query(UKInequalityImpact).filter_by(report_id=existing.id).delete()
+                self.session.query(UKWinnersLosers).filter_by(report_id=existing.id).delete()
+            
+            # Update existing report metadata
+            existing.baseline_simulation_id = baseline_simulation_id
+            existing.comparison_simulation_id = comparison_simulation_id
+            existing.year = year
+            existing.description = description or existing.description
+            existing.tags = tags or existing.tags
+            existing.updated_at = datetime.now()
+            existing.status = SimulationStatus.PENDING
+            report = existing
+        else:
+            # Create new report
+            report = ReportMetadata(
+                name=name,
+                baseline_simulation_id=baseline_simulation_id,
+                comparison_simulation_id=comparison_simulation_id,
+                country=country,
+                year=year,
+                description=description,
+                tags=tags,
+                created_by=created_by,
+            )
+            self.session.add(report)
+        
         self.session.commit()
+        self.session.refresh(report)
+        self.session.expunge(report)
         return report
     
     def run_report(
@@ -143,3 +176,133 @@ class ReportManager:
             query = query.filter_by(status=status)
         
         return query.all()
+    
+    def get_report_results(self, report_id: str) -> dict:
+        """Get report results including all impact data.
+        
+        Args:
+            report_id: Report ID
+            
+        Returns:
+            Dictionary containing report metadata and all impact results
+        """
+        # Get report metadata
+        report = self.session.query(ReportMetadata).filter_by(id=report_id).first()
+        if not report:
+            raise ValueError(f"Report {report_id} not found")
+        
+        # Build base results
+        results = {
+            "report": {
+                "id": report.id,
+                "name": report.name,
+                "country": report.country,
+                "year": report.year,
+                "baseline_simulation_id": report.baseline_simulation_id,
+                "comparison_simulation_id": report.comparison_simulation_id,
+                "description": report.description,
+                "created_at": report.created_at.isoformat() if report.created_at else None,
+            }
+        }
+        
+        # Get country-specific impact results
+        if report.country.lower() == "uk":
+            # UK-specific tables
+            government_budget = self.session.query(UKGovernmentBudget).filter_by(report_id=report_id).first()
+            household_income = self.session.query(UKHouseholdIncome).filter_by(report_id=report_id).first()
+            decile_impacts = self.session.query(UKDecileImpact).filter_by(report_id=report_id).all()
+            poverty_impacts = self.session.query(UKPovertyImpact).filter_by(report_id=report_id).all()
+            inequality_impact = self.session.query(UKInequalityImpact).filter_by(report_id=report_id).first()
+            winners_losers = self.session.query(UKWinnersLosers).filter_by(report_id=report_id).all()
+            
+            results.update({
+                "government_budget": {
+                    "gov_balance": {
+                        "baseline": government_budget.gov_balance_baseline if government_budget else None,
+                        "reform": government_budget.gov_balance_reform if government_budget else None,
+                        "change": government_budget.gov_balance_change if government_budget else None,
+                    },
+                    "gov_tax": {
+                        "baseline": government_budget.gov_tax_baseline if government_budget else None,
+                        "reform": government_budget.gov_tax_reform if government_budget else None,
+                        "change": government_budget.gov_tax_change if government_budget else None,
+                    },
+                    "gov_spending": {
+                        "baseline": government_budget.gov_spending_baseline if government_budget else None,
+                        "reform": government_budget.gov_spending_reform if government_budget else None,
+                        "change": government_budget.gov_spending_change if government_budget else None,
+                    },
+                } if government_budget else {},
+                "household_income": {
+                    "household_market_income": {
+                        "baseline": household_income.household_market_income_baseline if household_income else None,
+                        "reform": household_income.household_market_income_reform if household_income else None,
+                        "change": household_income.household_market_income_change if household_income else None,
+                    },
+                    "hbai_household_net_income": {
+                        "baseline": household_income.hbai_household_net_income_baseline if household_income else None,
+                        "reform": household_income.hbai_household_net_income_reform if household_income else None,
+                        "change": household_income.hbai_household_net_income_change if household_income else None,
+                    },
+                    "household_net_income": {
+                        "baseline": household_income.household_net_income_baseline if household_income else None,
+                        "reform": household_income.household_net_income_reform if household_income else None,
+                        "change": household_income.household_net_income_change if household_income else None,
+                    },
+                } if household_income else {},
+                "decile_impacts": [
+                    {
+                        "decile_type": impact.decile_type,
+                        "decile": impact.decile,
+                        "variable_name": impact.variable_name,
+                        "sum_baseline": impact.sum_baseline,
+                        "sum_reform": impact.sum_reform,
+                        "sum_change": impact.sum_change,
+                        "mean_baseline": impact.mean_baseline,
+                        "mean_reform": impact.mean_reform,
+                        "mean_change": impact.mean_change,
+                    }
+                    for impact in decile_impacts
+                ],
+                "poverty_impacts": [
+                    {
+                        "poverty_type": impact.poverty_type,
+                        "demographic_group": impact.demographic_group,
+                        "headcount_baseline": impact.headcount_baseline,
+                        "headcount_reform": impact.headcount_reform,
+                        "headcount_change": impact.headcount_change,
+                        "rate_baseline": impact.rate_baseline,
+                        "rate_reform": impact.rate_reform,
+                        "rate_change": impact.rate_change,
+                    }
+                    for impact in poverty_impacts
+                ],
+                "inequality_impacts": {
+                    "gini_baseline": inequality_impact.gini_baseline if inequality_impact else None,
+                    "gini_reform": inequality_impact.gini_reform if inequality_impact else None,
+                    "gini_change": inequality_impact.gini_change if inequality_impact else None,
+                    "top_10_percent_share_baseline": inequality_impact.top_10_percent_share_baseline if inequality_impact else None,
+                    "top_10_percent_share_reform": inequality_impact.top_10_percent_share_reform if inequality_impact else None,
+                    "top_10_percent_share_change": inequality_impact.top_10_percent_share_change if inequality_impact else None,
+                    "top_1_percent_share_baseline": inequality_impact.top_1_percent_share_baseline if inequality_impact else None,
+                    "top_1_percent_share_reform": inequality_impact.top_1_percent_share_reform if inequality_impact else None,
+                    "top_1_percent_share_change": inequality_impact.top_1_percent_share_change if inequality_impact else None,
+                } if inequality_impact else {},
+                "winners_losers": [
+                    {
+                        "decile": impact.decile,
+                        "gain_more_than_5_percent": impact.gain_more_than_5_percent,
+                        "gain_more_than_1_percent": impact.gain_more_than_1_percent,
+                        "no_change": impact.no_change,
+                        "lose_less_than_1_percent": impact.lose_less_than_1_percent,
+                        "lose_less_than_5_percent": impact.lose_less_than_5_percent,
+                        "lose_more_than_5_percent": impact.lose_more_than_5_percent,
+                    }
+                    for impact in winners_losers
+                ],
+            })
+        else:
+            # For now, US reports not implemented
+            results["error"] = "US reports not yet implemented with country-specific tables"
+        
+        return results

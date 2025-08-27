@@ -362,64 +362,169 @@ class ReportMetadata(Base):
     comparison_simulation = relationship("SimulationMetadata", foreign_keys=[comparison_simulation_id])
 
 
-class DecileImpact(Base):
-    """Store income change impacts by decile."""
-    __tablename__ = "report_decile_impacts"
+# UK-specific report tables
+
+class UKGovernmentBudget(Base):
+    """UK government budget metrics."""
+    __tablename__ = "report_uk_government_budget"
     
     id = Column(String, primary_key=True, default=generate_uuid)
     report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
     
-    # Type of decile grouping
-    decile_type = Column(String, nullable=False)  # 'income' or 'wealth'
-    decile = Column(Integer, nullable=False)  # 1-10
+    # Overall budget
+    gov_balance_baseline = Column(Float, nullable=True)
+    gov_balance_reform = Column(Float, nullable=True)
+    gov_balance_change = Column(Float, nullable=True)
     
-    # Impact metrics
-    relative_change = Column(Float, nullable=True)  # Percentage change
-    average_change = Column(Float, nullable=True)  # Average £/$ change
+    # Tax revenues
+    gov_tax_baseline = Column(Float, nullable=True)
+    gov_tax_reform = Column(Float, nullable=True)
+    gov_tax_change = Column(Float, nullable=True)
     
-    # Winners and losers breakdown
-    lose_more_than_5_percent = Column(Float, nullable=True)
-    lose_less_than_5_percent = Column(Float, nullable=True)
-    no_change = Column(Float, nullable=True)
-    gain_less_than_5_percent = Column(Float, nullable=True)
-    gain_more_than_5_percent = Column(Float, nullable=True)
+    # Specific taxes
+    income_tax_baseline = Column(Float, nullable=True)
+    income_tax_reform = Column(Float, nullable=True)
+    income_tax_change = Column(Float, nullable=True)
+    
+    national_insurance_baseline = Column(Float, nullable=True)
+    national_insurance_reform = Column(Float, nullable=True)
+    national_insurance_change = Column(Float, nullable=True)
+    
+    ni_employer_baseline = Column(Float, nullable=True)
+    ni_employer_reform = Column(Float, nullable=True)
+    ni_employer_change = Column(Float, nullable=True)
+    
+    vat_baseline = Column(Float, nullable=True)
+    vat_reform = Column(Float, nullable=True)
+    vat_change = Column(Float, nullable=True)
+    
+    capital_gains_tax_baseline = Column(Float, nullable=True)
+    capital_gains_tax_reform = Column(Float, nullable=True)
+    capital_gains_tax_change = Column(Float, nullable=True)
+    
+    # Government spending
+    gov_spending_baseline = Column(Float, nullable=True)
+    gov_spending_reform = Column(Float, nullable=True)
+    gov_spending_change = Column(Float, nullable=True)
+    
+    # Specific benefits
+    universal_credit_baseline = Column(Float, nullable=True)
+    universal_credit_reform = Column(Float, nullable=True)
+    universal_credit_change = Column(Float, nullable=True)
+    
+    state_pension_baseline = Column(Float, nullable=True)
+    state_pension_reform = Column(Float, nullable=True)
+    state_pension_change = Column(Float, nullable=True)
+    
+    pip_baseline = Column(Float, nullable=True)
+    pip_reform = Column(Float, nullable=True)
+    pip_change = Column(Float, nullable=True)
+    
+    dla_baseline = Column(Float, nullable=True)
+    dla_reform = Column(Float, nullable=True)
+    dla_change = Column(Float, nullable=True)
+    
+    housing_benefit_baseline = Column(Float, nullable=True)
+    housing_benefit_reform = Column(Float, nullable=True)
+    housing_benefit_change = Column(Float, nullable=True)
+    
+    working_tax_credit_baseline = Column(Float, nullable=True)
+    working_tax_credit_reform = Column(Float, nullable=True)
+    working_tax_credit_change = Column(Float, nullable=True)
+    
+    child_tax_credit_baseline = Column(Float, nullable=True)
+    child_tax_credit_reform = Column(Float, nullable=True)
+    child_tax_credit_change = Column(Float, nullable=True)
     
     created_at = Column(DateTime, default=datetime.now)
     
     # Relationships
-    report = relationship("ReportMetadata", backref="decile_impacts")
+    report = relationship("ReportMetadata", backref="uk_government_budget", uselist=False)
 
 
-class PovertyImpact(Base):
-    """Store poverty impact metrics."""
-    __tablename__ = "report_poverty_impacts"
+class UKHouseholdIncome(Base):
+    """UK household income metrics."""
+    __tablename__ = "report_uk_household_income"
     
     id = Column(String, primary_key=True, default=generate_uuid)
     report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
     
-    # Demographic group
-    group_type = Column(String, nullable=False)  # 'age', 'gender', 'race'
-    group_value = Column(String, nullable=False)  # 'child', 'adult', 'senior', 'male', 'female', etc.
+    # Market income
+    household_market_income_baseline = Column(Float, nullable=True)
+    household_market_income_reform = Column(Float, nullable=True)
+    household_market_income_change = Column(Float, nullable=True)
     
-    # Poverty metrics
-    poverty_rate_baseline = Column(Float, nullable=True)
-    poverty_rate_reform = Column(Float, nullable=True)
-    poverty_rate_change = Column(Float, nullable=True)
+    # HBAI net income (official definition for poverty)
+    hbai_household_net_income_baseline = Column(Float, nullable=True)
+    hbai_household_net_income_reform = Column(Float, nullable=True)
+    hbai_household_net_income_change = Column(Float, nullable=True)
     
-    # Deep poverty metrics
-    deep_poverty_rate_baseline = Column(Float, nullable=True)
-    deep_poverty_rate_reform = Column(Float, nullable=True)
-    deep_poverty_rate_change = Column(Float, nullable=True)
+    # Comprehensive net income
+    household_net_income_baseline = Column(Float, nullable=True)
+    household_net_income_reform = Column(Float, nullable=True)
+    household_net_income_change = Column(Float, nullable=True)
     
     created_at = Column(DateTime, default=datetime.now)
     
     # Relationships
-    report = relationship("ReportMetadata", backref="poverty_impacts")
+    report = relationship("ReportMetadata", backref="uk_household_income", uselist=False)
 
 
-class InequalityImpact(Base):
-    """Store inequality metrics."""
-    __tablename__ = "report_inequality_impacts"
+class UKDecileImpact(Base):
+    """UK income/wealth/consumption decile impacts."""
+    __tablename__ = "report_uk_decile_impacts"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
+    
+    # Decile grouping type
+    decile_type = Column(String, nullable=False)  # 'equiv_hbai_household_net_income', 'consumption', 'total_wealth'
+    decile = Column(Integer, nullable=False)  # 1-10, or 0 for all
+    
+    # Sum and mean metrics for each variable
+    variable_name = Column(String, nullable=False)  # Name of variable being aggregated
+    sum_baseline = Column(Float, nullable=True)
+    sum_reform = Column(Float, nullable=True)
+    sum_change = Column(Float, nullable=True)
+    mean_baseline = Column(Float, nullable=True)
+    mean_reform = Column(Float, nullable=True)
+    mean_change = Column(Float, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.now)
+    
+    # Relationships
+    report = relationship("ReportMetadata", backref="uk_decile_impacts")
+
+
+class UKPovertyImpact(Base):
+    """UK poverty rates (HBAI definitions)."""
+    __tablename__ = "report_uk_poverty_impacts"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
+    
+    # Poverty type and demographic group
+    poverty_type = Column(String, nullable=False)  # 'absolute_bhc', 'relative_bhc', 'absolute_ahc', 'relative_ahc'
+    demographic_group = Column(String, nullable=False)  # 'all', 'child', 'working_age', 'pensioner'
+    
+    # Headcount and rate
+    headcount_baseline = Column(Float, nullable=True)
+    headcount_reform = Column(Float, nullable=True)
+    headcount_change = Column(Float, nullable=True)
+    
+    rate_baseline = Column(Float, nullable=True)
+    rate_reform = Column(Float, nullable=True)
+    rate_change = Column(Float, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.now)
+    
+    # Relationships
+    report = relationship("ReportMetadata", backref="uk_poverty_impacts")
+
+
+class UKInequalityImpact(Base):
+    """UK inequality metrics."""
+    __tablename__ = "report_uk_inequality_impacts"
     
     id = Column(String, primary_key=True, default=generate_uuid)
     report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
@@ -441,74 +546,28 @@ class InequalityImpact(Base):
     created_at = Column(DateTime, default=datetime.now)
     
     # Relationships
-    report = relationship("ReportMetadata", backref="inequality_impacts", uselist=False)
+    report = relationship("ReportMetadata", backref="uk_inequality_impacts", uselist=False)
 
 
-class BudgetaryImpact(Base):
-    """Store budgetary impact metrics."""
-    __tablename__ = "report_budgetary_impacts"
+class UKWinnersLosers(Base):
+    """UK winners and losers breakdown."""
+    __tablename__ = "report_uk_winners_losers"
     
     id = Column(String, primary_key=True, default=generate_uuid)
     report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
     
-    # Overall budgetary impact
-    budgetary_impact = Column(Float, nullable=True)
+    # Decile (1-10) or 0 for all
+    decile = Column(Integer, nullable=False)
     
-    # Revenue and spending components
-    tax_revenue_impact = Column(Float, nullable=True)
-    state_tax_revenue_impact = Column(Float, nullable=True)
-    benefit_spending_impact = Column(Float, nullable=True)
-    
-    # Context metrics
-    households_affected = Column(Float, nullable=True)
-    baseline_net_income = Column(Float, nullable=True)
-    
-    created_at = Column(DateTime, default=datetime.now)
-    
-    # Relationships
-    report = relationship("ReportMetadata", backref="budgetary_impacts", uselist=False)
-
-
-class LaborSupplyImpact(Base):
-    """Store labor supply response metrics."""
-    __tablename__ = "report_labor_supply_impacts"
-    
-    id = Column(String, primary_key=True, default=generate_uuid)
-    report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
-    
-    # Labor supply responses
-    substitution_effect = Column(Float, nullable=True)
-    income_effect = Column(Float, nullable=True)
-    total_change = Column(Float, nullable=True)
-    revenue_change = Column(Float, nullable=True)
-    
-    # Hours worked
-    hours_baseline = Column(Float, nullable=True)
-    hours_reform = Column(Float, nullable=True)
-    hours_change = Column(Float, nullable=True)
-    hours_income_effect = Column(Float, nullable=True)
-    hours_substitution_effect = Column(Float, nullable=True)
+    # Share in each category
+    gain_more_than_5_percent = Column(Float, nullable=True)
+    gain_more_than_1_percent = Column(Float, nullable=True)
+    no_change = Column(Float, nullable=True)
+    lose_less_than_1_percent = Column(Float, nullable=True)
+    lose_less_than_5_percent = Column(Float, nullable=True)
+    lose_more_than_5_percent = Column(Float, nullable=True)
     
     created_at = Column(DateTime, default=datetime.now)
     
     # Relationships
-    report = relationship("ReportMetadata", backref="labor_supply_impacts", uselist=False)
-
-
-class ProgramSpecificImpact(Base):
-    """Store program-specific budgetary impacts (UK only)."""
-    __tablename__ = "report_program_impacts"
-    
-    id = Column(String, primary_key=True, default=generate_uuid)
-    report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
-    
-    # Program details
-    program_name = Column(String, nullable=False)
-    baseline_cost = Column(Float, nullable=True)
-    reform_cost = Column(Float, nullable=True)
-    cost_difference = Column(Float, nullable=True)
-    
-    created_at = Column(DateTime, default=datetime.now)
-    
-    # Relationships
-    report = relationship("ReportMetadata", backref="program_impacts")
+    report = relationship("ReportMetadata", backref="uk_winners_losers")

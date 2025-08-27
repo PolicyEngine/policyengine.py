@@ -17,6 +17,13 @@ class UKModelOutput(ModelOutput):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 UK_VARIABLE_WHITELIST = [
+    # ID columns for linking entities
+    "person_id",
+    "person_household_id",
+    "person_benunit_id",
+    "benunit_id",
+    "household_id",
+    
     # Income and wealth
     "household_net_income",
     # The following may not exist in all datasets, so we'll check them later
@@ -27,6 +34,9 @@ UK_VARIABLE_WHITELIST = [
     "total_wealth",
     "employment_income",
     "self_employment_income",
+    "hbai_household_net_income",
+    "equiv_hbai_household_net_income",
+    "consumption",
     
     # Weights
     "household_weight",
@@ -37,30 +47,42 @@ UK_VARIABLE_WHITELIST = [
     "age",
     "is_male",
     
-    # Tax and benefits
+    # Government budget
+    "gov_balance",
     "gov_tax",
     "gov_spending",
+    
+    # Tax and benefits
     "household_tax",
     "household_benefits",
     
-    # UK-specific programs
+    # UK-specific programs - taxes
     "income_tax",
     "national_insurance",
     "vat",
     "council_tax",
     "fuel_duty",
     "ni_employer",
+    "capital_gains_tax",
+    
+    # UK-specific programs - benefits
     "universal_credit",
     "child_benefit",
     "income_support",
     "housing_benefit",
     "pension_credit",
     "state_pension",
-    "employment_support_allowance",
-    "jobseekers_allowance",
     "child_tax_credit",
     "working_tax_credit",
     "tax_credits",
+    "pip",
+    "dla",
+    
+    # Poverty variables
+    "in_poverty",
+    "in_relative_poverty_bhc",
+    "in_poverty_ahc",
+    "in_relative_poverty_ahc",
 ]
 
 def process_uk_simulation(simulation: "Simulation", year: int) -> UKModelOutput:

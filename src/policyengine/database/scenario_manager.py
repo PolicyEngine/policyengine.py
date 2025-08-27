@@ -54,7 +54,9 @@ class ScenarioManager:
         
         if existing:
             # Update existing scenario - clear old parameter changes
+            print(f"Warning: Scenario '{name}' for country '{country}' already exists. Overwriting...")
             existing.model_version = get_model_version(country)
+            existing.description = description or existing.description
             existing.updated_at = datetime.now()
             session.query(ParameterChangeMetadata).filter_by(
                 scenario_id=existing.id

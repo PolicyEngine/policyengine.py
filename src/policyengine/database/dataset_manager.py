@@ -127,6 +127,7 @@ class DatasetManager:
         
         if existing:
             # Update existing dataset
+            print(f"Warning: Dataset '{name}' for country '{country}' already exists. Overwriting...")
             existing.year = year
             existing.source = source or existing.source
             existing.version = version or existing.version

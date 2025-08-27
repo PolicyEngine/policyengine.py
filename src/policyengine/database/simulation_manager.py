@@ -51,7 +51,7 @@ class SimulationManager:
             save_all_variables: If True, saves all calculated variables for all periods
             
         Returns:
-            Created SimulationMetadata object
+            Created or updated SimulationMetadata object
         """
         country = country or self.default_country
         if not country:
@@ -117,8 +117,22 @@ class SimulationManager:
                 session.add(dataset_obj)
                 session.flush()
         
-        # Generate unique ID for simulation
-        sim_id = str(uuid.uuid4())
+        # Check if simulation already exists for this scenario/dataset/year combination
+        existing_simulation = session.query(SimulationMetadata).filter_by(
+            scenario_id=scenario_obj.id,
+            dataset_id=dataset_obj.id if dataset_obj else None,
+            country=country.lower(),
+            year=years_to_process[0] if len(years_to_process) == 1 else None,
+            status=SimulationStatus.COMPLETED
+        ).first()
+        
+        if existing_simulation:
+            # Update existing simulation
+            print(f"Warning: Simulation for scenario '{scenario}', dataset '{dataset}', country '{country}' already exists. Overwriting...")
+            sim_id = existing_simulation.id
+        else:
+            # Generate new ID for simulation
+            sim_id = str(uuid.uuid4())
         
         # Save simulation data (now with multi-year structure)
         filepath, file_size_mb = self.storage.save_simulation(
@@ -142,26 +156,39 @@ class SimulationManager:
                 dataset_obj.gcs_path = filepath
             session.flush()
         
-        # Create simulation metadata
-        simulation = SimulationMetadata(
-            id=sim_id,
-            country=country.lower(),
-            year=years_to_process[0] if len(years_to_process) == 1 else None,  # Null for multi-year
-            file_size_mb=file_size_mb,
-            dataset_id=dataset_obj.id if dataset_obj else None,
-            scenario_id=scenario_obj.id,
-            model_version=get_model_version(country),
-            status=SimulationStatus.COMPLETED,
-            completed_at=datetime.now(),
-            tags=tags
-        )
-        session.add(simulation)
-        session.commit()
-        session.refresh(simulation)
-        # Attach storage backend for get_data() method
-        simulation._storage = self.storage
-        session.expunge(simulation)
-        return simulation
+        if existing_simulation:
+            # Update existing simulation metadata
+            existing_simulation.file_size_mb = file_size_mb
+            existing_simulation.model_version = get_model_version(country)
+            existing_simulation.completed_at = datetime.now()
+            existing_simulation.tags = tags
+            session.commit()
+            session.refresh(existing_simulation)
+            # Attach storage backend for get_data() method
+            existing_simulation._storage = self.storage
+            session.expunge(existing_simulation)
+            return existing_simulation
+        else:
+            # Create new simulation metadata
+            simulation = SimulationMetadata(
+                id=sim_id,
+                country=country.lower(),
+                year=years_to_process[0] if len(years_to_process) == 1 else None,  # Null for multi-year
+                file_size_mb=file_size_mb,
+                dataset_id=dataset_obj.id if dataset_obj else None,
+                scenario_id=scenario_obj.id,
+                model_version=get_model_version(country),
+                status=SimulationStatus.COMPLETED,
+                completed_at=datetime.now(),
+                tags=tags
+            )
+            session.add(simulation)
+            session.commit()
+            session.refresh(simulation)
+            # Attach storage backend for get_data() method
+            simulation._storage = self.storage
+            session.expunge(simulation)
+            return simulation
     
     def get_simulation_metadata(
         self,
