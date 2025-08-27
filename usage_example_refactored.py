@@ -3,7 +3,7 @@
 This demonstrates the separation between:
 1. Pure data models (Pydantic)
 2. Calculation functions that work with pure models
-3. Database models (SQLAlchemy)
+3. SimulationOrchestrator models (SQLAlchemy)
 4. Adapter layer for conversion
 """
 
@@ -24,7 +24,7 @@ from src.policyengine.countries.us.model_output import USModelOutput
 def example_pure_calculations_uk():
     """Example of UK calculations without any database dependency."""
     print("=" * 60)
-    print("UK EXAMPLE - Pure Calculations (No Database)")
+    print("UK EXAMPLE - Pure Calculations (No SimulationOrchestrator)")
     print("=" * 60)
     
     # Create sample UK household data
@@ -104,7 +104,7 @@ def example_pure_calculations_uk():
 def example_pure_calculations_us():
     """Example of US calculations without any database dependency."""
     print("\n" + "=" * 60)
-    print("US EXAMPLE - Pure Calculations (No Database)")
+    print("US EXAMPLE - Pure Calculations (No SimulationOrchestrator)")
     print("=" * 60)
     
     # Create sample US household data
@@ -235,7 +235,7 @@ def main():
     print("\nThe new architecture separates:")
     print("1. Pure data models (Pydantic) - no database dependencies")
     print("2. Calculation functions - work with pure models")
-    print("3. Database models (SQLAlchemy) - for persistence")
+    print("3. SimulationOrchestrator models (SQLAlchemy) - for persistence")
     print("4. Adapters - convert between model types")
     print("\nThis separation allows:")
     print("- Testing calculations without a database")

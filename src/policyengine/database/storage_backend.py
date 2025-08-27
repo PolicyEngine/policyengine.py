@@ -15,7 +15,7 @@ class StorageBackend:
         """Initialize storage backend.
         
         Args:
-            config: DatabaseConfig with storage settings
+            config: SimulationOrchestratorConfig with storage settings
         """
         self.config = config
     

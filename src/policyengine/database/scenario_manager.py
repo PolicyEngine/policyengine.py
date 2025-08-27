@@ -31,7 +31,7 @@ class ScenarioManager:
         """Add a parametric scenario with parameter changes.
         
         Args:
-            session: Database session
+            session: SimulationOrchestrator session
             name: Name of the scenario
             parameter_changes: Dictionary of parameter changes in various formats
             country: Country code (uses default if not specified)
@@ -165,7 +165,7 @@ class ScenarioManager:
         """Get a scenario by name and country.
         
         Args:
-            session: Database session
+            session: SimulationOrchestrator session
             name: Name of the scenario
             country: Country code (uses default if not specified)
             

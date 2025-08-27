@@ -29,7 +29,7 @@ class ReportManager:
         """Initialise the report manager.
         
         Args:
-            session: Database session
+            session: SimulationOrchestrator session
         """
         self.session = session
     

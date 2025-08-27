@@ -1,11 +1,11 @@
 """US example: Double the federal EITC."""
 
-from policyengine import Database
+from policyengine import SimulationOrchestrator
 from policyengine_us import Microsimulation
 from policyengine_core.reforms import Reform
 
 # Initialize database
-db = Database(connection_string="postgresql://postgres:postgres@127.0.0.1:54322/postgres")
+db = SimulationOrchestrator(connection_string="postgresql://postgres:postgres@127.0.0.1:54322/postgres")
 db._auto_initialize()
 
 # Create scenarios

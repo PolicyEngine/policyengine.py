@@ -108,7 +108,7 @@ class SimulationMetadata(Base):
             UKModelOutput/USModelOutput object for single year, or dict of {year: ModelOutput} for multiple years
         """
         if not hasattr(self, '_storage'):
-            raise RuntimeError("SimulationMetadata was not loaded through Database.get_simulation()")
+            raise RuntimeError("SimulationMetadata was not loaded through SimulationOrchestrator.get_simulation()")
         
         # Import here to avoid circular imports
         from ..countries.uk import UKModelOutput

@@ -26,7 +26,7 @@ class UKEconomicImpactReportRefactored:
     
     This class demonstrates the refactored approach where:
     1. Calculations work with pure Pydantic models
-    2. Database operations are handled separately through adapters
+    2. SimulationOrchestrator operations are handled separately through adapters
     3. The report class acts as a coordinator
     """
     
@@ -95,7 +95,7 @@ class UKEconomicImpactReportRefactored:
             EconomicImpactModel with all calculated impacts
         """
         if not self.session:
-            raise ValueError("Database session required for saving impacts")
+            raise ValueError("SimulationOrchestrator session required for saving impacts")
         
         # Convert ORM model to Pydantic
         report_metadata = report_metadata_orm_to_pydantic(report)

@@ -24,7 +24,7 @@ class EconomicImpactReportBase(ABC):
         """Initialise the report.
         
         Args:
-            session: Database session for writing results
+            session: SimulationOrchestrator session for writing results
             report_metadata: Metadata for this report run
         """
         self.session = session

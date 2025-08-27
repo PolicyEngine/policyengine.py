@@ -64,7 +64,7 @@ def import_variables_from_tax_benefit_system(
     """Import all variables from a tax benefit system into the database.
     
     Args:
-        session: Database session
+        session: SimulationOrchestrator session
         tax_benefit_system: PolicyEngine tax benefit system
         country: Country code
         

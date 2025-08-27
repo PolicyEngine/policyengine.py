@@ -35,7 +35,7 @@ class DatasetManager:
         """Create a Dataset entry with file information.
         
         Args:
-            session: Database session
+            session: SimulationOrchestrator session
             name: Name of the dataset
             country: Country code
             filename: Name of the file
@@ -93,7 +93,7 @@ class DatasetManager:
         """Register a dataset in the database.
         
         Args:
-            session: Database session
+            session: SimulationOrchestrator session
             name: Name of the dataset (e.g., "frs_2023_24")
             country: Country code (uses default if not specified)
             year: Year of the dataset
@@ -188,7 +188,7 @@ class DatasetManager:
         """Get a dataset by name and country.
         
         Args:
-            session: Database session
+            session: SimulationOrchestrator session
             name: Name of the dataset
             country: Country code (uses default if not specified)
             
@@ -219,7 +219,7 @@ class DatasetManager:
         """List datasets matching criteria.
         
         Args:
-            session: Database session
+            session: SimulationOrchestrator session
             country: Filter by country
             year: Filter by year
             source: Filter by source

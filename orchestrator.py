@@ -1,4 +1,4 @@
-"""Database management for PolicyEngine simulations and metadata."""
+"""SimulationOrchestrator management for PolicyEngine simulations and metadata."""
 
 import os
 from typing import Optional, Any, List
@@ -10,21 +10,21 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 from pydantic import BaseModel, Field
 
-from .models import Base
-from ..utils import import_parameters_from_tax_benefit_system
-from .storage_backend import StorageBackend
-from .scenario_manager import ScenarioManager
-from .dataset_manager import DatasetManager
-from .simulation_manager import SimulationManager
+from .src.policyengine.database.models import Base
+from .src.policyengine.utils import import_parameters_from_tax_benefit_system
+from .src.policyengine.database.storage_backend import StorageBackend
+from .src.policyengine.database.scenario_manager import ScenarioManager
+from .src.policyengine.database.dataset_manager import DatasetManager
+from .src.policyengine.database.simulation_manager import SimulationManager
 
 
-class DatabaseConfig(BaseModel):
+class SimulationOrchestratorConfig(BaseModel):
     """Configuration for database connection and storage."""
     
-    # Database configuration
+    # SimulationOrchestrator configuration
     connection_string: Optional[str] = Field(
         None, 
-        description="Database connection string (SQLite, PostgreSQL, MySQL, etc. - defaults to local SQLite)"
+        description="SimulationOrchestrator connection string (SQLite, PostgreSQL, MySQL, etc. - defaults to local SQLite)"
     )
     echo: bool = Field(False, description="Echo SQL statements")
     
@@ -37,12 +37,12 @@ class DatabaseConfig(BaseModel):
     gcs_prefix: Optional[str] = Field("simulations/", description="Prefix for GCS objects")
 
 
-class Database:
+class SimulationOrchestrator:
     """Main database manager for PolicyEngine."""
     
     def __init__(
             self,
-            # Database configuration
+            # SimulationOrchestrator configuration
             connection_string: Optional[str] = None,
             echo: bool = False,
             # Storage configuration
@@ -57,7 +57,7 @@ class Database:
         """Initialize database with configuration.
         
         Args:
-            connection_string: Database connection string (SQLite, PostgreSQL, MySQL, etc)
+            connection_string: SimulationOrchestrator connection string (SQLite, PostgreSQL, MySQL, etc)
             echo: Echo SQL statements
             storage_mode: Storage mode for .h5 files ('local' or 'cloud')
             local_storage_path: Local path for .h5 files
@@ -66,7 +66,7 @@ class Database:
             countries: List of supported countries (defaults to ["uk"])
             initialize: Whether to automatically initialize with current law parameters
         """
-        self.config = DatabaseConfig(
+        self.config = SimulationOrchestratorConfig(
             connection_string=connection_string,
             echo=echo,
             storage_mode=storage_mode,
@@ -141,7 +141,7 @@ class Database:
     
     def _auto_initialize(self):
         """Automatically initialize database with current law parameters for each country."""
-        from .models import ScenarioMetadata
+        from .src.policyengine.database.models import ScenarioMetadata
         
         for country in self.countries:
             # Check if current_law scenario already exists
@@ -169,7 +169,7 @@ class Database:
         Args:
             country: Country code ('uk' or 'us')
         """
-        from .models import DatasetMetadata
+        from .src.policyengine.database.models import DatasetMetadata
         
         # Define default datasets for each country
         default_datasets = {
@@ -247,7 +247,7 @@ class Database:
         """Get a database session context manager.
         
         Yields:
-            Database session
+            SimulationOrchestrator session
         """
         session = self.SessionLocal()
         try:
@@ -301,7 +301,7 @@ class Database:
         
         # Import parameters and variables into database
         with self.session() as session:
-            from ..utils.variables import import_variables_from_tax_benefit_system
+            from .src.policyengine.utils.variables import import_variables_from_tax_benefit_system
             
             # Import parameters
             import_parameters_from_tax_benefit_system(
@@ -334,7 +334,7 @@ class Database:
         Returns:
             ScenarioMetadata object or None if not found
         """
-        from .models import ScenarioMetadata
+        from .src.policyengine.database.models import ScenarioMetadata
         country = country or self.default_country
         
         with self.session() as session:
@@ -526,8 +526,8 @@ class Database:
         Returns:
             ReportMetadata object or report results dict (if run_immediately)
         """
-        from .models import SimulationMetadata
-        from .report_manager import ReportManager
+        from .src.policyengine.database.models import SimulationMetadata
+        from .src.policyengine.database.report_manager import ReportManager
         
         with self.session() as session:
             # Get simulation IDs
@@ -606,7 +606,7 @@ class Database:
         Returns:
             Dictionary containing report metadata and results
         """
-        from .report_manager import ReportManager
+        from .src.policyengine.database.report_manager import ReportManager
         
         with self.session() as session:
             report_manager = ReportManager(session)
@@ -628,8 +628,8 @@ class Database:
         Returns:
             List of ReportMetadata objects
         """
-        from .report_manager import ReportManager
-        from .models import SimulationStatus
+        from .src.policyengine.database.report_manager import ReportManager
+        from .src.policyengine.database.models import SimulationStatus
         
         with self.session() as session:
             report_manager = ReportManager(session)
@@ -662,7 +662,7 @@ class Database:
         Returns:
             VariableMetadata object or None if not found
         """
-        from .models import VariableMetadata
+        from .src.policyengine.database.models import VariableMetadata
         country = country or self.default_country
         
         with self.session() as session:
@@ -692,7 +692,7 @@ class Database:
         Returns:
             List of VariableMetadata objects
         """
-        from .models import VariableMetadata
+        from .src.policyengine.database.models import VariableMetadata
         country = country or self.default_country
         
         with self.session() as session:

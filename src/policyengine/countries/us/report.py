@@ -27,7 +27,7 @@ class USEconomicImpactReport:
         """Initialise US economic impact report.
         
         Args:
-            session: Database session
+            session: SimulationOrchestrator session
             report_metadata: Report metadata from database
         """
         self.session = session

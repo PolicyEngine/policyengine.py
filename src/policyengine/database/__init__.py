@@ -1,6 +1,6 @@
-"""Database abstraction for PolicyEngine with hybrid storage."""
+"""SimulationOrchestrator abstraction for PolicyEngine with hybrid storage."""
 
-from .database import Database
+from ....orchestrator import SimulationOrchestrator
 from .models import (
     SimulationMetadata,
     DatasetMetadata,
@@ -42,7 +42,7 @@ from .report_manager import ReportManager
 
 __all__ = [
     # Main classes
-    "Database",
+    "SimulationOrchestrator",
     
     # Models
     "SimulationMetadata",

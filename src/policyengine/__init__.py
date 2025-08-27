@@ -2,8 +2,8 @@
 
 __version__ = "0.6.1"
 
-from .database import Database
+from .database import SimulationOrchestrator
 
 __all__ = [
-    "Database",
+    "SimulationOrchestrator",
 ]

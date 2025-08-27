@@ -148,7 +148,7 @@ def import_parameters_from_tax_benefit_system(
     """Import all parameters from a tax benefit system into the database.
     
     Args:
-        session: Database session
+        session: SimulationOrchestrator session
         tax_benefit_system: PolicyEngine tax benefit system
         country: Country code
         scenario_name: Name for the scenario
@@ -263,7 +263,7 @@ def get_parameter_value_at_instant(
     """Get the value of a parameter at a specific instant.
     
     Args:
-        session: Database session
+        session: SimulationOrchestrator session
         parameter_name: Name of the parameter
         scenario_id: ID of the scenario
         instant: Date to get value for
@@ -306,7 +306,7 @@ def apply_parameter_changes_to_simulation(
     
     Args:
         simulation: PolicyEngine simulation to modify
-        session: Database session
+        session: SimulationOrchestrator session
         scenario_id: ID of the scenario with changes
         year: Year to apply changes for
     """

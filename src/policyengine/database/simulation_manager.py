@@ -39,7 +39,7 @@ class SimulationManager:
         """Store simulation results.
         
         Args:
-            session: Database session
+            session: SimulationOrchestrator session
             scenario: Name of the scenario used
             simulation: Simulation object from policyengine_core
             dataset: Name of the dataset used (optional, extracted from simulation if not provided)
@@ -201,7 +201,7 @@ class SimulationManager:
         """Retrieve simulation metadata.
         
         Args:
-            session: Database session
+            session: SimulationOrchestrator session
             scenario: Name of the scenario
             dataset: Name of the dataset
             country: Country code (uses default if not specified)
@@ -266,7 +266,7 @@ class SimulationManager:
         """Retrieve simulation results (legacy method, returns model output directly).
         
         Args:
-            session: Database session
+            session: SimulationOrchestrator session
             scenario: Name of the scenario
             dataset: Name of the dataset
             country: Country code (uses default if not specified)
@@ -381,7 +381,7 @@ class SimulationManager:
         """List simulations matching criteria.
         
         Args:
-            session: Database session
+            session: SimulationOrchestrator session
             country: Filter by country
             scenario: Filter by scenario
             dataset: Filter by dataset

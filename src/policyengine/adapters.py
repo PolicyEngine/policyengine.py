@@ -137,7 +137,7 @@ def save_budget_impact_to_db(
     """Save budget impact results to database.
     
     Args:
-        session: Database session
+        session: SimulationOrchestrator session
         report_id: Report ID to associate with
         impact: Budget impact model with results
         country: Country code ('uk' or 'us')
@@ -231,7 +231,7 @@ def save_decile_impacts_to_db(
     """Save decile impact results to database.
     
     Args:
-        session: Database session
+        session: SimulationOrchestrator session
         report_id: Report ID to associate with
         impacts: List of decile impact models
         country: Country code ('uk' or 'us')
@@ -266,7 +266,7 @@ def save_poverty_impacts_to_db(
     """Save poverty impact results to database.
     
     Args:
-        session: Database session
+        session: SimulationOrchestrator session
         report_id: Report ID to associate with
         impacts: List of poverty impact models
         country: Country code ('uk' or 'us')
@@ -325,7 +325,7 @@ def save_inequality_impact_to_db(
     """Save inequality impact results to database.
     
     Args:
-        session: Database session
+        session: SimulationOrchestrator session
         report_id: Report ID to associate with
         impact: Inequality impact model
         country: Country code ('uk' or 'us')
@@ -371,7 +371,7 @@ def save_economic_impact_to_db(
     """Save complete economic impact results to database.
     
     Args:
-        session: Database session
+        session: SimulationOrchestrator session
         impact: Complete economic impact model with all results
     """
     report_id = impact.report_metadata.id
