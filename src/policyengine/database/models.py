@@ -571,3 +571,224 @@ class UKWinnersLosers(Base):
     
     # Relationships
     report = relationship("ReportMetadata", backref="uk_winners_losers")
+
+
+# US-specific report tables
+
+class USGovernmentBudget(Base):
+    """US government budget metrics."""
+    __tablename__ = "report_us_government_budget"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
+    
+    # Federal tax revenues
+    federal_tax_baseline = Column(Float, nullable=True)
+    federal_tax_reform = Column(Float, nullable=True)
+    federal_tax_change = Column(Float, nullable=True)
+    
+    # State tax revenues
+    state_tax_baseline = Column(Float, nullable=True)
+    state_tax_reform = Column(Float, nullable=True)
+    state_tax_change = Column(Float, nullable=True)
+    
+    # Total tax revenues
+    total_tax_baseline = Column(Float, nullable=True)
+    total_tax_reform = Column(Float, nullable=True)
+    total_tax_change = Column(Float, nullable=True)
+    
+    # Federal benefits
+    federal_benefits_baseline = Column(Float, nullable=True)
+    federal_benefits_reform = Column(Float, nullable=True)
+    federal_benefits_change = Column(Float, nullable=True)
+    
+    # State benefits
+    state_benefits_baseline = Column(Float, nullable=True)
+    state_benefits_reform = Column(Float, nullable=True)
+    state_benefits_change = Column(Float, nullable=True)
+    
+    # Total benefits
+    total_benefits_baseline = Column(Float, nullable=True)
+    total_benefits_reform = Column(Float, nullable=True)
+    total_benefits_change = Column(Float, nullable=True)
+    
+    # Net budget impact
+    net_impact = Column(Float, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.now)
+    
+    # Relationships
+    report = relationship("ReportMetadata", backref="us_government_budget", uselist=False)
+
+
+class USHouseholdIncome(Base):
+    """US household income metrics."""
+    __tablename__ = "report_us_household_income"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
+    
+    # Market income
+    household_market_income_baseline = Column(Float, nullable=True)
+    household_market_income_reform = Column(Float, nullable=True)
+    household_market_income_change = Column(Float, nullable=True)
+    
+    # Net income (after taxes and transfers)
+    household_net_income_baseline = Column(Float, nullable=True)
+    household_net_income_reform = Column(Float, nullable=True)
+    household_net_income_change = Column(Float, nullable=True)
+    
+    # Net income including health benefits
+    household_net_income_with_health_baseline = Column(Float, nullable=True)
+    household_net_income_with_health_reform = Column(Float, nullable=True)
+    household_net_income_with_health_change = Column(Float, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.now)
+    
+    # Relationships
+    report = relationship("ReportMetadata", backref="us_household_income", uselist=False)
+
+
+class USDecileImpact(Base):
+    """US income decile impacts."""
+    __tablename__ = "report_us_decile_impacts"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
+    
+    # Decile (1-10, or 0 for all)
+    decile = Column(Integer, nullable=False)
+    
+    # Relative change in income
+    relative_change = Column(Float, nullable=True)
+    
+    # Average dollar change
+    average_change = Column(Float, nullable=True)
+    
+    # Share of total benefit
+    share_of_benefit = Column(Float, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.now)
+    
+    # Relationships
+    report = relationship("ReportMetadata", backref="us_decile_impacts")
+
+
+class USPovertyImpact(Base):
+    """US poverty impacts."""
+    __tablename__ = "report_us_poverty_impacts"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
+    
+    # Poverty type (SPM, deep)
+    poverty_type = Column(String, nullable=False)  # 'spm', 'deep'
+    
+    # Demographic group
+    demographic_group = Column(String, nullable=False)  # 'all', 'child', 'adult', 'senior'
+    
+    # Headcount and rate
+    headcount_baseline = Column(Float, nullable=True)
+    headcount_reform = Column(Float, nullable=True)
+    headcount_change = Column(Float, nullable=True)
+    
+    rate_baseline = Column(Float, nullable=True)
+    rate_reform = Column(Float, nullable=True)
+    rate_change = Column(Float, nullable=True)
+    
+    # Poverty gap (total dollars needed to lift out of poverty)
+    gap_baseline = Column(Float, nullable=True)
+    gap_reform = Column(Float, nullable=True)
+    gap_change = Column(Float, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.now)
+    
+    # Relationships
+    report = relationship("ReportMetadata", backref="us_poverty_impacts")
+
+
+class USInequalityImpact(Base):
+    """US inequality metrics."""
+    __tablename__ = "report_us_inequality_impacts"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
+    
+    # Gini coefficient
+    gini_baseline = Column(Float, nullable=True)
+    gini_reform = Column(Float, nullable=True)
+    gini_change = Column(Float, nullable=True)
+    
+    # Top income shares
+    top_10_percent_share_baseline = Column(Float, nullable=True)
+    top_10_percent_share_reform = Column(Float, nullable=True)
+    top_10_percent_share_change = Column(Float, nullable=True)
+    
+    top_1_percent_share_baseline = Column(Float, nullable=True)
+    top_1_percent_share_reform = Column(Float, nullable=True)
+    top_1_percent_share_change = Column(Float, nullable=True)
+    
+    # Bottom 50% share
+    bottom_50_percent_share_baseline = Column(Float, nullable=True)
+    bottom_50_percent_share_reform = Column(Float, nullable=True)
+    bottom_50_percent_share_change = Column(Float, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.now)
+    
+    # Relationships
+    report = relationship("ReportMetadata", backref="us_inequality_impacts", uselist=False)
+
+
+class USWinnersLosers(Base):
+    """US winners and losers breakdown."""
+    __tablename__ = "report_us_winners_losers"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
+    
+    # Decile (1-10) or 0 for all
+    decile = Column(Integer, nullable=False)
+    
+    # Share in each category
+    gain_more_than_5_percent = Column(Float, nullable=True)
+    gain_more_than_1_percent = Column(Float, nullable=True)
+    no_change = Column(Float, nullable=True)
+    lose_less_than_1_percent = Column(Float, nullable=True)
+    lose_less_than_5_percent = Column(Float, nullable=True)
+    lose_more_than_5_percent = Column(Float, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.now)
+    
+    # Relationships
+    report = relationship("ReportMetadata", backref="us_winners_losers")
+
+
+class USProgramImpact(Base):
+    """US program-specific impacts."""
+    __tablename__ = "report_us_program_impacts"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
+    
+    # Program name
+    program_name = Column(String, nullable=False)  # 'snap', 'tanf', 'eitc', 'ctc', 'social_security', etc.
+    
+    # Spending/cost
+    baseline_cost = Column(Float, nullable=True)
+    reform_cost = Column(Float, nullable=True)
+    cost_change = Column(Float, nullable=True)
+    
+    # Recipients
+    baseline_recipients = Column(Float, nullable=True)
+    reform_recipients = Column(Float, nullable=True)
+    recipients_change = Column(Float, nullable=True)
+    
+    # Average benefit per recipient
+    baseline_average_benefit = Column(Float, nullable=True)
+    reform_average_benefit = Column(Float, nullable=True)
+    average_benefit_change = Column(Float, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.now)
+    
+    # Relationships
+    report = relationship("ReportMetadata", backref="us_program_impacts")

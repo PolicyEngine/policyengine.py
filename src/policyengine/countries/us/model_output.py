@@ -18,8 +18,22 @@ class USModelOutput(ModelOutput):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 US_VARIABLE_WHITELIST = [
+    # ID columns for linking entities
+    "person_id",
+    "person_household_id",
+    "person_tax_unit_id",
+    "person_spm_unit_id",
+    "person_family_id",
+    "person_marital_unit_id",
+    "tax_unit_id",
+    "spm_unit_id",
+    "family_id",
+    "marital_unit_id",
+    "household_id",
+    
     # Income
     "household_net_income",
+    "household_net_income_including_health_benefits",
     "equiv_household_net_income",
     "household_market_income",
     "household_income_decile",
@@ -29,30 +43,43 @@ US_VARIABLE_WHITELIST = [
     # Weights
     "household_weight",
     "person_weight",
+    "tax_unit_weight",
+    "spm_unit_weight",
+    "family_weight",
     "household_count_people",
     
     # Demographics
     "age",
     "is_male",
-    "race",
     
-    # Poverty
+    # Poverty (SPM-based)
     "in_poverty",
     "in_deep_poverty",
     "poverty_gap",
     "deep_poverty_gap",
     
-    # Tax and benefits
+    # Federal taxes and benefits
     "household_tax",
     "household_benefits",
-    "household_state_tax",
+    "household_state_tax_before_refundable_credits",
+    "household_state_benefits",
+    "household_refundable_tax_credits",
+    "household_refundable_state_tax_credits",
     
-    # Labor supply (if available)
-    "substitution_lsr",
-    "income_lsr",
-    "substitution_lsr_hh",
-    "income_lsr_hh",
-    "weekly_hours",
+    # Specific federal programs
+    "snap",
+    "tanf",
+    "ssi",
+    "social_security",
+    "eitc",
+    "ctc",
+    "wic",
+    "unemployment_compensation",
+    "medicaid",
+    
+    # State programs (if available)
+    "state_eitc",
+    "state_ctc",
 ]
 
 def process_us_simulation(simulation: "Simulation", year: int) -> USModelOutput:

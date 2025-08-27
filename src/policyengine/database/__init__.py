@@ -17,6 +17,13 @@ from .models import (
     UKPovertyImpact,
     UKInequalityImpact,
     UKWinnersLosers,
+    USGovernmentBudget,
+    USHouseholdIncome,
+    USDecileImpact,
+    USPovertyImpact,
+    USInequalityImpact,
+    USWinnersLosers,
+    USProgramImpact,
 )
 from ..utils import (
     import_parameters_from_tax_benefit_system,
@@ -53,6 +60,13 @@ __all__ = [
     "UKPovertyImpact",
     "UKInequalityImpact",
     "UKWinnersLosers",
+    "USGovernmentBudget",
+    "USHouseholdIncome",
+    "USDecileImpact",
+    "USPovertyImpact",
+    "USInequalityImpact",
+    "USWinnersLosers",
+    "USProgramImpact",
     
     # Managers (for advanced use)
     "StorageBackend",
