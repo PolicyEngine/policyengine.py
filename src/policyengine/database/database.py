@@ -187,7 +187,7 @@ class Database:
                     "name": "enhanced_frs_2023_24",
                     "year": 2023,
                     "source": "FRS",
-                    "description": "Enhanced Family Resources Survey 2023-24 with imputed wealth",
+                    "description": "Enhanced Family Resources Survey 2023-24",
                     "filename": "enhanced_frs_2023_24.h5",
                     "gcs_bucket": "policyengine-uk-data-private",
                     "gcs_path": "enhanced_frs_2023_24.h5"
