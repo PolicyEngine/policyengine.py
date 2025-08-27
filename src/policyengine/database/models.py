@@ -329,3 +329,186 @@ class ParameterChangeMetadata(Base):
     # Relationships
     scenario = relationship("ScenarioMetadata", back_populates="parameter_changes")
     parameter = relationship("ParameterMetadata", back_populates="changes")
+
+
+# Report tables for storing economic impact results
+
+class ReportMetadata(Base):
+    """Metadata for economic impact report results."""
+    __tablename__ = "reports"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    name = Column(String, nullable=False, index=True)
+    country = Column(String, nullable=False, index=True)
+    year = Column(Integer, nullable=True, index=True)
+    
+    # References to simulations being compared
+    baseline_simulation_id = Column(String, ForeignKey("simulations.id"), nullable=False)
+    comparison_simulation_id = Column(String, ForeignKey("simulations.id"), nullable=False)
+    
+    # Processing metadata
+    status = Column(Enum(SimulationStatus), default=SimulationStatus.PENDING, nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    completed_at = Column(DateTime, nullable=True)
+    
+    # Optional metadata
+    description = Column(Text, nullable=True)
+    tags = Column(JSON, nullable=True)
+    created_by = Column(String, ForeignKey("users.id"), nullable=True)
+    
+    # Relationships
+    baseline_simulation = relationship("SimulationMetadata", foreign_keys=[baseline_simulation_id])
+    comparison_simulation = relationship("SimulationMetadata", foreign_keys=[comparison_simulation_id])
+
+
+class DecileImpact(Base):
+    """Store income change impacts by decile."""
+    __tablename__ = "report_decile_impacts"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
+    
+    # Type of decile grouping
+    decile_type = Column(String, nullable=False)  # 'income' or 'wealth'
+    decile = Column(Integer, nullable=False)  # 1-10
+    
+    # Impact metrics
+    relative_change = Column(Float, nullable=True)  # Percentage change
+    average_change = Column(Float, nullable=True)  # Average £/$ change
+    
+    # Winners and losers breakdown
+    lose_more_than_5_percent = Column(Float, nullable=True)
+    lose_less_than_5_percent = Column(Float, nullable=True)
+    no_change = Column(Float, nullable=True)
+    gain_less_than_5_percent = Column(Float, nullable=True)
+    gain_more_than_5_percent = Column(Float, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.now)
+    
+    # Relationships
+    report = relationship("ReportMetadata", backref="decile_impacts")
+
+
+class PovertyImpact(Base):
+    """Store poverty impact metrics."""
+    __tablename__ = "report_poverty_impacts"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
+    
+    # Demographic group
+    group_type = Column(String, nullable=False)  # 'age', 'gender', 'race'
+    group_value = Column(String, nullable=False)  # 'child', 'adult', 'senior', 'male', 'female', etc.
+    
+    # Poverty metrics
+    poverty_rate_baseline = Column(Float, nullable=True)
+    poverty_rate_reform = Column(Float, nullable=True)
+    poverty_rate_change = Column(Float, nullable=True)
+    
+    # Deep poverty metrics
+    deep_poverty_rate_baseline = Column(Float, nullable=True)
+    deep_poverty_rate_reform = Column(Float, nullable=True)
+    deep_poverty_rate_change = Column(Float, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.now)
+    
+    # Relationships
+    report = relationship("ReportMetadata", backref="poverty_impacts")
+
+
+class InequalityImpact(Base):
+    """Store inequality metrics."""
+    __tablename__ = "report_inequality_impacts"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
+    
+    # Gini coefficient
+    gini_baseline = Column(Float, nullable=True)
+    gini_reform = Column(Float, nullable=True)
+    gini_change = Column(Float, nullable=True)
+    
+    # Top income shares
+    top_10_percent_share_baseline = Column(Float, nullable=True)
+    top_10_percent_share_reform = Column(Float, nullable=True)
+    top_10_percent_share_change = Column(Float, nullable=True)
+    
+    top_1_percent_share_baseline = Column(Float, nullable=True)
+    top_1_percent_share_reform = Column(Float, nullable=True)
+    top_1_percent_share_change = Column(Float, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.now)
+    
+    # Relationships
+    report = relationship("ReportMetadata", backref="inequality_impacts", uselist=False)
+
+
+class BudgetaryImpact(Base):
+    """Store budgetary impact metrics."""
+    __tablename__ = "report_budgetary_impacts"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
+    
+    # Overall budgetary impact
+    budgetary_impact = Column(Float, nullable=True)
+    
+    # Revenue and spending components
+    tax_revenue_impact = Column(Float, nullable=True)
+    state_tax_revenue_impact = Column(Float, nullable=True)
+    benefit_spending_impact = Column(Float, nullable=True)
+    
+    # Context metrics
+    households_affected = Column(Float, nullable=True)
+    baseline_net_income = Column(Float, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.now)
+    
+    # Relationships
+    report = relationship("ReportMetadata", backref="budgetary_impacts", uselist=False)
+
+
+class LaborSupplyImpact(Base):
+    """Store labor supply response metrics."""
+    __tablename__ = "report_labor_supply_impacts"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
+    
+    # Labor supply responses
+    substitution_effect = Column(Float, nullable=True)
+    income_effect = Column(Float, nullable=True)
+    total_change = Column(Float, nullable=True)
+    revenue_change = Column(Float, nullable=True)
+    
+    # Hours worked
+    hours_baseline = Column(Float, nullable=True)
+    hours_reform = Column(Float, nullable=True)
+    hours_change = Column(Float, nullable=True)
+    hours_income_effect = Column(Float, nullable=True)
+    hours_substitution_effect = Column(Float, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.now)
+    
+    # Relationships
+    report = relationship("ReportMetadata", backref="labor_supply_impacts", uselist=False)
+
+
+class ProgramSpecificImpact(Base):
+    """Store program-specific budgetary impacts (UK only)."""
+    __tablename__ = "report_program_impacts"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    report_id = Column(String, ForeignKey("reports.id"), nullable=False, index=True)
+    
+    # Program details
+    program_name = Column(String, nullable=False)
+    baseline_cost = Column(Float, nullable=True)
+    reform_cost = Column(Float, nullable=True)
+    cost_difference = Column(Float, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.now)
+    
+    # Relationships
+    report = relationship("ReportMetadata", backref="program_impacts")

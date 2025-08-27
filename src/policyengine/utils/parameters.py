@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from policyengine_core.parameters import Parameter, ParameterNode
 from policyengine_core.simulations import Simulation
-from .models import (
+from ..database.models import (
     ParameterMetadata,
     ParameterChangeMetadata,
     ScenarioMetadata,
@@ -331,14 +331,24 @@ def apply_parameter_changes_to_simulation(
     
     for param_name, param_changes in changes_by_param.items():
         # Find applicable change for this instant
-        parameter: Parameter = params.get_child(param_name)
-        
-        for param_change in param_changes:
-            param_change: ParameterChangeMetadata
-            start_instant = param_change.start_date
-            end_instant = param_change.end_date
-            parameter.update(
-                value=param_change.value,
-                start=start_instant,
-                stop=end_instant
-            )
+        try:
+            parameter: Parameter = params.get_child(param_name)
+            
+            for param_change in param_changes:
+                param_change: ParameterChangeMetadata
+                start_instant = param_change.start_date
+                end_instant = param_change.end_date
+                
+                # Convert datetime to string format that policyengine-core expects
+                start_str = start_instant.strftime("%Y-%m-%d") if start_instant else None
+                end_str = end_instant.strftime("%Y-%m-%d") if end_instant else None
+                
+                parameter.update(
+                    value=param_change.value,
+                    start=start_str,
+                    stop=end_str
+                )
+        except Exception as e:
+            # Log warning but don't stop execution
+            import logging
+            logging.warning(f"Could not apply parameter change for {param_name}: {e}")

@@ -3,7 +3,7 @@
 from typing import Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
-from .models import VariableMetadata, get_model_version
+from ..database.models import VariableMetadata, get_model_version
 import uuid
 
 

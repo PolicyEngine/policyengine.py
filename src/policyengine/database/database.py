@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 from pydantic import BaseModel, Field
 
 from .models import Base
-from .parameter_utils import import_parameters_from_tax_benefit_system
+from ..utils import import_parameters_from_tax_benefit_system
 from .storage_backend import StorageBackend
 from .scenario_manager import ScenarioManager
 from .dataset_manager import DatasetManager
@@ -301,7 +301,7 @@ class Database:
         
         # Import parameters and variables into database
         with self.session() as session:
-            from .variable_utils import import_variables_from_tax_benefit_system
+            from ..utils.variables import import_variables_from_tax_benefit_system
             
             # Import parameters
             import_parameters_from_tax_benefit_system(
@@ -502,6 +502,154 @@ class Database:
             return self.simulations.list_simulations(
                 session, country, scenario, dataset, year, tags
             )
+    
+    # Report management
+    def create_report(
+        self,
+        baseline_simulation: Any,
+        reform_simulation: Any,
+        year: Optional[int] = None,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        run_immediately: bool = True
+    ):
+        """Create and optionally run an economic impact report.
+        
+        Args:
+            baseline_simulation: Either a SimulationMetadata object or simulation ID string
+            reform_simulation: Either a SimulationMetadata object or simulation ID string  
+            year: Optional year to analyze (for multi-year simulations)
+            name: Report name (defaults to auto-generated)
+            description: Report description
+            run_immediately: Whether to run the analysis immediately (default True)
+            
+        Returns:
+            ReportMetadata object or report results dict (if run_immediately)
+        """
+        from .models import SimulationMetadata
+        from .report_manager import ReportManager
+        
+        with self.session() as session:
+            # Get simulation IDs
+            if isinstance(baseline_simulation, str):
+                baseline_id = baseline_simulation
+                baseline_sim = session.query(SimulationMetadata).filter_by(id=baseline_id).first()
+                if not baseline_sim:
+                    raise ValueError(f"Baseline simulation {baseline_id} not found")
+            else:
+                baseline_id = baseline_simulation.id
+                baseline_sim = baseline_simulation
+            
+            if isinstance(reform_simulation, str):
+                reform_id = reform_simulation
+                reform_sim = session.query(SimulationMetadata).filter_by(id=reform_id).first()
+                if not reform_sim:
+                    raise ValueError(f"Reform simulation {reform_id} not found")
+            else:
+                reform_id = reform_simulation.id
+                reform_sim = reform_simulation
+            
+            # Validate simulations are from same country
+            if baseline_sim.country != reform_sim.country:
+                raise ValueError(f"Simulations must be from same country: {baseline_sim.country} != {reform_sim.country}")
+            
+            # Auto-generate name if not provided
+            if not name:
+                from datetime import datetime
+                name = f"{baseline_sim.country.upper()} Report {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+            
+            # Create report manager
+            report_manager = ReportManager(session)
+            
+            # Create report metadata
+            report = report_manager.create_report(
+                name=name,
+                baseline_simulation_id=baseline_id,
+                comparison_simulation_id=reform_id,
+                country=baseline_sim.country,
+                year=year or baseline_sim.year,
+                description=description,
+            )
+            
+            if run_immediately:
+                # Need to re-fetch simulations in this session context
+                baseline_sim = session.query(SimulationMetadata).filter_by(id=baseline_id).first()
+                reform_sim = session.query(SimulationMetadata).filter_by(id=reform_id).first()
+                
+                # Load simulation data
+                baseline_sim._storage = self.storage
+                reform_sim._storage = self.storage
+                
+                baseline_data = baseline_sim.get_data(year)
+                reform_data = reform_sim.get_data(year)
+                
+                if baseline_data is None:
+                    raise ValueError(f"No data found for baseline simulation {baseline_id}")
+                if reform_data is None:
+                    raise ValueError(f"No data found for reform simulation {reform_id}")
+                
+                # Run the report
+                report_manager.run_report(report.id, baseline_data, reform_data)
+                
+                # Return results
+                return report_manager.get_report_results(report.id)
+            else:
+                # Just return the report metadata
+                return report
+    
+    def get_report(self, report_id: str):
+        """Get a report and its results by ID.
+        
+        Args:
+            report_id: Report ID
+            
+        Returns:
+            Dictionary containing report metadata and results
+        """
+        from .report_manager import ReportManager
+        
+        with self.session() as session:
+            report_manager = ReportManager(session)
+            return report_manager.get_report_results(report_id)
+    
+    def list_reports(
+        self,
+        country: Optional[str] = None,
+        year: Optional[int] = None,
+        status: Optional[str] = None
+    ):
+        """List reports matching criteria.
+        
+        Args:
+            country: Filter by country
+            year: Filter by year
+            status: Filter by status ('pending', 'running', 'completed', 'failed')
+            
+        Returns:
+            List of ReportMetadata objects
+        """
+        from .report_manager import ReportManager
+        from .models import SimulationStatus
+        
+        with self.session() as session:
+            report_manager = ReportManager(session)
+            
+            # Convert status string to enum if provided
+            status_enum = None
+            if status:
+                status_enum = SimulationStatus(status)
+            
+            reports = report_manager.list_reports(
+                country=country,
+                year=year,
+                status=status_enum
+            )
+            
+            # Expunge from session to use outside
+            for report in reports:
+                session.expunge(report)
+            
+            return reports
     
     # Variable management
     def get_variable(

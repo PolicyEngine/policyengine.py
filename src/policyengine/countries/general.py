@@ -26,17 +26,28 @@ class ModelOutput(BaseModel):
         } for name, df in tables.items()}
     
     @classmethod
-    def from_tables(cls, data: Dict[str, pd.DataFrame]) -> "ModelOutput":
-        """Reconstruct ModelOutput from dictionary of DataFrames.
+    def from_tables(cls, data: Dict) -> "ModelOutput":
+        """Reconstruct ModelOutput from dictionary of DataFrames or dict data.
         
         Args:
-            data: Dictionary mapping table names to DataFrames
+            data: Dictionary mapping table names to DataFrames or dict representations
             
         Returns:
             Instance of the appropriate ModelOutput subclass
         """
+        # Convert dict representations back to DataFrames if needed
+        tables = {}
+        for name, table_data in data.items():
+            if isinstance(table_data, pd.DataFrame):
+                tables[name] = table_data
+            elif isinstance(table_data, dict):
+                # Convert dict to DataFrame
+                tables[name] = pd.DataFrame(table_data)
+            else:
+                tables[name] = table_data
+        
         # Create instance with the dataframes as attributes
-        return cls(**data)
+        return cls(**tables)
 
 def process_simulation(simulation: Simulation, year: int, variable_whitelist: List[str] = []) -> Dict[str, pd.DataFrame]:
     variables = list(simulation.tax_benefit_system.variables.values())
