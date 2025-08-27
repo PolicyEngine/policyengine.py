@@ -3,14 +3,14 @@
 from policyengine import SimulationOrchestrator
 from policyengine_us import Microsimulation
 
-# Initialize database
-db = SimulationOrchestrator(connection_string="postgresql://postgres:postgres@127.0.0.1:54322/postgres")
-db._auto_initialize()
+# Initialize orchestrator
+orchestrator = SimulationOrchestrator(connection_string="postgresql://postgres:postgres@127.0.0.1:54322/postgres")
+orchestrator._auto_initialize()
 
 print("Setting up US scenarios...")
 
 # Ensure current law scenario exists
-db.add_scenario(
+orchestrator.add_scenario(
     name="us_current_law",
     parameter_changes={},
     country="us",
@@ -18,7 +18,7 @@ db.add_scenario(
 )
 
 # Create a test scenario (identical to current law for testing)
-db.add_scenario(
+orchestrator.add_scenario(
     name="us_test_reform",
     parameter_changes={},
     country="us",
@@ -28,7 +28,7 @@ db.add_scenario(
 print("Creating simulations...")
 
 # Create baseline simulation
-baseline_sim = db.add_simulation(
+baseline_sim = orchestrator.add_simulation(
     scenario="us_current_law",
     simulation=Microsimulation(),
     dataset="enhanced_cps_2024",
@@ -37,7 +37,7 @@ baseline_sim = db.add_simulation(
 )
 
 # Create reform simulation (identical for testing)
-reform_sim = db.add_simulation(
+reform_sim = orchestrator.add_simulation(
     scenario="us_test_reform",
     simulation=Microsimulation(),
     dataset="enhanced_cps_2024",
@@ -48,7 +48,7 @@ reform_sim = db.add_simulation(
 print("Creating economic impact report...")
 
 # Create report
-report = db.create_report(
+report = orchestrator.create_report(
     baseline_simulation=baseline_sim,
     reform_simulation=reform_sim,
     year=2025,
@@ -61,7 +61,7 @@ print(f"Report ID: {report.id}")
 print(f"Status: {report.status}")
 
 # Get report results
-results = db.get_report_results(report.id)
+results = orchestrator.get_report_results(report.id)
 
 if "government_budget" in results:
     print("\n1. Government Budget:")

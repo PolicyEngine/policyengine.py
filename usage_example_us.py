@@ -4,20 +4,20 @@ from policyengine import SimulationOrchestrator
 from policyengine_us import Microsimulation
 from policyengine_core.reforms import Reform
 
-# Initialize database
-db = SimulationOrchestrator(connection_string="postgresql://postgres:postgres@127.0.0.1:54322/postgres")
-db._auto_initialize()
+# Initialize orchestrator
+orchestrator = SimulationOrchestrator(connection_string="postgresql://postgres:postgres@127.0.0.1:54322/postgres")
+orchestrator._auto_initialize()
 
 # Create scenarios
 # First ensure current law exists
-db.add_scenario(
+orchestrator.add_scenario(
     name="current_law",
     parameter_changes={},
     country="us",
     description="Current US tax and benefit system"
 )
-current_law = db.get_current_law_scenario(country="us")
-reformed = db.add_scenario(
+current_law = orchestrator.get_current_law_scenario(country="us")
+reformed = orchestrator.add_scenario(
     name="double_federal_eitc",
     parameter_changes={
         "gov.irs.credits.eitc.amount.max[0].amount": {"2025-01-01": 1264},  # Double from $632
@@ -30,7 +30,7 @@ reformed = db.add_scenario(
 )
 
 # Create baseline and reformed simulations
-baseline_simulation = db.add_simulation(
+baseline_simulation = orchestrator.add_simulation(
     scenario=current_law,
     simulation=Microsimulation(),
     dataset="enhanced_cps_2024",
@@ -53,7 +53,7 @@ reform = Reform.from_dict({
     "gov.irs.credits.eitc.amount.max[3].amount": {"2025-01-01": 9680},
 }, country_id="us")
 
-reform_simulation = db.add_simulation(
+reform_simulation = orchestrator.add_simulation(
     scenario=reformed,
     simulation=Microsimulation(reform=reform),
     dataset="enhanced_cps_2024",
@@ -62,7 +62,7 @@ reform_simulation = db.add_simulation(
 )
 
 # Create economic impact report
-report = db.create_report(
+report = orchestrator.create_report(
     baseline_simulation=baseline_simulation,
     reform_simulation=reform_simulation,
     year=2025,
@@ -73,7 +73,7 @@ report = db.create_report(
 print(f"Report '{report.name}' created successfully!")
 
 # Get report results
-results = db.get_report_results(report.id)
+results = orchestrator.get_report_results(report.id)
 
 # Display results
 print("\n=== US Economic Impact Report: Double Federal EITC ===")

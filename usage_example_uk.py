@@ -8,12 +8,12 @@ reformed = Microsimulation(scenario=Scenario(parameter_changes={
     "gov.hmrc.income_tax.allowances.personal_allowance.amount": 0,
 }))
 
-# Save it into the database
+# Save it using the orchestrator
 
-db = SimulationOrchestrator(connection_string="postgresql://postgres:postgres@127.0.0.1:54322/postgres")
-db._auto_initialize()
+orchestrator = SimulationOrchestrator(connection_string="postgresql://postgres:postgres@127.0.0.1:54322/postgres")
+orchestrator._auto_initialize()
 
-reform = db.add_scenario(
+reform = orchestrator.add_scenario(
     name="remove the personal allowance",
     parameter_changes={
         "gov.hmrc.income_tax.allowances.personal_allowance.amount": 0,
@@ -22,10 +22,10 @@ reform = db.add_scenario(
     description="Set the Personal Allowance to zero."
 )
 
-current_law = db.get_current_law_scenario(country="uk")
-dataset = db.get_dataset(name="enhanced_frs_2023_24", country="uk")
+current_law = orchestrator.get_current_law_scenario(country="uk")
+dataset = orchestrator.get_dataset(name="enhanced_frs_2023_24", country="uk")
 
-baseline_simulation = db.add_simulation(
+baseline_simulation = orchestrator.add_simulation(
     scenario=current_law,
     simulation=baseline,
     dataset=dataset,
@@ -33,7 +33,7 @@ baseline_simulation = db.add_simulation(
     year=2025,
 )
 
-reformed_simulation = db.add_simulation(
+reformed_simulation = orchestrator.add_simulation(
     scenario=reform,
     simulation=reformed,
     dataset=dataset,
@@ -41,7 +41,7 @@ reformed_simulation = db.add_simulation(
     year=2025,
 )
 
-report = db.create_report(
+report = orchestrator.create_report(
     baseline_simulation=baseline_simulation,
     reform_simulation=reformed_simulation,
     year=2025,
