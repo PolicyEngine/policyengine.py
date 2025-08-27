@@ -1,19 +1,26 @@
-from ..general import process_simulation, ModelOutput
-from pydantic import BaseModel, ConfigDict
+from ..general import process_simulation
+from ...data_models import SimulationDataModel
+from pydantic import ConfigDict
 import pandas as pd
-from typing import List, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from policyengine_us import Simulation
 
-class USModelOutput(ModelOutput):
-    person: pd.DataFrame
-    marital_unit: pd.DataFrame
-    family: pd.DataFrame
-    tax_unit: pd.DataFrame
-    spm_unit: pd.DataFrame
-    household: pd.DataFrame
-
-    table_names: List[str] = ["person", "marital_unit", "family", "tax_unit", "spm_unit", "household"]
+class USModelOutput(SimulationDataModel):
+    """US-specific model output that extends SimulationDataModel."""
+    # US has these specific entities
+    marital_unit: Optional[pd.DataFrame] = None
+    family: Optional[pd.DataFrame] = None
+    tax_unit: Optional[pd.DataFrame] = None
+    spm_unit: Optional[pd.DataFrame] = None
+    
+    # US doesn't have benefit_unit
+    benefit_unit: None = None
+    
+    @property
+    def table_names(self) -> List[str]:
+        """Get US-specific table names."""
+        return ["person", "marital_unit", "family", "tax_unit", "spm_unit", "household"]
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
