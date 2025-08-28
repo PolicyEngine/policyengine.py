@@ -141,8 +141,7 @@ class SimulationOrchestrator:
                     country=country,
                     year=dataset_info["year"],
                     source=dataset_info["source"],
-                    description=dataset_info["description"],
-                    filename=dataset_info["filename"]
+                    description=dataset_info["description"]
                 )
     
     # ==================== Scenario Management ====================
@@ -242,7 +241,6 @@ class SimulationOrchestrator:
         source: Optional[str] = None,
         version: Optional[str] = None,
         description: Optional[str] = None,
-        filename: Optional[str] = None,
     ) -> Any:
         """Create a dataset.
         
@@ -253,7 +251,6 @@ class SimulationOrchestrator:
             source: Data source
             version: Dataset version
             description: Description
-            filename: Associated file
             
         Returns:
             Created dataset object
