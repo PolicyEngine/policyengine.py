@@ -4,18 +4,12 @@ from typing import Optional, Any, List, Dict, Union, Literal
 from pydantic import BaseModel
 
 from .src.policyengine.storage_adapter import StorageAdapter
+from .src.policyengine.default_storage_adapter import DefaultStorageAdapter
 from .src.policyengine.sql_storage_adapter import SQLStorageAdapter, SQLConfig
-from .src.policyengine.database.models import (
-    ScenarioMetadata,
-    DatasetMetadata,
-    SimulationMetadata,
-    ReportMetadata,
-    VariableMetadata
-)
 
 
-# Storage strategy types
-StorageStrategy = Literal["sql"]  # Can be extended to include "mongo", "redis", etc.
+# Storage method types
+StorageMethod = Literal["default", "sql"]  # Can be extended to include "mongo", "redis", etc.
 
 
 class SimulationOrchestrator:
@@ -28,74 +22,42 @@ class SimulationOrchestrator:
     
     def __init__(
         self,
-        strategy: StorageStrategy = "sql",
+        storage_method: StorageMethod = "default",
         config: Optional[Union[Dict[str, Any], BaseModel]] = None,
-        # Legacy parameters for backward compatibility
-        connection_string: Optional[str] = None,
-        echo: bool = False,
-        storage_mode: str = "local",
-        local_storage_path: str = "./simulations",
-        gcs_bucket: Optional[str] = None,
-        gcs_prefix: str = "simulations/",
         countries: Optional[List[str]] = None,
         initialize: bool = False,
     ):
         """Initialize the SimulationOrchestrator.
         
         Args:
-            strategy: Storage strategy to use ('sql' for now)
-            config: Strategy-specific configuration object or dict
-            connection_string: Database connection string (legacy parameter)
-            echo: Echo SQL statements (legacy parameter)
-            storage_mode: Storage mode for files (legacy parameter)
-            local_storage_path: Local path for files (legacy parameter)
-            gcs_bucket: GCS bucket name (legacy parameter)
-            gcs_prefix: GCS prefix (legacy parameter)
+            storage_method: Storage method to use ('default' for in-memory, 'sql' for database)
+            config: Storage-specific configuration object or dict
             countries: List of supported countries
             initialize: Whether to auto-initialize with current law
         """
-        self.strategy = strategy
-        
-        # Handle legacy parameters if config not provided
-        if config is None and connection_string is not None:
-            # Create config from legacy parameters
-            if strategy == "sql":
-                config = SQLConfig(
-                    connection_string=connection_string,
-                    echo=echo,
-                    storage_mode=storage_mode,
-                    local_storage_path=local_storage_path,
-                    gcs_bucket=gcs_bucket,
-                    gcs_prefix=gcs_prefix,
-                    default_country=countries[0] if countries else "uk"
-                )
-        elif config is None:
-            # Use default config
-            if strategy == "sql":
-                config = SQLConfig(
-                    storage_mode=storage_mode,
-                    local_storage_path=local_storage_path,
-                    gcs_bucket=gcs_bucket,
-                    gcs_prefix=gcs_prefix,
-                    default_country=countries[0] if countries else "uk"
-                )
-        
-        # Convert dict to appropriate config object if needed
-        if isinstance(config, dict):
-            if strategy == "sql":
-                config = SQLConfig(**config)
-        
+        self.storage_method = storage_method
         self.config = config
         
         # Initialize the appropriate storage adapter
-        if strategy == "sql":
+        if storage_method == "default":
+            self.adapter: StorageAdapter = DefaultStorageAdapter(config.dict() if hasattr(config, 'dict') else config)
+        elif storage_method == "sql":
+            if not isinstance(config, SQLConfig):
+                if config is None:
+                    config = SQLConfig()
+                elif isinstance(config, dict):
+                    config = SQLConfig(**config)
             self.adapter: StorageAdapter = SQLStorageAdapter(config)
         else:
-            raise ValueError(f"Unknown storage strategy: {strategy}")
+            raise ValueError(f"Unknown storage method: {storage_method}")
         
-        # Set countries for backward compatibility
+        # Set countries
         self.countries = countries or ["uk"]
-        self.default_country = config.default_country if hasattr(config, 'default_country') else self.countries[0]
+        self.default_country = self.countries[0]
+        
+        # Update adapter's default country if it has one
+        if hasattr(self.adapter, 'config') and hasattr(self.adapter.config, 'default_country'):
+            self.adapter.config.default_country = self.default_country
         
         # Auto-initialize if requested
         if initialize:
@@ -182,7 +144,7 @@ class SimulationOrchestrator:
         parameter_changes: Optional[Dict[str, Any]] = None,
         country: Optional[str] = None,
         description: Optional[str] = None,
-    ) -> Optional[ScenarioMetadata]:
+    ) -> Any:
         """Create a parametric scenario with parameter changes.
         
         Args:
@@ -192,17 +154,15 @@ class SimulationOrchestrator:
             description: Human-readable description
             
         Returns:
-            ScenarioMetadata object or None
+            Created scenario object
         """
-        if self.adapter:
-            return self.adapter.create_scenario(name, parameter_changes, country, description)
-        return None
+        return self.adapter.create_scenario(name, parameter_changes, country, description)
     
     def get_scenario(
         self,
         name: str,
         country: Optional[str] = None
-    ) -> Optional[ScenarioMetadata]:
+    ) -> Optional[Any]:
         """Get a scenario by name and country.
         
         Args:
@@ -210,25 +170,23 @@ class SimulationOrchestrator:
             country: Country code
             
         Returns:
-            ScenarioMetadata object or None if not found
+            Scenario object or None if not found
         """
-        if self.adapter:
-            return self.adapter.get_scenario(name, country)
-        return None
+        return self.adapter.get_scenario(name, country)
     
     def get_current_law_scenario(
         self,
         country: Optional[str] = None
-    ) -> Optional[ScenarioMetadata]:
+    ) -> Optional[Any]:
         """Get the current law scenario for a country.
         
         Args:
             country: Country code (uses default if not specified)
             
         Returns:
-            ScenarioMetadata object or None if not found
+            Scenario object or None if not found
         """
-        if self.adapter and hasattr(self.adapter, 'get_current_law_scenario'):
+        if hasattr(self.adapter, 'get_current_law_scenario'):
             return self.adapter.get_current_law_scenario(country)
         return self.get_scenario("current_law", country)
     
@@ -243,8 +201,8 @@ class SimulationOrchestrator:
         version: Optional[str] = None,
         description: Optional[str] = None,
         filename: Optional[str] = None,
-    ) -> Optional[DatasetMetadata]:
-        """Create a dataset in the database.
+    ) -> Any:
+        """Create a dataset.
         
         Args:
             name: Unique dataset name
@@ -256,17 +214,15 @@ class SimulationOrchestrator:
             filename: Associated file
             
         Returns:
-            DatasetMetadata object or None
+            Created dataset object
         """
-        if self.adapter:
-            return self.adapter.create_dataset(name, country, year, source, version, description, filename)
-        return None
+        return self.adapter.create_dataset(name, country, year, source, version, description, filename)
     
     def get_dataset(
         self,
         name: str,
         country: Optional[str] = None
-    ) -> Optional[DatasetMetadata]:
+    ) -> Optional[Any]:
         """Get a dataset by name and country.
         
         Args:
@@ -274,18 +230,16 @@ class SimulationOrchestrator:
             country: Country code
             
         Returns:
-            DatasetMetadata object or None
+            Dataset object or None
         """
-        if self.adapter:
-            return self.adapter.get_dataset(name, country)
-        return None
+        return self.adapter.get_dataset(name, country)
     
     def list_datasets(
         self,
         country: Optional[str] = None,
         year: Optional[int] = None,
         source: Optional[str] = None
-    ) -> List[DatasetMetadata]:
+    ) -> List[Any]:
         """List datasets matching criteria.
         
         Args:
@@ -294,32 +248,30 @@ class SimulationOrchestrator:
             source: Filter by source
             
         Returns:
-            List of DatasetMetadata objects
+            List of dataset objects
         """
-        if self.adapter:
-            return self.adapter.list_datasets(country, year, source)
-        return []
+        return self.adapter.list_datasets(country, year, source)
     
     # ==================== Simulation Management ====================
     
     def create_simulation(
         self,
-        scenario: Union[str, ScenarioMetadata],
+        scenario: Union[str, Any],
         simulation: Any,
-        dataset: Optional[Union[str, DatasetMetadata]] = None,
+        dataset: Optional[Union[str, Any]] = None,
         country: Optional[str] = None,
         year: Optional[int] = None,
         years: Optional[List[int]] = None,
         tags: Optional[List[str]] = None,
         calculate_default_variables: bool = True,
         save_all_variables: bool = False,
-    ) -> Optional[SimulationMetadata]:
+    ) -> Any:
         """Create and store simulation results from a policyengine_core Simulation object.
         
         Args:
-            scenario: ScenarioMetadata object or scenario name string
+            scenario: Scenario object or scenario name string
             simulation: Simulation object from policyengine_core
-            dataset: DatasetMetadata object or dataset name string
+            dataset: Dataset object or dataset name string
             country: Country code
             year: Single year to save
             years: Multiple years to save
@@ -328,14 +280,12 @@ class SimulationOrchestrator:
             save_all_variables: If True, saves all calculated variables
             
         Returns:
-            SimulationMetadata object or None
+            Created simulation object
         """
-        if self.adapter:
-            return self.adapter.create_simulation(
-                scenario, simulation, dataset, country, year, years, tags,
-                calculate_default_variables, save_all_variables
-            )
-        return None
+        return self.adapter.create_simulation(
+            scenario, simulation, dataset, country, year, years, tags,
+            calculate_default_variables, save_all_variables
+        )
     
     def get_simulation(
         self,
@@ -343,7 +293,7 @@ class SimulationOrchestrator:
         dataset: str,
         country: Optional[str] = None,
         year: Optional[int] = None,
-    ) -> Optional[SimulationMetadata]:
+    ) -> Optional[Any]:
         """Retrieve simulation metadata.
         
         Args:
@@ -353,11 +303,9 @@ class SimulationOrchestrator:
             year: Simulation year
             
         Returns:
-            SimulationMetadata object with get_data() method, or None if not found
+            Simulation object or None if not found
         """
-        if self.adapter:
-            return self.adapter.get_simulation(scenario, dataset, country, year)
-        return None
+        return self.adapter.get_simulation(scenario, dataset, country, year)
     
     def list_simulations(
         self,
@@ -366,7 +314,7 @@ class SimulationOrchestrator:
         dataset: Optional[str] = None,
         year: Optional[int] = None,
         tags: Optional[List[str]] = None
-    ) -> List[SimulationMetadata]:
+    ) -> List[Any]:
         """List simulations matching criteria.
         
         Args:
@@ -377,77 +325,69 @@ class SimulationOrchestrator:
             tags: Filter by tags
             
         Returns:
-            List of SimulationMetadata objects
+            List of simulation objects
         """
-        if self.adapter:
-            return self.adapter.list_simulations(country, scenario, dataset, year, tags)
-        return []
+        return self.adapter.list_simulations(country, scenario, dataset, year, tags)
     
     # ==================== Report Management ====================
     
     def create_report(
         self,
-        baseline_simulation: Union[str, SimulationMetadata],
-        reform_simulation: Union[str, SimulationMetadata],
+        baseline_simulation: Union[str, Any],
+        reform_simulation: Union[str, Any],
         year: Optional[int] = None,
         name: Optional[str] = None,
         description: Optional[str] = None,
         run_immediately: bool = True
-    ) -> Optional[Union[ReportMetadata, Dict[str, Any]]]:
+    ) -> Any:
         """Create and optionally run an economic impact report.
         
         Args:
-            baseline_simulation: Either a SimulationMetadata object or simulation ID string
-            reform_simulation: Either a SimulationMetadata object or simulation ID string
+            baseline_simulation: Baseline simulation object or ID
+            reform_simulation: Reform simulation object or ID
             year: Optional year to analyze
             name: Report name
             description: Report description
             run_immediately: Whether to run the analysis immediately
             
         Returns:
-            ReportMetadata object or report results dict (if run_immediately), or None
+            Report object or results
         """
-        if self.adapter:
-            return self.adapter.create_report(
-                baseline_simulation, reform_simulation, year, name, description, run_immediately
-            )
-        return None
+        return self.adapter.create_report(
+            baseline_simulation, reform_simulation, year, name, description, run_immediately
+        )
     
     def get_report(
         self,
         report_id: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[Any]:
         """Get a report and its results by ID.
         
         Args:
             report_id: Report ID
             
         Returns:
-            Dictionary containing report metadata and results, or None
+            Report object or None
         """
-        if self.adapter:
-            return self.adapter.get_report(report_id)
-        return None
+        return self.adapter.get_report(report_id)
     
     def list_reports(
         self,
         country: Optional[str] = None,
         year: Optional[int] = None,
         status: Optional[str] = None
-    ) -> List[ReportMetadata]:
+    ) -> List[Any]:
         """List reports matching criteria.
         
         Args:
             country: Filter by country
             year: Filter by year
-            status: Filter by status ('pending', 'running', 'completed', 'failed')
+            status: Filter by status
             
         Returns:
-            List of ReportMetadata objects
+            List of report objects
         """
-        if self.adapter:
-            return self.adapter.list_reports(country, year, status)
-        return []
+        return self.adapter.list_reports(country, year, status)
     
     # ==================== Variable Management ====================
     
@@ -455,7 +395,7 @@ class SimulationOrchestrator:
         self,
         name: str,
         country: Optional[str] = None
-    ) -> Optional[VariableMetadata]:
+    ) -> Optional[Any]:
         """Get a variable by name and country.
         
         Args:
@@ -463,18 +403,16 @@ class SimulationOrchestrator:
             country: Country code
             
         Returns:
-            VariableMetadata object or None if not found
+            Variable object or None if not found
         """
-        if self.adapter:
-            return self.adapter.get_variable(name, country)
-        return None
+        return self.adapter.get_variable(name, country)
     
     def list_variables(
         self,
         country: Optional[str] = None,
         entity: Optional[str] = None,
         value_type: Optional[str] = None
-    ) -> List[VariableMetadata]:
+    ) -> List[Any]:
         """List variables matching criteria.
         
         Args:
@@ -483,11 +421,9 @@ class SimulationOrchestrator:
             value_type: Filter by value type (e.g., 'float', 'bool')
             
         Returns:
-            List of VariableMetadata objects
+            List of variable objects
         """
-        if self.adapter:
-            return self.adapter.list_variables(country, entity, value_type)
-        return []
+        return self.adapter.list_variables(country, entity, value_type)
     
     # ==================== Initialization ====================
     
@@ -495,27 +431,25 @@ class SimulationOrchestrator:
         self,
         country: str
     ) -> None:
-        """Initialize database with current law parameters.
+        """Initialize storage with current law parameters.
         
         Args:
             country: Country code
         """
-        if self.adapter:
-            self.adapter.initialize_with_current_law(country)
+        self.adapter.initialize_with_current_law(country)
     
-    # ==================== Backward Compatibility Methods ====================
-    # These methods exist to maintain backward compatibility with existing code
+    # ==================== SQL-specific compatibility methods ====================
     
     def session(self):
-        """Get a database session context manager (for backward compatibility).
+        """Get a database session context manager (SQL adapter only).
         
         Returns:
-            Session context manager if using SQL adapter, None otherwise
+            Session context manager if using SQL adapter, dummy context otherwise
         """
-        if self.strategy == "sql" and hasattr(self.adapter, 'session'):
+        if self.storage_method == "sql" and hasattr(self.adapter, 'session'):
             return self.adapter.session()
         
-        # Return a dummy context manager for non-SQL strategies
+        # Return a dummy context manager for non-SQL storage methods
         from contextlib import contextmanager
         
         @contextmanager
@@ -525,29 +459,14 @@ class SimulationOrchestrator:
         return dummy_session()
     
     def get_session(self):
-        """Get a new database session (for backward compatibility).
+        """Get a new database session (SQL adapter only).
         
         Returns:
             SQLAlchemy session if using SQL adapter, None otherwise
         """
-        if self.strategy == "sql" and hasattr(self.adapter, 'get_session'):
+        if self.storage_method == "sql" and hasattr(self.adapter, 'get_session'):
             return self.adapter.get_session()
         return None
-    
-    def init_db(self) -> None:
-        """Initialize database schema (for backward compatibility)."""
-        # SQL adapter initializes schema automatically
-        pass
-    
-    def drop_all(self) -> None:
-        """Drop all tables (for backward compatibility - use with caution)."""
-        if self.strategy == "sql" and hasattr(self.adapter, 'engine'):
-            from .src.policyengine.database.models import Base
-            Base.metadata.drop_all(bind=self.adapter.engine)
-    
-    def get_report_results(self, report_id: str) -> Optional[Dict[str, Any]]:
-        """Alias for get_report (for backward compatibility)."""
-        return self.get_report(report_id)
     
     # ==================== Context Manager Support ====================
     

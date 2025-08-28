@@ -1,11 +1,25 @@
 """Simple US example demonstrating report functionality."""
 
 from policyengine import SimulationOrchestrator
+from src.policyengine.sql_storage_adapter import SQLConfig
 from policyengine_us import Microsimulation
 
-# Initialize orchestrator
-orchestrator = SimulationOrchestrator(connection_string="postgresql://postgres:postgres@127.0.0.1:54322/postgres")
-orchestrator._auto_initialize()
+# Configure SQL storage
+sql_config = SQLConfig(
+    connection_string="postgresql://postgres:postgres@127.0.0.1:54322/postgres",
+    echo=False,
+    storage_mode="local",
+    local_storage_path="./simulations",
+    default_country="us"
+)
+
+# Initialize orchestrator with SQL storage
+orchestrator = SimulationOrchestrator(
+    storage_method="sql",
+    config=sql_config,
+    countries=["us"],
+    initialize=True
+)
 
 print("Setting up US scenarios...")
 
@@ -57,11 +71,11 @@ report = orchestrator.create_report(
 )
 
 print(f"\n=== US Economic Impact Report ===")
-print(f"Report ID: {report.id}")
-print(f"Status: {report.status}")
+print(f"Report ID: {report.get('id', 'N/A')}")
+print(f"Status: {report.get('status', 'N/A')}")
 
 # Get report results
-results = orchestrator.get_report_results(report.id)
+results = orchestrator.get_report(report.get('id')) or {}
 
 if "government_budget" in results:
     print("\n1. Government Budget:")

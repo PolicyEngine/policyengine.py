@@ -1,12 +1,26 @@
 """US example: Double the federal EITC."""
 
 from policyengine import SimulationOrchestrator
+from src.policyengine.sql_storage_adapter import SQLConfig
 from policyengine_us import Microsimulation
 from policyengine_core.reforms import Reform
 
-# Initialize orchestrator
-orchestrator = SimulationOrchestrator(connection_string="postgresql://postgres:postgres@127.0.0.1:54322/postgres")
-orchestrator._auto_initialize()
+# Configure SQL storage
+sql_config = SQLConfig(
+    connection_string="postgresql://postgres:postgres@127.0.0.1:54322/postgres",
+    echo=False,
+    storage_mode="local",
+    local_storage_path="./simulations",
+    default_country="us"
+)
+
+# Initialize orchestrator with SQL storage
+orchestrator = SimulationOrchestrator(
+    storage_method="sql",
+    config=sql_config,
+    countries=["us"],
+    initialize=True
+)
 
 # Create scenarios
 # First ensure current law exists
@@ -70,14 +84,14 @@ report = orchestrator.create_report(
     run_immediately=True
 )
 
-print(f"Report '{report.name}' created successfully!")
+print(f"Report '{report.get('name', 'unnamed')}' created successfully!")
 
 # Get report results
-results = orchestrator.get_report_results(report.id)
+results = orchestrator.get_report(report.get('id')) or {}
 
 # Display results
 print("\n=== US Economic Impact Report: Double Federal EITC ===")
-print(f"\nReport ID: {report.id}")
+print(f"\nReport ID: {report.get('id', 'N/A')}")
 
 if "government_budget" in results:
     print("\n1. Government Budget Impact:")

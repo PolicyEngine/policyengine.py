@@ -1,4 +1,5 @@
 from policyengine import SimulationOrchestrator
+from src.policyengine.sql_storage_adapter import SQLConfig
 from policyengine_uk import Microsimulation, Simulation, Scenario
 
 # Use pe country models as normal
@@ -10,8 +11,22 @@ reformed = Microsimulation(scenario=Scenario(parameter_changes={
 
 # Save it using the orchestrator
 
-orchestrator = SimulationOrchestrator(connection_string="postgresql://postgres:postgres@127.0.0.1:54322/postgres")
-orchestrator._auto_initialize()
+# Configure SQL storage
+sql_config = SQLConfig(
+    connection_string="postgresql://postgres:postgres@127.0.0.1:54322/postgres",
+    echo=False,
+    storage_mode="local",
+    local_storage_path="./simulations",
+    default_country="uk"
+)
+
+# Initialize orchestrator with SQL storage
+orchestrator = SimulationOrchestrator(
+    storage_method="sql",
+    config=sql_config,
+    countries=["uk"],
+    initialize=True
+)
 
 reform = orchestrator.create_scenario(
     name="remove the personal allowance",
@@ -49,4 +64,5 @@ report = orchestrator.create_report(
     run_immediately=True
 )
 
-baseline_simulation.get_data().person.employment_income
+# Access the actual simulation object if needed
+# baseline_simulation_data = baseline.calculate("employment_income")
