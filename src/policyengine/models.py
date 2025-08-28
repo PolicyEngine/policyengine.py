@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from enum import Enum
+import pandas as pd
 
 
 class SimulationStatus(str, Enum):
@@ -36,7 +37,10 @@ class Dataset(BaseModel):
     # File metadata
     file_size_mb: Optional[float] = None
 
-    def load_from_local_path(self):
+    def __init__(self):
+        self.load()
+
+    def load(self):
         """Load dataset from local path."""
         raise NotImplementedError("Dataset load method must be implemented in country-specific subclass.")
 
@@ -45,12 +49,27 @@ class Dataset(BaseModel):
         raise NotImplementedError("Dataset save method must be implemented in country-specific subclass.")
 
 
-class Scenario(BaseModel):
-    """Modifications made to baseline simulation behaviour."""
+class Rules(BaseModel):
+    """Modifications made to baseline tax-benefit rules."""
     name: str
+
+    # Parent rules reference
+    parent_rules: Optional["Rules"] = None
     
-    # Parent scenario reference
-    parent_scenario: Optional["Scenario"] = None
+    # Metadata
+    description: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None # Should automatically be current datetime
+
+    _parameter_changes: Optional[dict] = None
+    _simulation_modifier: Optional[Any] = None
+
+class Dynamics(BaseModel):
+    """Modifications made to baseline tax-benefit dynamics."""
+    name: str
+
+    # Parent dynamics reference
+    parent_dynamics: Optional["Dynamics"] = None
     
     # Metadata
     description: Optional[str] = None
@@ -64,6 +83,9 @@ class Scenario(BaseModel):
 class Simulation(BaseModel):
     """Metadata for simulation, stored in .h5 file. Overridden by country versions."""
     # Foreign key references
+    data: Dataset
+    rules: Rules
+    dynamics: Dynamics
     output_dataset: Optional[Dataset] = None
     model_version: Optional[str] = None
     
@@ -76,6 +98,30 @@ class Simulation(BaseModel):
     def run(self) -> Dataset:
         """Run the simulation."""
         raise NotImplementedError("Simulation run method must be implemented in country-specific subclass.")
+
+class ReportElementDataItem(BaseModel):
+    report_element: "ReportElement"
+
+class ReportElement(BaseModel):
+    """An element of a report, which may include tables, charts, and other visualizations."""
+    name: str
+    description: Optional[str] = None
+    data_items: List[ReportElementDataItem] = []
+    report: "Report"
+
+    @property
+    def data(self) -> pd.DataFrame:
+        # Get pydantic fields from reportelementdataitem-inheriting classes
+        data = []
+        for item in self.data_items:
+            data.append(item.model_dump())
+        return pd.DataFrame(data)
+
+class Report(BaseModel):
+    """A report generated from a simulation."""
+    name: str
+    description: Optional[str] = None
+    elements: List[ReportElement] = []
 
 
 class Variable(BaseModel):
@@ -107,7 +153,8 @@ class Parameter(BaseModel):
 class ParameterValue(BaseModel):
     """Individual parameter value for some point in time."""
     # Foreign keys
-    scenario: "Scenario"
+    rules: "Rules"
+    dynamics: "Dynamics"
     parameter: "Parameter"
     
     # Time period for this change
