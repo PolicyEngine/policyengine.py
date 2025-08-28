@@ -17,6 +17,12 @@ from sqlalchemy.pool import StaticPool
 from pydantic import BaseModel, Field
 
 from .storage_adapter import StorageAdapter
+from .data_models import (
+    ScenarioModel,
+    DatasetModel,
+    SimulationMetadataModel,
+    ReportMetadataModel,
+)
 from .database.models import (
     Base,
     ScenarioMetadata,
@@ -159,15 +165,15 @@ class SQLStorageAdapter(StorageAdapter):
     
     def create_scenario(
         self,
-        name: str,
-        parameter_changes: Optional[Dict[str, Any]] = None,
-        country: Optional[str] = None,
-        description: Optional[str] = None,
+        scenario: ScenarioModel,
     ) -> ScenarioMetadata:
         """Create a scenario with parameter changes."""
+        # Convert parameter changes to dict format for SQL adapter
+        parameter_changes = {pc.parameter_name: pc.value for pc in scenario.parameter_changes}
+        
         with self.session() as session:
             return self.scenario_manager.create_scenario(
-                session, name, parameter_changes, country, description
+                session, scenario.name, parameter_changes, scenario.country, scenario.description
             )
     
     def get_scenario(
@@ -231,18 +237,13 @@ class SQLStorageAdapter(StorageAdapter):
     
     def create_dataset(
         self,
-        name: str,
-        country: Optional[str] = None,
-        year: Optional[int] = None,
-        source: Optional[str] = None,
-        version: Optional[str] = None,
-        description: Optional[str] = None,
-        filename: Optional[str] = None,
+        dataset: DatasetModel,
     ) -> DatasetMetadata:
         """Create a dataset."""
         with self.session() as session:
             return self.dataset_manager.create_dataset(
-                session, name, country, year, source, version, description, filename
+                session, dataset.name, dataset.country, dataset.year, 
+                dataset.source, dataset.version, dataset.description, None  # filename not in model
             )
     
     def get_dataset(
@@ -274,29 +275,19 @@ class SQLStorageAdapter(StorageAdapter):
     
     def create_simulation(
         self,
-        scenario: Union[str, ScenarioMetadata],
+        simulation_metadata: SimulationMetadataModel,
         simulation: Any,
-        dataset: Optional[Union[str, DatasetMetadata]] = None,
-        country: Optional[str] = None,
-        year: Optional[int] = None,
-        years: Optional[List[int]] = None,
-        tags: Optional[List[str]] = None,
         calculate_default_variables: bool = True,
         save_all_variables: bool = False,
     ) -> SimulationMetadata:
         """Create and store simulation results."""
-        # Extract names from objects if provided
-        if hasattr(scenario, 'name'):
-            scenario_name = scenario.name
-            country = country or scenario.country
-        else:
-            scenario_name = scenario
-        
-        if dataset and hasattr(dataset, 'name'):
-            dataset_name = dataset.name
-            country = country or dataset.country
-        else:
-            dataset_name = dataset
+        # Extract values from metadata model
+        scenario_name = simulation_metadata.scenario.name
+        dataset_name = simulation_metadata.dataset.name
+        country = simulation_metadata.country
+        year = simulation_metadata.year
+        years = [year] if year else []
+        tags = simulation_metadata.tags
         
         with self.session() as session:
             result = self.simulation_manager.create_simulation(
@@ -369,11 +360,9 @@ class SQLStorageAdapter(StorageAdapter):
     
     def create_report(
         self,
+        report_metadata: ReportMetadataModel,
         baseline_simulation: Union[str, SimulationMetadata],
         reform_simulation: Union[str, SimulationMetadata],
-        year: Optional[int] = None,
-        name: Optional[str] = None,
-        description: Optional[str] = None,
         run_immediately: bool = True
     ) -> Union[ReportMetadata, Dict[str, Any]]:
         """Create an economic impact report."""
@@ -404,18 +393,14 @@ class SQLStorageAdapter(StorageAdapter):
             if baseline_sim.country != reform_sim.country:
                 raise ValueError(f"Simulations must be from same country")
             
-            # Auto-generate name if not provided
-            if not name:
-                name = f"{baseline_sim.country.upper()} Report {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-            
             # Create report metadata
             report = self.report_manager.create_report(
-                name=name,
+                name=report_metadata.name,
                 baseline_simulation_id=baseline_id,
                 comparison_simulation_id=reform_id,
                 country=baseline_sim.country,
-                year=year or baseline_sim.year,
-                description=description,
+                year=report_metadata.year or baseline_sim.year,
+                description=report_metadata.description,
             )
             
             if run_immediately:

@@ -8,6 +8,12 @@ storage backends (SQL, NoSQL, file-based, etc.) to be used interchangeably.
 from abc import ABC, abstractmethod
 from typing import Any, Optional, List, Dict, Union
 from datetime import datetime
+from .data_models import (
+    ScenarioModel,
+    DatasetModel,
+    SimulationMetadataModel,
+    ReportMetadataModel,
+)
 
 
 class StorageAdapter(ABC):
@@ -31,10 +37,7 @@ class StorageAdapter(ABC):
     @abstractmethod
     def create_scenario(
         self,
-        name: str,
-        parameter_changes: Optional[Dict[str, Any]] = None,
-        country: Optional[str] = None,
-        description: Optional[str] = None,
+        scenario: ScenarioModel,
     ) -> Any:
         """Create a scenario with parameter changes.
         
@@ -117,13 +120,7 @@ class StorageAdapter(ABC):
     @abstractmethod
     def create_dataset(
         self,
-        name: str,
-        country: Optional[str] = None,
-        year: Optional[int] = None,
-        source: Optional[str] = None,
-        version: Optional[str] = None,
-        description: Optional[str] = None,
-        filename: Optional[str] = None,
+        dataset: DatasetModel,
     ) -> Any:
         """Create a dataset.
         
@@ -191,13 +188,8 @@ class StorageAdapter(ABC):
     @abstractmethod
     def create_simulation(
         self,
-        scenario: Union[str, Any],
+        simulation_metadata: SimulationMetadataModel,
         simulation: Any,
-        dataset: Optional[Union[str, Any]] = None,
-        country: Optional[str] = None,
-        year: Optional[int] = None,
-        years: Optional[List[int]] = None,
-        tags: Optional[List[str]] = None,
         calculate_default_variables: bool = True,
         save_all_variables: bool = False,
     ) -> Any:
@@ -295,11 +287,9 @@ class StorageAdapter(ABC):
     @abstractmethod
     def create_report(
         self,
+        report_metadata: ReportMetadataModel,
         baseline_simulation: Union[str, Any],
         reform_simulation: Union[str, Any],
-        year: Optional[int] = None,
-        name: Optional[str] = None,
-        description: Optional[str] = None,
         run_immediately: bool = True
     ) -> Any:
         """Create an economic impact report.

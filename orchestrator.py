@@ -2,10 +2,19 @@
 
 from typing import Optional, Any, List, Dict, Union, Literal
 from pydantic import BaseModel
+from datetime import datetime
+import uuid
 
 from .src.policyengine.storage_adapter import StorageAdapter
 from .src.policyengine.default_storage_adapter import DefaultStorageAdapter
 from .src.policyengine.sql_storage_adapter import SQLStorageAdapter, SQLConfig
+from .src.policyengine.data_models import (
+    ScenarioModel,
+    ParameterChangeModel,
+    DatasetModel,
+    SimulationMetadataModel,
+    ReportMetadataModel,
+)
 
 
 # Storage method types
@@ -156,7 +165,40 @@ class SimulationOrchestrator:
         Returns:
             Created scenario object
         """
-        return self.adapter.create_scenario(name, parameter_changes, country, description)
+        # Convert parameter_changes dict to ParameterChangeModel instances
+        param_change_models = []
+        if parameter_changes:
+            for param_name, value_or_dict in parameter_changes.items():
+                if isinstance(value_or_dict, dict):
+                    # Format: {"2025-01-01": value}
+                    for date_str, value in value_or_dict.items():
+                        param_change_models.append(
+                            ParameterChangeModel(
+                                parameter_name=param_name,
+                                start_date=datetime.fromisoformat(date_str),
+                                value=value,
+                            )
+                        )
+                else:
+                    # Simple value format
+                    param_change_models.append(
+                        ParameterChangeModel(
+                            parameter_name=param_name,
+                            start_date=datetime.now(),
+                            value=value_or_dict,
+                        )
+                    )
+        
+        # Create ScenarioModel
+        scenario_model = ScenarioModel(
+            name=name,
+            country=country or self.default_country,
+            description=description,
+            parameter_changes=param_change_models,
+        )
+        
+        # Pass the model to the adapter
+        return self.adapter.create_scenario(scenario_model)
     
     def get_scenario(
         self,
@@ -216,7 +258,18 @@ class SimulationOrchestrator:
         Returns:
             Created dataset object
         """
-        return self.adapter.create_dataset(name, country, year, source, version, description, filename)
+        # Create DatasetModel
+        dataset_model = DatasetModel(
+            name=name,
+            country=country or self.default_country,
+            year=year,
+            source=source,
+            version=version,
+            description=description,
+        )
+        
+        # Pass the model to the adapter
+        return self.adapter.create_dataset(dataset_model)
     
     def get_dataset(
         self,
@@ -282,8 +335,33 @@ class SimulationOrchestrator:
         Returns:
             Created simulation object
         """
+        # Convert to model instances if needed
+        scenario_model = scenario if isinstance(scenario, ScenarioModel) else ScenarioModel(
+            name=scenario if isinstance(scenario, str) else scenario.get("name"),
+            country=country or self.default_country,
+            description="",
+            parameter_changes=[],
+        )
+        
+        dataset_model = dataset if isinstance(dataset, DatasetModel) else DatasetModel(
+            name=dataset if isinstance(dataset, str) else (dataset.get("name") if dataset else "unknown"),
+            country=country or self.default_country,
+            year=year,
+        )
+        
+        # Create SimulationMetadataModel
+        simulation_metadata = SimulationMetadataModel(
+            id=str(uuid.uuid4()),
+            country=country or self.default_country,
+            year=year,
+            dataset=dataset_model,
+            scenario=scenario_model,
+            tags=tags or [],
+        )
+        
+        # Pass the model to the adapter
         return self.adapter.create_simulation(
-            scenario, simulation, dataset, country, year, years, tags,
+            simulation_metadata, simulation,
             calculate_default_variables, save_all_variables
         )
     
@@ -353,8 +431,24 @@ class SimulationOrchestrator:
         Returns:
             Report object or results
         """
+        # Extract IDs
+        baseline_id = baseline_simulation if isinstance(baseline_simulation, str) else baseline_simulation.get("id")
+        comparison_id = reform_simulation if isinstance(reform_simulation, str) else reform_simulation.get("id")
+        
+        # Create ReportMetadataModel
+        report_metadata = ReportMetadataModel(
+            id=str(uuid.uuid4()),
+            name=name or f"Report {datetime.now().isoformat()}",
+            country=self.default_country,
+            year=year,
+            baseline_simulation_id=baseline_id,
+            comparison_simulation_id=comparison_id,
+            description=description,
+        )
+        
+        # Pass the model to the adapter
         return self.adapter.create_report(
-            baseline_simulation, reform_simulation, year, name, description, run_immediately
+            report_metadata, baseline_simulation, reform_simulation, run_immediately
         )
     
     def get_report(

@@ -9,6 +9,12 @@ from datetime import datetime
 import uuid
 
 from .storage_adapter import StorageAdapter
+from .data_models import (
+    ScenarioModel,
+    DatasetModel,
+    SimulationMetadataModel,
+    ReportMetadataModel,
+)
 
 
 class DefaultStorageAdapter(StorageAdapter):
@@ -39,23 +45,20 @@ class DefaultStorageAdapter(StorageAdapter):
     
     def create_scenario(
         self,
-        name: str,
-        parameter_changes: Optional[Dict[str, Any]] = None,
-        country: Optional[str] = None,
-        description: Optional[str] = None,
+        scenario: ScenarioModel,
     ) -> Dict[str, Any]:
         """Create a scenario with parameter changes."""
-        scenario_key = f"{country or 'default'}_{name}"
-        scenario = {
+        scenario_key = f"{scenario.country}_{scenario.name}"
+        scenario_dict = {
             "id": str(uuid.uuid4()),
-            "name": name,
-            "parameter_changes": parameter_changes or {},
-            "country": country,
-            "description": description,
+            "name": scenario.name,
+            "parameter_changes": {pc.parameter_name: pc.value for pc in scenario.parameter_changes},
+            "country": scenario.country,
+            "description": scenario.description,
             "created_at": datetime.now().isoformat()
         }
-        self.scenarios[scenario_key] = scenario
-        return scenario
+        self.scenarios[scenario_key] = scenario_dict
+        return scenario_dict
     
     def get_scenario(
         self,
@@ -97,29 +100,23 @@ class DefaultStorageAdapter(StorageAdapter):
     
     def create_dataset(
         self,
-        name: str,
-        country: Optional[str] = None,
-        year: Optional[int] = None,
-        source: Optional[str] = None,
-        version: Optional[str] = None,
-        description: Optional[str] = None,
-        filename: Optional[str] = None,
+        dataset: DatasetModel,
     ) -> Dict[str, Any]:
         """Create a dataset."""
-        dataset_key = f"{country or 'default'}_{name}"
-        dataset = {
+        dataset_key = f"{dataset.country}_{dataset.name}"
+        dataset_dict = {
             "id": str(uuid.uuid4()),
-            "name": name,
-            "country": country,
-            "year": year,
-            "source": source,
-            "version": version,
-            "description": description,
-            "filename": filename,
+            "name": dataset.name,
+            "country": dataset.country,
+            "year": dataset.year,
+            "source": dataset.source,
+            "version": dataset.version,
+            "description": dataset.description,
+            "filename": None,  # Not in DatasetModel
             "created_at": datetime.now().isoformat()
         }
-        self.datasets[dataset_key] = dataset
-        return dataset
+        self.datasets[dataset_key] = dataset_dict
+        return dataset_dict
     
     def get_dataset(
         self,
@@ -152,30 +149,21 @@ class DefaultStorageAdapter(StorageAdapter):
     
     def create_simulation(
         self,
-        scenario: Union[str, Any],
+        simulation_metadata: SimulationMetadataModel,
         simulation: Any,
-        dataset: Optional[Union[str, Any]] = None,
-        country: Optional[str] = None,
-        year: Optional[int] = None,
-        years: Optional[List[int]] = None,
-        tags: Optional[List[str]] = None,
         calculate_default_variables: bool = True,
         save_all_variables: bool = False,
     ) -> Dict[str, Any]:
         """Create and store simulation results."""
-        # Extract scenario name
-        scenario_name = scenario if isinstance(scenario, str) else scenario.get("name", "unknown")
-        dataset_name = dataset if isinstance(dataset, str) else (dataset.get("name", "unknown") if dataset else "unknown")
-        
-        sim_id = str(uuid.uuid4())
+        sim_id = simulation_metadata.id or str(uuid.uuid4())
         simulation_obj = {
             "id": sim_id,
-            "scenario": scenario_name,
-            "dataset": dataset_name,
-            "country": country,
-            "year": year,
-            "years": years or [year] if year else [],
-            "tags": tags or [],
+            "scenario": simulation_metadata.scenario.name,
+            "dataset": simulation_metadata.dataset.name,
+            "country": simulation_metadata.country,
+            "year": simulation_metadata.year,
+            "years": [simulation_metadata.year] if simulation_metadata.year else [],
+            "tags": simulation_metadata.tags,
             "created_at": datetime.now().isoformat(),
             "calculate_default_variables": calculate_default_variables,
             "save_all_variables": save_all_variables,
@@ -183,7 +171,7 @@ class DefaultStorageAdapter(StorageAdapter):
         }
         
         # Create key for retrieval
-        sim_key = f"{country or 'default'}_{scenario_name}_{dataset_name}_{year}"
+        sim_key = f"{simulation_metadata.country}_{simulation_metadata.scenario.name}_{simulation_metadata.dataset.name}_{simulation_metadata.year}"
         self.simulations[sim_key] = simulation_obj
         self.simulations[sim_id] = simulation_obj  # Also store by ID
         
@@ -244,15 +232,13 @@ class DefaultStorageAdapter(StorageAdapter):
     
     def create_report(
         self,
+        report_metadata: ReportMetadataModel,
         baseline_simulation: Union[str, Any],
         reform_simulation: Union[str, Any],
-        year: Optional[int] = None,
-        name: Optional[str] = None,
-        description: Optional[str] = None,
         run_immediately: bool = True
     ) -> Dict[str, Any]:
         """Create an economic impact report."""
-        report_id = str(uuid.uuid4())
+        report_id = report_metadata.id or str(uuid.uuid4())
         
         # Extract IDs
         baseline_id = baseline_simulation if isinstance(baseline_simulation, str) else baseline_simulation.get("id")
@@ -260,11 +246,11 @@ class DefaultStorageAdapter(StorageAdapter):
         
         report = {
             "id": report_id,
-            "name": name or f"Report {datetime.now().isoformat()}",
+            "name": report_metadata.name,
             "baseline_simulation_id": baseline_id,
             "reform_simulation_id": reform_id,
-            "year": year,
-            "description": description,
+            "year": report_metadata.year,
+            "description": report_metadata.description,
             "created_at": datetime.now().isoformat(),
             "status": "completed" if run_immediately else "pending",
             "results": {}
