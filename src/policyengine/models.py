@@ -89,9 +89,6 @@ class Variable(BaseModel):
     value_type: str  # "float", "int", "bool", "string", "enum"
     entity: str  # "person", "household", "tax_unit", etc.
     definition_period: Optional[str] = None  # "year", "month", "eternity"
-    
-    # Model version tracking
-    model_version: Optional[str] = None
 
 
 class Parameter(BaseModel):

@@ -54,7 +54,7 @@ class UKSingleYearSimulation(Simulation):
 
         return output_dataset
     
-class UKNationalEconomicComparisonOutput(BaseModel):
+class UKNationalEconomicComparisonOutput(Dataset):
     baseline_household_net_income: float
     reform_household_net_income: float
     difference: float
@@ -68,6 +68,7 @@ class UKNationalEconomicComparison(Simulation):
         total_counterfactual = self.counterfactual.household_df["hbai_household_net_income"].sum()
 
         return UKNationalEconomicComparisonOutput(
+            name=f"comparison_{self.baseline.name}_vs_{self.counterfactual.name}",
             baseline_household_net_income=total_baseline,
             reform_household_net_income=total_counterfactual,
             difference=total_counterfactual - total_baseline
