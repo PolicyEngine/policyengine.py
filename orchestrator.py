@@ -1,176 +1,126 @@
-"""SimulationOrchestrator management for PolicyEngine simulations and metadata."""
+"""SimulationOrchestrator - Main interface for PolicyEngine simulations and metadata."""
 
-import os
-from typing import Optional, Any, List
-from contextlib import contextmanager
-from datetime import datetime
-from pathlib import Path
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import StaticPool
-from pydantic import BaseModel, Field
+from typing import Optional, Any, List, Dict, Union, Literal
+from pydantic import BaseModel
 
-from .src.policyengine.database.models import Base
-from .src.policyengine.utils import import_parameters_from_tax_benefit_system
-from .src.policyengine.database.storage_backend import StorageBackend
-from .src.policyengine.database.scenario_manager import ScenarioManager
-from .src.policyengine.database.dataset_manager import DatasetManager
-from .src.policyengine.database.simulation_manager import SimulationManager
+from .src.policyengine.storage_adapter import StorageAdapter
+from .src.policyengine.sql_storage_adapter import SQLStorageAdapter, SQLConfig
+from .src.policyengine.database.models import (
+    ScenarioMetadata,
+    DatasetMetadata,
+    SimulationMetadata,
+    ReportMetadata,
+    VariableMetadata
+)
 
 
-class SimulationOrchestratorConfig(BaseModel):
-    """Configuration for database connection and storage."""
-    
-    # SimulationOrchestrator configuration
-    connection_string: Optional[str] = Field(
-        None, 
-        description="SimulationOrchestrator connection string (SQLite, PostgreSQL, MySQL, etc. - defaults to local SQLite)"
-    )
-    echo: bool = Field(False, description="Echo SQL statements")
-    
-    # Storage configuration for .h5 simulation files
-    storage_mode: str = Field("local", description="Storage mode for .h5 files: 'local' or 'cloud'")
-    local_storage_path: str = Field("./simulations", description="Local path for .h5 files")
-    
-    # Cloud storage configuration for .h5 files (optional)
-    gcs_bucket: Optional[str] = Field(None, description="Google Cloud Storage bucket name for .h5 files")
-    gcs_prefix: Optional[str] = Field("simulations/", description="Prefix for GCS objects")
+# Storage strategy types
+StorageStrategy = Literal["sql"]  # Can be extended to include "mongo", "redis", etc.
 
 
 class SimulationOrchestrator:
-    """Main database manager for PolicyEngine."""
+    """Main orchestrator for PolicyEngine simulations.
+    
+    This class provides a unified interface for managing simulations, scenarios,
+    datasets, and reports. It uses the strategy pattern to support different
+    storage backends.
+    """
     
     def __init__(
-            self,
-            # SimulationOrchestrator configuration
-            connection_string: Optional[str] = None,
-            echo: bool = False,
-            # Storage configuration
-            storage_mode: str = "local",
-            local_storage_path: str = "./simulations",
-            gcs_bucket: Optional[str] = None,
-            gcs_prefix: str = "simulations/",
-            # Other options
-            countries: Optional[List[str]] = None,
-            initialize: bool = False,
-        ):
-        """Initialize database with configuration.
+        self,
+        strategy: StorageStrategy = "sql",
+        config: Optional[Union[Dict[str, Any], BaseModel]] = None,
+        # Legacy parameters for backward compatibility
+        connection_string: Optional[str] = None,
+        echo: bool = False,
+        storage_mode: str = "local",
+        local_storage_path: str = "./simulations",
+        gcs_bucket: Optional[str] = None,
+        gcs_prefix: str = "simulations/",
+        countries: Optional[List[str]] = None,
+        initialize: bool = False,
+    ):
+        """Initialize the SimulationOrchestrator.
         
         Args:
-            connection_string: SimulationOrchestrator connection string (SQLite, PostgreSQL, MySQL, etc)
-            echo: Echo SQL statements
-            storage_mode: Storage mode for .h5 files ('local' or 'cloud')
-            local_storage_path: Local path for .h5 files
-            gcs_bucket: Google Cloud Storage bucket name for .h5 files
-            gcs_prefix: Prefix for GCS objects
-            countries: List of supported countries (defaults to ["uk"])
-            initialize: Whether to automatically initialize with current law parameters
+            strategy: Storage strategy to use ('sql' for now)
+            config: Strategy-specific configuration object or dict
+            connection_string: Database connection string (legacy parameter)
+            echo: Echo SQL statements (legacy parameter)
+            storage_mode: Storage mode for files (legacy parameter)
+            local_storage_path: Local path for files (legacy parameter)
+            gcs_bucket: GCS bucket name (legacy parameter)
+            gcs_prefix: GCS prefix (legacy parameter)
+            countries: List of supported countries
+            initialize: Whether to auto-initialize with current law
         """
-        self.config = SimulationOrchestratorConfig(
-            connection_string=connection_string,
-            echo=echo,
-            storage_mode=storage_mode,
-            local_storage_path=local_storage_path,
-            gcs_bucket=gcs_bucket,
-            gcs_prefix=gcs_prefix
-        )
-        self.engine = self._create_engine()
-        self.SessionLocal = sessionmaker(bind=self.engine)
+        self.strategy = strategy
         
-        # Set default countries and default_country
-        if countries is None:
-            self.countries = ["uk"]
-            self.default_country = "uk"
+        # Handle legacy parameters if config not provided
+        if config is None and connection_string is not None:
+            # Create config from legacy parameters
+            if strategy == "sql":
+                config = SQLConfig(
+                    connection_string=connection_string,
+                    echo=echo,
+                    storage_mode=storage_mode,
+                    local_storage_path=local_storage_path,
+                    gcs_bucket=gcs_bucket,
+                    gcs_prefix=gcs_prefix,
+                    default_country=countries[0] if countries else "uk"
+                )
+        elif config is None:
+            # Use default config
+            if strategy == "sql":
+                config = SQLConfig(
+                    storage_mode=storage_mode,
+                    local_storage_path=local_storage_path,
+                    gcs_bucket=gcs_bucket,
+                    gcs_prefix=gcs_prefix,
+                    default_country=countries[0] if countries else "uk"
+                )
+        
+        # Convert dict to appropriate config object if needed
+        if isinstance(config, dict):
+            if strategy == "sql":
+                config = SQLConfig(**config)
+        
+        self.config = config
+        
+        # Initialize the appropriate storage adapter
+        if strategy == "sql":
+            self.adapter: StorageAdapter = SQLStorageAdapter(config)
         else:
-            self.countries = countries
-            # If only one country, use it as default. Otherwise default to UK if in list, else first
-            if len(countries) == 1:
-                self.default_country = countries[0]
-            elif "uk" in countries:
-                self.default_country = "uk"
-            else:
-                self.default_country = countries[0]
+            raise ValueError(f"Unknown storage strategy: {strategy}")
         
-        # Initialize managers
-        self.storage = StorageBackend(self.config)
-        self.scenarios = ScenarioManager(self.default_country)
-        self.datasets = DatasetManager(self.default_country)
-        self.simulations = SimulationManager(self.storage, self.default_country)
+        # Set countries for backward compatibility
+        self.countries = countries or ["uk"]
+        self.default_country = config.default_country if hasattr(config, 'default_country') else self.countries[0]
         
-        # Create tables if they don't exist
-        Base.metadata.create_all(bind=self.engine)
-        
-        # Ensure storage directories exist
-        if self.config.storage_mode == "local":
-            self._setup_local_storage()
-        
-        # Automatically initialize with current law parameters if requested
+        # Auto-initialize if requested
         if initialize:
             self._auto_initialize()
     
-    def _create_engine(self):
-        """Create SQLAlchemy engine for metadata storage.
-        
-        The database stores metadata only - actual simulation data is in .h5 files.
-        Supports any SQLAlchemy-compatible database (SQLite, PostgreSQL, MySQL, etc).
-        """
-        if self.config.connection_string:
-            # Use provided connection string (can be local or cloud database)
-            # Examples:
-            # - sqlite:///path/to/db.sqlite
-            # - postgresql://user:pass@host/dbname
-            # - mysql+pymysql://user:pass@host/dbname
-            return create_engine(
-                self.config.connection_string,
-                echo=self.config.echo
-            )
-        else:
-            # Default to local SQLite in the storage path
-            db_path = os.path.join(self.config.local_storage_path, "metadata.db")
-            os.makedirs(os.path.dirname(db_path), exist_ok=True)
-            
-            return create_engine(
-                f"sqlite:///{db_path}",
-                echo=self.config.echo
-            )
-    
-    def _setup_local_storage(self):
-        """Ensure local storage directories exist."""
-        storage_path = Path(self.config.local_storage_path)
-        storage_path.mkdir(parents=True, exist_ok=True)
-    
-    def _auto_initialize(self):
-        """Automatically initialize database with current law parameters for each country."""
-        from .src.policyengine.database.models import ScenarioMetadata
-        
+    def _auto_initialize(self) -> None:
+        """Automatically initialize with current law parameters for each country."""
         for country in self.countries:
-            # Check if current_law scenario already exists
-            with self.session() as session:
-                existing = session.query(ScenarioMetadata).filter_by(
-                    name="current_law",
-                    country=country.lower()
-                ).first()
-                
-                if not existing:
-                    try:
-                        print(f"Initializing {country.upper()} current law parameters and variables...")
-                        self.initialize_with_current_law(country)
-                    except ImportError:
-                        print(f"Note: policyengine-{country} not installed, skipping initialization")
-                    except Exception as e:
-                        print(f"Warning: Could not initialize {country} parameters: {e}")
+            # Check if current law already exists
+            existing = self.get_scenario("current_law", country)
+            
+            if not existing:
+                try:
+                    print(f"Initializing {country.upper()} current law parameters and variables...")
+                    self.initialize_with_current_law(country)
+                except ImportError:
+                    print(f"Note: policyengine-{country} not installed, skipping initialization")
+                except Exception as e:
+                    print(f"Warning: Could not initialize {country} parameters: {e}")
             
             # Initialize default datasets
             self._initialize_default_datasets(country)
     
-    def _initialize_default_datasets(self, country: str):
-        """Initialize default datasets for a country with DataFile references.
-        
-        Args:
-            country: Country code ('uk' or 'us')
-        """
-        from .src.policyengine.database.models import DatasetMetadata
-        
+    def _initialize_default_datasets(self, country: str) -> None:
+        """Initialize default datasets for a country."""
         # Define default datasets for each country
         default_datasets = {
             "uk": [
@@ -180,8 +130,6 @@ class SimulationOrchestrator:
                     "source": "FRS",
                     "description": "Family Resources Survey 2023-24",
                     "filename": "frs_2023_24.h5",
-                    "gcs_bucket": "policyengine-uk-data-private",
-                    "gcs_path": "frs_2023_24.h5"
                 },
                 {
                     "name": "enhanced_frs_2023_24",
@@ -189,8 +137,6 @@ class SimulationOrchestrator:
                     "source": "FRS",
                     "description": "Enhanced Family Resources Survey 2023-24",
                     "filename": "enhanced_frs_2023_24.h5",
-                    "gcs_bucket": "policyengine-uk-data-private",
-                    "gcs_path": "enhanced_frs_2023_24.h5"
                 }
             ],
             "us": [
@@ -200,8 +146,6 @@ class SimulationOrchestrator:
                     "source": "CPS",
                     "description": "Current Population Survey 2023",
                     "filename": "cps_2023.h5",
-                    "gcs_bucket": "policyengine-us-data",
-                    "gcs_path": "cps_2023.h5"
                 },
                 {
                     "name": "enhanced_cps_2024",
@@ -209,123 +153,73 @@ class SimulationOrchestrator:
                     "source": "CPS",
                     "description": "Enhanced Current Population Survey 2024",
                     "filename": "enhanced_cps_2024.h5",
-                    "gcs_bucket": "policyengine-us-data",
-                    "gcs_path": "enhanced_cps_2024.h5"
                 }
             ]
         }
         
         datasets = default_datasets.get(country.lower(), [])
         
-        if not datasets:
-            return
-        
-        with self.session() as session:
-            for dataset_info in datasets:
-                # Check if dataset already exists
-                existing = session.query(DatasetMetadata).filter_by(
+        for dataset_info in datasets:
+            # Check if dataset already exists
+            existing = self.get_dataset(dataset_info["name"], country)
+            
+            if not existing:
+                # Create dataset
+                self.add_dataset(
                     name=dataset_info["name"],
-                    country=country.lower()
-                ).first()
-                
-                if not existing:
-                    # Create dataset with file information
-                    self.datasets.add_dataset(
-                        session=session,
-                        name=dataset_info["name"],
-                        country=country,
-                        year=dataset_info["year"],
-                        source=dataset_info["source"],
-                        description=dataset_info["description"],
-                        filename=dataset_info["filename"],
-                        gcs_bucket=dataset_info["gcs_bucket"],
-                        gcs_path=dataset_info["gcs_path"]
-                    )
+                    country=country,
+                    year=dataset_info["year"],
+                    source=dataset_info["source"],
+                    description=dataset_info["description"],
+                    filename=dataset_info["filename"]
+                )
     
-    @contextmanager
-    def session(self) -> Session:
-        """Get a database session context manager.
-        
-        Yields:
-            SimulationOrchestrator session
-        """
-        session = self.SessionLocal()
-        try:
-            yield session
-            session.commit()
-        except Exception:
-            session.rollback()
-            raise
-        finally:
-            session.close()
+    # ==================== Scenario Management ====================
     
-    def get_session(self) -> Session:
-        """Get a new database session.
-        
-        Returns:
-            SQLAlchemy session
-        """
-        return self.SessionLocal()
-    
-    def init_db(self) -> None:
-        """Initialize database schema."""
-        Base.metadata.create_all(bind=self.engine)
-    
-    def drop_all(self) -> None:
-        """Drop all tables (use with caution)."""
-        Base.metadata.drop_all(bind=self.engine)
-    
-    # Parameter initialization
-    def initialize_with_current_law(
+    def add_scenario(
         self,
-        country: str = None
-    ) -> None:
-        """Initialize database with current law parameters.
+        name: str,
+        parameter_changes: Optional[Dict[str, Any]] = None,
+        country: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> Optional[ScenarioMetadata]:
+        """Add a parametric scenario with parameter changes.
         
         Args:
-            country: Country code (uses default if not specified)
+            name: Unique scenario name
+            parameter_changes: Dictionary of parameter changes
+            country: Country code
+            description: Human-readable description
+            
+        Returns:
+            ScenarioMetadata object or None
         """
-        country = country or self.default_country
-        if not country:
-            raise ValueError("Country must be specified or set as default")
+        if self.adapter:
+            return self.adapter.add_scenario(name, parameter_changes, country, description)
+        return None
+    
+    def get_scenario(
+        self,
+        name: str,
+        country: Optional[str] = None
+    ) -> Optional[ScenarioMetadata]:
+        """Get a scenario by name and country.
         
-        # Import the appropriate country system
-        if country.lower() == "uk":
-            from policyengine_uk import CountryTaxBenefitSystem
-            system = CountryTaxBenefitSystem()
-        elif country.lower() == "us":
-            from policyengine_us import CountryTaxBenefitSystem
-            system = CountryTaxBenefitSystem()
-        else:
-            raise ValueError(f"Unsupported country: {country}")
-        
-        # Import parameters and variables into database
-        with self.session() as session:
-            from .src.policyengine.utils.variables import import_variables_from_tax_benefit_system
+        Args:
+            name: Scenario name
+            country: Country code
             
-            # Import parameters
-            import_parameters_from_tax_benefit_system(
-                session=session,
-                tax_benefit_system=system,
-                country=country.lower(),
-                scenario_name="current_law",
-                scenario_description="Current model baseline"
-            )
-            
-            # Import variables
-            variable_count = import_variables_from_tax_benefit_system(
-                session=session,
-                tax_benefit_system=system,
-                country=country.lower()
-            )
-            
-            if variable_count > 0:
-                print(f"Imported {variable_count} new variables for {country.upper()}")
+        Returns:
+            ScenarioMetadata object or None if not found
+        """
+        if self.adapter:
+            return self.adapter.get_scenario(name, country)
+        return None
     
     def get_current_law_scenario(
         self,
-        country: str = None
-    ):
+        country: Optional[str] = None
+    ) -> Optional[ScenarioMetadata]:
         """Get the current law scenario for a country.
         
         Args:
@@ -334,290 +228,213 @@ class SimulationOrchestrator:
         Returns:
             ScenarioMetadata object or None if not found
         """
-        from .src.policyengine.database.models import ScenarioMetadata
-        country = country or self.default_country
-        
-        with self.session() as session:
-            from sqlalchemy.orm import joinedload
-            scenario = session.query(ScenarioMetadata).options(
-                joinedload(ScenarioMetadata.parameter_changes)
-            ).filter_by(
-                name="current_law",
-                country=country.lower()
-            ).first()
-            
-            if scenario:
-                session.expunge_all()
-            
-            return scenario
+        if self.adapter and hasattr(self.adapter, 'get_current_law_scenario'):
+            return self.adapter.get_current_law_scenario(country)
+        return self.get_scenario("current_law", country)
     
-    # Scenario management (delegated to ScenarioManager)
-    def add_scenario(
-        self,
-        name: str,
-        parameter_changes: dict = None,
-        country: str = None,
-        description: str = None,
-    ):
-        """Add a parametric scenario with parameter changes.
-        
-        See ScenarioManager for documentation on parameter change formats.
-        Returns ScenarioMetadata object.
-        """
-        with self.session() as session:
-            return self.scenarios.add_scenario(
-                session, name, parameter_changes, country, description
-            )
+    # ==================== Dataset Management ====================
     
-    def get_scenario(
-        self,
-        name: str,
-        country: str = None
-    ):
-        """Get a scenario by name and country.
-        
-        Returns:
-            ScenarioMetadata object or None if not found
-        """
-        with self.session() as session:
-            return self.scenarios.get_scenario(
-                session, name, country
-            )
-    
-    # Dataset management (delegated to DatasetManager)
     def add_dataset(
         self,
         name: str,
-        country: str = None,
-        year: int = None,
-        source: str = None,
-        version: str = None,
-        description: str = None,
-    ):
-        """Register a dataset in the database. Returns DatasetMetadata object."""
-        with self.session() as session:
-            return self.datasets.add_dataset(
-                session, name, country, year, source, version, description
-            )
+        country: Optional[str] = None,
+        year: Optional[int] = None,
+        source: Optional[str] = None,
+        version: Optional[str] = None,
+        description: Optional[str] = None,
+        filename: Optional[str] = None,
+    ) -> Optional[DatasetMetadata]:
+        """Register a dataset in the database.
+        
+        Args:
+            name: Unique dataset name
+            country: Country code
+            year: Dataset year
+            source: Data source
+            version: Dataset version
+            description: Description
+            filename: Associated file
+            
+        Returns:
+            DatasetMetadata object or None
+        """
+        if self.adapter:
+            return self.adapter.add_dataset(name, country, year, source, version, description, filename)
+        return None
     
     def get_dataset(
         self,
         name: str,
-        country: str = None
-    ):
-        """Get a dataset by name and country. Returns DatasetMetadata object or None."""
-        with self.session() as session:
-            return self.datasets.get_dataset(session, name, country)
+        country: Optional[str] = None
+    ) -> Optional[DatasetMetadata]:
+        """Get a dataset by name and country.
+        
+        Args:
+            name: Dataset name
+            country: Country code
+            
+        Returns:
+            DatasetMetadata object or None
+        """
+        if self.adapter:
+            return self.adapter.get_dataset(name, country)
+        return None
     
     def list_datasets(
         self,
-        country: str = None,
-        year: int = None,
-        source: str = None
-    ):
-        """List datasets matching criteria. Returns list of DatasetMetadata objects."""
-        with self.session() as session:
-            return self.datasets.list_datasets(session, country, year, source)
+        country: Optional[str] = None,
+        year: Optional[int] = None,
+        source: Optional[str] = None
+    ) -> List[DatasetMetadata]:
+        """List datasets matching criteria.
+        
+        Args:
+            country: Filter by country
+            year: Filter by year
+            source: Filter by source
+            
+        Returns:
+            List of DatasetMetadata objects
+        """
+        if self.adapter:
+            return self.adapter.list_datasets(country, year, source)
+        return []
     
-    # Simulation management (delegated to SimulationManager)
+    # ==================== Simulation Management ====================
+    
     def add_simulation(
         self,
-        scenario: Any,  # Can be ScenarioMetadata object or string
+        scenario: Union[str, ScenarioMetadata],
         simulation: Any,
-        dataset: Any = None,  # Can be DatasetMetadata object or string
-        country: str = None,
-        year: int = None,
-        years: List[int] = None,
-        tags: List[str] = None,
+        dataset: Optional[Union[str, DatasetMetadata]] = None,
+        country: Optional[str] = None,
+        year: Optional[int] = None,
+        years: Optional[List[int]] = None,
+        tags: Optional[List[str]] = None,
         calculate_default_variables: bool = True,
         save_all_variables: bool = False,
-    ):
+    ) -> Optional[SimulationMetadata]:
         """Store simulation results from a policyengine_core Simulation object.
         
         Args:
             scenario: ScenarioMetadata object or scenario name string
             simulation: Simulation object from policyengine_core
-            dataset: DatasetMetadata object or dataset name string (optional)
-            country: Country code (optional, extracted from scenario/dataset if objects provided)
-            year: Single year to save (if specified, only saves this year)
-            years: Multiple years to save (if specified, saves all these years)
+            dataset: DatasetMetadata object or dataset name string
+            country: Country code
+            year: Single year to save
+            years: Multiple years to save
             tags: Optional tags for filtering
-            calculate_default_variables: If True, calculates household net income etc.
-            save_all_variables: If True, saves all calculated variables for all periods
-        
+            calculate_default_variables: If True, calculates default variables
+            save_all_variables: If True, saves all calculated variables
+            
         Returns:
-            SimulationMetadata object with get_data() method
+            SimulationMetadata object or None
         """
-        # Extract names and country from objects if provided
-        if hasattr(scenario, 'name'):
-            # It's a ScenarioMetadata object
-            scenario_name = scenario.name
-            country = country or scenario.country
-        else:
-            # It's a string
-            scenario_name = scenario
-        
-        if dataset and hasattr(dataset, 'name'):
-            # It's a DatasetMetadata object
-            dataset_name = dataset.name
-            country = country or dataset.country
-        else:
-            # It's a string or None
-            dataset_name = dataset
-        
-        with self.session() as session:
-            return self.simulations.add_simulation(
-                session, scenario_name, simulation, dataset_name, 
-                country, year, years, tags, 
+        if self.adapter:
+            return self.adapter.add_simulation(
+                scenario, simulation, dataset, country, year, years, tags,
                 calculate_default_variables, save_all_variables
             )
+        return None
     
     def get_simulation(
         self,
         scenario: str,
         dataset: str,
-        country: str = None,
-        year: int = None,
-    ):
+        country: Optional[str] = None,
+        year: Optional[int] = None,
+    ) -> Optional[SimulationMetadata]:
         """Retrieve simulation metadata.
         
+        Args:
+            scenario: Scenario name
+            dataset: Dataset name
+            country: Country code
+            year: Simulation year
+            
         Returns:
             SimulationMetadata object with get_data() method, or None if not found
         """
-        with self.session() as session:
-            return self.simulations.get_simulation_metadata(
-                session, scenario, dataset, country, year
-            )
+        if self.adapter:
+            return self.adapter.get_simulation(scenario, dataset, country, year)
+        return None
     
     def list_simulations(
         self,
-        country: str = None,
-        scenario: str = None,
-        dataset: str = None,
-        year: int = None,
-        tags: List[str] = None
-    ):
-        """List simulations matching criteria. Returns list of SimulationMetadata objects."""
-        with self.session() as session:
-            return self.simulations.list_simulations(
-                session, country, scenario, dataset, year, tags
-            )
+        country: Optional[str] = None,
+        scenario: Optional[str] = None,
+        dataset: Optional[str] = None,
+        year: Optional[int] = None,
+        tags: Optional[List[str]] = None
+    ) -> List[SimulationMetadata]:
+        """List simulations matching criteria.
+        
+        Args:
+            country: Filter by country
+            scenario: Filter by scenario
+            dataset: Filter by dataset
+            year: Filter by year
+            tags: Filter by tags
+            
+        Returns:
+            List of SimulationMetadata objects
+        """
+        if self.adapter:
+            return self.adapter.list_simulations(country, scenario, dataset, year, tags)
+        return []
     
-    # Report management
+    # ==================== Report Management ====================
+    
     def create_report(
         self,
-        baseline_simulation: Any,
-        reform_simulation: Any,
+        baseline_simulation: Union[str, SimulationMetadata],
+        reform_simulation: Union[str, SimulationMetadata],
         year: Optional[int] = None,
         name: Optional[str] = None,
         description: Optional[str] = None,
         run_immediately: bool = True
-    ):
+    ) -> Optional[Union[ReportMetadata, Dict[str, Any]]]:
         """Create and optionally run an economic impact report.
         
         Args:
             baseline_simulation: Either a SimulationMetadata object or simulation ID string
-            reform_simulation: Either a SimulationMetadata object or simulation ID string  
-            year: Optional year to analyze (for multi-year simulations)
-            name: Report name (defaults to auto-generated)
+            reform_simulation: Either a SimulationMetadata object or simulation ID string
+            year: Optional year to analyze
+            name: Report name
             description: Report description
-            run_immediately: Whether to run the analysis immediately (default True)
+            run_immediately: Whether to run the analysis immediately
             
         Returns:
-            ReportMetadata object or report results dict (if run_immediately)
+            ReportMetadata object or report results dict (if run_immediately), or None
         """
-        from .src.policyengine.database.models import SimulationMetadata
-        from .src.policyengine.database.report_manager import ReportManager
-        
-        with self.session() as session:
-            # Get simulation IDs
-            if isinstance(baseline_simulation, str):
-                baseline_id = baseline_simulation
-                baseline_sim = session.query(SimulationMetadata).filter_by(id=baseline_id).first()
-                if not baseline_sim:
-                    raise ValueError(f"Baseline simulation {baseline_id} not found")
-            else:
-                baseline_id = baseline_simulation.id
-                baseline_sim = baseline_simulation
-            
-            if isinstance(reform_simulation, str):
-                reform_id = reform_simulation
-                reform_sim = session.query(SimulationMetadata).filter_by(id=reform_id).first()
-                if not reform_sim:
-                    raise ValueError(f"Reform simulation {reform_id} not found")
-            else:
-                reform_id = reform_simulation.id
-                reform_sim = reform_simulation
-            
-            # Validate simulations are from same country
-            if baseline_sim.country != reform_sim.country:
-                raise ValueError(f"Simulations must be from same country: {baseline_sim.country} != {reform_sim.country}")
-            
-            # Auto-generate name if not provided
-            if not name:
-                from datetime import datetime
-                name = f"{baseline_sim.country.upper()} Report {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-            
-            # Create report manager
-            report_manager = ReportManager(session)
-            
-            # Create report metadata
-            report = report_manager.create_report(
-                name=name,
-                baseline_simulation_id=baseline_id,
-                comparison_simulation_id=reform_id,
-                country=baseline_sim.country,
-                year=year or baseline_sim.year,
-                description=description,
+        if self.adapter:
+            return self.adapter.create_report(
+                baseline_simulation, reform_simulation, year, name, description, run_immediately
             )
-            
-            if run_immediately:
-                # Need to re-fetch simulations in this session context
-                baseline_sim = session.query(SimulationMetadata).filter_by(id=baseline_id).first()
-                reform_sim = session.query(SimulationMetadata).filter_by(id=reform_id).first()
-                
-                # Load simulation data
-                baseline_sim._storage = self.storage
-                reform_sim._storage = self.storage
-                
-                baseline_data = baseline_sim.get_data(year)
-                reform_data = reform_sim.get_data(year)
-                
-                if baseline_data is None:
-                    raise ValueError(f"No data found for baseline simulation {baseline_id}")
-                if reform_data is None:
-                    raise ValueError(f"No data found for reform simulation {reform_id}")
-                
-                # Run the report
-                report_manager.run_report(report.id, baseline_data, reform_data)
-                
-                # Return results
-                return report_manager.get_report_results(report.id)
-            else:
-                # Just return the report metadata
-                return report
+        return None
     
-    def get_report(self, report_id: str):
+    def get_report(
+        self,
+        report_id: str
+    ) -> Optional[Dict[str, Any]]:
         """Get a report and its results by ID.
         
         Args:
             report_id: Report ID
             
         Returns:
-            Dictionary containing report metadata and results
+            Dictionary containing report metadata and results, or None
         """
-        from .src.policyengine.database.report_manager import ReportManager
-        
-        with self.session() as session:
-            report_manager = ReportManager(session)
-            return report_manager.get_report_results(report_id)
+        if self.adapter:
+            return self.adapter.get_report(report_id)
+        return None
     
     def list_reports(
         self,
         country: Optional[str] = None,
         year: Optional[int] = None,
         status: Optional[str] = None
-    ):
+    ) -> List[ReportMetadata]:
         """List reports matching criteria.
         
         Args:
@@ -628,60 +445,36 @@ class SimulationOrchestrator:
         Returns:
             List of ReportMetadata objects
         """
-        from .src.policyengine.database.report_manager import ReportManager
-        from .src.policyengine.database.models import SimulationStatus
-        
-        with self.session() as session:
-            report_manager = ReportManager(session)
-            
-            # Convert status string to enum if provided
-            status_enum = None
-            if status:
-                status_enum = SimulationStatus(status)
-            
-            reports = report_manager.list_reports(
-                country=country,
-                year=year,
-                status=status_enum
-            )
-            
-            # Expunge from session to use outside
-            for report in reports:
-                session.expunge(report)
-            
-            return reports
+        if self.adapter:
+            return self.adapter.list_reports(country, year, status)
+        return []
     
-    # Variable management
+    # ==================== Variable Management ====================
+    
     def get_variable(
         self,
         name: str,
-        country: str = None
-    ):
+        country: Optional[str] = None
+    ) -> Optional[VariableMetadata]:
         """Get a variable by name and country.
         
+        Args:
+            name: Variable name
+            country: Country code
+            
         Returns:
             VariableMetadata object or None if not found
         """
-        from .src.policyengine.database.models import VariableMetadata
-        country = country or self.default_country
-        
-        with self.session() as session:
-            variable = session.query(VariableMetadata).filter_by(
-                name=name,
-                country=country.lower()
-            ).first()
-            
-            if variable:
-                session.expunge(variable)
-            
-            return variable
+        if self.adapter:
+            return self.adapter.get_variable(name, country)
+        return None
     
     def list_variables(
         self,
-        country: str = None,
-        entity: str = None,
-        value_type: str = None
-    ):
+        country: Optional[str] = None,
+        entity: Optional[str] = None,
+        value_type: Optional[str] = None
+    ) -> List[VariableMetadata]:
         """List variables matching criteria.
         
         Args:
@@ -692,24 +485,77 @@ class SimulationOrchestrator:
         Returns:
             List of VariableMetadata objects
         """
-        from .src.policyengine.database.models import VariableMetadata
-        country = country or self.default_country
+        if self.adapter:
+            return self.adapter.list_variables(country, entity, value_type)
+        return []
+    
+    # ==================== Initialization ====================
+    
+    def initialize_with_current_law(
+        self,
+        country: str
+    ) -> None:
+        """Initialize database with current law parameters.
         
-        with self.session() as session:
-            query = session.query(VariableMetadata)
-            
-            if country:
-                query = query.filter_by(country=country.lower())
-            
-            if entity:
-                query = query.filter_by(entity=entity)
-            
-            if value_type:
-                query = query.filter_by(value_type=value_type)
-            
-            variables = query.order_by(VariableMetadata.name).all()
-            
-            for var in variables:
-                session.expunge(var)
-            
-            return variables
+        Args:
+            country: Country code
+        """
+        if self.adapter:
+            self.adapter.initialize_with_current_law(country)
+    
+    # ==================== Backward Compatibility Methods ====================
+    # These methods exist to maintain backward compatibility with existing code
+    
+    def session(self):
+        """Get a database session context manager (for backward compatibility).
+        
+        Returns:
+            Session context manager if using SQL adapter, None otherwise
+        """
+        if self.strategy == "sql" and hasattr(self.adapter, 'session'):
+            return self.adapter.session()
+        
+        # Return a dummy context manager for non-SQL strategies
+        from contextlib import contextmanager
+        
+        @contextmanager
+        def dummy_session():
+            yield None
+        
+        return dummy_session()
+    
+    def get_session(self):
+        """Get a new database session (for backward compatibility).
+        
+        Returns:
+            SQLAlchemy session if using SQL adapter, None otherwise
+        """
+        if self.strategy == "sql" and hasattr(self.adapter, 'get_session'):
+            return self.adapter.get_session()
+        return None
+    
+    def init_db(self) -> None:
+        """Initialize database schema (for backward compatibility)."""
+        # SQL adapter initializes schema automatically
+        pass
+    
+    def drop_all(self) -> None:
+        """Drop all tables (for backward compatibility - use with caution)."""
+        if self.strategy == "sql" and hasattr(self.adapter, 'engine'):
+            from .src.policyengine.database.models import Base
+            Base.metadata.drop_all(bind=self.adapter.engine)
+    
+    def get_report_results(self, report_id: str) -> Optional[Dict[str, Any]]:
+        """Alias for get_report (for backward compatibility)."""
+        return self.get_report(report_id)
+    
+    # ==================== Context Manager Support ====================
+    
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
+        if hasattr(self.adapter, 'close'):
+            self.adapter.close()
