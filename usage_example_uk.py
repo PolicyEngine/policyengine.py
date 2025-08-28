@@ -13,7 +13,7 @@ reformed = Microsimulation(scenario=Scenario(parameter_changes={
 orchestrator = SimulationOrchestrator(connection_string="postgresql://postgres:postgres@127.0.0.1:54322/postgres")
 orchestrator._auto_initialize()
 
-reform = orchestrator.add_scenario(
+reform = orchestrator.create_scenario(
     name="remove the personal allowance",
     parameter_changes={
         "gov.hmrc.income_tax.allowances.personal_allowance.amount": 0,
@@ -25,7 +25,7 @@ reform = orchestrator.add_scenario(
 current_law = orchestrator.get_current_law_scenario(country="uk")
 dataset = orchestrator.get_dataset(name="enhanced_frs_2023_24", country="uk")
 
-baseline_simulation = orchestrator.add_simulation(
+baseline_simulation = orchestrator.create_simulation(
     scenario=current_law,
     simulation=baseline,
     dataset=dataset,
@@ -33,7 +33,7 @@ baseline_simulation = orchestrator.add_simulation(
     year=2025,
 )
 
-reformed_simulation = orchestrator.add_simulation(
+reformed_simulation = orchestrator.create_simulation(
     scenario=reform,
     simulation=reformed,
     dataset=dataset,

@@ -10,14 +10,14 @@ orchestrator._auto_initialize()
 
 # Create scenarios
 # First ensure current law exists
-orchestrator.add_scenario(
+orchestrator.create_scenario(
     name="current_law",
     parameter_changes={},
     country="us",
     description="Current US tax and benefit system"
 )
 current_law = orchestrator.get_current_law_scenario(country="us")
-reformed = orchestrator.add_scenario(
+reformed = orchestrator.create_scenario(
     name="double_federal_eitc",
     parameter_changes={
         "gov.irs.credits.eitc.amount.max[0].amount": {"2025-01-01": 1264},  # Double from $632
@@ -30,7 +30,7 @@ reformed = orchestrator.add_scenario(
 )
 
 # Create baseline and reformed simulations
-baseline_simulation = orchestrator.add_simulation(
+baseline_simulation = orchestrator.create_simulation(
     scenario=current_law,
     simulation=Microsimulation(),
     dataset="enhanced_cps_2024",
@@ -53,7 +53,7 @@ reform = Reform.from_dict({
     "gov.irs.credits.eitc.amount.max[3].amount": {"2025-01-01": 9680},
 }, country_id="us")
 
-reform_simulation = orchestrator.add_simulation(
+reform_simulation = orchestrator.create_simulation(
     scenario=reformed,
     simulation=Microsimulation(reform=reform),
     dataset="enhanced_cps_2024",

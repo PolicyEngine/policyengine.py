@@ -23,7 +23,7 @@ class SimulationManager:
         self.storage = storage_backend
         self.default_country = default_country
     
-    def add_simulation(
+    def create_simulation(
         self,
         session: Session,
         scenario: str,

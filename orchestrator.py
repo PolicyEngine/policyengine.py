@@ -165,7 +165,7 @@ class SimulationOrchestrator:
             
             if not existing:
                 # Create dataset
-                self.add_dataset(
+                self.create_dataset(
                     name=dataset_info["name"],
                     country=country,
                     year=dataset_info["year"],
@@ -176,14 +176,14 @@ class SimulationOrchestrator:
     
     # ==================== Scenario Management ====================
     
-    def add_scenario(
+    def create_scenario(
         self,
         name: str,
         parameter_changes: Optional[Dict[str, Any]] = None,
         country: Optional[str] = None,
         description: Optional[str] = None,
     ) -> Optional[ScenarioMetadata]:
-        """Add a parametric scenario with parameter changes.
+        """Create a parametric scenario with parameter changes.
         
         Args:
             name: Unique scenario name
@@ -195,7 +195,7 @@ class SimulationOrchestrator:
             ScenarioMetadata object or None
         """
         if self.adapter:
-            return self.adapter.add_scenario(name, parameter_changes, country, description)
+            return self.adapter.create_scenario(name, parameter_changes, country, description)
         return None
     
     def get_scenario(
@@ -234,7 +234,7 @@ class SimulationOrchestrator:
     
     # ==================== Dataset Management ====================
     
-    def add_dataset(
+    def create_dataset(
         self,
         name: str,
         country: Optional[str] = None,
@@ -244,7 +244,7 @@ class SimulationOrchestrator:
         description: Optional[str] = None,
         filename: Optional[str] = None,
     ) -> Optional[DatasetMetadata]:
-        """Register a dataset in the database.
+        """Create a dataset in the database.
         
         Args:
             name: Unique dataset name
@@ -259,7 +259,7 @@ class SimulationOrchestrator:
             DatasetMetadata object or None
         """
         if self.adapter:
-            return self.adapter.add_dataset(name, country, year, source, version, description, filename)
+            return self.adapter.create_dataset(name, country, year, source, version, description, filename)
         return None
     
     def get_dataset(
@@ -302,7 +302,7 @@ class SimulationOrchestrator:
     
     # ==================== Simulation Management ====================
     
-    def add_simulation(
+    def create_simulation(
         self,
         scenario: Union[str, ScenarioMetadata],
         simulation: Any,
@@ -314,7 +314,7 @@ class SimulationOrchestrator:
         calculate_default_variables: bool = True,
         save_all_variables: bool = False,
     ) -> Optional[SimulationMetadata]:
-        """Store simulation results from a policyengine_core Simulation object.
+        """Create and store simulation results from a policyengine_core Simulation object.
         
         Args:
             scenario: ScenarioMetadata object or scenario name string
@@ -331,7 +331,7 @@ class SimulationOrchestrator:
             SimulationMetadata object or None
         """
         if self.adapter:
-            return self.adapter.add_simulation(
+            return self.adapter.create_simulation(
                 scenario, simulation, dataset, country, year, years, tags,
                 calculate_default_variables, save_all_variables
             )

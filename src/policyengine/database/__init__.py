@@ -40,8 +40,6 @@ from .simulation_manager import SimulationManager
 from .report_manager import ReportManager
 
 __all__ = [
-    # Main classes
-    "SimulationOrchestrator",
     
     # Models
     "SimulationMetadata",

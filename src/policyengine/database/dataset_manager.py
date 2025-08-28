@@ -72,7 +72,7 @@ class DatasetManager:
         session.flush()
         return dataset
     
-    def add_dataset(
+    def create_dataset(
         self,
         session: Session,
         name: str,

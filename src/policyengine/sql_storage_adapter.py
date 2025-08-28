@@ -157,16 +157,16 @@ class SQLStorageAdapter(StorageAdapter):
     
     # ==================== Scenario Management ====================
     
-    def add_scenario(
+    def create_scenario(
         self,
         name: str,
         parameter_changes: Optional[Dict[str, Any]] = None,
         country: Optional[str] = None,
         description: Optional[str] = None,
     ) -> ScenarioMetadata:
-        """Add a scenario with parameter changes."""
+        """Create a scenario with parameter changes."""
         with self.session() as session:
-            return self.scenario_manager.add_scenario(
+            return self.scenario_manager.create_scenario(
                 session, name, parameter_changes, country, description
             )
     
@@ -229,7 +229,7 @@ class SQLStorageAdapter(StorageAdapter):
     
     # ==================== Dataset Management ====================
     
-    def add_dataset(
+    def create_dataset(
         self,
         name: str,
         country: Optional[str] = None,
@@ -239,9 +239,9 @@ class SQLStorageAdapter(StorageAdapter):
         description: Optional[str] = None,
         filename: Optional[str] = None,
     ) -> DatasetMetadata:
-        """Register a dataset."""
+        """Create a dataset."""
         with self.session() as session:
-            return self.dataset_manager.add_dataset(
+            return self.dataset_manager.create_dataset(
                 session, name, country, year, source, version, description, filename
             )
     
@@ -272,7 +272,7 @@ class SQLStorageAdapter(StorageAdapter):
     
     # ==================== Simulation Management ====================
     
-    def add_simulation(
+    def create_simulation(
         self,
         scenario: Union[str, ScenarioMetadata],
         simulation: Any,
@@ -284,7 +284,7 @@ class SQLStorageAdapter(StorageAdapter):
         calculate_default_variables: bool = True,
         save_all_variables: bool = False,
     ) -> SimulationMetadata:
-        """Store simulation results."""
+        """Create and store simulation results."""
         # Extract names from objects if provided
         if hasattr(scenario, 'name'):
             scenario_name = scenario.name
@@ -299,7 +299,7 @@ class SQLStorageAdapter(StorageAdapter):
             dataset_name = dataset
         
         with self.session() as session:
-            result = self.simulation_manager.add_simulation(
+            result = self.simulation_manager.create_simulation(
                 session, scenario_name, simulation, dataset_name,
                 country, year, years, tags,
                 calculate_default_variables, save_all_variables

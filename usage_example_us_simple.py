@@ -10,7 +10,7 @@ orchestrator._auto_initialize()
 print("Setting up US scenarios...")
 
 # Ensure current law scenario exists
-orchestrator.add_scenario(
+orchestrator.create_scenario(
     name="us_current_law",
     parameter_changes={},
     country="us",
@@ -18,7 +18,7 @@ orchestrator.add_scenario(
 )
 
 # Create a test scenario (identical to current law for testing)
-orchestrator.add_scenario(
+orchestrator.create_scenario(
     name="us_test_reform",
     parameter_changes={},
     country="us",
@@ -28,7 +28,7 @@ orchestrator.add_scenario(
 print("Creating simulations...")
 
 # Create baseline simulation
-baseline_sim = orchestrator.add_simulation(
+baseline_sim = orchestrator.create_simulation(
     scenario="us_current_law",
     simulation=Microsimulation(),
     dataset="enhanced_cps_2024",
@@ -37,7 +37,7 @@ baseline_sim = orchestrator.add_simulation(
 )
 
 # Create reform simulation (identical for testing)
-reform_sim = orchestrator.add_simulation(
+reform_sim = orchestrator.create_simulation(
     scenario="us_test_reform",
     simulation=Microsimulation(),
     dataset="enhanced_cps_2024",

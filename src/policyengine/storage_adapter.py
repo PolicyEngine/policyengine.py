@@ -29,14 +29,14 @@ class StorageAdapter(ABC):
     # ==================== Scenario Management ====================
     
     @abstractmethod
-    def add_scenario(
+    def create_scenario(
         self,
         name: str,
         parameter_changes: Optional[Dict[str, Any]] = None,
         country: Optional[str] = None,
         description: Optional[str] = None,
     ) -> Any:
-        """Add a scenario with parameter changes.
+        """Create a scenario with parameter changes.
         
         Args:
             name: Unique name for the scenario
@@ -50,7 +50,7 @@ class StorageAdapter(ABC):
         Raises:
             NotImplementedError: Must be implemented by subclass
         """
-        raise NotImplementedError("Subclass must implement add_scenario")
+        raise NotImplementedError("Subclass must implement create_scenario")
     
     @abstractmethod
     def get_scenario(
@@ -115,7 +115,7 @@ class StorageAdapter(ABC):
     # ==================== Dataset Management ====================
     
     @abstractmethod
-    def add_dataset(
+    def create_dataset(
         self,
         name: str,
         country: Optional[str] = None,
@@ -125,7 +125,7 @@ class StorageAdapter(ABC):
         description: Optional[str] = None,
         filename: Optional[str] = None,
     ) -> Any:
-        """Register a dataset.
+        """Create a dataset.
         
         Args:
             name: Unique dataset name
@@ -142,7 +142,7 @@ class StorageAdapter(ABC):
         Raises:
             NotImplementedError: Must be implemented by subclass
         """
-        raise NotImplementedError("Subclass must implement add_dataset")
+        raise NotImplementedError("Subclass must implement create_dataset")
     
     @abstractmethod
     def get_dataset(
@@ -189,7 +189,7 @@ class StorageAdapter(ABC):
     # ==================== Simulation Management ====================
     
     @abstractmethod
-    def add_simulation(
+    def create_simulation(
         self,
         scenario: Union[str, Any],
         simulation: Any,
@@ -201,7 +201,7 @@ class StorageAdapter(ABC):
         calculate_default_variables: bool = True,
         save_all_variables: bool = False,
     ) -> Any:
-        """Store simulation results.
+        """Create and store simulation results.
         
         Args:
             scenario: Scenario name or object
@@ -220,7 +220,7 @@ class StorageAdapter(ABC):
         Raises:
             NotImplementedError: Must be implemented by subclass
         """
-        raise NotImplementedError("Subclass must implement add_simulation")
+        raise NotImplementedError("Subclass must implement create_simulation")
     
     @abstractmethod
     def get_simulation(
