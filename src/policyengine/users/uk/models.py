@@ -4,7 +4,6 @@ from policyengine_uk.model_api import Scenario as PolicyEngineUKScenario
 from policyengine_uk.data.dataset_schema import (
     UKSingleYearDataset as PolicyEngineUKSingleYearDataset,
 )
-import h5py
 import pandas as pd
 
 
