@@ -7,7 +7,7 @@ from enum import Enum
 import pandas as pd
 
 
-class SimulationStatus(str, Enum):
+class OperationStatus(str, Enum):
     """Status of simulation processing."""
 
     PENDING = "pending"
@@ -101,7 +101,7 @@ class Simulation(BaseModel):
     model_version: Optional[str] = None
 
     # Processing metadata
-    status: SimulationStatus = SimulationStatus.PENDING
+    status: OperationStatus = OperationStatus.PENDING
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
@@ -124,6 +124,7 @@ class ReportElement(BaseModel):
     description: Optional[str] = None
     data_items: List[ReportElementDataItem] = []
     report: "Report"
+    status: OperationStatus = OperationStatus.PENDING
 
     @property
     def data(self) -> pd.DataFrame:

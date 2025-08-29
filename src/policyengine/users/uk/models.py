@@ -91,6 +91,7 @@ class AggregateChanges(ReportElement):
     name: str = "aggregate changes"
     baseline_dataset: UKSingleYearDataset
     reform_dataset: UKSingleYearDataset
+    variables: List[str] = ["gov_tax", "gov_spending", "gov_balance"]
 
     def run(self):
         # Calculate aggregate changes between baseline and reform datasets
@@ -98,7 +99,7 @@ class AggregateChanges(ReportElement):
         reform_data = self.reform_dataset
 
         changes = []
-        for variable in ["gov_tax", "gov_spending", "gov_balance"]:
+        for variable in self.variables:
             weights = baseline_data.household["household_weight"]
             baseline_value = (weights * baseline_data.household[variable]).sum()
             reform_value = (weights * reform_data.household[variable]).sum()
