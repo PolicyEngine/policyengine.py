@@ -5,35 +5,19 @@ from policyengine_uk.data.dataset_schema import (
     UKSingleYearDataset as PolicyEngineUKSingleYearDataset,
 )
 import pandas as pd
+import numpy as np
 
 
 class UKSingleYearDataset(Dataset):
+    year: int
     person: Optional[Any] = None
     benunit: Optional[Any] = None
     household: Optional[Any] = None
 
-    def load(self):  # can put helpers in the main bit to avoid this
-        path = self.local_path
-
-        # read tables from h5
-        with pd.HDFStore(path, "r") as store:
-            self.person = store["person"]
-            self.benunit = store["benunit"]
-            self.household = store["household"]
-
-    def save(self):
-        path = self.local_path
-
-        # write tables to h5 using pandas
-        with pd.HDFStore(path, "w") as store:
-            store["person"] = self.person
-            store["benunit"] = self.benunit
-            store["household"] = self.household
-
     def copy(self):
         return UKSingleYearDataset(
             name=self.name,
-            local_path=self.local_path,
+            year=self.year,
             person=self.person.copy(),
             benunit=self.benunit.copy(),
             household=self.household.copy(),
@@ -43,10 +27,9 @@ class UKSingleYearDataset(Dataset):
 class UKSingleYearSimulation(Simulation):
     year: int
     data: UKSingleYearDataset
-    _simulation: Optional[PolicyEngineUKSimulation] = None
 
-    def run(self) -> UKSingleYearDataset:
-        sim = PolicyEngineUKSimulation(
+    def _get_simulation(self):
+        return PolicyEngineUKSimulation(
             dataset=PolicyEngineUKSingleYearDataset(
                 person=self.data.person,
                 benunit=self.data.benunit,
@@ -54,18 +37,19 @@ class UKSingleYearSimulation(Simulation):
                 fiscal_year=self.year,
             ),
             scenario=PolicyEngineUKScenario(
-                parameter_changes=self.rules.parameter_changes,
-                simulation_modifier=self.rules.simulation_modifier,
+                parameter_changes=self.policy.parameter_values,
+                simulation_modifier=self.policy.simulation_modifier,
             )
             + PolicyEngineUKScenario(
-                parameter_changes=self.dynamics.parameter_changes,
+                parameter_changes=self.dynamics.parameter_values,
                 simulation_modifier=self.dynamics.simulation_modifier,
             ),
         )
-        self._simulation = sim
+
+    def run(self) -> UKSingleYearDataset:
+        sim = self._get_simulation()
 
         output_dataset = self.data.copy()
-        output_dataset.local_path = f"{self.data.name}_output_{self.year}_{self.rules.name}_{self.dynamics.name}.h5"
         output_dataset.household["gov_tax"] = sim.calculate("gov_tax", self.year)
         output_dataset.household["gov_spending"] = sim.calculate(
             "gov_spending", self.year
@@ -88,7 +72,6 @@ class AggregateChange(ReportElementDataItem):
 
 
 class AggregateChanges(ReportElement):
-    name: str = "aggregate changes"
     baseline_dataset: UKSingleYearDataset
     reform_dataset: UKSingleYearDataset
     variables: List[str] = ["gov_tax", "gov_spending", "gov_balance"]
@@ -116,19 +99,41 @@ class AggregateChanges(ReportElement):
         self.data_items = changes
 
         return changes
+    
+def create_example_uk_dataset() -> UKSingleYearDataset:
+    person, benunit, household = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
+    person["person_id"] = np.arange(1, 100)
+    person["person_benunit_id"] = np.arange(1, 100)
+    person["person_household_id"] = np.arange(1, 100)
+    benunit["benunit_id"] = np.arange(1, 100)
+    household["household_id"] = np.arange(1, 100)
 
-efrs_2023_24 = UKSingleYearDataset(
-    name="enhanced_frs_2023_24",
-    local_path="/Users/nikhilwoodruff/policyengine/policyengine-uk-data/policyengine_uk_data/storage/enhanced_frs_2023_24.h5",
-)
+    # Earnings normally distributed around 30k
+    person["employment_income"] = np.random.normal(30_000, 5_000)
 
-current_law = Rules(
+    household["household_weight"] = 66e6 / 100
+    household["region"] = "LONDON"
+    household["council_tax"] = 1_000
+    household["tenure_type"] = "OWNED_OUTRIGHT"
+    household["rent"] = 12_000
+
+    return UKSingleYearDataset(
+        name="example UK dataset",
+        year=2023,
+        person=person,
+        benunit=benunit,
+        household=household,
+    )
+
+example_uk_dataset = create_example_uk_dataset()
+
+current_law = Policy(
     name="current law",
     description="Current tax and benefit system in the UK.",
 )
 
-default_dynamics = Dynamics(
+no_behavioural_responses = Dynamics(
     name="default dynamics",
     description="Default dynamics for the UK tax and benefit system.",
 )

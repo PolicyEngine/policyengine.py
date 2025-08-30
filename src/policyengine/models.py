@@ -17,66 +17,33 @@ class OperationStatus(str, Enum):
 
 
 class Dataset(BaseModel):
-    """Metadata for data files. Overridden by country versions."""
+    """A dataset used or created by a simulation."""
 
-    name: str
-
+    name: Optional[str] = None
     # Dataset characteristics
     source_dataset: Optional["Dataset"] = None
     version: Optional[str] = None
 
-    # Local storage
-    local_path: Optional[str] = None
 
-    # Google Cloud Storage
-    gcs_bucket: Optional[str] = None
-    gcs_path: Optional[str] = None
-
-    # HuggingFace
-    huggingface_repo: Optional[str] = None
-    huggingface_path: Optional[str] = None
-
-    # File metadata
-    file_size_mb: Optional[float] = None
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.load()
-
-    def load(self):
-        """Load dataset from local path."""
-        raise NotImplementedError(
-            "Dataset load method must be implemented in country-specific subclass."
-        )
-
-    def save(self, path: str) -> None:
-        """Save dataset to local path."""
-        raise NotImplementedError(
-            "Dataset save method must be implemented in country-specific subclass."
-        )
-
-
-class Rules(BaseModel):
+class Policy(BaseModel):
     """Modifications made to baseline tax-benefit rules."""
 
-    name: str
+    name: Optional[str] = None
 
-    # Parent rules reference
-    parent_rules: Optional["Rules"] = None
+    # Parent policy reference
+    parent: Optional["Policy"] = None
 
     # Metadata
     description: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None  # Should automatically be current datetime
 
-    parameter_changes: Optional[dict] = None
+    parameter_values: Optional[List["ParameterValue"]] = None
     simulation_modifier: Optional[Any] = None
 
 
 class Dynamics(BaseModel):
     """Modifications made to baseline tax-benefit dynamics."""
 
-    name: str
+    name: Optional[str] = None
 
     # Parent dynamics reference
     parent_dynamics: Optional["Dynamics"] = None
@@ -86,7 +53,7 @@ class Dynamics(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None  # Should automatically be current datetime
 
-    parameter_changes: Optional[dict] = None
+    parameter_values: Optional[List["ParameterValue"]] = None
     simulation_modifier: Optional[Any] = None
 
 
@@ -95,7 +62,7 @@ class Simulation(BaseModel):
 
     # Foreign key references
     data: Dataset
-    rules: Rules
+    policy: Policy
     dynamics: Dynamics
     output_dataset: Optional[Dataset] = None
     model_version: Optional[str] = None
@@ -120,10 +87,10 @@ class ReportElementDataItem(BaseModel):
 class ReportElement(BaseModel):
     """An element of a report, which may include tables, charts, and other visualizations."""
 
-    name: str
+    name: Optional[str] = None
     description: Optional[str] = None
     data_items: List[ReportElementDataItem] = []
-    report: "Report"
+    report: Optional["Report"] = None
     status: OperationStatus = OperationStatus.PENDING
 
     @property
@@ -179,9 +146,9 @@ class ParameterValue(BaseModel):
     """Individual parameter value for some point in time."""
 
     # Foreign keys
-    rules: "Rules"
-    dynamics: "Dynamics"
-    parameter: "Parameter"
+    policy: Optional["Policy"] = None
+    dynamics: Optional["Dynamics"] = None
+    parameter: Parameter
 
     # Time period for this change
     start_date: datetime
