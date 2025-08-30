@@ -23,6 +23,7 @@ class Dataset(BaseModel):
     # Dataset characteristics
     source_dataset: Optional["Dataset"] = None
     version: Optional[str] = None
+    data: Optional[str] = None
 
 
 class Policy(BaseModel):
@@ -132,7 +133,6 @@ class Parameter(BaseModel):
     """Policy parameter of the country package model."""
 
     name: str
-    country: str
     parent: Optional["Parameter"] = None  # For hierarchical parameters
 
     # Parameter metadata
