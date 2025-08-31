@@ -23,7 +23,7 @@ class Dataset(BaseModel):
     # Dataset characteristics
     source_dataset: Optional["Dataset"] = None
     version: Optional[str] = None
-    data: Optional[str] = None
+    data: Optional[Any] = None
 
 
 class Policy(BaseModel):
@@ -59,10 +59,10 @@ class Dynamics(BaseModel):
 
 
 class Simulation(BaseModel):
-    """Metadata for simulation, stored in .h5 file. Overridden by country versions."""
+    """Metadata for simulation, stored in .h5 file. Re-implemented by country versions."""
 
     # Foreign key references
-    data: Dataset
+    dataset: Dataset
     policy: Policy
     dynamics: Dynamics
     output_dataset: Optional[Dataset] = None

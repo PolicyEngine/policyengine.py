@@ -1,4 +1,9 @@
-from policyengine.models import *
+from policyengine.models import (
+    Policy, Dynamics, Simulation as GeneralSimulation, Dataset as GeneralDataset,
+    ReportElementDataItem, ReportElement, Report
+)
+from pydantic import BaseModel
+from typing import Any, Optional, List
 from policyengine_uk import Simulation as PolicyEngineUKSimulation
 from policyengine_uk.model_api import Scenario as PolicyEngineUKScenario
 from policyengine_uk.data.dataset_schema import (
@@ -6,34 +11,41 @@ from policyengine_uk.data.dataset_schema import (
 )
 import pandas as pd
 import numpy as np
+from microdf import MicroDataFrame
 
-
-class UKSingleYearDataset(Dataset):
-    year: int
-    person: Optional[Any] = None
-    benunit: Optional[Any] = None
-    household: Optional[Any] = None
+class UKSingleYearDataset(BaseModel):
+    person: Any # DataFrame
+    benunit: Any
+    household: Any
 
     def copy(self):
         return UKSingleYearDataset(
-            name=self.name,
-            year=self.year,
             person=self.person.copy(),
             benunit=self.benunit.copy(),
             household=self.household.copy(),
         )
 
 
-class UKSingleYearSimulation(Simulation):
+class Dataset(GeneralDataset):
     year: int
+    name: Optional[str] = None
     data: UKSingleYearDataset
+    version: Optional[str] = None
+
+
+class Simulation(GeneralSimulation):
+    year: int
+    dataset: Dataset
+    policy: Policy
+    dynamics: Dynamics
+    version: Optional[str]
 
     def _get_simulation(self):
         return PolicyEngineUKSimulation(
             dataset=PolicyEngineUKSingleYearDataset(
-                person=self.data.person,
-                benunit=self.data.benunit,
-                household=self.data.household,
+                person=self.dataset.data.person,
+                benunit=self.dataset.data.benunit,
+                household=self.dataset.data.household,
                 fiscal_year=self.year,
             ),
             scenario=PolicyEngineUKScenario(
@@ -49,12 +61,19 @@ class UKSingleYearSimulation(Simulation):
     def run(self) -> UKSingleYearDataset:
         sim = self._get_simulation()
 
-        output_dataset = self.data.copy()
-        output_dataset.household["gov_tax"] = sim.calculate("gov_tax", self.year)
-        output_dataset.household["gov_spending"] = sim.calculate(
+        output_dataset = Dataset(
+            year=self.year,
+            data=UKSingleYearDataset(
+                person=self.dataset.data.person,
+                benunit=self.dataset.data.benunit,
+                household=self.dataset.data.household,
+            )
+        )
+        output_dataset.data.household["gov_tax"] = sim.calculate("gov_tax", self.year)
+        output_dataset.data.household["gov_spending"] = sim.calculate(
             "gov_spending", self.year
         )
-        output_dataset.household["gov_balance"] = sim.calculate(
+        output_dataset.data.household["gov_balance"] = sim.calculate(
             "gov_balance", self.year
         )
 
@@ -68,13 +87,13 @@ class AggregateChange(ReportElementDataItem):
     baseline: float
     reform: float
     difference: float
-    report_element: ReportElement
+    report_element: "AggregateChanges"
 
 
 class AggregateChanges(ReportElement):
     baseline_dataset: UKSingleYearDataset
     reform_dataset: UKSingleYearDataset
-    variables: List[str] = ["gov_tax", "gov_spending", "gov_balance"]
+    variables: List[str] = ["gov_balance"]
 
     def run(self):
         # Calculate aggregate changes between baseline and reform datasets
@@ -118,12 +137,14 @@ def create_example_uk_dataset() -> UKSingleYearDataset:
     household["tenure_type"] = "OWNED_OUTRIGHT"
     household["rent"] = 12_000
 
-    return UKSingleYearDataset(
-        name="example UK dataset",
+    return Dataset(
         year=2023,
-        person=person,
-        benunit=benunit,
-        household=household,
+        name="example_uk_2023",
+        data=UKSingleYearDataset(
+            person=person,
+            benunit=benunit,
+            household=household,
+        ),
     )
 
 example_uk_dataset = create_example_uk_dataset()
