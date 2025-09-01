@@ -1,6 +1,14 @@
 from policyengine.models import (
-    Policy, Dynamics, Simulation as GeneralSimulation, Dataset as GeneralDataset,
-    ReportElementDataItem, ReportElement, Report
+    Policy,
+    Dynamics,
+    Simulation as GeneralSimulation,
+    Dataset as GeneralDataset,
+    ReportElementDataItem,
+    ReportElement,
+    Report,
+    Variable,
+    Parameter,
+    ParameterValue,
 )
 from pydantic import BaseModel
 from typing import Any, Optional, List
@@ -12,9 +20,11 @@ from policyengine_uk.data.dataset_schema import (
 import pandas as pd
 import numpy as np
 from microdf import MicroDataFrame
+from policyengine.utils.parametric_reforms import apply_parametric_reform
+
 
 class UKSingleYearDataset(BaseModel):
-    person: Any # DataFrame
+    person: Any  # DataFrame
     benunit: Any
     household: Any
 
@@ -38,9 +48,25 @@ class Simulation(GeneralSimulation):
     dataset: Dataset
     policy: Policy
     dynamics: Dynamics
-    version: Optional[str]
+    version: Optional[str] = None
+    output_data: Optional[Dataset] = None
 
     def _get_simulation(self):
+        parametric_policy = apply_parametric_reform(self.policy.parameter_values or [])
+        parametric_dynamics = apply_parametric_reform(
+            self.dynamics.parameter_values or []
+        )
+
+        def modifier(sim):
+            parametric_policy.simulation_modifier(sim)
+            if self.policy.simulation_modifier:
+                self.policy.simulation_modifier(sim)
+
+            parametric_dynamics.simulation_modifier(sim)
+            if self.dynamics.simulation_modifier:
+                self.dynamics.simulation_modifier(sim)
+
+        scenario = PolicyEngineUKScenario(simulation_modifier=modifier)
         return PolicyEngineUKSimulation(
             dataset=PolicyEngineUKSingleYearDataset(
                 person=self.dataset.data.person,
@@ -48,14 +74,7 @@ class Simulation(GeneralSimulation):
                 household=self.dataset.data.household,
                 fiscal_year=self.year,
             ),
-            scenario=PolicyEngineUKScenario(
-                parameter_changes=self.policy.parameter_values,
-                simulation_modifier=self.policy.simulation_modifier,
-            )
-            + PolicyEngineUKScenario(
-                parameter_changes=self.dynamics.parameter_values,
-                simulation_modifier=self.dynamics.simulation_modifier,
-            ),
+            scenario=scenario,
         )
 
     def run(self) -> UKSingleYearDataset:
@@ -64,10 +83,10 @@ class Simulation(GeneralSimulation):
         output_dataset = Dataset(
             year=self.year,
             data=UKSingleYearDataset(
-                person=self.dataset.data.person,
-                benunit=self.dataset.data.benunit,
-                household=self.dataset.data.household,
-            )
+                person=self.dataset.data.person.copy(),
+                benunit=self.dataset.data.benunit.copy(),
+                household=self.dataset.data.household.copy(),
+            ),
         )
         output_dataset.data.household["gov_tax"] = sim.calculate("gov_tax", self.year)
         output_dataset.data.household["gov_spending"] = sim.calculate(
@@ -77,7 +96,7 @@ class Simulation(GeneralSimulation):
             "gov_balance", self.year
         )
 
-        self.output_dataset = output_dataset
+        self.output_data = output_dataset
 
         return output_dataset
 
@@ -87,18 +106,18 @@ class AggregateChange(ReportElementDataItem):
     baseline: float
     reform: float
     difference: float
-    report_element: "AggregateChanges"
+    report_element: "AggregateChangeReportElement"
 
 
-class AggregateChanges(ReportElement):
-    baseline_dataset: UKSingleYearDataset
-    reform_dataset: UKSingleYearDataset
+class AggregateChangeReportElement(ReportElement):
+    baseline_simulation: Simulation
+    reform_simulation: Simulation
     variables: List[str] = ["gov_balance"]
 
     def run(self):
-        # Calculate aggregate changes between baseline and reform datasets
-        baseline_data = self.baseline_dataset
-        reform_data = self.reform_dataset
+        # Calculate aggregate changes between baseline and reform simulations
+        baseline_data = self.baseline_simulation.output_data.data
+        reform_data = self.reform_simulation.output_data.data
 
         changes = []
         for variable in self.variables:
@@ -118,7 +137,8 @@ class AggregateChanges(ReportElement):
         self.data_items = changes
 
         return changes
-    
+
+
 def create_example_uk_dataset() -> UKSingleYearDataset:
     person, benunit, household = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
@@ -146,6 +166,7 @@ def create_example_uk_dataset() -> UKSingleYearDataset:
             household=household,
         ),
     )
+
 
 example_uk_dataset = create_example_uk_dataset()
 

@@ -31,9 +31,6 @@ class Policy(BaseModel):
 
     name: Optional[str] = None
 
-    # Parent policy reference
-    parent: Optional["Policy"] = None
-
     # Metadata
     description: Optional[str] = None
 
@@ -65,7 +62,7 @@ class Simulation(BaseModel):
     dataset: Dataset
     policy: Policy
     dynamics: Dynamics
-    output_dataset: Optional[Dataset] = None
+    output_data: Optional[Any] = None
     model_version: Optional[str] = None
 
     # Processing metadata
