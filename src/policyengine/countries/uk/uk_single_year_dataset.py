@@ -1,6 +1,12 @@
+from typing import Any
+
 from pydantic import BaseModel
-from typing import Any, Optional
-from policyengine.utils.dataframe_storage import deserialise_dataframe_dict, serialise_dataframe_dict
+
+from policyengine.utils.dataframe_storage import (
+    deserialise_dataframe_dict,
+    serialise_dataframe_dict,
+)
+
 
 class UKSingleYearDataset(BaseModel):
     person: Any
@@ -8,7 +14,7 @@ class UKSingleYearDataset(BaseModel):
     household: Any
     year: int
 
-    def __init__(self, serialised_bytes: Optional[bytes] = None, **kwargs):
+    def __init__(self, serialised_bytes: bytes | None = None, **kwargs):
         if serialised_bytes is None:
             super().__init__(**kwargs)
         else:
@@ -19,12 +25,14 @@ class UKSingleYearDataset(BaseModel):
             self.year = deserialised_data.get("year")
 
     def serialise(self) -> bytes:
-        return serialise_dataframe_dict({
-            "person": self.person,
-            "benunit": self.benunit,
-            "household": self.household,
-            "year": self.year,
-        })
+        return serialise_dataframe_dict(
+            {
+                "person": self.person,
+                "benunit": self.benunit,
+                "household": self.household,
+                "year": self.year,
+            }
+        )
 
     def deserialise(self, serialised_bytes: bytes):
         deserialised_data = deserialise_dataframe_dict(serialised_bytes)

@@ -1,6 +1,7 @@
 import io
-import pandas as pd
 import pickle
+
+import pandas as pd
 
 
 def serialise_dataframe_dict(data: dict[str, pd.DataFrame]) -> str:

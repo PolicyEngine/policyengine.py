@@ -1,10 +1,10 @@
-from policyengine_uk import Scenario, Simulation
-from policyengine.models import ParameterValue, Parameter
-from typing import List
 from policyengine_core.periods import instant
+from policyengine_uk import Scenario, Simulation
+
+from policyengine.models import ParameterValue
 
 
-def apply_parametric_reform(provisions: List[ParameterValue]) -> Scenario:
+def apply_parametric_reform(provisions: list[ParameterValue]) -> Scenario:
     def modifier(sim: Simulation):
         for provision in provisions:
             parameter_name = provision.parameter.name
