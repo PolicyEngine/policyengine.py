@@ -3,6 +3,12 @@
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+from pydantic import BaseModel
+from datetime import datetime
+from typing import Optional, List, Dict, Any
+from sqlmodel import SQLModel, Field
+import uuid
+from policyengine.utils.dataframe_storage import deserialise_dataframe_dict
 from enum import Enum
 import pandas as pd
 
@@ -15,6 +21,11 @@ class OperationStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
 
+class DatasetType(str, Enum):
+    """Data types for dataset fields."""
+    UK = "uk"
+    US = "us"
+
 
 class Dataset(BaseModel):
     """A dataset used or created by a simulation."""
@@ -24,6 +35,7 @@ class Dataset(BaseModel):
     source_dataset: Optional["Dataset"] = None
     version: Optional[str] = None
     data: Optional[Any] = None
+    dataset_type: DatasetType
 
 
 class Policy(BaseModel):
@@ -36,6 +48,7 @@ class Policy(BaseModel):
 
     parameter_values: Optional[List["ParameterValue"]] = None
     simulation_modifier: Optional[Any] = None
+    country: Optional[str] = None
 
 
 class Dynamics(BaseModel):
@@ -53,10 +66,11 @@ class Dynamics(BaseModel):
 
     parameter_values: Optional[List["ParameterValue"]] = None
     simulation_modifier: Optional[Any] = None
+    country: Optional[str] = None
 
 
 class Simulation(BaseModel):
-    """Metadata for simulation, stored in .h5 file. Re-implemented by country versions."""
+    """Metadata for simulation. Re-implemented by country versions."""
 
     # Foreign key references
     dataset: Dataset
@@ -64,6 +78,7 @@ class Simulation(BaseModel):
     dynamics: Dynamics
     output_data: Optional[Any] = None
     model_version: Optional[str] = None
+    country: str
 
     # Processing metadata
     status: OperationStatus = OperationStatus.PENDING
@@ -73,13 +88,14 @@ class Simulation(BaseModel):
 
     def run(self) -> Dataset:
         """Run the simulation."""
-        raise NotImplementedError(
-            "Simulation run method must be implemented in country-specific subclass."
-        )
+        if self.country == "uk":
+            from policyengine.countries.uk.simulation import run_uk_simulation
+            return run_uk_simulation(self)
 
 
 class ReportElementDataItem(BaseModel):
     report_element: "ReportElement"
+
 
 
 class ReportElement(BaseModel):
@@ -90,6 +106,8 @@ class ReportElement(BaseModel):
     data_items: List[ReportElementDataItem] = []
     report: Optional["Report"] = None
     status: OperationStatus = OperationStatus.PENDING
+    country: Optional[str] = None
+    data_item_type: Optional[str] = None
 
     @property
     def data(self) -> pd.DataFrame:
@@ -102,6 +120,9 @@ class ReportElement(BaseModel):
             )
             data.append({key: getattr(item, key) for key in non_inherited_fields})
         return pd.DataFrame(data)
+    
+    def run(self):
+        raise NotImplementedError("ReportElement run method must be implemented in country-specific subclass.")
 
 
 class Report(BaseModel):
@@ -110,6 +131,7 @@ class Report(BaseModel):
     name: str
     description: Optional[str] = None
     elements: List[ReportElement] = []
+    country: Optional[str] = None
 
 
 class Variable(BaseModel):
@@ -124,6 +146,7 @@ class Variable(BaseModel):
     value_type: str  # "float", "int", "bool", "string", "enum"
     entity: str  # "person", "household", "tax_unit", etc.
     definition_period: Optional[str] = None  # "year", "month", "eternity"
+    country: Optional[str] = None
 
 
 class Parameter(BaseModel):
@@ -136,7 +159,8 @@ class Parameter(BaseModel):
     label: Optional[str] = None
     description: Optional[str] = None
     unit: Optional[str] = None
-    data_type: str  # "float", "int", "bool", "string"
+    data_type: type  # "float", "int", "bool", "string"
+    country: Optional[str] = None
 
 
 class ParameterValue(BaseModel):
@@ -146,6 +170,7 @@ class ParameterValue(BaseModel):
     policy: Optional["Policy"] = None
     dynamics: Optional["Dynamics"] = None
     parameter: Parameter
+    model_version: str
 
     # Time period for this change
     start_date: datetime
@@ -153,3 +178,4 @@ class ParameterValue(BaseModel):
 
     # The actual change
     value: Any  # JSON-serializable value
+    country: Optional[str] = None

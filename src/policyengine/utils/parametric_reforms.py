@@ -15,8 +15,5 @@ def apply_parametric_reform(provisions: List[ParameterValue]) -> Scenario:
                 else None,
                 value=provision.value,
             )
-            print(
-                f"Updated {parameter_name} to {provision.value} from {provision.start_date} to {provision.end_date}"
-            )
 
     return Scenario(simulation_modifier=modifier)
