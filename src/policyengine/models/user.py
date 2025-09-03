@@ -1,9 +1,10 @@
 from pydantic import BaseModel
 from typing import Optional
+from uuid import UUID
 
 
 class User(BaseModel):
-    id: int
+    id: UUID
     name: str
     email: str
 

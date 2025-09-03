@@ -3,5 +3,5 @@
 **/*.egg-info
 _build/
 simulations/
-test_*
+test.*
 supabase/

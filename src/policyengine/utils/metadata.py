@@ -75,12 +75,32 @@ def get_metadata(system: TaxBenefitSystem, country: str):
     }
 
 def _safe_date(date_str: str | None) -> datetime.datetime | None:
-    # 0000-01-01 to early- move it to 0001-01-01
-    if date_str == "0000-01-01":
-        date_str = "0001-01-01"
+    """Parse a date safely.
+
+    Accepts YYYY-MM-DD and ISO timestamps (YYYY-MM-DDTHH:MM:SS), and treats
+    "infinity" / "+infinity" or None as open-ended (returns None).
+    Also normalises the invalid 0000-01-01 to 0001-01-01 for compatibility.
+    """
     if date_str is None:
         return None
-    try:
-        return datetime.datetime.strptime(date_str, "%Y-%m-%d")
-    except ValueError:
+    s = date_str.strip()
+    low = s.lower()
+    if low in {"infinity", "+infinity", "inf", "+inf", "-infinity", "-inf"}:
+        # Treat as open-ended; dates should not use infinities here
         return None
+    if s == "0000-01-01":
+        s = "0001-01-01"
+    # Try date only
+    try:
+        return datetime.datetime.strptime(s, "%Y-%m-%d")
+    except ValueError:
+        pass
+    # Try ISO timestamp variants
+    try:
+        # Remove trailing Z if present (naive)
+        if s.endswith("Z"):
+            s = s[:-1]
+        return datetime.datetime.fromisoformat(s)
+    except Exception:
+        # As a final fallback, use the earliest valid date to satisfy required fields
+        return datetime.datetime(1, 1, 1)

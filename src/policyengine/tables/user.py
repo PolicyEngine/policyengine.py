@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Optional
+from uuid import UUID, uuid4
 
 from sqlmodel import SQLModel, Field
 
@@ -8,7 +9,7 @@ from sqlmodel import SQLModel, Field
 class UserTable(SQLModel, table=True):
     __tablename__ = "users"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
     name: str
     email: str
 
@@ -18,9 +19,9 @@ class UserTable(SQLModel, table=True):
 class UserPolicyTable(SQLModel, table=True):
     __tablename__ = "user_policies"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="users.id")
-    policy_id: int = Field(foreign_key="policies.id")
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: UUID = Field(foreign_key="users.id")
+    policy_id: UUID = Field(foreign_key="policies.id")
     label: str | None = None
     description: str | None = None
 
@@ -30,9 +31,9 @@ class UserPolicyTable(SQLModel, table=True):
 class UserSimulationTable(SQLModel, table=True):
     __tablename__ = "user_simulations"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="users.id")
-    simulation_id: int = Field(foreign_key="simulations.id")
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: UUID = Field(foreign_key="users.id")
+    simulation_id: UUID = Field(foreign_key="simulations.id")
     label: str | None = None
     description: str | None = None
 
@@ -42,9 +43,9 @@ class UserSimulationTable(SQLModel, table=True):
 class UserReportTable(SQLModel, table=True):
     __tablename__ = "user_reports"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="users.id")
-    report_id: int = Field(foreign_key="reports.id")
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: UUID = Field(foreign_key="users.id")
+    report_id: UUID = Field(foreign_key="reports.id")
     label: str | None = None
     description: str | None = None
 
@@ -54,9 +55,9 @@ class UserReportTable(SQLModel, table=True):
 class UserReportElementTable(SQLModel, table=True):
     __tablename__ = "user_report_elements"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="users.id")
-    report_element_id: int = Field(foreign_key="report_elements.id")
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: UUID = Field(foreign_key="users.id")
+    report_element_id: UUID = Field(foreign_key="report_elements.id")
     label: str | None = None
     description: str | None = None
 

@@ -24,7 +24,7 @@ class Simulation(BaseModel):
     policy: Policy
     dynamics: Dynamics
     result: Any | None = None
-    model_version: str | None
+    model_version: str | None = None
     country: str
 
     # Processing metadata

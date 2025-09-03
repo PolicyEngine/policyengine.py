@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Dict, Generator, Iterable, Optional, Tuple, Type, TypeVar, Union
+from uuid import UUID
 
 from sqlmodel import SQLModel, Session, create_engine, select
 from sqlalchemy import delete
@@ -93,6 +94,16 @@ class Database:
         if seed_countries:
             self.seed(seed_countries)
 
+    def reset(self) -> None:
+        """Drop and recreate all tables, clearing all data.
+
+        Use with care. This removes all rows from every table by
+        dropping the schema and recreating it.
+        """
+        # Ensure models are loaded so metadata is complete
+        SQLModel.metadata.drop_all(self.engine)
+        SQLModel.metadata.create_all(self.engine)
+
     @contextmanager
     def session(self) -> Generator[Session, None, None]:
         with Session(self.engine) as s:
@@ -113,7 +124,7 @@ class Database:
             s.refresh(row)
             return row
 
-    def add_all(self, objs: Iterable[Any], *, cascade: bool = True) -> list[SQLModel]:
+    def add_all(self, objs: Iterable[Any], *, cascade: bool = True, refresh: bool = True) -> list[SQLModel]:
         results: list[SQLModel] = []
         with self.session() as s:
             # Pre-pass: for ParameterValue replacement semantics, delete existing
@@ -123,29 +134,49 @@ class Database:
             from policyengine.tables import ParameterTable, ParameterValueTable, PolicyTable, DynamicsTable
 
             cleanup_keys: set[tuple[int, str, Optional[int], Optional[int], Optional[str]]] = set()
+            # Caches to avoid repeated upserts/flushes
+            param_cache: dict[tuple[str | None, str | None], int] = {}
+            policy_cache: dict[tuple[str | None, str | None], int] = {}
+            dynamics_cache: dict[tuple[str | None, str | None], int] = {}
 
             for obj in objs:
                 if isinstance(obj, PVModel):
                     # Ensure parameter/policy/dynamics rows exist to resolve IDs
-                    par_row = self._to_table(obj.parameter, s, cascade=cascade)
-                    par_row = self._upsert_row(obj.parameter, par_row, s)  # type: ignore[arg-type]
-                    s.add(par_row)
-                    s.flush()
+                    par_key = (obj.parameter.name, obj.parameter.country)
+                    if par_key in param_cache:
+                        par_id = param_cache[par_key]
+                    else:
+                        par_row = self._to_table(obj.parameter, s, cascade=cascade)
+                        par_row = self._upsert_row(obj.parameter, par_row, s)  # type: ignore[arg-type]
+                        s.add(par_row)
+                        s.flush()
+                        par_id = par_row.id  # type: ignore[assignment]
+                        param_cache[par_key] = par_id
                     policy_id = None
                     dynamics_id = None
                     if obj.policy is not None:
-                        pol_row = self._to_table(obj.policy, s, cascade=cascade)
-                        pol_row = self._upsert_row(obj.policy, pol_row, s)  # type: ignore[arg-type]
-                        s.add(pol_row)
-                        s.flush()
-                        policy_id = pol_row.id  # type: ignore[assignment]
+                        pol_key = (obj.policy.name, obj.policy.country)
+                        if pol_key in policy_cache:
+                            policy_id = policy_cache[pol_key]
+                        else:
+                            pol_row = self._to_table(obj.policy, s, cascade=cascade)
+                            pol_row = self._upsert_row(obj.policy, pol_row, s)  # type: ignore[arg-type]
+                            s.add(pol_row)
+                            s.flush()
+                            policy_id = pol_row.id  # type: ignore[assignment]
+                            policy_cache[pol_key] = policy_id
                     if obj.dynamics is not None:
-                        dyn_row = self._to_table(obj.dynamics, s, cascade=cascade)
-                        dyn_row = self._upsert_row(obj.dynamics, dyn_row, s)  # type: ignore[arg-type]
-                        s.add(dyn_row)
-                        s.flush()
-                        dynamics_id = dyn_row.id  # type: ignore[assignment]
-                    key = (par_row.id, obj.model_version, policy_id, dynamics_id, obj.country)  # type: ignore[arg-type]
+                        dyn_key = (obj.dynamics.name, obj.dynamics.country)
+                        if dyn_key in dynamics_cache:
+                            dynamics_id = dynamics_cache[dyn_key]
+                        else:
+                            dyn_row = self._to_table(obj.dynamics, s, cascade=cascade)
+                            dyn_row = self._upsert_row(obj.dynamics, dyn_row, s)  # type: ignore[arg-type]
+                            s.add(dyn_row)
+                            s.flush()
+                            dynamics_id = dyn_row.id  # type: ignore[assignment]
+                            dynamics_cache[dyn_key] = dynamics_id
+                    key = (par_id, obj.model_version, policy_id, dynamics_id, obj.country)  # type: ignore[arg-type]
                     cleanup_keys.add(key)
 
             # Perform cleanup deletes per key
@@ -169,15 +200,23 @@ class Database:
                 s.exec(stmt)
 
             # Now process all objects normally (upsert)
+            from policyengine.tables import ParameterValueTable as PVTable
+
             for obj in objs:
                 self._resolve_table_class(obj)  # validate known type
                 row = self._to_table(obj, s, cascade=cascade)
-                row = self._upsert_row(obj, row, s)
-                s.add(row)
+                # After cleanup above, ParameterValues for these keys have been removed;
+                # avoid a redundant upsert lookup and insert directly.
+                if isinstance(row, PVTable):
+                    s.add(row)
+                else:
+                    row = self._upsert_row(obj, row, s)
+                    s.add(row)
                 results.append(row)
             s.commit()
-            for row in results:
-                s.refresh(row)
+            if refresh:
+                for row in results:
+                    s.refresh(row)
         return results
 
     # ------------------- Seeding -------------------
@@ -202,26 +241,35 @@ class Database:
                 raise ValueError(f"Unknown country code for seeding: {country}")
 
             # Upsert policy and dynamics anchors
+            anchor_objs = []
             if md.get("current_law") is not None:
                 md["current_law"].country = country
-                self.add(md["current_law"])
+                anchor_objs.append(md["current_law"])
             if md.get("static") is not None:
                 md["static"].country = country
-                self.add(md["static"])
+                anchor_objs.append(md["static"])
+            if anchor_objs:
+                self.add_all(anchor_objs, refresh=False)
 
             # Variables
+            variables = []
             for v in md.get("variables", []) or []:
                 v.country = country
-                self.add(v)
+                variables.append(v)
+            if variables:
+                self.add_all(variables, refresh=False)
 
             # Parameter values (cascades will create parameters)
+            pvalues = []
             for pv in md.get("parameter_values", []) or []:
                 pv.country = country
                 if pv.parameter is not None:
                     pv.parameter.country = country
-                self.add(pv)
+                pvalues.append(pv)
+            if pvalues:
+                self.add_all(pvalues, refresh=False)
 
-    def get(self, model_cls: Type[BM], id: int, *, cascade: bool = False) -> BM | None:
+    def get(self, model_cls: Type[BM], id: Any, *, cascade: bool = False) -> BM | None:
         """Load a BaseModel instance by primary key of its table."""
         table_cls = self._resolve_table_class(model_cls)
         with self.session() as s:
@@ -368,6 +416,7 @@ class Database:
             s.add(par_row)
             s.flush()
             parameter_id = par_row.id
+            # JSON-safe value handling (inf/-inf, NaN)
             return ParameterValueTable(
                 policy_id=policy_id,
                 dynamics_id=dynamics_id,
@@ -375,7 +424,7 @@ class Database:
                 model_version=obj.model_version,
                 start_date=obj.start_date,
                 end_date=obj.end_date,
-                value=obj.value,
+                value=self._json_safe_value(obj.value),
                 country=obj.country,
             )
 
@@ -575,7 +624,7 @@ class Database:
                 model_version=row.model_version,
                 start_date=row.start_date,
                 end_date=row.end_date,
-                value=row.value,
+                value=self._json_restore_value(row.value),
                 country=row.country,
             )
 
@@ -671,6 +720,51 @@ class Database:
         if isinstance(row, SQLModel):
             raise ValueError(f"No mapper for table row type: {type(row)}")
         return row
+
+    # ------------------- JSON helpers -------------------
+    def _json_safe_value(self, v: Any) -> Any:
+        """Make a JSON-compatible value while preserving inf/-inf/NaN semantics.
+
+        - float('inf') -> "Infinity"
+        - float('-inf') -> "-Infinity"
+        - float('nan') -> "NaN"
+        Recurses into lists/tuples/dicts.
+        """
+        import math
+
+        if isinstance(v, float):
+            if math.isinf(v):
+                return "Infinity" if v > 0 else "-Infinity"
+            if math.isnan(v):
+                return "NaN"
+            return v
+        if isinstance(v, (list, tuple)):
+            return [self._json_safe_value(x) for x in v]
+        if isinstance(v, dict):
+            return {k: self._json_safe_value(val) for k, val in v.items()}
+        return v
+
+    def _json_restore_value(self, v: Any) -> Any:
+        """Restore special float markers from JSON back to Python floats.
+
+        - "Infinity" -> float('inf')
+        - "-Infinity" -> float('-inf')
+        - "NaN" -> float('nan')
+        Recurses into lists/tuples/dicts.
+        """
+        if isinstance(v, str):
+            if v == "Infinity":
+                return float("inf")
+            if v == "-Infinity":
+                return float("-inf")
+            if v == "NaN":
+                return float("nan")
+            return v
+        if isinstance(v, list):
+            return [self._json_restore_value(x) for x in v]
+        if isinstance(v, dict):
+            return {k: self._json_restore_value(val) for k, val in v.items()}
+        return v
 
     # ------------------- Upsert helpers -------------------
     def _upsert_row(self, obj: Any, new_row: SQLModel, s: Session) -> SQLModel:
