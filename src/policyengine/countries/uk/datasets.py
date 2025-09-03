@@ -6,6 +6,7 @@ import pandas as pd
 
 from policyengine.models.dataset import Dataset
 from policyengine.models.single_year_dataset import SingleYearDataset
+from policyengine.models.enums import DatasetType
 
 
 def create_efrs(year: int = 2029) -> Dataset:
@@ -16,15 +17,18 @@ def create_efrs(year: int = 2029) -> Dataset:
     from policyengine_uk import Microsimulation
 
     sim = Microsimulation()
+    tables = dict(
+        person=getattr(sim.dataset[year], "person", None),
+        benunit=getattr(sim.dataset[year], "benunit", getattr(sim.dataset[year], "benefit_unit", None)),
+        household=getattr(sim.dataset[year], "household", None),
+    )
+    # Drop any missing tables to avoid serialising Nones
+    tables = {k: v for k, v in tables.items() if v is not None}
     data = SingleYearDataset(
-        tables=dict(
-            person=sim.dataset[year].person,
-            benunit=sim.dataset[year].benunit,
-            household=sim.dataset[year].household,
-        ),
+        tables=tables,
         year=year,
     )
-    return Dataset(name="efrs", data=data, dataset_type="uk")
+    return Dataset(name="efrs", data=data, dataset_type=DatasetType.UK)
 
 
 def create_uk_synthetic(year: int = 2029) -> Dataset:
@@ -173,4 +177,3 @@ def create_uk_synthetic(year: int = 2029) -> Dataset:
         year=year,
     )
     return Dataset(name="uk-synthetic", data=data, dataset_type="uk")
-

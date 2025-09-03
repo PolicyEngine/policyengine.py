@@ -6,12 +6,14 @@ import pandas as pd
 
 from policyengine.models.dataset import Dataset
 from policyengine.models.single_year_dataset import SingleYearDataset
+from policyengine.models.enums import DatasetType
 
 
-def create_ecps(year=2024) -> Dataset:
-    """Create the ECPS 2024 dataset using the US microsimulation variables.
+def create_ecps(year: int = 2024) -> Dataset:
+    """Create the ECPS dataset for a given year using the US microsimulation.
 
-    Builds per-entity tables from policyengine_us for the 2024 period.
+    This computes variables per entity for the requested year. This is the
+    original behavior and differs from the UK path.
     """
     from policyengine_us import Microsimulation
 
@@ -22,13 +24,14 @@ def create_ecps(year=2024) -> Dataset:
         for variable in sim.tax_benefit_system.variables:
             if sim.tax_benefit_system.variables[variable].entity.key != entity:
                 continue
-            known_periods = map(str, sim.get_known_periods(variable))
-            if "2024" in known_periods: # Data loaded in 2024
-                tables[entity] = tables.get(entity, pd.DataFrame())
+            known_periods = set(map(str, sim.get_known_periods(variable)))
+            if str(year) in known_periods:
+                if entity not in tables:
+                    tables[entity] = pd.DataFrame()
                 tables[entity][variable] = sim.calculate(variable, period=year)
 
     data = SingleYearDataset(tables=tables, year=year)
-    return Dataset(name="ECPS 2024", data=data, dataset_type="us")
+    return Dataset(name="ecps", data=data, dataset_type=DatasetType.US)
 
 
 def create_us_synthetic(year: int = 2024) -> Dataset:
@@ -207,4 +210,3 @@ def create_us_synthetic(year: int = 2024) -> Dataset:
         year=year,
     )
     return Dataset(name="us-synthetic", data=data, dataset_type="us")
-

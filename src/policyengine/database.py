@@ -139,6 +139,7 @@ class Database:
             policy_cache: dict[tuple[str | None, str | None], int] = {}
             dynamics_cache: dict[tuple[str | None, str | None], int] = {}
 
+            only_pv_models = True
             for obj in objs:
                 if isinstance(obj, PVModel):
                     # Ensure parameter/policy/dynamics rows exist to resolve IDs
@@ -178,6 +179,8 @@ class Database:
                             dynamics_cache[dyn_key] = dynamics_id
                     key = (par_id, obj.model_version, policy_id, dynamics_id, obj.country)  # type: ignore[arg-type]
                     cleanup_keys.add(key)
+                else:
+                    only_pv_models = False
 
             # Perform cleanup deletes per key
             for (parameter_id, model_version, policy_id, dynamics_id, country) in cleanup_keys:
@@ -199,14 +202,43 @@ class Database:
                 stmt = delete(ParameterValueTable).where(*conds)
                 s.exec(stmt)
 
-            # Now process all objects normally (upsert)
+            # Fast path: bulk insert parameter values in one executemany
             from policyengine.tables import ParameterValueTable as PVTable
+            from sqlalchemy import insert as sa_insert
 
+            if only_pv_models and len(objs) > 0:
+                pv_dicts = []
+                for obj in objs:  # type: ignore[union-attr]
+                    row = self._to_table(obj, s, cascade=cascade)
+                    # Ensure id assigned for UUID primary key
+                    if getattr(row, "id", None) is None:
+                        # SQLModel default_factory runs on instance creation, but be safe
+                        import uuid
+
+                        row.id = uuid.uuid4()
+                    pv_dicts.append(
+                        {
+                            "id": row.id,
+                            "policy_id": row.policy_id,
+                            "dynamics_id": row.dynamics_id,
+                            "parameter_id": row.parameter_id,
+                            "model_version": row.model_version,
+                            "start_date": row.start_date,
+                            "end_date": row.end_date,
+                            "value": row.value,
+                            "country": row.country,
+                        }
+                    )
+                if pv_dicts:
+                    s.exec(sa_insert(PVTable), pv_dicts)
+                s.commit()
+                # No refresh needed for seed path
+                return [] if not refresh else []
+
+            # General path: process all objects (mixed types)
             for obj in objs:
                 self._resolve_table_class(obj)  # validate known type
                 row = self._to_table(obj, s, cascade=cascade)
-                # After cleanup above, ParameterValues for these keys have been removed;
-                # avoid a redundant upsert lookup and insert directly.
                 if isinstance(row, PVTable):
                     s.add(row)
                 else:
@@ -269,11 +301,40 @@ class Database:
             if pvalues:
                 self.add_all(pvalues, refresh=False)
 
-    def get(self, model_cls: Type[BM], id: Any, *, cascade: bool = False) -> BM | None:
-        """Load a BaseModel instance by primary key of its table."""
+            # Country datasets provided by metadata
+            datasets = md.get("datasets") or []
+            if datasets:
+                # ensure dataset names are set and deduplicate by name
+                self.add_all(datasets, refresh=False)
+
+    def get(self, model_cls: Type[BM], id: Any | None = None, *, cascade: bool = False, **filters: Any) -> BM | None:
+        """Load a BaseModel by primary key or by attribute filters.
+
+        Examples:
+        - get(Dataset, id)
+        - get(Policy, name="Current law", country="uk")
+        - get(Parameter, name="gov.ubi.amount")
+        """
         table_cls = self._resolve_table_class(model_cls)
         with self.session() as s:
-            row = s.get(table_cls, id)
+            if id is not None:
+                row = s.get(table_cls, id)
+                if row is None:
+                    return None
+                return self._to_model(row, s, cascade=cascade)
+            stmt = select(table_cls)
+            conds = []
+            for key, value in filters.items():
+                if not hasattr(table_cls, key):
+                    raise ValueError(f"Unknown field for {table_cls.__name__}: {key}")
+                col = getattr(table_cls, key)
+                if value is None:
+                    conds.append(col.is_(None))
+                else:
+                    conds.append(col == value)
+            if conds:
+                stmt = stmt.where(*conds)
+            row = s.exec(stmt).first()
             if row is None:
                 return None
             return self._to_model(row, s, cascade=cascade)
@@ -785,6 +846,7 @@ class Database:
             VariableTable,
             ReportTable,
             ReportElementTable,
+            DatasetTable,
         )
 
         # Policy
@@ -886,6 +948,19 @@ class Database:
                 existing.report_id = new_row.report_id
                 existing.status = new_row.status
                 existing.country = new_row.country
+                return existing
+            return new_row
+
+        # Dataset
+        if isinstance(new_row, DatasetTable):
+            # Deduplicate by dataset name; update payload
+            stmt = select(DatasetTable).where(DatasetTable.name == new_row.name)
+            existing = s.exec(stmt).first()
+            if existing:
+                existing.source_dataset_id = new_row.source_dataset_id
+                existing.version = new_row.version
+                existing.data_bytes = new_row.data_bytes
+                existing.dataset_type = new_row.dataset_type
                 return existing
             return new_row
 

@@ -1,10 +1,11 @@
 import io
 import pickle
+import zlib
 
 import pandas as pd
 
 
-def serialise_dataframe_dict(data: dict[str, pd.DataFrame]) -> str:
+def serialise_dataframe_dict(data: dict[str, pd.DataFrame]) -> bytes:
     """
     Serialize a dictionary of DataFrames to bytes.
 
@@ -15,13 +16,14 @@ def serialise_dataframe_dict(data: dict[str, pd.DataFrame]) -> str:
         Serialized str-bytes representation
     """
     buffer = io.BytesIO()
-    pickle.dump(data, buffer)
-    bytes_val = buffer.getvalue()
-    # encode into sql-safe string
-    return bytes_val
+    # Use highest protocol for speed and size
+    pickle.dump(data, buffer, protocol=pickle.HIGHEST_PROTOCOL)
+    raw = buffer.getvalue()
+    # Compress to speed up IO and reduce DB size
+    return zlib.compress(raw, level=6)
 
 
-def deserialise_dataframe_dict(data: str) -> dict[str, pd.DataFrame]:
+def deserialise_dataframe_dict(data: bytes) -> dict[str, pd.DataFrame]:
     """
     Deserialize str bytes back to a dictionary of DataFrames.
 
@@ -31,5 +33,10 @@ def deserialise_dataframe_dict(data: str) -> dict[str, pd.DataFrame]:
     Returns:
         Dictionary with string keys and DataFrame values
     """
-    buffer = io.BytesIO(data)
+    # Try to decompress; if not compressed, fall back to raw
+    try:
+        raw = zlib.decompress(data)
+    except Exception:
+        raw = data
+    buffer = io.BytesIO(raw)
     return pickle.load(buffer)
