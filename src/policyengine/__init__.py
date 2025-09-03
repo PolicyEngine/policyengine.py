@@ -8,7 +8,12 @@ from .models import (
     Policy,
     Report,
     ReportElement,
-    AggregateChangeReportElement,
     Simulation,
     Variable,
+)
+from .report_elements import (
+    AggregateReportElement,
+    ChangeByBaselineGroupReportElement,
+    WinnersLosersByQuantileReportElement,
+    VariableChangeByValueReportElement,
 )
