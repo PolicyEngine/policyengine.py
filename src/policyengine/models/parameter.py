@@ -25,7 +25,7 @@ class Parameter(BaseModel):
     label: str | None = None
     description: str | None = None
     unit: str | None = None
-    data_type: type  # "float", "int", "bool", "string"
+    data_type: type | None  # "float", "int", "bool", "string"
     country: str | None = None
 
 

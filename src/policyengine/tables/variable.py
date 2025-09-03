@@ -15,7 +15,7 @@ class VariableTable(SQLModel, table=True):
     label: str | None = None
     description: str | None = None
     unit: str | None = None
-    value_type: str
+    data_type: str
     entity: str
     definition_period: str | None = None
     country: str | None = None

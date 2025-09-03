@@ -13,6 +13,7 @@ from .dataset import Dataset
 from .dynamics import Dynamics
 from .enums import OperationStatus
 from .policy import Policy
+from policyengine.utils.version import get_model_version
 
 
 class Simulation(BaseModel):
@@ -23,7 +24,7 @@ class Simulation(BaseModel):
     policy: Policy
     dynamics: Dynamics
     result: Any | None = None
-    model_version: str | None = None
+    model_version: str | None
     country: str
 
     # Processing metadata
@@ -44,4 +45,5 @@ class Simulation(BaseModel):
 
         self.status = OperationStatus.COMPLETED
         self.completed_at = datetime.now()
+        self.model_version = get_model_version(self.country)
         return self.dataset
