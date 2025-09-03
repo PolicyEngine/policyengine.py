@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any, Dict, Generator, Iterable, Optional, Tuple, Type, TypeVar, Union
 
 from sqlmodel import SQLModel, Session, create_engine, select
+from sqlalchemy import delete
 
 # Base models
 from policyengine.models.user import (
@@ -57,7 +58,12 @@ class Database:
     over enforcing every possible constraint. Extend as needs grow.
     """
 
-    def __init__(self, url: str = "sqlite:///policyengine.db", echo: bool = False):
+    def __init__(
+        self,
+        url: str = "sqlite:///policyengine.db",
+        echo: bool = False,
+        seed_countries: Iterable[str] | None = None,
+    ):
         self.engine = create_engine(url, echo=echo, future=True)
         SQLModel.metadata.create_all(self.engine)
 
@@ -83,6 +89,10 @@ class Database:
             v: k for k, v in self._bm_to_table.items()
         }
 
+        # Optionally seed metadata on init
+        if seed_countries:
+            self.seed(seed_countries)
+
     @contextmanager
     def session(self) -> Generator[Session, None, None]:
         with Session(self.engine) as s:
@@ -97,6 +107,7 @@ class Database:
         table_cls = self._resolve_table_class(obj)
         with self.session() as s:
             row = self._to_table(obj, s, cascade=cascade)
+            row = self._upsert_row(obj, row, s)
             s.add(row)
             s.commit()
             s.refresh(row)
@@ -105,15 +116,110 @@ class Database:
     def add_all(self, objs: Iterable[Any], *, cascade: bool = True) -> list[SQLModel]:
         results: list[SQLModel] = []
         with self.session() as s:
+            # Pre-pass: for ParameterValue replacement semantics, delete existing
+            # rows for the same (parameter, model_version, policy, dynamics, country)
+            # to allow full replacement of a time-series for a given version.
+            from policyengine.models.parameter import ParameterValue as PVModel
+            from policyengine.tables import ParameterTable, ParameterValueTable, PolicyTable, DynamicsTable
+
+            cleanup_keys: set[tuple[int, str, Optional[int], Optional[int], Optional[str]]] = set()
+
+            for obj in objs:
+                if isinstance(obj, PVModel):
+                    # Ensure parameter/policy/dynamics rows exist to resolve IDs
+                    par_row = self._to_table(obj.parameter, s, cascade=cascade)
+                    par_row = self._upsert_row(obj.parameter, par_row, s)  # type: ignore[arg-type]
+                    s.add(par_row)
+                    s.flush()
+                    policy_id = None
+                    dynamics_id = None
+                    if obj.policy is not None:
+                        pol_row = self._to_table(obj.policy, s, cascade=cascade)
+                        pol_row = self._upsert_row(obj.policy, pol_row, s)  # type: ignore[arg-type]
+                        s.add(pol_row)
+                        s.flush()
+                        policy_id = pol_row.id  # type: ignore[assignment]
+                    if obj.dynamics is not None:
+                        dyn_row = self._to_table(obj.dynamics, s, cascade=cascade)
+                        dyn_row = self._upsert_row(obj.dynamics, dyn_row, s)  # type: ignore[arg-type]
+                        s.add(dyn_row)
+                        s.flush()
+                        dynamics_id = dyn_row.id  # type: ignore[assignment]
+                    key = (par_row.id, obj.model_version, policy_id, dynamics_id, obj.country)  # type: ignore[arg-type]
+                    cleanup_keys.add(key)
+
+            # Perform cleanup deletes per key
+            for (parameter_id, model_version, policy_id, dynamics_id, country) in cleanup_keys:
+                conds = [
+                    ParameterValueTable.parameter_id == parameter_id,
+                    ParameterValueTable.model_version == model_version,
+                    ParameterValueTable.country == country,
+                ]
+                conds.append(
+                    ParameterValueTable.policy_id.is_(None)
+                    if policy_id is None
+                    else ParameterValueTable.policy_id == policy_id
+                )
+                conds.append(
+                    ParameterValueTable.dynamics_id.is_(None)
+                    if dynamics_id is None
+                    else ParameterValueTable.dynamics_id == dynamics_id
+                )
+                stmt = delete(ParameterValueTable).where(*conds)
+                s.exec(stmt)
+
+            # Now process all objects normally (upsert)
             for obj in objs:
                 self._resolve_table_class(obj)  # validate known type
                 row = self._to_table(obj, s, cascade=cascade)
+                row = self._upsert_row(obj, row, s)
                 s.add(row)
                 results.append(row)
             s.commit()
             for row in results:
                 s.refresh(row)
         return results
+
+    # ------------------- Seeding -------------------
+    def seed(self, countries: Iterable[str]) -> None:
+        """Seed database with metadata for selected countries.
+
+        Accepts any subset of {"uk", "us"}. Uses country-specific metadata
+        helpers to load Variables, Parameters (via ParameterValues), and
+        default Policy/Dynamics and upserts them into the DB.
+        """
+        for country in countries:
+            country = country.lower()
+            if country == "uk":
+                from policyengine.countries.uk.metadata import get_uk_metadata
+
+                md = get_uk_metadata()
+            elif country == "us":
+                from policyengine.countries.us.metadata import get_us_metadata
+
+                md = get_us_metadata()
+            else:
+                raise ValueError(f"Unknown country code for seeding: {country}")
+
+            # Upsert policy and dynamics anchors
+            if md.get("current_law") is not None:
+                md["current_law"].country = country
+                self.add(md["current_law"])
+            if md.get("static") is not None:
+                md["static"].country = country
+                self.add(md["static"])
+
+            # Variables
+            for v in md.get("variables", []) or []:
+                v.country = country
+                self.add(v)
+
+            # Parameter values (cascades will create parameters)
+            for pv in md.get("parameter_values", []) or []:
+                pv.country = country
+                if pv.parameter is not None:
+                    pv.parameter.country = country
+                self.add(pv)
 
     def get(self, model_cls: Type[BM], id: int, *, cascade: bool = False) -> BM | None:
         """Load a BaseModel instance by primary key of its table."""
@@ -350,12 +456,13 @@ class Database:
 
         # Variable
         if isinstance(obj, Variable):
+            data_type = obj.data_type.__name__ if isinstance(obj.data_type, type) else str(obj.data_type)
             return VariableTable(
                 name=obj.name,
                 label=obj.label,
                 description=obj.description,
                 unit=obj.unit,
-                value_type=obj.value_type,
+                data_type=data_type,
                 entity=obj.entity,
                 definition_period=obj.definition_period,
                 country=obj.country,
@@ -547,12 +654,14 @@ class Database:
 
         # Variable
         if isinstance(row, VariableTable):
+            data_type_map = {"float": float, "int": int, "bool": bool, "string": str}
+            data_type = data_type_map.get(row.data_type, str)
             return Variable(
                 name=row.name,
                 label=row.label,
                 description=row.description,
                 unit=row.unit,
-                value_type=row.value_type,
+                data_type=data_type,
                 entity=row.entity,
                 definition_period=row.definition_period,
                 country=row.country,
@@ -562,3 +671,129 @@ class Database:
         if isinstance(row, SQLModel):
             raise ValueError(f"No mapper for table row type: {type(row)}")
         return row
+
+    # ------------------- Upsert helpers -------------------
+    def _upsert_row(self, obj: Any, new_row: SQLModel, s: Session) -> SQLModel:
+        """Apply deduplication/upsert rules per model type.
+
+        - Parameter: same name+country replaces
+        - Variable: same name+country replaces
+        - Policy: same name+country replaces
+        - Dynamics: same name+country replaces
+        - ParameterValue: same (parameter, model_version, start/end, policy, dynamics, country) replaces
+        - Report/ReportElement: same name+country replaces (best-effort)
+        """
+        from policyengine.tables import (
+            PolicyTable,
+            DynamicsTable,
+            ParameterTable,
+            ParameterValueTable,
+            VariableTable,
+            ReportTable,
+            ReportElementTable,
+        )
+
+        # Policy
+        if isinstance(new_row, PolicyTable):
+            stmt = select(PolicyTable).where(
+                PolicyTable.name == new_row.name, PolicyTable.country == new_row.country
+            )
+            existing = s.exec(stmt).first()
+            if existing:
+                existing.description = new_row.description
+                existing.country = new_row.country
+                return existing
+            return new_row
+
+        # Dynamics
+        if isinstance(new_row, DynamicsTable):
+            stmt = select(DynamicsTable).where(
+                DynamicsTable.name == new_row.name, DynamicsTable.country == new_row.country
+            )
+            existing = s.exec(stmt).first()
+            if existing:
+                existing.parent_id = new_row.parent_id
+                existing.description = new_row.description
+                existing.created_at = new_row.created_at
+                existing.updated_at = new_row.updated_at
+                existing.country = new_row.country
+                return existing
+            return new_row
+
+        # Parameter
+        if isinstance(new_row, ParameterTable):
+            stmt = select(ParameterTable).where(
+                ParameterTable.name == new_row.name, ParameterTable.country == new_row.country
+            )
+            existing = s.exec(stmt).first()
+            if existing:
+                existing.parent_id = new_row.parent_id
+                existing.label = new_row.label
+                existing.description = new_row.description
+                existing.unit = new_row.unit
+                existing.data_type = new_row.data_type
+                existing.country = new_row.country
+                return existing
+            return new_row
+
+        # ParameterValue
+        if isinstance(new_row, ParameterValueTable):
+            stmt = select(ParameterValueTable).where(
+                ParameterValueTable.parameter_id == new_row.parameter_id,
+                ParameterValueTable.model_version == new_row.model_version,
+                ParameterValueTable.start_date == new_row.start_date,
+                ParameterValueTable.end_date.is_(new_row.end_date) if new_row.end_date is None else ParameterValueTable.end_date == new_row.end_date,
+                ParameterValueTable.policy_id.is_(new_row.policy_id) if new_row.policy_id is None else ParameterValueTable.policy_id == new_row.policy_id,
+                ParameterValueTable.dynamics_id.is_(new_row.dynamics_id) if new_row.dynamics_id is None else ParameterValueTable.dynamics_id == new_row.dynamics_id,
+                ParameterValueTable.country == new_row.country,
+            )
+            existing = s.exec(stmt).first()
+            if existing:
+                existing.value = new_row.value
+                return existing
+            return new_row
+
+        # Variable
+        if isinstance(new_row, VariableTable):
+            stmt = select(VariableTable).where(
+                VariableTable.name == new_row.name, VariableTable.country == new_row.country
+            )
+            existing = s.exec(stmt).first()
+            if existing:
+                existing.label = new_row.label
+                existing.description = new_row.description
+                existing.unit = new_row.unit
+                existing.data_type = new_row.data_type
+                existing.entity = new_row.entity
+                existing.definition_period = new_row.definition_period
+                existing.country = new_row.country
+                return existing
+            return new_row
+
+        # Reports
+        if isinstance(new_row, ReportTable):
+            stmt = select(ReportTable).where(
+                ReportTable.name == new_row.name, ReportTable.country == new_row.country
+            )
+            existing = s.exec(stmt).first()
+            if existing:
+                existing.description = new_row.description
+                existing.country = new_row.country
+                return existing
+            return new_row
+
+        if isinstance(new_row, ReportElementTable):
+            stmt = select(ReportElementTable).where(
+                ReportElementTable.name == new_row.name, ReportElementTable.country == new_row.country
+            )
+            existing = s.exec(stmt).first()
+            if existing:
+                existing.description = new_row.description
+                existing.report_id = new_row.report_id
+                existing.status = new_row.status
+                existing.country = new_row.country
+                return existing
+            return new_row
+
+        # Default: no special upsert, insert as-is
+        return new_row
