@@ -11,7 +11,7 @@ import pandas as pd
 
 
 def run_us_simulation(simulation: Simulation) -> Dataset:
-    """Run the UK-specific simulation."""
+    """Run the US-specific simulation."""
     # Implement UK-specific simulation logic here
     sim = _get_simulation(simulation)
 
@@ -33,7 +33,7 @@ def run_us_simulation(simulation: Simulation) -> Dataset:
         )
 
     simulation.result = Dataset(
-        dataset_type="uk",
+        dataset_type="us",
         data=output,
     )
 

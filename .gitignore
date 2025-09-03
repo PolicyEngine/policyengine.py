@@ -1,7 +1,6 @@
 **/*.db
 **/__pycache__
 **/*.egg-info
-*.ipynb
 _build/
 simulations/
 test_*

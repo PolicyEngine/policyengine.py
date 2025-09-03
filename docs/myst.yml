@@ -1,0 +1,15 @@
+# See docs at: https://mystmd.org/guide/frontmatter
+version: 1
+project:
+  id: d32e015e-a8cb-49e2-814a-dd8ccfd2f8d7
+  # title:
+  # description:
+  # keywords: []
+  # authors: []
+  github: https://github.com/PolicyEngine/policyengine.py
+  # To autogenerate a Table of Contents, run "jupyter book init --write-toc"
+site:
+  template: book-theme
+  # options:
+  #   favicon: favicon.ico
+  #   logo: site_logo.png
