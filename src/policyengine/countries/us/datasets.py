@@ -8,16 +8,23 @@ from policyengine.models.dataset import Dataset
 from policyengine.models.single_year_dataset import SingleYearDataset
 from policyengine.models.enums import DatasetType
 
+def create_ecps_years(start_year: int, end_year: int) -> list[Dataset]:
+    from policyengine_us import Microsimulation
 
-def create_ecps(year: int = 2024) -> Dataset:
+    sim = Microsimulation()
+
+    return [create_ecps(year=year, sim=sim) for year in range(start_year, end_year + 1)]
+
+
+def create_ecps(year: int = 2024, sim: "Microsimulation" | None = None) -> Dataset:
     """Create the ECPS dataset for a given year using the US microsimulation.
 
     This computes variables per entity for the requested year. This is the
     original behavior and differs from the UK path.
     """
-    from policyengine_us import Microsimulation
-
-    sim = Microsimulation()
+    if sim is None:
+        from policyengine_us import Microsimulation
+        sim = Microsimulation()
     tables: Dict[str, pd.DataFrame] = {}
 
     for entity in sim.tax_benefit_system.entities_by_singular().keys():
@@ -31,7 +38,7 @@ def create_ecps(year: int = 2024) -> Dataset:
                 tables[entity][variable] = sim.calculate(variable, period=year)
 
     data = SingleYearDataset(tables=tables, year=year)
-    return Dataset(name="ecps", data=data, dataset_type=DatasetType.US)
+    return Dataset(name=f"ecps_{year}", data=data, dataset_type=DatasetType.US)
 
 
 def create_us_synthetic(year: int = 2024) -> Dataset:

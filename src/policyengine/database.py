@@ -124,132 +124,244 @@ class Database:
             s.refresh(row)
             return row
 
-    def add_all(self, objs: Iterable[Any], *, cascade: bool = True, refresh: bool = True) -> list[SQLModel]:
+    def add_all(
+        self,
+        objs: Iterable[Any],
+        *,
+        cascade: bool = True,
+        refresh: bool = True,
+        chunk_size: int = 500,
+        progress: bool = False,
+    ) -> list[SQLModel]:
+        """Insert or upsert a collection of BaseModel objects, generically.
+
+        - Processes items in chunks, committing per chunk.
+        - Optional lightweight progress output for visibility.
+        - For specialized bulk behavior (e.g., ParameterValue series replacement),
+          use a dedicated method instead of overloading this generic one.
+        """
+        items = list(objs)
+        if not items:
+            return []
+
         results: list[SQLModel] = []
+        total = len(items)
         with self.session() as s:
-            # Pre-pass: for ParameterValue replacement semantics, delete existing
-            # rows for the same (parameter, model_version, policy, dynamics, country)
-            # to allow full replacement of a time-series for a given version.
-            from policyengine.models.parameter import ParameterValue as PVModel
-            from policyengine.tables import ParameterTable, ParameterValueTable, PolicyTable, DynamicsTable
+            pbar = None
+            if progress:
+                try:
+                    from tqdm.auto import tqdm  # type: ignore
 
-            cleanup_keys: set[tuple[int, str, Optional[int], Optional[int], Optional[str]]] = set()
-            # Caches to avoid repeated upserts/flushes
-            param_cache: dict[tuple[str | None, str | None], int] = {}
-            policy_cache: dict[tuple[str | None, str | None], int] = {}
-            dynamics_cache: dict[tuple[str | None, str | None], int] = {}
+                    pbar = tqdm(total=total, desc="Adding", unit="row")
+                except Exception:
+                    pbar = None
 
-            only_pv_models = True
-            for obj in objs:
-                if isinstance(obj, PVModel):
-                    # Ensure parameter/policy/dynamics rows exist to resolve IDs
-                    par_key = (obj.parameter.name, obj.parameter.country)
-                    if par_key in param_cache:
-                        par_id = param_cache[par_key]
-                    else:
-                        par_row = self._to_table(obj.parameter, s, cascade=cascade)
-                        par_row = self._upsert_row(obj.parameter, par_row, s)  # type: ignore[arg-type]
-                        s.add(par_row)
-                        s.flush()
-                        par_id = par_row.id  # type: ignore[assignment]
-                        param_cache[par_key] = par_id
-                    policy_id = None
-                    dynamics_id = None
-                    if obj.policy is not None:
-                        pol_key = (obj.policy.name, obj.policy.country)
-                        if pol_key in policy_cache:
-                            policy_id = policy_cache[pol_key]
-                        else:
-                            pol_row = self._to_table(obj.policy, s, cascade=cascade)
-                            pol_row = self._upsert_row(obj.policy, pol_row, s)  # type: ignore[arg-type]
-                            s.add(pol_row)
-                            s.flush()
-                            policy_id = pol_row.id  # type: ignore[assignment]
-                            policy_cache[pol_key] = policy_id
-                    if obj.dynamics is not None:
-                        dyn_key = (obj.dynamics.name, obj.dynamics.country)
-                        if dyn_key in dynamics_cache:
-                            dynamics_id = dynamics_cache[dyn_key]
-                        else:
-                            dyn_row = self._to_table(obj.dynamics, s, cascade=cascade)
-                            dyn_row = self._upsert_row(obj.dynamics, dyn_row, s)  # type: ignore[arg-type]
-                            s.add(dyn_row)
-                            s.flush()
-                            dynamics_id = dyn_row.id  # type: ignore[assignment]
-                            dynamics_cache[dyn_key] = dynamics_id
-                    key = (par_id, obj.model_version, policy_id, dynamics_id, obj.country)  # type: ignore[arg-type]
-                    cleanup_keys.add(key)
-                else:
-                    only_pv_models = False
-
-            # Perform cleanup deletes per key
-            for (parameter_id, model_version, policy_id, dynamics_id, country) in cleanup_keys:
-                conds = [
-                    ParameterValueTable.parameter_id == parameter_id,
-                    ParameterValueTable.model_version == model_version,
-                    ParameterValueTable.country == country,
-                ]
-                conds.append(
-                    ParameterValueTable.policy_id.is_(None)
-                    if policy_id is None
-                    else ParameterValueTable.policy_id == policy_id
-                )
-                conds.append(
-                    ParameterValueTable.dynamics_id.is_(None)
-                    if dynamics_id is None
-                    else ParameterValueTable.dynamics_id == dynamics_id
-                )
-                stmt = delete(ParameterValueTable).where(*conds)
-                s.exec(stmt)
-
-            # Fast path: bulk insert parameter values in one executemany
-            from policyengine.tables import ParameterValueTable as PVTable
-            from sqlalchemy import insert as sa_insert
-
-            if only_pv_models and len(objs) > 0:
-                pv_dicts = []
-                for obj in objs:  # type: ignore[union-attr]
+            for start in range(0, total, max(1, chunk_size)):
+                end = min(start + chunk_size, total)
+                for obj in items[start:end]:
                     row = self._to_table(obj, s, cascade=cascade)
-                    # Ensure id assigned for UUID primary key
-                    if getattr(row, "id", None) is None:
-                        # SQLModel default_factory runs on instance creation, but be safe
-                        import uuid
-
-                        row.id = uuid.uuid4()
-                    pv_dicts.append(
-                        {
-                            "id": row.id,
-                            "policy_id": row.policy_id,
-                            "dynamics_id": row.dynamics_id,
-                            "parameter_id": row.parameter_id,
-                            "model_version": row.model_version,
-                            "start_date": row.start_date,
-                            "end_date": row.end_date,
-                            "value": row.value,
-                            "country": row.country,
-                        }
-                    )
-                if pv_dicts:
-                    s.exec(sa_insert(PVTable), pv_dicts)
-                s.commit()
-                # No refresh needed for seed path
-                return [] if not refresh else []
-
-            # General path: process all objects (mixed types)
-            for obj in objs:
-                self._resolve_table_class(obj)  # validate known type
-                row = self._to_table(obj, s, cascade=cascade)
-                if isinstance(row, PVTable):
-                    s.add(row)
-                else:
                     row = self._upsert_row(obj, row, s)
                     s.add(row)
-                results.append(row)
-            s.commit()
+                    results.append(row)
+                s.commit()
+                if pbar is not None:
+                    pbar.update(end - start)
+            if pbar is not None:
+                pbar.close()
             if refresh:
                 for row in results:
                     s.refresh(row)
         return results
+
+    def add_parameter_values_bulk(
+        self,
+        pvalues: Iterable[ParameterValue],
+        *,
+        cascade: bool = True,
+        chunk_size: int = 2000,
+        progress: bool = False,
+        verbose: bool = False,
+        replace: bool = False,
+    ) -> None:
+        """Replace-and-insert bulk operation for ParameterValue rows.
+
+        For each unique (parameter, model_version, policy, dynamics, country)
+        key, deletes existing rows, then bulk inserts provided values in chunks.
+        """
+        items = list(pvalues)
+        if not items:
+            return
+
+        from sqlalchemy import insert as sa_insert
+        from policyengine.tables import (
+            ParameterValueTable as PVTable,
+            ParameterTable as PTable,
+            PolicyTable as PoTable,
+            DynamicsTable as DTable,
+        )
+
+        total = len(items)
+        if verbose:
+            print(f"Preparing {total} parameter values for bulk load...")
+        with self.session() as s:
+            pbar = None
+            if progress:
+                try:
+                    from tqdm.auto import tqdm  # type: ignore
+
+                    pbar = tqdm(total=total, desc="Parameter values", unit="row")
+                except Exception:
+                    pbar = None
+
+            # Caches and per-run bookkeeping
+            param_cache: dict[tuple[str | None, str | None], Any] = {}
+            policy_cache: dict[tuple[str | None, str | None], Any] = {}
+            dynamics_cache: dict[tuple[str | None, str | None], Any] = {}
+            deleted_series: set[tuple[Any, str, Any, Any, Any]] = set()
+
+            import uuid
+
+            processed = 0
+            for start in range(0, total, max(1, chunk_size)):
+                end = min(start + chunk_size, total)
+                batch = items[start:end]
+
+                # Phase 1: resolve IDs; optionally collect unique series keys needing delete
+                keys_to_delete: list[tuple[Any, str, Any, Any, Any]] = []
+                pv_rows: list[dict[str, Any]] = []
+
+                for idx, obj in enumerate(batch):
+                    # Parameter id
+                    par_key = (obj.parameter.name, obj.parameter.country)
+                    par_id = param_cache.get(par_key)
+                    if par_id is None:
+                        # Try to fetch existing first to avoid upsert overhead
+                        existing = s.exec(
+                            select(PTable).where(
+                                PTable.name == obj.parameter.name,
+                                PTable.country == obj.parameter.country,
+                            )
+                        ).first()
+                        if existing is not None:
+                            par_id = existing.id
+                        else:
+                            par_row = self._to_table(obj.parameter, s, cascade=cascade)
+                            par_row = self._upsert_row(obj.parameter, par_row, s)  # type: ignore[arg-type]
+                            s.add(par_row)
+                            s.flush()
+                            par_id = par_row.id
+                        param_cache[par_key] = par_id
+
+                    # Policy id (optional)
+                    pol_id = None
+                    if obj.policy is not None:
+                        pol_key = (obj.policy.name, obj.policy.country)
+                        pol_id = policy_cache.get(pol_key)
+                        if pol_id is None:
+                            existing = s.exec(
+                                select(PoTable).where(
+                                    PoTable.name == obj.policy.name,
+                                    PoTable.country == obj.policy.country,
+                                )
+                            ).first()
+                            if existing is not None:
+                                pol_id = existing.id
+                            else:
+                                pol_row = self._to_table(obj.policy, s, cascade=cascade)
+                                pol_row = self._upsert_row(obj.policy, pol_row, s)  # type: ignore[arg-type]
+                                s.add(pol_row)
+                                s.flush()
+                                pol_id = pol_row.id
+                            policy_cache[pol_key] = pol_id
+
+                    # Dynamics id (optional)
+                    dyn_id = None
+                    if obj.dynamics is not None:
+                        dyn_key = (obj.dynamics.name, obj.dynamics.country)
+                        dyn_id = dynamics_cache.get(dyn_key)
+                        if dyn_id is None:
+                            existing = s.exec(
+                                select(DTable).where(
+                                    DTable.name == obj.dynamics.name,
+                                    DTable.country == obj.dynamics.country,
+                                )
+                            ).first()
+                            if existing is not None:
+                                dyn_id = existing.id
+                            else:
+                                dyn_row = self._to_table(obj.dynamics, s, cascade=cascade)
+                                dyn_row = self._upsert_row(obj.dynamics, dyn_row, s)  # type: ignore[arg-type]
+                                s.add(dyn_row)
+                                s.flush()
+                                dyn_id = dyn_row.id
+                            dynamics_cache[dyn_key] = dyn_id
+
+                    series_key = (par_id, obj.model_version, pol_id, dyn_id, obj.country)
+                    if replace and series_key not in deleted_series:
+                        deleted_series.add(series_key)
+                        keys_to_delete.append(series_key)
+
+                    # Build row dict for insert (no extra lookups)
+                    new_id = uuid.uuid4()
+                    pv_rows.append(
+                        {
+                            "id": new_id,
+                            "policy_id": pol_id,
+                            "dynamics_id": dyn_id,
+                            "parameter_id": par_id,
+                            "model_version": obj.model_version,
+                            "start_date": obj.start_date,
+                            "end_date": obj.end_date,
+                            "value": self._json_safe_value(obj.value),
+                            "country": obj.country,
+                        }
+                    )
+
+                if verbose:
+                    if replace:
+                        print(f"Chunk {start}-{end}: deleting {len(keys_to_delete)} series and inserting {len(pv_rows)} rows...")
+                    else:
+                        print(f"Chunk {start}-{end}: inserting {len(pv_rows)} rows...")
+
+                # Phase 2: perform series deletes for this unseen set
+                if replace and keys_to_delete:
+                    for (parameter_id, model_version, policy_id, dynamics_id, country) in keys_to_delete:
+                        conds = [
+                            PVTable.parameter_id == parameter_id,
+                            PVTable.model_version == model_version,
+                            PVTable.country == country,
+                        ]
+                        conds.append(
+                            PVTable.policy_id.is_(None)
+                            if policy_id is None
+                            else PVTable.policy_id == policy_id
+                        )
+                        conds.append(
+                            PVTable.dynamics_id.is_(None)
+                            if dynamics_id is None
+                            else PVTable.dynamics_id == dynamics_id
+                        )
+                        s.exec(delete(PVTable).where(*conds))
+
+                # Phase 3: bulk insert rows for this chunk
+                if pv_rows:
+                    s.exec(sa_insert(PVTable).values(pv_rows))
+                s.commit()
+
+                processed += len(batch)
+                if pbar is not None:
+                    pbar.update(len(batch))
+                if verbose and processed % 10000 == 0:
+                    print(f"Processed {processed}/{total} values...")
+
+            if pbar is not None:
+                pbar.close()
+            if verbose:
+                print("Bulk load complete.")
+
+        return None
+
+    
 
     # ------------------- Seeding -------------------
     def seed(self, countries: Iterable[str]) -> None:
@@ -271,6 +383,7 @@ class Database:
                 md = get_us_metadata()
             else:
                 raise ValueError(f"Unknown country code for seeding: {country}")
+            
 
             # Upsert policy and dynamics anchors
             anchor_objs = []
@@ -291,7 +404,7 @@ class Database:
             if variables:
                 self.add_all(variables, refresh=False)
 
-            # Parameter values (cascades will create parameters)
+            # Parameter values (parameters are added first; then values)
             pvalues = []
             for pv in md.get("parameter_values", []) or []:
                 pv.country = country
@@ -299,7 +412,25 @@ class Database:
                     pv.parameter.country = country
                 pvalues.append(pv)
             if pvalues:
-                self.add_all(pvalues, refresh=False)
+                # First add all unique parameters referenced by values
+                unique_params = {}
+                for pv in pvalues:
+                    if pv.parameter is not None:
+                        key = (pv.parameter.name, pv.parameter.country)
+                        if key not in unique_params:
+                            unique_params[key] = pv.parameter
+                if unique_params:
+                    self.add_all(unique_params.values(), refresh=False, progress=True, chunk_size=1000)
+
+                # Then add values without replacement or auto-linking
+                self.add_parameter_values_bulk(
+                    pvalues,
+                    cascade=False,
+                    chunk_size=2000,
+                    progress=True,
+                    verbose=True,
+                    replace=False,
+                )
 
             # Country datasets provided by metadata
             datasets = md.get("datasets") or []
@@ -458,30 +589,38 @@ class Database:
             )
 
         if isinstance(obj, ParameterValue):
-            # Ensure dependent objects exist if cascading
+            # Do not auto-create/link related rows here; only resolve by lookup.
+            from policyengine.tables import ParameterTable as PTable, PolicyTable as PoTable, DynamicsTable as DTable
+
+            # parameter is required and must already exist (by name+country)
+            if obj.parameter is None:
+                raise ValueError("ParameterValue.parameter is required")
+            par = obj.parameter
+            par_row = s.exec(select(PTable).where(PTable.name == par.name, PTable.country == par.country)).first()
+            if par_row is None:
+                raise ValueError(f"Parameter not found for value: {par.name} ({par.country})")
+
             policy_id = None
-            dynamics_id = None
-            parameter_id = None
-            if obj.policy is not None and cascade:
-                pol_row = self._to_table(obj.policy, s, cascade=cascade)
-                s.add(pol_row)
-                s.flush()
+            if obj.policy is not None:
+                pol = obj.policy
+                pol_row = s.exec(select(PoTable).where(PoTable.name == pol.name, PoTable.country == pol.country)).first()
+                if pol_row is None:
+                    raise ValueError(f"Policy not found for value: {pol.name} ({pol.country})")
                 policy_id = pol_row.id
-            if obj.dynamics is not None and cascade:
-                dyn_row = self._to_table(obj.dynamics, s, cascade=cascade)
-                s.add(dyn_row)
-                s.flush()
+
+            dynamics_id = None
+            if obj.dynamics is not None:
+                dyn = obj.dynamics
+                dyn_row = s.exec(select(DTable).where(DTable.name == dyn.name, DTable.country == dyn.country)).first()
+                if dyn_row is None:
+                    raise ValueError(f"Dynamics not found for value: {dyn.name} ({dyn.country})")
                 dynamics_id = dyn_row.id
-            # parameter is required
-            par_row = self._to_table(obj.parameter, s, cascade=cascade)
-            s.add(par_row)
-            s.flush()
-            parameter_id = par_row.id
+
             # JSON-safe value handling (inf/-inf, NaN)
             return ParameterValueTable(
                 policy_id=policy_id,
                 dynamics_id=dynamics_id,
-                parameter_id=parameter_id,  # type: ignore[arg-type]
+                parameter_id=par_row.id,  # type: ignore[arg-type]
                 model_version=obj.model_version,
                 start_date=obj.start_date,
                 end_date=obj.end_date,

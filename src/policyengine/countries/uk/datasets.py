@@ -8,15 +8,22 @@ from policyengine.models.dataset import Dataset
 from policyengine.models.single_year_dataset import SingleYearDataset
 from policyengine.models.enums import DatasetType
 
+def create_efrs_years(start_year: int, end_year: int) -> list[Dataset]:
+    """Create the UK EFRS datasets for a range of years."""
+    from policyengine_uk import Microsimulation
 
-def create_efrs(year: int = 2029) -> Dataset:
+    sim = Microsimulation()
+    return [create_efrs(year=year, sim=sim) for year in range(start_year, end_year + 1)]
+
+
+def create_efrs(year: int = 2029, sim: "Microsimulation" | None = None) -> Dataset:
     """Create the UK EFRS dataset for a given year (default 2029).
 
     Uses the policyengine_uk Microsimulation’s bundled dataset tables.
     """
-    from policyengine_uk import Microsimulation
-
-    sim = Microsimulation()
+    if sim is None:
+        from policyengine_uk import Microsimulation
+        sim = Microsimulation()
     tables = dict(
         person=getattr(sim.dataset[year], "person", None),
         benunit=getattr(sim.dataset[year], "benunit", getattr(sim.dataset[year], "benefit_unit", None)),
@@ -28,7 +35,7 @@ def create_efrs(year: int = 2029) -> Dataset:
         tables=tables,
         year=year,
     )
-    return Dataset(name="efrs", data=data, dataset_type=DatasetType.UK)
+    return Dataset(name=f"efrs_{year}", data=data, dataset_type=DatasetType.UK)
 
 
 def create_uk_synthetic(year: int = 2029) -> Dataset:
