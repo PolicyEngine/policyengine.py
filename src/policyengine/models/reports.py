@@ -3,16 +3,14 @@
 Includes `ReportElementDataItem`, `ReportElement`, and `Report` models.
 """
 
-from typing import Optional
+from typing import Optional, List
 
 import pandas as pd
 from pydantic import BaseModel
 
 from .enums import OperationStatus
-
-
-class ReportElementDataItem(BaseModel):
-    report_element: "ReportElement"
+from microdf import MicroDataFrame
+from enum import Enum
 
 
 class ReportElement(BaseModel):
@@ -23,27 +21,11 @@ class ReportElement(BaseModel):
 
     name: str | None = None
     description: str | None = None
-    data_items: list[ReportElementDataItem] = []
     report: Optional["Report"] = None
     status: OperationStatus = OperationStatus.PENDING
     country: str | None = None
-    data_item_type: str | None = None
 
-    @property
-    def data(self) -> pd.DataFrame:
-        # Get pydantic fields from reportelementdataitem-inheriting classes
-        data: list[dict[str, object]] = []
-        for item in self.data_items:
-            non_inherited_fields = (
-                type(item).model_fields.keys()
-                - ReportElementDataItem.model_fields.keys()
-            )
-            data.append(
-                {key: getattr(item, key) for key in non_inherited_fields}
-            )
-        return pd.DataFrame(data)
-
-    def run(self):
+    def run(self) -> pd.DataFrame:
         raise NotImplementedError(
             "ReportElement run method must be implemented in "
             "country-specific subclass."
@@ -57,3 +39,42 @@ class Report(BaseModel):
     description: str | None = None
     elements: list[ReportElement] = []
     country: str | None = None
+
+
+class AggregateType(str, Enum):
+    MEAN = "mean"
+    MEDIAN = "median"
+    SUM = "sum"
+
+
+class Aggregate(BaseModel):
+    simulation: "Simulation"
+    type: AggregateType
+    variable: str
+    value: str
+
+
+class AggregateChangeReportElement(ReportElement):
+    simulations: List["Simulation"] = []
+    variables: List[str] = ["gov_balance"]
+    aggregate_type: AggregateType = AggregateType.MEAN
+
+    def run(self) -> pd.DataFrame:
+        results = []
+        for sim in self.simulations:
+            for variable in self.variables:
+                for table in sim.result.data.tables.values():
+                    table = MicroDataFrame(table, weights="weight_value")
+                    if variable in table.columns:
+                        results.append(
+                            dict(
+                                simulation=sim,
+                                variable=variable,
+                                value={
+                                    "mean": table[variable].mean(),
+                                    "median": table[variable].median(),
+                                    "sum": table[variable].sum(),
+                                }[self.aggregate_type],
+                            )
+                        )
+        return pd.DataFrame(results)

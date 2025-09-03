@@ -22,14 +22,13 @@ class Simulation(BaseModel):
     dataset: Dataset
     policy: Policy
     dynamics: Dynamics
-    output_data: Any | None = None
+    result: Any | None = None
     model_version: str | None = None
     country: str
 
     # Processing metadata
     status: OperationStatus = OperationStatus.PENDING
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
+    created_at: datetime = datetime.now()
     completed_at: datetime | None = None
 
     def run(self) -> Dataset:
@@ -37,4 +36,12 @@ class Simulation(BaseModel):
         if self.country == "uk":
             from policyengine.countries.uk.simulation import run_uk_simulation
 
-            return run_uk_simulation(self)
+            run_uk_simulation(self)
+        elif self.country == "us":
+            from policyengine.countries.us.simulation import run_us_simulation
+
+            run_us_simulation(self)
+
+        self.status = OperationStatus.COMPLETED
+        self.completed_at = datetime.now()
+        return self.dataset

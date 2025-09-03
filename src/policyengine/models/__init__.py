@@ -12,21 +12,7 @@ from .dynamics import Dynamics
 from .enums import DatasetType, OperationStatus
 from .parameter import Parameter, ParameterValue
 from .policy import Policy
-from .reports import Report, ReportElement, ReportElementDataItem
+from .reports import Report, ReportElement, AggregateChangeReportElement
 from .simulation import Simulation
 from .variable import Variable
-
-__all__ = [
-    "OperationStatus",
-    "DatasetType",
-    "Dataset",
-    "Policy",
-    "Dynamics",
-    "Simulation",
-    "ReportElementDataItem",
-    "ReportElement",
-    "Report",
-    "Variable",
-    "Parameter",
-    "ParameterValue",
-]
+from .single_year_dataset import SingleYearDataset
