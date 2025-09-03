@@ -16,3 +16,19 @@ from .reports import Report, ReportElement, AggregateChangeReportElement
 from .simulation import Simulation
 from .variable import Variable
 from .single_year_dataset import SingleYearDataset
+from .user import User, UserPolicy, UserSimulation, UserReport, UserReportElement
+
+# Resolve forward references for Pydantic models that reference each other
+try:
+    Policy.model_rebuild()
+    Dynamics.model_rebuild()
+    ParameterValue.model_rebuild()
+    Report.model_rebuild()
+    ReportElement.model_rebuild()
+    UserPolicy.model_rebuild()
+    UserSimulation.model_rebuild()
+    UserReport.model_rebuild()
+    UserReportElement.model_rebuild()
+except Exception:
+    # In case of partial imports during docs or static analysis
+    pass

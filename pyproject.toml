@@ -17,6 +17,7 @@ dependencies = [
     "policyengine-uk",
     "policyengine-us>=1.213.1",
     "sqlalchemy>=2.0.0",
+    "sqlmodel>=0.0.21",
     "alembic>=1.13.0",
     "psycopg2-binary>=2.9.0",
     "pymysql>=1.1.0",
