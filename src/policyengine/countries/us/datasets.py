@@ -8,11 +8,42 @@ from policyengine.models.dataset import Dataset
 from policyengine.models.single_year_dataset import SingleYearDataset
 from policyengine.models.enums import DatasetType
 
+US_HUGGING_FACE_REPO = "policyengine/policyengine-us-data"
+US_HUGGING_FACE_DATASETS = [
+    "enhanced_cps_2024.h5"
+]
+
 
 def create_ecps_years(start_year: int, end_year: int) -> list[Dataset]:
     from policyengine_us import Microsimulation
 
     sim = Microsimulation()
+
+    return [
+        create_ecps(year=year, sim=sim)
+        for year in range(start_year, end_year + 1)
+    ]
+
+
+def create_ecps_years_from_hf(
+    start_year: int,
+    end_year: int,
+    *,
+    repo: str,
+    filename: str,
+    version: str | None = None,
+) -> list[Dataset]:
+    """Create ECPS datasets using a Hugging Face dataset file as the base year.
+
+    Constructs a `Microsimulation` with `dataset="hf://{repo}/{filename}[@{version}]"`
+    and then materialises dataset rows for the requested range.
+    """
+    from policyengine_us import Microsimulation
+
+    base = f"hf://{repo}/{filename}"
+    if version:
+        base = f"{base}@{version}"
+    sim = Microsimulation(dataset=base)
 
     return [
         create_ecps(year=year, sim=sim)

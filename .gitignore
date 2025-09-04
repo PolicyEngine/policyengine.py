@@ -5,3 +5,5 @@ _build/
 simulations/
 test.*
 supabase/
+.env
+**/review.md

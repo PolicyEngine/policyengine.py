@@ -8,12 +8,43 @@ from policyengine.models.dataset import Dataset
 from policyengine.models.single_year_dataset import SingleYearDataset
 from policyengine.models.enums import DatasetType
 
+UK_HUGGING_FACE_REPO = "policyengine/policyengine-uk-data-private"
+UK_HUGGING_FACE_FILENAMES = [
+    "enhanced_frs_2023_24.h5",
+    "frs_2023_24.h5",
+]
+
 
 def create_efrs_years(start_year: int, end_year: int) -> list[Dataset]:
     """Create the UK EFRS datasets for a range of years."""
     from policyengine_uk import Microsimulation
 
     sim = Microsimulation()
+    return [
+        create_efrs(year=year, sim=sim)
+        for year in range(start_year, end_year + 1)
+    ]
+
+
+def create_efrs_years_from_hf(
+    start_year: int,
+    end_year: int,
+    *,
+    repo: str,
+    filename: str,
+    version: str | None = None,
+) -> list[Dataset]:
+    """Create EFRS datasets using a Hugging Face dataset file as the base year.
+
+    Constructs a `Microsimulation` with `dataset="hf://{repo}/{filename}[@{version}]"`
+    and then materialises dataset rows for the requested range.
+    """
+    from policyengine_uk import Microsimulation
+
+    base = f"hf://{repo}/{filename}"
+    if version:
+        base = f"{base}@{version}"
+    sim = Microsimulation(dataset=base)
     return [
         create_efrs(year=year, sim=sim)
         for year in range(start_year, end_year + 1)
