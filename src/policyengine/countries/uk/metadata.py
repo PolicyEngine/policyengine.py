@@ -4,9 +4,10 @@ from policyengine.countries.uk.datasets import create_efrs_years
 
 
 def get_uk_metadata():
-    md = get_metadata(system, country="uk")
+    """Return UK model metadata (variables, parameters, values) only."""
+    return get_metadata(system, country="uk")
 
-    datasets = create_efrs_years(2023, 2030)
 
-    md["datasets"] = datasets
-    return md
+def get_uk_datasets(start_year: int = 2023, end_year: int = 2030):
+    """Return UK dataset rows for the given range (default 2023–2030)."""
+    return create_efrs_years(start_year, end_year)

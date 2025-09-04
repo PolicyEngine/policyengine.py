@@ -15,11 +15,6 @@ from .policy import Policy
 from .reports import (
     Report,
     ReportElement,
-    Aggregate,
-    AggregateMetric,
-    ChangeByBaselineGroup,
-    VariableChangeGroupByQuantileGroup,
-    VariableChangeGroupByVariableValue,
 )
 from .simulation import Simulation
 from .variable import Variable
@@ -39,10 +34,7 @@ try:
     ParameterValue.model_rebuild()
     Report.model_rebuild()
     ReportElement.model_rebuild()
-    Aggregate.model_rebuild()
-    ChangeByBaselineGroup.model_rebuild()
-    VariableChangeGroupByQuantileGroup.model_rebuild()
-    VariableChangeGroupByVariableValue.model_rebuild()
+    # Data items rebuilt when their modules are imported directly
     UserPolicy.model_rebuild()
     UserSimulation.model_rebuild()
     UserReport.model_rebuild()

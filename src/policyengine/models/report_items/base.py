@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Iterable, List
+from typing import Iterable
 
 import pandas as pd
 from pydantic import BaseModel
+
 from policyengine.models.simulation import Simulation
 
 
@@ -28,7 +29,6 @@ class ReportElementDataItem(BaseModel):
         rows = []
         for r in records:
             row: dict[str, object] = {}
-            # iterate raw field values to preserve object types
             for k in getattr(r, "model_fields").keys():
                 v = getattr(r, k)
                 if isinstance(v, Simulation):

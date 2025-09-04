@@ -5,9 +5,7 @@ import pandas as pd
 from policyengine.models import Dataset, DatasetType, Policy, Dynamics
 from policyengine.models.single_year_dataset import SingleYearDataset
 from policyengine.models.simulation import Simulation
-from policyengine.report_elements import AggregateReportElement
-from policyengine.models.reports import AggregateMetric
-from policyengine.models.aggregate import Aggregate
+from policyengine.models.report_items import Aggregate, AggregateMetric
 
 
 def _mk_sim_with_person_table(
@@ -37,14 +35,13 @@ def test_aggregate_report_element_grouped_mean():
     )
 
     sim = _mk_sim_with_person_table(df)
-    el = AggregateReportElement(
+    records = Aggregate.build(
         simulation=sim,
         variable="is_in_poverty",
         entity_level="person",
         filter_variable="race_ethnicity",
         metric=AggregateMetric.MEAN,
     )
-    records = el.run()
     assert isinstance(records, list) and all(
         isinstance(r, type(records[0])) for r in records
     )
@@ -71,8 +68,7 @@ def test_to_dataframe_flattens_simulation_columns():
     sim.dataset.name = "D"
     sim.dynamics.name = "X"
 
-    el = AggregateReportElement(simulation=sim, variable="var")
-    recs = el.run()
+    recs = Aggregate.build(simulation=sim, variable="var")
     dfx = Aggregate.to_dataframe(recs)
     # Simulation column is flattened to policy/dataset/dynamics
     assert "simulation" not in dfx.columns

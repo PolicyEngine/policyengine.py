@@ -476,10 +476,25 @@ class Database:
                     replace=False,
                 )
 
-            # Country datasets provided by metadata
-            datasets = md.get("datasets") or []
+            # Country datasets (default range) – sourced via dedicated helpers
+            try:
+                if country == "uk":
+                    from policyengine.countries.uk.metadata import (
+                        get_uk_datasets,
+                    )
+
+                    datasets = get_uk_datasets(2023, 2030)
+                elif country == "us":
+                    from policyengine.countries.us.metadata import (
+                        get_us_datasets,
+                    )
+
+                    datasets = get_us_datasets(2024, 2035)
+                else:
+                    datasets = []
+            except Exception:
+                datasets = []
             if datasets:
-                # ensure dataset names are set and deduplicate by name
                 self.add_all(datasets, refresh=False)
 
     def get(

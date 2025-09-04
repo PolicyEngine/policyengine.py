@@ -233,21 +233,17 @@ def seed_datasets(
         task_build = progress.add_task("Building dataset rows...", total=None)
         try:
             if country == "uk" and family == "efrs":
-                from policyengine.countries.uk.datasets import (
-                    create_efrs_years,
-                )
+                from policyengine.countries.uk.metadata import get_uk_datasets
 
                 s = start_year if start_year is not None else 2023
                 e = end_year if end_year is not None else 2030
-                datasets = create_efrs_years(s, e)
+                datasets = get_uk_datasets(s, e)
             elif country == "us" and family == "ecps":
-                from policyengine.countries.us.datasets import (
-                    create_ecps_years,
-                )
+                from policyengine.countries.us.metadata import get_us_datasets
 
                 s = start_year if start_year is not None else 2024
                 e = end_year if end_year is not None else 2035
-                datasets = create_ecps_years(s, e)
+                datasets = get_us_datasets(s, e)
             else:
                 raise SystemExit(
                     f"Unknown dataset family for {country}: {family}"
@@ -257,17 +253,17 @@ def seed_datasets(
             progress.stop()
     else:
         if country == "uk" and family == "efrs":
-            from policyengine.countries.uk.datasets import create_efrs_years
+            from policyengine.countries.uk.metadata import get_uk_datasets
 
             s = start_year if start_year is not None else 2023
             e = end_year if end_year is not None else 2030
-            datasets = create_efrs_years(s, e)
+            datasets = get_uk_datasets(s, e)
         elif country == "us" and family == "ecps":
-            from policyengine.countries.us.datasets import create_ecps_years
+            from policyengine.countries.us.metadata import get_us_datasets
 
             s = start_year if start_year is not None else 2024
             e = end_year if end_year is not None else 2035
-            datasets = create_ecps_years(s, e)
+            datasets = get_us_datasets(s, e)
         else:
             raise SystemExit(f"Unknown dataset family for {country}: {family}")
 
@@ -348,6 +344,18 @@ def main(argv: list[str] | None = None) -> None:
         help="End year (optional)",
     )
 
+    # reset
+    p_reset = sub.add_parser(
+        "reset", help="Drop and recreate all tables (DESTROYS DATA)"
+    )
+    p_reset.add_argument(
+        "-y",
+        "--yes",
+        dest="yes",
+        action="store_true",
+        help="Do not prompt for confirmation",
+    )
+
     args = parser.parse_args(argv)
 
     db = Database(url=args.db_url)
@@ -373,6 +381,22 @@ def main(argv: list[str] | None = None) -> None:
             end_year=args.end_year,
         )
         _log(f"[done] datasets={n}")
+        return
+
+    if args.cmd == "reset":
+        if not getattr(args, "yes", False):
+            try:
+                confirm = input(
+                    "This will DELETE ALL data and recreate tables. Type 'yes' to proceed: "
+                ).strip()
+            except EOFError:
+                confirm = ""
+            if confirm.lower() != "yes":
+                _log("Aborted.")
+                return
+        _log("[migrate] Resetting database (drop + create all tables)...")
+        db.reset()
+        _log("[done] Database reset complete.")
         return
 
 

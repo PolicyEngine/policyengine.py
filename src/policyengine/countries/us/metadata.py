@@ -4,9 +4,10 @@ from policyengine.countries.us.datasets import create_ecps_years
 
 
 def get_us_metadata():
-    md = get_metadata(system, country="us")
+    """Return US model metadata (variables, parameters, values) only."""
+    return get_metadata(system, country="us")
 
-    datasets = create_ecps_years(2024, 2035)
 
-    md["datasets"] = datasets
-    return md
+def get_us_datasets(start_year: int = 2024, end_year: int = 2035):
+    """Return US dataset rows for the given range (default 2024–2035)."""
+    return create_ecps_years(start_year, end_year)

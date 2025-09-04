@@ -62,3 +62,8 @@ __all__ = [
     "seed_us_ecps_datasets",
     "cli_main",
 ]
+
+
+def reset_db(db):
+    """Drop and recreate all tables."""
+    db.reset()
