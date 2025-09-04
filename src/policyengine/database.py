@@ -57,7 +57,6 @@ from policyengine.tables import (
 
 BM = TypeVar("BM")
 
-
 class Database:
     """Lightweight Database layer bridging BaseModels and SQLModel tables.
 
@@ -71,11 +70,10 @@ class Database:
 
     def __init__(
         self,
-        url: str = "sqlite:///policyengine.db",
-        echo: bool = False,
+        url: str = "sqlite:///:memory:",
         seed_countries: Iterable[str] | None = None,
     ):
-        self.engine = create_engine(url, echo=echo, future=True)
+        self.engine = create_engine(url=url)
         SQLModel.metadata.create_all(self.engine)
 
         # Mapping between BaseModel classes and SQLModel table classes

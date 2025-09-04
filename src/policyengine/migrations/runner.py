@@ -18,29 +18,24 @@ from policyengine.database import Database
 
 
 def _prompt_select(prompt: str, choices: list[str]) -> str:
-    """Prompt user to select from choices. Falls back to text input.
+    """Simple numeric selection prompt.
 
+    Displays a numbered list and asks the user to enter a number.
     Returns the selected value from `choices`.
     """
-    try:
-        from rich.prompt import Prompt
-
-        return str(Prompt.ask(prompt, choices=choices))
-    except Exception:
-        # Fallback: numeric menu
-        while True:
-            _log(f"{prompt}:")
-            for i, ch in enumerate(choices, start=1):
-                _log(f"  {i}. {ch}")
-            try:
-                sel = input("Enter number: ").strip()
-            except EOFError:
-                sel = ""
-            if sel.isdigit():
-                idx = int(sel) - 1
-                if 0 <= idx < len(choices):
-                    return choices[idx]
-            _log("Invalid selection, try again.")
+    while True:
+        _log(f"{prompt}:")
+        for i, ch in enumerate(choices, start=1):
+            _log(f"  {i}. {ch}")
+        try:
+            sel = input("Enter number: ").strip()
+        except EOFError:
+            sel = ""
+        if sel.isdigit():
+            idx = int(sel) - 1
+            if 0 <= idx < len(choices):
+                return choices[idx]
+        _log("Invalid selection, try again.")
 
 
 def _hf_list_tags(repo: str, *, repo_type: str = "datasets") -> list[str]:
@@ -141,18 +136,14 @@ def _policyengine_db_url() -> str:
             "POLICYENGINE_DB_PASSWORD is not set. Add it to your .env."
         )
     # Fixed connection parameters (no password embedded here)
-    user = os.getenv("POLICYENGINE_DB_USER", "postgres")
+    user = os.getenv("POLICYENGINE_DB_USER", "postgres.usugnrssspkdutcjeevk")
     host = os.getenv(
-        "POLICYENGINE_DB_HOST", "db.usugnrssspkdutcjeevk.supabase.co"
+        "POLICYENGINE_DB_HOST", "aws-1-us-east-1.pooler.supabase.com"
     )
     port = int(os.getenv("POLICYENGINE_DB_PORT", "5432"))
     dbname = os.getenv("POLICYENGINE_DB_NAME", "postgres")
-    sslmode = os.getenv("POLICYENGINE_DB_SSLMODE", "")
-    # Match the expected DSN shape exactly; add sslmode only if provided
-    dsn = f"postgresql://{user}:{pwd}@{host}:{port}/{dbname}"
-    if sslmode:
-        dsn = f"{dsn}?sslmode={sslmode}"
-    return dsn
+    # Match the expected DSN shape exactly
+    return f"postgresql://{user}:{pwd}@{host}:{port}/{dbname}"
 
 
 def seed_model(db: Database, country: str) -> dict[str, int]:
