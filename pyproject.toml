@@ -11,7 +11,7 @@ authors = [
     {name = "PolicyEngine", email = "hello@policyengine.org"},
 ]
 license = {file = "LICENSE"}
-requires-python = ">=3.6"
+requires-python = ">=3.13"
 dependencies = [
     "policyengine_core>=3.10",
     "policyengine-uk",
@@ -25,7 +25,9 @@ dependencies = [
     "microdf_python",
     "getpass4",
     "pydantic>=2.0.0",
-    "pandas>=2.0.0"
+    "pandas>=2.0.0",
+    "rich>=13.0.0",
+    "ipywidgets>=8.0.0",
 ]
 
 [project.optional-dependencies]
@@ -51,6 +53,9 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "policyengine" = ["**/*"]
+
+[project.scripts]
+pe-migrate = "policyengine.migrations.runner:main"
 
 [tool.pytest.ini_options]
 addopts = "-v"

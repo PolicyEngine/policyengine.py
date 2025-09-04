@@ -24,4 +24,3 @@ class Aggregate(ReportElementDataItem):
     filter_variable_max_value: float | None = None
     metric: AggregateMetric
     value: float
-

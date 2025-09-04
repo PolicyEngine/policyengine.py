@@ -10,7 +10,9 @@ from policyengine.models.reports import AggregateMetric
 from policyengine.models.aggregate import Aggregate
 
 
-def _mk_sim_with_person_table(df: pd.DataFrame, year: int = 2025) -> Simulation:
+def _mk_sim_with_person_table(
+    df: pd.DataFrame, year: int = 2025
+) -> Simulation:
     syd = SingleYearDataset(tables={"person": df}, year=year)
     ds = Dataset(name="ds", data=syd, dataset_type=DatasetType.UK)
     sim = Simulation(
@@ -43,7 +45,9 @@ def test_aggregate_report_element_grouped_mean():
         metric=AggregateMetric.MEAN,
     )
     records = el.run()
-    assert isinstance(records, list) and all(isinstance(r, type(records[0])) for r in records)
+    assert isinstance(records, list) and all(
+        isinstance(r, type(records[0])) for r in records
+    )
     # Expect two groups A and B
     assert len(records) == 2
 

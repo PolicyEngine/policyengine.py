@@ -15,12 +15,15 @@ def _has_pkg(mod_path: str) -> bool:
         return False
 
 
-@pytest.mark.parametrize("country,mod", [
-    ("uk", "policyengine.countries.uk.metadata"),
-    ("us", "policyengine.countries.us.metadata"),
-])
+@pytest.mark.parametrize(
+    "country,mod",
+    [
+        ("uk", "policyengine.countries.uk.metadata"),
+        ("us", "policyengine.countries.us.metadata"),
+    ],
+)
 def test_seed_country(tmp_path, country, mod):
-    if not _has_pkg(mod.split(':')[0]):
+    if not _has_pkg(mod.split(":")[0]):
         pytest.skip(f"Missing package for {country}")
 
     db_path = tmp_path / f"seed_{country}.db"

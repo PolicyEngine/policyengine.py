@@ -14,7 +14,9 @@ class ReportElementDataItem(BaseModel):
     """
 
     @classmethod
-    def to_dataframe(cls, records: Iterable["ReportElementDataItem"]) -> pd.DataFrame:
+    def to_dataframe(
+        cls, records: Iterable["ReportElementDataItem"]
+    ) -> pd.DataFrame:
         """Convert records to a DataFrame.
 
         Default rule: if a field is a Simulation, replace it with columns for
@@ -36,9 +38,15 @@ class ReportElementDataItem(BaseModel):
                         prefix = k[: -len("_simulation")] + "_"
                     else:
                         prefix = k + "_"
-                    row[prefix + "policy"] = getattr(getattr(v, "policy", None), "name", None)
-                    row[prefix + "dataset"] = getattr(getattr(v, "dataset", None), "name", None)
-                    row[prefix + "dynamics"] = getattr(getattr(v, "dynamics", None), "name", None)
+                    row[prefix + "policy"] = getattr(
+                        getattr(v, "policy", None), "name", None
+                    )
+                    row[prefix + "dataset"] = getattr(
+                        getattr(v, "dataset", None), "name", None
+                    )
+                    row[prefix + "dynamics"] = getattr(
+                        getattr(v, "dynamics", None), "name", None
+                    )
                 else:
                     row[k] = v
             rows.append(row)

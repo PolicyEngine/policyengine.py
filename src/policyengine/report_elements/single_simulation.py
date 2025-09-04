@@ -61,7 +61,11 @@ class AggregateReportElement(ReportElement):
         use_weights = "weight_value" in table.columns
 
         def compute_metric_from_df(df: pd.DataFrame) -> float:
-            mdf = MicroDataFrame(df, weights="weight_value") if use_weights else MicroDataFrame(df)
+            mdf = (
+                MicroDataFrame(df, weights="weight_value")
+                if use_weights
+                else MicroDataFrame(df)
+            )
             s = mdf[self.variable]
             if self.metric == AggregateMetric.MEAN:
                 return float(s.mean())

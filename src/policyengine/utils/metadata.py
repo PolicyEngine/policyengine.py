@@ -1,6 +1,12 @@
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
 from policyengine_core.parameters import Parameter as CoreParameter
-from policyengine.models import Parameter, ParameterValue, Variable, Policy, Dynamics
+from policyengine.models import (
+    Parameter,
+    ParameterValue,
+    Variable,
+    Policy,
+    Dynamics,
+)
 import datetime
 from policyengine.utils.version import get_model_version
 
@@ -12,7 +18,16 @@ def get_metadata(system: TaxBenefitSystem, country: str):
     parameter_values = []
     version = get_model_version(country)
 
-    for param in system.parameters.get_descendants():
+    param_tree = system.parameters
+
+    # TEMPORARY FOR DEBUGGING: RESTRICT TO A SUBSET
+
+    if country == "uk":
+        param_tree = param_tree.gov.hmrc.income_tax
+    elif country == "us":
+        param_tree = param_tree.gov.irs.credits
+
+    for param in param_tree.get_descendants():
         if isinstance(param, CoreParameter):
             p = Parameter(
                 name=param.name,
@@ -25,7 +40,7 @@ def get_metadata(system: TaxBenefitSystem, country: str):
 
             # Also add values
             values_list = param.values_list[::-1]
-            for i in range(len(values_list)): # Moving forwards in time
+            for i in range(len(values_list)):  # Moving forwards in time
                 if i == len(values_list) - 1:
                     end_date = None
                 else:
@@ -41,7 +56,7 @@ def get_metadata(system: TaxBenefitSystem, country: str):
                 )
                 parameter_values.append(p_value)
 
-        else: # Parameter subfolder
+        else:  # Parameter subfolder
             p = Parameter(
                 name=param.name,
                 label=param.metadata.get("label"),
@@ -62,7 +77,7 @@ def get_metadata(system: TaxBenefitSystem, country: str):
             unit=variable.unit,
             data_type=variable.value_type,
             country=country,
-            entity=variable.entity.key
+            entity=variable.entity.key,
         )
         variables.append(v)
 
@@ -73,6 +88,7 @@ def get_metadata(system: TaxBenefitSystem, country: str):
         "parameter_values": parameter_values,
         "variables": variables,
     }
+
 
 def _safe_date(date_str: str | None) -> datetime.datetime | None:
     """Parse a date safely.

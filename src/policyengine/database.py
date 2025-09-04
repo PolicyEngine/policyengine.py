@@ -2,7 +2,17 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Dict, Generator, Iterable, Optional, Tuple, Type, TypeVar, Union
+from typing import (
+    Any,
+    Dict,
+    Generator,
+    Iterable,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
 from uuid import UUID
 
 from sqlmodel import SQLModel, Session, create_engine, select
@@ -209,7 +219,9 @@ class Database:
                 try:
                     from tqdm.auto import tqdm  # type: ignore
 
-                    pbar = tqdm(total=total, desc="Parameter values", unit="row")
+                    pbar = tqdm(
+                        total=total, desc="Parameter values", unit="row"
+                    )
                 except Exception:
                     pbar = None
 
@@ -245,8 +257,12 @@ class Database:
                         if existing is not None:
                             par_id = existing.id
                         else:
-                            par_row = self._to_table(obj.parameter, s, cascade=cascade)
-                            par_row = self._upsert_row(obj.parameter, par_row, s)  # type: ignore[arg-type]
+                            par_row = self._to_table(
+                                obj.parameter, s, cascade=cascade
+                            )
+                            par_row = self._upsert_row(
+                                obj.parameter, par_row, s
+                            )  # type: ignore[arg-type]
                             s.add(par_row)
                             s.flush()
                             par_id = par_row.id
@@ -267,8 +283,12 @@ class Database:
                             if existing is not None:
                                 pol_id = existing.id
                             else:
-                                pol_row = self._to_table(obj.policy, s, cascade=cascade)
-                                pol_row = self._upsert_row(obj.policy, pol_row, s)  # type: ignore[arg-type]
+                                pol_row = self._to_table(
+                                    obj.policy, s, cascade=cascade
+                                )
+                                pol_row = self._upsert_row(
+                                    obj.policy, pol_row, s
+                                )  # type: ignore[arg-type]
                                 s.add(pol_row)
                                 s.flush()
                                 pol_id = pol_row.id
@@ -289,14 +309,24 @@ class Database:
                             if existing is not None:
                                 dyn_id = existing.id
                             else:
-                                dyn_row = self._to_table(obj.dynamics, s, cascade=cascade)
-                                dyn_row = self._upsert_row(obj.dynamics, dyn_row, s)  # type: ignore[arg-type]
+                                dyn_row = self._to_table(
+                                    obj.dynamics, s, cascade=cascade
+                                )
+                                dyn_row = self._upsert_row(
+                                    obj.dynamics, dyn_row, s
+                                )  # type: ignore[arg-type]
                                 s.add(dyn_row)
                                 s.flush()
                                 dyn_id = dyn_row.id
                             dynamics_cache[dyn_key] = dyn_id
 
-                    series_key = (par_id, obj.model_version, pol_id, dyn_id, obj.country)
+                    series_key = (
+                        par_id,
+                        obj.model_version,
+                        pol_id,
+                        dyn_id,
+                        obj.country,
+                    )
                     if replace and series_key not in deleted_series:
                         deleted_series.add(series_key)
                         keys_to_delete.append(series_key)
@@ -319,13 +349,23 @@ class Database:
 
                 if verbose:
                     if replace:
-                        print(f"Chunk {start}-{end}: deleting {len(keys_to_delete)} series and inserting {len(pv_rows)} rows...")
+                        print(
+                            f"Chunk {start}-{end}: deleting {len(keys_to_delete)} series and inserting {len(pv_rows)} rows..."
+                        )
                     else:
-                        print(f"Chunk {start}-{end}: inserting {len(pv_rows)} rows...")
+                        print(
+                            f"Chunk {start}-{end}: inserting {len(pv_rows)} rows..."
+                        )
 
                 # Phase 2: perform series deletes for this unseen set
                 if replace and keys_to_delete:
-                    for (parameter_id, model_version, policy_id, dynamics_id, country) in keys_to_delete:
+                    for (
+                        parameter_id,
+                        model_version,
+                        policy_id,
+                        dynamics_id,
+                        country,
+                    ) in keys_to_delete:
                         conds = [
                             PVTable.parameter_id == parameter_id,
                             PVTable.model_version == model_version,
@@ -361,8 +401,6 @@ class Database:
 
         return None
 
-    
-
     # ------------------- Seeding -------------------
     def seed(self, countries: Iterable[str]) -> None:
         """Seed database with metadata for selected countries.
@@ -382,8 +420,9 @@ class Database:
 
                 md = get_us_metadata()
             else:
-                raise ValueError(f"Unknown country code for seeding: {country}")
-            
+                raise ValueError(
+                    f"Unknown country code for seeding: {country}"
+                )
 
             # Upsert policy and dynamics anchors
             anchor_objs = []
@@ -420,7 +459,12 @@ class Database:
                         if key not in unique_params:
                             unique_params[key] = pv.parameter
                 if unique_params:
-                    self.add_all(unique_params.values(), refresh=False, progress=True, chunk_size=1000)
+                    self.add_all(
+                        unique_params.values(),
+                        refresh=False,
+                        progress=True,
+                        chunk_size=1000,
+                    )
 
                 # Then add values without replacement or auto-linking
                 self.add_parameter_values_bulk(
@@ -438,7 +482,14 @@ class Database:
                 # ensure dataset names are set and deduplicate by name
                 self.add_all(datasets, refresh=False)
 
-    def get(self, model_cls: Type[BM], id: Any | None = None, *, cascade: bool = False, **filters: Any) -> BM | None:
+    def get(
+        self,
+        model_cls: Type[BM],
+        id: Any | None = None,
+        *,
+        cascade: bool = False,
+        **filters: Any,
+    ) -> BM | None:
         """Load a BaseModel by primary key or by attribute filters.
 
         Examples:
@@ -457,7 +508,9 @@ class Database:
             conds = []
             for key, value in filters.items():
                 if not hasattr(table_cls, key):
-                    raise ValueError(f"Unknown field for {table_cls.__name__}: {key}")
+                    raise ValueError(
+                        f"Unknown field for {table_cls.__name__}: {key}"
+                    )
                 col = getattr(table_cls, key)
                 if value is None:
                     conds.append(col.is_(None))
@@ -470,7 +523,9 @@ class Database:
                 return None
             return self._to_model(row, s, cascade=cascade)
 
-    def list(self, model_cls: Type[BM], *, limit: int | None = None) -> list[BM]:
+    def list(
+        self, model_cls: Type[BM], *, limit: int | None = None
+    ) -> list[BM]:
         """List BaseModel instances for a given class."""
         table_cls = self._resolve_table_class(model_cls)
         with self.session() as s:
@@ -481,7 +536,9 @@ class Database:
             return [self._to_model(r, s, cascade=False) for r in rows]
 
     # ------------------- Mapping helpers -------------------
-    def _resolve_table_class(self, obj_or_cls: Union[Any, type]) -> type[SQLModel]:
+    def _resolve_table_class(
+        self, obj_or_cls: Union[Any, type]
+    ) -> type[SQLModel]:
         if isinstance(obj_or_cls, type):
             if obj_or_cls in self._bm_to_table:
                 return self._bm_to_table[obj_or_cls]
@@ -552,12 +609,16 @@ class Database:
 
         # Policy, Dynamics, Parameters
         if isinstance(obj, Policy):
-            return PolicyTable(name=obj.name, description=obj.description, country=obj.country)
+            return PolicyTable(
+                name=obj.name, description=obj.description, country=obj.country
+            )
 
         if isinstance(obj, Dynamics):
             parent_id = None
             if obj.parent_dynamics is not None and cascade:
-                parent_row = self._to_table(obj.parent_dynamics, s, cascade=cascade)
+                parent_row = self._to_table(
+                    obj.parent_dynamics, s, cascade=cascade
+                )
                 s.add(parent_row)
                 s.flush()
                 parent_id = parent_row.id
@@ -577,7 +638,11 @@ class Database:
                 s.add(parent_row)
                 s.flush()
                 parent_id = parent_row.id
-            data_type = obj.data_type.__name__ if isinstance(obj.data_type, type) else str(obj.data_type)
+            data_type = (
+                obj.data_type.__name__
+                if isinstance(obj.data_type, type)
+                else str(obj.data_type)
+            )
             return ParameterTable(
                 name=obj.name,
                 parent_id=parent_id,
@@ -590,30 +655,53 @@ class Database:
 
         if isinstance(obj, ParameterValue):
             # Do not auto-create/link related rows here; only resolve by lookup.
-            from policyengine.tables import ParameterTable as PTable, PolicyTable as PoTable, DynamicsTable as DTable
+            from policyengine.tables import (
+                ParameterTable as PTable,
+                PolicyTable as PoTable,
+                DynamicsTable as DTable,
+            )
 
             # parameter is required and must already exist (by name+country)
             if obj.parameter is None:
                 raise ValueError("ParameterValue.parameter is required")
             par = obj.parameter
-            par_row = s.exec(select(PTable).where(PTable.name == par.name, PTable.country == par.country)).first()
+            par_row = s.exec(
+                select(PTable).where(
+                    PTable.name == par.name, PTable.country == par.country
+                )
+            ).first()
             if par_row is None:
-                raise ValueError(f"Parameter not found for value: {par.name} ({par.country})")
+                raise ValueError(
+                    f"Parameter not found for value: {par.name} ({par.country})"
+                )
 
             policy_id = None
             if obj.policy is not None:
                 pol = obj.policy
-                pol_row = s.exec(select(PoTable).where(PoTable.name == pol.name, PoTable.country == pol.country)).first()
+                pol_row = s.exec(
+                    select(PoTable).where(
+                        PoTable.name == pol.name,
+                        PoTable.country == pol.country,
+                    )
+                ).first()
                 if pol_row is None:
-                    raise ValueError(f"Policy not found for value: {pol.name} ({pol.country})")
+                    raise ValueError(
+                        f"Policy not found for value: {pol.name} ({pol.country})"
+                    )
                 policy_id = pol_row.id
 
             dynamics_id = None
             if obj.dynamics is not None:
                 dyn = obj.dynamics
-                dyn_row = s.exec(select(DTable).where(DTable.name == dyn.name, DTable.country == dyn.country)).first()
+                dyn_row = s.exec(
+                    select(DTable).where(
+                        DTable.name == dyn.name, DTable.country == dyn.country
+                    )
+                ).first()
                 if dyn_row is None:
-                    raise ValueError(f"Dynamics not found for value: {dyn.name} ({dyn.country})")
+                    raise ValueError(
+                        f"Dynamics not found for value: {dyn.name} ({dyn.country})"
+                    )
                 dynamics_id = dyn_row.id
 
             # JSON-safe value handling (inf/-inf, NaN)
@@ -632,7 +720,9 @@ class Database:
         if isinstance(obj, Dataset):
             source_id = None
             if obj.source_dataset is not None and cascade:
-                src_row = self._to_table(obj.source_dataset, s, cascade=cascade)
+                src_row = self._to_table(
+                    obj.source_dataset, s, cascade=cascade
+                )
                 s.add(src_row)
                 s.flush()
                 source_id = src_row.id
@@ -686,7 +776,9 @@ class Database:
 
         # Reports
         if isinstance(obj, Report):
-            return ReportTable(name=obj.name, description=obj.description, country=obj.country)
+            return ReportTable(
+                name=obj.name, description=obj.description, country=obj.country
+            )
 
         if isinstance(obj, ReportElement):
             report_id = None
@@ -705,7 +797,11 @@ class Database:
 
         # Variable
         if isinstance(obj, Variable):
-            data_type = obj.data_type.__name__ if isinstance(obj.data_type, type) else str(obj.data_type)
+            data_type = (
+                obj.data_type.__name__
+                if isinstance(obj.data_type, type)
+                else str(obj.data_type)
+            )
             return VariableTable(
                 name=obj.name,
                 label=obj.label,
@@ -729,48 +825,90 @@ class Database:
             return User(id=row.id or 0, name=row.name, email=row.email)
 
         if isinstance(row, UserPolicyTable):
-            user = self._to_model(s.get(UserTable, row.user_id), s, cascade=False)
+            user = self._to_model(
+                s.get(UserTable, row.user_id), s, cascade=False
+            )
             policy = (
-                self._to_model(s.get(PolicyTable, row.policy_id), s, cascade=False)
+                self._to_model(
+                    s.get(PolicyTable, row.policy_id), s, cascade=False
+                )
                 if row.policy_id is not None
                 else None
             )
-            return UserPolicy(user=user, policy=policy, label=row.label, description=row.description)
+            return UserPolicy(
+                user=user,
+                policy=policy,
+                label=row.label,
+                description=row.description,
+            )
 
         if isinstance(row, UserSimulationTable):
-            user = self._to_model(s.get(UserTable, row.user_id), s, cascade=False)
+            user = self._to_model(
+                s.get(UserTable, row.user_id), s, cascade=False
+            )
             sim = (
-                self._to_model(s.get(SimulationTable, row.simulation_id), s, cascade=False)
+                self._to_model(
+                    s.get(SimulationTable, row.simulation_id), s, cascade=False
+                )
                 if row.simulation_id is not None
                 else None
             )
-            return UserSimulation(user=user, simulation=sim, label=row.label, description=row.description)
+            return UserSimulation(
+                user=user,
+                simulation=sim,
+                label=row.label,
+                description=row.description,
+            )
 
         if isinstance(row, UserReportTable):
-            user = self._to_model(s.get(UserTable, row.user_id), s, cascade=False)
+            user = self._to_model(
+                s.get(UserTable, row.user_id), s, cascade=False
+            )
             report = (
-                self._to_model(s.get(ReportTable, row.report_id), s, cascade=False)
+                self._to_model(
+                    s.get(ReportTable, row.report_id), s, cascade=False
+                )
                 if row.report_id is not None
                 else None
             )
-            return UserReport(user=user, report=report, label=row.label, description=row.description)
+            return UserReport(
+                user=user,
+                report=report,
+                label=row.label,
+                description=row.description,
+            )
 
         if isinstance(row, UserReportElementTable):
-            user = self._to_model(s.get(UserTable, row.user_id), s, cascade=False)
+            user = self._to_model(
+                s.get(UserTable, row.user_id), s, cascade=False
+            )
             el = (
-                self._to_model(s.get(ReportElementTable, row.report_element_id), s, cascade=False)
+                self._to_model(
+                    s.get(ReportElementTable, row.report_element_id),
+                    s,
+                    cascade=False,
+                )
                 if row.report_element_id is not None
                 else None
             )
-            return UserReportElement(user=user, report_element=el, label=row.label, description=row.description)
+            return UserReportElement(
+                user=user,
+                report_element=el,
+                label=row.label,
+                description=row.description,
+            )
 
         # Policy, Dynamics, Parameters
         if isinstance(row, PolicyTable):
-            return Policy(name=row.name, description=row.description, country=row.country)
+            return Policy(
+                name=row.name, description=row.description, country=row.country
+            )
 
         if isinstance(row, DynamicsTable):
             parent = (
-                self._to_model(s.get(DynamicsTable, row.parent_id), s, cascade=False)
+                self._to_model(
+                    s.get(DynamicsTable, row.parent_id), s, cascade=False
+                )
                 if (cascade and row.parent_id is not None)
                 else None
             )
@@ -785,11 +923,18 @@ class Database:
 
         if isinstance(row, ParameterTable):
             parent = (
-                self._to_model(s.get(ParameterTable, row.parent_id), s, cascade=False)
+                self._to_model(
+                    s.get(ParameterTable, row.parent_id), s, cascade=False
+                )
                 if (cascade and row.parent_id is not None)
                 else None
             )
-            data_type_map = {"float": float, "int": int, "bool": bool, "string": str}
+            data_type_map = {
+                "float": float,
+                "int": int,
+                "bool": bool,
+                "string": str,
+            }
             data_type = data_type_map.get(row.data_type, str)
             return Parameter(
                 name=row.name,
@@ -803,17 +948,23 @@ class Database:
 
         if isinstance(row, ParameterValueTable):
             policy = (
-                self._to_model(s.get(PolicyTable, row.policy_id), s, cascade=False)
+                self._to_model(
+                    s.get(PolicyTable, row.policy_id), s, cascade=False
+                )
                 if (cascade and row.policy_id is not None)
                 else None
             )
             dynamics = (
-                self._to_model(s.get(DynamicsTable, row.dynamics_id), s, cascade=False)
+                self._to_model(
+                    s.get(DynamicsTable, row.dynamics_id), s, cascade=False
+                )
                 if (cascade and row.dynamics_id is not None)
                 else None
             )
             parameter = (
-                self._to_model(s.get(ParameterTable, row.parameter_id), s, cascade=False)
+                self._to_model(
+                    s.get(ParameterTable, row.parameter_id), s, cascade=False
+                )
                 if row.parameter_id is not None
                 else None
             )
@@ -831,7 +982,11 @@ class Database:
         # Dataset
         if isinstance(row, DatasetTable):
             source = (
-                self._to_model(s.get(DatasetTable, row.source_dataset_id), s, cascade=False)
+                self._to_model(
+                    s.get(DatasetTable, row.source_dataset_id),
+                    s,
+                    cascade=False,
+                )
                 if (cascade and row.source_dataset_id is not None)
                 else None
             )
@@ -851,22 +1006,32 @@ class Database:
         # Simulation
         if isinstance(row, SimulationTable):
             dataset = (
-                self._to_model(s.get(DatasetTable, row.dataset_id), s, cascade=False)
+                self._to_model(
+                    s.get(DatasetTable, row.dataset_id), s, cascade=False
+                )
                 if row.dataset_id is not None
                 else None
             )
             policy = (
-                self._to_model(s.get(PolicyTable, row.policy_id), s, cascade=False)
+                self._to_model(
+                    s.get(PolicyTable, row.policy_id), s, cascade=False
+                )
                 if row.policy_id is not None
                 else None
             )
             dynamics = (
-                self._to_model(s.get(DynamicsTable, row.dynamics_id), s, cascade=False)
+                self._to_model(
+                    s.get(DynamicsTable, row.dynamics_id), s, cascade=False
+                )
                 if row.dynamics_id is not None
                 else None
             )
             result = (
-                self._to_model(s.get(DatasetTable, row.result_dataset_id), s, cascade=False)
+                self._to_model(
+                    s.get(DatasetTable, row.result_dataset_id),
+                    s,
+                    cascade=False,
+                )
                 if row.result_dataset_id is not None
                 else None
             )
@@ -885,11 +1050,18 @@ class Database:
         # Reports
         if isinstance(row, ReportTable):
             # Elements are not auto-hydrated to avoid heavy joins
-            return Report(name=row.name, description=row.description, elements=[], country=row.country)
+            return Report(
+                name=row.name,
+                description=row.description,
+                elements=[],
+                country=row.country,
+            )
 
         if isinstance(row, ReportElementTable):
             report = (
-                self._to_model(s.get(ReportTable, row.report_id), s, cascade=False)
+                self._to_model(
+                    s.get(ReportTable, row.report_id), s, cascade=False
+                )
                 if (cascade and row.report_id is not None)
                 else None
             )
@@ -903,7 +1075,12 @@ class Database:
 
         # Variable
         if isinstance(row, VariableTable):
-            data_type_map = {"float": float, "int": int, "bool": bool, "string": str}
+            data_type_map = {
+                "float": float,
+                "int": int,
+                "bool": bool,
+                "string": str,
+            }
             data_type = data_type_map.get(row.data_type, str)
             return Variable(
                 name=row.name,
@@ -991,7 +1168,8 @@ class Database:
         # Policy
         if isinstance(new_row, PolicyTable):
             stmt = select(PolicyTable).where(
-                PolicyTable.name == new_row.name, PolicyTable.country == new_row.country
+                PolicyTable.name == new_row.name,
+                PolicyTable.country == new_row.country,
             )
             existing = s.exec(stmt).first()
             if existing:
@@ -1003,7 +1181,8 @@ class Database:
         # Dynamics
         if isinstance(new_row, DynamicsTable):
             stmt = select(DynamicsTable).where(
-                DynamicsTable.name == new_row.name, DynamicsTable.country == new_row.country
+                DynamicsTable.name == new_row.name,
+                DynamicsTable.country == new_row.country,
             )
             existing = s.exec(stmt).first()
             if existing:
@@ -1018,7 +1197,8 @@ class Database:
         # Parameter
         if isinstance(new_row, ParameterTable):
             stmt = select(ParameterTable).where(
-                ParameterTable.name == new_row.name, ParameterTable.country == new_row.country
+                ParameterTable.name == new_row.name,
+                ParameterTable.country == new_row.country,
             )
             existing = s.exec(stmt).first()
             if existing:
@@ -1037,9 +1217,15 @@ class Database:
                 ParameterValueTable.parameter_id == new_row.parameter_id,
                 ParameterValueTable.model_version == new_row.model_version,
                 ParameterValueTable.start_date == new_row.start_date,
-                ParameterValueTable.end_date.is_(new_row.end_date) if new_row.end_date is None else ParameterValueTable.end_date == new_row.end_date,
-                ParameterValueTable.policy_id.is_(new_row.policy_id) if new_row.policy_id is None else ParameterValueTable.policy_id == new_row.policy_id,
-                ParameterValueTable.dynamics_id.is_(new_row.dynamics_id) if new_row.dynamics_id is None else ParameterValueTable.dynamics_id == new_row.dynamics_id,
+                ParameterValueTable.end_date.is_(new_row.end_date)
+                if new_row.end_date is None
+                else ParameterValueTable.end_date == new_row.end_date,
+                ParameterValueTable.policy_id.is_(new_row.policy_id)
+                if new_row.policy_id is None
+                else ParameterValueTable.policy_id == new_row.policy_id,
+                ParameterValueTable.dynamics_id.is_(new_row.dynamics_id)
+                if new_row.dynamics_id is None
+                else ParameterValueTable.dynamics_id == new_row.dynamics_id,
                 ParameterValueTable.country == new_row.country,
             )
             existing = s.exec(stmt).first()
@@ -1051,7 +1237,8 @@ class Database:
         # Variable
         if isinstance(new_row, VariableTable):
             stmt = select(VariableTable).where(
-                VariableTable.name == new_row.name, VariableTable.country == new_row.country
+                VariableTable.name == new_row.name,
+                VariableTable.country == new_row.country,
             )
             existing = s.exec(stmt).first()
             if existing:
@@ -1068,7 +1255,8 @@ class Database:
         # Reports
         if isinstance(new_row, ReportTable):
             stmt = select(ReportTable).where(
-                ReportTable.name == new_row.name, ReportTable.country == new_row.country
+                ReportTable.name == new_row.name,
+                ReportTable.country == new_row.country,
             )
             existing = s.exec(stmt).first()
             if existing:
@@ -1079,7 +1267,8 @@ class Database:
 
         if isinstance(new_row, ReportElementTable):
             stmt = select(ReportElementTable).where(
-                ReportElementTable.name == new_row.name, ReportElementTable.country == new_row.country
+                ReportElementTable.name == new_row.name,
+                ReportElementTable.country == new_row.country,
             )
             existing = s.exec(stmt).first()
             if existing:
@@ -1093,7 +1282,9 @@ class Database:
         # Dataset
         if isinstance(new_row, DatasetTable):
             # Deduplicate by dataset name; update payload
-            stmt = select(DatasetTable).where(DatasetTable.name == new_row.name)
+            stmt = select(DatasetTable).where(
+                DatasetTable.name == new_row.name
+            )
             existing = s.exec(stmt).first()
             if existing:
                 existing.source_dataset_id = new_row.source_dataset_id

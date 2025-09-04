@@ -24,7 +24,13 @@ from .reports import (
 from .simulation import Simulation
 from .variable import Variable
 from .single_year_dataset import SingleYearDataset
-from .user import User, UserPolicy, UserSimulation, UserReport, UserReportElement
+from .user import (
+    User,
+    UserPolicy,
+    UserSimulation,
+    UserReport,
+    UserReportElement,
+)
 
 # Resolve forward references for Pydantic models that reference each other
 try:

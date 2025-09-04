@@ -64,6 +64,7 @@ class ChangeByBaselineGroup(ReportElementDataItem):
     relative_change: float
     average_change_per_entity: float
 
+
 class VariableChangeGroupByQuantileGroup(ReportElementDataItem):
     """Winners/losers share by quantile grouping based on baseline.
 
@@ -82,6 +83,7 @@ class VariableChangeGroupByQuantileGroup(ReportElementDataItem):
     fixed_entity_count_per_quantile_group: str = "household"
     percent_of_group_in_change_group: float
     entities_in_group_in_change_group: float
+
 
 class VariableChangeGroupByVariableValue(ReportElementDataItem):
     """Change-group shares by exact group variable value (not quantiles)."""

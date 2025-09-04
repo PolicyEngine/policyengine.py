@@ -74,7 +74,10 @@ def test_simulation_with_result_dataset(tmp_path):
     loaded = db.get(Simulation, row.id)  # type: ignore[arg-type]
     assert isinstance(loaded.result, Dataset)
     assert isinstance(loaded.result.data, SingleYearDataset)
-    assert "gov_tax" in loaded.result.data.tables.get("person", pd.DataFrame()).columns
+    assert (
+        "gov_tax"
+        in loaded.result.data.tables.get("person", pd.DataFrame()).columns
+    )
 
 
 def test_parameter_value_cascade(tmp_path):

@@ -74,22 +74,42 @@ class ChangeByBaselineGroupReportElement(ReportElement):
         merged = _align_baseline_reform(base_tbl, ref_tbl, self.entity_level)
         # weights from baseline
         # Build MicroDataFrame with baseline weights if available
-        weights_col = "weight_value_base" if "weight_value_base" in merged.columns else None
-        merged["__delta__"] = merged[f"{self.variable}_ref"] - merged[f"{self.variable}_base"]
+        weights_col = (
+            "weight_value_base"
+            if "weight_value_base" in merged.columns
+            else None
+        )
+        merged["__delta__"] = (
+            merged[f"{self.variable}_ref"] - merged[f"{self.variable}_base"]
+        )
         if self.group_variable in merged.columns:
             sub = merged[merged[self.group_variable] == self.group_value]
         else:
             sub = merged
-        mdf = MicroDataFrame(sub, weights=weights_col) if weights_col else MicroDataFrame(sub)
+        mdf = (
+            MicroDataFrame(sub, weights=weights_col)
+            if weights_col
+            else MicroDataFrame(sub)
+        )
         total_change = float(mdf["__delta__"].sum())
         denom = float(mdf[f"{self.variable}_base"].sum())
-        relative_change = float(total_change / denom) if denom != 0 else float("nan")
+        relative_change = (
+            float(total_change / denom) if denom != 0 else float("nan")
+        )
         # Sum of weights via summing a column of ones
         sub = sub.copy()
         sub["__ones__"] = 1.0
-        mdf2 = MicroDataFrame(sub, weights=weights_col) if weights_col else MicroDataFrame(sub)
+        mdf2 = (
+            MicroDataFrame(sub, weights=weights_col)
+            if weights_col
+            else MicroDataFrame(sub)
+        )
         weights_sum = float(mdf2["__ones__"].sum())
-        avg_change = float(total_change / weights_sum) if weights_sum != 0 else float("nan")
+        avg_change = (
+            float(total_change / weights_sum)
+            if weights_sum != 0
+            else float("nan")
+        )
 
         period = getattr(self.baseline.dataset.data, "year", None)
         rec = ChangeByBaselineGroup(
@@ -133,21 +153,31 @@ class WinnersLosersByQuantileReportElement(ReportElement):
             return []
 
         merged = _align_baseline_reform(base_tbl, ref_tbl, self.entity_level)
-        merged["__delta__"] = merged[f"{self.variable}_ref"] - merged[f"{self.variable}_base"]
+        merged["__delta__"] = (
+            merged[f"{self.variable}_ref"] - merged[f"{self.variable}_base"]
+        )
         if self.change_bound_is_relative:
             base = merged[f"{self.variable}_base"].replace({0.0: np.nan}).abs()
             merged["__delta__"] = merged["__delta__"] / base
 
         results: list[VariableChangeGroupByQuantileGroup] = []
         period = getattr(self.baseline.dataset.data, "year", None)
-        weights_col = "weight_value_base" if "weight_value_base" in merged.columns else None
+        weights_col = (
+            "weight_value_base"
+            if "weight_value_base" in merged.columns
+            else None
+        )
         for g, grp in merged.groupby(self.group_variable):
             grp = grp.copy()
             grp["__in_bucket__"] = (
                 (grp["__delta__"] >= self.change_lower_bound)
                 & (grp["__delta__"] < self.change_upper_bound)
             ).astype(int)
-            mdf = MicroDataFrame(grp, weights=weights_col) if weights_col else MicroDataFrame(grp)
+            mdf = (
+                MicroDataFrame(grp, weights=weights_col)
+                if weights_col
+                else MicroDataFrame(grp)
+            )
             percent = float(mdf["__in_bucket__"].mean())
             entities = float(mdf["__in_bucket__"].sum())
 
@@ -157,7 +187,9 @@ class WinnersLosersByQuantileReportElement(ReportElement):
                     reform_simulation=self.reform,
                     variable=self.variable,
                     group_variable=self.group_variable,
-                    quantile_group=int(g) if isinstance(g, (int, np.integer)) else g,
+                    quantile_group=int(g)
+                    if isinstance(g, (int, np.integer))
+                    else g,
                     quantile_group_count=self.quantile_group_count,
                     change_lower_bound=float(self.change_lower_bound),
                     change_upper_bound=float(self.change_upper_bound),
@@ -196,20 +228,30 @@ class VariableChangeByValueReportElement(ReportElement):
             return []
 
         merged = _align_baseline_reform(base_tbl, ref_tbl, self.entity_level)
-        merged["__delta__"] = merged[f"{self.variable}_ref"] - merged[f"{self.variable}_base"]
+        merged["__delta__"] = (
+            merged[f"{self.variable}_ref"] - merged[f"{self.variable}_base"]
+        )
         if self.change_bound_is_relative:
             base = merged[f"{self.variable}_base"].replace({0.0: np.nan}).abs()
             merged["__delta__"] = merged["__delta__"] / base
 
         results: list[VariableChangeGroupByVariableValue] = []
-        weights_col = "weight_value_base" if "weight_value_base" in merged.columns else None
+        weights_col = (
+            "weight_value_base"
+            if "weight_value_base" in merged.columns
+            else None
+        )
         for val, grp in merged.groupby(self.group_variable):
             grp = grp.copy()
             grp["__in_bucket__"] = (
                 (grp["__delta__"] >= self.change_lower_bound)
                 & (grp["__delta__"] < self.change_upper_bound)
             ).astype(int)
-            mdf = MicroDataFrame(grp, weights=weights_col) if weights_col else MicroDataFrame(grp)
+            mdf = (
+                MicroDataFrame(grp, weights=weights_col)
+                if weights_col
+                else MicroDataFrame(grp)
+            )
             percent = float(mdf["__in_bucket__"].mean())
             entities = float(mdf["__in_bucket__"].sum())
 
