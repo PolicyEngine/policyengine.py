@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel
+from uuid import UUID
 
 from .dataset import Dataset
 from .dynamics import Dynamics
@@ -19,6 +20,7 @@ from policyengine.utils.version import get_model_version
 class Simulation(BaseModel):
     """Metadata for simulation. Re-implemented by country versions."""
 
+    id: UUID | None = None
     # Foreign key references
     dataset: Dataset
     policy: Policy

@@ -53,70 +53,86 @@ class ChangeByBaselineGroup(ReportElementDataItem):
     average_change_per_entity: float
 
     @staticmethod
-    def build(
-        baseline_simulation: "Simulation",
-        reform_simulation: "Simulation",
-        *,
-        variable: str,
-        group_variable: str,
-        group_value: Any,
-        entity_level: str = "household",
+    def run(
+        items: list["ChangeByBaselineGroup"],
     ) -> list["ChangeByBaselineGroup"]:
-        base_tbl = _get_table(baseline_simulation, entity_level)
-        ref_tbl = _get_table(reform_simulation, entity_level)
-        merged = _align_baseline_reform(base_tbl, ref_tbl, entity_level)
+        """Batch-compute change metrics for provided items.
 
-        weights_col = (
-            "weight_value_base"
-            if "weight_value_base" in merged.columns
-            else None
-        )
-        merged["__delta__"] = (
-            merged[f"{variable}_ref"] - merged[f"{variable}_base"]
-        )
-        sub = (
-            merged[merged[group_variable] == group_value]
-            if group_variable in merged.columns
-            else merged
-        )
-        mdf = (
-            MicroDataFrame(sub, weights=weights_col)
-            if weights_col
-            else MicroDataFrame(sub)
-        )
-        total_change = float(mdf["__delta__"].sum())
-        denom = float(mdf[f"{variable}_base"].sum())
-        relative_change = (
-            float(total_change / denom) if denom != 0 else float("nan")
-        )
+        Assumes items share the same baseline/reform simulations for efficiency.
+        """
+        if not items:
+            return []
 
-        sub = sub.copy()
-        sub["__ones__"] = 1.0
-        mdf2 = (
-            MicroDataFrame(sub, weights=weights_col)
-            if weights_col
-            else MicroDataFrame(sub)
-        )
-        weights_sum = float(mdf2["__ones__"].sum())
-        avg_change = (
-            float(total_change / weights_sum) if weights_sum else float("nan")
-        )
+        # Group by (entity_level) to reuse aligned tables
+        grouped: dict[str, list[ChangeByBaselineGroup]] = {}
+        for it in items:
+            grouped.setdefault(it.entity_level, []).append(it)
 
-        period = getattr(baseline_simulation.dataset.data, "year", None)
-        return [
-            ChangeByBaselineGroup(
-                baseline_simulation=baseline_simulation,
-                reform_simulation=reform_simulation,
-                variable=variable,
-                group_variable=group_variable,
-                group_value=group_value,
-                entity_level=entity_level,
-                time_period=period,
-                total_change=total_change,
-                relative_change=relative_change,
-                average_change_per_entity=avg_change,
+        out: list[ChangeByBaselineGroup] = []
+        for entity_level, bucket in grouped.items():
+            base_sim = bucket[0].baseline_simulation
+            ref_sim = bucket[0].reform_simulation
+            base_tbl = _get_table(base_sim, entity_level)
+            ref_tbl = _get_table(ref_sim, entity_level)
+            merged = _align_baseline_reform(base_tbl, ref_tbl, entity_level)
+
+            weights_col = (
+                "weight_value_base"
+                if "weight_value_base" in merged.columns
+                else None
             )
-        ]
+
+            # Precompute ones for weighted counts
+            merged = merged.copy()
+            merged["__ones__"] = 1.0
+
+            for it in bucket:
+                var = it.variable
+                grp_var = it.group_variable
+                merged["__delta__"] = (
+                    merged[f"{var}_ref"] - merged[f"{var}_base"]
+                )
+                sub = (
+                    merged[merged[grp_var] == it.group_value]
+                    if grp_var in merged.columns
+                    else merged
+                )
+                mdf = (
+                    MicroDataFrame(sub, weights=weights_col)
+                    if weights_col
+                    else MicroDataFrame(sub)
+                )
+                total_change = float(mdf["__delta__"].sum())
+                denom = float(mdf[f"{var}_base"].sum())
+                relative_change = (
+                    float(total_change / denom) if denom != 0 else float("nan")
+                )
+
+                mdf2 = (
+                    MicroDataFrame(sub, weights=weights_col)
+                    if weights_col
+                    else MicroDataFrame(sub)
+                )
+                weights_sum = float(mdf2["__ones__"].sum())
+                avg_change = (
+                    float(total_change / weights_sum)
+                    if weights_sum
+                    else float("nan")
+                )
+
+                period = getattr(base_sim.dataset.data, "year", None)
+                payload = it.model_dump()
+                payload.update(
+                    {
+                        "time_period": period,
+                        "total_change": total_change,
+                        "relative_change": relative_change,
+                        "average_change_per_entity": avg_change,
+                    }
+                )
+                out.append(ChangeByBaselineGroup(**payload))
+
+        return out
 
 
 class VariableChangeGroupByQuantileGroup(ReportElementDataItem):
@@ -134,66 +150,76 @@ class VariableChangeGroupByQuantileGroup(ReportElementDataItem):
     entities_in_group_in_change_group: float
 
     @staticmethod
-    def build(
-        baseline_simulation: "Simulation",
-        reform_simulation: "Simulation",
-        *,
-        variable: str,
-        group_variable: str,
-        quantile_group_count: int = 10,
-        change_lower_bound: float = -np.inf,
-        change_upper_bound: float = 0.0,
-        change_bound_is_relative: bool = False,
-        entity_level: str = "household",
+    def run(
+        items: list["VariableChangeGroupByQuantileGroup"],
     ) -> list["VariableChangeGroupByQuantileGroup"]:
-        base_tbl = _get_table(baseline_simulation, entity_level)
-        ref_tbl = _get_table(reform_simulation, entity_level)
-        merged = _align_baseline_reform(base_tbl, ref_tbl, entity_level)
-        merged["__delta__"] = (
-            merged[f"{variable}_ref"] - merged[f"{variable}_base"]
-        )
-        if change_bound_is_relative:
-            base = merged[f"{variable}_base"].replace({0.0: np.nan}).abs()
-            merged["__delta__"] = merged["__delta__"] / base
+        """Batch-compute change-bucket shares by group.
 
-        results: list[VariableChangeGroupByQuantileGroup] = []
-        weights_col = (
-            "weight_value_base"
-            if "weight_value_base" in merged.columns
-            else None
-        )
-        for g, grp in merged.groupby(group_variable):
-            grp = grp.copy()
-            grp["__in_bucket__"] = (
-                (grp["__delta__"] >= change_lower_bound)
-                & (grp["__delta__"] < change_upper_bound)
-            ).astype(int)
-            mdf = (
-                MicroDataFrame(grp, weights=weights_col)
-                if weights_col
-                else MicroDataFrame(grp)
+        Items should reference the same baseline/reform simulations for best performance.
+        """
+        if not items:
+            return []
+
+        # Group by entity_level
+        grouped: dict[str, list[VariableChangeGroupByQuantileGroup]] = {}
+        for it in items:
+            grouped.setdefault(
+                it.fixed_entity_count_per_quantile_group, []
+            ).append(it)
+
+        out: list[VariableChangeGroupByQuantileGroup] = []
+        for entity_level, bucket in grouped.items():
+            base_sim = bucket[0].baseline_simulation
+            ref_sim = bucket[0].reform_simulation
+            base_tbl = _get_table(base_sim, entity_level)
+            ref_tbl = _get_table(ref_sim, entity_level)
+            merged = _align_baseline_reform(base_tbl, ref_tbl, entity_level)
+
+            weights_col = (
+                "weight_value_base"
+                if "weight_value_base" in merged.columns
+                else None
             )
-            percent = float(mdf["__in_bucket__"].mean())
-            entities = float(mdf["__in_bucket__"].sum())
-            results.append(
-                VariableChangeGroupByQuantileGroup(
-                    baseline_simulation=baseline_simulation,
-                    reform_simulation=reform_simulation,
-                    variable=variable,
-                    group_variable=group_variable,
-                    quantile_group=int(g)
-                    if isinstance(g, (int, np.integer))
-                    else g,
-                    quantile_group_count=quantile_group_count,
-                    change_lower_bound=float(change_lower_bound),
-                    change_upper_bound=float(change_upper_bound),
-                    change_bound_is_relative=change_bound_is_relative,
-                    fixed_entity_count_per_quantile_group=entity_level,
-                    percent_of_group_in_change_group=percent,
-                    entities_in_group_in_change_group=entities,
+            merged = merged.copy()
+
+            for it in bucket:
+                var = it.variable
+                grp_var = it.group_variable
+                merged["__delta__"] = (
+                    merged[f"{var}_ref"] - merged[f"{var}_base"]
                 )
-            )
-        return results
+                if it.change_bound_is_relative:
+                    base = merged[f"{var}_base"].replace({0.0: np.nan}).abs()
+                    merged["__delta__"] = merged["__delta__"] / base
+
+                # Compute stats only for the requested group value
+                # The field name is `quantile_group` in the model
+                target = it.quantile_group
+                if grp_var in merged.columns:
+                    grp = merged[merged[grp_var] == target].copy()
+                else:
+                    grp = merged.copy()
+                grp["__in_bucket__"] = (
+                    (grp["__delta__"] >= it.change_lower_bound)
+                    & (grp["__delta__"] < it.change_upper_bound)
+                ).astype(int)
+                mdf = (
+                    MicroDataFrame(grp, weights=weights_col)
+                    if weights_col
+                    else MicroDataFrame(grp)
+                )
+                percent = float(mdf["__in_bucket__"].mean())
+                entities = float(mdf["__in_bucket__"].sum())
+                payload = it.model_dump()
+                payload.update(
+                    {
+                        "percent_of_group_in_change_group": percent,
+                        "entities_in_group_in_change_group": entities,
+                    }
+                )
+                out.append(VariableChangeGroupByQuantileGroup(**payload))
+
+        return out
 
 
 class VariableChangeGroupByVariableValue(ReportElementDataItem):
@@ -207,56 +233,72 @@ class VariableChangeGroupByVariableValue(ReportElementDataItem):
     entities_in_group_in_change_group: float
 
     @staticmethod
-    def build(
-        baseline_simulation: "Simulation",
-        reform_simulation: "Simulation",
-        *,
-        variable: str,
-        group_variable: str,
-        change_lower_bound: float = -np.inf,
-        change_upper_bound: float = 0.0,
-        change_bound_is_relative: bool = False,
-        entity_level: str = "household",
+    def run(
+        items: list["VariableChangeGroupByVariableValue"],
     ) -> list["VariableChangeGroupByVariableValue"]:
-        base_tbl = _get_table(baseline_simulation, entity_level)
-        ref_tbl = _get_table(reform_simulation, entity_level)
-        merged = _align_baseline_reform(base_tbl, ref_tbl, entity_level)
-        merged["__delta__"] = (
-            merged[f"{variable}_ref"] - merged[f"{variable}_base"]
-        )
-        if change_bound_is_relative:
-            base = merged[f"{variable}_base"].replace({0.0: np.nan}).abs()
-            merged["__delta__"] = merged["__delta__"] / base
+        """Batch-compute change-bucket shares by variable values.
 
-        results: list[VariableChangeGroupByVariableValue] = []
-        weights_col = (
-            "weight_value_base"
-            if "weight_value_base" in merged.columns
-            else None
-        )
-        for val, grp in merged.groupby(group_variable):
-            grp = grp.copy()
-            grp["__in_bucket__"] = (
-                (grp["__delta__"] >= change_lower_bound)
-                & (grp["__delta__"] < change_upper_bound)
-            ).astype(int)
-            mdf = (
-                MicroDataFrame(grp, weights=weights_col)
-                if weights_col
-                else MicroDataFrame(grp)
+        Assumes shared baseline/reform simulations for best performance.
+        """
+        if not items:
+            return []
+
+        # Group by entity_level
+        grouped: dict[str, list[VariableChangeGroupByVariableValue]] = {}
+        for it in items:
+            grouped.setdefault(
+                it.fixed_entity_count_per_quantile_group, []
+            ).append(it)
+
+        out: list[VariableChangeGroupByVariableValue] = []
+        for entity_level, bucket in grouped.items():
+            base_sim = bucket[0].baseline_simulation
+            ref_sim = bucket[0].reform_simulation
+            base_tbl = _get_table(base_sim, entity_level)
+            ref_tbl = _get_table(ref_sim, entity_level)
+            merged = _align_baseline_reform(base_tbl, ref_tbl, entity_level)
+            weights_col = (
+                "weight_value_base"
+                if "weight_value_base" in merged.columns
+                else None
             )
-            percent = float(mdf["__in_bucket__"].mean())
-            entities = float(mdf["__in_bucket__"].sum())
-            results.append(
-                VariableChangeGroupByVariableValue(
-                    baseline_simulation=baseline_simulation,
-                    reform_simulation=reform_simulation,
-                    variable=variable,
-                    group_variable=group_variable,
-                    group_variable_value=val,
-                    fixed_entity_count_per_quantile_group=entity_level,
-                    percent_of_group_in_change_group=percent,
-                    entities_in_group_in_change_group=entities,
+            merged = merged.copy()
+
+            for it in bucket:
+                var = it.variable
+                grp_var = it.group_variable
+                merged["__delta__"] = (
+                    merged[f"{var}_ref"] - merged[f"{var}_base"]
                 )
-            )
-        return results
+                if it.change_bound_is_relative:
+                    base = merged[f"{var}_base"].replace({0.0: np.nan}).abs()
+                    merged["__delta__"] = merged["__delta__"] / base
+
+                # Only compute for the requested group value
+                if grp_var in merged.columns:
+                    grp = merged[
+                        merged[grp_var] == it.group_variable_value
+                    ].copy()
+                else:
+                    grp = merged.copy()
+                grp["__in_bucket__"] = (
+                    (grp["__delta__"] >= it.change_lower_bound)
+                    & (grp["__delta__"] < it.change_upper_bound)
+                ).astype(int)
+                mdf = (
+                    MicroDataFrame(grp, weights=weights_col)
+                    if weights_col
+                    else MicroDataFrame(grp)
+                )
+                percent = float(mdf["__in_bucket__"].mean())
+                entities = float(mdf["__in_bucket__"].sum())
+                payload = it.model_dump()
+                payload.update(
+                    {
+                        "percent_of_group_in_change_group": percent,
+                        "entities_in_group_in_change_group": entities,
+                    }
+                )
+                out.append(VariableChangeGroupByVariableValue(**payload))
+
+        return out

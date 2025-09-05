@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
+from uuid import UUID
 
 if TYPE_CHECKING:  # Import to satisfy type checkers without runtime cycles
     from .dynamics import Dynamics
@@ -18,6 +19,7 @@ if TYPE_CHECKING:  # Import to satisfy type checkers without runtime cycles
 class Parameter(BaseModel):
     """Policy parameter of the country package model."""
 
+    id: UUID | None = None
     name: str
     parent: Parameter | None = None  # For hierarchical parameters
 
@@ -32,6 +34,7 @@ class Parameter(BaseModel):
 class ParameterValue(BaseModel):
     """Individual parameter value for some point in time."""
 
+    id: UUID | None = None
     # Foreign keys
     policy: Policy | None = None
     dynamics: Dynamics | None = None

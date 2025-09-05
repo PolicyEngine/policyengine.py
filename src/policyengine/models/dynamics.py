@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
+from uuid import UUID
 
 if TYPE_CHECKING:  # For type checking only
     from .parameter import ParameterValue
@@ -17,6 +18,7 @@ if TYPE_CHECKING:  # For type checking only
 class Dynamics(BaseModel):
     """Modifications made to baseline tax-benefit dynamics."""
 
+    id: UUID | None = None
     name: str | None = None
 
     # Parent dynamics reference

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import os
 from datetime import datetime
 from typing import (
     Any,
@@ -35,6 +36,16 @@ from policyengine.models.simulation import Simulation
 from policyengine.models.reports import Report, ReportElement
 from policyengine.models.variable import Variable
 from policyengine.models.enums import DatasetType, OperationStatus
+from policyengine.models.report_items.aggregate import (
+    Aggregate,
+    AggregateMetric,
+)
+from policyengine.models.report_items.count import Count
+from policyengine.models.report_items.two_sim_change import (
+    ChangeByBaselineGroup,
+    VariableChangeGroupByQuantileGroup,
+    VariableChangeGroupByVariableValue,
+)
 
 # Table models
 from policyengine.tables import (
@@ -52,10 +63,16 @@ from policyengine.tables import (
     ReportTable,
     ReportElementTable,
     VariableTable,
+    AggregateTable,
+    CountTable,
+    ChangeByBaselineGroupTable,
+    VariableChangeGroupByQuantileGroupTable,
+    VariableChangeGroupByVariableValueTable,
 )
 
 
 BM = TypeVar("BM")
+
 
 class Database:
     """Lightweight Database layer bridging BaseModels and SQLModel tables.
@@ -73,6 +90,23 @@ class Database:
         url: str = "sqlite:///:memory:",
         seed_countries: Iterable[str] | None = None,
     ):
+        # Special shortcut: connect to PolicyEngine live DB using env vars
+        if url == "policyengine":
+            pwd = os.getenv("POLICYENGINE_DB_PASSWORD")
+            if not pwd:
+                raise ValueError(
+                    "POLICYENGINE_DB_PASSWORD is not set in environment."
+                )
+            user = os.getenv(
+                "POLICYENGINE_DB_USER", "postgres.usugnrssspkdutcjeevk"
+            )
+            host = os.getenv(
+                "POLICYENGINE_DB_HOST", "aws-1-us-east-1.pooler.supabase.com"
+            )
+            port = int(os.getenv("POLICYENGINE_DB_PORT", "5432"))
+            dbname = os.getenv("POLICYENGINE_DB_NAME", "postgres")
+            url = f"postgresql://{user}:{pwd}@{host}:{port}/{dbname}"
+
         self.engine = create_engine(url=url)
         SQLModel.metadata.create_all(self.engine)
 
@@ -92,6 +126,11 @@ class Database:
             Report: ReportTable,
             ReportElement: ReportElementTable,
             Variable: VariableTable,
+            Aggregate: AggregateTable,
+            Count: CountTable,
+            ChangeByBaselineGroup: ChangeByBaselineGroupTable,
+            VariableChangeGroupByQuantileGroup: VariableChangeGroupByQuantileGroupTable,
+            VariableChangeGroupByVariableValue: VariableChangeGroupByVariableValueTable,
         }
 
         self._table_to_bm: Dict[type[SQLModel], type] = {
@@ -623,7 +662,10 @@ class Database:
         # Policy, Dynamics, Parameters
         if isinstance(obj, Policy):
             return PolicyTable(
-                name=obj.name, description=obj.description, country=obj.country
+                id=getattr(obj, "id", None),
+                name=obj.name,
+                description=obj.description,
+                country=obj.country,
             )
 
         if isinstance(obj, Dynamics):
@@ -632,10 +674,14 @@ class Database:
                 parent_row = self._to_table(
                     obj.parent_dynamics, s, cascade=cascade
                 )
+                parent_row = self._upsert_row(
+                    obj.parent_dynamics, parent_row, s
+                )
                 s.add(parent_row)
                 s.flush()
                 parent_id = parent_row.id
             return DynamicsTable(
+                id=getattr(obj, "id", None),
                 name=obj.name,
                 parent_id=parent_id,
                 description=obj.description,
@@ -648,6 +694,7 @@ class Database:
             parent_id = None
             if obj.parent is not None and cascade:
                 parent_row = self._to_table(obj.parent, s, cascade=cascade)
+                parent_row = self._upsert_row(obj.parent, parent_row, s)
                 s.add(parent_row)
                 s.flush()
                 parent_id = parent_row.id
@@ -657,6 +704,7 @@ class Database:
                 else str(obj.data_type)
             )
             return ParameterTable(
+                id=getattr(obj, "id", None),
                 name=obj.name,
                 parent_id=parent_id,
                 label=obj.label,
@@ -719,6 +767,7 @@ class Database:
 
             # JSON-safe value handling (inf/-inf, NaN)
             return ParameterValueTable(
+                id=getattr(obj, "id", None),
                 policy_id=policy_id,
                 dynamics_id=dynamics_id,
                 parameter_id=par_row.id,  # type: ignore[arg-type]
@@ -736,6 +785,7 @@ class Database:
                 src_row = self._to_table(
                     obj.source_dataset, s, cascade=cascade
                 )
+                src_row = self._upsert_row(obj.source_dataset, src_row, s)
                 s.add(src_row)
                 s.flush()
                 source_id = src_row.id
@@ -745,6 +795,7 @@ class Database:
             elif isinstance(obj.data, (bytes, bytearray)):
                 data_bytes = bytes(obj.data)
             return DatasetTable(
+                id=getattr(obj, "id", None),
                 name=obj.name,
                 source_dataset_id=source_id,
                 version=obj.version,
@@ -757,25 +808,30 @@ class Database:
             dataset_id = policy_id = dynamics_id = result_dataset_id = None
             if obj.dataset is not None and cascade:
                 ds_row = self._to_table(obj.dataset, s, cascade=cascade)
+                ds_row = self._upsert_row(obj.dataset, ds_row, s)
                 s.add(ds_row)
                 s.flush()
                 dataset_id = ds_row.id
             if obj.policy is not None and cascade:
                 po_row = self._to_table(obj.policy, s, cascade=cascade)
+                po_row = self._upsert_row(obj.policy, po_row, s)
                 s.add(po_row)
                 s.flush()
                 policy_id = po_row.id
             if obj.dynamics is not None and cascade:
                 dy_row = self._to_table(obj.dynamics, s, cascade=cascade)
+                dy_row = self._upsert_row(obj.dynamics, dy_row, s)
                 s.add(dy_row)
                 s.flush()
                 dynamics_id = dy_row.id
             if isinstance(obj.result, Dataset) and cascade:
                 rs_row = self._to_table(obj.result, s, cascade=cascade)
+                rs_row = self._upsert_row(obj.result, rs_row, s)
                 s.add(rs_row)
                 s.flush()
                 result_dataset_id = rs_row.id
             return SimulationTable(
+                id=getattr(obj, "id", None),
                 dataset_id=dataset_id,
                 policy_id=policy_id,
                 dynamics_id=dynamics_id,
@@ -790,22 +846,138 @@ class Database:
         # Reports
         if isinstance(obj, Report):
             return ReportTable(
-                name=obj.name, description=obj.description, country=obj.country
+                id=getattr(obj, "id", None),
+                name=obj.name,
+                description=obj.description,
+                country=obj.country,
             )
 
         if isinstance(obj, ReportElement):
             report_id = None
             if obj.report is not None and cascade:
                 rep_row = self._to_table(obj.report, s, cascade=cascade)
+                rep_row = self._upsert_row(obj.report, rep_row, s)
                 s.add(rep_row)
                 s.flush()
                 report_id = rep_row.id
             return ReportElementTable(
+                id=getattr(obj, "id", None),
                 name=obj.name,
                 description=obj.description,
                 report_id=report_id,
                 status=obj.status,
                 country=obj.country,
+            )
+
+        # Report item data rows
+        if isinstance(obj, Aggregate):
+            sim_row = self._to_table(obj.simulation, s, cascade=cascade)
+            if getattr(sim_row, "id", None) is None:
+                s.add(sim_row)
+                s.flush()
+            return AggregateTable(
+                simulation_id=sim_row.id,  # type: ignore[arg-type]
+                time_period=str(obj.time_period)
+                if obj.time_period is not None
+                else None,
+                variable=obj.variable,
+                entity_level=obj.entity_level,
+                filter_variable=obj.filter_variable,
+                filter_variable_value=self._json_safe_value(
+                    obj.filter_variable_value
+                ),
+                filter_variable_min_value=obj.filter_variable_min_value,
+                filter_variable_max_value=obj.filter_variable_max_value,
+                metric=str(obj.metric),
+                value=obj.value,
+            )
+
+        if isinstance(obj, Count):
+            sim_row = self._to_table(obj.simulation, s, cascade=cascade)
+            if getattr(sim_row, "id", None) is None:
+                s.add(sim_row)
+                s.flush()
+            return CountTable(
+                simulation_id=sim_row.id,  # type: ignore[arg-type]
+                time_period=str(obj.time_period)
+                if obj.time_period is not None
+                else None,
+                variable=obj.variable,
+                entity_level=obj.entity_level,
+                equals_value=self._json_safe_value(obj.equals_value),
+                min_value=obj.min_value,
+                max_value=obj.max_value,
+                count=obj.count,
+            )
+
+        if isinstance(obj, ChangeByBaselineGroup):
+            base_row = self._to_table(
+                obj.baseline_simulation, s, cascade=cascade
+            )
+            ref_row = self._to_table(obj.reform_simulation, s, cascade=cascade)
+            for r in (base_row, ref_row):
+                if getattr(r, "id", None) is None:
+                    s.add(r)
+                    s.flush()
+            return ChangeByBaselineGroupTable(
+                baseline_simulation_id=base_row.id,  # type: ignore[arg-type]
+                reform_simulation_id=ref_row.id,  # type: ignore[arg-type]
+                variable=obj.variable,
+                group_variable=obj.group_variable,
+                group_value=self._json_safe_value(obj.group_value),
+                entity_level=obj.entity_level,
+                time_period=str(obj.time_period)
+                if obj.time_period is not None
+                else None,
+                total_change=obj.total_change,
+                relative_change=obj.relative_change,
+                average_change_per_entity=obj.average_change_per_entity,
+            )
+
+        if isinstance(obj, VariableChangeGroupByQuantileGroup):
+            base_row = self._to_table(
+                obj.baseline_simulation, s, cascade=cascade
+            )
+            ref_row = self._to_table(obj.reform_simulation, s, cascade=cascade)
+            for r in (base_row, ref_row):
+                if getattr(r, "id", None) is None:
+                    s.add(r)
+                    s.flush()
+            return VariableChangeGroupByQuantileGroupTable(
+                baseline_simulation_id=base_row.id,  # type: ignore[arg-type]
+                reform_simulation_id=ref_row.id,  # type: ignore[arg-type]
+                variable=obj.variable,
+                group_variable=obj.group_variable,
+                quantile_group=obj.quantile_group,
+                quantile_group_count=obj.quantile_group_count,
+                change_lower_bound=float(obj.change_lower_bound),
+                change_upper_bound=float(obj.change_upper_bound),
+                change_bound_is_relative=bool(obj.change_bound_is_relative),
+                fixed_entity_count_per_quantile_group=obj.fixed_entity_count_per_quantile_group,
+                percent_of_group_in_change_group=obj.percent_of_group_in_change_group,
+                entities_in_group_in_change_group=obj.entities_in_group_in_change_group,
+            )
+
+        if isinstance(obj, VariableChangeGroupByVariableValue):
+            base_row = self._to_table(
+                obj.baseline_simulation, s, cascade=cascade
+            )
+            ref_row = self._to_table(obj.reform_simulation, s, cascade=cascade)
+            for r in (base_row, ref_row):
+                if getattr(r, "id", None) is None:
+                    s.add(r)
+                    s.flush()
+            return VariableChangeGroupByVariableValueTable(
+                baseline_simulation_id=base_row.id,  # type: ignore[arg-type]
+                reform_simulation_id=ref_row.id,  # type: ignore[arg-type]
+                variable=obj.variable,
+                group_variable=obj.group_variable,
+                group_variable_value=self._json_safe_value(
+                    obj.group_variable_value
+                ),
+                fixed_entity_count_per_quantile_group=obj.fixed_entity_count_per_quantile_group,
+                percent_of_group_in_change_group=obj.percent_of_group_in_change_group,
+                entities_in_group_in_change_group=obj.entities_in_group_in_change_group,
             )
 
         # Variable
@@ -816,6 +988,7 @@ class Database:
                 else str(obj.data_type)
             )
             return VariableTable(
+                id=getattr(obj, "id", None),
                 name=obj.name,
                 label=obj.label,
                 description=obj.description,
@@ -914,7 +1087,10 @@ class Database:
         # Policy, Dynamics, Parameters
         if isinstance(row, PolicyTable):
             return Policy(
-                name=row.name, description=row.description, country=row.country
+                id=row.id,
+                name=row.name,
+                description=row.description,
+                country=row.country,
             )
 
         if isinstance(row, DynamicsTable):
@@ -926,6 +1102,7 @@ class Database:
                 else None
             )
             return Dynamics(
+                id=row.id,
                 name=row.name,
                 parent_dynamics=parent,
                 description=row.description,
@@ -950,6 +1127,7 @@ class Database:
             }
             data_type = data_type_map.get(row.data_type, str)
             return Parameter(
+                id=row.id,
                 name=row.name,
                 parent=parent,
                 label=row.label,
@@ -982,6 +1160,7 @@ class Database:
                 else None
             )
             return ParameterValue(
+                id=row.id,
                 policy=policy,
                 dynamics=dynamics,
                 parameter=parameter,  # type: ignore[arg-type]
@@ -1009,6 +1188,7 @@ class Database:
                 else None
             )
             return Dataset(
+                id=row.id,
                 name=row.name,
                 source_dataset=source,
                 version=row.version,
@@ -1049,6 +1229,7 @@ class Database:
                 else None
             )
             return Simulation(
+                id=row.id,
                 dataset=dataset,  # type: ignore[arg-type]
                 policy=policy,  # type: ignore[arg-type]
                 dynamics=dynamics,  # type: ignore[arg-type]
@@ -1064,6 +1245,7 @@ class Database:
         if isinstance(row, ReportTable):
             # Elements are not auto-hydrated to avoid heavy joins
             return Report(
+                id=row.id,
                 name=row.name,
                 description=row.description,
                 elements=[],
@@ -1079,6 +1261,7 @@ class Database:
                 else None
             )
             return ReportElement(
+                id=row.id,
                 name=row.name,
                 description=row.description,
                 report=report,  # type: ignore[arg-type]
@@ -1096,6 +1279,7 @@ class Database:
             }
             data_type = data_type_map.get(row.data_type, str)
             return Variable(
+                id=row.id,
                 name=row.name,
                 label=row.label,
                 description=row.description,
@@ -1177,6 +1361,22 @@ class Database:
             ReportElementTable,
             DatasetTable,
         )
+
+        # If an explicit primary key is provided on the row, prefer updating
+        # that row directly to avoid accidental duplication when callers
+        # rehydrate then persist again.
+        try:
+            row_id = getattr(new_row, "id", None)
+            if row_id is not None:
+                existing_by_id = s.get(type(new_row), row_id)
+                if existing_by_id is not None:
+                    for field in getattr(new_row, "model_fields", {}).keys():
+                        if field == "id":
+                            continue
+                        setattr(existing_by_id, field, getattr(new_row, field))
+                    return existing_by_id
+        except Exception:
+            pass
 
         # Policy
         if isinstance(new_row, PolicyTable):

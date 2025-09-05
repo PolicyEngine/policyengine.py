@@ -9,9 +9,7 @@ from policyengine.models.single_year_dataset import SingleYearDataset
 from policyengine.models.enums import DatasetType
 
 US_HUGGING_FACE_REPO = "policyengine/policyengine-us-data"
-US_HUGGING_FACE_DATASETS = [
-    "enhanced_cps_2024.h5"
-]
+US_HUGGING_FACE_DATASETS = ["enhanced_cps_2024.h5"]
 
 
 def create_ecps_years(start_year: int, end_year: int) -> list[Dataset]:

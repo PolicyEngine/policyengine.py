@@ -9,6 +9,7 @@ from typing import Optional
 
 import pandas as pd
 from pydantic import BaseModel
+from uuid import UUID
 
 from .enums import OperationStatus
 from enum import Enum
@@ -23,6 +24,7 @@ class ReportElement(BaseModel):
     to a DataFrame using the record class' helper.
     """
 
+    id: UUID | None = None
     name: str | None = None
     description: str | None = None
     report: Optional["Report"] = None
@@ -36,6 +38,7 @@ class ReportElement(BaseModel):
 class Report(BaseModel):
     """A report generated from a simulation."""
 
+    id: UUID | None = None
     name: str
     description: str | None = None
     elements: list[ReportElement] = []

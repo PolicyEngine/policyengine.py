@@ -1,0 +1,71 @@
+from __future__ import annotations
+
+from typing import Any
+
+import pandas as pd
+from microdf import MicroDataFrame
+
+from policyengine.models.simulation import Simulation  # ensure fwd ref
+from policyengine.models.single_year_dataset import SingleYearDataset
+from .base import ReportElementDataItem
+
+
+class Count(ReportElementDataItem):
+    """Weighted count of entities where a variable matches a condition.
+
+    Use `Count.run([...])` with items initialized with `count=None`.
+    Conditions supported: exact equality via `equals_value`, and/or range via
+    `min_value` (inclusive) and `max_value` (exclusive). If `equals_value` is
+    provided, range bounds are applied in addition (logical AND).
+    """
+
+    simulation: "Simulation"
+    time_period: int | str | None = None
+    variable: str
+    entity_level: str = "person"
+    equals_value: Any | None = None
+    min_value: float | None = None
+    max_value: float | None = None
+    count: float | None = None
+
+    @staticmethod
+    def run(items: list["Count"]) -> list["Count"]:
+        if not items:
+            return []
+
+        # Group items by entity level to reuse the same table
+        by_level: dict[str, list[Count]] = {}
+        for it in items:
+            by_level.setdefault(it.entity_level, []).append(it)
+
+        out: list[Count] = []
+        for entity_level, group in by_level.items():
+            sim = group[0].simulation
+            data: SingleYearDataset = sim.result.data  # type: ignore[attr-defined]
+            table: pd.DataFrame = data.tables[entity_level]
+            time_period = getattr(sim.dataset.data, "year", None)
+            use_weights = "weight_value" in table.columns
+
+            for it in group:
+                series = table[it.variable]
+                mask = pd.Series(True, index=table.index)
+                if it.equals_value is not None:
+                    mask &= series == it.equals_value
+                if it.min_value is not None:
+                    mask &= series >= it.min_value
+                if it.max_value is not None:
+                    mask &= series < it.max_value
+                df = table.loc[mask].copy()
+                df["__ones__"] = 1.0
+                mdf = (
+                    MicroDataFrame(df, weights="weight_value")
+                    if use_weights and "weight_value" in df.columns
+                    else MicroDataFrame(df)
+                )
+                cnt = float(mdf["__ones__"].sum())
+
+                payload = it.model_dump()
+                payload.update({"time_period": time_period, "count": cnt})
+                out.append(Count(**payload))
+
+        return out

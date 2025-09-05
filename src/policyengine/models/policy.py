@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
+from uuid import UUID
 
 if TYPE_CHECKING:  # Avoid runtime imports/cycles
     from .parameter import ParameterValue
@@ -16,6 +17,7 @@ if TYPE_CHECKING:  # Avoid runtime imports/cycles
 class Policy(BaseModel):
     """Modifications made to baseline tax-benefit rules."""
 
+    id: UUID | None = None
     name: str | None = None
 
     # Metadata

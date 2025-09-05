@@ -4,11 +4,13 @@ Represents a model variable and associated metadata.
 """
 
 from pydantic import BaseModel
+from uuid import UUID
 
 
 class Variable(BaseModel):
     """PolicyEngine variable concept- an attribute of an entity."""
 
+    id: UUID | None = None
     name: str
 
     # Variable metadata

@@ -18,73 +18,107 @@ from policyengine.database import Database
 
 
 def _prompt_select(prompt: str, choices: list[str]) -> str:
-    """Simple numeric selection prompt.
+    """Prompt using Rich with explicit choices.
 
-    Displays a numbered list and asks the user to enter a number.
-    Returns the selected value from `choices`.
+    Requires `rich` (declared as a dependency). Returns the selection.
     """
-    while True:
-        _log(f"{prompt}:")
-        for i, ch in enumerate(choices, start=1):
-            _log(f"  {i}. {ch}")
-        try:
-            sel = input("Enter number: ").strip()
-        except EOFError:
-            sel = ""
-        if sel.isdigit():
-            idx = int(sel) - 1
-            if 0 <= idx < len(choices):
-                return choices[idx]
-        _log("Invalid selection, try again.")
+    from rich.prompt import Prompt
+
+    return str(Prompt.ask(prompt, choices=choices))
 
 
-def _hf_list_tags(repo: str, *, repo_type: str = "datasets") -> list[str]:
-    """Return tag names for a Hugging Face repo using the public API.
+def _hf_list_tags(repo: str) -> list[str]:
+    """Return tag names for a Hugging Face repo.
 
-    Uses HUGGING_FACE_TOKEN if present for private repos.
+    Tries huggingface_hub first (dataset repo), then model; falls back to HTTP
+    calls against both endpoints. Uses HUGGING_FACE_TOKEN if present.
     """
-    base = f"https://huggingface.co/api/{repo_type}/{repo}/refs?type=tag"
-    req = request.Request(base)
     token = os.getenv("HUGGING_FACE_TOKEN")
-    if token:
-        req.add_header("Authorization", f"Bearer {token}")
-    try:
-        with request.urlopen(req, timeout=20) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except error.HTTPError as e:
-        _log(f"[error] Failed to fetch tags: HTTP {e.code}")
-        return []
-    except Exception as e:  # network/parse
-        _log(f"[error] Failed to fetch tags: {e}")
-        return []
 
-    tags: list[str] = []
-    # API sometimes returns { tags: [{name:..}] } or { refs: { tags: [...] } }
-    if isinstance(data, dict):
-        if isinstance(data.get("tags"), list):
-            tags = [t.get("name") for t in data.get("tags", []) if t.get("name")]
-        elif isinstance(data.get("refs"), dict) and isinstance(
-            data["refs"].get("tags"), list
-        ):
-            tags = [
-                t.get("name") for t in data["refs"].get("tags", []) if t.get("name")
-            ]
-        elif isinstance(data.get("refs"), list):
-            tags = [
-                r.get("name")
-                for r in data.get("refs", [])
-                if r and r.get("name") and r.get("type") == "tag"
-            ]
-    # Sort newest-like first if semantic versions, otherwise lexicographic desc
-    tags = [t for t in tags if isinstance(t, str)]
-    try:
-        # Attempt to sort by version (vX.Y.Z) fallback to lexicographic
-        from packaging.version import Version  # type: ignore
+    def _filter_sort_versions(ts: list[str]) -> list[str]:
+        """Keep only tags like a.b.c (optionally prefixed with 'v'), sort ascending."""
+        clean: list[tuple[str, tuple[int, int, int]]] = []
+        for t in ts:
+            if not isinstance(t, str):
+                continue
+            s = t.strip()
+            if s.startswith("v"):
+                core = s[1:]
+            else:
+                core = s
+            parts = core.split(".")
+            if len(parts) != 3 or not all(p.isdigit() for p in parts):
+                continue
+            try:
+                key = (int(parts[0]), int(parts[1]), int(parts[2]))
+            except Exception:
+                continue
+            clean.append((t, key))
+        clean.sort(key=lambda x: x[1])  # ascending sequential order
+        return [t for t, _ in clean]
 
-        tags.sort(key=lambda t: Version(t.lstrip("v")), reverse=True)
+    # 1) huggingface_hub API
+    try:
+        from huggingface_hub import HfApi  # type: ignore
+
+        api = HfApi(token=token)
+        # Try as dataset repo
+        refs = api.list_repo_refs(repo, repo_type="dataset")
+        tags = [t.name for t in (refs.tags or [])]
+        tags = _filter_sort_versions(tags)
+        if tags:
+            return tags
+        # Try as model repo (fallback)
+        refs = api.list_repo_refs(repo, repo_type="model")
+        tags = [t.name for t in (refs.tags or [])]
+        tags = _filter_sort_versions(tags)
+        if tags:
+            return tags
     except Exception:
-        tags.sort(reverse=True)
-    return tags
+        pass
+
+    # 2) HTTP fallback: try both endpoints
+    def _http_tags(endpoint: str) -> list[str]:
+        url = f"https://huggingface.co/api/{endpoint}/{repo}/refs?type=tag"
+        req = request.Request(url)
+        if token:
+            req.add_header("Authorization", f"Bearer {token}")
+        try:
+            with request.urlopen(req, timeout=20) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except Exception:
+            return []
+        tags: list[str] = []
+        if isinstance(data, dict):
+            if isinstance(data.get("tags"), list):
+                tags = [
+                    t.get("name")
+                    for t in data.get("tags", [])
+                    if t.get("name")
+                ]
+            elif isinstance(data.get("refs"), dict) and isinstance(
+                data["refs"].get("tags"), list
+            ):
+                tags = [
+                    t.get("name")
+                    for t in data["refs"].get("tags", [])
+                    if t.get("name")
+                ]
+            elif isinstance(data.get("refs"), list):
+                tags = [
+                    r.get("name")
+                    for r in data.get("refs", [])
+                    if r and r.get("name") and r.get("type") == "tag"
+                ]
+        return tags
+
+    for endpoint in ("datasets", "models"):
+        tags = _http_tags(endpoint)
+        tags = _filter_sort_versions(tags)
+        if tags:
+            return tags
+
+    return []
 
 
 def _console() -> Any:
@@ -444,47 +478,14 @@ def main(argv: list[str] | None = None) -> None:
     )
     p_model.add_argument("country", choices=["uk", "us"], help="Country code")
 
-    # seed-datasets
-    p_ds = sub.add_parser(
-        "seed-datasets", help="Seed datasets for a country/family"
+    # seed-dataset (Hugging Face flow only)
+    p_sd = sub.add_parser(
+        "seed-dataset",
+        help="Seed datasets from a Hugging Face repo (interactive)",
     )
-    p_ds.add_argument("country", choices=["uk", "us"], help="Country code")
-    p_ds.add_argument("family", help="Dataset family (e.g., efrs, ecps)")
-    p_ds.add_argument(
-        "--version",
-        dest="version",
-        default=None,
-        help="Dataset version label to store on rows",
-    )
-    p_ds.add_argument(
-        "--start",
-        dest="start_year",
-        type=int,
-        default=None,
-        help="Start year (optional)",
-    )
-    p_ds.add_argument(
-        "--end",
-        dest="end_year",
-        type=int,
-        default=None,
-        help="End year (optional)",
-    )
-
-    # seed-datasets-hf (interactive)
-    p_hf = sub.add_parser(
-        "seed-datasets-hf",
-        help="Interactively seed datasets from a Hugging Face repo",
-    )
-    p_hf.add_argument("--country", choices=["uk", "us"], default=None)
-    p_hf.add_argument(
-        "--family",
-        choices=["efrs", "ecps"],
-        default=None,
-        help="Dataset family (efrs/ecps)",
-    )
-    p_hf.add_argument("--start", dest="start_year", type=int, default=None)
-    p_hf.add_argument("--end", dest="end_year", type=int, default=None)
+    p_sd.add_argument("--country", choices=["uk", "us"], default=None)
+    p_sd.add_argument("--start", dest="start_year", type=int, default=None)
+    p_sd.add_argument("--end", dest="end_year", type=int, default=None)
 
     # reset
     p_reset = sub.add_parser(
@@ -514,7 +515,9 @@ def main(argv: list[str] | None = None) -> None:
             db_url = os.getenv("DATABASE_URL", "sqlite:///policyengine.db")
         elif args.cmd is None:
             # Interactive selection for DB location
-            choice = _prompt_select("Select database", ["local", "policyengine"])
+            choice = _prompt_select(
+                "Select database", ["local", "policyengine"]
+            )
             if choice == "policyengine":
                 db_url = _policyengine_db_url()
             else:
@@ -532,60 +535,36 @@ def main(argv: list[str] | None = None) -> None:
         )
         return
 
-    if args.cmd == "seed-datasets":
-        _log(
-            f"[migrate] Seeding datasets for {args.country}:{args.family} (version={args.version or '-'})."
-        )
-        n = seed_datasets(
-            db,
-            args.country,
-            family=args.family,
-            version=args.version,
-            start_year=args.start_year,
-            end_year=args.end_year,
-        )
-        _log(f"[done] datasets={n}")
-        return
-
-    if args.cmd == "seed-datasets-hf":
-        # Interactive selection flow
+    if args.cmd == "seed-dataset":
+        # Interactive selection flow (country only)
         country = getattr(args, "country", None) or _prompt_select(
             "Select country", ["uk", "us"]
         )
         if country == "uk":
-            families = ["efrs"]
-        elif country == "us":
-            families = ["ecps"]
-        else:
-            raise SystemExit(f"Unknown country: {country}")
-
-        family = getattr(args, "family", None) or _prompt_select(
-            "Select dataset family", families
-        )
-
-        if country == "uk" and family == "efrs":
             from policyengine.countries.uk.datasets import (
                 UK_HUGGING_FACE_REPO as REPO,
                 UK_HUGGING_FACE_FILENAMES as FILES,
                 create_efrs_years_from_hf as build_years,
             )
-        elif country == "us" and family == "ecps":
+        elif country == "us":
             from policyengine.countries.us.datasets import (
                 US_HUGGING_FACE_REPO as REPO,
                 US_HUGGING_FACE_DATASETS as FILES,
                 create_ecps_years_from_hf as build_years,
             )
         else:
-            raise SystemExit(f"Unknown dataset family for {country}: {family}")
+            raise SystemExit(f"Unknown country: {country}")
 
         # Choose base file
-        filename = FILES[0] if len(FILES) == 1 else _prompt_select(
-            "Select base dataset file", list(FILES)
+        filename = (
+            FILES[0]
+            if len(FILES) == 1
+            else _prompt_select("Select base dataset file", list(FILES))
         )
 
         # Fetch and choose tag
         _log(f"[migrate] Fetching tags from {REPO}...")
-        tags = _hf_list_tags(REPO, repo_type="datasets")
+        tags = _hf_list_tags(REPO)
         if not tags:
             raise SystemExit("No tags found or access denied to the repo.")
         version = _prompt_select("Select dataset version (git tag)", tags)
@@ -599,38 +578,17 @@ def main(argv: list[str] | None = None) -> None:
         start_year = getattr(args, "start_year", None)
         end_year = getattr(args, "end_year", None)
 
-        try:
-            from rich.prompt import IntPrompt  # type: ignore
+        from rich.prompt import IntPrompt  # type: ignore
 
-            if start_year is None:
-                start_year = int(
-                    IntPrompt.ask("Start year", default=str(default_start))
-                )
-            if end_year is None:
-                end_year = int(
-                    IntPrompt.ask("End year", default=str(default_end))
-                )
-        except Exception:
-            # Fallback via input()
-            if start_year is None:
-                try:
-                    start_year = int(
-                        input(f"Start year [{default_start}]: ").strip()
-                        or default_start
-                    )
-                except Exception:
-                    start_year = default_start
-            if end_year is None:
-                try:
-                    end_year = int(
-                        input(f"End year [{default_end}]: ").strip()
-                        or default_end
-                    )
-                except Exception:
-                    end_year = default_end
+        if start_year is None:
+            start_year = int(
+                IntPrompt.ask("Start year", default=str(default_start))
+            )
+        if end_year is None:
+            end_year = int(IntPrompt.ask("End year", default=str(default_end)))
 
         _log(
-            f"[migrate] Seeding {country}:{family} from HF tag '{version}' years {start_year}-{end_year}..."
+            f"[migrate] Seeding {country} from HF tag '{version}' years {start_year}-{end_year}..."
         )
 
         # Build
@@ -690,8 +648,7 @@ def main(argv: list[str] | None = None) -> None:
     # Automatic interactive wizard when no subcommand provided
     if args.cmd is None:
         action = _prompt_select(
-            "Choose action",
-            ["seed-model", "seed-datasets", "seed-datasets-hf", "reset"],
+            "Choose action", ["seed-model", "seed-dataset", "reset"]
         )
 
         if action == "seed-model":
@@ -703,136 +660,49 @@ def main(argv: list[str] | None = None) -> None:
             )
             return
 
-        if action == "seed-datasets":
+        if action == "seed-dataset":
+            # Reuse the same HF-only flow as the subcommand (country only)
             country = _prompt_select("Select country", ["uk", "us"])
-            families = ["efrs"] if country == "uk" else ["ecps"]
-            family = _prompt_select("Select dataset family", families)
-
-            # Optional version label
-            try:
-                from rich.prompt import Prompt  # type: ignore
-
-                version = Prompt.ask(
-                    "Version label (optional)", default="", show_default=False
-                ).strip()
-            except Exception:
-                try:
-                    version = input("Version label (optional): ").strip()
-                except EOFError:
-                    version = ""
-            version = version or None
-
-            # Year range defaults
             if country == "uk":
-                default_start, default_end = 2023, 2030
-            else:
-                default_start, default_end = 2024, 2035
-            try:
-                from rich.prompt import IntPrompt  # type: ignore
-
-                start_year = int(
-                    IntPrompt.ask("Start year", default=str(default_start))
-                )
-                end_year = int(
-                    IntPrompt.ask("End year", default=str(default_end))
-                )
-            except Exception:
-                try:
-                    start_year = int(
-                        input(f"Start year [{default_start}]: ").strip()
-                        or default_start
-                    )
-                except Exception:
-                    start_year = default_start
-                try:
-                    end_year = int(
-                        input(f"End year [{default_end}]: ").strip()
-                        or default_end
-                    )
-                except Exception:
-                    end_year = default_end
-
-            _log(
-                f"[migrate] Seeding datasets for {country}:{family} (version={version or '-'}) {start_year}-{end_year}..."
-            )
-            n = seed_datasets(
-                db,
-                country,
-                family=family,
-                version=version,
-                start_year=start_year,
-                end_year=end_year,
-            )
-            _log(f"[done] datasets={n}")
-            return
-
-        if action == "seed-datasets-hf":
-            country = _prompt_select("Select country", ["uk", "us"])
-            families = ["efrs"] if country == "uk" else ["ecps"]
-            family = _prompt_select("Select dataset family", families)
-
-            if country == "uk" and family == "efrs":
                 from policyengine.countries.uk.datasets import (
                     UK_HUGGING_FACE_REPO as REPO,
                     UK_HUGGING_FACE_FILENAMES as FILES,
                     create_efrs_years_from_hf as build_years,
                 )
-            elif country == "us" and family == "ecps":
+            elif country == "us":
                 from policyengine.countries.us.datasets import (
                     US_HUGGING_FACE_REPO as REPO,
                     US_HUGGING_FACE_DATASETS as FILES,
                     create_ecps_years_from_hf as build_years,
                 )
             else:
-                raise SystemExit(
-                    f"Unknown dataset family for {country}: {family}"
-                )
+                raise SystemExit(f"Unknown country: {country}")
 
-            filename = FILES[0] if len(FILES) == 1 else _prompt_select(
-                "Select base dataset file", list(FILES)
+            filename = (
+                FILES[0]
+                if len(FILES) == 1
+                else _prompt_select("Select base dataset file", list(FILES))
             )
 
             _log(f"[migrate] Fetching tags from {REPO}...")
-            tags = _hf_list_tags(REPO, repo_type="datasets")
+            tags = _hf_list_tags(REPO)
             if not tags:
-                raise SystemExit(
-                    "No tags found or access denied to the repo."
-                )
-            version = _prompt_select(
-                "Select dataset version (git tag)", tags
-            )
+                raise SystemExit("No tags found or access denied to the repo.")
+            version = _prompt_select("Select dataset version (git tag)", tags)
 
             if country == "uk":
                 default_start, default_end = 2023, 2030
             else:
                 default_start, default_end = 2024, 2035
-            try:
-                from rich.prompt import IntPrompt  # type: ignore
+            from rich.prompt import IntPrompt  # type: ignore
 
-                start_year = int(
-                    IntPrompt.ask("Start year", default=str(default_start))
-                )
-                end_year = int(
-                    IntPrompt.ask("End year", default=str(default_end))
-                )
-            except Exception:
-                try:
-                    start_year = int(
-                        input(f"Start year [{default_start}]: ").strip()
-                        or default_start
-                    )
-                except Exception:
-                    start_year = default_start
-                try:
-                    end_year = int(
-                        input(f"End year [{default_end}]: ").strip()
-                        or default_end
-                    )
-                except Exception:
-                    end_year = default_end
+            start_year = int(
+                IntPrompt.ask("Start year", default=str(default_start))
+            )
+            end_year = int(IntPrompt.ask("End year", default=str(default_end)))
 
             _log(
-                f"[migrate] Seeding {country}:{family} from HF tag '{version}' years {start_year}-{end_year}..."
+                f"[migrate] Seeding {country} from HF tag '{version}' years {start_year}-{end_year}..."
             )
             datasets = build_years(
                 start_year,
