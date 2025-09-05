@@ -48,9 +48,9 @@ class ChangeByBaselineGroup(ReportElementDataItem):
     entity_level: str = "household"
     time_period: int | str | None = None
 
-    total_change: float
-    relative_change: float
-    average_change_per_entity: float
+    total_change: float | None = None
+    relative_change: float | None = None
+    average_change_per_entity: float | None = None
 
     @staticmethod
     def run(
@@ -92,9 +92,18 @@ class ChangeByBaselineGroup(ReportElementDataItem):
                 merged["__delta__"] = (
                     merged[f"{var}_ref"] - merged[f"{var}_base"]
                 )
+                # Resolve group column name (merge may suffix)
+                if grp_var in merged.columns:
+                    grp_col = grp_var
+                elif f"{grp_var}_base" in merged.columns:
+                    grp_col = f"{grp_var}_base"
+                elif f"{grp_var}_ref" in merged.columns:
+                    grp_col = f"{grp_var}_ref"
+                else:
+                    grp_col = None
                 sub = (
-                    merged[merged[grp_var] == it.group_value]
-                    if grp_var in merged.columns
+                    merged[merged[grp_col] == it.group_value]  # type: ignore[index]
+                    if grp_col is not None
                     else merged
                 )
                 mdf = (
@@ -146,8 +155,8 @@ class VariableChangeGroupByQuantileGroup(ReportElementDataItem):
     change_upper_bound: float
     change_bound_is_relative: bool = False
     fixed_entity_count_per_quantile_group: str = "household"
-    percent_of_group_in_change_group: float
-    entities_in_group_in_change_group: float
+    percent_of_group_in_change_group: float | None = None
+    entities_in_group_in_change_group: float | None = None
 
     @staticmethod
     def run(
@@ -192,13 +201,21 @@ class VariableChangeGroupByQuantileGroup(ReportElementDataItem):
                     base = merged[f"{var}_base"].replace({0.0: np.nan}).abs()
                     merged["__delta__"] = merged["__delta__"] / base
 
-                # Compute stats only for the requested group value
-                # The field name is `quantile_group` in the model
-                target = it.quantile_group
+                # Resolve group column name and subset to selected group
                 if grp_var in merged.columns:
-                    grp = merged[merged[grp_var] == target].copy()
+                    grp_col = grp_var
+                elif f"{grp_var}_base" in merged.columns:
+                    grp_col = f"{grp_var}_base"
+                elif f"{grp_var}_ref" in merged.columns:
+                    grp_col = f"{grp_var}_ref"
                 else:
-                    grp = merged.copy()
+                    grp_col = None
+                target = it.quantile_group
+                grp = (
+                    merged[merged[grp_col] == target].copy()  # type: ignore[index]
+                    if grp_col is not None
+                    else merged.copy()
+                )
                 grp["__in_bucket__"] = (
                     (grp["__delta__"] >= it.change_lower_bound)
                     & (grp["__delta__"] < it.change_upper_bound)
@@ -229,8 +246,8 @@ class VariableChangeGroupByVariableValue(ReportElementDataItem):
     group_variable: str
     group_variable_value: Any
     fixed_entity_count_per_quantile_group: str = "household"
-    percent_of_group_in_change_group: float
-    entities_in_group_in_change_group: float
+    percent_of_group_in_change_group: float | None = None
+    entities_in_group_in_change_group: float | None = None
 
     @staticmethod
     def run(
@@ -274,13 +291,21 @@ class VariableChangeGroupByVariableValue(ReportElementDataItem):
                     base = merged[f"{var}_base"].replace({0.0: np.nan}).abs()
                     merged["__delta__"] = merged["__delta__"] / base
 
-                # Only compute for the requested group value
+                # Resolve group column name and subset
                 if grp_var in merged.columns:
-                    grp = merged[
-                        merged[grp_var] == it.group_variable_value
-                    ].copy()
+                    grp_col = grp_var
+                elif f"{grp_var}_base" in merged.columns:
+                    grp_col = f"{grp_var}_base"
+                elif f"{grp_var}_ref" in merged.columns:
+                    grp_col = f"{grp_var}_ref"
                 else:
-                    grp = merged.copy()
+                    grp_col = None
+
+                grp = (
+                    merged[merged[grp_col] == it.group_variable_value].copy()  # type: ignore[index]
+                    if grp_col is not None
+                    else merged.copy()
+                )
                 grp["__in_bucket__"] = (
                     (grp["__delta__"] >= it.change_lower_bound)
                     & (grp["__delta__"] < it.change_upper_bound)

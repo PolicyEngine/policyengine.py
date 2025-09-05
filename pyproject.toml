@@ -83,7 +83,7 @@ extend-exclude = '''
 
 [tool.ruff]
 line-length = 79
-target-version = "py311"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = [
