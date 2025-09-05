@@ -29,7 +29,7 @@ class ReportElementDataItem(BaseModel):
         rows = []
         for r in records:
             row: dict[str, object] = {}
-            for k in getattr(r, "model_fields").keys():
+            for k in r.__class__.model_fields.keys():
                 v = getattr(r, k)
                 if isinstance(v, Simulation):
                     if k == "simulation":
