@@ -83,8 +83,13 @@ def test_simulation_with_result_dataset(tmp_path):
 def test_parameter_value_cascade(tmp_path):
     db = _mk_db(tmp_path)
 
-    param = Parameter(name="threshold", data_type=int)
-    policy = Policy(name="baseline")
+    param = Parameter(name="threshold", data_type=int, country="uk")
+    policy = Policy(name="baseline", country="uk")
+    
+    # Add the parameter and policy first
+    param_row = db.add(param)
+    policy_row = db.add(policy)
+    
     pv = ParameterValue(
         parameter=param,
         policy=policy,

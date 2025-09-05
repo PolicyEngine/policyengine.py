@@ -42,7 +42,10 @@ def test_parameter_value_infinity_roundtrip(tmp_path):
     db_path = tmp_path / "inf.db"
     db = Database(url=f"sqlite:///{db_path}")
 
-    p = Parameter(name="x", data_type=float)
+    p = Parameter(name="x", data_type=float, country="uk")
+    # Add the parameter first
+    db.add(p)
+    
     pv = ParameterValue(
         parameter=p,
         model_version="v",
