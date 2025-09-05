@@ -42,8 +42,8 @@ def _get_simulation(simulation: Simulation):
     parametric_policy = apply_parametric_reform(
         simulation.policy.parameter_values or []
     )
-    parametric_dynamics = apply_parametric_reform(
-        simulation.dynamics.parameter_values or []
+    parametric_dynamic = apply_parametric_reform(
+        simulation.dynamic.parameter_values or []
     )
 
     def modifier(sim):
@@ -51,9 +51,9 @@ def _get_simulation(simulation: Simulation):
         if simulation.policy.simulation_modifier:
             simulation.policy.simulation_modifier(sim)
 
-        parametric_dynamics.simulation_modifier(sim)
-        if simulation.dynamics.simulation_modifier:
-            simulation.dynamics.simulation_modifier(sim)
+        parametric_dynamic.simulation_modifier(sim)
+        if simulation.dynamic.simulation_modifier:
+            simulation.dynamic.simulation_modifier(sim)
 
     sim = PolicyEngineUSSimulation(
         dataset=convert_entity_tables_to_us_dataset(simulation.dataset.data),

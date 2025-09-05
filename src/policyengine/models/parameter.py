@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from uuid import UUID
 
 if TYPE_CHECKING:  # Import to satisfy type checkers without runtime cycles
-    from .dynamics import Dynamics
+    from .dynamic import Dynamic
     from .policy import Policy
 
 
@@ -37,7 +37,7 @@ class ParameterValue(BaseModel):
     id: UUID | None = None
     # Foreign keys
     policy: Policy | None = None
-    dynamics: Dynamics | None = None
+    dynamic: Dynamic | None = None
     parameter: Parameter
     model_version: str
 

@@ -242,7 +242,7 @@ def seed_model(db: Database, country: str) -> dict[str, int]:
     par_count = len(unique_params)
 
     # Attach country and persist
-    # Anchor policy/dynamics
+    # Anchor policy/dynamic
     anchors = []
     if md.get("current_law") is not None:
         md["current_law"].country = country

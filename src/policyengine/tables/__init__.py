@@ -6,7 +6,7 @@ from .user import (
     UserReportElementTable,
 )
 from .policy import PolicyTable
-from .dynamics import DynamicsTable
+from .dynamic import DynamicTable
 from .parameter import ParameterTable, ParameterValueTable
 from .dataset import DatasetTable
 from .variable import VariableTable
@@ -27,7 +27,7 @@ __all__ = [
     "UserReportTable",
     "UserReportElementTable",
     "PolicyTable",
-    "DynamicsTable",
+    "DynamicTable",
     "ParameterTable",
     "ParameterValueTable",
     "DatasetTable",

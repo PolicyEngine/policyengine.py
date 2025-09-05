@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from policyengine.models import Dataset, DatasetType, Policy, Dynamics
+from policyengine.models import Dataset, DatasetType, Policy, Dynamic
 from policyengine.models.single_year_dataset import SingleYearDataset
 from policyengine.models.simulation import Simulation
 from policyengine.models.report_items import Aggregate, AggregateMetric
@@ -16,7 +16,7 @@ def _mk_sim_with_person_table(
     sim = Simulation(
         dataset=ds,
         policy=Policy(),
-        dynamics=Dynamics(),
+        dynamic=Dynamic(),
         country="uk",
     )
     # result mirrors dataset for reporting
@@ -66,10 +66,10 @@ def test_to_dataframe_flattens_simulation_columns():
     sim = _mk_sim_with_person_table(df)
     sim.policy.name = "P"
     sim.dataset.name = "D"
-    sim.dynamics.name = "X"
+    sim.dynamic.name = "X"
 
     recs = Aggregate.build(simulation=sim, variable="var")
     dfx = Aggregate.to_dataframe(recs)
-    # Simulation column is flattened to policy/dataset/dynamics
+    # Simulation column is flattened to policy/dataset/dynamic
     assert "simulation" not in dfx.columns
-    assert set(["policy", "dataset", "dynamics"]).issubset(dfx.columns)
+    assert set(["policy", "dataset", "dynamic"]).issubset(dfx.columns)

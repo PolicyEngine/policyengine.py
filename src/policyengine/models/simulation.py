@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from uuid import UUID
 
 from .dataset import Dataset
-from .dynamics import Dynamics
+from .dynamic import Dynamic
 from .enums import OperationStatus
 from .policy import Policy
 from policyengine.utils.version import get_model_version
@@ -24,7 +24,7 @@ class Simulation(BaseModel):
     # Foreign key references
     dataset: Dataset
     policy: Policy
-    dynamics: Dynamics
+    dynamic: Dynamic
     result: Any | None = None
     model_version: str | None = None
     country: str

@@ -28,7 +28,7 @@ from policyengine.models.user import (
     UserReportElement,
 )
 from policyengine.models.policy import Policy
-from policyengine.models.dynamics import Dynamics
+from policyengine.models.dynamic import Dynamic
 from policyengine.models.parameter import Parameter, ParameterValue
 from policyengine.models.dataset import Dataset
 from policyengine.models.single_year_dataset import SingleYearDataset
@@ -55,7 +55,7 @@ from policyengine.tables import (
     UserReportTable,
     UserReportElementTable,
     PolicyTable,
-    DynamicsTable,
+    DynamicTable,
     ParameterTable,
     ParameterValueTable,
     DatasetTable,
@@ -118,7 +118,7 @@ class Database:
             UserReport: UserReportTable,
             UserReportElement: UserReportElementTable,
             Policy: PolicyTable,
-            Dynamics: DynamicsTable,
+            Dynamic: DynamicTable,
             Parameter: ParameterTable,
             ParameterValue: ParameterValueTable,
             Dataset: DatasetTable,
@@ -232,7 +232,7 @@ class Database:
     ) -> None:
         """Replace-and-insert bulk operation for ParameterValue rows.
 
-        For each unique (parameter, model_version, policy, dynamics, country)
+        For each unique (parameter, model_version, policy, dynamic, country)
         key, deletes existing rows, then bulk inserts provided values in chunks.
         """
         items = list(pvalues)
@@ -244,7 +244,7 @@ class Database:
             ParameterValueTable as PVTable,
             ParameterTable as PTable,
             PolicyTable as PoTable,
-            DynamicsTable as DTable,
+            DynamicTable as DTable,
         )
 
         total = len(items)
@@ -265,7 +265,7 @@ class Database:
             # Caches and per-run bookkeeping
             param_cache: dict[tuple[str | None, str | None], Any] = {}
             policy_cache: dict[tuple[str | None, str | None], Any] = {}
-            dynamics_cache: dict[tuple[str | None, str | None], Any] = {}
+            dynamic_cache: dict[tuple[str | None, str | None], Any] = {}
             deleted_series: set[tuple[Any, str, Any, Any, Any]] = set()
 
             import uuid
@@ -331,31 +331,31 @@ class Database:
                                 pol_id = pol_row.id
                             policy_cache[pol_key] = pol_id
 
-                    # Dynamics id (optional)
+                    # Dynamic id (optional)
                     dyn_id = None
-                    if obj.dynamics is not None:
-                        dyn_key = (obj.dynamics.name, obj.dynamics.country)
-                        dyn_id = dynamics_cache.get(dyn_key)
+                    if obj.dynamic is not None:
+                        dyn_key = (obj.dynamic.name, obj.dynamic.country)
+                        dyn_id = dynamic_cache.get(dyn_key)
                         if dyn_id is None:
                             existing = s.exec(
                                 select(DTable).where(
-                                    DTable.name == obj.dynamics.name,
-                                    DTable.country == obj.dynamics.country,
+                                    DTable.name == obj.dynamic.name,
+                                    DTable.country == obj.dynamic.country,
                                 )
                             ).first()
                             if existing is not None:
                                 dyn_id = existing.id
                             else:
                                 dyn_row = self._to_table(
-                                    obj.dynamics, s, cascade=cascade
+                                    obj.dynamic, s, cascade=cascade
                                 )
                                 dyn_row = self._upsert_row(
-                                    obj.dynamics, dyn_row, s
+                                    obj.dynamic, dyn_row, s
                                 )  # type: ignore[arg-type]
                                 s.add(dyn_row)
                                 s.flush()
                                 dyn_id = dyn_row.id
-                            dynamics_cache[dyn_key] = dyn_id
+                            dynamic_cache[dyn_key] = dyn_id
 
                     series_key = (
                         par_id,
@@ -444,7 +444,7 @@ class Database:
 
         Accepts any subset of {"uk", "us"}. Uses country-specific metadata
         helpers to load Variables, Parameters (via ParameterValues), and
-        default Policy/Dynamics and upserts them into the DB.
+        default Policy/Dynamic and upserts them into the DB.
         """
         for country in countries:
             country = country.lower()
@@ -461,7 +461,7 @@ class Database:
                     f"Unknown country code for seeding: {country}"
                 )
 
-            # Upsert policy and dynamics anchors
+            # Upsert policy and dynamic anchors
             anchor_objs = []
             if md.get("current_law") is not None:
                 md["current_law"].country = country
@@ -659,7 +659,7 @@ class Database:
                 description=obj.description,
             )
 
-        # Policy, Dynamics, Parameters
+        # Policy, Dynamic, Parameters
         if isinstance(obj, Policy):
             return PolicyTable(
                 id=getattr(obj, "id", None),
@@ -668,19 +668,19 @@ class Database:
                 country=obj.country,
             )
 
-        if isinstance(obj, Dynamics):
+        if isinstance(obj, Dynamic):
             parent_id = None
-            if obj.parent_dynamics is not None and cascade:
+            if obj.parent_dynamic is not None and cascade:
                 parent_row = self._to_table(
-                    obj.parent_dynamics, s, cascade=cascade
+                    obj.parent_dynamic, s, cascade=cascade
                 )
                 parent_row = self._upsert_row(
-                    obj.parent_dynamics, parent_row, s
+                    obj.parent_dynamic, parent_row, s
                 )
                 s.add(parent_row)
                 s.flush()
                 parent_id = parent_row.id
-            return DynamicsTable(
+            return DynamicTable(
                 id=getattr(obj, "id", None),
                 name=obj.name,
                 parent_id=parent_id,
@@ -719,7 +719,7 @@ class Database:
             from policyengine.tables import (
                 ParameterTable as PTable,
                 PolicyTable as PoTable,
-                DynamicsTable as DTable,
+                DynamicTable as DTable,
             )
 
             # parameter is required and must already exist (by name+country)
@@ -751,9 +751,9 @@ class Database:
                     )
                 policy_id = pol_row.id
 
-            dynamics_id = None
-            if obj.dynamics is not None:
-                dyn = obj.dynamics
+            dynamic_id = None
+            if obj.dynamic is not None:
+                dyn = obj.dynamic
                 dyn_row = s.exec(
                     select(DTable).where(
                         DTable.name == dyn.name, DTable.country == dyn.country
@@ -761,15 +761,15 @@ class Database:
                 ).first()
                 if dyn_row is None:
                     raise ValueError(
-                        f"Dynamics not found for value: {dyn.name} ({dyn.country})"
+                        f"Dynamic not found for value: {dyn.name} ({dyn.country})"
                     )
-                dynamics_id = dyn_row.id
+                dynamic_id = dyn_row.id
 
             # JSON-safe value handling (inf/-inf, NaN)
             return ParameterValueTable(
                 id=getattr(obj, "id", None),
                 policy_id=policy_id,
-                dynamics_id=dynamics_id,
+                dynamics_id=dynamic_id,
                 parameter_id=par_row.id,  # type: ignore[arg-type]
                 model_version=obj.model_version,
                 start_date=obj.start_date,
@@ -818,9 +818,9 @@ class Database:
                 s.add(po_row)
                 s.flush()
                 policy_id = po_row.id
-            if obj.dynamics is not None and cascade:
-                dy_row = self._to_table(obj.dynamics, s, cascade=cascade)
-                dy_row = self._upsert_row(obj.dynamics, dy_row, s)
+            if obj.dynamic is not None and cascade:
+                dy_row = self._to_table(obj.dynamic, s, cascade=cascade)
+                dy_row = self._upsert_row(obj.dynamic, dy_row, s)
                 s.add(dy_row)
                 s.flush()
                 dynamics_id = dy_row.id
@@ -1084,7 +1084,7 @@ class Database:
                 description=row.description,
             )
 
-        # Policy, Dynamics, Parameters
+        # Policy, Dynamic, Parameters
         if isinstance(row, PolicyTable):
             return Policy(
                 id=row.id,
@@ -1093,18 +1093,18 @@ class Database:
                 country=row.country,
             )
 
-        if isinstance(row, DynamicsTable):
+        if isinstance(row, DynamicTable):
             parent = (
                 self._to_model(
-                    s.get(DynamicsTable, row.parent_id), s, cascade=False
+                    s.get(DynamicTable, row.parent_id), s, cascade=False
                 )
                 if (cascade and row.parent_id is not None)
                 else None
             )
-            return Dynamics(
+            return Dynamic(
                 id=row.id,
                 name=row.name,
-                parent_dynamics=parent,
+                parent_dynamic=parent,
                 description=row.description,
                 created_at=row.created_at,
                 updated_at=row.updated_at,
@@ -1145,9 +1145,9 @@ class Database:
                 if (cascade and row.policy_id is not None)
                 else None
             )
-            dynamics = (
+            dynamic = (
                 self._to_model(
-                    s.get(DynamicsTable, row.dynamics_id), s, cascade=False
+                    s.get(DynamicTable, row.dynamics_id), s, cascade=False
                 )
                 if (cascade and row.dynamics_id is not None)
                 else None
@@ -1162,7 +1162,7 @@ class Database:
             return ParameterValue(
                 id=row.id,
                 policy=policy,
-                dynamics=dynamics,
+                dynamic=dynamic,
                 parameter=parameter,  # type: ignore[arg-type]
                 model_version=row.model_version,
                 start_date=row.start_date,
@@ -1212,9 +1212,9 @@ class Database:
                 if row.policy_id is not None
                 else None
             )
-            dynamics = (
+            dynamic = (
                 self._to_model(
-                    s.get(DynamicsTable, row.dynamics_id), s, cascade=False
+                    s.get(DynamicTable, row.dynamics_id), s, cascade=False
                 )
                 if row.dynamics_id is not None
                 else None
@@ -1232,7 +1232,7 @@ class Database:
                 id=row.id,
                 dataset=dataset,  # type: ignore[arg-type]
                 policy=policy,  # type: ignore[arg-type]
-                dynamics=dynamics,  # type: ignore[arg-type]
+                dynamic=dynamic,  # type: ignore[arg-type]
                 result=result,  # type: ignore[arg-type]
                 model_version=row.model_version,
                 country=row.country,
@@ -1347,13 +1347,13 @@ class Database:
         - Parameter: same name+country replaces
         - Variable: same name+country replaces
         - Policy: same name+country replaces
-        - Dynamics: same name+country replaces
-        - ParameterValue: same (parameter, model_version, start/end, policy, dynamics, country) replaces
+        - Dynamic: same name+country replaces
+        - ParameterValue: same (parameter, model_version, start/end, policy, dynamic, country) replaces
         - Report/ReportElement: same name+country replaces (best-effort)
         """
         from policyengine.tables import (
             PolicyTable,
-            DynamicsTable,
+            DynamicTable,
             ParameterTable,
             ParameterValueTable,
             VariableTable,
@@ -1391,11 +1391,11 @@ class Database:
                 return existing
             return new_row
 
-        # Dynamics
-        if isinstance(new_row, DynamicsTable):
-            stmt = select(DynamicsTable).where(
-                DynamicsTable.name == new_row.name,
-                DynamicsTable.country == new_row.country,
+        # Dynamic
+        if isinstance(new_row, DynamicTable):
+            stmt = select(DynamicTable).where(
+                DynamicTable.name == new_row.name,
+                DynamicTable.country == new_row.country,
             )
             existing = s.exec(stmt).first()
             if existing:

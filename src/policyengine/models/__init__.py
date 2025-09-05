@@ -8,7 +8,7 @@ preserving the original import surface. You can continue using:
 """
 
 from .dataset import Dataset
-from .dynamics import Dynamics
+from .dynamic import Dynamic
 from .enums import DatasetType, OperationStatus
 from .parameter import Parameter, ParameterValue
 from .policy import Policy
@@ -30,7 +30,7 @@ from .user import (
 # Resolve forward references for Pydantic models that reference each other
 try:
     Policy.model_rebuild()
-    Dynamics.model_rebuild()
+    Dynamic.model_rebuild()
     ParameterValue.model_rebuild()
     Report.model_rebuild()
     ReportElement.model_rebuild()

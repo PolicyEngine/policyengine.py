@@ -21,10 +21,10 @@ class ReportElementDataItem(BaseModel):
         """Convert records to a DataFrame.
 
         Default rule: if a field is a Simulation, replace it with columns for
-        policy/dataset/dynamics names. For fields named `baseline_simulation`
+        policy/dataset/dynamic names. For fields named `baseline_simulation`
         or `reform_simulation`, prefix these columns with `baseline_`/`reform_`.
         For a field named exactly `simulation`, use unprefixed `policy`, `dataset`,
-        and `dynamics`.
+        and `dynamic`.
         """
         rows = []
         for r in records:
@@ -44,8 +44,8 @@ class ReportElementDataItem(BaseModel):
                     row[prefix + "dataset"] = getattr(
                         getattr(v, "dataset", None), "name", None
                     )
-                    row[prefix + "dynamics"] = getattr(
-                        getattr(v, "dynamics", None), "name", None
+                    row[prefix + "dynamic"] = getattr(
+                        getattr(v, "dynamic", None), "name", None
                     )
                 else:
                     row[k] = v

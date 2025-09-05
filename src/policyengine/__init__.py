@@ -1,7 +1,7 @@
 from .models import (
     Dataset,
     DatasetType,
-    Dynamics,
+    Dynamic,
     OperationStatus,
     Parameter,
     ParameterValue,
@@ -15,7 +15,7 @@ from .models import (
 __all__ = [
     "Dataset",
     "DatasetType",
-    "Dynamics",
+    "Dynamic",
     "OperationStatus",
     "Parameter",
     "ParameterValue",

@@ -1,6 +1,6 @@
-"""Dynamics model for PolicyEngine.
+"""Dynamic model for PolicyEngine.
 
-Encapsulates modifications to baseline tax-benefit dynamics.
+Encapsulates modifications to baseline tax-benefit dynamic.
 """
 
 from __future__ import annotations
@@ -15,14 +15,14 @@ if TYPE_CHECKING:  # For type checking only
     from .parameter import ParameterValue
 
 
-class Dynamics(BaseModel):
-    """Modifications made to baseline tax-benefit dynamics."""
+class Dynamic(BaseModel):
+    """Modifications made to baseline tax-benefit dynamic."""
 
     id: UUID | None = None
     name: str | None = None
 
-    # Parent dynamics reference
-    parent_dynamics: Dynamics | None = None
+    # Parent dynamic reference
+    parent_dynamic: Dynamic | None = None
 
     # Metadata
     description: str | None = None

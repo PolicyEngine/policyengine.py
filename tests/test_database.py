@@ -7,7 +7,7 @@ import pandas as pd
 from policyengine.database import Database
 from policyengine.models import (
     Dataset,
-    Dynamics,
+    Dynamic,
     OperationStatus,
     Parameter,
     ParameterValue,
@@ -58,11 +58,11 @@ def test_simulation_with_result_dataset(tmp_path):
     ds_out = Dataset(name="out", data=syd_out, dataset_type=DatasetType.UK)
 
     policy = Policy(name="p")
-    dynamics = Dynamics(name="d")
+    dynamic = Dynamic(name="d")
     sim = Simulation(
         dataset=ds_in,
         policy=policy,
-        dynamics=dynamics,
+        dynamic=dynamic,
         country="uk",
         status=OperationStatus.PENDING,
     )
