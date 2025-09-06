@@ -15,6 +15,7 @@ from typing import (
     Union,
 )
 from uuid import UUID
+import pickle
 
 from sqlmodel import SQLModel, Session, create_engine, select
 from sqlalchemy import delete
@@ -661,11 +662,20 @@ class Database:
 
         # Policy, Dynamic, Parameters
         if isinstance(obj, Policy):
+            # Pickle simulation_modifier if provided
+            sim_bytes = None
+            try:
+                if obj.simulation_modifier is not None:
+                    sim_bytes = pickle.dumps(obj.simulation_modifier)
+            except Exception:
+                # If pickling fails, store nothing; user can correct function
+                sim_bytes = None
             return PolicyTable(
                 id=getattr(obj, "id", None),
                 name=obj.name,
                 description=obj.description,
                 country=obj.country,
+                simulation_modifier_bytes=sim_bytes,
             )
 
         if isinstance(obj, Dynamic):
@@ -680,6 +690,10 @@ class Database:
                 s.add(parent_row)
                 s.flush()
                 parent_id = parent_row.id
+            # Pickle simulation_modifier if provided
+            sim_bytes = None
+            if obj.simulation_modifier is not None:
+                sim_bytes = pickle.dumps(obj.simulation_modifier)
             return DynamicTable(
                 id=getattr(obj, "id", None),
                 name=obj.name,
@@ -688,6 +702,7 @@ class Database:
                 created_at=obj.created_at,
                 updated_at=obj.updated_at,
                 country=obj.country,
+                simulation_modifier_bytes=sim_bytes,
             )
 
         if isinstance(obj, Parameter):
@@ -1086,10 +1101,18 @@ class Database:
 
         # Policy, Dynamic, Parameters
         if isinstance(row, PolicyTable):
+            # Unpickle simulation_modifier if present
+            sim_mod = None
+            if getattr(row, "simulation_modifier_bytes", None):
+                try:
+                    sim_mod = pickle.loads(row.simulation_modifier_bytes)  # type: ignore[arg-type]
+                except Exception:
+                    sim_mod = None
             return Policy(
                 id=row.id,
                 name=row.name,
                 description=row.description,
+                simulation_modifier=sim_mod,
                 country=row.country,
             )
 
@@ -1101,6 +1124,10 @@ class Database:
                 if (cascade and row.parent_id is not None)
                 else None
             )
+            # Unpickle simulation_modifier if present
+            sim_mod = None
+            if row.simulation_modifier_bytes is not None:
+                sim_mod = pickle.loads(row.simulation_modifier_bytes)  # type: ignore[arg-type]
             return Dynamic(
                 id=row.id,
                 name=row.name,
@@ -1108,6 +1135,7 @@ class Database:
                 description=row.description,
                 created_at=row.created_at,
                 updated_at=row.updated_at,
+                simulation_modifier=sim_mod,
                 country=row.country,
             )
 
@@ -1388,6 +1416,9 @@ class Database:
             if existing:
                 existing.description = new_row.description
                 existing.country = new_row.country
+                existing.simulation_modifier_bytes = (
+                    new_row.simulation_modifier_bytes
+                )
                 return existing
             return new_row
 
@@ -1404,6 +1435,9 @@ class Database:
                 existing.created_at = new_row.created_at
                 existing.updated_at = new_row.updated_at
                 existing.country = new_row.country
+                existing.simulation_modifier_bytes = (
+                    new_row.simulation_modifier_bytes
+                )
                 return existing
             return new_row
 

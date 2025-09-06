@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 from uuid import UUID, uuid4
 
 from sqlmodel import SQLModel, Field
@@ -17,5 +16,7 @@ class DynamicTable(SQLModel, table=True):
     created_at: datetime | None = None
     updated_at: datetime | None = None
     country: str | None = None
+    # Pickled simulation modifier function (if provided)
+    simulation_modifier_bytes: bytes | None = None
 
     # No ORM relationship wiring

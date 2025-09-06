@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
 from uuid import UUID, uuid4
 
 from sqlmodel import SQLModel, Field
@@ -13,5 +12,7 @@ class PolicyTable(SQLModel, table=True):
     name: str | None = None
     description: str | None = None
     country: str | None = None
+    # Pickled simulation modifier function (if provided)
+    simulation_modifier_bytes: bytes | None = None
 
     # No ORM relationships in this minimal layer

@@ -8,8 +8,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel
-from uuid import UUID
+from pydantic import BaseModel, Field
+from uuid import UUID, uuid4
 
 if TYPE_CHECKING:  # For type checking only
     from .parameter import ParameterValue
@@ -18,7 +18,7 @@ if TYPE_CHECKING:  # For type checking only
 class Dynamic(BaseModel):
     """Modifications made to baseline tax-benefit dynamic."""
 
-    id: UUID | None = None
+    id: UUID = Field(default_factory=uuid4)
     name: str | None = None
 
     # Parent dynamic reference
