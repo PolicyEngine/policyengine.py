@@ -85,11 +85,11 @@ def test_parameter_value_cascade(tmp_path):
 
     param = Parameter(name="threshold", data_type=int, country="uk")
     policy = Policy(name="baseline", country="uk")
-    
+
     # Add the parameter and policy first
     param_row = db.add(param)
     policy_row = db.add(policy)
-    
+
     pv = ParameterValue(
         parameter=param,
         policy=policy,

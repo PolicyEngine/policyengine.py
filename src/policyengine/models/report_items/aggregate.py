@@ -47,7 +47,7 @@ class Aggregate(ReportElementDataItem):
         metric: AggregateMetric = AggregateMetric.SUM,
     ) -> list["Aggregate"]:
         """Build and run aggregate calculations for all unique filter values.
-        
+
         If filter_variable is provided, creates one Aggregate per unique value.
         Otherwise creates a single Aggregate for the entire dataset.
         """
@@ -78,10 +78,10 @@ class Aggregate(ReportElementDataItem):
                     metric=metric,
                 )
             )
-        
+
         # Run the computation
         return cls.run(items)
-    
+
     @staticmethod
     def run(items: list["Aggregate"]) -> list["Aggregate"]:
         """Compute values for provided Aggregate items.
