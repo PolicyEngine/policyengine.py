@@ -1,3 +1,4 @@
+from .database import Database, POLICYENGINE_DB
 from .models import (
     Dataset,
     DatasetType,
@@ -13,12 +14,14 @@ from .models import (
 )
 
 __all__ = [
+    "Database",
     "Dataset",
     "DatasetType",
     "Dynamic",
     "OperationStatus",
     "Parameter",
     "ParameterValue",
+    "POLICYENGINE_DB",
     "Policy",
     "Report",
     "ReportElement",

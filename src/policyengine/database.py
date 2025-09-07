@@ -20,6 +20,9 @@ import pickle
 from sqlmodel import SQLModel, Session, create_engine, select
 from sqlalchemy import delete
 
+# Constants for database connection
+POLICYENGINE_DB = "policyengine"  # Special value to connect to PolicyEngine live DB using environment variables
+
 # Base models
 from policyengine.models.user import (
     User,
@@ -84,6 +87,17 @@ class Database:
 
     This is intentionally pragmatic and minimal; it favors a simple mapping
     over enforcing every possible constraint. Extend as needs grow.
+    
+    Usage:
+        # In-memory database
+        db = Database("sqlite:///:memory:")
+        
+        # Local file database
+        db = Database("sqlite:///policyengine.db")
+        
+        # Connect to live PolicyEngine database (requires env vars)
+        from policyengine import POLICYENGINE_DB
+        db = Database(POLICYENGINE_DB)  # Uses POLICYENGINE_DB_PASSWORD env var
     """
 
     def __init__(
@@ -92,7 +106,7 @@ class Database:
         seed_countries: Iterable[str] | None = None,
     ):
         # Special shortcut: connect to PolicyEngine live DB using env vars
-        if url == "policyengine":
+        if url == POLICYENGINE_DB:
             pwd = os.getenv("POLICYENGINE_DB_PASSWORD")
             if not pwd:
                 raise ValueError(
