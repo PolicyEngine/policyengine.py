@@ -17,7 +17,7 @@ class SimulationTable(SQLModel, table=True):
 
     dataset_id: UUID | None = Field(default=None, foreign_key="datasets.id")
     policy_id: UUID | None = Field(default=None, foreign_key="policies.id")
-    dynamic_id: UUID | None = Field(default=None, foreign_key="dynamic.id")
+    dynamic_id: UUID | None = Field(default=None, foreign_key="dynamics.id")
 
     # Store result dataset as a dataset row to keep consistency
     result_dataset_id: UUID | None = Field(

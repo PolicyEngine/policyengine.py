@@ -20,13 +20,6 @@ def get_metadata(system: TaxBenefitSystem, country: str):
 
     param_tree = system.parameters
 
-    # TEMPORARY FOR DEBUGGING: RESTRICT TO A SUBSET
-
-    if country == "uk":
-        param_tree = param_tree.gov.hmrc.income_tax
-    elif country == "us":
-        param_tree = param_tree.gov.irs.credits
-
     for param in param_tree.get_descendants():
         if isinstance(param, CoreParameter):
             p = Parameter(

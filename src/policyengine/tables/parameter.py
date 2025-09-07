@@ -36,7 +36,7 @@ class ParameterValueTable(SQLModel, table=True):
 
     # Foreign keys
     policy_id: UUID | None = Field(default=None, foreign_key="policies.id")
-    dynamic_id: UUID | None = Field(default=None, foreign_key="dynamic.id")
+    dynamic_id: UUID | None = Field(default=None, foreign_key="dynamics.id")
     parameter_id: UUID = Field(foreign_key="parameters.id")
     model_version: str
 

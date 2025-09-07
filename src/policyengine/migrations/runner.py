@@ -5,6 +5,7 @@ from policyengine.database import Database
 from policyengine.utils.metadata import get_metadata
 from policyengine.utils.version import get_model_version
 from policyengine.utils.hugging_face import hf_list_tags
+from tqdm import trange
 
 
 def migrate_country(db: Database, country: str, include_datasets: bool = True) -> None:
@@ -57,47 +58,71 @@ def migrate_country(db: Database, country: str, include_datasets: bool = True) -
         print(f"  Migrating {len(variables)} variables...")
         db.add_all(variables, refresh=False, chunk_size=1000, progress=True)
     
-    # Migrate parameters (upsert on name, country)
-    parameters = []
-    for p in metadata.get("parameters", []) or []:
-        p.country = country
-        parameters.append(p)
-    if parameters:
-        print(f"  Migrating {len(parameters)} parameters...")
-        db.add_all(parameters, refresh=False, chunk_size=1000, progress=True)
-    
-    # Migrate parameter values (upsert on parameter, model_version, country)
-    pvalues = []
+    # Extract unique parameters from parameter values and migrate them
+    unique_params = {}
     for pv in metadata.get("parameter_values", []) or []:
-        pv.country = country
-        pv.model_version = version
         if pv.parameter is not None:
-            pv.parameter.country = country
-        pvalues.append(pv)
+            key = (pv.parameter.name, country)
+            if key not in unique_params:
+                pv.parameter.country = country
+                unique_params[key] = pv.parameter
     
-    if pvalues:
-        # First ensure all unique parameters exist
-        unique_params = {}
-        for pv in pvalues:
-            if pv.parameter is not None:
-                key = (pv.parameter.name, pv.parameter.country)
-                if key not in unique_params:
-                    unique_params[key] = pv.parameter
-        
-        if unique_params:
-            print(f"  Ensuring {len(unique_params)} parameters exist...")
-            db.add_all(unique_params.values(), refresh=False, chunk_size=1000)
-        
-        # Then add parameter values with replacement for this model version
-        print(f"  Migrating {len(pvalues)} parameter values...")
-        db.add_parameter_values_bulk(
-            pvalues,
-            cascade=False,
-            chunk_size=2000,
-            progress=True,
-            verbose=False,
-            replace=True  # Replace existing values for this model version
-        )
+    if unique_params:
+        print(f"  Migrating {len(unique_params)} parameters...")
+        db.add_all(unique_params.values(), refresh=False, chunk_size=1000, progress=True)
+    
+    # Delete existing parameter values for this model version
+    print(f"  Deleting existing parameter values for model version {version}...")
+    deleted_count = db.delete_baseline_parameter_values_by_model_version(version, country)
+    if deleted_count > 0:
+        print(f"    Deleted {deleted_count} existing parameter values")
+    
+    # Build parameter lookup map
+    param_lookup = {}
+    from policyengine.tables import ParameterTable
+    from sqlmodel import select
+    
+    with db.session() as s:
+        for param_name in unique_params.keys():
+            param_row = s.exec(
+                select(ParameterTable).where(
+                    ParameterTable.name == param_name[0],
+                    ParameterTable.country == country,
+                )
+            ).first()
+            if param_row:
+                param_lookup[param_name[0]] = param_row.id
+    
+    # Now add new parameter values directly using bulk insert
+    from policyengine.tables import BaselineParameterValueTable
+    from sqlalchemy import insert as sa_insert
+    import uuid
+    
+    pv_rows = []
+    for pv in metadata.get("parameter_values", []) or []:
+        if pv.parameter is not None and pv.parameter.name in param_lookup:
+            pv_rows.append({
+                "id": uuid.uuid4(),
+                "parameter_id": param_lookup[pv.parameter.name],
+                "policy_id": None,  # Not using policy/dynamic for now
+                "dynamic_id": None,
+                "model_version": version,
+                "start_date": pv.start_date,
+                "end_date": pv.end_date,
+                "value": db._json_safe_value(pv.value),
+                "country": country,
+            })
+    
+    if pv_rows:
+        print(f"  Adding {len(pv_rows)} new parameter values...")
+        with db.session() as s:
+            # Insert in chunks to avoid SQL limits
+            chunk_size = 1000
+            for i in trange(0, len(pv_rows), chunk_size):
+                chunk = pv_rows[i:i + chunk_size]
+                s.exec(sa_insert(BaselineParameterValueTable).values(chunk))
+            s.commit()
+        print(f"    Successfully added {len(pv_rows)} parameter values")
     
     # Migrate datasets if requested
     if include_datasets:
@@ -170,7 +195,7 @@ def migrate_datasets(db: Database, country: str, hf_repo: str, hf_filenames: lis
     # Upsert datasets to database
     if datasets:
         print(f"  Adding {len(datasets)} datasets to database...")
-        db.add_all(datasets, refresh=False, chunk_size=100, progress=True)
+        db.add_all(datasets, refresh=False, chunk_size=1, progress=True)
         print(f"  Successfully migrated {len(datasets)} datasets")
 
 

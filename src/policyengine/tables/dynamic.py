@@ -8,7 +8,7 @@ from sqlalchemy import UniqueConstraint, Index
 
 
 class DynamicTable(SQLModel, table=True):
-    __tablename__ = "dynamic"
+    __tablename__ = "dynamics"
     __table_args__ = (
         UniqueConstraint("name", "country", name="uq_dynamic_name_country"),
         Index("ix_dynamic_name_country", "name", "country"),
@@ -16,7 +16,7 @@ class DynamicTable(SQLModel, table=True):
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     name: str | None = None
-    parent_id: UUID | None = Field(default=None, foreign_key="dynamic.id")
+    parent_id: UUID | None = Field(default=None, foreign_key="dynamics.id")
     description: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None

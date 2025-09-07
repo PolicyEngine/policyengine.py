@@ -8,6 +8,7 @@ from .user import (
 from .policy import PolicyTable
 from .dynamic import DynamicTable
 from .parameter import ParameterTable, ParameterValueTable
+from .baseline_parameter import BaselineParameterValueTable
 from .dataset import DatasetTable
 from .variable import VariableTable
 from .reports import ReportTable, ReportElementTable
@@ -30,6 +31,7 @@ __all__ = [
     "DynamicTable",
     "ParameterTable",
     "ParameterValueTable",
+    "BaselineParameterValueTable",
     "DatasetTable",
     "VariableTable",
     "ReportTable",

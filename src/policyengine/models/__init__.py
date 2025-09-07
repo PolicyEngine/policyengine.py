@@ -11,6 +11,7 @@ from .dataset import Dataset
 from .dynamic import Dynamic
 from .enums import DatasetType, OperationStatus
 from .parameter import Parameter, ParameterValue
+from .baseline_parameter import BaselineParameterValue
 from .policy import Policy
 from .reports import (
     Report,
@@ -32,6 +33,7 @@ try:
     Policy.model_rebuild()
     Dynamic.model_rebuild()
     ParameterValue.model_rebuild()
+    BaselineParameterValue.model_rebuild()
     Report.model_rebuild()
     ReportElement.model_rebuild()
     # Data items rebuilt when their modules are imported directly
