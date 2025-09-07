@@ -6,10 +6,15 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import JSON
 from sqlmodel import SQLModel, Field
+from sqlalchemy import UniqueConstraint, Index
 
 
 class ParameterTable(SQLModel, table=True):
     __tablename__ = "parameters"
+    __table_args__ = (
+        UniqueConstraint("name", "country", name="uq_parameters_name_country"),
+        Index("ix_parameters_name_country", "name", "country"),
+    )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     name: str
@@ -31,7 +36,7 @@ class ParameterValueTable(SQLModel, table=True):
 
     # Foreign keys
     policy_id: UUID | None = Field(default=None, foreign_key="policies.id")
-    dynamics_id: UUID | None = Field(default=None, foreign_key="dynamic.id")
+    dynamic_id: UUID | None = Field(default=None, foreign_key="dynamic.id")
     parameter_id: UUID = Field(foreign_key="parameters.id")
     model_version: str
 

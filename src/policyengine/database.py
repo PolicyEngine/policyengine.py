@@ -192,28 +192,147 @@ class Database:
         if not items:
             return []
 
+        # Try to use an optimized batched upsert path for uniform models
         results: list[SQLModel] = []
         total = len(items)
+
+        # Helper: determine table class for a base object
+        def _tbl_cls_for(obj: Any) -> type[SQLModel]:
+            return self._resolve_table_class(obj)
+
+        first_tbl = _tbl_cls_for(items[0])
+        uniform = all(_tbl_cls_for(o) is first_tbl for o in items)
+
+        # Natural key config per table for fast batch upsert
+        from policyengine.tables import (
+            VariableTable as VarT,
+            ParameterTable as ParT,
+            PolicyTable as PolT,
+            DynamicTable as DynT,
+            ReportTable as RepT,
+            ReportElementTable as RepElT,
+            DatasetTable as DsT,
+        )
+
+        Key = tuple[str, ...]
+
+        # Natural keys per table; kept minimal and generic
+        bulk_key_fields: dict[type[SQLModel], Key] = {
+            VarT: ("name", "country"),
+            ParT: ("name", "country"),
+            PolT: ("name", "country"),
+            DynT: ("name", "country"),
+            RepT: ("name", "country"),
+            RepElT: ("name", "country"),
+            DsT: ("name",),
+        }
+
+        use_bulk = uniform and (first_tbl in bulk_key_fields)
+
         with self.session() as s:
             pbar = None
             if progress:
-                try:
-                    from tqdm.auto import tqdm  # type: ignore
+                from tqdm.auto import tqdm  # type: ignore
 
-                    pbar = tqdm(total=total, desc="Adding", unit="row")
-                except Exception:
-                    pbar = None
+                pbar = tqdm(total=total, desc="Adding", unit="row")
 
-            for start in range(0, total, max(1, chunk_size)):
-                end = min(start + chunk_size, total)
-                for obj in items[start:end]:
-                    row = self._to_table(obj, s, cascade=cascade)
-                    row = self._upsert_row(obj, row, s)
-                    s.add(row)
-                    results.append(row)
-                s.commit()
-                if pbar is not None:
-                    pbar.update(end - start)
+            if not use_bulk:
+                # Fallback: existing per-row upsert path
+                for start in range(0, total, max(1, chunk_size)):
+                    end = min(start + chunk_size, total)
+                    for obj in items[start:end]:
+                        row = self._to_table(obj, s, cascade=cascade)
+                        row = self._upsert_row(obj, row, s)
+                        s.add(row)
+                        results.append(row)
+                    s.commit()
+                    if pbar is not None:
+                        pbar.update(end - start)
+            else:
+                # Optimized: batch fetch existing rows by natural key and update/insert
+                key_fields = bulk_key_fields[first_tbl]
+                # Derive updatable fields dynamically from table columns, excluding PKs and key fields
+                # This keeps behavior general (e.g., if a table adds model_version later).
+                table_columns = list(first_tbl.__table__.columns)
+                pk_names = {c.name for c in table_columns if c.primary_key}
+                upd_fields = tuple(
+                    c.name
+                    for c in table_columns
+                    if (c.name not in pk_names) and (c.name not in key_fields)
+                )
+
+                for start in range(0, total, max(1, chunk_size)):
+                    end = min(start + chunk_size, total)
+                    batch = items[start:end]
+
+                    # Convert to table rows first (to resolve FKs, etc.)
+                    new_rows: list[SQLModel] = [
+                        self._to_table(obj, s, cascade=cascade) for obj in batch
+                    ]
+
+                    # Build key -> new_row map for easy lookup
+                    def _key_from_row(r: SQLModel) -> tuple[Any, ...]:
+                        return tuple(getattr(r, k) for k in key_fields)
+
+                    key_to_new = {_key_from_row(r): r for r in new_rows}
+
+                    # Fetch existing rows in as few queries as possible
+                    tbl = first_tbl
+                    from sqlalchemy import and_, or_
+
+                    existing_map: dict[tuple[Any, ...], SQLModel] = {}
+
+                    # For Dataset (single key)
+                    if key_fields == ("name",):
+                        names = {k[0] for k in key_to_new.keys()}
+                        if names:
+                            stmt = select(tbl).where(getattr(tbl, "name").in_(list(names)))
+                            for r in s.exec(stmt).all():
+                                existing_map[(getattr(r, "name"),)] = r
+                    else:
+                        # Keys of form (name, country)
+                        names = {k[0] for k in key_to_new.keys()}
+                        countries_non_null = {k[1] for k in key_to_new.keys() if k[1] is not None}
+                        names_null_country = {k[0] for k in key_to_new.keys() if k[1] is None}
+
+                        conds = []
+                        if names and countries_non_null:
+                            conds.append(
+                                and_(
+                                    getattr(tbl, "name").in_(list(names)),
+                                    getattr(tbl, "country").in_(list(countries_non_null)),
+                                )
+                            )
+                        if names_null_country:
+                            conds.append(
+                                and_(
+                                    getattr(tbl, "name").in_(list(names_null_country)),
+                                    getattr(tbl, "country").is_(None),
+                                )
+                            )
+                        if conds:
+                            stmt = select(tbl).where(or_(*conds))
+                            for r in s.exec(stmt).all():
+                                key = (getattr(r, "name"), getattr(r, "country"))
+                                if key in key_to_new:
+                                    existing_map[key] = r
+
+                    # Apply updates or stage inserts
+                    for key, new_row in key_to_new.items():
+                        existing = existing_map.get(key)
+                        if existing is not None:
+                            # Update only the allowed fields to mirror _upsert_row
+                            for col in upd_fields:
+                                setattr(existing, col, getattr(new_row, col))
+                            results.append(existing)
+                        else:
+                            s.add(new_row)
+                            results.append(new_row)
+
+                    s.commit()
+                    if pbar is not None:
+                        pbar.update(end - start)
+
             if pbar is not None:
                 pbar.close()
             if refresh:
@@ -375,7 +494,7 @@ class Database:
                         {
                             "id": new_id,
                             "policy_id": pol_id,
-                            "dynamics_id": dyn_id,
+                            "dynamic_id": dyn_id,
                             "parameter_id": par_id,
                             "model_version": obj.model_version,
                             "start_date": obj.start_date,
@@ -401,7 +520,7 @@ class Database:
                         parameter_id,
                         model_version,
                         policy_id,
-                        dynamics_id,
+                        dynamic_id,
                         country,
                     ) in keys_to_delete:
                         conds = [
@@ -415,9 +534,9 @@ class Database:
                             else PVTable.policy_id == policy_id
                         )
                         conds.append(
-                            PVTable.dynamics_id.is_(None)
-                            if dynamics_id is None
-                            else PVTable.dynamics_id == dynamics_id
+                            PVTable.dynamic_id.is_(None)
+                            if dynamic_id is None
+                            else PVTable.dynamic_id == dynamic_id
                         )
                         s.exec(delete(PVTable).where(*conds))
 
@@ -784,7 +903,7 @@ class Database:
             return ParameterValueTable(
                 id=getattr(obj, "id", None),
                 policy_id=policy_id,
-                dynamics_id=dynamic_id,
+                dynamic_id=dynamic_id,
                 parameter_id=par_row.id,  # type: ignore[arg-type]
                 model_version=obj.model_version,
                 start_date=obj.start_date,
@@ -820,7 +939,7 @@ class Database:
 
         # Simulation
         if isinstance(obj, Simulation):
-            dataset_id = policy_id = dynamics_id = result_dataset_id = None
+            dataset_id = policy_id = dynamic_id = result_dataset_id = None
             if obj.dataset is not None and cascade:
                 ds_row = self._to_table(obj.dataset, s, cascade=cascade)
                 ds_row = self._upsert_row(obj.dataset, ds_row, s)
@@ -838,7 +957,7 @@ class Database:
                 dy_row = self._upsert_row(obj.dynamic, dy_row, s)
                 s.add(dy_row)
                 s.flush()
-                dynamics_id = dy_row.id
+                dynamic_id = dy_row.id
             if isinstance(obj.result, Dataset) and cascade:
                 rs_row = self._to_table(obj.result, s, cascade=cascade)
                 rs_row = self._upsert_row(obj.result, rs_row, s)
@@ -849,7 +968,7 @@ class Database:
                 id=getattr(obj, "id", None),
                 dataset_id=dataset_id,
                 policy_id=policy_id,
-                dynamics_id=dynamics_id,
+                dynamic_id=dynamic_id,
                 result_dataset_id=result_dataset_id,
                 model_version=obj.model_version,
                 country=obj.country,
@@ -1175,9 +1294,9 @@ class Database:
             )
             dynamic = (
                 self._to_model(
-                    s.get(DynamicTable, row.dynamics_id), s, cascade=False
+                    s.get(DynamicTable, row.dynamic_id), s, cascade=False
                 )
-                if (cascade and row.dynamics_id is not None)
+                if (cascade and row.dynamic_id is not None)
                 else None
             )
             parameter = (
@@ -1242,9 +1361,9 @@ class Database:
             )
             dynamic = (
                 self._to_model(
-                    s.get(DynamicTable, row.dynamics_id), s, cascade=False
+                    s.get(DynamicTable, row.dynamic_id), s, cascade=False
                 )
-                if row.dynamics_id is not None
+                if row.dynamic_id is not None
                 else None
             )
             result = (
@@ -1470,9 +1589,9 @@ class Database:
                 ParameterValueTable.policy_id.is_(new_row.policy_id)
                 if new_row.policy_id is None
                 else ParameterValueTable.policy_id == new_row.policy_id,
-                ParameterValueTable.dynamics_id.is_(new_row.dynamics_id)
-                if new_row.dynamics_id is None
-                else ParameterValueTable.dynamics_id == new_row.dynamics_id,
+                ParameterValueTable.dynamic_id.is_(new_row.dynamic_id)
+                if new_row.dynamic_id is None
+                else ParameterValueTable.dynamic_id == new_row.dynamic_id,
                 ParameterValueTable.country == new_row.country,
             )
             existing = s.exec(stmt).first()

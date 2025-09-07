@@ -5,7 +5,7 @@ from policyengine.models import (
     ParameterValue,
     Variable,
     Policy,
-    Dynamics,
+    Dynamic,
 )
 import datetime
 from policyengine.utils.version import get_model_version
@@ -13,7 +13,7 @@ from policyengine.utils.version import get_model_version
 
 def get_metadata(system: TaxBenefitSystem, country: str):
     current_law = Policy(name="Current law")
-    static = Dynamics(name="Static")
+    static = Dynamic(name="Static")
     parameters = []
     parameter_values = []
     version = get_model_version(country)

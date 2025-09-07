@@ -37,51 +37,6 @@ class Aggregate(ReportElementDataItem):
     metric: AggregateMetric
     value: float | None = None
 
-    @classmethod
-    def build(
-        cls,
-        simulation: "Simulation",
-        variable: str,
-        entity_level: str = "person",
-        filter_variable: str | None = None,
-        metric: AggregateMetric = AggregateMetric.SUM,
-    ) -> list["Aggregate"]:
-        """Build and run aggregate calculations for all unique filter values.
-
-        If filter_variable is provided, creates one Aggregate per unique value.
-        Otherwise creates a single Aggregate for the entire dataset.
-        """
-        items = []
-        if filter_variable is not None:
-            # Get unique values of the filter variable
-            data: SingleYearDataset = simulation.result.data  # type: ignore[attr-defined]
-            table: pd.DataFrame = data.tables[entity_level]
-            if filter_variable in table.columns:
-                unique_values = table[filter_variable].unique()
-                for value in unique_values:
-                    items.append(
-                        cls(
-                            simulation=simulation,
-                            variable=variable,
-                            entity_level=entity_level,
-                            filter_variable=filter_variable,
-                            filter_variable_value=value,
-                            metric=metric,
-                        )
-                    )
-        else:
-            items.append(
-                cls(
-                    simulation=simulation,
-                    variable=variable,
-                    entity_level=entity_level,
-                    metric=metric,
-                )
-            )
-
-        # Run the computation
-        return cls.run(items)
-
     @staticmethod
     def run(items: list["Aggregate"]) -> list["Aggregate"]:
         """Compute values for provided Aggregate items.
