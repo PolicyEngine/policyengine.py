@@ -106,6 +106,7 @@ class Database:
         self,
         url: str = "sqlite:///:memory:",
         seed_countries: Iterable[str] | None = None,
+        country: str | None = None,
     ):
         # Special shortcut: connect to PolicyEngine live DB using env vars
         if url == POLICYENGINE_DB:
@@ -126,6 +127,7 @@ class Database:
 
         self.engine = create_engine(url=url)
         SQLModel.metadata.create_all(self.engine)
+        self.country = country
 
         # Mapping between BaseModel classes and SQLModel table classes
         self._bm_to_table: Dict[type, type[SQLModel]] = {
@@ -180,7 +182,6 @@ class Database:
 
         Returns the created/updated table instance (with primary key).
         """
-        table_cls = self._resolve_table_class(obj)
         with self.session() as s:
             row = self._to_table(obj, s, cascade=cascade)
             row = self._upsert_row(obj, row, s)
@@ -231,10 +232,8 @@ class Database:
             DatasetTable as DsT,
         )
 
-        Key = tuple[str, ...]
-
         # Natural keys per table; kept minimal and generic
-        bulk_key_fields: dict[type[SQLModel], Key] = {
+        bulk_key_fields: Dict[type[SQLModel], Tuple[str, ...]] = {
             VarT: ("name", "country"),
             ParT: ("name", "country"),
             PolT: ("name", "country"),
@@ -491,6 +490,11 @@ class Database:
         - get(Parameter, name="gov.ubi.amount")
         """
         table_cls = self._resolve_table_class(model_cls)
+        
+        # Add default country if not specified and table has country field
+        if self.country and hasattr(table_cls, 'country') and 'country' not in filters:
+            filters['country'] = self.country
+            
         with self.session() as s:
             if id is not None:
                 row = s.get(table_cls, id)
@@ -670,45 +674,6 @@ class Database:
             )
 
         if isinstance(obj, BaselineParameterValue):
-            # BaselineParameterValue - links to Policy or Dynamic by name lookup
-            from policyengine.tables import (
-                PolicyTable as PoTable,
-                DynamicTable as DTable,
-            )
-            
-            policy_id = None
-            if obj.policy is not None:
-                pol = obj.policy
-                pol_row = s.exec(
-                    select(PoTable).where(
-                        PoTable.name == pol.name,
-                        PoTable.country == pol.country,
-                    )
-                ).first()
-                if pol_row is None:
-                    # Create the policy if it doesn't exist
-                    pol_row = self._to_table(pol, s, cascade=cascade)
-                    pol_row = self._upsert_row(pol, pol_row, s)
-                    s.add(pol_row)
-                    s.flush()
-                policy_id = pol_row.id
-            
-            dynamic_id = None
-            if obj.dynamic is not None:
-                dyn = obj.dynamic
-                dyn_row = s.exec(
-                    select(DTable).where(
-                        DTable.name == dyn.name, DTable.country == dyn.country
-                    )
-                ).first()
-                if dyn_row is None:
-                    # Create the dynamic if it doesn't exist
-                    dyn_row = self._to_table(dyn, s, cascade=cascade)
-                    dyn_row = self._upsert_row(dyn, dyn_row, s)
-                    s.add(dyn_row)
-                    s.flush()
-                dynamic_id = dyn_row.id
-            
             # Handle parameter field
             parameter_id = None
             if obj.parameter:
@@ -734,8 +699,6 @@ class Database:
             
             return BaselineParameterValueTable(
                 id=getattr(obj, "id", None),
-                policy_id=policy_id,
-                dynamic_id=dynamic_id,
                 parameter_id=parameter_id,
                 model_version=obj.model_version,
                 start_date=obj.start_date,
@@ -1419,7 +1382,7 @@ class Database:
         return v
 
     # ------------------- Upsert helpers -------------------
-    def _upsert_row(self, obj: Any, new_row: SQLModel, s: Session) -> SQLModel:
+    def _upsert_row(self, obj: Any, new_row: SQLModel, s: Session) -> SQLModel:  # noqa: ARG002
         """Apply deduplication/upsert rules per model type.
 
         - Parameter: same name+country replaces

@@ -24,7 +24,7 @@ class SimulationTable(SQLModel, table=True):
         default=None, foreign_key="datasets.id"
     )
     model_version: str | None = None
-    country: str
+    country: str | None = None
 
     status: OperationStatus = OperationStatus.PENDING
     created_at: datetime = datetime.now()

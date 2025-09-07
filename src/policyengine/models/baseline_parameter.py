@@ -12,18 +12,13 @@ from pydantic import BaseModel
 from uuid import UUID
 
 if TYPE_CHECKING:  # Import to satisfy type checkers without runtime cycles
-    from .dynamic import Dynamic
-    from .policy import Policy
     from .parameter import Parameter
 
 
 class BaselineParameterValue(BaseModel):
-    """Baseline parameter value that links to Policy or Dynamic."""
+    """Baseline parameter value for a specific parameter and model version."""
 
     id: UUID | None = None
-    # Foreign keys - either policy or dynamic, not both
-    policy: Policy | None = None
-    dynamic: Dynamic | None = None
     
     # Parameter identification
     parameter: Parameter

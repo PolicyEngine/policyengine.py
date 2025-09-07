@@ -18,10 +18,6 @@ class BaselineParameterValueTable(SQLModel, table=True):
     )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-
-    # Foreign keys - either policy or dynamic, not both
-    policy_id: UUID | None = Field(default=None, foreign_key="policies.id")
-    dynamic_id: UUID | None = Field(default=None, foreign_key="dynamics.id")
     
     # Parameter identification
     parameter_id: UUID = Field(foreign_key="parameters.id")
