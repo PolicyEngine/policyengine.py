@@ -73,26 +73,54 @@ class Aggregate(ReportElementDataItem):
             for it in group:
                 df = table
                 # Apply value and range filters if provided
-                if (
-                    it.filter_variable is not None
-                    and it.filter_variable in df.columns
-                ):
-                    mask = pd.Series(True, index=df.index)
-                    if it.filter_variable_value is not None:
-                        mask &= (
-                            df[it.filter_variable] == it.filter_variable_value
-                        )
-                    if it.filter_variable_min_value is not None:
-                        mask &= (
-                            df[it.filter_variable]
-                            >= it.filter_variable_min_value
-                        )
-                    if it.filter_variable_max_value is not None:
-                        mask &= (
-                            df[it.filter_variable]
-                            < it.filter_variable_max_value
-                        )
-                    df = df.loc[mask]
+                if it.filter_variable is not None:
+                    # Check if filter variable is in current entity's columns
+                    if it.filter_variable in df.columns:
+                        mask = pd.Series(True, index=df.index)
+                        if it.filter_variable_value is not None:
+                            mask &= (
+                                df[it.filter_variable] == it.filter_variable_value
+                            )
+                        if it.filter_variable_min_value is not None:
+                            mask &= (
+                                df[it.filter_variable]
+                                >= it.filter_variable_min_value
+                            )
+                        if it.filter_variable_max_value is not None:
+                            mask &= (
+                                df[it.filter_variable]
+                                < it.filter_variable_max_value
+                            )
+                        df = df.loc[mask]
+                    else:
+                        # Filter variable is on a different entity level
+                        # Try to find it in other entity tables and map via foreign keys
+                        found = False
+                        for other_entity, other_table in data.tables.items():
+                            if other_entity != entity_level and it.filter_variable in other_table.columns:
+                                # Found the filter variable in another entity
+                                # Check if we have a foreign key relationship
+                                fk_col = f"{entity_level}_{other_entity}_id"
+                                if fk_col in df.columns:
+                                    # Map filter from other entity to current entity
+                                    other_df = other_table.set_index(f"{other_entity}_id")
+                                    mapped_filter = other_df.loc[df[fk_col], it.filter_variable].values
+                                    
+                                    mask = pd.Series(True, index=df.index)
+                                    if it.filter_variable_value is not None:
+                                        mask &= mapped_filter == it.filter_variable_value
+                                    if it.filter_variable_min_value is not None:
+                                        mask &= mapped_filter >= it.filter_variable_min_value
+                                    if it.filter_variable_max_value is not None:
+                                        mask &= mapped_filter < it.filter_variable_max_value
+                                    df = df.loc[mask]
+                                    found = True
+                                    break
+                        
+                        if not found:
+                            # Could not find filter variable or foreign key relationship
+                            # Skip filtering or raise warning
+                            pass
 
                 if not MICRODF_AVAILABLE:
                     raise ImportError(
