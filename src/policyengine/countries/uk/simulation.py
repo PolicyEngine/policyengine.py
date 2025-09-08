@@ -53,7 +53,7 @@ def run_uk_simulation(simulation: Simulation) -> Dataset:
     )
 
     simulation.result = Dataset(
-        dataset_type="uk",
+        dataset_type="uk_single_year",
         data=output,
     )
 
@@ -72,9 +72,11 @@ def _apply_uk_parametric_reform(provisions, sim):
         parameter_name = provision.parameter.name
         sim.tax_benefit_system.parameters.get_child(parameter_name).update(
             start=instant(provision.start_date.strftime("%Y-%m-%d")),
-            stop=instant(provision.end_date.strftime("%Y-%m-%d"))
-            if provision.end_date
-            else None,
+            stop=(
+                instant(provision.end_date.strftime("%Y-%m-%d"))
+                if provision.end_date
+                else None
+            ),
             value=provision.value,
         )
 

@@ -25,6 +25,7 @@ dependencies = [
     "rich>=13.0.0",
     "ipywidgets>=8.0.0",
     "microdf_python",
+    "tqdm>=4.67.1",
 ]
 
 [project.optional-dependencies]

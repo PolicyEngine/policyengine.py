@@ -117,11 +117,11 @@ def migrate_country(
                 ParameterTable.country == country,
             )
         ).all()
-        
+
         # Build lookup map from query results
         for param in all_params:
             param_lookup[param.name] = param.id
-        
+
         print(f"    Found {len(param_lookup)} parameters in database")
 
     # Now add new parameter values directly using bulk insert

@@ -913,9 +913,11 @@ class Database:
                 s.flush()
             return AggregateTable(
                 simulation_id=sim_row.id,  # type: ignore[arg-type]
-                time_period=str(obj.time_period)
-                if obj.time_period is not None
-                else None,
+                time_period=(
+                    str(obj.time_period)
+                    if obj.time_period is not None
+                    else None
+                ),
                 variable=obj.variable,
                 entity_level=obj.entity_level,
                 filter_variable=obj.filter_variable,
@@ -935,9 +937,11 @@ class Database:
                 s.flush()
             return CountTable(
                 simulation_id=sim_row.id,  # type: ignore[arg-type]
-                time_period=str(obj.time_period)
-                if obj.time_period is not None
-                else None,
+                time_period=(
+                    str(obj.time_period)
+                    if obj.time_period is not None
+                    else None
+                ),
                 variable=obj.variable,
                 entity_level=obj.entity_level,
                 equals_value=self._json_safe_value(obj.equals_value),
@@ -962,9 +966,11 @@ class Database:
                 group_variable=obj.group_variable,
                 group_value=self._json_safe_value(obj.group_value),
                 entity_level=obj.entity_level,
-                time_period=str(obj.time_period)
-                if obj.time_period is not None
-                else None,
+                time_period=(
+                    str(obj.time_period)
+                    if obj.time_period is not None
+                    else None
+                ),
                 total_change=obj.total_change,
                 relative_change=obj.relative_change,
                 average_change_per_entity=obj.average_change_per_entity,
@@ -1425,7 +1431,9 @@ class Database:
         return v
 
     # ------------------- Upsert helpers -------------------
-    def _upsert_row(self, obj: Any, new_row: SQLModel, s: Session) -> SQLModel:  # noqa: ARG002
+    def _upsert_row(
+        self, obj: Any, new_row: SQLModel, s: Session
+    ) -> SQLModel:  # noqa: ARG002
         """Apply deduplication/upsert rules per model type.
 
         - Parameter: same name+country replaces
@@ -1524,17 +1532,28 @@ class Database:
                 BaselineParameterValueTable.model_version
                 == new_row.model_version,
                 BaselineParameterValueTable.start_date == new_row.start_date,
-                BaselineParameterValueTable.end_date.is_(new_row.end_date)
-                if new_row.end_date is None
-                else BaselineParameterValueTable.end_date == new_row.end_date,
-                BaselineParameterValueTable.policy_id.is_(new_row.policy_id)
-                if new_row.policy_id is None
-                else BaselineParameterValueTable.policy_id
-                == new_row.policy_id,
-                BaselineParameterValueTable.dynamic_id.is_(new_row.dynamic_id)
-                if new_row.dynamic_id is None
-                else BaselineParameterValueTable.dynamic_id
-                == new_row.dynamic_id,
+                (
+                    BaselineParameterValueTable.end_date.is_(new_row.end_date)
+                    if new_row.end_date is None
+                    else BaselineParameterValueTable.end_date
+                    == new_row.end_date
+                ),
+                (
+                    BaselineParameterValueTable.policy_id.is_(
+                        new_row.policy_id
+                    )
+                    if new_row.policy_id is None
+                    else BaselineParameterValueTable.policy_id
+                    == new_row.policy_id
+                ),
+                (
+                    BaselineParameterValueTable.dynamic_id.is_(
+                        new_row.dynamic_id
+                    )
+                    if new_row.dynamic_id is None
+                    else BaselineParameterValueTable.dynamic_id
+                    == new_row.dynamic_id
+                ),
                 BaselineParameterValueTable.country == new_row.country,
             )
             existing = s.exec(stmt).first()

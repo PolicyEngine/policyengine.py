@@ -79,9 +79,9 @@ def test_migrate_uk_dataset():
     # Check for specific dataset patterns
     dataset_names = [d.name for d in uk_datasets]
     # Should have either enhanced_frs or frs datasets for multiple years
-    assert any("frs" in name for name in dataset_names), (
-        "No FRS datasets found"
-    )
+    assert any(
+        "frs" in name for name in dataset_names
+    ), "No FRS datasets found"
 
 
 def test_migrate_us_dataset():
@@ -103,9 +103,9 @@ def test_migrate_us_dataset():
     # Check for specific dataset patterns
     dataset_names = [d.name for d in us_datasets]
     # Should have enhanced_cps datasets for multiple years
-    assert any("cps" in name for name in dataset_names), (
-        "No CPS datasets found"
-    )
+    assert any(
+        "cps" in name for name in dataset_names
+    ), "No CPS datasets found"
 
 
 def test_migrate_all():
@@ -182,13 +182,13 @@ def test_parameter_value_versioning():
         )
         values = s.exec(stmt).all()
 
-        assert len(values) > 0, (
-            f"No parameter values found for version {version}"
-        )
+        assert (
+            len(values) > 0
+        ), f"No parameter values found for version {version}"
         for v in values:
-            assert v.model_version == version, (
-                f"Wrong version: {v.model_version}"
-            )
+            assert (
+                v.model_version == version
+            ), f"Wrong version: {v.model_version}"
 
 
 def test_invalid_country():

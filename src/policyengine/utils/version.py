@@ -11,6 +11,8 @@ def get_model_version(country: str):
             # Fallback if importlib.metadata is unavailable/old env
             import pkg_resources  # type: ignore
 
-            return pkg_resources.get_distribution(package_name).version  # noqa: F401
+            return pkg_resources.get_distribution(
+                package_name
+            ).version  # noqa: F401
         except Exception:
             return "unknown"

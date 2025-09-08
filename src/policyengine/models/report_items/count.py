@@ -62,24 +62,31 @@ class Count(ReportElementDataItem):
                     # Try to find it in other entity tables and map via foreign keys
                     series = None
                     for other_entity, other_table in data.tables.items():
-                        if other_entity != entity_level and it.variable in other_table.columns:
+                        if (
+                            other_entity != entity_level
+                            and it.variable in other_table.columns
+                        ):
                             # Found the variable in another entity
                             # Check if we have a foreign key relationship
                             fk_col = f"{entity_level}_{other_entity}_id"
                             if fk_col in table.columns:
                                 # Map variable from other entity to current entity
-                                other_df = other_table.set_index(f"{other_entity}_id")
+                                other_df = other_table.set_index(
+                                    f"{other_entity}_id"
+                                )
                                 series = pd.Series(
-                                    other_df.loc[table[fk_col], it.variable].values,
-                                    index=table.index
+                                    other_df.loc[
+                                        table[fk_col], it.variable
+                                    ].values,
+                                    index=table.index,
                                 )
                                 break
-                    
+
                     if series is None:
                         # Could not find variable or foreign key relationship
                         # Use empty mask to count nothing
-                        series = pd.Series(float('nan'), index=table.index)
-                
+                        series = pd.Series(float("nan"), index=table.index)
+
                 mask = pd.Series(True, index=table.index)
                 if it.equals_value is not None:
                     mask &= series == it.equals_value

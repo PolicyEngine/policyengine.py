@@ -1277,18 +1277,21 @@ dependencies = [
     { name = "ipywidgets" },
     { name = "microdf-python" },
     { name = "pandas" },
-    { name = "policyengine-core" },
-    { name = "policyengine-uk" },
-    { name = "policyengine-us" },
     { name = "psycopg2-binary" },
     { name = "pydantic" },
     { name = "pymysql" },
     { name = "rich" },
     { name = "sqlalchemy" },
     { name = "sqlmodel" },
+    { name = "tqdm" },
 ]
 
 [package.optional-dependencies]
+all = [
+    { name = "policyengine-core" },
+    { name = "policyengine-uk" },
+    { name = "policyengine-us" },
+]
 dev = [
     { name = "autodoc-pydantic" },
     { name = "black" },
@@ -1300,6 +1303,14 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "ruff" },
     { name = "yaml-changelog" },
+]
+uk = [
+    { name = "policyengine-core" },
+    { name = "policyengine-uk" },
+]
+us = [
+    { name = "policyengine-core" },
+    { name = "policyengine-us" },
 ]
 
 [package.metadata]
@@ -1316,9 +1327,13 @@ requires-dist = [
     { name = "jupyter-book", marker = "extra == 'dev'" },
     { name = "microdf-python" },
     { name = "pandas", specifier = ">=2.0.0" },
-    { name = "policyengine-core", specifier = ">=3.10" },
-    { name = "policyengine-uk" },
-    { name = "policyengine-us", specifier = ">=1.213.1" },
+    { name = "policyengine-core", marker = "extra == 'all'", specifier = ">=3.10" },
+    { name = "policyengine-core", marker = "extra == 'uk'", specifier = ">=3.10" },
+    { name = "policyengine-core", marker = "extra == 'us'", specifier = ">=3.10" },
+    { name = "policyengine-uk", marker = "extra == 'all'" },
+    { name = "policyengine-uk", marker = "extra == 'uk'" },
+    { name = "policyengine-us", marker = "extra == 'all'", specifier = ">=1.213.1" },
+    { name = "policyengine-us", marker = "extra == 'us'", specifier = ">=1.213.1" },
     { name = "psycopg2-binary", specifier = ">=2.9.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pymysql", specifier = ">=1.1.0" },
@@ -1328,9 +1343,10 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5.0" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
     { name = "sqlmodel", specifier = ">=0.0.21" },
+    { name = "tqdm", specifier = ">=4.67.1" },
     { name = "yaml-changelog", marker = "extra == 'dev'", specifier = ">=0.1.7" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["uk", "us", "all", "dev"]
 
 [[package]]
 name = "policyengine-core"
