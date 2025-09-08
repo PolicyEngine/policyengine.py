@@ -22,7 +22,13 @@ def create_dataset_years_from_hf(
     Constructs a `Microsimulation` with `dataset="hf://{repo}/{filename}[@{version}]"`
     and then materialises dataset rows for the requested range.
     """
-    from policyengine_uk import Microsimulation
+    try:
+        from policyengine_uk import Microsimulation
+    except ImportError:
+        raise ImportError(
+            "policyengine-uk is not installed. "
+            "Install it with: pip install 'policyengine[uk]' or pip install policyengine-uk"
+        )
 
     base = f"hf://{repo}/{filename}"
     if version:
@@ -35,14 +41,22 @@ def create_dataset_years_from_hf(
 
 
 def create_dataset(
-    year: int = 2029, sim: "Microsimulation" | None = None, filename: str = None
+    year: int = 2029,
+    sim: "Microsimulation" | None = None,
+    filename: str = None,
 ) -> Dataset:
     """Create the UK dataset for a given year (default 2029).
 
     Uses the policyengine_uk Microsimulation’s bundled dataset tables.
     """
     if sim is None:
-        from policyengine_uk import Microsimulation
+        try:
+            from policyengine_uk import Microsimulation
+        except ImportError:
+            raise ImportError(
+                "policyengine-uk is not installed. "
+                "Install it with: pip install 'policyengine[uk]' or pip install policyengine-uk"
+            )
 
         sim = Microsimulation()
     tables = dict(
@@ -60,4 +74,8 @@ def create_dataset(
         tables=tables,
         year=year,
     )
-    return Dataset(name=filename.replace(".h5", "") + f"/{year}", data=data, dataset_type=DatasetType.UK)
+    return Dataset(
+        name=filename.replace(".h5", "") + f"/{year}",
+        data=data,
+        dataset_type=DatasetType.UK_SINGLE_YEAR,
+    )

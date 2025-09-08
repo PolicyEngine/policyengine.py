@@ -1,5 +1,12 @@
-from policyengine_core.taxbenefitsystems import TaxBenefitSystem
-from policyengine_core.parameters import Parameter as CoreParameter
+try:
+    from policyengine_core.taxbenefitsystems import TaxBenefitSystem
+    from policyengine_core.parameters import Parameter as CoreParameter
+
+    CORE_AVAILABLE = True
+except ImportError:
+    CORE_AVAILABLE = False
+    TaxBenefitSystem = None
+    CoreParameter = None
 from policyengine.models import (
     Parameter,
     ParameterValue,
@@ -11,7 +18,16 @@ import datetime
 from policyengine.utils.version import get_model_version
 
 
-def get_metadata(system: TaxBenefitSystem, country: str):
+def get_metadata(system, country: str):
+    if not CORE_AVAILABLE:
+        raise ImportError(
+            "policyengine-core is not installed. "
+            "Install it with: pip install 'policyengine[core]'"
+        )
+
+    if system is None:
+        raise ValueError("System parameter cannot be None")
+
     current_law = Policy(name="Current law")
     static = Dynamic(name="Static")
     parameters = []

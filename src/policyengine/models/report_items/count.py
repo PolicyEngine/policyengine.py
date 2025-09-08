@@ -3,7 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 import pandas as pd
-from microdf import MicroDataFrame
+
+try:
+    from microdf import MicroDataFrame
+
+    MICRODF_AVAILABLE = True
+except ImportError:
+    MICRODF_AVAILABLE = False
+    MicroDataFrame = None
 
 from policyengine.models.simulation import Simulation  # ensure fwd ref
 from policyengine.models.single_year_dataset import SingleYearDataset
@@ -57,6 +64,11 @@ class Count(ReportElementDataItem):
                     mask &= series < it.max_value
                 df = table.loc[mask].copy()
                 df["__ones__"] = 1.0
+                if not MICRODF_AVAILABLE:
+                    raise ImportError(
+                        "microdf is not installed. "
+                        "Install it with: pip install 'policyengine[core]'"
+                    )
                 mdf = (
                     MicroDataFrame(df, weights="weight_value")
                     if use_weights and "weight_value" in df.columns

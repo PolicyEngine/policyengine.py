@@ -12,9 +12,10 @@ def test_policyengine_db_constant():
 def test_database_with_constant_no_password():
     """Test that using POLICYENGINE_DB without password raises error."""
     import os
+
     # Make sure password is not set
     old_password = os.environ.pop("POLICYENGINE_DB_PASSWORD", None)
-    
+
     try:
         with pytest.raises(ValueError, match="POLICYENGINE_DB_PASSWORD"):
             db = Database(POLICYENGINE_DB)
@@ -34,7 +35,7 @@ def test_database_with_memory():
 def test_database_import_from_main_package():
     """Test that Database and POLICYENGINE_DB can be imported from main package."""
     from policyengine import Database as DB2, POLICYENGINE_DB as PDB2
-    
+
     assert DB2 == Database
     assert PDB2 == POLICYENGINE_DB
     assert PDB2 == "policyengine"

@@ -18,15 +18,15 @@ class BaselineParameterValueTable(SQLModel, table=True):
     )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    
+
     # Parameter identification
     parameter_id: UUID = Field(foreign_key="parameters.id")
     model_version: str
-    
+
     # Time period for this value
     start_date: datetime
     end_date: datetime | None = None
-    
+
     # The actual value
     value: Any = Field(sa_type=JSON)
     country: str | None = None

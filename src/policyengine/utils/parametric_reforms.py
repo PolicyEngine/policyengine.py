@@ -1,19 +1,18 @@
-from policyengine_core.periods import instant
-from policyengine_uk import Scenario, Simulation
+"""Parametric reform utilities.
 
-from policyengine.models import ParameterValue
+Note: This module is deprecated. Use the country-specific implementations
+in the simulation modules instead.
+"""
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from policyengine.models import ParameterValue
 
 
-def apply_parametric_reform(provisions: list[ParameterValue]) -> Scenario:
-    def modifier(sim: Simulation):
-        for provision in provisions:
-            parameter_name = provision.parameter.name
-            sim.tax_benefit_system.parameters.get_child(parameter_name).update(
-                start=instant(provision.start_date.strftime("%Y-%m-%d")),
-                stop=instant(provision.end_date.strftime("%Y-%m-%d"))
-                if provision.end_date
-                else None,
-                value=provision.value,
-            )
-
-    return Scenario(simulation_modifier=modifier)
+def apply_parametric_reform(provisions: list["ParameterValue"]) -> None:
+    """Deprecated. Use country-specific implementations instead."""
+    raise NotImplementedError(
+        "apply_parametric_reform has been moved to country-specific modules. "
+        "This function should not be called directly."
+    )

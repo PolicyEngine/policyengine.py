@@ -30,7 +30,7 @@ def test_dataset_serialization_roundtrip(tmp_path):
 
     person = pd.DataFrame({"person_id": [1, 2], "age": [30, 40]})
     syd = SingleYearDataset(tables={"person": person}, year=2024)
-    ds = Dataset(name="syd", data=syd, dataset_type=DatasetType.UK)
+    ds = Dataset(name="syd", data=syd, dataset_type=DatasetType.UK_SINGLE_YEAR)
 
     row = db.add(ds)
     assert getattr(row, "id", None) is not None
@@ -50,12 +50,16 @@ def test_simulation_with_result_dataset(tmp_path):
     # Input dataset
     household = pd.DataFrame({"household_id": [1], "household_weight": [1.0]})
     syd_in = SingleYearDataset(tables={"household": household}, year=2029)
-    ds_in = Dataset(name="in", data=syd_in, dataset_type=DatasetType.UK)
+    ds_in = Dataset(
+        name="in", data=syd_in, dataset_type=DatasetType.UK_SINGLE_YEAR
+    )
 
     # Result dataset
     person = pd.DataFrame({"person_id": [1], "gov_tax": [123.0]})
     syd_out = SingleYearDataset(tables={"person": person}, year=2029)
-    ds_out = Dataset(name="out", data=syd_out, dataset_type=DatasetType.UK)
+    ds_out = Dataset(
+        name="out", data=syd_out, dataset_type=DatasetType.UK_SINGLE_YEAR
+    )
 
     policy = Policy(name="p")
     dynamic = Dynamic(name="d")

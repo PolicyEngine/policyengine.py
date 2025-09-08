@@ -4,7 +4,14 @@ from typing import Any, List
 
 import numpy as np
 import pandas as pd
-from microdf import MicroDataFrame
+
+try:
+    from microdf import MicroDataFrame
+
+    MICRODF_AVAILABLE = True
+except ImportError:
+    MICRODF_AVAILABLE = False
+    MicroDataFrame = None
 from policyengine.models.simulation import (
     Simulation,
 )  # ensure forward ref resolution
@@ -106,6 +113,11 @@ class ChangeByBaselineGroup(ReportElementDataItem):
                     if grp_col is not None
                     else merged
                 )
+                if not MICRODF_AVAILABLE:
+                    raise ImportError(
+                        "microdf is not installed. "
+                        "Install it with: pip install 'policyengine[core]'"
+                    )
                 mdf = (
                     MicroDataFrame(sub, weights=weights_col)
                     if weights_col
@@ -220,6 +232,11 @@ class VariableChangeGroupByQuantileGroup(ReportElementDataItem):
                     (grp["__delta__"] >= it.change_lower_bound)
                     & (grp["__delta__"] < it.change_upper_bound)
                 ).astype(int)
+                if not MICRODF_AVAILABLE:
+                    raise ImportError(
+                        "microdf is not installed. "
+                        "Install it with: pip install 'policyengine[core]'"
+                    )
                 mdf = (
                     MicroDataFrame(grp, weights=weights_col)
                     if weights_col
@@ -310,6 +327,11 @@ class VariableChangeGroupByVariableValue(ReportElementDataItem):
                     (grp["__delta__"] >= it.change_lower_bound)
                     & (grp["__delta__"] < it.change_upper_bound)
                 ).astype(int)
+                if not MICRODF_AVAILABLE:
+                    raise ImportError(
+                        "microdf is not installed. "
+                        "Install it with: pip install 'policyengine[core]'"
+                    )
                 mdf = (
                     MicroDataFrame(grp, weights=weights_col)
                     if weights_col

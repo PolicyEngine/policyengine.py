@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from enum import Enum
 import pandas as pd
-from microdf import MicroDataFrame
+
+try:
+    from microdf import MicroDataFrame
+
+    MICRODF_AVAILABLE = True
+except ImportError:
+    MICRODF_AVAILABLE = False
+    MicroDataFrame = None
 from policyengine.models.simulation import (
     Simulation,
 )  # ensure forward ref resolution
@@ -87,6 +94,11 @@ class Aggregate(ReportElementDataItem):
                         )
                     df = df.loc[mask]
 
+                if not MICRODF_AVAILABLE:
+                    raise ImportError(
+                        "microdf is not installed. "
+                        "Install it with: pip install 'policyengine[core]'"
+                    )
                 mdf = (
                     MicroDataFrame(df, weights="weight_value")
                     if use_weights and "weight_value" in df.columns

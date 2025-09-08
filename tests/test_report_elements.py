@@ -12,7 +12,7 @@ def _mk_sim_with_person_table(
     df: pd.DataFrame, year: int = 2025
 ) -> Simulation:
     syd = SingleYearDataset(tables={"person": df}, year=year)
-    ds = Dataset(name="ds", data=syd, dataset_type=DatasetType.UK)
+    ds = Dataset(name="ds", data=syd, dataset_type=DatasetType.UK_SINGLE_YEAR)
     sim = Simulation(
         dataset=ds,
         policy=Policy(),
@@ -20,7 +20,7 @@ def _mk_sim_with_person_table(
         country="uk",
     )
     # result mirrors dataset for reporting
-    sim.result = Dataset(dataset_type=DatasetType.UK, data=syd)
+    sim.result = Dataset(dataset_type=DatasetType.UK_SINGLE_YEAR, data=syd)
     return sim
 
 

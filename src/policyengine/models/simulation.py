@@ -33,21 +33,25 @@ class Simulation(BaseModel):
     status: OperationStatus = OperationStatus.PENDING
     created_at: datetime = datetime.now()
     completed_at: datetime | None = None
-    
-    @model_validator(mode='after')
+
+    @model_validator(mode="after")
     def infer_country_and_version(self):
         """Infer country from dataset type and model_version from country package."""
         # Infer country from dataset if not provided
-        if self.country is None and self.dataset and hasattr(self.dataset, 'dataset_type'):
-            if self.dataset.dataset_type == DatasetType.UK:
-                self.country = 'uk'
-            elif self.dataset.dataset_type == DatasetType.US:
-                self.country = 'us'
-        
+        if (
+            self.country is None
+            and self.dataset
+            and hasattr(self.dataset, "dataset_type")
+        ):
+            if self.dataset.dataset_type == DatasetType.UK_SINGLE_YEAR:
+                self.country = "uk"
+            elif self.dataset.dataset_type == DatasetType.US_SINGLE_YEAR:
+                self.country = "us"
+
         # Infer model_version from country package if not provided
         if self.model_version is None and self.country:
             self.model_version = get_model_version(self.country)
-            
+
         return self
 
     def run(self) -> Dataset:

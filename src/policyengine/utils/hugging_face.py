@@ -2,6 +2,7 @@ import os
 import json
 from urllib import request
 
+
 def hf_list_tags(repo: str) -> list[str]:
     """Return tag names for a Hugging Face repo.
 

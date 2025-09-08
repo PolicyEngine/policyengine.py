@@ -25,7 +25,13 @@ def create_dataset_years_from_hf(
     Constructs a `Microsimulation` with `dataset="hf://{repo}/{filename}[@{version}]"`
     and then materialises dataset rows for the requested range.
     """
-    from policyengine_us import Microsimulation
+    try:
+        from policyengine_us import Microsimulation
+    except ImportError:
+        raise ImportError(
+            "policyengine-us is not installed. "
+            "Install it with: pip install 'policyengine[us]' or pip install policyengine-us"
+        )
 
     base = f"hf://{repo}/{filename}"
     if version:
@@ -39,7 +45,9 @@ def create_dataset_years_from_hf(
 
 
 def create_dataset(
-    year: int = 2024, sim: "Microsimulation" | None = None, filename: str = None
+    year: int = 2024,
+    sim: "Microsimulation" | None = None,
+    filename: str = None,
 ) -> Dataset:
     """Create the dataset for a given year using the US microsimulation.
 
@@ -47,7 +55,13 @@ def create_dataset(
     original behavior and differs from the UK path.
     """
     if sim is None:
-        from policyengine_us import Microsimulation
+        try:
+            from policyengine_us import Microsimulation
+        except ImportError:
+            raise ImportError(
+                "policyengine-us is not installed. "
+                "Install it with: pip install 'policyengine[us]' or pip install policyengine-us"
+            )
 
         sim = Microsimulation()
     tables: Dict[str, pd.DataFrame] = {}
@@ -63,5 +77,8 @@ def create_dataset(
                 tables[entity][variable] = sim.calculate(variable, period=year)
 
     data = SingleYearDataset(tables=tables, year=year)
-    return Dataset(name=filename.replace(".h5", "") + f"/{year}", data=data, dataset_type=DatasetType.US)
-
+    return Dataset(
+        name=filename.replace(".h5", "") + f"/{year}",
+        data=data,
+        dataset_type=DatasetType.US_SINGLE_YEAR,
+    )

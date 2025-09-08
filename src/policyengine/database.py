@@ -89,14 +89,14 @@ class Database:
 
     This is intentionally pragmatic and minimal; it favors a simple mapping
     over enforcing every possible constraint. Extend as needs grow.
-    
+
     Usage:
         # In-memory database
         db = Database("sqlite:///:memory:")
-        
+
         # Local file database
         db = Database("sqlite:///policyengine.db")
-        
+
         # Connect to live PolicyEngine database (requires env vars)
         from policyengine import POLICYENGINE_DB
         db = Database(POLICYENGINE_DB)  # Uses POLICYENGINE_DB_PASSWORD env var
@@ -283,7 +283,8 @@ class Database:
 
                     # Convert to table rows first (to resolve FKs, etc.)
                     new_rows: list[SQLModel] = [
-                        self._to_table(obj, s, cascade=cascade) for obj in batch
+                        self._to_table(obj, s, cascade=cascade)
+                        for obj in batch
                     ]
 
                     # Build key -> new_row map for easy lookup
@@ -302,34 +303,47 @@ class Database:
                     if key_fields == ("name",):
                         names = {k[0] for k in key_to_new.keys()}
                         if names:
-                            stmt = select(tbl).where(getattr(tbl, "name").in_(list(names)))
+                            stmt = select(tbl).where(
+                                getattr(tbl, "name").in_(list(names))
+                            )
                             for r in s.exec(stmt).all():
                                 existing_map[(getattr(r, "name"),)] = r
                     else:
                         # Keys of form (name, country)
                         names = {k[0] for k in key_to_new.keys()}
-                        countries_non_null = {k[1] for k in key_to_new.keys() if k[1] is not None}
-                        names_null_country = {k[0] for k in key_to_new.keys() if k[1] is None}
+                        countries_non_null = {
+                            k[1] for k in key_to_new.keys() if k[1] is not None
+                        }
+                        names_null_country = {
+                            k[0] for k in key_to_new.keys() if k[1] is None
+                        }
 
                         conds = []
                         if names and countries_non_null:
                             conds.append(
                                 and_(
                                     getattr(tbl, "name").in_(list(names)),
-                                    getattr(tbl, "country").in_(list(countries_non_null)),
+                                    getattr(tbl, "country").in_(
+                                        list(countries_non_null)
+                                    ),
                                 )
                             )
                         if names_null_country:
                             conds.append(
                                 and_(
-                                    getattr(tbl, "name").in_(list(names_null_country)),
+                                    getattr(tbl, "name").in_(
+                                        list(names_null_country)
+                                    ),
                                     getattr(tbl, "country").is_(None),
                                 )
                             )
                         if conds:
                             stmt = select(tbl).where(or_(*conds))
                             for r in s.exec(stmt).all():
-                                key = (getattr(r, "name"), getattr(r, "country"))
+                                key = (
+                                    getattr(r, "name"),
+                                    getattr(r, "country"),
+                                )
                                 if key in key_to_new:
                                     existing_map[key] = r
 
@@ -360,27 +374,29 @@ class Database:
         self, model_version: str, country: str | None = None
     ) -> int:
         """Delete all ParameterValue rows for a given model version and country.
-        
+
         Args:
             model_version: The model version to delete
             country: Optional country filter
-            
+
         Returns:
             Number of rows deleted
         """
         from policyengine.tables import BaselineParameterValueTable
-        
+
         with self.session() as s:
             stmt = delete(BaselineParameterValueTable).where(
                 BaselineParameterValueTable.model_version == model_version
             )
             if country is not None:
-                stmt = stmt.where(BaselineParameterValueTable.country == country)
+                stmt = stmt.where(
+                    BaselineParameterValueTable.country == country
+                )
 
             result = s.exec(stmt)
             deleted_count = result.rowcount
             s.commit()
-            
+
         return deleted_count
 
     # ------------------- Seeding -------------------
@@ -394,13 +410,29 @@ class Database:
         for country in countries:
             country = country.lower()
             if country == "uk":
-                from policyengine.countries.uk.metadata import get_uk_metadata
+                try:
+                    from policyengine.countries.uk.metadata import (
+                        get_uk_metadata,
+                    )
 
-                md = get_uk_metadata()
+                    md = get_uk_metadata()
+                except ImportError:
+                    print(
+                        f"Warning: policyengine-uk not installed, skipping UK seeding"
+                    )
+                    continue
             elif country == "us":
-                from policyengine.countries.us.metadata import get_us_metadata
+                try:
+                    from policyengine.countries.us.metadata import (
+                        get_us_metadata,
+                    )
 
-                md = get_us_metadata()
+                    md = get_us_metadata()
+                except ImportError:
+                    print(
+                        f"Warning: policyengine-us not installed, skipping US seeding"
+                    )
+                    continue
             else:
                 raise ValueError(
                     f"Unknown country code for seeding: {country}"
@@ -430,8 +462,10 @@ class Database:
             for pv in md.get("parameter_values", []) or []:
                 if pv.parameter is not None:
                     # Create BaselineParameterValue instead
-                    from policyengine.models.baseline_parameter import BaselineParameterValue
-                    
+                    from policyengine.models.baseline_parameter import (
+                        BaselineParameterValue,
+                    )
+
                     bpv = BaselineParameterValue(
                         policy=pv.policy,
                         dynamic=pv.dynamic,
@@ -443,9 +477,11 @@ class Database:
                         country=country,
                     )
                     baseline_values.append(bpv)
-            
+
             if baseline_values:
-                print(f"  Adding {len(baseline_values)} baseline parameter values...")
+                print(
+                    f"  Adding {len(baseline_values)} baseline parameter values..."
+                )
                 self.add_all(
                     baseline_values,
                     refresh=False,
@@ -490,11 +526,15 @@ class Database:
         - get(Parameter, name="gov.ubi.amount")
         """
         table_cls = self._resolve_table_class(model_cls)
-        
+
         # Add default country if not specified and table has country field
-        if self.country and hasattr(table_cls, 'country') and 'country' not in filters:
-            filters['country'] = self.country
-            
+        if (
+            self.country
+            and hasattr(table_cls, "country")
+            and "country" not in filters
+        ):
+            filters["country"] = self.country
+
         with self.session() as s:
             if id is not None:
                 row = s.get(table_cls, id)
@@ -681,6 +721,7 @@ class Database:
                 if param_row.id is None:
                     # If parameter doesn't have an ID, try to find or create it
                     from policyengine.tables import ParameterTable as PTable
+
                     existing_param = s.exec(
                         select(PTable).where(
                             PTable.name == param_row.name,
@@ -690,13 +731,15 @@ class Database:
                     if existing_param:
                         parameter_id = existing_param.id
                     else:
-                        param_row = self._upsert_row(obj.parameter, param_row, s)
+                        param_row = self._upsert_row(
+                            obj.parameter, param_row, s
+                        )
                         s.add(param_row)
                         s.flush()
                         parameter_id = param_row.id
                 else:
                     parameter_id = param_row.id
-            
+
             return BaselineParameterValueTable(
                 id=getattr(obj, "id", None),
                 parameter_id=parameter_id,
@@ -1476,18 +1519,22 @@ class Database:
         # BaselineParameterValue
         if isinstance(new_row, BaselineParameterValueTable):
             stmt = select(BaselineParameterValueTable).where(
-                BaselineParameterValueTable.parameter_id == new_row.parameter_id,
-                BaselineParameterValueTable.model_version == new_row.model_version,
+                BaselineParameterValueTable.parameter_id
+                == new_row.parameter_id,
+                BaselineParameterValueTable.model_version
+                == new_row.model_version,
                 BaselineParameterValueTable.start_date == new_row.start_date,
                 BaselineParameterValueTable.end_date.is_(new_row.end_date)
                 if new_row.end_date is None
                 else BaselineParameterValueTable.end_date == new_row.end_date,
                 BaselineParameterValueTable.policy_id.is_(new_row.policy_id)
                 if new_row.policy_id is None
-                else BaselineParameterValueTable.policy_id == new_row.policy_id,
+                else BaselineParameterValueTable.policy_id
+                == new_row.policy_id,
                 BaselineParameterValueTable.dynamic_id.is_(new_row.dynamic_id)
                 if new_row.dynamic_id is None
-                else BaselineParameterValueTable.dynamic_id == new_row.dynamic_id,
+                else BaselineParameterValueTable.dynamic_id
+                == new_row.dynamic_id,
                 BaselineParameterValueTable.country == new_row.country,
             )
             existing = s.exec(stmt).first()

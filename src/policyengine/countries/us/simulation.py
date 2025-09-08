@@ -1,18 +1,35 @@
-from policyengine_us import Simulation as PolicyEngineUSSimulation
-from policyengine_core.data import Dataset
+try:
+    from policyengine_us import Simulation as PolicyEngineUSSimulation
+
+    US_AVAILABLE = True
+except ImportError:
+    US_AVAILABLE = False
+    PolicyEngineUSSimulation = None
+
+# Note: Dataset import is from policyengine.models, not policyengine_core
 
 from policyengine.models import Dataset, Simulation
-from policyengine.utils.parametric_reforms import apply_parametric_reform
-
 from policyengine.models.single_year_dataset import SingleYearDataset
 
-from microdf import MicroDataFrame
+try:
+    from microdf import MicroDataFrame
+
+    MICRODF_AVAILABLE = True
+except ImportError:
+    MICRODF_AVAILABLE = False
+    MicroDataFrame = None
+
 import pandas as pd
 
 
 def run_us_simulation(simulation: Simulation) -> Dataset:
     """Run the US-specific simulation."""
-    # Implement UK-specific simulation logic here
+    if not US_AVAILABLE:
+        raise ImportError(
+            "policyengine-us is not installed. "
+            "Install it with: pip install 'policyengine[us]' or pip install policyengine-us"
+        )
+    # Implement US-specific simulation logic here
     sim = _get_simulation(simulation)
 
     output = simulation.dataset.data.copy()
@@ -38,20 +55,41 @@ def run_us_simulation(simulation: Simulation) -> Dataset:
     )
 
 
-def _get_simulation(simulation: Simulation):
-    parametric_policy = apply_parametric_reform(
-        simulation.policy.parameter_values or []
-    )
-    parametric_dynamic = apply_parametric_reform(
-        simulation.dynamic.parameter_values or []
-    )
+def _apply_us_parametric_reform(provisions, sim):
+    """Apply parametric reforms to US simulation."""
+    try:
+        from policyengine_core.periods import instant
+    except ImportError:
+        raise ImportError(
+            "policyengine-core is not installed. "
+            "Install it with: pip install 'policyengine[us]'"
+        )
 
+    for provision in provisions:
+        parameter_name = provision.parameter.name
+        sim.tax_benefit_system.parameters.get_child(parameter_name).update(
+            start=instant(provision.start_date.strftime("%Y-%m-%d")),
+            stop=instant(provision.end_date.strftime("%Y-%m-%d"))
+            if provision.end_date
+            else None,
+            value=provision.value,
+        )
+
+
+def _get_simulation(simulation: Simulation):
     def modifier(sim):
-        parametric_policy.simulation_modifier(sim)
+        # Apply parametric reforms
+        if simulation.policy.parameter_values:
+            _apply_us_parametric_reform(
+                simulation.policy.parameter_values, sim
+            )
         if simulation.policy.simulation_modifier:
             simulation.policy.simulation_modifier(sim)
 
-        parametric_dynamic.simulation_modifier(sim)
+        if simulation.dynamic.parameter_values:
+            _apply_us_parametric_reform(
+                simulation.dynamic.parameter_values, sim
+            )
         if simulation.dynamic.simulation_modifier:
             simulation.dynamic.simulation_modifier(sim)
 

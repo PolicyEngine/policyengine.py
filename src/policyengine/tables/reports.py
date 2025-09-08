@@ -27,7 +27,9 @@ class ReportTable(SQLModel, table=True):
 class ReportElementTable(SQLModel, table=True):
     __tablename__ = "report_elements"
     __table_args__ = (
-        UniqueConstraint("name", "country", name="uq_report_elements_name_country"),
+        UniqueConstraint(
+            "name", "country", name="uq_report_elements_name_country"
+        ),
         Index("ix_report_elements_name_country", "name", "country"),
     )
 

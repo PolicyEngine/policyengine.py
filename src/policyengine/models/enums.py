@@ -15,5 +15,5 @@ class OperationStatus(str, Enum):
 class DatasetType(str, Enum):
     """Data types for dataset fields."""
 
-    UK = "uk"
-    US = "us"
+    UK_SINGLE_YEAR = "uk_single_year"
+    US_SINGLE_YEAR = "us_single_year"
