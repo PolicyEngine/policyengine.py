@@ -103,20 +103,26 @@ def migrate_country(
         print(f"    Deleted {deleted_count} existing parameter values")
 
     # Build parameter lookup map
+    print(f"  Building parameter lookup map...")
     param_lookup = {}
     from policyengine.tables import ParameterTable
     from sqlmodel import select
 
     with db.session() as s:
-        for param_name in unique_params.keys():
-            param_row = s.exec(
-                select(ParameterTable).where(
-                    ParameterTable.name == param_name[0],
-                    ParameterTable.country == country,
-                )
-            ).first()
-            if param_row:
-                param_lookup[param_name[0]] = param_row.id
+        # Get all parameters for this country in a single query
+        param_names = [name[0] for name in unique_params.keys()]
+        all_params = s.exec(
+            select(ParameterTable).where(
+                ParameterTable.name.in_(param_names),
+                ParameterTable.country == country,
+            )
+        ).all()
+        
+        # Build lookup map from query results
+        for param in all_params:
+            param_lookup[param.name] = param.id
+        
+        print(f"    Found {len(param_lookup)} parameters in database")
 
     # Now add new parameter values directly using bulk insert
     from policyengine.tables import BaselineParameterValueTable
@@ -130,8 +136,6 @@ def migrate_country(
                 {
                     "id": uuid.uuid4(),
                     "parameter_id": param_lookup[pv.parameter.name],
-                    "policy_id": None,  # Not using policy/dynamic for now
-                    "dynamic_id": None,
                     "model_version": version,
                     "start_date": pv.start_date,
                     "end_date": pv.end_date,

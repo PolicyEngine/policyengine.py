@@ -35,7 +35,7 @@ def create_dataset_years_from_hf(
         base = f"{base}@{version}"
     sim = Microsimulation(dataset=base)
     return [
-        create_dataset(year=year, sim=sim, filename=filename)
+        create_dataset(year=year, sim=sim, filename=filename, version=version)
         for year in range(start_year, end_year + 1)
     ]
 
@@ -44,6 +44,7 @@ def create_dataset(
     year: int = 2029,
     sim: "Microsimulation" | None = None,
     filename: str = None,
+    version: str | None = None,
 ) -> Dataset:
     """Create the UK dataset for a given year (default 2029).
 
@@ -78,4 +79,5 @@ def create_dataset(
         name=filename.replace(".h5", "") + f"/{year}",
         data=data,
         dataset_type=DatasetType.UK_SINGLE_YEAR,
+        version=version,
     )

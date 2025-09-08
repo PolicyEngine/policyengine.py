@@ -22,10 +22,6 @@ class BaselineParameterValueTable(SQLModel, table=True):
     # Parameter identification
     parameter_id: UUID = Field(foreign_key="parameters.id")
     model_version: str
-    
-    # Optional foreign keys for policy or dynamic
-    policy_id: UUID | None = Field(default=None, foreign_key="policies.id")
-    dynamic_id: UUID | None = Field(default=None, foreign_key="dynamics.id")
 
     # Time period for this value
     start_date: datetime
