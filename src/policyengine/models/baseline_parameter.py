@@ -13,6 +13,8 @@ from uuid import UUID
 
 if TYPE_CHECKING:  # Import to satisfy type checkers without runtime cycles
     from .parameter import Parameter
+    from .dynamic import Dynamic
+    from .policy import Policy
 
 
 class BaselineParameterValue(BaseModel):
@@ -23,6 +25,10 @@ class BaselineParameterValue(BaseModel):
     # Parameter identification
     parameter: Parameter
     model_version: str
+    
+    # Optional links to policy or dynamic
+    policy: Policy | None = None
+    dynamic: Dynamic | None = None
 
     # Time period for this value
     start_date: datetime
