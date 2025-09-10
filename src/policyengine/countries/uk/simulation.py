@@ -34,12 +34,39 @@ def run_uk_simulation(simulation: Simulation) -> Dataset:
     # Implement UK-specific simulation logic here
     sim = _get_simulation(simulation)
 
+    # Hack for now: skip explicit calculation of
+    # long-running variables (they're still calculated in lsr sims)
+
+    blacklist = [
+        "is_uc_entitled_baseline",
+        "income_elasticity_lsr",
+        "child_benefit_opts_out",
+        "housing_benefit_baseline_entitlement",
+        "baseline_ctc_entitlement",
+        "pre_budget_change_household_tax",
+        "pre_budget_change_household_net_income",
+        "is_on_cliff",
+        "marginal_tax_rate_on_capital_gains",
+        "relative_capital_gains_mtr_change",
+        "pre_budget_change_ons_equivalised_income_decile",
+        "substitution_elasticity",
+        "marginal_tax_rate",
+        "cliff_evaluated",
+        "cliff_gap",
+        "substitution_elasticity_lsr",
+        "relative_wage_change",
+        "relative_income_change",
+        "pre_budget_change_household_benefits",
+    ]
+
     output = simulation.dataset.data.copy()
-    output.tables["household"]["gov_tax"] = sim.calculate(
-        "gov_tax",
-    )
-    output.tables["household"]["gov_spending"] = sim.calculate("gov_spending")
-    output.tables["household"]["gov_balance"] = sim.calculate("gov_balance")
+
+    for variable in sim.tax_benefit_system.variables.values():
+        if variable in blacklist:
+            continue
+        output.tables[variable.entity.key][variable.name] = sim.calculate(
+            variable.name
+        )
 
     # Cast to microdf
     output.tables["person"]["weight_value"] = sim.calculate(
