@@ -35,6 +35,7 @@ class Aggregate(ReportElementDataItem):
 
     simulation: "Simulation"
     time_period: int | str | None = None
+    country: str
     variable: str
     entity_level: str = "person"
     filter_variable: str | None = None

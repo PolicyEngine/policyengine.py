@@ -13,9 +13,10 @@ class AggregateTable(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     simulation_id: UUID = Field(foreign_key="simulations.id")
     time_period: str | None = None
-    variable: str
+    country: str
+    variable_id: UUID = Field(foreign_key="variables.id")
     entity_level: str
-    filter_variable: str | None = None
+    filter_variable_id: UUID | None = Field(default=None, foreign_key="variables.id")
     filter_variable_value: Any | None = Field(default=None, sa_type=JSON)
     filter_variable_min_value: float | None = None
     filter_variable_max_value: float | None = None
@@ -29,7 +30,8 @@ class CountTable(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     simulation_id: UUID = Field(foreign_key="simulations.id")
     time_period: str | None = None
-    variable: str
+    country: str
+    variable_id: UUID = Field(foreign_key="variables.id")
     entity_level: str
     equals_value: Any | None = Field(default=None, sa_type=JSON)
     min_value: float | None = None
@@ -43,8 +45,9 @@ class ChangeByBaselineGroupTable(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     baseline_simulation_id: UUID = Field(foreign_key="simulations.id")
     reform_simulation_id: UUID = Field(foreign_key="simulations.id")
-    variable: str
-    group_variable: str
+    country: str
+    variable_id: UUID = Field(foreign_key="variables.id")
+    group_variable_id: UUID = Field(foreign_key="variables.id")
     group_value: Any | None = Field(default=None, sa_type=JSON)
     entity_level: str
     time_period: str | None = None
@@ -59,8 +62,9 @@ class VariableChangeGroupByQuantileGroupTable(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     baseline_simulation_id: UUID = Field(foreign_key="simulations.id")
     reform_simulation_id: UUID = Field(foreign_key="simulations.id")
-    variable: str
-    group_variable: str
+    country: str
+    variable_id: UUID = Field(foreign_key="variables.id")
+    group_variable_id: UUID = Field(foreign_key="variables.id")
     quantile_group: int
     quantile_group_count: int
     change_lower_bound: float
@@ -77,9 +81,13 @@ class VariableChangeGroupByVariableValueTable(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     baseline_simulation_id: UUID = Field(foreign_key="simulations.id")
     reform_simulation_id: UUID = Field(foreign_key="simulations.id")
-    variable: str
-    group_variable: str
+    country: str
+    variable_id: UUID = Field(foreign_key="variables.id")
+    group_variable_id: UUID = Field(foreign_key="variables.id")
     group_variable_value: Any | None = Field(default=None, sa_type=JSON)
+    change_lower_bound: float
+    change_upper_bound: float
+    change_bound_is_relative: bool
     fixed_entity_count_per_quantile_group: str
     percent_of_group_in_change_group: float
     entities_in_group_in_change_group: float

@@ -49,6 +49,7 @@ def _align_baseline_reform(
 class ChangeByBaselineGroup(ReportElementDataItem):
     baseline_simulation: "Simulation"
     reform_simulation: "Simulation"
+    country: str
     variable: str
     group_variable: str
     group_value: int | str
@@ -159,6 +160,7 @@ class ChangeByBaselineGroup(ReportElementDataItem):
 class VariableChangeGroupByQuantileGroup(ReportElementDataItem):
     baseline_simulation: "Simulation"
     reform_simulation: "Simulation"
+    country: str
     variable: str
     group_variable: str
     quantile_group: int
@@ -259,9 +261,13 @@ class VariableChangeGroupByQuantileGroup(ReportElementDataItem):
 class VariableChangeGroupByVariableValue(ReportElementDataItem):
     baseline_simulation: "Simulation"
     reform_simulation: "Simulation"
+    country: str
     variable: str
     group_variable: str
     group_variable_value: Any
+    change_lower_bound: float
+    change_upper_bound: float
+    change_bound_is_relative: bool = False
     fixed_entity_count_per_quantile_group: str = "household"
     percent_of_group_in_change_group: float | None = None
     entities_in_group_in_change_group: float | None = None

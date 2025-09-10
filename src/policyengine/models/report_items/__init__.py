@@ -5,6 +5,7 @@ from .two_sim_change import (
     VariableChangeGroupByQuantileGroup,
     VariableChangeGroupByVariableValue,
 )
+from .registry import ReportItemRegistry
 
 __all__ = [
     "ReportElementDataItem",
@@ -13,6 +14,7 @@ __all__ = [
     "ChangeByBaselineGroup",
     "VariableChangeGroupByQuantileGroup",
     "VariableChangeGroupByVariableValue",
+    "ReportItemRegistry",
 ]
 
 # Ensure Pydantic forward references are resolved when this package is imported

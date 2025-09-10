@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 from typing import (
     Any,
+    Callable,
     Dict,
     Generator,
     Iterable,
@@ -51,6 +52,7 @@ from policyengine.models.report_items.two_sim_change import (
     VariableChangeGroupByQuantileGroup,
     VariableChangeGroupByVariableValue,
 )
+from policyengine.models.report_items.registry import ReportItemRegistry
 
 # Table models
 from policyengine.tables import (
@@ -157,9 +159,78 @@ class Database:
             v: k for k, v in self._bm_to_table.items()
         }
 
+        # Register built-in report items with the registry
+        self._register_builtin_report_items()
+        
         # Optionally seed metadata on init
         if seed_countries:
             self.seed(seed_countries)
+
+    def _register_builtin_report_items(self) -> None:
+        """Register built-in report item types with the registry."""
+        # Clear any existing registrations
+        ReportItemRegistry.clear()
+        
+        # Register built-in types
+        ReportItemRegistry.register(
+            name="aggregate",
+            model_class=Aggregate,
+            table_class=AggregateTable,
+        )
+        ReportItemRegistry.register(
+            name="count",
+            model_class=Count,
+            table_class=CountTable,
+        )
+        ReportItemRegistry.register(
+            name="change_by_baseline_group",
+            model_class=ChangeByBaselineGroup,
+            table_class=ChangeByBaselineGroupTable,
+        )
+        ReportItemRegistry.register(
+            name="variable_change_by_quantile",
+            model_class=VariableChangeGroupByQuantileGroup,
+            table_class=VariableChangeGroupByQuantileGroupTable,
+        )
+        ReportItemRegistry.register(
+            name="variable_change_by_value",
+            model_class=VariableChangeGroupByVariableValue,
+            table_class=VariableChangeGroupByVariableValueTable,
+        )
+
+    def register_custom_mapping(
+        self, 
+        model_class: type, 
+        table_class: type[SQLModel],
+        to_table_mapper: Optional[Callable] = None,
+        from_table_mapper: Optional[Callable] = None,
+    ) -> None:
+        """Register a custom model/table mapping at runtime.
+        
+        Args:
+            model_class: The Pydantic model class
+            table_class: The SQLModel table class
+            to_table_mapper: Optional custom function to convert model to table
+            from_table_mapper: Optional custom function to convert table to model
+        """
+        # Add to internal mappings
+        self._bm_to_table[model_class] = table_class
+        self._table_to_bm[table_class] = model_class
+        
+        # If it's a ReportElementDataItem subclass, also register with the registry
+        from policyengine.models.report_items.base import ReportElementDataItem
+        if issubclass(model_class, ReportElementDataItem):
+            name = f"custom_{model_class.__name__.lower()}"
+            ReportItemRegistry.register(
+                name=name,
+                model_class=model_class,
+                table_class=table_class,
+                to_table_mapper=to_table_mapper,
+                from_table_mapper=from_table_mapper,
+            )
+        
+        # Create the table if it doesn't exist
+        SQLModel.metadata.create_all(self.engine, tables=[table_class.__table__])
 
     def reset(self) -> None:
         """Drop and recreate all tables, clearing all data.
@@ -591,6 +662,13 @@ class Database:
 
     # Specific mappers. These keep relationships simple and optional.
     def _to_table(self, obj: Any, s: Session, *, cascade: bool) -> SQLModel:
+        # Check if this is a custom registered type
+        from policyengine.models.report_items.base import ReportElementDataItem
+        if isinstance(obj, ReportElementDataItem):
+            registration = ReportItemRegistry.get_by_model(type(obj))
+            if registration and registration["to_table"]:
+                # Use custom mapper
+                return registration["to_table"](obj, s, cascade=cascade)
         # Users and links
         if isinstance(obj, User):
             return UserTable(id=obj.id, name=obj.name, email=obj.email)
@@ -841,37 +919,57 @@ class Database:
 
         # Simulation
         if isinstance(obj, Simulation):
-            dataset_id = policy_id = dynamic_id = result_dataset_id = None
+            dataset_id = policy_id = dynamic_id = None
+            dataset_type = None
+            result_bytes = None
+            
             if obj.dataset is not None and cascade:
                 ds_row = self._to_table(obj.dataset, s, cascade=cascade)
                 ds_row = self._upsert_row(obj.dataset, ds_row, s)
                 s.add(ds_row)
                 s.flush()
                 dataset_id = ds_row.id
+                # Get dataset type from the dataset
+                if hasattr(obj.dataset, 'dataset_type'):
+                    dataset_type = obj.dataset.dataset_type
+                    
             if obj.policy is not None and cascade:
                 po_row = self._to_table(obj.policy, s, cascade=cascade)
                 po_row = self._upsert_row(obj.policy, po_row, s)
                 s.add(po_row)
                 s.flush()
                 policy_id = po_row.id
+                
             if obj.dynamic is not None and cascade:
                 dy_row = self._to_table(obj.dynamic, s, cascade=cascade)
                 dy_row = self._upsert_row(obj.dynamic, dy_row, s)
                 s.add(dy_row)
                 s.flush()
                 dynamic_id = dy_row.id
-            if isinstance(obj.result, Dataset) and cascade:
-                rs_row = self._to_table(obj.result, s, cascade=cascade)
-                rs_row = self._upsert_row(obj.result, rs_row, s)
-                s.add(rs_row)
-                s.flush()
-                result_dataset_id = rs_row.id
+                
+            # Store result as bytes directly in simulation table
+            if obj.result is not None:
+                if isinstance(obj.result, Dataset):
+                    # If result is a Dataset, serialize its data
+                    if hasattr(obj.result, 'data') and obj.result.data is not None:
+                        if hasattr(obj.result.data, 'serialise'):
+                            result_bytes = obj.result.data.serialise()
+                        elif isinstance(obj.result.data, (bytes, bytearray)):
+                            result_bytes = bytes(obj.result.data)
+                elif isinstance(obj.result, (bytes, bytearray)):
+                    # Direct bytes result
+                    result_bytes = bytes(obj.result)
+                elif hasattr(obj.result, 'serialise'):
+                    # SingleYearDataset or similar
+                    result_bytes = obj.result.serialise()
+                    
             return SimulationTable(
                 id=getattr(obj, "id", None),
                 dataset_id=dataset_id,
                 policy_id=policy_id,
                 dynamic_id=dynamic_id,
-                result_dataset_id=result_dataset_id,
+                dataset_type=dataset_type,
+                result=result_bytes,
                 model_version=obj.model_version,
                 country=obj.country,
                 status=obj.status,
@@ -1048,6 +1146,11 @@ class Database:
         raise ValueError(f"Unsupported object type for to_table: {type(obj)}")
 
     def _to_model(self, row: SQLModel, s: Session, *, cascade: bool) -> Any:
+        # Check if this is a custom registered table type
+        registration = ReportItemRegistry.get_by_table(type(row))
+        if registration and registration["from_table"]:
+            # Use custom mapper
+            return registration["from_table"](row, s, cascade=cascade)
         # Users and links
         if isinstance(row, UserTable):
             return User(id=row.id or 0, name=row.name, email=row.email)
@@ -1309,15 +1412,19 @@ class Database:
                 if row.dynamic_id is not None
                 else None
             )
-            result = (
-                self._to_model(
-                    s.get(DatasetTable, row.result_dataset_id),
-                    s,
-                    cascade=False,
+            
+            # Reconstruct result from bytes stored in simulation table
+            result = None
+            if row.result is not None:
+                # Create a Dataset object with SingleYearDataset data
+                result_data = SingleYearDataset(serialised_bytes=row.result)
+                # Create a Dataset wrapper for the result
+                result = Dataset(
+                    name=f"simulation_{row.id}_result",
+                    data=result_data,
+                    dataset_type=row.dataset_type,
                 )
-                if row.result_dataset_id is not None
-                else None
-            )
+            
             return Simulation(
                 id=row.id,
                 dataset=dataset,  # type: ignore[arg-type]

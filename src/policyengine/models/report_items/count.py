@@ -28,6 +28,7 @@ class Count(ReportElementDataItem):
 
     simulation: "Simulation"
     time_period: int | str | None = None
+    country: str
     variable: str
     entity_level: str = "person"
     equals_value: Any | None = None

@@ -4,10 +4,10 @@ from datetime import datetime
 from typing import Optional, Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON
+from sqlalchemy import JSON, LargeBinary
 from sqlmodel import SQLModel, Field, Relationship
 
-from policyengine.models.enums import OperationStatus
+from policyengine.models.enums import OperationStatus, DatasetType
 
 
 class SimulationTable(SQLModel, table=True):
@@ -19,10 +19,12 @@ class SimulationTable(SQLModel, table=True):
     policy_id: UUID | None = Field(default=None, foreign_key="policies.id")
     dynamic_id: UUID | None = Field(default=None, foreign_key="dynamics.id")
 
-    # Store result dataset as a dataset row to keep consistency
-    result_dataset_id: UUID | None = Field(
-        default=None, foreign_key="datasets.id"
-    )
+    # Dataset type for the input dataset
+    dataset_type: DatasetType | None = None
+    
+    # Store simulation results directly in the simulation table
+    result: bytes | None = Field(default=None, sa_type=LargeBinary)
+    
     model_version: str | None = None
     country: str | None = None
 
