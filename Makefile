@@ -3,13 +3,16 @@
 all: build-package
 
 docs:
-	jupyter book start
+	cd docs && jupyter book start
 
 install:
 	pip install -e .[dev]
 
 format:
 	black . -l 79
+
+clean:
+	rm -rf **/__pycache__ _build **/_build .pytest_cache .ruff_cache **/*.egg-info **/*.pyc
 
 changelog:
 	build-changelog changelog.yaml --output changelog.yaml --update-last-date --start-from 1.0.0 --append-file changelog_entry.yaml
