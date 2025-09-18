@@ -3,6 +3,7 @@ from typing import Callable
 from uuid import uuid4
 from datetime import datetime
 
+
 class Policy(BaseModel):
     id: str = str(uuid4())
     name: str

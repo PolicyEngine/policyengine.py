@@ -3,8 +3,8 @@ from uuid import uuid4
 from .model import Model
 
 
-class Parameter(BaseModel):
+class VersionedDataset(BaseModel):
     id: str = str(uuid4())
+    name: str
     description: str
-    data_type: type
     model: Model | None = None

@@ -138,6 +138,22 @@ wheels = [
 ]
 
 [[package]]
+name = "blosc"
+version = "1.11.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e3/ca/3ec5a5d05e10ad200d887c8cfb9492d9a02e05f9f8f726aa178123b1711b/blosc-1.11.3.tar.gz", hash = "sha256:89ed658eba7814a92e89c44d8c524148d55921595bc133bd1a90f8888a9e088e", size = 1439627, upload-time = "2025-05-17T11:50:03.713Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a5/23/6ee0e7270ad6299e73483dfad31b17f8acf66f7768094316a35ee0534f1d/blosc-1.11.3-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:9b474c70b9765587323dd1d7ff8e9fa9e9b35ccb3bee77e7658ce9faf2e05f7f", size = 2291576, upload-time = "2025-05-17T11:49:41.013Z" },
+    { url = "https://files.pythonhosted.org/packages/51/8f/d8097dd6bf952d4bc1a31852f717d5a1157b32c1bea50dac723ed8e6bc8d/blosc-1.11.3-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:291d153864f53960861a48c2a5f6706adc2a84a2bdd9c3d1c5353d9c32748a03", size = 1801973, upload-time = "2025-05-17T11:49:42.259Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/cb/7fdf0756e6a38d6a28c5063bc8ba8a8c8b1a1ab6980d777c52ca7dd942b1/blosc-1.11.3-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ece67bb34741a147e4120cff3ee3784121709a112d16795716b8f4239aaddfa4", size = 2485043, upload-time = "2025-05-17T11:49:44.034Z" },
+    { url = "https://files.pythonhosted.org/packages/7c/b8/d21a1305356312ca0fc6bd54ad6fb91e7434f0efef545972eb72f040c815/blosc-1.11.3-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e70216dbddb85b69a8d0f62a4a5c09b7a1fce9ca2f329793e799f8b6f9fa3ab0", size = 2619988, upload-time = "2025-05-17T11:49:45.346Z" },
+    { url = "https://files.pythonhosted.org/packages/a0/79/9ed273c9493e02f0bc5deacd3854ecabd6c6ba5371ed04b6c7702fd16f77/blosc-1.11.3-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:220865ffcac638f8f0f4b51259d4e4f3236165e5b43fffd1e836cd7cd29b9367", size = 2678176, upload-time = "2025-05-17T11:49:47.12Z" },
+    { url = "https://files.pythonhosted.org/packages/79/0e/c50458a1e038c0f0da70c3223d2a34ad702b86a79d0921f23a8ffaae035f/blosc-1.11.3-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:d57dde8c335378e8443757b69d0b29e90dfc53047d01311e952aecc815167dec", size = 2752740, upload-time = "2025-05-17T11:49:48.909Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/0e/3a5ed949e0e23eb576c08017bb39e8612607cf8f591d8149b0fb82469a03/blosc-1.11.3-cp313-cp313-win32.whl", hash = "sha256:d3d72046580a50177811916c78130d6ae7307420733de6e950cb567c896b1ca5", size = 1530991, upload-time = "2025-05-17T11:49:50.121Z" },
+    { url = "https://files.pythonhosted.org/packages/06/d4/0c3cdaf34b3ef705fdab465ad8df4a3bce5bbdf2bca8f2515eae90ae28a0/blosc-1.11.3-cp313-cp313-win_amd64.whl", hash = "sha256:73721c1949f2b8d2f4168cababbfe6280511f0da9a971ba7ec9c56eab9603824", size = 1815688, upload-time = "2025-05-17T11:49:51.434Z" },
+]
+
+[[package]]
 name = "blosc2"
 version = "3.7.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1268,10 +1284,11 @@ wheels = [
 
 [[package]]
 name = "policyengine"
-version = "0.6.1"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
+    { name = "blosc" },
     { name = "getpass4" },
     { name = "google-cloud-storage" },
     { name = "ipywidgets" },
@@ -1287,11 +1304,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-all = [
-    { name = "policyengine-core" },
-    { name = "policyengine-uk" },
-    { name = "policyengine-us" },
-]
 dev = [
     { name = "autodoc-pydantic" },
     { name = "black" },
@@ -1318,6 +1330,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.13.0" },
     { name = "autodoc-pydantic", marker = "extra == 'dev'" },
     { name = "black", marker = "extra == 'dev'" },
+    { name = "blosc", specifier = ">=1.11.3" },
     { name = "build", marker = "extra == 'dev'" },
     { name = "furo", marker = "extra == 'dev'" },
     { name = "getpass4" },
@@ -1327,12 +1340,9 @@ requires-dist = [
     { name = "jupyter-book", marker = "extra == 'dev'" },
     { name = "microdf-python" },
     { name = "pandas", specifier = ">=2.0.0" },
-    { name = "policyengine-core", marker = "extra == 'all'", specifier = ">=3.10" },
     { name = "policyengine-core", marker = "extra == 'uk'", specifier = ">=3.10" },
     { name = "policyengine-core", marker = "extra == 'us'", specifier = ">=3.10" },
-    { name = "policyengine-uk", marker = "extra == 'all'" },
     { name = "policyengine-uk", marker = "extra == 'uk'" },
-    { name = "policyengine-us", marker = "extra == 'all'", specifier = ">=1.213.1" },
     { name = "policyengine-us", marker = "extra == 'us'", specifier = ">=1.213.1" },
     { name = "psycopg2-binary", specifier = ">=2.9.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
@@ -1346,7 +1356,7 @@ requires-dist = [
     { name = "tqdm", specifier = ">=4.67.1" },
     { name = "yaml-changelog", marker = "extra == 'dev'", specifier = ">=0.1.7" },
 ]
-provides-extras = ["uk", "us", "all", "dev"]
+provides-extras = ["uk", "us", "dev"]
 
 [[package]]
 name = "policyengine-core"

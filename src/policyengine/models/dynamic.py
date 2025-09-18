@@ -3,6 +3,7 @@ from typing import Callable
 from uuid import uuid4
 from datetime import datetime
 
+
 class Dynamic(BaseModel):
     id: str = str(uuid4())
     name: str
@@ -11,4 +12,3 @@ class Dynamic(BaseModel):
     simulation_modifier: Callable | None = None
     created_at: datetime = datetime.now()
     updated_at: datetime = datetime.now()
-

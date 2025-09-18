@@ -1,86 +1,20 @@
-from pydantic import BaseModel
-from sqlmodel import SQLModel, Field, JSON, Column, Session, select, MetaData
-from typing import Optional, List, Any, Callable
-from datetime import datetime
-from uuid import uuid4
-from policyengine.models import Model, Policy, Dynamic, Dataset, Simulation, Parameter, ParameterValue
-import pickle
+from sqlmodel import SQLModel, Session
+from typing import Any
 from .link import TableLink
-from .model import model_table_link, model_version_table_link
 
-class PolicyTable(SQLModel, table=True):
-    __tablename__ = "policies"
-    
-    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
-    name: str = Field(nullable=False)
-    description: Optional[str] = Field(default=None)
-    parameter_value_ids: List[str] = Field(default_factory=list, sa_column=Column(JSON))
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
+# Import all table links
+from .model_table import model_table_link
+from .model_version_table import model_version_table_link
+from .dataset_table import dataset_table_link
+from .versioned_dataset_table import versioned_dataset_table_link
+from .policy_table import policy_table_link
+from .dynamic_table import dynamic_table_link
+from .parameter_table import parameter_table_link
+from .parameter_value_table import parameter_value_table_link
+from .simulation_table import simulation_table_link
 
-class DynamicTable(SQLModel, table=True):
-    __tablename__ = "dynamics"
-    
-    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
-    name: str = Field(nullable=False)
-    description: Optional[str] = Field(default=None)
-    parameter_value_ids: List[str] = Field(default_factory=list, sa_column=Column(JSON))
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
+from policyengine.extensions.general_outputs import aggregate_table_link
 
-
-
-class ParameterTable(SQLModel, table=True):
-    __tablename__ = "parameters"
-    
-    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
-    description: str = Field(nullable=False)
-    data_type: str = Field(nullable=False)
-    model_id: Optional[str] = Field(default=None)
-
-class ParameterValueTable(SQLModel, table=True):
-    __tablename__ = "parameter_values"
-    
-    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
-    parameter_id: str = Field(nullable=False)
-    value: float = Field(nullable=False)
-    start_date: datetime = Field(nullable=False)
-    end_date: Optional[datetime] = Field(default=None)
-
-class VersionedDatasetTable(SQLModel, table=True):
-    __tablename__ = "versioned_datasets"
-    
-    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
-    name: str = Field(nullable=False)
-    description: str = Field(nullable=False)
-    model_id: Optional[str] = Field(default=None, foreign_key="models.id")
-
-class DatasetTable(SQLModel, table=True):
-    __tablename__ = "datasets"
-    
-    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
-    name: str = Field(nullable=False)
-    description: str = Field(nullable=False)
-    version: Optional[str] = Field(default=None)
-    versioned_dataset_id: Optional[str] = Field(default=None, foreign_key="versioned_datasets.id")
-    year: Optional[int] = Field(default=None)
-    data: Optional[Any] = Field(default=None, sa_column=Column(JSON))
-    model_id: Optional[str] = Field(default=None, foreign_key="models.id")
-
-class SimulationTable(SQLModel, table=True):
-    __tablename__ = "simulations"
-    
-    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
-    name: str = Field(nullable=False)
-    description: Optional[str] = Field(default=None)
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
-    
-    policy_id: Optional[str] = Field(default=None, foreign_key="policies.id")
-    dynamic_id: Optional[str] = Field(default=None, foreign_key="dynamics.id")
-    dataset_id: str = Field(foreign_key="datasets.id")
-    model_version_id: Optional[str] = Field(default=None, foreign_key="model_versions.id")
-    result: Optional[Any] = Field(default=None, sa_column=Column(JSON))
 
 class Database:
     url: str
@@ -95,17 +29,26 @@ class Database:
         for link in [
             model_table_link,
             model_version_table_link,
+            dataset_table_link,
+            versioned_dataset_table_link,
+            policy_table_link,
+            dynamic_table_link,
+            parameter_table_link,
+            parameter_value_table_link,
+            simulation_table_link,
+            aggregate_table_link,
         ]:
             self.register_table(link)
-    
+
     def _create_engine(self):
         from sqlmodel import create_engine
+
         return create_engine(self.url, echo=False)
-    
+
     def create_tables(self):
         """Create all database tables."""
         SQLModel.metadata.create_all(self.engine)
-    
+
     def drop_tables(self):
         """Drop all database tables."""
         SQLModel.metadata.drop_all(self.engine)
@@ -114,12 +57,12 @@ class Database:
         """Drop and recreate all tables."""
         self.drop_tables()
         self.create_tables()
-    
+
     def __enter__(self):
         """Context manager entry - creates a session."""
         self.session = Session(self.engine)
         return self.session
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit - closes the session."""
         if exc_type:
@@ -132,17 +75,27 @@ class Database:
         self._model_table_links.append(link)
         # Create the table if not exists
         link.table_cls.metadata.create_all(self.engine)
-        
 
     def get(self, model_cls: type, **kwargs):
-        table_link = next((link for link in self._model_table_links if link.model_cls == model_cls), None)
+        table_link = next(
+            (
+                link
+                for link in self._model_table_links
+                if link.model_cls == model_cls
+            ),
+            None,
+        )
         if table_link is not None:
             table_link.get(self, **kwargs)
 
     def set(self, object: Any):
-        table_link = next((link for link in self._model_table_links if link.model_cls == type(object)), None)
+        table_link = next(
+            (
+                link
+                for link in self._model_table_links
+                if link.model_cls == type(object)
+            ),
+            None,
+        )
         if table_link is not None:
             table_link.set(self, object)
-
-# Now, define the table links
-

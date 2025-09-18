@@ -1,6 +1,9 @@
-from .dataset import Dataset, VersionedDataset
+from .dataset import Dataset
+from .versioned_dataset import VersionedDataset
 from .dynamic import Dynamic
 from .policy import Policy
-from .model import Model, ModelVersion
-from .parameter import Parameter, ParameterValue
+from .model import Model
+from .model_version import ModelVersion
+from .parameter import Parameter
+from .parameter_value import ParameterValue
 from .simulation import Simulation

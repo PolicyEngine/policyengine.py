@@ -26,6 +26,7 @@ dependencies = [
     "ipywidgets>=8.0.0",
     "microdf_python",
     "tqdm>=4.67.1",
+    "blosc>=1.11.3",
 ]
 
 [project.optional-dependencies]
