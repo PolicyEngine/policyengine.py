@@ -13,6 +13,9 @@ from .parameter_table import parameter_table_link
 from .parameter_value_table import parameter_value_table_link
 from .simulation_table import simulation_table_link
 from .aggregate import aggregate_table_link
+from .report_table import report_table_link
+from .report_element_table import report_element_table_link
+from .user_table import user_table_link
 
 
 class Database:
@@ -36,6 +39,9 @@ class Database:
             parameter_value_table_link,
             simulation_table_link,
             aggregate_table_link,
+            user_table_link,
+            report_table_link,
+            report_element_table_link,
         ]:
             self.register_table(link)
 

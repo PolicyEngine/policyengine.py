@@ -7,3 +7,6 @@ from .model_version import ModelVersion
 from .parameter import Parameter
 from .parameter_value import ParameterValue
 from .simulation import Simulation
+from .report import Report
+from .report_element import ReportElement
+from .user import User
