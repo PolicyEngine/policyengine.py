@@ -12,8 +12,7 @@ from .dynamic_table import dynamic_table_link
 from .parameter_table import parameter_table_link
 from .parameter_value_table import parameter_value_table_link
 from .simulation_table import simulation_table_link
-
-from policyengine.extensions.general_outputs import aggregate_table_link
+from .aggregate import aggregate_table_link
 
 
 class Database:
