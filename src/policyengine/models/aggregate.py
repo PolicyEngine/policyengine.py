@@ -2,6 +2,8 @@ from pydantic import BaseModel
 from policyengine.models import Simulation
 from enum import Enum
 from typing import Literal
+from microdf import MicroDataFrame
+import pandas as pd
 
 
 class AggregateType(str, Enum):
@@ -31,6 +33,10 @@ class Aggregate(BaseModel):
         results = []
 
         tables = aggregates[0].simulation.result
+        for table in tables:
+            tables[table] = pd.DataFrame(tables[table])
+            weight_col = f"{table}_weight"
+            tables[table] = MicroDataFrame(tables[table], weights=weight_col)
 
         for agg in aggregates:
             if agg.entity not in tables:
@@ -46,9 +52,7 @@ class Aggregate(BaseModel):
 
             df = table
 
-            if agg.year is not None and "year" in df.columns:
-                df = df[df["year"] == agg.year]
-            elif agg.year is None:
+            if agg.year is None:
                 agg.year = aggregates[0].simulation.dataset.year
 
             if agg.filter_variable_name is not None:

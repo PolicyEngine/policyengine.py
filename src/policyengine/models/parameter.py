@@ -5,6 +5,6 @@ from .model import Model
 
 class Parameter(BaseModel):
     id: str = str(uuid4())
-    description: str
-    data_type: type
+    description: str | None
+    data_type: type | None
     model: Model | None = None

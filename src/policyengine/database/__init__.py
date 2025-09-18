@@ -16,6 +16,14 @@ from .parameter_value_table import (
     ParameterValueTable,
     parameter_value_table_link,
 )
+from .baseline_parameter_value_table import (
+    BaselineParameterValueTable,
+    baseline_parameter_value_table_link,
+)
+from .baseline_variable_table import (
+    BaselineVariableTable,
+    baseline_variable_table_link,
+)
 from .simulation_table import SimulationTable, simulation_table_link
 
 __all__ = [
@@ -30,6 +38,8 @@ __all__ = [
     "DynamicTable",
     "ParameterTable",
     "ParameterValueTable",
+    "BaselineParameterValueTable",
+    "BaselineVariableTable",
     "SimulationTable",
     # Links
     "model_table_link",
@@ -40,5 +50,7 @@ __all__ = [
     "dynamic_table_link",
     "parameter_table_link",
     "parameter_value_table_link",
+    "baseline_parameter_value_table_link",
+    "baseline_variable_table_link",
     "simulation_table_link",
 ]

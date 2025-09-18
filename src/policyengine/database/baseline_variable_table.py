@@ -1,0 +1,29 @@
+from sqlmodel import SQLModel, Field
+from typing import Optional
+from policyengine.models import BaselineVariable
+from .link import TableLink
+from policyengine.utils.compress import compress_data, decompress_data
+
+
+class BaselineVariableTable(SQLModel, table=True):
+    __tablename__ = "baseline_variables"
+
+    id: str = Field(primary_key=True)
+    model_id: str = Field(foreign_key="models.id", ondelete="CASCADE")
+    entity: str = Field(nullable=False)
+    label: Optional[str] = Field(default=None)
+    description: Optional[str] = Field(default=None)
+    data_type: Optional[bytes] = Field(default=None)  # Pickled type
+
+
+baseline_variable_table_link = TableLink(
+    model_cls=BaselineVariable,
+    table_cls=BaselineVariableTable,
+    model_to_table_custom_transforms=dict(
+        model_id=lambda bv: bv.model.id,
+        data_type=lambda bv: compress_data(bv.data_type) if bv.data_type else None,
+    ),
+    table_to_model_custom_transforms=dict(
+        data_type=lambda dt: decompress_data(dt) if dt else None,
+    ),
+)

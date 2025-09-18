@@ -6,6 +6,8 @@ from .model import Model
 from .model_version import ModelVersion
 from .parameter import Parameter
 from .parameter_value import ParameterValue
+from .baseline_parameter_value import BaselineParameterValue
+from .baseline_variable import BaselineVariable
 from .simulation import Simulation
 from .report import Report
 from .report_element import ReportElement
