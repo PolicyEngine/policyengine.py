@@ -11,6 +11,8 @@ from .policy_table import policy_table_link
 from .dynamic_table import dynamic_table_link
 from .parameter_table import parameter_table_link
 from .parameter_value_table import parameter_value_table_link
+from .baseline_parameter_value_table import baseline_parameter_value_table_link
+from .baseline_variable_table import baseline_variable_table_link
 from .simulation_table import simulation_table_link
 from .aggregate import aggregate_table_link
 from .report_table import report_table_link
@@ -37,6 +39,8 @@ class Database:
             dynamic_table_link,
             parameter_table_link,
             parameter_value_table_link,
+            baseline_parameter_value_table_link,
+            baseline_variable_table_link,
             simulation_table_link,
             aggregate_table_link,
             user_table_link,
@@ -93,7 +97,7 @@ class Database:
         if table_link is not None:
             table_link.get(self, **kwargs)
 
-    def set(self, object: Any):
+    def set(self, object: Any, commit: bool = True):
         table_link = next(
             (
                 link
@@ -103,4 +107,48 @@ class Database:
             None,
         )
         if table_link is not None:
-            table_link.set(self, object)
+            table_link.set(self, object, commit=commit)
+
+    def register_model_version(self, model_version):
+        """Register a model version with its model and seed objects.
+        This replaces all existing parameters, baseline parameter values,
+        and baseline variables for this model version."""
+        from .parameter_table import ParameterTable
+        from .baseline_parameter_value_table import BaselineParameterValueTable
+        from .baseline_variable_table import BaselineVariableTable
+
+        # First, add the model and model version
+        self.set(model_version.model)
+        self.set(model_version)
+
+        # Get seed objects from the model
+        seed_objects = model_version.model.create_seed_objects(model_version)
+
+        # Delete all existing baseline parameter values and baseline variables for this model version
+        # (they have foreign key dependencies on parameters)
+        self.session.query(BaselineParameterValueTable).filter(
+            BaselineParameterValueTable.model_version_id == model_version.id
+        ).delete()
+        self.session.query(BaselineVariableTable).filter(
+            BaselineVariableTable.model_version_id == model_version.id
+        ).delete()
+
+        # Delete all existing parameters for this model
+        self.session.query(ParameterTable).filter(
+            ParameterTable.model_id == model_version.model.id
+        ).delete()
+        self.session.commit()
+
+        # Add new parameters
+        for parameter in seed_objects.parameters:
+            self.set(parameter, commit=False)
+        
+        self.session.commit()
+
+        # Add new baseline parameter values
+        for baseline_param_value in seed_objects.baseline_parameter_values:
+            self.set(baseline_param_value)
+
+        # Add new baseline variables
+        for baseline_variable in seed_objects.baseline_variables:
+            self.set(baseline_variable)

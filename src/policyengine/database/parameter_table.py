@@ -11,7 +11,7 @@ class ParameterTable(SQLModel, table=True):
 
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     description: str | None = Field(default=None)
-    data_type: Optional[str] = Field(nullable=False)  # Pickled type
+    data_type: Optional[str] = Field(nullable=True)  # Pickled type
     model_id: Optional[str] = Field(
         default=None, foreign_key="models.id", ondelete="SET NULL"
     )
@@ -21,10 +21,10 @@ parameter_table_link = TableLink(
     model_cls=Parameter,
     table_cls=ParameterTable,
     model_to_table_custom_transforms=dict(
-        data_type=str,
+        data_type=lambda p: p.data_type.__name__ if p.data_type else None,
         model_id=lambda p: p.model.id if p.model else None,
     ),
     table_to_model_custom_transforms=dict(
-        data_type=type,
+        data_type=lambda t: eval(t.data_type) if t.data_type else None
     ),
 )

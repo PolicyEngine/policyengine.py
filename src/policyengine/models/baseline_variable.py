@@ -1,10 +1,10 @@
 from pydantic import BaseModel
 from datetime import datetime
-from .model import Model
+from .model_version import ModelVersion
 
 class BaselineVariable(BaseModel):
     id: str
-    model: Model
+    model_version: ModelVersion
     entity: str
     label: str | None = None
     description: str | None = None

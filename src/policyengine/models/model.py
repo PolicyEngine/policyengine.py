@@ -15,7 +15,7 @@ class Model(BaseModel):
     description: str | None = None
     simulation_function: Callable
 
-    def create_seed_objects(self):
+    def create_seed_objects(self, model_version):
         from .baseline_parameter_value import BaselineParameterValue
         from .parameter import Parameter
         from .baseline_variable import BaselineVariable
@@ -26,7 +26,7 @@ class Model(BaseModel):
             from policyengine_us.system import system
         else:
             raise ValueError("Unsupported model.")
-        
+
         parameters = []
         baseline_parameter_values = []
         baseline_variables = []
@@ -41,7 +41,7 @@ class Model(BaseModel):
             parameters.append(param)
             if isinstance(parameter, CoreParameter):
                 values = parameter.values_list[::-1]
-                param.data_type = type(values[-1])
+                param.data_type = type(values[-1].value)
                 for i in range(len(values)):
                     value_at_instant = values[i]
                     instant_str = safe_parse_instant_str(value_at_instant.instant_str)
@@ -51,17 +51,17 @@ class Model(BaseModel):
                         next_instant_str = None
                     baseline_param_value = BaselineParameterValue(
                         parameter=param,
-                        model=self,
+                        model_version=model_version,
                         value=value_at_instant.value,
                         start_date=instant_str,
                         end_date=next_instant_str
                     )
                     baseline_parameter_values.append(baseline_param_value)
-        
+
         for variable in system.variables.values():
             baseline_variable = BaselineVariable(
                 id=variable.name,
-                model=self,
+                model_version=model_version,
                 entity=variable.entity.key,
                 label=variable.label,
                 description=variable.documentation,

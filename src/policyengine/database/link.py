@@ -35,7 +35,7 @@ class TableLink(BaseModel):
         }
         return self.model_cls(**filtered_model_data)
 
-    def set(self, database: "Database", obj: BaseModel):
+    def set(self, database: "Database", obj: BaseModel, commit: bool = True):
         model_data = obj.model_dump()
         if self.model_to_table_custom_transforms:
             for (
@@ -74,4 +74,6 @@ class TableLink(BaseModel):
         else:
             database.session.add(table_obj)
 
-        database.session.commit()
+        if commit:
+            print("Committing to database")  # Debug statement
+            database.session.commit()
