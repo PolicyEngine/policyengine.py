@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from uuid import uuid4
 from datetime import datetime
 from .policy import Policy
@@ -10,9 +10,9 @@ from typing import Any
 
 
 class Simulation(BaseModel):
-    id: str = str(uuid4())
-    created_at: datetime = datetime.now()
-    updated_at: datetime = datetime.now()
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
 
     policy: Policy | None = None
     dynamic: Dynamic | None = None
