@@ -80,7 +80,7 @@ class Aggregate(BaseModel):
             elif agg.aggregate_function == AggregateType.MEAN:
                 agg.value = float(df[agg.variable_name].mean())
             elif agg.aggregate_function == AggregateType.COUNT:
-                agg.value = float(len(df))
+                agg.value = float((df[agg.variable_name] > 0).sum())
 
             results.append(agg)
 
