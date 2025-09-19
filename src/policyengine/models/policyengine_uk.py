@@ -28,7 +28,7 @@ def run_policyengine_uk(
         if policy is not None and len(policy.parameter_values) > 0:
             for parameter_value in policy.parameter_values:
                 sim.tax_benefit_system.parameters.get_child(parameter_value.parameter.id).update(
-                    parameter_value.value,
+                    value=parameter_value.value,
                     start=parameter_value.start_date.strftime("%Y-%m-%d"),
                     stop=parameter_value.end_date.strftime("%Y-%m-%d") if parameter_value.end_date else None,
                 )
@@ -36,7 +36,7 @@ def run_policyengine_uk(
         if dynamic is not None and len(dynamic.parameter_values) > 0:
             for parameter_value in dynamic.parameter_values:
                 sim.tax_benefit_system.parameters.get_child(parameter_value.parameter.id).update(
-                    parameter_value.value,
+                    value=parameter_value.value,
                     start=parameter_value.start_date.strftime("%Y-%m-%d"),
                     stop=parameter_value.end_date.strftime("%Y-%m-%d") if parameter_value.end_date else None,
                 )

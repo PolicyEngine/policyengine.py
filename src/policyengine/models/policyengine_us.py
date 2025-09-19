@@ -31,8 +31,29 @@ def run_policyengine_us(
     sim = Microsimulation(dataset=person_df)
     sim.default_calculation_period = dataset.year
 
-    if policy is not None:
-        policy.simulation_modifier(sim)
+    def simulation_modifier(sim: Microsimulation):
+        if policy is not None and len(policy.parameter_values) > 0:
+            for parameter_value in policy.parameter_values:
+                sim.tax_benefit_system.parameters.get_child(parameter_value.parameter.id).update(
+                    parameter_value.value,
+                    start=parameter_value.start_date.strftime("%Y-%m-%d"),
+                    stop=parameter_value.end_date.strftime("%Y-%m-%d") if parameter_value.end_date else None,
+                )
+        
+        if dynamic is not None and len(dynamic.parameter_values) > 0:
+            for parameter_value in dynamic.parameter_values:
+                sim.tax_benefit_system.parameters.get_child(parameter_value.parameter.id).update(
+                    parameter_value.value,
+                    start=parameter_value.start_date.strftime("%Y-%m-%d"),
+                    stop=parameter_value.end_date.strftime("%Y-%m-%d") if parameter_value.end_date else None,
+                )
+
+        if dynamic is not None and dynamic.simulation_modifier is not None:
+            dynamic.simulation_modifier(sim)
+        if policy is not None and policy.simulation_modifier is not None:
+            policy.simulation_modifier(sim)
+
+    simulation_modifier(sim)
 
     # Skip reforms for now
 
