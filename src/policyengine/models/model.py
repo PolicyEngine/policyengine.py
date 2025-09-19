@@ -30,8 +30,13 @@ class Model(BaseModel):
         parameters = []
         baseline_parameter_values = []
         baseline_variables = []
+        seen_parameter_ids = set()
 
         for parameter in system.parameters.get_descendants():
+            # Skip if we've already processed this parameter ID
+            if parameter.name in seen_parameter_ids:
+                continue
+            seen_parameter_ids.add(parameter.name)
             param = Parameter(
                 id=parameter.name,
                 description=parameter.description,
@@ -79,7 +84,27 @@ def safe_parse_instant_str(instant_str: str) -> datetime:
     if instant_str == "0000-01-01":
         return datetime(1, 1, 1)
     else:
-        return datetime.strptime(instant_str, "%Y-%m-%d")
+        try:
+            return datetime.strptime(instant_str, "%Y-%m-%d")
+        except ValueError:
+            # Handle invalid dates like 2021-06-31
+            # Try to parse year and month, then use last valid day
+            parts = instant_str.split("-")
+            if len(parts) == 3:
+                year = int(parts[0])
+                month = int(parts[1])
+                day = int(parts[2])
+
+                # Find the last valid day of the month
+                import calendar
+                last_day = calendar.monthrange(year, month)[1]
+                if day > last_day:
+                    print(f"Warning: Invalid date {instant_str}, using {year}-{month:02d}-{last_day:02d}")
+                    return datetime(year, month, last_day)
+
+            # If we can't parse it at all, print and raise
+            print(f"Error: Cannot parse date {instant_str}")
+            raise
     
 class SeedObjects(BaseModel):
     parameters: List["Parameter"]

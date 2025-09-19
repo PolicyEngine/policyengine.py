@@ -11,7 +11,7 @@ class TableLink(BaseModel):
     table_cls: type[SQLModel]
     model_to_table_custom_transforms: dict[str, Callable] | None = None
     table_to_model_custom_transforms: dict[str, Callable] | None = None
-    primary_key: str | tuple[str] = "id"
+    primary_key: str | tuple[str, ...] = "id"  # Allow multiple strings in tuple
 
     def get(self, database: "Database", **kwargs):
         statement = select(self.table_cls).filter_by(**kwargs)
@@ -56,11 +56,11 @@ class TableLink(BaseModel):
         query = select(self.table_cls)
         if isinstance(self.primary_key, tuple):
             for key in self.primary_key:
-                query.where(
+                query = query.where(
                     getattr(self.table_cls, key) == getattr(table_obj, key)
                 )
         else:
-            query.where(
+            query = query.where(
                 getattr(self.table_cls, self.primary_key)
                 == getattr(table_obj, self.primary_key)
             )
@@ -75,5 +75,4 @@ class TableLink(BaseModel):
             database.session.add(table_obj)
 
         if commit:
-            print("Committing to database")  # Debug statement
             database.session.commit()

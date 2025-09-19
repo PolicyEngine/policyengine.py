@@ -12,7 +12,7 @@ from policyengine.models.aggregate import Aggregate
 class AggregateTable(SQLModel, table=True):
     __tablename__ = "aggregates"
 
-    id: str = Field(default_factory=lambda: uuid4(), primary_key=True)
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     simulation_id: str = Field(
         foreign_key="simulations.id", ondelete="CASCADE"
     )

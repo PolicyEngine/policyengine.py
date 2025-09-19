@@ -116,39 +116,117 @@ class Database:
         from .parameter_table import ParameterTable
         from .baseline_parameter_value_table import BaselineParameterValueTable
         from .baseline_variable_table import BaselineVariableTable
+        from .model_table import ModelTable
+        from .model_version_table import ModelVersionTable
 
-        # First, add the model and model version
-        self.set(model_version.model)
-        self.set(model_version)
+        # Add or update the model directly to avoid conflicts
+        from policyengine.utils.compress import compress_data
+        existing_model = self.session.query(ModelTable).filter(
+            ModelTable.id == model_version.model.id
+        ).first()
+        if not existing_model:
+            model_table = ModelTable(
+                id=model_version.model.id,
+                name=model_version.model.name,
+                description=model_version.model.description,
+                simulation_function=compress_data(model_version.model.simulation_function),
+            )
+            self.session.add(model_table)
+            self.session.flush()
+
+        # Add or update the model version
+        existing_version = self.session.query(ModelVersionTable).filter(
+            ModelVersionTable.id == model_version.id
+        ).first()
+        if not existing_version:
+            version_table = ModelVersionTable(
+                id=model_version.id,
+                model_id=model_version.model.id,
+                version=model_version.version,
+                description=model_version.description,
+                created_at=model_version.created_at,
+            )
+            self.session.add(version_table)
+            self.session.flush()
 
         # Get seed objects from the model
         seed_objects = model_version.model.create_seed_objects(model_version)
 
-        # Delete all existing baseline parameter values and baseline variables for this model version
-        # (they have foreign key dependencies on parameters)
+        # Delete ALL existing seed data for this model (not just this version)
+        # This ensures we start fresh with the new version's data
+        # Order matters due to foreign key constraints
+
+        # First delete baseline parameter values (they reference parameters)
         self.session.query(BaselineParameterValueTable).filter(
-            BaselineParameterValueTable.model_version_id == model_version.id
-        ).delete()
-        self.session.query(BaselineVariableTable).filter(
-            BaselineVariableTable.model_version_id == model_version.id
+            BaselineParameterValueTable.model_id == model_version.model.id
         ).delete()
 
-        # Delete all existing parameters for this model
+        # Then delete baseline variables for this model
+        self.session.query(BaselineVariableTable).filter(
+            BaselineVariableTable.model_id == model_version.model.id
+        ).delete()
+
+        # Finally delete all parameters for this model
         self.session.query(ParameterTable).filter(
             ParameterTable.model_id == model_version.model.id
         ).delete()
+
         self.session.commit()
 
-        # Add new parameters
+        # Add all parameters first
         for parameter in seed_objects.parameters:
-            self.set(parameter, commit=False)
-        
-        self.session.commit()
+            # We need to add directly to session to avoid the autoflush issue
+            from .parameter_table import ParameterTable
+            param_table = ParameterTable(
+                id=parameter.id,
+                model_id=parameter.model.id,  # Now required as part of composite key
+                description=parameter.description,
+                data_type=parameter.data_type.__name__ if parameter.data_type else None,
+            )
+            self.session.add(param_table)
 
-        # Add new baseline parameter values
+        # Flush parameters to database so they exist for foreign key constraints
+        self.session.flush()
+
+        # Add all baseline parameter values
         for baseline_param_value in seed_objects.baseline_parameter_values:
-            self.set(baseline_param_value)
+            from .baseline_parameter_value_table import BaselineParameterValueTable
+            from uuid import uuid4
+            import math
 
-        # Add new baseline variables
+            # Handle special float values that JSON doesn't support
+            value = baseline_param_value.value
+            if isinstance(value, float):
+                if math.isinf(value):
+                    value = "Infinity" if value > 0 else "-Infinity"
+                elif math.isnan(value):
+                    value = "NaN"
+
+            bpv_table = BaselineParameterValueTable(
+                id=str(uuid4()),
+                parameter_id=baseline_param_value.parameter.id,
+                model_id=baseline_param_value.parameter.model.id,  # Add model_id
+                model_version_id=baseline_param_value.model_version.id,
+                value=value,
+                start_date=baseline_param_value.start_date,
+                end_date=baseline_param_value.end_date,
+            )
+            self.session.add(bpv_table)
+
+        # Add all baseline variables
         for baseline_variable in seed_objects.baseline_variables:
-            self.set(baseline_variable)
+            from .baseline_variable_table import BaselineVariableTable
+            from policyengine.utils.compress import compress_data
+            bv_table = BaselineVariableTable(
+                id=baseline_variable.id,
+                model_id=baseline_variable.model_version.model.id,  # Add model_id
+                model_version_id=baseline_variable.model_version.id,
+                entity=baseline_variable.entity,
+                label=baseline_variable.label,
+                description=baseline_variable.description,
+                data_type=compress_data(baseline_variable.data_type) if baseline_variable.data_type else None,
+            )
+            self.session.add(bv_table)
+
+        # Commit everything at once
+        self.session.commit()

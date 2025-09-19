@@ -36,7 +36,8 @@ class Aggregate(BaseModel):
         for table in tables:
             tables[table] = pd.DataFrame(tables[table])
             weight_col = f"{table}_weight"
-            tables[table] = MicroDataFrame(tables[table], weights=weight_col)
+            if weight_col in tables[table].columns:
+                tables[table] = MicroDataFrame(tables[table], weights=weight_col)
 
         for agg in aggregates:
             if agg.entity not in tables:
