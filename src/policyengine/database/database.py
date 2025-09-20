@@ -1,23 +1,25 @@
-from sqlmodel import SQLModel, Session
 from typing import Any
+
+from sqlmodel import Session, SQLModel
+
+from .aggregate import aggregate_table_link
+from .baseline_parameter_value_table import baseline_parameter_value_table_link
+from .baseline_variable_table import baseline_variable_table_link
+from .dataset_table import dataset_table_link
+from .dynamic_table import dynamic_table_link
 from .link import TableLink
 
 # Import all table links
 from .model_table import model_table_link
 from .model_version_table import model_version_table_link
-from .dataset_table import dataset_table_link
-from .versioned_dataset_table import versioned_dataset_table_link
-from .policy_table import policy_table_link
-from .dynamic_table import dynamic_table_link
 from .parameter_table import parameter_table_link
 from .parameter_value_table import parameter_value_table_link
-from .baseline_parameter_value_table import baseline_parameter_value_table_link
-from .baseline_variable_table import baseline_variable_table_link
-from .simulation_table import simulation_table_link
-from .aggregate import aggregate_table_link
-from .report_table import report_table_link
+from .policy_table import policy_table_link
 from .report_element_table import report_element_table_link
+from .report_table import report_table_link
+from .simulation_table import simulation_table_link
 from .user_table import user_table_link
+from .versioned_dataset_table import versioned_dataset_table_link
 
 
 class Database:
@@ -102,7 +104,7 @@ class Database:
             (
                 link
                 for link in self._model_table_links
-                if link.model_cls == type(object)
+                if link.model_cls is type(object)
             ),
             None,
         )
@@ -113,14 +115,14 @@ class Database:
         """Register a model version with its model and seed objects.
         This replaces all existing parameters, baseline parameter values,
         and baseline variables for this model version."""
-        from .parameter_table import ParameterTable
+        # Add or update the model directly to avoid conflicts
+        from policyengine.utils.compress import compress_data
+
         from .baseline_parameter_value_table import BaselineParameterValueTable
         from .baseline_variable_table import BaselineVariableTable
         from .model_table import ModelTable
         from .model_version_table import ModelVersionTable
-
-        # Add or update the model directly to avoid conflicts
-        from policyengine.utils.compress import compress_data
+        from .parameter_table import ParameterTable
 
         existing_model = (
             self.session.query(ModelTable)
@@ -200,11 +202,12 @@ class Database:
 
         # Add all baseline parameter values
         for baseline_param_value in seed_objects.baseline_parameter_values:
+            import math
+            from uuid import uuid4
+
             from .baseline_parameter_value_table import (
                 BaselineParameterValueTable,
             )
-            from uuid import uuid4
-            import math
 
             # Handle special float values that JSON doesn't support
             value = baseline_param_value.value
@@ -228,7 +231,6 @@ class Database:
         # Add all baseline variables
         for baseline_variable in seed_objects.baseline_variables:
             from .baseline_variable_table import BaselineVariableTable
-            from policyengine.utils.compress import compress_data
 
             bv_table = BaselineVariableTable(
                 id=baseline_variable.id,

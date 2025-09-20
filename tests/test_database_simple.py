@@ -1,9 +1,10 @@
 """Test database model tables for simple set and get operations without complex relationships."""
 
-import pytest
+import sys
 from datetime import datetime
 from pathlib import Path
-import sys
+
+import pytest
 
 # Add src to path to allow imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))

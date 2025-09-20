@@ -1,10 +1,12 @@
-from sqlmodel import SQLModel, Field
-from typing import Optional
-from uuid import uuid4
 from datetime import datetime
+from uuid import uuid4
+
+from sqlmodel import Field, SQLModel
+
 from policyengine.models import Dynamic
-from .link import TableLink
 from policyengine.utils.compress import compress_data, decompress_data
+
+from .link import TableLink
 
 
 class DynamicTable(SQLModel, table=True):
@@ -12,8 +14,8 @@ class DynamicTable(SQLModel, table=True):
 
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     name: str = Field(nullable=False)
-    description: Optional[str] = Field(default=None)
-    simulation_modifier: Optional[bytes] = Field(default=None)
+    description: str | None = Field(default=None)
+    simulation_modifier: bytes | None = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 

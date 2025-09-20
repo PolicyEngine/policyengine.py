@@ -1,7 +1,9 @@
-from pydantic import BaseModel, Field
-from typing import Callable
-from uuid import uuid4
+from collections.abc import Callable
 from datetime import datetime
+from uuid import uuid4
+
+from pydantic import BaseModel, Field
+
 from .parameter_value import ParameterValue
 
 

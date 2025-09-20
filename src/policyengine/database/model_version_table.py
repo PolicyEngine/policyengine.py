@@ -1,8 +1,10 @@
-from sqlmodel import SQLModel, Field
-from typing import Optional
 from datetime import datetime
 from uuid import uuid4
+
+from sqlmodel import Field, SQLModel
+
 from policyengine.models import ModelVersion
+
 from .link import TableLink
 
 
@@ -12,7 +14,7 @@ class ModelVersionTable(SQLModel, table=True):
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     model_id: str = Field(foreign_key="models.id", ondelete="CASCADE")
     version: str = Field(nullable=False)
-    description: Optional[str] = Field(default=None)
+    description: str | None = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.now)
 
 

@@ -1,9 +1,10 @@
 """Test database model tables for set and get operations."""
 
-import pytest
+import sys
 from datetime import datetime
 from pathlib import Path
-import sys
+
+import pytest
 
 # Add src to path to allow imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -148,9 +149,9 @@ def test_baseline_parameter_value_table_set_and_get(fresh_database):
     """Test BaselineParameterValueTable set and get operations."""
     from policyengine.models import (
         BaselineParameterValue,
-        Parameter,
-        ModelVersion,
         Model,
+        ModelVersion,
+        Parameter,
     )
 
     # Create model, parameter and model version first
@@ -326,11 +327,10 @@ def test_aggregate_table_set_and_get(fresh_database):
     """Test AggregateTable set and get operations."""
     from policyengine.models import (
         Aggregate,
-        AggregateType,
-        Simulation,
         Dataset,
         Model,
         ModelVersion,
+        Simulation,
     )
 
     # Create model first

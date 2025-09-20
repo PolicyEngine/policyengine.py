@@ -1,9 +1,12 @@
-from pydantic import BaseModel
-from policyengine.models import Simulation
 from enum import Enum
-from typing import Literal
-from microdf import MicroDataFrame
+from typing import TYPE_CHECKING, Literal
+
 import pandas as pd
+from microdf import MicroDataFrame
+from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    from policyengine.models import Simulation
 
 
 class AggregateType(str, Enum):
@@ -13,7 +16,7 @@ class AggregateType(str, Enum):
 
 
 class Aggregate(BaseModel):
-    simulation: Simulation
+    simulation: "Simulation"
     entity: str
     variable_name: str
     year: int | None = None

@@ -1,7 +1,8 @@
-from pydantic import BaseModel, Field
-from typing import Optional, Literal
-from datetime import datetime
 import uuid
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 
 class ReportElement(BaseModel):
@@ -10,28 +11,26 @@ class ReportElement(BaseModel):
     type: Literal["chart", "markdown"]
 
     # Data source
-    data_table: Optional[Literal["aggregates"]] = (
-        None  # Which table to pull from
-    )
+    data_table: Literal["aggregates"] | None = None  # Which table to pull from
 
     # Chart configuration
-    chart_type: Optional[
-        Literal["bar", "line", "scatter", "area", "pie", "histogram"]
-    ] = None
-    x_axis_variable: Optional[str] = None  # Column name from the table
-    y_axis_variable: Optional[str] = None  # Column name from the table
-    group_by: Optional[str] = None  # Column to group/split series by
-    color_by: Optional[str] = None  # Column for color mapping
-    size_by: Optional[str] = None  # Column for size mapping (bubble charts)
+    chart_type: (
+        Literal["bar", "line", "scatter", "area", "pie", "histogram"] | None
+    ) = None
+    x_axis_variable: str | None = None  # Column name from the table
+    y_axis_variable: str | None = None  # Column name from the table
+    group_by: str | None = None  # Column to group/split series by
+    color_by: str | None = None  # Column for color mapping
+    size_by: str | None = None  # Column for size mapping (bubble charts)
 
     # Markdown specific
-    markdown_content: Optional[str] = None
+    markdown_content: str | None = None
 
     # Metadata
-    report_id: Optional[str] = None
-    user_id: Optional[str] = None
-    position: Optional[int] = None
-    visible: Optional[bool] = True
-    custom_config: Optional[dict] = None  # Additional chart-specific config
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    report_id: str | None = None
+    user_id: str | None = None
+    position: int | None = None
+    visible: bool | None = True
+    custom_config: dict | None = None  # Additional chart-specific config
+    created_at: datetime | None = None
+    updated_at: datetime | None = None

@@ -1,11 +1,8 @@
-from pydantic import BaseModel
-from sqlmodel import SQLModel, Field
-
-from policyengine.models import Simulation
-from enum import Enum
-from typing import Literal
-from policyengine.database.link import TableLink
 from uuid import uuid4
+
+from sqlmodel import Field, SQLModel
+
+from policyengine.database.link import TableLink
 from policyengine.models.aggregate import Aggregate
 
 

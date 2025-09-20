@@ -1,5 +1,6 @@
-from policyengine.models import Dataset
 import pandas as pd
+
+from policyengine.models import Dataset
 
 
 def create_uk_dataset(
@@ -7,6 +8,7 @@ def create_uk_dataset(
     year: int = 2029,
 ):
     from policyengine_uk import Microsimulation
+
     from policyengine.models.policyengine_uk import policyengine_uk_model
 
     sim = Microsimulation(
@@ -35,6 +37,7 @@ def create_us_dataset(
     year: int = 2024,
 ):
     from policyengine_us import Microsimulation
+
     from policyengine.models.policyengine_us import policyengine_us_model
 
     sim = Microsimulation(

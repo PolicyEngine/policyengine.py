@@ -1,9 +1,7 @@
 """Chart formatting utilities for PolicyEngine."""
 
 import plotly.graph_objects as go
-from typing import Optional
 from IPython.display import HTML
-
 
 COLOUR_SCHEMES = {
     "teal": {
@@ -64,14 +62,14 @@ def add_fonts() -> HTML:
 
 def format_figure(
     fig: go.Figure,
-    title: Optional[str] = None,
-    x_title: Optional[str] = None,
-    y_title: Optional[str] = None,
+    title: str | None = None,
+    x_title: str | None = None,
+    y_title: str | None = None,
     colour_scheme: str = "teal",
     show_grid: bool = True,
     show_legend: bool = True,
-    height: Optional[int] = None,
-    width: Optional[int] = None,
+    height: int | None = None,
+    width: int | None = None,
 ) -> go.Figure:
     """Apply consistent formatting to a Plotly figure.
 
@@ -194,7 +192,7 @@ def create_bar_chart(
     data: dict[str, list],
     x: str,
     y: str,
-    title: Optional[str] = None,
+    title: str | None = None,
     colour_scheme: str = "teal",
     **kwargs,
 ) -> go.Figure:
@@ -241,7 +239,7 @@ def create_line_chart(
     data: dict[str, list],
     x: str,
     y: str | list[str],
-    title: Optional[str] = None,
+    title: str | None = None,
     colour_scheme: str = "teal",
     **kwargs,
 ) -> go.Figure:

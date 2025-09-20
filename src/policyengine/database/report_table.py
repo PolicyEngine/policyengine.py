@@ -1,9 +1,11 @@
-from sqlmodel import SQLModel, Field
-from policyengine.models.report import Report
-from typing import Optional
-from datetime import datetime
-from .link import TableLink
 import uuid
+from datetime import datetime
+
+from sqlmodel import Field, SQLModel
+
+from policyengine.models.report import Report
+
+from .link import TableLink
 
 
 class ReportTable(SQLModel, table=True, extend_existing=True):

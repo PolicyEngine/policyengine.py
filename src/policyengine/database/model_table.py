@@ -1,8 +1,9 @@
-from sqlmodel import SQLModel, Field
+from sqlmodel import Field, SQLModel
+
 from policyengine.models import Model
-from typing import Optional
-from .link import TableLink
 from policyengine.utils.compress import compress_data, decompress_data
+
+from .link import TableLink
 
 
 class ModelTable(SQLModel, table=True, extend_existing=True):
@@ -10,7 +11,7 @@ class ModelTable(SQLModel, table=True, extend_existing=True):
 
     id: str = Field(primary_key=True)
     name: str = Field(nullable=False)
-    description: Optional[str] = Field(default=None)
+    description: str | None = Field(default=None)
     simulation_function: bytes
 
 

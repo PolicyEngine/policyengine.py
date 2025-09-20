@@ -1,8 +1,8 @@
-from sqlmodel import SQLModel, Field
-from typing import Optional
+from sqlmodel import Field, SQLModel
+
 from policyengine.models import Parameter
+
 from .link import TableLink
-from policyengine.utils.compress import compress_data, decompress_data
 
 
 class ParameterTable(SQLModel, table=True):
@@ -14,7 +14,7 @@ class ParameterTable(SQLModel, table=True):
         primary_key=True, foreign_key="models.id"
     )  # Part of composite key
     description: str | None = Field(default=None)
-    data_type: Optional[str] = Field(nullable=True)  # Data type name
+    data_type: str | None = Field(nullable=True)  # Data type name
 
 
 parameter_table_link = TableLink(

@@ -1,6 +1,7 @@
-import blosc
 import pickle
 from typing import Any
+
+import blosc
 
 
 def compress_data(data: Any) -> bytes:

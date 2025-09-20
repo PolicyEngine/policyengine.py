@@ -1,9 +1,11 @@
-from sqlmodel import SQLModel, Field
-from typing import Optional
 from uuid import uuid4
+
+from sqlmodel import Field, SQLModel
+
 from policyengine.models import Dataset
-from .link import TableLink
 from policyengine.utils.compress import compress_data, decompress_data
+
+from .link import TableLink
 
 
 class DatasetTable(SQLModel, table=True):
@@ -11,14 +13,14 @@ class DatasetTable(SQLModel, table=True):
 
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     name: str = Field(nullable=False)
-    description: Optional[str] = Field(default=None)
-    version: Optional[str] = Field(default=None)
-    versioned_dataset_id: Optional[str] = Field(
+    description: str | None = Field(default=None)
+    version: str | None = Field(default=None)
+    versioned_dataset_id: str | None = Field(
         default=None, foreign_key="versioned_datasets.id", ondelete="SET NULL"
     )
-    year: Optional[int] = Field(default=None)
-    data: Optional[bytes] = Field(default=None)
-    model_id: Optional[str] = Field(
+    year: int | None = Field(default=None)
+    data: bytes | None = Field(default=None)
+    model_id: str | None = Field(
         default=None, foreign_key="models.id", ondelete="SET NULL"
     )
 

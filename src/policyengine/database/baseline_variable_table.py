@@ -1,8 +1,9 @@
-from sqlmodel import SQLModel, Field
-from typing import Optional
+from sqlmodel import Field, SQLModel
+
 from policyengine.models import BaselineVariable
-from .link import TableLink
 from policyengine.utils.compress import compress_data, decompress_data
+
+from .link import TableLink
 
 
 class BaselineVariableTable(SQLModel, table=True):
@@ -17,9 +18,9 @@ class BaselineVariableTable(SQLModel, table=True):
         foreign_key="model_versions.id", ondelete="CASCADE"
     )
     entity: str = Field(nullable=False)
-    label: Optional[str] = Field(default=None)
-    description: Optional[str] = Field(default=None)
-    data_type: Optional[bytes] = Field(default=None)  # Pickled type
+    label: str | None = Field(default=None)
+    description: str | None = Field(default=None)
+    data_type: bytes | None = Field(default=None)  # Pickled type
 
 
 baseline_variable_table_link = TableLink(

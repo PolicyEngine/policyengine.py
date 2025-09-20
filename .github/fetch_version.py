@@ -3,7 +3,6 @@ def fetch_version():
         import importlib
 
         return importlib.import_module("policyengine").__version__
-        return version
     except Exception as e:
         print(f"Error fetching version: {e}")
         return None

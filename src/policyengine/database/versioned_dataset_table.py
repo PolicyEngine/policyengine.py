@@ -1,7 +1,9 @@
-from sqlmodel import SQLModel, Field
-from typing import Optional
 from uuid import uuid4
+
+from sqlmodel import Field, SQLModel
+
 from policyengine.models import VersionedDataset
+
 from .link import TableLink
 
 
@@ -11,7 +13,7 @@ class VersionedDatasetTable(SQLModel, table=True):
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     name: str = Field(nullable=False)
     description: str = Field(nullable=False)
-    model_id: Optional[str] = Field(
+    model_id: str | None = Field(
         default=None, foreign_key="models.id", ondelete="SET NULL"
     )
 

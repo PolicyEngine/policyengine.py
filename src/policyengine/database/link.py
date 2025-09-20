@@ -1,6 +1,8 @@
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+
 from pydantic import BaseModel
 from sqlmodel import SQLModel, select
-from typing import Callable, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .database import Database

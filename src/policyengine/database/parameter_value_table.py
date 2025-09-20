@@ -1,8 +1,11 @@
-from sqlmodel import SQLModel, Field, JSON, Column
-from typing import Optional, Any
-from uuid import uuid4
 from datetime import datetime
+from typing import Any
+from uuid import uuid4
+
+from sqlmodel import JSON, Column, Field, SQLModel
+
 from policyengine.models import ParameterValue
+
 from .link import TableLink
 
 
@@ -13,11 +16,11 @@ class ParameterValueTable(SQLModel, table=True):
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     parameter_id: str = Field(nullable=False)  # Part of composite foreign key
     model_id: str = Field(nullable=False)  # Part of composite foreign key
-    value: Optional[Any] = Field(
+    value: Any | None = Field(
         default=None, sa_column=Column(JSON)
     )  # JSON field for any type
     start_date: datetime = Field(nullable=False)
-    end_date: Optional[datetime] = Field(default=None)
+    end_date: datetime | None = Field(default=None)
 
 
 def transform_value_to_table(pv):

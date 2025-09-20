@@ -1,7 +1,9 @@
-from pydantic import BaseModel
-from .parameter import Parameter
-from .model_version import ModelVersion
 from datetime import datetime
+
+from pydantic import BaseModel
+
+from .model_version import ModelVersion
+from .parameter import Parameter
 
 
 class BaselineParameterValue(BaseModel):

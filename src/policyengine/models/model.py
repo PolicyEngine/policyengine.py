@@ -1,12 +1,13 @@
-from pydantic import BaseModel
-from typing import Callable
+from collections.abc import Callable
 from datetime import datetime
-from typing import List, TYPE_CHECKING
+from typing import TYPE_CHECKING
+
+from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from .baseline_parameter_value import BaselineParameterValue
-    from .parameter import Parameter
     from .baseline_variable import BaselineVariable
+    from .parameter import Parameter
 
 
 class Model(BaseModel):
@@ -16,10 +17,11 @@ class Model(BaseModel):
     simulation_function: Callable
 
     def create_seed_objects(self, model_version):
-        from .baseline_parameter_value import BaselineParameterValue
-        from .parameter import Parameter
-        from .baseline_variable import BaselineVariable
         from policyengine_core.parameters import Parameter as CoreParameter
+
+        from .baseline_parameter_value import BaselineParameterValue
+        from .baseline_variable import BaselineVariable
+        from .parameter import Parameter
 
         if self.id == "policyengine_uk":
             from policyengine_uk.tax_benefit_system import system
@@ -117,6 +119,6 @@ def safe_parse_instant_str(instant_str: str) -> datetime:
 
 
 class SeedObjects(BaseModel):
-    parameters: List["Parameter"]
-    baseline_parameter_values: List["BaselineParameterValue"]
-    baseline_variables: List["BaselineVariable"]
+    parameters: list["Parameter"]
+    baseline_parameter_values: list["BaselineParameterValue"]
+    baseline_variables: list["BaselineVariable"]

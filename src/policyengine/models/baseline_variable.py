@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from datetime import datetime
+
 from .model_version import ModelVersion
 
 

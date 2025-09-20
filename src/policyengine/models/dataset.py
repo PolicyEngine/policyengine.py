@@ -1,6 +1,8 @@
-from pydantic import BaseModel, Field
 from typing import Any
 from uuid import uuid4
+
+from pydantic import BaseModel, Field
+
 from .model import Model
 from .versioned_dataset import VersionedDataset
 

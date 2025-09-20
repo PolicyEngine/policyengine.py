@@ -1,9 +1,11 @@
-from sqlmodel import SQLModel, Field, JSON, Column
-from policyengine.models.report_element import ReportElement
-from typing import Optional
-from datetime import datetime
-from .link import TableLink
 import uuid
+from datetime import datetime
+
+from sqlmodel import Field, SQLModel
+
+from policyengine.models.report_element import ReportElement
+
+from .link import TableLink
 
 
 class ReportElementTable(SQLModel, table=True, extend_existing=True):
@@ -16,26 +18,26 @@ class ReportElementTable(SQLModel, table=True, extend_existing=True):
     type: str = Field(nullable=False)  # "chart" or "markdown"
 
     # Data source
-    data_table: Optional[str] = Field(default=None)  # "aggregates"
+    data_table: str | None = Field(default=None)  # "aggregates"
 
     # Chart configuration
-    chart_type: Optional[str] = Field(
+    chart_type: str | None = Field(
         default=None
     )  # "bar", "line", "scatter", "area", "pie"
-    x_axis_variable: Optional[str] = Field(default=None)
-    y_axis_variable: Optional[str] = Field(default=None)
-    group_by: Optional[str] = Field(default=None)
-    color_by: Optional[str] = Field(default=None)
-    size_by: Optional[str] = Field(default=None)
+    x_axis_variable: str | None = Field(default=None)
+    y_axis_variable: str | None = Field(default=None)
+    group_by: str | None = Field(default=None)
+    color_by: str | None = Field(default=None)
+    size_by: str | None = Field(default=None)
 
     # Markdown specific
-    markdown_content: Optional[str] = Field(default=None)
+    markdown_content: str | None = Field(default=None)
 
     # Metadata
-    report_id: Optional[str] = Field(default=None, foreign_key="reports.id")
-    user_id: Optional[str] = Field(default=None, foreign_key="users.id")
-    position: Optional[int] = Field(default=None)
-    visible: Optional[bool] = Field(default=True)
+    report_id: str | None = Field(default=None, foreign_key="reports.id")
+    user_id: str | None = Field(default=None, foreign_key="users.id")
+    position: int | None = Field(default=None)
+    visible: bool | None = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

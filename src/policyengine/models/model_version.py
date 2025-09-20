@@ -1,7 +1,9 @@
-from pydantic import BaseModel, Field
 from datetime import datetime
-from .model import Model
 from uuid import uuid4
+
+from pydantic import BaseModel, Field
+
+from .model import Model
 
 
 class ModelVersion(BaseModel):
