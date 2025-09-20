@@ -13,7 +13,7 @@ class TableLink(BaseModel):
     table_to_model_custom_transforms: dict[str, Callable] | None = None
     primary_key: str | tuple[str, ...] = (
         "id"  # Allow multiple strings in tuple
-    )
+    ) 
 
     def get(self, database: "Database", **kwargs):
         statement = select(self.table_cls).filter_by(**kwargs)
