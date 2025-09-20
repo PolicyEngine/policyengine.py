@@ -95,7 +95,7 @@ class Database:
             None,
         )
         if table_link is not None:
-            table_link.get(self, **kwargs)
+            return table_link.get(self, **kwargs)
 
     def set(self, object: Any, commit: bool = True):
         table_link = next(
@@ -132,9 +132,9 @@ class Database:
                 id=model_version.model.id,
                 name=model_version.model.name,
                 description=model_version.model.description,
-                simulation_function=compress_data(
-                    model_version.model.simulation_function
-                ),
+                simulation_function=(
+                    lambda m: compress_data(m.simulation_function)
+                )(model_version.model),
             )
             self.session.add(model_table)
             self.session.flush()
@@ -237,7 +237,9 @@ class Database:
                 entity=baseline_variable.entity,
                 label=baseline_variable.label,
                 description=baseline_variable.description,
-                data_type=compress_data(baseline_variable.data_type)
+                data_type=(lambda bv: compress_data(bv.data_type))(
+                    baseline_variable
+                )
                 if baseline_variable.data_type
                 else None,
             )

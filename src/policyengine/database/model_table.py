@@ -18,9 +18,9 @@ model_table_link = TableLink(
     model_cls=Model,
     table_cls=ModelTable,
     model_to_table_custom_transforms=dict(
-        simulation_function=compress_data,
+        simulation_function=lambda m: compress_data(m.simulation_function),
     ),
     table_to_model_custom_transforms=dict(
-        simulation_function=decompress_data,
+        simulation_function=lambda b: decompress_data(b),
     ),
 )

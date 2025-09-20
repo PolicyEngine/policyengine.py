@@ -26,7 +26,7 @@ class TableLink(BaseModel):
                 field,
                 transform,
             ) in self.table_to_model_custom_transforms.items():
-                model_data[field] = transform(result)
+                model_data[field] = transform(getattr(result, field))
 
         # Only include fields that exist in the model class
         valid_fields = {
