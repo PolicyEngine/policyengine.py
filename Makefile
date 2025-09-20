@@ -1,15 +1,18 @@
+.PHONY: docs
+
 all: build-package
 
-documentation:
-	jb clean docs
-	jb build docs
-	python docs/add_plotly_to_book.py docs/
+docs:
+	cd docs && jupyter book start
 
 install:
-	pip install -e .[dev]
+	uv pip install -e .[dev]
 
 format:
-	black . -l 79
+	ruff format .
+
+clean:
+	rm -rf **/__pycache__ _build **/_build .pytest_cache .ruff_cache **/*.egg-info **/*.pyc
 
 changelog:
 	build-changelog changelog.yaml --output changelog.yaml --update-last-date --start-from 1.0.0 --append-file changelog_entry.yaml

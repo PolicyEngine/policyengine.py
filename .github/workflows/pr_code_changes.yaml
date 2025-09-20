@@ -1,0 +1,48 @@
+# Workflow that runs on code changes to a pull request.
+
+name: Code changes
+on:
+  pull_request:
+    branches:
+      - main
+
+    paths:
+      - src/**
+      - tests/**
+      - .github/**
+  workflow_dispatch:
+
+jobs:
+  Lint:
+    runs-on: ubuntu-latest
+    steps:
+        - uses: actions/checkout@v4
+        # Check formatting with ruff
+        - name: Install ruff
+          run: pip install ruff
+
+        - name: Run ruff check
+          run: ruff check .
+  Test:
+    runs-on: macos-latest
+    steps:
+        - name: Checkout repo
+          uses: actions/checkout@v4
+        - name: Install uv
+          uses: astral-sh/setup-uv@v5
+
+        - name: Set up Python
+          uses: actions/setup-python@v5
+          with:
+              python-version: '3.13'
+            
+        - name: Install package
+          run: uv pip install -e .[dev] --system
+        - name: Install policyengine
+          run: uv pip install policyengine --system
+        - name: UV sync
+          run: uv sync
+        - name: Run tests with coverage
+          run: make test
+          env:
+            HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}

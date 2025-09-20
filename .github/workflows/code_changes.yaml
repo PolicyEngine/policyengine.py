@@ -1,14 +1,16 @@
-# Workflow that runs on code changes to a pull request.
+# Workflow that runs on code changes to the master branch.
 
 name: Code changes
 on:
-  pull_request:
+  push:
     branches:
       - main
 
     paths:
-      - policyengine/**
+      - src/**
       - tests/**
+      - .github/**
+  workflow_dispatch:
 
 jobs:
   Lint:
@@ -20,27 +22,28 @@ jobs:
           with:
               args: ". -l 79 --check"
   Test:
-      runs-on: ubuntu-latest
+      runs-on: macos-latest
       permissions:
         contents: "read"
         id-token: "write"
       steps:
           - name: Checkout repo
-            uses: actions/checkout@v2
+            uses: actions/checkout@v4
           - name: Install uv
             uses: astral-sh/setup-uv@v5
 
           - name: Set up Python
-            uses: actions/setup-python@v2
+            uses: actions/setup-python@v5
             with:
                 python-version: '3.13'
-          - uses: "google-github-actions/auth@v2"
-            with:
-              workload_identity_provider: "projects/322898545428/locations/global/workloadIdentityPools/policyengine-research-id-pool/providers/prod-github-provider"
-              service_account: "policyengine-research@policyengine-research.iam.gserviceaccount.com"
               
           - name: Install package
-            run: uv pip install .[dev] --system
-          
-          - name: Run tests
+            run: uv pip install -e .[dev] --system
+          - name: Install JB
+            run: uv pip install "jupyter-book>=2.0.0a0" --system
+          - name: UV sync
+            run: uv sync
+          - name: Run tests with coverage
             run: make test
+            env:
+              HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}

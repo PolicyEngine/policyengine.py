@@ -4,26 +4,40 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "policyengine"
-version = "0.6.1"
+version = "1.0.0"
 description = "A package to conduct policy analysis using PolicyEngine tax-benefit models."
 readme = "README.md"
 authors = [
     {name = "PolicyEngine", email = "hello@policyengine.org"},
 ]
 license = {file = "LICENSE"}
-requires-python = ">=3.6"
+requires-python = ">=3.13"
 dependencies = [
-    "policyengine_core>=3.10",
-    "policyengine-uk",
-    "policyengine-us>=1.213.1",
-    "diskcache (>=5.6.3,<6.0.0)",
-    "google-cloud-storage (>=3.1.0,<4.0.0)",
-    "microdf_python",
+    "sqlalchemy>=2.0.0",
+    "sqlmodel>=0.0.21",
+    "alembic>=1.13.0",
+    "psycopg2-binary>=2.9.0",
+    "pymysql>=1.1.0",
+    "google-cloud-storage>=2.10.0",
     "getpass4",
-    "pydantic"
+    "pydantic>=2.0.0",
+    "pandas>=2.0.0",
+    "rich>=13.0.0",
+    "ipywidgets>=8.0.0",
+    "microdf_python",
+    "tqdm>=4.67.1",
+    "blosc>=1.11.3",
 ]
 
 [project.optional-dependencies]
+uk = [
+    "policyengine_core>=3.10",
+    "policyengine-uk>=2.51.0",
+]
+us = [
+    "policyengine_core>=3.10",
+    "policyengine-us>=1.213.1",
+]
 dev = [
     "black",
     "pytest",
@@ -34,14 +48,24 @@ dev = [
     "itables",
     "build",
     "pytest-asyncio>=0.26.0",
+    "ruff>=0.5.0",
+    "policyengine_core>=3.10",
+    "policyengine-uk>=2.51.0",
+    "policyengine-us>=1.213.1",
 ]
 
 [tool.setuptools]
-packages = ["policyengine"]
+package-dir = {"" = "src"}
 include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.setuptools.package-data]
 "policyengine" = ["**/*"]
+
+[project.scripts]
+pe-migrate = "policyengine.migrations.runner:main"
 
 [tool.pytest.ini_options]
 addopts = "-v"
@@ -66,3 +90,24 @@ extend-exclude = '''
   | dist
 )/
 '''
+
+[tool.ruff]
+line-length = 79
+target-version = "py313"
+extend-exclude = ["*.ipynb"]
+
+[tool.ruff.lint]
+select = [
+  "E",  # pycodestyle errors
+  "F",  # pyflakes
+  "I",  # import sorting
+  "W",  # pycodestyle warnings
+  "UP", # pyupgrade
+]
+ignore = ["E501"]  # Ignore line length errors
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
