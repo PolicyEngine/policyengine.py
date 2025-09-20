@@ -23,25 +23,26 @@ jobs:
 
         - name: Run ruff check
           run: ruff check .
-      runs-on: macos-latest
-      steps:
-          - name: Checkout repo
-            uses: actions/checkout@v4
-          - name: Install uv
-            uses: astral-sh/setup-uv@v5
+  Test:
+    runs-on: macos-latest
+    steps:
+        - name: Checkout repo
+          uses: actions/checkout@v4
+        - name: Install uv
+          uses: astral-sh/setup-uv@v5
 
-          - name: Set up Python
-            uses: actions/setup-python@v5
-            with:
-                python-version: '3.13'
-              
-          - name: Install package
-            run: uv pip install -e .[dev] --system
-          - name: Install policyengine
-            run: uv pip install policyengine --system
-          - name: UV sync
-            run: uv sync
-          - name: Run tests with coverage
-            run: make test
-            env:
-              HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+        - name: Set up Python
+          uses: actions/setup-python@v5
+          with:
+              python-version: '3.13'
+            
+        - name: Install package
+          run: uv pip install -e .[dev] --system
+        - name: Install policyengine
+          run: uv pip install policyengine --system
+        - name: UV sync
+          run: uv sync
+        - name: Run tests with coverage
+          run: make test
+          env:
+            HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
