@@ -32,7 +32,7 @@ dependencies = [
 [project.optional-dependencies]
 uk = [
     "policyengine_core>=3.10",
-    "policyengine-uk",
+    "policyengine-uk>=2.51.0",
 ]
 us = [
     "policyengine_core>=3.10",
@@ -49,6 +49,9 @@ dev = [
     "build",
     "pytest-asyncio>=0.26.0",
     "ruff>=0.5.0",
+    "policyengine_core>=3.10",
+    "policyengine-uk>=2.51.0",
+    "policyengine-us>=1.213.1",
 ]
 
 [tool.setuptools]

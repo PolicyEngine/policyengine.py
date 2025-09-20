@@ -6,10 +6,10 @@ docs:
 	cd docs && jupyter book start
 
 install:
-	pip install -e .[dev]
+	uv pip install -e .[dev]
 
 format:
-	black . -l 79
+	ruff format .
 
 clean:
 	rm -rf **/__pycache__ _build **/_build .pytest_cache .ruff_cache **/*.egg-info **/*.pyc
