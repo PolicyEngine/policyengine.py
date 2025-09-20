@@ -1,8 +1,8 @@
-# Workflow that runs on code changes to the master branch.
+# Workflow that runs on code changes to a pull request.
 
 name: Code changes
 on:
-  push:
+  pull_request:
     branches:
       - master
 
@@ -23,9 +23,6 @@ jobs:
               args: ". -l 79 --check"
   Test:
       runs-on: macos-latest
-      permissions:
-        contents: "read"
-        id-token: "write"
       steps:
           - name: Checkout repo
             uses: actions/checkout@v4
@@ -39,8 +36,8 @@ jobs:
               
           - name: Install package
             run: uv pip install -e .[dev] --system
-          - name: Install JB
-            run: uv pip install "jupyter-book>=2.0.0a0" --system
+          - name: Install policyengine
+            run: uv pip install policyengine --system
           - name: UV sync
             run: uv sync
           - name: Run tests with coverage
