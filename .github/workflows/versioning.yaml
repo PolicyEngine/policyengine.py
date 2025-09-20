@@ -66,7 +66,3 @@ jobs:
           user: __token__
           password: ${{ secrets.PYPI }}
           skip_existing: true
-      - name: Update API
-        run: python .github/update_api.py
-        env:
-          GITHUB_TOKEN: ${{ secrets.POLICYENGINE_GITHUB }}
