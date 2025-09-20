@@ -15,7 +15,7 @@ COLOUR_SCHEMES = {
         "lightest": "#E6FFFA",
         "dark": "#2C7A7B",
         "darker": "#285E61",
-        "darkest": "#234E52"
+        "darkest": "#234E52",
     },
     "blue": {
         "primary": "#0EA5E9",
@@ -26,7 +26,7 @@ COLOUR_SCHEMES = {
         "lightest": "#E0F2FE",
         "dark": "#026AA2",
         "darker": "#075985",
-        "darkest": "#0C4A6E"
+        "darkest": "#0C4A6E",
     },
     "gray": {
         "primary": "#6B7280",
@@ -37,8 +37,8 @@ COLOUR_SCHEMES = {
         "lightest": "#F9FAFB",
         "dark": "#4B5563",
         "darker": "#344054",
-        "darkest": "#101828"
-    }
+        "darkest": "#101828",
+    },
 }
 
 DEFAULT_COLOURS = [
@@ -49,7 +49,7 @@ DEFAULT_COLOURS = [
     COLOUR_SCHEMES["teal"]["tertiary"],
     COLOUR_SCHEMES["blue"]["tertiary"],
     COLOUR_SCHEMES["gray"]["dark"],
-    COLOUR_SCHEMES["teal"]["dark"]
+    COLOUR_SCHEMES["teal"]["dark"],
 ]
 
 
@@ -71,7 +71,7 @@ def format_figure(
     show_grid: bool = True,
     show_legend: bool = True,
     height: Optional[int] = None,
-    width: Optional[int] = None
+    width: Optional[int] = None,
 ) -> go.Figure:
     """Apply consistent formatting to a Plotly figure.
 
@@ -105,7 +105,7 @@ def format_figure(
         "font": {
             "family": "Roboto, sans-serif",
             "size": 14,
-            "color": COLOUR_SCHEMES["gray"]["darkest"]
+            "color": COLOUR_SCHEMES["gray"]["darkest"],
         },
         "plot_bgcolor": "white",
         "paper_bgcolor": "white",
@@ -114,7 +114,7 @@ def format_figure(
         "hoverlabel": {
             "bgcolor": "white",
             "font": {"family": "Roboto Mono, monospace", "size": 12},
-            "bordercolor": colours["light"]
+            "bordercolor": colours["light"],
         },
     }
 
@@ -126,7 +126,7 @@ def format_figure(
                 "family": "Roboto, sans-serif",
                 "size": 20,
                 "color": COLOUR_SCHEMES["gray"]["darkest"],
-                "weight": 500
+                "weight": 500,
             },
         }
 
@@ -141,17 +141,17 @@ def format_figure(
         "tickfont": {
             "family": "Roboto Mono, monospace",
             "size": 11,
-            "color": COLOUR_SCHEMES["gray"]["primary"]
+            "color": COLOUR_SCHEMES["gray"]["primary"],
         },
         "titlefont": {
             "family": "Roboto, sans-serif",
             "size": 14,
-            "color": COLOUR_SCHEMES["gray"]["dark"]
+            "color": COLOUR_SCHEMES["gray"]["dark"],
         },
         "linecolor": COLOUR_SCHEMES["gray"]["light"],
         "linewidth": 1,
         "showline": True,
-        "mirror": False
+        "mirror": False,
     }
 
     layout_updates["xaxis"] = axis_config.copy()
@@ -184,7 +184,7 @@ def format_figure(
                 trace.textfont = {
                     "family": "Roboto Mono, monospace",
                     "size": 11,
-                    "color": COLOUR_SCHEMES["gray"]["primary"]
+                    "color": COLOUR_SCHEMES["gray"]["primary"],
                 }
 
     return fig
@@ -196,7 +196,7 @@ def create_bar_chart(
     y: str,
     title: Optional[str] = None,
     colour_scheme: str = "teal",
-    **kwargs
+    **kwargs,
 ) -> go.Figure:
     """Create a formatted bar chart.
 
@@ -211,16 +211,21 @@ def create_bar_chart(
     Returns:
         Formatted bar chart figure
     """
-    fig = go.Figure(data=[
-        go.Bar(
-            x=data[x],
-            y=data[y],
-            marker_color=COLOUR_SCHEMES[colour_scheme]["primary"],
-            marker_line_color=COLOUR_SCHEMES[colour_scheme]["dark"],
-            marker_line_width=1,
-            hovertemplate=f"{x}: " + "%{x}<br>" + f"{y}: " + "%{y:,.0f}<extra></extra>"
-        )
-    ])
+    fig = go.Figure(
+        data=[
+            go.Bar(
+                x=data[x],
+                y=data[y],
+                marker_color=COLOUR_SCHEMES[colour_scheme]["primary"],
+                marker_line_color=COLOUR_SCHEMES[colour_scheme]["dark"],
+                marker_line_width=1,
+                hovertemplate=f"{x}: "
+                + "%{x}<br>"
+                + f"{y}: "
+                + "%{y:,.0f}<extra></extra>",
+            )
+        ]
+    )
 
     return format_figure(
         fig,
@@ -228,7 +233,7 @@ def create_bar_chart(
         x_title=x,
         y_title=y,
         colour_scheme=colour_scheme,
-        **kwargs
+        **kwargs,
     )
 
 
@@ -238,7 +243,7 @@ def create_line_chart(
     y: str | list[str],
     title: Optional[str] = None,
     colour_scheme: str = "teal",
-    **kwargs
+    **kwargs,
 ) -> go.Figure:
     """Create a formatted line chart.
 
@@ -264,11 +269,10 @@ def create_line_chart(
                 mode="lines+markers",
                 name=y_col,
                 line=dict(
-                    color=DEFAULT_COLOURS[i % len(DEFAULT_COLOURS)],
-                    width=2
+                    color=DEFAULT_COLOURS[i % len(DEFAULT_COLOURS)], width=2
                 ),
                 marker=dict(size=6),
-                hovertemplate=f"{y_col}: " + "%{y:,.0f}<extra></extra>"
+                hovertemplate=f"{y_col}: " + "%{y:,.0f}<extra></extra>",
             )
         )
 
@@ -280,5 +284,5 @@ def create_line_chart(
         x_title=x,
         y_title=y_columns[0] if len(y_columns) == 1 else None,
         colour_scheme=colour_scheme,
-        **kwargs
+        **kwargs,
     )

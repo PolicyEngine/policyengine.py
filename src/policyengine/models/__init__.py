@@ -13,5 +13,11 @@ from .report import Report
 from .report_element import ReportElement
 from .user import User
 from .aggregate import Aggregate, AggregateType
-from .policyengine_uk import policyengine_uk_latest_version, policyengine_uk_model
-from .policyengine_us import policyengine_us_latest_version, policyengine_us_model
+from .policyengine_uk import (
+    policyengine_uk_latest_version,
+    policyengine_uk_model,
+)
+from .policyengine_us import (
+    policyengine_us_latest_version,
+    policyengine_us_model,
+)

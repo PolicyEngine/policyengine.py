@@ -8,14 +8,14 @@ from .link import TableLink
 
 class ParameterValueTable(SQLModel, table=True):
     __tablename__ = "parameter_values"
-    __table_args__ = (
-        {"extend_existing": True},
-    )
+    __table_args__ = ({"extend_existing": True},)
 
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     parameter_id: str = Field(nullable=False)  # Part of composite foreign key
     model_id: str = Field(nullable=False)  # Part of composite foreign key
-    value: Optional[Any] = Field(default=None, sa_column=Column(JSON))  # JSON field for any type
+    value: Optional[Any] = Field(
+        default=None, sa_column=Column(JSON)
+    )  # JSON field for any type
     start_date: datetime = Field(nullable=False)
     end_date: Optional[datetime] = Field(default=None)
 
@@ -23,6 +23,7 @@ class ParameterValueTable(SQLModel, table=True):
 def transform_value_to_table(pv):
     """Transform value for storage, handling special float values."""
     import math
+
     value = pv.value
     if isinstance(value, float):
         if math.isinf(value):
@@ -36,11 +37,11 @@ def transform_value_from_table(table_row):
     """Transform value from storage, converting special strings back to floats."""
     value = table_row.value
     if value == "Infinity":
-        return float('inf')
+        return float("inf")
     elif value == "-Infinity":
-        return float('-inf')
+        return float("-inf")
     elif value == "NaN":
-        return float('nan')
+        return float("nan")
     return value
 
 

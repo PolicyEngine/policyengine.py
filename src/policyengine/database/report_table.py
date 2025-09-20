@@ -9,7 +9,9 @@ import uuid
 class ReportTable(SQLModel, table=True, extend_existing=True):
     __tablename__ = "reports"
 
-    id: str = Field(primary_key=True, default_factory=lambda: str(uuid.uuid4()))
+    id: str = Field(
+        primary_key=True, default_factory=lambda: str(uuid.uuid4())
+    )
     label: str = Field(nullable=False)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 

@@ -121,23 +121,30 @@ class Database:
 
         # Add or update the model directly to avoid conflicts
         from policyengine.utils.compress import compress_data
-        existing_model = self.session.query(ModelTable).filter(
-            ModelTable.id == model_version.model.id
-        ).first()
+
+        existing_model = (
+            self.session.query(ModelTable)
+            .filter(ModelTable.id == model_version.model.id)
+            .first()
+        )
         if not existing_model:
             model_table = ModelTable(
                 id=model_version.model.id,
                 name=model_version.model.name,
                 description=model_version.model.description,
-                simulation_function=compress_data(model_version.model.simulation_function),
+                simulation_function=compress_data(
+                    model_version.model.simulation_function
+                ),
             )
             self.session.add(model_table)
             self.session.flush()
 
         # Add or update the model version
-        existing_version = self.session.query(ModelVersionTable).filter(
-            ModelVersionTable.id == model_version.id
-        ).first()
+        existing_version = (
+            self.session.query(ModelVersionTable)
+            .filter(ModelVersionTable.id == model_version.id)
+            .first()
+        )
         if not existing_version:
             version_table = ModelVersionTable(
                 id=model_version.id,
@@ -177,11 +184,14 @@ class Database:
         for parameter in seed_objects.parameters:
             # We need to add directly to session to avoid the autoflush issue
             from .parameter_table import ParameterTable
+
             param_table = ParameterTable(
                 id=parameter.id,
                 model_id=parameter.model.id,  # Now required as part of composite key
                 description=parameter.description,
-                data_type=parameter.data_type.__name__ if parameter.data_type else None,
+                data_type=parameter.data_type.__name__
+                if parameter.data_type
+                else None,
             )
             self.session.add(param_table)
 
@@ -190,7 +200,9 @@ class Database:
 
         # Add all baseline parameter values
         for baseline_param_value in seed_objects.baseline_parameter_values:
-            from .baseline_parameter_value_table import BaselineParameterValueTable
+            from .baseline_parameter_value_table import (
+                BaselineParameterValueTable,
+            )
             from uuid import uuid4
             import math
 
@@ -217,6 +229,7 @@ class Database:
         for baseline_variable in seed_objects.baseline_variables:
             from .baseline_variable_table import BaselineVariableTable
             from policyengine.utils.compress import compress_data
+
             bv_table = BaselineVariableTable(
                 id=baseline_variable.id,
                 model_id=baseline_variable.model_version.model.id,  # Add model_id
@@ -224,7 +237,9 @@ class Database:
                 entity=baseline_variable.entity,
                 label=baseline_variable.label,
                 description=baseline_variable.description,
-                data_type=compress_data(baseline_variable.data_type) if baseline_variable.data_type else None,
+                data_type=compress_data(baseline_variable.data_type)
+                if baseline_variable.data_type
+                else None,
             )
             self.session.add(bv_table)
 

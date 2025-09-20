@@ -7,12 +7,12 @@ from policyengine.utils.compress import compress_data, decompress_data
 
 class ParameterTable(SQLModel, table=True):
     __tablename__ = "parameters"
-    __table_args__ = (
-        {"extend_existing": True},
-    )
+    __table_args__ = ({"extend_existing": True},)
 
     id: str = Field(primary_key=True)  # Parameter name
-    model_id: str = Field(primary_key=True, foreign_key="models.id")  # Part of composite key
+    model_id: str = Field(
+        primary_key=True, foreign_key="models.id"
+    )  # Part of composite key
     description: str | None = Field(default=None)
     data_type: Optional[str] = Field(nullable=True)  # Data type name
 

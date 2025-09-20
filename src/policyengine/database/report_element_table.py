@@ -9,7 +9,9 @@ import uuid
 class ReportElementTable(SQLModel, table=True, extend_existing=True):
     __tablename__ = "report_elements"
 
-    id: str = Field(primary_key=True, default_factory=lambda: str(uuid.uuid4()))
+    id: str = Field(
+        primary_key=True, default_factory=lambda: str(uuid.uuid4())
+    )
     label: str = Field(nullable=False)
     type: str = Field(nullable=False)  # "chart" or "markdown"
 
@@ -17,7 +19,9 @@ class ReportElementTable(SQLModel, table=True, extend_existing=True):
     data_table: Optional[str] = Field(default=None)  # "aggregates"
 
     # Chart configuration
-    chart_type: Optional[str] = Field(default=None)  # "bar", "line", "scatter", "area", "pie"
+    chart_type: Optional[str] = Field(
+        default=None
+    )  # "bar", "line", "scatter", "area", "pie"
     x_axis_variable: Optional[str] = Field(default=None)
     y_axis_variable: Optional[str] = Field(default=None)
     group_by: Optional[str] = Field(default=None)

@@ -27,18 +27,26 @@ def run_policyengine_uk(
     def simulation_modifier(sim: Microsimulation):
         if policy is not None and len(policy.parameter_values) > 0:
             for parameter_value in policy.parameter_values:
-                sim.tax_benefit_system.parameters.get_child(parameter_value.parameter.id).update(
+                sim.tax_benefit_system.parameters.get_child(
+                    parameter_value.parameter.id
+                ).update(
                     value=parameter_value.value,
                     start=parameter_value.start_date.strftime("%Y-%m-%d"),
-                    stop=parameter_value.end_date.strftime("%Y-%m-%d") if parameter_value.end_date else None,
+                    stop=parameter_value.end_date.strftime("%Y-%m-%d")
+                    if parameter_value.end_date
+                    else None,
                 )
-        
+
         if dynamic is not None and len(dynamic.parameter_values) > 0:
             for parameter_value in dynamic.parameter_values:
-                sim.tax_benefit_system.parameters.get_child(parameter_value.parameter.id).update(
+                sim.tax_benefit_system.parameters.get_child(
+                    parameter_value.parameter.id
+                ).update(
                     value=parameter_value.value,
                     start=parameter_value.start_date.strftime("%Y-%m-%d"),
-                    stop=parameter_value.end_date.strftime("%Y-%m-%d") if parameter_value.end_date else None,
+                    stop=parameter_value.end_date.strftime("%Y-%m-%d")
+                    if parameter_value.end_date
+                    else None,
                 )
 
         if dynamic is not None and dynamic.simulation_modifier is not None:
@@ -83,7 +91,9 @@ def run_policyengine_uk(
             if variable.definition_period != "year":
                 continue
             if correct_entity:
-                output_data[entity][variable.name] = sim.calculate(variable.name)
+                output_data[entity][variable.name] = sim.calculate(
+                    variable.name
+                )
 
     return output_data
 
@@ -96,7 +106,6 @@ policyengine_uk_model = Model(
 )
 
 # Get policyengine-uk version
-
 
 policyengine_uk_latest_version = ModelVersion(
     model=policyengine_uk_model,

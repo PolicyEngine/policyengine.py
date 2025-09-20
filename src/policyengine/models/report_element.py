@@ -10,10 +10,14 @@ class ReportElement(BaseModel):
     type: Literal["chart", "markdown"]
 
     # Data source
-    data_table: Optional[Literal["aggregates"]] = None  # Which table to pull from
+    data_table: Optional[Literal["aggregates"]] = (
+        None  # Which table to pull from
+    )
 
     # Chart configuration
-    chart_type: Optional[Literal["bar", "line", "scatter", "area", "pie", "histogram"]] = None
+    chart_type: Optional[
+        Literal["bar", "line", "scatter", "area", "pie", "histogram"]
+    ] = None
     x_axis_variable: Optional[str] = None  # Column name from the table
     y_axis_variable: Optional[str] = None  # Column name from the table
     group_by: Optional[str] = None  # Column to group/split series by

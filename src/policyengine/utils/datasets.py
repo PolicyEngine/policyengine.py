@@ -1,6 +1,7 @@
 from policyengine.models import Dataset
 import pandas as pd
 
+
 def create_uk_dataset(
     dataset: str = "enhanced_frs_2023_24.h5",
     year: int = 2029,
@@ -8,7 +9,9 @@ def create_uk_dataset(
     from policyengine_uk import Microsimulation
     from policyengine.models.policyengine_uk import policyengine_uk_model
 
-    sim = Microsimulation(dataset="hf://policyengine/policyengine-uk-data/" + dataset)
+    sim = Microsimulation(
+        dataset="hf://policyengine/policyengine-uk-data/" + dataset
+    )
     sim.default_calculation_period = year
 
     tables = {
@@ -26,6 +29,7 @@ def create_uk_dataset(
         data=tables,
     )
 
+
 def create_us_dataset(
     dataset: str = "enhanced_cps_2024.h5",
     year: int = 2024,
@@ -33,7 +37,9 @@ def create_us_dataset(
     from policyengine_us import Microsimulation
     from policyengine.models.policyengine_us import policyengine_us_model
 
-    sim = Microsimulation(dataset="hf://policyengine/policyengine-us-data/" + dataset)
+    sim = Microsimulation(
+        dataset="hf://policyengine/policyengine-us-data/" + dataset
+    )
     sim.default_calculation_period = year
 
     known_variables = sim.input_variables
@@ -51,7 +57,7 @@ def create_us_dataset(
         entity = sim.tax_benefit_system.variables[variable].entity.key
         if variable in sim.tax_benefit_system.variables:
             tables[entity][variable] = sim.calculate(variable)
-    
+
     return Dataset(
         id="us",
         name="US",

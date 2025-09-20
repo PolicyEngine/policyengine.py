@@ -34,18 +34,26 @@ def run_policyengine_us(
     def simulation_modifier(sim: Microsimulation):
         if policy is not None and len(policy.parameter_values) > 0:
             for parameter_value in policy.parameter_values:
-                sim.tax_benefit_system.parameters.get_child(parameter_value.parameter.id).update(
+                sim.tax_benefit_system.parameters.get_child(
+                    parameter_value.parameter.id
+                ).update(
                     parameter_value.value,
                     start=parameter_value.start_date.strftime("%Y-%m-%d"),
-                    stop=parameter_value.end_date.strftime("%Y-%m-%d") if parameter_value.end_date else None,
+                    stop=parameter_value.end_date.strftime("%Y-%m-%d")
+                    if parameter_value.end_date
+                    else None,
                 )
-        
+
         if dynamic is not None and len(dynamic.parameter_values) > 0:
             for parameter_value in dynamic.parameter_values:
-                sim.tax_benefit_system.parameters.get_child(parameter_value.parameter.id).update(
+                sim.tax_benefit_system.parameters.get_child(
+                    parameter_value.parameter.id
+                ).update(
                     parameter_value.value,
                     start=parameter_value.start_date.strftime("%Y-%m-%d"),
-                    stop=parameter_value.end_date.strftime("%Y-%m-%d") if parameter_value.end_date else None,
+                    stop=parameter_value.end_date.strftime("%Y-%m-%d")
+                    if parameter_value.end_date
+                    else None,
                 )
 
         if dynamic is not None and dynamic.simulation_modifier is not None:
@@ -66,11 +74,20 @@ def run_policyengine_us(
     for variable in variable_whitelist:
         sim.calculate(variable)
 
-    for entity in ["person", "marital_unit", "family", "tax_unit", "spm_unit", "household"]:
+    for entity in [
+        "person",
+        "marital_unit",
+        "family",
+        "tax_unit",
+        "spm_unit",
+        "household",
+    ]:
         output_data[entity] = pd.DataFrame()
         for variable in sim.tax_benefit_system.variables.values():
             correct_entity = variable.entity.key == entity
-            if str(dataset.year) not in list(map(str, sim.get_holder(variable.name).get_known_periods())):
+            if str(dataset.year) not in list(
+                map(str, sim.get_holder(variable.name).get_known_periods())
+            ):
                 continue
             if variable.definition_period != "year":
                 continue

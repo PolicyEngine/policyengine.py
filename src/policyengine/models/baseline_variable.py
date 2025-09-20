@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from .model_version import ModelVersion
 
+
 class BaselineVariable(BaseModel):
     id: str
     model_version: ModelVersion
@@ -9,4 +10,3 @@ class BaselineVariable(BaseModel):
     label: str | None = None
     description: str | None = None
     data_type: type | None = None
-    

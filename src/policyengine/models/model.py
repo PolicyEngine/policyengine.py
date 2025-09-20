@@ -20,6 +20,7 @@ class Model(BaseModel):
         from .parameter import Parameter
         from .baseline_variable import BaselineVariable
         from policyengine_core.parameters import Parameter as CoreParameter
+
         if self.id == "policyengine_uk":
             from policyengine_uk.tax_benefit_system import system
         elif self.id == "policyengine_us":
@@ -49,9 +50,13 @@ class Model(BaseModel):
                 param.data_type = type(values[-1].value)
                 for i in range(len(values)):
                     value_at_instant = values[i]
-                    instant_str = safe_parse_instant_str(value_at_instant.instant_str)
+                    instant_str = safe_parse_instant_str(
+                        value_at_instant.instant_str
+                    )
                     if i + 1 < len(values):
-                        next_instant_str = safe_parse_instant_str(values[i + 1].instant_str)
+                        next_instant_str = safe_parse_instant_str(
+                            values[i + 1].instant_str
+                        )
                     else:
                         next_instant_str = None
                     baseline_param_value = BaselineParameterValue(
@@ -59,7 +64,7 @@ class Model(BaseModel):
                         model_version=model_version,
                         value=value_at_instant.value,
                         start_date=instant_str,
-                        end_date=next_instant_str
+                        end_date=next_instant_str,
                     )
                     baseline_parameter_values.append(baseline_param_value)
 
@@ -79,7 +84,8 @@ class Model(BaseModel):
             baseline_parameter_values=baseline_parameter_values,
             baseline_variables=baseline_variables,
         )
-    
+
+
 def safe_parse_instant_str(instant_str: str) -> datetime:
     if instant_str == "0000-01-01":
         return datetime(1, 1, 1)
@@ -97,15 +103,19 @@ def safe_parse_instant_str(instant_str: str) -> datetime:
 
                 # Find the last valid day of the month
                 import calendar
+
                 last_day = calendar.monthrange(year, month)[1]
                 if day > last_day:
-                    print(f"Warning: Invalid date {instant_str}, using {year}-{month:02d}-{last_day:02d}")
+                    print(
+                        f"Warning: Invalid date {instant_str}, using {year}-{month:02d}-{last_day:02d}"
+                    )
                     return datetime(year, month, last_day)
 
             # If we can't parse it at all, print and raise
             print(f"Error: Cannot parse date {instant_str}")
             raise
-    
+
+
 class SeedObjects(BaseModel):
     parameters: List["Parameter"]
     baseline_parameter_values: List["BaselineParameterValue"]

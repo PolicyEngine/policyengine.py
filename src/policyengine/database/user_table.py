@@ -9,7 +9,9 @@ import uuid
 class UserTable(SQLModel, table=True, extend_existing=True):
     __tablename__ = "users"
 
-    id: str = Field(primary_key=True, default_factory=lambda: str(uuid.uuid4()))
+    id: str = Field(
+        primary_key=True, default_factory=lambda: str(uuid.uuid4())
+    )
     username: str = Field(nullable=False, unique=True)
     first_name: Optional[str] = Field(default=None)
     last_name: Optional[str] = Field(default=None)
