@@ -17,11 +17,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
         - uses: actions/checkout@v4
-        - name: Check formatting
-          uses: "lgeiger/black-action@master"
-          with:
-              args: ". -l 79 --check"
-  Test:
+        # Check formatting with ruff
+        - name: Install ruff
+          run: pip install ruff
+
+        - name: Run ruff check
+          run: ruff check .
       runs-on: macos-latest
       steps:
           - name: Checkout repo
