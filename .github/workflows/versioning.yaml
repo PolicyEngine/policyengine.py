@@ -55,7 +55,7 @@ jobs:
       - name: Install policyengine
         run: uv pip install policyengine --system
       - name: Install Wheel and Pytest
-        run: uv pip install wheel setuptools pytest==5.4.3
+        run: uv pip install wheel setuptools pytest==5.4.3 --system
       - name: Publish a git tag
         run: ".github/publish-git-tag.sh"
       - name: Build package
