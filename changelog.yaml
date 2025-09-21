@@ -142,3 +142,8 @@
     added:
     - Complete rewrite.
   date: 2025-09-21 22:26:17
+- bump: major
+  changes:
+    added:
+    - Consolidated models and database integration.
+  date: 2025-09-21 22:29:03
