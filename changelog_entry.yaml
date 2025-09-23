@@ -1,0 +1,4 @@
+- bump: major
+  changes:
+    fixed:
+    - Major version bump to fix pypi issues.
