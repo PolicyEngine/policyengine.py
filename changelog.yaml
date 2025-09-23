@@ -147,3 +147,8 @@
     added:
     - Consolidated models and database integration.
   date: 2025-09-21 22:29:03
+- bump: major
+  changes:
+    fixed:
+    - Major version bump to fix pypi issues.
+  date: 2025-09-23 08:43:22
