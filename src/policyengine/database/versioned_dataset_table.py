@@ -1,10 +1,14 @@
 from uuid import uuid4
 
 from sqlmodel import Field, SQLModel
+from typing import TYPE_CHECKING
 
 from policyengine.models import VersionedDataset
 
 from .link import TableLink
+
+if TYPE_CHECKING:
+    from .database import Database
 
 
 class VersionedDatasetTable(SQLModel, table=True):
@@ -17,12 +21,25 @@ class VersionedDatasetTable(SQLModel, table=True):
         default=None, foreign_key="models.id", ondelete="SET NULL"
     )
 
+    @classmethod
+    def convert_from_model(cls, model: VersionedDataset, database: "Database" = None) -> "VersionedDatasetTable":
+        """Convert a VersionedDataset instance to a VersionedDatasetTable instance."""
+        return cls(
+            id=model.id,
+            name=model.name,
+            description=model.description,
+        )
+
+    def convert_to_model(self, database: "Database" = None) -> VersionedDataset:
+        """Convert this VersionedDatasetTable instance to a VersionedDataset instance."""
+        return VersionedDataset(
+            id=self.id,
+            name=self.name,
+            description=self.description,
+        )
+
 
 versioned_dataset_table_link = TableLink(
     model_cls=VersionedDataset,
     table_cls=VersionedDatasetTable,
-    model_to_table_custom_transforms=dict(
-        model_id=lambda vd: vd.model.id if vd.model else None,
-    ),
-    table_to_model_custom_transforms={},
 )

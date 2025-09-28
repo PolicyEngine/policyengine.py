@@ -94,7 +94,7 @@ def run_policyengine_us(
                 continue
             if not correct_entity:
                 continue
-            output_data[entity][variable.name] = sim.calculate(variable.name)
+            output_data[entity][variable.name] = sim.calculate(variable.name).values
 
     return output_data
 

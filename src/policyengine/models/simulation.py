@@ -23,6 +23,7 @@ class Simulation(BaseModel):
     model: Model
     model_version: ModelVersion
     result: Any | None = None
+    aggregates: list = Field(default_factory=list)  # Will be list[Aggregate] but avoid circular import
 
     def run(self):
         self.result = self.model.simulation_function(

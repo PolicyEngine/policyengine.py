@@ -28,3 +28,9 @@ from .report_element import ReportElement as ReportElement
 from .simulation import Simulation as Simulation
 from .user import User as User
 from .versioned_dataset import VersionedDataset as VersionedDataset
+
+# Rebuild models to handle circular references
+from .aggregate import Aggregate
+from .simulation import Simulation
+Aggregate.model_rebuild()
+Simulation.model_rebuild()

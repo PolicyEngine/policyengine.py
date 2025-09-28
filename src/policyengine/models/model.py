@@ -45,6 +45,8 @@ class Model(BaseModel):
                 description=parameter.description,
                 data_type=None,
                 model=self,
+                label=parameter.metadata.get("label"),
+                unit=parameter.metadata.get("unit"),
             )
             parameters.append(param)
             if isinstance(parameter, CoreParameter):

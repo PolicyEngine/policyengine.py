@@ -25,6 +25,9 @@ from .versioned_dataset_table import (
     VersionedDatasetTable,
     versioned_dataset_table_link,
 )
+from .report_table import ReportTable, report_table_link
+from .report_element_table import ReportElementTable, report_element_table_link
+from .aggregate import AggregateTable, aggregate_table_link
 
 __all__ = [
     "Database",
@@ -41,6 +44,9 @@ __all__ = [
     "BaselineParameterValueTable",
     "BaselineVariableTable",
     "SimulationTable",
+    "ReportTable",
+    "ReportElementTable",
+    "AggregateTable",
     # Links
     "model_table_link",
     "model_version_table_link",
@@ -53,4 +59,7 @@ __all__ = [
     "baseline_parameter_value_table_link",
     "baseline_variable_table_link",
     "simulation_table_link",
+    "report_table_link",
+    "report_element_table_link",
+    "aggregate_table_link",
 ]

@@ -10,3 +10,5 @@ class Parameter(BaseModel):
     description: str | None = None
     data_type: type | None = None
     model: Model | None = None
+    label: str | None = None
+    unit: str | None = None

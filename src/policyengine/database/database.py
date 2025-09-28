@@ -88,6 +88,10 @@ class Database:
         link.table_cls.metadata.create_all(self.engine)
 
     def get(self, model_cls: type, **kwargs):
+        """Get a model instance from the database by its attributes."""
+        from sqlmodel import select
+
+        # Find the table class for this model
         table_link = next(
             (
                 link
@@ -96,10 +100,26 @@ class Database:
             ),
             None,
         )
-        if table_link is not None:
-            return table_link.get(self, **kwargs)
+
+        if table_link is None:
+            return None
+
+        # Query the database
+        statement = select(table_link.table_cls).filter_by(**kwargs)
+        result = self.session.exec(statement).first()
+
+        if result is None:
+            return None
+
+        # Use the table's convert_to_model method
+        return result.convert_to_model(self)
 
     def set(self, object: Any, commit: bool = True):
+        """Save or update a model instance in the database."""
+        from sqlmodel import select
+        from sqlalchemy.inspection import inspect
+
+        # Find the table class for this model
         table_link = next(
             (
                 link
@@ -108,8 +128,36 @@ class Database:
             ),
             None,
         )
-        if table_link is not None:
-            table_link.set(self, object, commit=commit)
+
+        if table_link is None:
+            return
+
+        # Convert model to table instance
+        table_obj = table_link.table_cls.convert_from_model(object, self)
+
+        # Get primary key columns
+        mapper = inspect(table_link.table_cls)
+        pk_cols = [col.name for col in mapper.primary_key]
+
+        # Build query to check if exists
+        query = select(table_link.table_cls)
+        for pk_col in pk_cols:
+            query = query.where(
+                getattr(table_link.table_cls, pk_col) == getattr(table_obj, pk_col)
+            )
+
+        existing = self.session.exec(query).first()
+
+        if existing:
+            # Update existing record
+            for key, value in table_obj.model_dump().items():
+                setattr(existing, key, value)
+            self.session.add(existing)
+        else:
+            self.session.add(table_obj)
+
+        if commit:
+            self.session.commit()
 
     def register_model_version(self, model_version):
         """Register a model version with its model and seed objects.
@@ -134,9 +182,9 @@ class Database:
                 id=model_version.model.id,
                 name=model_version.model.name,
                 description=model_version.model.description,
-                simulation_function=(
-                    lambda m: compress_data(m.simulation_function)
-                )(model_version.model),
+                simulation_function=compress_data(
+                    model_version.model.simulation_function
+                ),
             )
             self.session.add(model_table)
             self.session.flush()
@@ -194,6 +242,8 @@ class Database:
                 data_type=parameter.data_type.__name__
                 if parameter.data_type
                 else None,
+                label=parameter.label,
+                unit=parameter.unit,
             )
             self.session.add(param_table)
 

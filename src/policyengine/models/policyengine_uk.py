@@ -94,7 +94,8 @@ def run_policyengine_uk(
             if correct_entity:
                 output_data[entity][variable.name] = sim.calculate(
                     variable.name
-                )
+                ).values
+        output_data[entity] = pd.DataFrame(output_data[entity])
 
     return output_data
 

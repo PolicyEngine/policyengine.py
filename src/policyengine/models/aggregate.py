@@ -1,9 +1,10 @@
 from enum import Enum
 from typing import TYPE_CHECKING, Literal
+from uuid import uuid4
 
 import pandas as pd
 from microdf import MicroDataFrame
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     from policyengine.models import Simulation
@@ -16,7 +17,8 @@ class AggregateType(str, Enum):
 
 
 class Aggregate(BaseModel):
-    simulation: "Simulation"
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    simulation: "Simulation | None" = None
     entity: str
     variable_name: str
     year: int | None = None
@@ -27,6 +29,7 @@ class Aggregate(BaseModel):
     aggregate_function: Literal[
         AggregateType.SUM, AggregateType.MEAN, AggregateType.COUNT
     ]
+    reportelement_id: str | None = None
 
     value: float | None = None
 
@@ -36,6 +39,8 @@ class Aggregate(BaseModel):
         results = []
 
         tables = aggregates[0].simulation.result
+        # copy tables to ensure we don't modify original dataframes
+        tables = {k: v.copy() for k, v in tables.items()}
         for table in tables:
             tables[table] = pd.DataFrame(tables[table])
             weight_col = f"{table}_weight"
