@@ -2,7 +2,6 @@ from sqlmodel import Field, SQLModel
 from typing import TYPE_CHECKING
 
 from policyengine.models import ModelVersion, BaselineVariable
-from policyengine.utils.compress import compress_data, decompress_data
 
 from .link import TableLink
 
@@ -24,13 +23,11 @@ class BaselineVariableTable(SQLModel, table=True):
     entity: str = Field(nullable=False)
     label: str | None = Field(default=None)
     description: str | None = Field(default=None)
-    data_type: bytes | None = Field(default=None)  # Pickled type
+    data_type: str | None = Field(default=None)  # Data type name
 
     @classmethod
     def convert_from_model(cls, model: BaselineVariable, database: "Database" = None) -> "BaselineVariableTable":
         """Convert a BaselineVariable instance to a BaselineVariableTable instance."""
-        from policyengine.utils.compress import compress_data
-
         # Ensure foreign objects are persisted if database is provided
         if database and model.model_version:
             database.set(model.model_version, commit=False)
@@ -42,12 +39,11 @@ class BaselineVariableTable(SQLModel, table=True):
             entity=model.entity,
             label=model.label,
             description=model.description,
-            data_type=compress_data(model.data_type) if model.data_type else None,
+            data_type=model.data_type.__name__ if model.data_type else None,
         )
 
     def convert_to_model(self, database: "Database" = None) -> BaselineVariable:
         """Convert this BaselineVariableTable instance to a BaselineVariable instance."""
-        from policyengine.utils.compress import decompress_data
         from .model_version_table import ModelVersionTable
         from sqlmodel import select
 
@@ -61,13 +57,21 @@ class BaselineVariableTable(SQLModel, table=True):
             if version_table:
                 model_version = version_table.convert_to_model(database)
 
+        # Convert data_type string back to type
+        data_type = None
+        if self.data_type:
+            try:
+                data_type = eval(self.data_type)
+            except:
+                data_type = None
+
         return BaselineVariable(
             id=self.id,
             model_version=model_version,
             entity=self.entity,
             label=self.label,
             description=self.description,
-            data_type=decompress_data(self.data_type) if self.data_type else None,
+            data_type=data_type,
         )
 
 

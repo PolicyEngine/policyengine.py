@@ -57,8 +57,6 @@ def run_policyengine_uk(
 
     simulation_modifier(sim)
 
-    # Skip reforms for now
-
     output_data = {}
 
     variable_blacklist = [  # TEMPORARY: we need to fix policyengine-uk to make these only take a long time with non-default parameters set to true.

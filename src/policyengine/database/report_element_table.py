@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, SQLModel, Column, JSON
 from typing import TYPE_CHECKING
 
 from policyengine.models.report_element import ReportElement
@@ -40,8 +40,11 @@ class ReportElementTable(SQLModel, table=True, extend_existing=True):
     # Metadata
     report_id: str | None = Field(default=None, foreign_key="reports.id")
     user_id: str | None = Field(default=None, foreign_key="users.id")
+    model_version_id: str | None = Field(default=None, foreign_key="model_versions.id")
     position: int | None = Field(default=None)
     visible: bool | None = Field(default=True)
+    custom_config: dict | None = Field(default=None, sa_column=Column(JSON))
+    report_element_metadata: dict | None = Field(default=None, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -62,8 +65,11 @@ class ReportElementTable(SQLModel, table=True, extend_existing=True):
             markdown_content=model.markdown_content,
             report_id=model.report_id,
             user_id=model.user_id,
+            model_version_id=model.model_version_id,
             position=model.position,
             visible=model.visible,
+            custom_config=model.custom_config,
+            report_element_metadata=model.report_element_metadata,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -84,8 +90,11 @@ class ReportElementTable(SQLModel, table=True, extend_existing=True):
             markdown_content=self.markdown_content,
             report_id=self.report_id,
             user_id=self.user_id,
+            model_version_id=self.model_version_id,
             position=self.position,
             visible=self.visible,
+            custom_config=self.custom_config,
+            report_element_metadata=self.report_element_metadata,
             created_at=self.created_at,
             updated_at=self.updated_at,
         )

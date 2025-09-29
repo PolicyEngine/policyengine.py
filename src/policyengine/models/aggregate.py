@@ -35,11 +35,43 @@ class Aggregate(BaseModel):
 
     @staticmethod
     def run(aggregates: list["Aggregate"]) -> list["Aggregate"]:
-        # Assumes that all aggregates are from the same simulation
+        """Process aggregates, handling multiple simulations if necessary."""
+        # Group aggregates by simulation
+        simulation_groups = {}
+        for agg in aggregates:
+            sim_id = id(agg.simulation) if agg.simulation else None
+            if sim_id not in simulation_groups:
+                simulation_groups[sim_id] = []
+            simulation_groups[sim_id].append(agg)
+
+        # Process each simulation group separately
+        all_results = []
+        for sim_id, sim_aggregates in simulation_groups.items():
+            if not sim_aggregates:
+                continue
+
+            # Get the simulation from the first aggregate in this group
+            simulation = sim_aggregates[0].simulation
+            if simulation is None:
+                raise ValueError("Aggregate has no simulation attached")
+
+            # Process this simulation's aggregates
+            group_results = Aggregate._process_simulation_aggregates(
+                sim_aggregates, simulation
+            )
+            all_results.extend(group_results)
+
+        return all_results
+
+    @staticmethod
+    def _process_simulation_aggregates(
+        aggregates: list["Aggregate"], simulation: "Simulation"
+    ) -> list["Aggregate"]:
+        """Process aggregates for a single simulation."""
         results = []
 
-        tables = aggregates[0].simulation.result
-        # copy tables to ensure we don't modify original dataframes
+        tables = simulation.result
+        # Copy tables to ensure we don't modify original dataframes
         tables = {k: v.copy() for k, v in tables.items()}
         for table in tables:
             tables[table] = pd.DataFrame(tables[table])
@@ -64,7 +96,7 @@ class Aggregate(BaseModel):
             df = table
 
             if agg.year is None:
-                agg.year = aggregates[0].simulation.dataset.year
+                agg.year = simulation.dataset.year
 
             if agg.filter_variable_name is not None:
                 if agg.filter_variable_name not in df.columns:

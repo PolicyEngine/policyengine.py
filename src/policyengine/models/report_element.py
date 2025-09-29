@@ -29,8 +29,10 @@ class ReportElement(BaseModel):
     # Metadata
     report_id: str | None = None
     user_id: str | None = None
+    model_version_id: str | None = None
     position: int | None = None
     visible: bool | None = True
     custom_config: dict | None = None  # Additional chart-specific config
+    report_element_metadata: dict | None = None  # General metadata field for flexible data storage
     created_at: datetime | None = None
     updated_at: datetime | None = None
