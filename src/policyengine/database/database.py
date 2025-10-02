@@ -19,6 +19,11 @@ from .report_element_table import report_element_table_link
 from .report_table import report_table_link
 from .simulation_table import simulation_table_link
 from .user_table import user_table_link
+from .user_policy_table import user_policy_table_link
+from .user_dynamic_table import user_dynamic_table_link
+from .user_dataset_table import user_dataset_table_link
+from .user_simulation_table import user_simulation_table_link
+from .user_report_table import user_report_table_link
 from .versioned_dataset_table import versioned_dataset_table_link
 
 
@@ -46,6 +51,11 @@ class Database:
             simulation_table_link,
             aggregate_table_link,
             user_table_link,
+            user_policy_table_link,
+            user_dynamic_table_link,
+            user_dataset_table_link,
+            user_simulation_table_link,
+            user_report_table_link,
             report_table_link,
             report_element_table_link,
         ]:

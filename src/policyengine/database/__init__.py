@@ -29,6 +29,12 @@ from .report_table import ReportTable, report_table_link
 from .report_element_table import ReportElementTable, report_element_table_link
 from .aggregate import AggregateTable, aggregate_table_link
 from .aggregate_change import AggregateChangeTable, aggregate_change_table_link
+from .user_table import UserTable, user_table_link
+from .user_policy_table import UserPolicyTable, user_policy_table_link
+from .user_dynamic_table import UserDynamicTable, user_dynamic_table_link
+from .user_dataset_table import UserDatasetTable, user_dataset_table_link
+from .user_simulation_table import UserSimulationTable, user_simulation_table_link
+from .user_report_table import UserReportTable, user_report_table_link
 
 __all__ = [
     "Database",
@@ -49,6 +55,12 @@ __all__ = [
     "ReportElementTable",
     "AggregateTable",
     "AggregateChangeTable",
+    "UserTable",
+    "UserPolicyTable",
+    "UserDynamicTable",
+    "UserDatasetTable",
+    "UserSimulationTable",
+    "UserReportTable",
     # Links
     "model_table_link",
     "model_version_table_link",
@@ -65,4 +77,10 @@ __all__ = [
     "report_element_table_link",
     "aggregate_table_link",
     "aggregate_change_table_link",
+    "user_table_link",
+    "user_policy_table_link",
+    "user_dynamic_table_link",
+    "user_dataset_table_link",
+    "user_simulation_table_link",
+    "user_report_table_link",
 ]
