@@ -79,6 +79,32 @@ class Database:
         self.drop_tables()
         self.create_tables()
 
+    def ensure_anonymous_user(self):
+        """Ensure the anonymous user exists in the database for development."""
+        from datetime import datetime
+        from policyengine.models.user import User
+        from sqlmodel import select
+        from .user_table import UserTable
+
+        # Check if anonymous user exists
+        stmt = select(UserTable).where(UserTable.id == "anonymous")
+        existing = self.session.exec(stmt).first()
+
+        if not existing:
+            # Create anonymous user with UK model as default
+            anonymous_user = UserTable(
+                id="anonymous",
+                username="anonymous",
+                first_name="Anonymous",
+                last_name="User",
+                email=None,
+                current_model_id="policyengine_uk",
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+            )
+            self.session.add(anonymous_user)
+            self.session.commit()
+
     def __enter__(self):
         """Context manager entry - creates a session."""
         self.session = Session(self.engine)

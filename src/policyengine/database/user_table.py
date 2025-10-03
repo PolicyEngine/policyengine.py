@@ -22,6 +22,7 @@ class UserTable(SQLModel, table=True, extend_existing=True):
     first_name: str | None = Field(default=None)
     last_name: str | None = Field(default=None)
     email: str | None = Field(default=None)
+    current_model_id: str = Field(default="policyengine_uk")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -34,6 +35,7 @@ class UserTable(SQLModel, table=True, extend_existing=True):
             first_name=model.first_name,
             last_name=model.last_name,
             email=model.email,
+            current_model_id=model.current_model_id,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -46,6 +48,7 @@ class UserTable(SQLModel, table=True, extend_existing=True):
             first_name=self.first_name,
             last_name=self.last_name,
             email=self.email,
+            current_model_id=self.current_model_id,
             created_at=self.created_at,
             updated_at=self.updated_at,
         )

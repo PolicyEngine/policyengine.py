@@ -33,6 +33,7 @@ class SimulationTable(SQLModel, table=True):
     )
 
     result: bytes | None = Field(default=None)
+    error: str | None = Field(default=None)
 
     @classmethod
     def convert_from_model(cls, model: Simulation, database: "Database" = None) -> "SimulationTable":
@@ -68,6 +69,7 @@ class SimulationTable(SQLModel, table=True):
             model_id=model.model.id if model.model else None,
             model_version_id=model.model_version.id if model.model_version else None,
             result=compress_data(model.result) if model.result else None,
+            error=getattr(model, 'error', None),
         )
 
         # Handle nested aggregates if database is provided
@@ -205,7 +207,7 @@ class SimulationTable(SQLModel, table=True):
                 agg_model = agg_table.convert_to_model(None)
                 aggregates.append(agg_model)
 
-        return Simulation(
+        sim = Simulation(
             id=self.id,
             created_at=self.created_at,
             updated_at=self.updated_at,
@@ -217,6 +219,10 @@ class SimulationTable(SQLModel, table=True):
             result=decompress_data(self.result) if self.result else None,
             aggregates=aggregates,
         )
+        # Add error as dynamic attribute if present
+        if self.error:
+            sim.error = self.error
+        return sim
 
 
 simulation_table_link = TableLink(

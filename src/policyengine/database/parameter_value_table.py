@@ -81,8 +81,7 @@ class ParameterValueTable(SQLModel, table=True):
                     ParameterTable.model_id == self.model_id
                 )
             ).first()
-            if param_table:
-                parameter = param_table.convert_to_model(database)
+            parameter = param_table.convert_to_model(database)
 
         # Handle special string values
         value = self.value

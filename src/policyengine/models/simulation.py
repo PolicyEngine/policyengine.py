@@ -18,14 +18,19 @@ class Simulation(BaseModel):
 
     policy: Policy | None = None
     dynamic: Dynamic | None = None
-    dataset: Dataset
+    dataset: Dataset | None = None
 
-    model: Model
-    model_version: ModelVersion
+    model: Model | None = None
+    model_version: ModelVersion | None = None
     result: Any | None = None
     aggregates: list = Field(default_factory=list)  # Will be list[Aggregate] but avoid circular import
 
     def run(self):
+        if not self.model:
+            raise ValueError("Cannot run simulation: model is not set")
+        if not self.dataset:
+            raise ValueError("Cannot run simulation: dataset is not set")
+
         self.result = self.model.simulation_function(
             dataset=self.dataset,
             policy=self.policy,

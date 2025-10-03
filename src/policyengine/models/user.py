@@ -10,5 +10,6 @@ class User(BaseModel):
     first_name: str | None = None
     last_name: str | None = None
     email: str | None = None
+    current_model_id: str = "policyengine_uk"  # Default to UK model
     created_at: datetime | None = None
     updated_at: datetime | None = None
