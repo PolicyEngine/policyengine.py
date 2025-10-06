@@ -15,15 +15,7 @@ from .model_version_table import model_version_table_link
 from .parameter_table import parameter_table_link
 from .parameter_value_table import parameter_value_table_link
 from .policy_table import policy_table_link
-from .report_element_table import report_element_table_link
-from .report_table import report_table_link
 from .simulation_table import simulation_table_link
-from .user_table import user_table_link
-from .user_policy_table import user_policy_table_link
-from .user_dynamic_table import user_dynamic_table_link
-from .user_dataset_table import user_dataset_table_link
-from .user_simulation_table import user_simulation_table_link
-from .user_report_table import user_report_table_link
 from .versioned_dataset_table import versioned_dataset_table_link
 
 
@@ -50,14 +42,6 @@ class Database:
             baseline_variable_table_link,
             simulation_table_link,
             aggregate_table_link,
-            user_table_link,
-            user_policy_table_link,
-            user_dynamic_table_link,
-            user_dataset_table_link,
-            user_simulation_table_link,
-            user_report_table_link,
-            report_table_link,
-            report_element_table_link,
         ]:
             self.register_table(link)
 
@@ -80,30 +64,8 @@ class Database:
         self.create_tables()
 
     def ensure_anonymous_user(self):
-        """Ensure the anonymous user exists in the database for development."""
-        from datetime import datetime
-        from policyengine.models.user import User
-        from sqlmodel import select
-        from .user_table import UserTable
-
-        # Check if anonymous user exists
-        stmt = select(UserTable).where(UserTable.id == "anonymous")
-        existing = self.session.exec(stmt).first()
-
-        if not existing:
-            # Create anonymous user with UK model as default
-            anonymous_user = UserTable(
-                id="anonymous",
-                username="anonymous",
-                first_name="Anonymous",
-                last_name="User",
-                email=None,
-                current_model_id="policyengine_uk",
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
-            )
-            self.session.add(anonymous_user)
-            self.session.commit()
+        """Deprecated: This method no longer exists as user management has been moved to the API layer."""
+        pass
 
     def __enter__(self):
         """Context manager entry - creates a session."""
