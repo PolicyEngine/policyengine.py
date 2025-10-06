@@ -21,14 +21,17 @@ from .versioned_dataset_table import versioned_dataset_table_link
 
 class Database:
     url: str
-
-    _model_table_links: list[TableLink] = []
+    _model_table_links: list[TableLink]
 
     def __init__(self, url: str):
         self.url = url
         self.engine = self._create_engine()
         self.session = Session(self.engine)
 
+        # Initialize instance variable for table links
+        self._model_table_links = []
+
+        # Register all table links
         for link in [
             model_table_link,
             model_version_table_link,
@@ -48,7 +51,19 @@ class Database:
     def _create_engine(self):
         from sqlmodel import create_engine
 
-        return create_engine(self.url, echo=False)
+        # Configure engine with proper settings for PostgreSQL/Supabase
+        engine_args = {
+            "echo": False,
+            "pool_pre_ping": True,  # Verify connections before using
+            "pool_recycle": 3600,  # Recycle connections after 1 hour
+        }
+
+        # For PostgreSQL, ensure proper connection pooling
+        if self.url.startswith("postgresql"):
+            engine_args["pool_size"] = 5
+            engine_args["max_overflow"] = 10
+
+        return create_engine(self.url, **engine_args)
 
     def create_tables(self):
         """Create all database tables."""
@@ -81,9 +96,34 @@ class Database:
         self.session.close()
 
     def register_table(self, link: TableLink):
+        """Register a table link for use with the database.
+
+        Note: This does NOT create the table. Call create_tables() after
+        registering all tables to create them in the correct order respecting
+        foreign key dependencies.
+
+        Args:
+            link: The TableLink to register
+        """
         self._model_table_links.append(link)
-        # Create the table if not exists
-        link.table_cls.metadata.create_all(self.engine)
+
+    def verify_tables_exist(self) -> dict[str, bool]:
+        """Verify that all registered tables exist in the database.
+
+        Returns:
+            A dictionary mapping table names to whether they exist
+        """
+        from sqlalchemy import inspect as sql_inspect
+
+        inspector = sql_inspect(self.engine)
+        existing_tables = set(inspector.get_table_names())
+
+        results = {}
+        for link in self._model_table_links:
+            table_name = link.table_cls.__tablename__
+            results[table_name] = table_name in existing_tables
+
+        return results
 
     def get(self, model_cls: type, **kwargs):
         """Get a model instance from the database by its attributes."""
