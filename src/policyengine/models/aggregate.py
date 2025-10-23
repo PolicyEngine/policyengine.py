@@ -1,10 +1,10 @@
 from enum import Enum
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
 import pandas as pd
 from microdf import MicroDataFrame
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, SkipValidation
 
 if TYPE_CHECKING:
     from policyengine.models import Simulation
@@ -17,158 +17,207 @@ class AggregateType(str, Enum):
     COUNT = "count"
 
 
-class AggregateUtils:
-    """Shared utilities for aggregate calculations."""
+class DataEngine:
+    """Clean data processing engine for aggregations."""
+
+    def __init__(self, tables: dict):
+        """Initialize with simulation result tables."""
+        self.tables = self._prepare_tables(tables)
 
     @staticmethod
-    def prepare_tables(simulation: "Simulation") -> dict:
-        """Prepare dataframes from simulation result once."""
-        tables = simulation.result
-        tables = {k: v.copy() for k, v in tables.items()}
+    def _prepare_tables(tables: dict) -> dict[str, pd.DataFrame]:
+        """Convert tables to DataFrames with MicroDataFrame for weighted columns."""
+        prepared = {}
+        for name, table in tables.items():
+            df = pd.DataFrame(table.copy() if hasattr(table, 'copy') else table)
+            weight_col = f"{name}_weight"
+            if weight_col in df.columns:
+                df = MicroDataFrame(df, weights=weight_col)
+            prepared[name] = df
+        return prepared
 
-        for table in tables:
-            tables[table] = pd.DataFrame(tables[table])
-            weight_col = f"{table}_weight"
-            if weight_col in tables[table].columns:
-                tables[table] = MicroDataFrame(
-                    tables[table], weights=weight_col
-                )
-
-        return tables
-
-    @staticmethod
-    def infer_entity(variable_name: str, tables: dict) -> str:
-        """Infer entity from variable name by checking which table contains it."""
-        for entity, table in tables.items():
-            if variable_name in table.columns:
+    def infer_entity(self, variable: str) -> str:
+        """Infer which entity contains a variable."""
+        for entity, table in self.tables.items():
+            if variable in table.columns:
                 return entity
-        raise ValueError(f"Variable {variable_name} not found in any entity table")
+        raise ValueError(f"Variable {variable} not found in any entity")
 
-    @staticmethod
-    def get_entity_link_columns() -> dict:
-        """Return mapping of entity relationships for common PolicyEngine models."""
-        return {
-            # person -> group entity links (copy values down)
-            "person": {
-                "benunit": "person_benunit_id",
-                "household": "person_household_id",
-                "family": "person_family_id",
-                "tax_unit": "person_tax_unit_id",
-                "spm_unit": "person_spm_unit_id",
-            },
+    def get_variable_series(
+        self,
+        variable: str,
+        target_entity: str,
+        filters: dict[str, Any] | None = None
+    ) -> pd.Series:
+        """
+        Get variable series at target entity level, with optional filtering.
+
+        Handles cross-entity mapping automatically.
+        """
+        # Find source entity
+        source_entity = self.infer_entity(variable)
+
+        # Apply filters first (on target entity)
+        if filters:
+            mask = self._build_filter_mask(filters, target_entity)
+            target_table = self.tables[target_entity][mask]
+        else:
+            target_table = self.tables[target_entity]
+
+        # Get variable (map if needed)
+        if source_entity == target_entity:
+            return target_table[variable]
+        else:
+            # Map across entities
+            source_series = self.tables[source_entity][variable]
+            mapped_series = self._map_variable(source_series, source_entity, target_entity)
+            # Apply filter mask to mapped series
+            if filters:
+                return mapped_series[mask]
+            return mapped_series
+
+    def _build_filter_mask(self, filters: dict[str, Any], target_entity: str) -> pd.Series:
+        """Build boolean mask from filter specification."""
+        target_table = self.tables[target_entity]
+        mask = pd.Series([True] * len(target_table), index=target_table.index)
+
+        filter_variable = filters.get('variable')
+        if not filter_variable:
+            return mask
+
+        # Get filter series (map if cross-entity)
+        filter_entity = self.infer_entity(filter_variable)
+        if filter_entity == target_entity:
+            filter_series = target_table[filter_variable]
+        else:
+            filter_series = self._map_variable(
+                self.tables[filter_entity][filter_variable],
+                filter_entity,
+                target_entity
+            )
+
+        # Apply value filters
+        if 'value' in filters and filters['value'] is not None:
+            mask &= filter_series == filters['value']
+
+        if 'leq' in filters and filters['leq'] is not None:
+            mask &= filter_series <= filters['leq']
+
+        if 'geq' in filters and filters['geq'] is not None:
+            mask &= filter_series >= filters['geq']
+
+        # Apply quantile filters
+        if 'quantile_leq' in filters and filters['quantile_leq'] is not None:
+            threshold = filter_series.quantile(filters['quantile_leq'])
+            mask &= filter_series <= threshold
+
+        if 'quantile_geq' in filters and filters['quantile_geq'] is not None:
+            threshold = filter_series.quantile(filters['quantile_geq'])
+            mask &= filter_series >= threshold
+
+        return mask
+
+    def _map_variable(
+        self,
+        series: pd.Series,
+        source_entity: str,
+        target_entity: str
+    ) -> pd.Series:
+        """Map a variable from source to target entity."""
+        if source_entity == target_entity:
+            return series
+
+        # Default entity links (can be overridden)
+        person_links = {
+            "benunit": "person_benunit_id",
+            "household": "person_household_id",
+            "family": "person_family_id",
+            "tax_unit": "person_tax_unit_id",
+            "spm_unit": "person_spm_unit_id",
         }
 
-    @staticmethod
-    def map_variable_across_entities(
-        df: pd.DataFrame,
-        variable_name: str,
-        source_entity: str,
-        target_entity: str,
-        tables: dict
-    ) -> pd.Series:
-        """Map a variable from source entity to target entity level."""
-        links = AggregateUtils.get_entity_link_columns()
-
-        # Group to person: copy group values to persons using link column
+        # Group to person: copy values down
         if source_entity != "person" and target_entity == "person":
-            link_col = links.get("person", {}).get(source_entity)
-            if link_col is None:
-                raise ValueError(f"No known link from person to {source_entity}")
+            link_col = person_links.get(source_entity)
+            if not link_col:
+                raise ValueError(f"No link from person to {source_entity}")
 
-            if link_col not in tables["person"].columns:
-                raise ValueError(f"Link column {link_col} not found in person table")
+            person_table = self.tables["person"]
+            if link_col not in person_table.columns:
+                raise ValueError(f"Link column {link_col} not in person table")
 
-            # Create mapping: group position (0-based index) -> value
-            group_values = df[variable_name].values
-
-            # Map to person level using the link column
-            person_table = tables["person"]
+            group_values = series.values
             person_group_ids = person_table[link_col].values
+            return pd.Series(
+                [group_values[int(gid)] if int(gid) < len(group_values) else 0
+                 for gid in person_group_ids],
+                index=person_table.index
+            )
 
-            # Map each person to their group's value
-            result = pd.Series([group_values[int(gid)] if int(gid) < len(group_values) else 0
-                               for gid in person_group_ids], index=person_table.index)
-            return result
-
-        # Person to group: sum persons' values to group level
+        # Person to group: aggregate up
         elif source_entity == "person" and target_entity != "person":
-            link_col = links.get("person", {}).get(target_entity)
-            if link_col is None:
-                raise ValueError(f"No known link from person to {target_entity}")
+            link_col = person_links.get(target_entity)
+            if not link_col:
+                raise ValueError(f"No link from person to {target_entity}")
 
-            if link_col not in df.columns:
-                raise ValueError(f"Link column {link_col} not found in person table")
+            person_table = self.tables["person"]
+            if link_col not in person_table.columns:
+                raise ValueError(f"Link column {link_col} not in person table")
 
-            # Sum by group - need to align with group table length
-            grouped = df.groupby(link_col)[variable_name].sum()
+            grouped = pd.DataFrame({
+                link_col: person_table[link_col],
+                'value': series
+            }).groupby(link_col)['value'].sum()
 
-            # Create a series aligned with the group table
-            group_table = tables[target_entity]
-            result = pd.Series([grouped.get(i, 0) for i in range(len(group_table))],
-                              index=group_table.index)
-            return result
-
-        # Group to group: try via person as intermediary
-        elif source_entity != "person" and target_entity != "person":
-            # Map source -> person -> target
-            person_values = AggregateUtils.map_variable_across_entities(
-                df, variable_name, source_entity, "person", tables
-            )
-            # Create temp dataframe with person values
-            temp_person_df = tables["person"].copy()
-            temp_person_df[variable_name] = person_values
-
-            return AggregateUtils.map_variable_across_entities(
-                temp_person_df, variable_name, "person", target_entity, tables
+            target_table = self.tables[target_entity]
+            return pd.Series(
+                [grouped.get(i, 0) for i in range(len(target_table))],
+                index=target_table.index
             )
 
+        # Group to group: via person
         else:
-            # Same entity - shouldn't happen but return as-is
-            return df[variable_name]
+            person_series = self._map_variable(series, source_entity, "person")
+            return self._map_variable(person_series, "person", target_entity)
 
     @staticmethod
-    def compute_aggregate(
-        variable_series: pd.Series | MicroDataFrame,
-        aggregate_function: str
-    ) -> float:
-        """Compute aggregate value from a series."""
-        if len(variable_series) == 0:
+    def aggregate(series: pd.Series, function: AggregateType) -> float:
+        """Apply aggregation function to series."""
+        if len(series) == 0:
             return 0.0
 
-        # Check if this is a weight column being summed from a MicroDataFrame
-        # If so, use unweighted sum to avoid weight^2
-        is_weight_column = (
-            isinstance(variable_series, pd.Series) and
-            hasattr(variable_series, 'name') and
-            variable_series.name and
-            'weight' in str(variable_series.name).lower()
+        # Avoid double-weighting weight columns
+        is_weight = (
+            hasattr(series, 'name') and
+            series.name and
+            'weight' in str(series.name).lower()
         )
 
-        if aggregate_function == AggregateType.SUM:
-            if is_weight_column:
-                # Use unweighted sum for weight columns
-                return float(pd.Series(variable_series.values).sum())
-            return float(variable_series.sum())
-        elif aggregate_function == AggregateType.MEAN:
-            return float(variable_series.mean())
-        elif aggregate_function == AggregateType.MEDIAN:
-            return float(variable_series.median())
-        elif aggregate_function == AggregateType.COUNT:
-            # For COUNT, return the actual number of entries (not weighted)
-            # Use len() to count all entries regardless of value
-            return float(len(variable_series))
+        if function == AggregateType.SUM:
+            if is_weight:
+                return float(pd.Series(series.values).sum())
+            return float(series.sum())
+        elif function == AggregateType.MEAN:
+            return float(series.mean())
+        elif function == AggregateType.MEDIAN:
+            return float(series.median())
+        elif function == AggregateType.COUNT:
+            return float(len(series))
         else:
-            raise ValueError(f"Unknown aggregate function: {aggregate_function}")
+            raise ValueError(f"Unknown aggregate function: {function}")
 
 
 class Aggregate(BaseModel):
+    """Aggregate calculation."""
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     id: str = Field(default_factory=lambda: str(uuid4()))
-    simulation: "Simulation | None" = None
+    simulation: SkipValidation["Simulation | None"] = None
     entity: str | None = None
     variable_name: str
     year: int | None = None
     filter_variable_name: str | None = None
-    filter_variable_value: str | None = None
+    filter_variable_value: Any | None = None
     filter_variable_leq: float | None = None
     filter_variable_geq: float | None = None
     filter_variable_quantile_leq: float | None = None
@@ -177,154 +226,61 @@ class Aggregate(BaseModel):
         AggregateType.SUM, AggregateType.MEAN, AggregateType.MEDIAN, AggregateType.COUNT
     ]
     reportelement_id: str | None = None
-
     value: float | None = None
 
     @staticmethod
     def run(aggregates: list["Aggregate"]) -> list["Aggregate"]:
-        """Process aggregates, handling multiple simulations if necessary."""
-        # Group aggregates by simulation
-        simulation_groups = {}
+        """Process aggregates efficiently by batching those with same simulation."""
+        # Group by simulation for batch processing
+        by_simulation = {}
         for agg in aggregates:
             sim_id = id(agg.simulation) if agg.simulation else None
-            if sim_id not in simulation_groups:
-                simulation_groups[sim_id] = []
-            simulation_groups[sim_id].append(agg)
+            if sim_id not in by_simulation:
+                by_simulation[sim_id] = []
+            by_simulation[sim_id].append(agg)
 
-        # Process each simulation group separately
-        all_results = []
-        for sim_id, sim_aggregates in simulation_groups.items():
+        results = []
+        for sim_aggregates in by_simulation.values():
             if not sim_aggregates:
                 continue
 
-            # Get the simulation from the first aggregate in this group
             simulation = sim_aggregates[0].simulation
             if simulation is None:
-                raise ValueError("Aggregate has no simulation attached")
+                raise ValueError("Aggregate has no simulation")
 
-            # Process this simulation's aggregates
-            group_results = Aggregate._process_simulation_aggregates(
-                sim_aggregates, simulation
-            )
-            all_results.extend(group_results)
+            # Create data engine once per simulation (batch optimization)
+            engine = DataEngine(simulation.result)
 
-        return all_results
+            # Process each aggregate
+            for agg in sim_aggregates:
+                if agg.year is None:
+                    agg.year = simulation.dataset.year
 
-    @staticmethod
-    def _process_simulation_aggregates(
-        aggregates: list["Aggregate"], simulation: "Simulation"
-    ) -> list["Aggregate"]:
-        """Process aggregates for a single simulation."""
-        results = []
+                # Infer entity if not specified
+                if agg.entity is None:
+                    agg.entity = engine.infer_entity(agg.variable_name)
 
-        # Use centralized table preparation
-        tables = AggregateUtils.prepare_tables(simulation)
+                # Build filter specification
+                filters = None
+                if agg.filter_variable_name:
+                    filters = {
+                        'variable': agg.filter_variable_name,
+                        'value': agg.filter_variable_value,
+                        'leq': agg.filter_variable_leq,
+                        'geq': agg.filter_variable_geq,
+                        'quantile_leq': agg.filter_variable_quantile_leq,
+                        'quantile_geq': agg.filter_variable_quantile_geq,
+                    }
 
-        for agg in aggregates:
-            # Infer entity if not provided
-            if agg.entity is None:
-                agg.entity = AggregateUtils.infer_entity(agg.variable_name, tables)
-
-            if agg.entity not in tables:
-                raise ValueError(
-                    f"Entity {agg.entity} not found in simulation results"
-                )
-
-            if agg.year is None:
-                agg.year = simulation.dataset.year
-
-            # Get the target table
-            target_table = tables[agg.entity]
-
-            # Handle cross-entity filters
-            mask = None
-            if agg.filter_variable_name is not None:
-                # Find which entity contains the filter variable
-                filter_entity = None
-                for entity, table in tables.items():
-                    if agg.filter_variable_name in table.columns:
-                        filter_entity = entity
-                        break
-
-                if filter_entity is None:
-                    raise ValueError(
-                        f"Filter variable {agg.filter_variable_name} not found in any entity"
-                    )
-
-                # Get the filter series (mapped if needed)
-                if filter_entity == agg.entity:
-                    filter_series = tables[agg.entity][agg.filter_variable_name]
-                else:
-                    # Different entity - map filter variable to target entity
-                    filter_df = tables[filter_entity]
-                    filter_series = AggregateUtils.map_variable_across_entities(
-                        filter_df,
-                        agg.filter_variable_name,
-                        filter_entity,
-                        agg.entity,
-                        tables
-                    )
-
-                # Build mask
-                mask = pd.Series([True] * len(target_table), index=target_table.index)
-
-                # Apply value/range filters
-                if agg.filter_variable_value is not None:
-                    mask &= filter_series == agg.filter_variable_value
-                if agg.filter_variable_leq is not None:
-                    mask &= filter_series <= agg.filter_variable_leq
-                if agg.filter_variable_geq is not None:
-                    mask &= filter_series >= agg.filter_variable_geq
-
-                # Apply quantile filters
-                if agg.filter_variable_quantile_leq is not None:
-                    threshold = filter_series.quantile(agg.filter_variable_quantile_leq)
-                    mask &= filter_series <= threshold
-                if agg.filter_variable_quantile_geq is not None:
-                    threshold = filter_series.quantile(agg.filter_variable_quantile_geq)
-                    mask &= filter_series >= threshold
-
-            # Find which entity contains the variable
-            variable_entity = None
-            for entity, table in tables.items():
-                if agg.variable_name in table.columns:
-                    variable_entity = entity
-                    break
-
-            if variable_entity is None:
-                raise ValueError(
-                    f"Variable {agg.variable_name} not found in any entity"
-                )
-
-            # Get variable data (mapped if needed)
-            if variable_entity == agg.entity:
-                # Same entity - extract from target table
-                if mask is not None:
-                    # Filter the entire table to preserve MicroDataFrame weights
-                    filtered_table = target_table[mask]
-                    variable_series = filtered_table[agg.variable_name]
-                else:
-                    variable_series = target_table[agg.variable_name]
-            else:
-                # Map variable to target entity
-                source_table = tables[variable_entity]
-                variable_series = AggregateUtils.map_variable_across_entities(
-                    source_table,
+                # Get variable series with filters
+                series = engine.get_variable_series(
                     agg.variable_name,
-                    variable_entity,
                     agg.entity,
-                    tables
+                    filters
                 )
-                # Apply mask after mapping
-                if mask is not None:
-                    variable_series = variable_series[mask]
 
-            # Compute aggregate using centralized function
-            agg.value = AggregateUtils.compute_aggregate(
-                variable_series,
-                agg.aggregate_function
-            )
-
-            results.append(agg)
+                # Compute aggregate
+                agg.value = engine.aggregate(series, agg.aggregate_function)
+                results.append(agg)
 
         return results
