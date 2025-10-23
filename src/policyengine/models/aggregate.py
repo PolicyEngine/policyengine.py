@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
 import pandas as pd
-from microdf import MicroDataFrame
+from microdf import MicroDataFrame, MicroSeries
 from pydantic import BaseModel, ConfigDict, Field, SkipValidation
 
 if TYPE_CHECKING:
@@ -148,11 +148,16 @@ class DataEngine:
 
             group_values = series.values
             person_group_ids = person_table[link_col].values
-            return pd.Series(
-                [group_values[int(gid)] if int(gid) < len(group_values) else 0
-                 for gid in person_group_ids],
-                index=person_table.index
-            )
+            mapped_values = [
+                group_values[int(gid)] if int(gid) < len(group_values) else 0
+                for gid in person_group_ids
+            ]
+
+            # Return MicroSeries with person weights
+            weight_col = f"{target_entity}_weight"
+            if isinstance(person_table, MicroDataFrame) and weight_col in person_table.columns:
+                return MicroSeries(mapped_values, weights=person_table[weight_col])
+            return pd.Series(mapped_values, index=person_table.index)
 
         # Person to group: aggregate up
         elif source_entity == "person" and target_entity != "person":
@@ -170,10 +175,13 @@ class DataEngine:
             }).groupby(link_col)['value'].sum()
 
             target_table = self.tables[target_entity]
-            return pd.Series(
-                [grouped.get(i, 0) for i in range(len(target_table))],
-                index=target_table.index
-            )
+            mapped_values = [grouped.get(i, 0) for i in range(len(target_table))]
+
+            # Return MicroSeries with target entity weights
+            weight_col = f"{target_entity}_weight"
+            if isinstance(target_table, MicroDataFrame) and weight_col in target_table.columns:
+                return MicroSeries(mapped_values, weights=target_table[weight_col])
+            return pd.Series(mapped_values, index=target_table.index)
 
         # Group to group: via person
         else:
@@ -202,6 +210,9 @@ class DataEngine:
         elif function == AggregateType.MEDIAN:
             return float(series.median())
         elif function == AggregateType.COUNT:
+            # For MicroSeries, sum the weights to get weighted population count
+            if isinstance(series, MicroSeries):
+                return float(series.weights.sum())
             return float(len(series))
         else:
             raise ValueError(f"Unknown aggregate function: {function}")

@@ -88,7 +88,8 @@ class TestBasicAggregations:
             entity='person'
         )
         results = Aggregate.run([agg])
-        assert results[0].value == 4.0
+        # Weighted count: sum of person weights = 100 + 100 + 200 + 200 = 600
+        assert results[0].value == 600.0
 
     def test_median(self, sample_tables):
         """Test median aggregation."""
@@ -131,7 +132,8 @@ class TestFiltering:
             filter_variable_value=30
         )
         results = Aggregate.run([agg])
-        assert results[0].value == 1.0
+        # Weighted count: person 0 has age 30 and weight 100
+        assert results[0].value == 100.0
 
     def test_range_filter_leq(self, sample_tables):
         """Test filtering with <= operator."""
@@ -193,8 +195,9 @@ class TestFiltering:
             filter_variable_quantile_leq=0.5
         )
         results = Aggregate.run([agg])
-        # Bottom 50% by age should have at least 2 people
-        assert results[0].value >= 2.0
+        # Weighted median age is 40, so includes ages <= 40: persons 0, 1, 3
+        # Weighted count: 100 + 100 + 200 = 400
+        assert results[0].value == 400.0
 
     def test_quantile_filter_geq(self, sample_tables):
         """Test filtering with quantile_geq."""
@@ -208,8 +211,9 @@ class TestFiltering:
             filter_variable_quantile_geq=0.5
         )
         results = Aggregate.run([agg])
-        # Top 50% by age should have at least 2 people
-        assert results[0].value >= 2.0
+        # Weighted median age is 40, so includes ages >= 40: persons 2, 3
+        # Weighted count: 200 + 200 = 400
+        assert results[0].value == 400.0
 
 
 class TestCrossEntity:
@@ -228,7 +232,8 @@ class TestCrossEntity:
         )
         results = Aggregate.run([agg])
         # Persons in poor households (household 0): persons 0 and 1
-        assert results[0].value == 2.0
+        # Weighted count: 100 + 100 = 200
+        assert results[0].value == 200.0
 
     def test_person_to_household_aggregation(self, sample_tables):
         """Test aggregating person variable at household level."""
@@ -240,8 +245,11 @@ class TestCrossEntity:
             entity='household'
         )
         results = Aggregate.run([agg])
-        # Employment income summed to household level: 50000 + 115000 = 165,000
-        assert results[0].value == 165_000.0
+        # Employment income summed to household level with household weights:
+        # Household 0: (50000 + 0) * 100 = 5,000,000
+        # Household 1: (60000 + 55000) * 200 = 23,000,000
+        # Total weighted sum: 28,000,000
+        assert results[0].value == 28_000_000.0
 
     def test_poverty_rate_calculation(self, sample_tables):
         """Test calculating poverty rate."""
@@ -267,7 +275,8 @@ class TestCrossEntity:
 
         results = Aggregate.run([poor, total])
         poverty_rate = results[0].value / results[1].value
-        assert poverty_rate == 0.5  # 2 out of 4 persons
+        # Weighted: 200 poor / 600 total = 1/3
+        assert round(poverty_rate, 3) == 0.333
 
     def test_mean_income_for_poor(self, sample_tables):
         """Test mean income for persons in poor households."""
@@ -318,7 +327,7 @@ class TestBatching:
         assert len(results) == 3
         assert results[0].value == 28_000_000.0
         assert round(results[1].value, 2) == 34.17
-        assert results[2].value == 4.0
+        assert results[2].value == 600.0  # Weighted count
 
     def test_batch_different_filters(self, sample_tables):
         """Test batching aggregates with different filters."""
@@ -345,8 +354,8 @@ class TestBatching:
 
         results = Aggregate.run(aggregates)
         assert len(results) == 2
-        assert results[0].value == 1.0  # Children
-        assert results[1].value == 3.0  # Adults
+        assert results[0].value == 100.0  # Children: person 1 weight 100
+        assert results[1].value == 500.0  # Adults: persons 0,2,3 weights 100+200+200
 
 
 class TestEdgeCases:
@@ -409,7 +418,7 @@ class TestComplexScenarios:
         )
 
         results = Aggregate.run([children_poor])
-        assert results[0].value == 1.0  # Person 1 (age 5)
+        assert results[0].value == 100.0  # Person 1 (age 5, weight 100)
 
     def test_multiple_aggregations(self, sample_tables):
         """Test running multiple different aggregations together."""

@@ -149,14 +149,14 @@ class TestBasicChanges:
         results = AggregateChange.run([agg_change])
         result = results[0]
 
-        # Baseline: 1 household in poverty
-        assert result.baseline_value == 1.0
+        # Baseline: household 0 in poverty with weight 100
+        assert result.baseline_value == 100.0
 
         # Comparison: 0 households in poverty
         assert result.comparison_value == 0.0
 
-        # Change: -1 household
-        assert result.change == -1.0
+        # Change: -100 (weighted household count)
+        assert result.change == -100.0
 
 
 class TestCrossEntityChanges:
@@ -181,14 +181,14 @@ class TestCrossEntityChanges:
         results = AggregateChange.run([agg_change])
         result = results[0]
 
-        # Baseline: 2 persons in poor households (persons 0, 1)
-        assert result.baseline_value == 2.0
+        # Baseline: persons 0, 1 in poor households with weights 100 + 100 = 200
+        assert result.baseline_value == 200.0
 
         # Comparison: 0 persons in poor households
         assert result.comparison_value == 0.0
 
-        # Change: -2 persons
-        assert result.change == -2.0
+        # Change: -200 (weighted person count)
+        assert result.change == -200.0
 
     def test_mean_benefits_for_poor(self, baseline_tables, comparison_tables):
         """Test change in mean benefits for persons in poor households."""
@@ -255,7 +255,7 @@ class TestBatching:
         assert len(results) == 3
         assert results[0].change == 800_000.0  # Benefits increased
         assert results[1].change == 0.0  # Employment income unchanged
-        assert results[2].change == -2.0  # Poverty count decreased
+        assert results[2].change == -200.0  # Poverty count decreased (weighted)
 
 
 class TestRangeFilters:
