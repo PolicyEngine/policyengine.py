@@ -6,8 +6,8 @@ from pydantic import BaseModel, Field
 
 from .dataset import Dataset
 from .dynamic import Dynamic
-from .model import Model
-from .model_version import ModelVersion
+from .tax_benefit_model import TaxBenefitModel
+from .tax_benefit_model_version import TaxBenefitModelVersion
 from .policy import Policy
 
 
@@ -20,21 +20,6 @@ class Simulation(BaseModel):
     dynamic: Dynamic | None = None
     dataset: Dataset | None = None
 
-    model: Model | None = None
-    model_version: ModelVersion | None = None
-    result: Any | None = None
-    aggregates: list = Field(default_factory=list)  # Will be list[Aggregate] but avoid circular import
-
-    def run(self):
-        if not self.model:
-            raise ValueError("Cannot run simulation: model is not set")
-        if not self.dataset:
-            raise ValueError("Cannot run simulation: dataset is not set")
-
-        self.result = self.model.simulation_function(
-            dataset=self.dataset,
-            policy=self.policy,
-            dynamic=self.dynamic,
-        )
-        self.updated_at = datetime.now()
-        return self.result
+    tax_benefit_model: TaxBenefitModel | None = None
+    tax_benefit_model_version: TaxBenefitModelVersion | None = None
+    output_file_path: str | None = None
