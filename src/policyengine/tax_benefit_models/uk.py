@@ -335,7 +335,6 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                     # Tax
                     "income_tax",
                     "national_insurance",
-                    "net_income",
                 ],
                 "benunit": [
                     # IDs and weights
@@ -369,7 +368,6 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                     # Housing
                     "rent",
                     "council_tax",
-                    "housing_benefit",
                 ],
             }
 
