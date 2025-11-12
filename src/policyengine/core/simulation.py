@@ -18,8 +18,9 @@ class Simulation(BaseModel):
 
     policy: Policy | None = None
     dynamic: Dynamic | None = None
-    dataset: Dataset | None = None
+    dataset: Dataset = None
+    year: int
 
     tax_benefit_model: TaxBenefitModel | None = None
     tax_benefit_model_version: TaxBenefitModelVersion | None = None
-    output_file_path: str | None = None
+    output_dataset: Dataset | None = None

@@ -14,4 +14,5 @@ class Dataset(BaseModel):
     description: str
     dataset_version: DatasetVersion | None = None
     filepath: str
+    is_output_dataset: bool = False
     tax_benefit_model: TaxBenefitModel = None

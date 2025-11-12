@@ -15,8 +15,7 @@ if TYPE_CHECKING:
 
 class TaxBenefitModel(BaseModel):
     id: str
-    name: str
     description: str | None = None
 
     def run(self, simulation: "Simulation") -> "Simulation":
-        pass
+        raise NotImplementedError("The TaxBenefitModel class must define a method to execute simulations.")

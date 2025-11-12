@@ -45,11 +45,12 @@ def test_save_and_load_single_year():
         dataset.save(filepath)
 
         # Load it back
-        loaded = PolicyEngineUKDataset.load(
-            filepath,
+        loaded = PolicyEngineUKDataset(
             name='Loaded Dataset',
-            description='Loaded from file'
+            description='Loaded from file',
+            filepath=filepath
         )
+        loaded.load(filepath)
 
         # Verify data
         assert 2025 in loaded.data
@@ -122,11 +123,12 @@ def test_save_and_load_multiple_years():
         filepath = os.path.join(tmpdir, 'multi_year_dataset.h5')
         dataset.save(filepath)
 
-        loaded = PolicyEngineUKDataset.load(
-            filepath,
+        loaded = PolicyEngineUKDataset(
             name='Loaded Multi-year',
-            description='Loaded from file'
+            description='Loaded from file',
+            filepath=filepath
         )
+        loaded.load(filepath)
 
         # Verify both years exist
         assert 2025 in loaded.data
@@ -156,10 +158,11 @@ def test_empty_dataset():
         filepath = os.path.join(tmpdir, 'empty_dataset.h5')
         dataset.save(filepath)
 
-        loaded = PolicyEngineUKDataset.load(
-            filepath,
+        loaded = PolicyEngineUKDataset(
             name='Loaded Empty',
-            description='Empty dataset loaded'
+            description='Empty dataset loaded',
+            filepath=filepath
         )
+        loaded.load(filepath)
 
         assert len(loaded.data) == 0
