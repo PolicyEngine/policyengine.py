@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from typing import TYPE_CHECKING
 
 from .tax_benefit_model import TaxBenefitModel
+
 if TYPE_CHECKING:
     from .dataset import Dataset
 

@@ -1,11 +1,16 @@
 from .variable import Variable
-from .dataset import Dataset as Dataset
-from .dynamic import Dynamic as Dynamic
+from .dataset import Dataset
+from .dynamic import Dynamic
 from .tax_benefit_model import TaxBenefitModel
 from .tax_benefit_model_version import TaxBenefitModelVersion
-from .parameter import Parameter as Parameter
-from .parameter_value import ParameterValue as ParameterValue
-from .policy import Policy as Policy
-from .simulation import Simulation as Simulation
-from .dataset_version import DatasetVersion
+from .parameter import Parameter
+from .parameter_value import ParameterValue
+from .policy import Policy
 from .simulation import Simulation
+from .dataset_version import DatasetVersion
+
+# Rebuild models to resolve forward references
+TaxBenefitModelVersion.model_rebuild()
+Variable.model_rebuild()
+Parameter.model_rebuild()
+ParameterValue.model_rebuild()

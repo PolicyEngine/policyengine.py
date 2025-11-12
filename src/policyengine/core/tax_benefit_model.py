@@ -2,7 +2,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     from .variable import Variable
@@ -11,11 +11,9 @@ if TYPE_CHECKING:
     from .dataset import Dataset
     from .policy import Policy
     from .dynamic import Dynamic
+    from .parameter_value import ParameterValue
 
 
 class TaxBenefitModel(BaseModel):
     id: str
     description: str | None = None
-
-    def run(self, simulation: "Simulation") -> "Simulation":
-        raise NotImplementedError("The TaxBenefitModel class must define a method to execute simulations.")
