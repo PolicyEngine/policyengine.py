@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Dict, List
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -22,6 +22,11 @@ class Simulation(BaseModel):
 
     tax_benefit_model_version: TaxBenefitModelVersion = None
     output_dataset: Dataset | None = None
+
+    variables: Dict[str, List[str]] | None = Field(
+        default=None,
+        description="Optional dictionary mapping entity names to lists of variable names to calculate. If None, uses model defaults.",
+    )
 
     def run(self):
         self.tax_benefit_model_version.run(self)

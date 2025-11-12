@@ -7,6 +7,7 @@ import requests
 from policyengine.utils import parse_safe_date
 from pathlib import Path
 from importlib.metadata import version
+from microdf import MicroDataFrame
 
 
 class UKYearData(BaseModel):
@@ -14,9 +15,123 @@ class UKYearData(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    person: pd.DataFrame
-    benunit: pd.DataFrame
-    household: pd.DataFrame
+    person: MicroDataFrame
+    benunit: MicroDataFrame
+    household: MicroDataFrame
+
+    def map_to_entity(
+        self, source_entity: str, target_entity: str, columns: list[str] = None
+    ) -> MicroDataFrame:
+        """Map data from source entity to target entity using join keys.
+
+        Args:
+            source_entity (str): The source entity name ('person', 'benunit', 'household').
+            target_entity (str): The target entity name ('person', 'benunit', 'household').
+            columns (list[str], optional): List of column names to map. If None, maps all columns.
+
+        Returns:
+            MicroDataFrame: The mapped data at the target entity level.
+
+        Raises:
+            ValueError: If source or target entity is invalid.
+        """
+        valid_entities = {"person", "benunit", "household"}
+        if source_entity not in valid_entities:
+            raise ValueError(
+                f"Invalid source entity '{source_entity}'. Must be one of {valid_entities}"
+            )
+        if target_entity not in valid_entities:
+            raise ValueError(
+                f"Invalid target entity '{target_entity}'. Must be one of {valid_entities}"
+            )
+
+        # Get source data
+        source_df = getattr(self, source_entity)
+        if columns:
+            # Select only requested columns (keep join keys)
+            join_keys = {"person_id", "benunit_id", "household_id"}
+            cols_to_keep = list(
+                set(columns) | (join_keys & set(source_df.columns))
+            )
+            source_df = source_df[cols_to_keep]
+
+        # Determine weight column for target entity
+        weight_col_map = {
+            "person": "person_weight",
+            "benunit": "benunit_weight",
+            "household": "household_weight",
+        }
+        target_weight = weight_col_map[target_entity]
+
+        # Same entity - return as is
+        if source_entity == target_entity:
+            return MicroDataFrame(
+                pd.DataFrame(source_df), weights=target_weight
+            )
+
+        # Map to different entity
+        target_df = getattr(self, target_entity)
+
+        # Person -> Benunit
+        if source_entity == "person" and target_entity == "benunit":
+            result = pd.DataFrame(target_df).merge(
+                pd.DataFrame(source_df), on="benunit_id", how="left"
+            )
+            return MicroDataFrame(result, weights=target_weight)
+
+        # Person -> Household
+        elif source_entity == "person" and target_entity == "household":
+            result = pd.DataFrame(target_df).merge(
+                pd.DataFrame(source_df), on="household_id", how="left"
+            )
+            return MicroDataFrame(result, weights=target_weight)
+
+        # Benunit -> Person
+        elif source_entity == "benunit" and target_entity == "person":
+            result = pd.DataFrame(target_df).merge(
+                pd.DataFrame(source_df), on="benunit_id", how="left"
+            )
+            return MicroDataFrame(result, weights=target_weight)
+
+        # Benunit -> Household
+        elif source_entity == "benunit" and target_entity == "household":
+            # Need to go through person to link benunit and household
+            person_link = pd.DataFrame(self.person)[
+                ["benunit_id", "household_id"]
+            ].drop_duplicates()
+            source_with_hh = pd.DataFrame(source_df).merge(
+                person_link, on="benunit_id", how="left"
+            )
+            result = pd.DataFrame(target_df).merge(
+                source_with_hh, on="household_id", how="left"
+            )
+            return MicroDataFrame(result, weights=target_weight)
+
+        # Household -> Person
+        elif source_entity == "household" and target_entity == "person":
+            result = pd.DataFrame(target_df).merge(
+                pd.DataFrame(source_df), on="household_id", how="left"
+            )
+            return MicroDataFrame(result, weights=target_weight)
+
+        # Household -> Benunit
+        elif source_entity == "household" and target_entity == "benunit":
+            # Need to go through person to link household and benunit
+            person_link = pd.DataFrame(self.person)[
+                ["benunit_id", "household_id"]
+            ].drop_duplicates()
+            source_with_bu = pd.DataFrame(source_df).merge(
+                person_link, on="household_id", how="left"
+            )
+            result = pd.DataFrame(target_df).merge(
+                source_with_bu, on="benunit_id", how="left"
+            )
+            return MicroDataFrame(result, weights=target_weight)
+
+        else:
+            raise ValueError(
+                f"Unsupported mapping from {source_entity} to {target_entity}"
+            )
 
 
 class PolicyEngineUKDataset(Dataset):
@@ -24,22 +139,37 @@ class PolicyEngineUKDataset(Dataset):
 
     data: UKYearData | None = None
 
+    def __init__(self, **kwargs: dict):
+        super().__init__(**kwargs)
+
+        # Make sure we are synchronised between in-memory and storage, at least on initialisation.
+        if "data" in kwargs:
+            self.save()
+        elif "filepath" in kwargs:
+            self.load()
+
     def save(self) -> None:
         """Save dataset to HDF5 file."""
         filepath = self.filepath
         with pd.HDFStore(filepath, mode="w") as store:
-            store["person"] = self.data.person
-            store["benunit"] = self.data.benunit
-            store["household"] = self.data.household
+            store["person"] = pd.DataFrame(self.data.person)
+            store["benunit"] = pd.DataFrame(self.data.benunit)
+            store["household"] = pd.DataFrame(self.data.household)
 
     def load(self) -> None:
         """Load dataset from HDF5 file into this instance."""
         filepath = self.filepath
         with pd.HDFStore(filepath, mode="r") as store:
             self.data = UKYearData(
-                person=store["person"],
-                benunit=store["benunit"],
-                household=store["household"],
+                person=MicroDataFrame(
+                    store["person"], weights="person_weight"
+                ),
+                benunit=MicroDataFrame(
+                    store["benunit"], weights="benunit_weight"
+                ),
+                household=MicroDataFrame(
+                    store["household"], weights="household_weight"
+                ),
             )
 
     def __repr__(self) -> str:
@@ -77,6 +207,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
     def __init__(self, **kwargs: dict):
         super().__init__(**kwargs)
         from policyengine_uk.system import system
+        from policyengine_core.enums import Enum
 
         self.id = f"{self.model.id}@{self.version}"
 
@@ -84,11 +215,24 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
         for var_obj in system.variables.values():
             variable = Variable(
                 id=self.id + "-" + var_obj.name,
+                name=var_obj.name,
                 tax_benefit_model_version=self,
                 entity=var_obj.entity.key,
                 description=var_obj.documentation,
-                data_type=var_obj.value_type,
+                data_type=var_obj.value_type
+                if var_obj.value_type is not Enum
+                else str,
             )
+            if (
+                hasattr(var_obj, "possible_values")
+                and var_obj.possible_values is not None
+            ):
+                variable.possible_values = list(
+                    map(
+                        lambda x: x.name,
+                        var_obj.possible_values._value2member_map_.values(),
+                    )
+                )
             self.variables.append(variable)
 
         self.parameters = []
@@ -142,23 +286,92 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
         )
         microsim = Microsimulation(dataset=input_data)
 
-        entity_variables = {
-            "person": [
-                "person_id",
-                "benunit_id",
-                "household_id",
-                "age",
-                "employment_income",
-                "person_weight",
-            ],
-            "benunit": ["benunit_id", "benunit_weight"],
-            "household": [
-                "household_id",
-                "household_weight",
-                "hbai_household_net_income",
-                "equiv_hbai_household_net_income",
-            ],
-        }
+        if (
+            simulation.policy
+            and simulation.policy.simulation_modifier is not None
+        ):
+            simulation.policy.simulation_modifier(microsim)
+
+        if (
+            simulation.dynamic
+            and simulation.dynamic.simulation_modifier is not None
+        ):
+            simulation.dynamic.simulation_modifier(microsim)
+
+        # Allow custom variable selection, or use defaults
+        if simulation.variables is not None:
+            entity_variables = simulation.variables
+        else:
+            # Default comprehensive variable set
+            entity_variables = {
+                "person": [
+                    # IDs and weights
+                    "person_id",
+                    "benunit_id",
+                    "household_id",
+                    "person_weight",
+                    # Demographics
+                    "age",
+                    "gender",
+                    "is_adult",
+                    "is_child",
+                    # Income
+                    "employment_income",
+                    "self_employment_income",
+                    "pension_income",
+                    "private_pension_income",
+                    "savings_interest_income",
+                    "dividend_income",
+                    "property_income",
+                    "total_income",
+                    "earned_income",
+                    # Benefits
+                    "universal_credit",
+                    "child_benefit",
+                    "pension_credit",
+                    "income_support",
+                    "working_tax_credit",
+                    "child_tax_credit",
+                    # Tax
+                    "income_tax",
+                    "national_insurance",
+                    "net_income",
+                ],
+                "benunit": [
+                    # IDs and weights
+                    "benunit_id",
+                    "benunit_weight",
+                    # Structure
+                    "family_type",
+                    "num_adults",
+                    "num_children",
+                    # Income and benefits
+                    "benunit_total_income",
+                    "benunit_net_income",
+                    "universal_credit",
+                    "child_benefit",
+                    "working_tax_credit",
+                    "child_tax_credit",
+                ],
+                "household": [
+                    # IDs and weights
+                    "household_id",
+                    "household_weight",
+                    # Income measures
+                    "household_net_income",
+                    "hbai_household_net_income",
+                    "equiv_hbai_household_net_income",
+                    "household_market_income",
+                    "household_gross_income",
+                    # Benefits and tax
+                    "household_benefits",
+                    "household_tax",
+                    # Housing
+                    "rent",
+                    "council_tax",
+                    "housing_benefit",
+                ],
+            }
 
         data = {
             "person": pd.DataFrame(),
@@ -171,6 +384,16 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                 data[entity][var] = microsim.calculate(
                     var, period=simulation.dataset.year, map_to=entity
                 ).values
+
+        data["person"] = MicroDataFrame(
+            data["person"], weights="person_weight"
+        )
+        data["benunit"] = MicroDataFrame(
+            data["benunit"], weights="benunit_weight"
+        )
+        data["household"] = MicroDataFrame(
+            data["household"], weights="household_weight"
+        )
 
         simulation.output_dataset = PolicyEngineUKDataset(
             name=dataset.name,

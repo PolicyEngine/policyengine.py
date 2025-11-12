@@ -12,7 +12,13 @@ format:
 	ruff format .
 
 clean:
-	rm -rf **/__pycache__ _build **/_build .pytest_cache .ruff_cache **/*.egg-info **/*.pyc
+	find . -not -path "./.venv/*" -type d -name "__pycache__" -exec rm -rf {} +
+	find . -not -path "./.venv/*" -type d -name "_build" -exec rm -rf {} +
+	find . -not -path "./.venv/*" -type d -name ".pytest_cache" -exec rm -rf {} +
+	find . -not -path "./.venv/*" -type d -name ".ruff_cache" -exec rm -rf {} +
+	find . -not -path "./.venv/*" -type d -name "*.egg-info" -exec rm -rf {} +
+	find . -not -path "./.venv/*" -type f -name "*.pyc" -delete
+	find . -not -path "./.venv/*" -type f -name "*.h5" -delete
 
 changelog:
 	build-changelog changelog.yaml --output changelog.yaml --update-last-date --start-from 1.0.0 --append-file changelog_entry.yaml

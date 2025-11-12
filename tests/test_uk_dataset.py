@@ -1,6 +1,7 @@
 import pandas as pd
 import tempfile
 import os
+from microdf import MicroDataFrame
 from policyengine.core import *
 from policyengine.tax_benefit_models.uk import (
     PolicyEngineUKDataset,
@@ -33,20 +34,40 @@ def test_uk_latest_instantiation():
 def test_save_and_load_single_year():
     """Test saving and loading a dataset with a single year."""
     # Create sample data
-    person_df = pd.DataFrame(
-        {
-            "person_id": [1, 2, 3],
-            "age": [25, 30, 35],
-            "income": [30000, 45000, 60000],
-        }
+    person_df = MicroDataFrame(
+        pd.DataFrame(
+            {
+                "person_id": [1, 2, 3],
+                "age": [25, 30, 35],
+                "income": [30000, 45000, 60000],
+                "person_weight": [1.0, 1.0, 1.0],
+            }
+        ),
+        weights="person_weight",
     )
 
-    benunit_df = pd.DataFrame(
-        {"benunit_id": [1, 2], "size": [2, 1], "total_income": [75000, 60000]}
+    benunit_df = MicroDataFrame(
+        pd.DataFrame(
+            {
+                "benunit_id": [1, 2],
+                "size": [2, 1],
+                "total_income": [75000, 60000],
+                "benunit_weight": [1.0, 1.0],
+            }
+        ),
+        weights="benunit_weight",
     )
 
-    household_df = pd.DataFrame(
-        {"household_id": [1], "num_people": [3], "rent": [1200]}
+    household_df = MicroDataFrame(
+        pd.DataFrame(
+            {
+                "household_id": [1],
+                "num_people": [3],
+                "rent": [1200],
+                "household_weight": [1.0],
+            }
+        ),
+        weights="household_weight",
     )
 
     # Create dataset
@@ -77,6 +98,13 @@ def test_save_and_load_single_year():
 
         # Verify data
         assert loaded.year == 2025
-        pd.testing.assert_frame_equal(loaded.data.person, person_df)
-        pd.testing.assert_frame_equal(loaded.data.benunit, benunit_df)
-        pd.testing.assert_frame_equal(loaded.data.household, household_df)
+        # Convert to DataFrame for comparison (MicroDataFrame inherits from DataFrame)
+        pd.testing.assert_frame_equal(
+            pd.DataFrame(loaded.data.person), pd.DataFrame(person_df)
+        )
+        pd.testing.assert_frame_equal(
+            pd.DataFrame(loaded.data.benunit), pd.DataFrame(benunit_df)
+        )
+        pd.testing.assert_frame_equal(
+            pd.DataFrame(loaded.data.household), pd.DataFrame(household_df)
+        )

@@ -72,6 +72,9 @@ addopts = "-v"
 testpaths = [
     "tests",
 ]
+filterwarnings = [
+    "ignore::pydantic.warnings.PydanticDeprecatedSince20",
+]
 
 [tool.black]
 line-length = 79
