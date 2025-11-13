@@ -6,6 +6,8 @@ if find_spec("policyengine_us") is not None:
     from .us import *
 
     __all__ = [
+        "USYearData",
+        "PolicyEngineUSDataset",
         "PolicyEngineUS",
         "PolicyEngineUSLatest",
         "us_model",
@@ -15,6 +17,7 @@ if find_spec("policyengine_us") is not None:
     ]
 
     # Rebuild models to resolve forward references
+    PolicyEngineUSDataset.model_rebuild()
     PolicyEngineUSLatest.model_rebuild()
 else:
     __all__ = []

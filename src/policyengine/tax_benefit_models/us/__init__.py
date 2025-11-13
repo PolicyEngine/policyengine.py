@@ -3,11 +3,14 @@
 from importlib.util import find_spec
 
 if find_spec("policyengine_us") is not None:
+    from .datasets import USYearData, PolicyEngineUSDataset
     from .model import PolicyEngineUS, PolicyEngineUSLatest, us_model, us_latest
     from .analysis import general_policy_reform_analysis
     from .outputs import ProgramStatistics
 
     __all__ = [
+        "USYearData",
+        "PolicyEngineUSDataset",
         "PolicyEngineUS",
         "PolicyEngineUSLatest",
         "us_model",
