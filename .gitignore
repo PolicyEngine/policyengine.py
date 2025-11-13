@@ -5,3 +5,4 @@
 *.ipynb
 _build/
 .env
+**/.DS_Store

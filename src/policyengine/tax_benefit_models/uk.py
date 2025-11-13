@@ -150,7 +150,9 @@ class PolicyEngineUKDataset(Dataset):
 
     def save(self) -> None:
         """Save dataset to HDF5 file."""
-        filepath = self.filepath
+        filepath = Path(self.filepath)
+        if not filepath.parent.exists():
+            filepath.parent.mkdir(parents=True, exist_ok=True)
         with pd.HDFStore(filepath, mode="w") as store:
             store["person"] = pd.DataFrame(self.data.person)
             store["benunit"] = pd.DataFrame(self.data.benunit)
@@ -273,6 +275,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
     def run(self, simulation: "Simulation") -> "Simulation":
         from policyengine_uk import Microsimulation
         from policyengine_uk.data import UKSingleYearDataset
+        from policyengine.utils.parametric_reforms import simulation_modifier_from_parameter_values
 
         assert isinstance(simulation.dataset, PolicyEngineUKDataset)
 
@@ -291,12 +294,22 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
             and simulation.policy.simulation_modifier is not None
         ):
             simulation.policy.simulation_modifier(microsim)
+        elif simulation.policy:
+            modifier = simulation_modifier_from_parameter_values(
+                simulation.policy.parameter_values
+            )
+            modifier(microsim)
 
         if (
             simulation.dynamic
             and simulation.dynamic.simulation_modifier is not None
         ):
             simulation.dynamic.simulation_modifier(microsim)
+        elif simulation.dynamic:
+            modifier = simulation_modifier_from_parameter_values(
+                simulation.dynamic.parameter_values
+            )
+            modifier(microsim)
 
         # Allow custom variable selection, or use defaults
         if simulation.variables is not None:
@@ -314,6 +327,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                     "age",
                     "gender",
                     "is_adult",
+                    "is_SP_age",
                     "is_child",
                     # Income
                     "employment_income",
@@ -342,11 +356,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                     "benunit_weight",
                     # Structure
                     "family_type",
-                    "num_adults",
-                    "num_children",
                     # Income and benefits
-                    "benunit_total_income",
-                    "benunit_net_income",
                     "universal_credit",
                     "child_benefit",
                     "working_tax_credit",
@@ -365,9 +375,11 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                     # Benefits and tax
                     "household_benefits",
                     "household_tax",
+                    "vat",
                     # Housing
                     "rent",
                     "council_tax",
+                    "tenure_type",
                 ],
             }
 
@@ -410,6 +422,31 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
         )
 
         simulation.output_dataset.save()
+
+def create_datasets(
+    datasets: list[str] = [
+        "hf://policyengine/policyengine-uk-data/frs_2023_24.h5",
+        "hf://policyengine/policyengine-uk-data/enhanced_frs_2023_24.h5",
+    ],
+    years: list[int] = [2026, 2027, 2028, 2029, 2030],
+) -> None:
+    for dataset in datasets:
+        from policyengine_uk import Microsimulation
+        sim = Microsimulation(dataset=dataset)
+        for year in years:
+            year_dataset = sim.dataset[year]
+            uk_dataset = PolicyEngineUKDataset(
+                name=f"{dataset}-year-{year}",
+                description=f"UK Dataset for year {year} based on {dataset}",
+                filepath=f"./data/{Path(dataset).stem}_year_{year}.h5",
+                year=year,
+                data=UKYearData(
+                    person=MicroDataFrame(year_dataset.person),
+                    benunit=MicroDataFrame(year_dataset.benunit),
+                    household=MicroDataFrame(year_dataset.household),
+                ),
+            )
+            uk_dataset.save()
 
 
 # Rebuild models to resolve forward references
