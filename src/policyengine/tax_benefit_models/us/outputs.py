@@ -1,4 +1,4 @@
-"""UK-specific output templates."""
+"""US-specific output templates."""
 
 from policyengine.core import Output
 from policyengine.outputs.aggregate import Aggregate, AggregateType
@@ -10,14 +10,14 @@ if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
 
 
-class ProgrammeStatistics(Output):
-    """Single programme's statistics from a policy reform - represents one database row."""
+class ProgramStatistics(Output):
+    """Single program's statistics from a policy reform - represents one database row."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     baseline_simulation: "Simulation"
     reform_simulation: "Simulation"
-    programme_name: str
+    program_name: str
     entity: str
     is_tax: bool = False
 
@@ -31,11 +31,11 @@ class ProgrammeStatistics(Output):
     losers: float | None = None
 
     def run(self):
-        """Calculate statistics for this programme."""
+        """Calculate statistics for this program."""
         # Baseline totals
         baseline_total = Aggregate(
             simulation=self.baseline_simulation,
-            variable=self.programme_name,
+            variable=self.program_name,
             aggregate_type=AggregateType.SUM,
             entity=self.entity,
         )
@@ -44,7 +44,7 @@ class ProgrammeStatistics(Output):
         # Reform totals
         reform_total = Aggregate(
             simulation=self.reform_simulation,
-            variable=self.programme_name,
+            variable=self.program_name,
             aggregate_type=AggregateType.SUM,
             entity=self.entity,
         )
@@ -53,10 +53,10 @@ class ProgrammeStatistics(Output):
         # Count of recipients/payers (baseline)
         baseline_count = Aggregate(
             simulation=self.baseline_simulation,
-            variable=self.programme_name,
+            variable=self.program_name,
             aggregate_type=AggregateType.COUNT,
             entity=self.entity,
-            filter_variable=self.programme_name,
+            filter_variable=self.program_name,
             filter_variable_geq=0.01,
         )
         baseline_count.run()
@@ -64,10 +64,10 @@ class ProgrammeStatistics(Output):
         # Count of recipients/payers (reform)
         reform_count = Aggregate(
             simulation=self.reform_simulation,
-            variable=self.programme_name,
+            variable=self.program_name,
             aggregate_type=AggregateType.COUNT,
             entity=self.entity,
-            filter_variable=self.programme_name,
+            filter_variable=self.program_name,
             filter_variable_geq=0.01,
         )
         reform_count.run()
@@ -76,7 +76,7 @@ class ProgrammeStatistics(Output):
         winners = ChangeAggregate(
             baseline_simulation=self.baseline_simulation,
             reform_simulation=self.reform_simulation,
-            variable=self.programme_name,
+            variable=self.program_name,
             aggregate_type=ChangeAggregateType.COUNT,
             entity=self.entity,
             change_geq=0.01 if not self.is_tax else -0.01,
@@ -86,7 +86,7 @@ class ProgrammeStatistics(Output):
         losers = ChangeAggregate(
             baseline_simulation=self.baseline_simulation,
             reform_simulation=self.reform_simulation,
-            variable=self.programme_name,
+            variable=self.program_name,
             aggregate_type=ChangeAggregateType.COUNT,
             entity=self.entity,
             change_leq=-0.01 if not self.is_tax else 0.01,

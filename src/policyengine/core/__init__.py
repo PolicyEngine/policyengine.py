@@ -8,6 +8,7 @@ from .parameter_value import ParameterValue
 from .policy import Policy
 from .simulation import Simulation
 from .dataset_version import DatasetVersion
+from .output import Output, OutputCollection
 
 # Rebuild models to resolve forward references
 TaxBenefitModelVersion.model_rebuild()

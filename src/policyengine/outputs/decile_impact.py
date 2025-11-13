@@ -1,5 +1,4 @@
-from policyengine.core import Simulation
-from policyengine.outputs.base import Output
+from policyengine.core import Simulation, Output, OutputCollection
 from pydantic import ConfigDict
 import pandas as pd
 
@@ -82,11 +81,11 @@ def calculate_decile_impacts(
     income_variable: str = "equiv_hbai_household_net_income",
     entity: str | None = None,
     quantiles: int = 10,
-) -> tuple[list[DecileImpact], pd.DataFrame]:
+) -> OutputCollection[DecileImpact]:
     """Calculate decile-by-decile impact of a reform.
 
     Returns:
-        tuple of (list of DecileImpact objects, DataFrame)
+        OutputCollection containing list of DecileImpact objects and DataFrame
     """
     results = []
     for decile in range(1, quantiles + 1):
@@ -101,7 +100,7 @@ def calculate_decile_impacts(
         impact.run()
         results.append(impact)
 
-    # Also create DataFrame for convenience
+    # Create DataFrame
     df = pd.DataFrame([
         {
             "baseline_simulation_id": r.baseline_simulation.id,
@@ -119,4 +118,4 @@ def calculate_decile_impacts(
         for r in results
     ])
 
-    return results, df
+    return OutputCollection(outputs=results, dataframe=df)

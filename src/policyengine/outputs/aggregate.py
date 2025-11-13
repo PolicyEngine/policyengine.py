@@ -1,5 +1,4 @@
 from policyengine.core import *
-from policyengine.outputs.base import Output
 from enum import Enum
 from typing import Any
 

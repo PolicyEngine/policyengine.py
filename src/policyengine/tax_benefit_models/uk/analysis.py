@@ -1,26 +1,30 @@
 """General utility functions for UK policy reform analysis."""
 
-from policyengine.core import Simulation
+from policyengine.core import Simulation, OutputCollection
 from policyengine.outputs.decile_impact import DecileImpact, calculate_decile_impacts
 from .outputs import ProgrammeStatistics
+from pydantic import BaseModel
 import pandas as pd
+
+
+class PolicyReformAnalysis(BaseModel):
+    """Complete policy reform analysis result."""
+
+    decile_impacts: OutputCollection[DecileImpact]
+    programme_statistics: OutputCollection[ProgrammeStatistics]
 
 
 def general_policy_reform_analysis(
     baseline_simulation: Simulation,
     reform_simulation: Simulation,
-) -> tuple[list[DecileImpact], list[ProgrammeStatistics], pd.DataFrame, pd.DataFrame]:
+) -> PolicyReformAnalysis:
     """Perform comprehensive analysis of a policy reform.
 
     Returns:
-        tuple of:
-        - list[DecileImpact]: Decile-by-decile impacts
-        - list[ProgrammeStatistics]: Statistics for major programmes
-        - pd.DataFrame: Decile impacts as DataFrame
-        - pd.DataFrame: Programme statistics as DataFrame
+        PolicyReformAnalysis containing decile impacts and programme statistics
     """
     # Decile impact
-    decile_impacts, decile_df = calculate_decile_impacts(
+    decile_impacts = calculate_decile_impacts(
         baseline_simulation=baseline_simulation,
         reform_simulation=reform_simulation,
     )
@@ -57,7 +61,7 @@ def general_policy_reform_analysis(
         stats.run()
         programme_statistics.append(stats)
 
-    # Create DataFrames for convenience
+    # Create DataFrame
     programme_df = pd.DataFrame([
         {
             "baseline_simulation_id": p.baseline_simulation.id,
@@ -76,4 +80,12 @@ def general_policy_reform_analysis(
         for p in programme_statistics
     ])
 
-    return decile_impacts, programme_statistics, decile_df, programme_df
+    programme_collection = OutputCollection(
+        outputs=programme_statistics,
+        dataframe=programme_df
+    )
+
+    return PolicyReformAnalysis(
+        decile_impacts=decile_impacts,
+        programme_statistics=programme_collection
+    )
