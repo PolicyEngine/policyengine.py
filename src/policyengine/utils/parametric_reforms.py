@@ -1,5 +1,6 @@
 from policyengine.core import ParameterValue
 from typing import Callable
+from policyengine_core.periods import period
 
 
 def simulation_modifier_from_parameter_values(parameter_values: list[ParameterValue]) -> Callable:
@@ -16,10 +17,12 @@ def simulation_modifier_from_parameter_values(parameter_values: list[ParameterVa
     def modifier(simulation):
         for pv in parameter_values:
             p = simulation.tax_benefit_system.parameters.get_child(pv.parameter.name)
+            start_period = period(pv.start_date.strftime("%Y-%m-%d"))
+            stop_period = period(pv.end_date.strftime("%Y-%m-%d")) if pv.end_date else None
             p.update(
                 value=pv.value,
-                start=pv.start_date.strftime("%Y-%m-%d"),
-                stop=pv.stop_date.strftime("%Y-%m-%d") if pv.stop_date else None,
+                start=start_period,
+                stop=stop_period,
             )
         return simulation
 

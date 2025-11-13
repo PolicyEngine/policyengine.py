@@ -1,5 +1,5 @@
-from pydantic import BaseModel
 from policyengine.core import *
+from policyengine.outputs.base import Output
 from enum import Enum
 from typing import Any
 
@@ -10,7 +10,7 @@ class ChangeAggregateType(str, Enum):
     MEAN = "mean"
 
 
-class ChangeAggregate(BaseModel):
+class ChangeAggregate(Output):
     baseline_simulation: Simulation
     reform_simulation: Simulation
     variable: str
@@ -32,10 +32,29 @@ class ChangeAggregate(BaseModel):
     filter_variable_eq: Any | None = None
     filter_variable_leq: Any | None = None
     filter_variable_geq: Any | None = None
+    filter_variable_describes_quantiles: bool = False
+
+    # Convenient quantile specification (alternative to describes_quantiles)
+    quantile: int | None = None  # Number of quantiles (e.g., 10 for deciles, 5 for quintiles)
+    quantile_eq: int | None = None  # Exact quantile (e.g., 3 for 3rd decile)
+    quantile_leq: int | None = None  # Maximum quantile (e.g., 5 for bottom 5 deciles)
+    quantile_geq: int | None = None  # Minimum quantile (e.g., 9 for top 2 deciles)
 
     result: Any | None = None
 
     def run(self):
+        # Convert quantile specification to describes_quantiles format
+        if self.quantile is not None:
+            self.filter_variable_describes_quantiles = True
+            if self.quantile_eq is not None:
+                # For a specific quantile, filter between (quantile-1)/n and quantile/n
+                self.filter_variable_geq = (self.quantile_eq - 1) / self.quantile
+                self.filter_variable_leq = self.quantile_eq / self.quantile
+            elif self.quantile_leq is not None:
+                self.filter_variable_leq = self.quantile_leq / self.quantile
+            elif self.quantile_geq is not None:
+                self.filter_variable_geq = (self.quantile_geq - 1) / self.quantile
+
         # Get variable object
         var_obj = next(
             v for v in self.baseline_simulation.tax_benefit_model_version.variables
@@ -106,12 +125,23 @@ class ChangeAggregate(BaseModel):
             else:
                 filter_series = baseline_data[self.filter_variable]
 
-            if self.filter_variable_eq is not None:
-                mask &= (filter_series == self.filter_variable_eq)
-            if self.filter_variable_leq is not None:
-                mask &= (filter_series <= self.filter_variable_leq)
-            if self.filter_variable_geq is not None:
-                mask &= (filter_series >= self.filter_variable_geq)
+            if self.filter_variable_describes_quantiles:
+                if self.filter_variable_eq is not None:
+                    threshold = filter_series.quantile(self.filter_variable_eq)
+                    mask &= (filter_series <= threshold)
+                if self.filter_variable_leq is not None:
+                    threshold = filter_series.quantile(self.filter_variable_leq)
+                    mask &= (filter_series <= threshold)
+                if self.filter_variable_geq is not None:
+                    threshold = filter_series.quantile(self.filter_variable_geq)
+                    mask &= (filter_series >= threshold)
+            else:
+                if self.filter_variable_eq is not None:
+                    mask &= (filter_series == self.filter_variable_eq)
+                if self.filter_variable_leq is not None:
+                    mask &= (filter_series <= self.filter_variable_leq)
+                if self.filter_variable_geq is not None:
+                    mask &= (filter_series >= self.filter_variable_geq)
 
         # Apply mask to get filtered data
         filtered_change = change_series[mask]

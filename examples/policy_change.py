@@ -1,313 +1,308 @@
-"""Example: Analyze policy change impacts using ChangeAggregate.
+"""Example: Analyse policy change impacts using ChangeAggregate with parametric reforms.
 
 This script demonstrates:
-1. Creating baseline and reform datasets with different income distributions
-2. Using ChangeAggregate to analyze winners, losers, and impact sizes
-3. Filtering by absolute and relative change thresholds
-4. Visualising results with Plotly
+1. Loading representative household microdata
+2. Applying parametric reforms (e.g., setting personal allowance to zero)
+3. Running baseline and reform simulations
+4. Using ChangeAggregate to analyse winners, losers, and impact sizes by income decile
+5. Using quantile filters for decile-based analysis
+6. Visualising results with Plotly
 
 Run: python examples/policy_change.py
 """
-import numpy as np
-import pandas as pd
-from microdf import MicroDataFrame
+
+from pathlib import Path
+import datetime
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from policyengine.core import Simulation
+from policyengine.core import Simulation, Policy, Parameter, ParameterValue
 from policyengine.tax_benefit_models.uk import (
     PolicyEngineUKDataset,
-    UKYearData,
     uk_latest,
 )
-from policyengine.outputs.change_aggregate import ChangeAggregate, ChangeAggregateType
-
-# Create baseline dataset with random incomes
-np.random.seed(42)
-n_people = 1000
-
-baseline_person_df = MicroDataFrame(
-    pd.DataFrame({
-        "person_id": range(1, n_people + 1),
-        "benunit_id": range(1, n_people + 1),
-        "household_id": range(1, n_people + 1),
-        "age": np.random.randint(18, 70, n_people),
-        "employment_income": np.random.exponential(35000, n_people),
-        "person_weight": np.ones(n_people),
-    }),
-    weights="person_weight"
+from policyengine.outputs.change_aggregate import (
+    ChangeAggregate,
+    ChangeAggregateType,
 )
 
-benunit_df = MicroDataFrame(
-    pd.DataFrame({
-        "benunit_id": range(1, n_people + 1),
-        "benunit_weight": np.ones(n_people),
-    }),
-    weights="benunit_weight"
-)
 
-household_df = MicroDataFrame(
-    pd.DataFrame({
-        "household_id": range(1, n_people + 1),
-        "household_weight": np.ones(n_people),
-    }),
-    weights="household_weight"
-)
+def load_representative_data(year: int = 2026) -> PolicyEngineUKDataset:
+    """Load representative household microdata for a given year."""
+    dataset_path = Path(f"./data/enhanced_frs_2023_24_year_{year}.h5")
 
-# Create baseline dataset
-baseline_dataset = PolicyEngineUKDataset(
-    name="Baseline",
-    description="Baseline scenario",
-    filepath="./baseline_data.h5",
-    year=2024,
-    data=UKYearData(person=baseline_person_df, benunit=benunit_df, household=household_df),
-)
+    if not dataset_path.exists():
+        raise FileNotFoundError(
+            f"Dataset not found at {dataset_path}. "
+            "Run create_datasets() from policyengine.tax_benefit_models.uk first."
+        )
 
-# Create reform dataset - progressive income boost
-# Low earners get 10% boost, high earners get 5% boost, middle gets 7.5%
-baseline_incomes = baseline_person_df["employment_income"].values
-reform_incomes = []
-for income in baseline_incomes:
-    if income < 25000:
-        boost = 0.10  # 10% for low earners
-    elif income < 50000:
-        boost = 0.075  # 7.5% for middle earners
-    else:
-        boost = 0.05  # 5% for high earners
-    reform_incomes.append(income * (1 + boost))
-
-reform_person_df = MicroDataFrame(
-    pd.DataFrame({
-        "person_id": range(1, n_people + 1),
-        "benunit_id": range(1, n_people + 1),
-        "household_id": range(1, n_people + 1),
-        "age": baseline_person_df["age"].values,
-        "employment_income": reform_incomes,
-        "person_weight": np.ones(n_people),
-    }),
-    weights="person_weight"
-)
-
-reform_dataset = PolicyEngineUKDataset(
-    name="Reform",
-    description="Progressive income boost",
-    filepath="./reform_data.h5",
-    year=2024,
-    data=UKYearData(person=reform_person_df, benunit=benunit_df, household=household_df),
-)
-
-# Create simulations
-baseline_sim = Simulation(
-    dataset=baseline_dataset,
-    tax_benefit_model_version=uk_latest,
-    output_dataset=baseline_dataset,
-)
-
-reform_sim = Simulation(
-    dataset=reform_dataset,
-    tax_benefit_model_version=uk_latest,
-    output_dataset=reform_dataset,
-)
-
-# Analysis 1: Overall winners/losers
-winners = ChangeAggregate(
-    baseline_simulation=baseline_sim,
-    reform_simulation=reform_sim,
-    variable="employment_income",
-    aggregate_type=ChangeAggregateType.COUNT,
-    change_geq=1,
-)
-winners.run()
-
-losers = ChangeAggregate(
-    baseline_simulation=baseline_sim,
-    reform_simulation=reform_sim,
-    variable="employment_income",
-    aggregate_type=ChangeAggregateType.COUNT,
-    change_leq=-1,
-)
-losers.run()
-
-no_change = ChangeAggregate(
-    baseline_simulation=baseline_sim,
-    reform_simulation=reform_sim,
-    variable="employment_income",
-    aggregate_type=ChangeAggregateType.COUNT,
-    change_eq=0,
-)
-no_change.run()
-
-# Analysis 2: Total gains and losses
-total_gain = ChangeAggregate(
-    baseline_simulation=baseline_sim,
-    reform_simulation=reform_sim,
-    variable="employment_income",
-    aggregate_type=ChangeAggregateType.SUM,
-    change_geq=0,
-)
-total_gain.run()
-
-total_loss = ChangeAggregate(
-    baseline_simulation=baseline_sim,
-    reform_simulation=reform_sim,
-    variable="employment_income",
-    aggregate_type=ChangeAggregateType.SUM,
-    change_leq=0,
-)
-total_loss.run()
-
-# Analysis 3: Distribution of gains by size
-gain_bands = [
-    ("£0-500", 0, 500),
-    ("£500-1k", 500, 1000),
-    ("£1k-2k", 1000, 2000),
-    ("£2k-3k", 2000, 3000),
-    ("£3k-5k", 3000, 5000),
-    ("£5k+", 5000, None),
-]
-
-gain_counts = []
-for label, lower, upper in gain_bands:
-    agg = ChangeAggregate(
-        baseline_simulation=baseline_sim,
-        reform_simulation=reform_sim,
-        variable="employment_income",
-        aggregate_type=ChangeAggregateType.COUNT,
-        change_geq=lower,
-        change_leq=upper,
+    dataset = PolicyEngineUKDataset(
+        name=f"Enhanced FRS {year}",
+        description=f"Representative household microdata for {year}",
+        filepath=str(dataset_path),
+        year=year,
     )
-    agg.run()
-    gain_counts.append(agg.result)
+    dataset.load()
+    return dataset
 
-# Analysis 4: Impact by age group
-age_groups = [
-    ("18-30", 18, 30),
-    ("31-45", 31, 45),
-    ("46-60", 46, 60),
-    ("61+", 61, 150),
-]
 
-age_group_labels = []
-age_group_winners = []
-age_group_avg_gain = []
+def create_personal_allowance_reform(year: int) -> Policy:
+    """Create a policy that sets personal allowance to zero."""
+    parameter = Parameter(
+        id=f"{uk_latest.id}-gov.hmrc.income_tax.allowances.personal_allowance.amount",
+        name="gov.hmrc.income_tax.allowances.personal_allowance.amount",
+        tax_benefit_model_version=uk_latest,
+        description="Personal allowance for income tax",
+        data_type=float,
+    )
 
-for label, min_age, max_age in age_groups:
-    # Count winners in age group
-    count_agg = ChangeAggregate(
+    parameter_value = ParameterValue(
+        parameter=parameter,
+        start_date=datetime.date(year, 1, 1),
+        end_date=datetime.date(year, 12, 31),
+        value=0,
+    )
+
+    return Policy(
+        name="Zero personal allowance",
+        description="Sets personal allowance to £0",
+        parameter_values=[parameter_value],
+    )
+
+
+def run_baseline_simulation(dataset: PolicyEngineUKDataset) -> Simulation:
+    """Run baseline microsimulation without policy changes."""
+    simulation = Simulation(
+        dataset=dataset,
+        tax_benefit_model_version=uk_latest,
+    )
+    simulation.run()
+    return simulation
+
+
+def run_reform_simulation(
+    dataset: PolicyEngineUKDataset, policy: Policy
+) -> Simulation:
+    """Run reform microsimulation with policy changes."""
+    simulation = Simulation(
+        dataset=dataset,
+        tax_benefit_model_version=uk_latest,
+        policy=policy,
+    )
+    simulation.run()
+    return simulation
+
+
+def analyse_overall_impact(
+    baseline_sim: Simulation, reform_sim: Simulation
+) -> dict:
+    """Analyse overall winners, losers, and financial impact."""
+    winners = ChangeAggregate(
         baseline_simulation=baseline_sim,
         reform_simulation=reform_sim,
-        variable="employment_income",
+        variable="household_net_income",
         aggregate_type=ChangeAggregateType.COUNT,
         change_geq=1,
-        filter_variable="age",
-        filter_variable_geq=min_age,
-        filter_variable_leq=max_age,
     )
-    count_agg.run()
+    winners.run()
 
-    # Average gain in age group
-    mean_agg = ChangeAggregate(
+    losers = ChangeAggregate(
         baseline_simulation=baseline_sim,
         reform_simulation=reform_sim,
-        variable="employment_income",
-        aggregate_type=ChangeAggregateType.MEAN,
-        filter_variable="age",
-        filter_variable_geq=min_age,
-        filter_variable_leq=max_age,
+        variable="household_net_income",
+        aggregate_type=ChangeAggregateType.COUNT,
+        change_leq=-1,
     )
-    mean_agg.run()
+    losers.run()
 
-    age_group_labels.append(label)
-    age_group_winners.append(count_agg.result)
-    age_group_avg_gain.append(mean_agg.result)
+    no_change = ChangeAggregate(
+        baseline_simulation=baseline_sim,
+        reform_simulation=reform_sim,
+        variable="household_net_income",
+        aggregate_type=ChangeAggregateType.COUNT,
+        change_eq=0,
+    )
+    no_change.run()
 
-# Analysis 5: Large winners (gaining more than 10%)
-large_winners = ChangeAggregate(
-    baseline_simulation=baseline_sim,
-    reform_simulation=reform_sim,
-    variable="employment_income",
-    aggregate_type=ChangeAggregateType.COUNT,
-    relative_change_geq=0.10,
-)
-large_winners.run()
+    total_change = ChangeAggregate(
+        baseline_simulation=baseline_sim,
+        reform_simulation=reform_sim,
+        variable="household_net_income",
+        aggregate_type=ChangeAggregateType.SUM,
+    )
+    total_change.run()
 
-# Create visualisations
-fig = make_subplots(
-    rows=2, cols=2,
-    subplot_titles=(
-        "Winners vs losers",
-        "Distribution of gains",
-        "Winners by age group",
-        "Average gain by age group"
-    ),
-    specs=[[{"type": "bar"}, {"type": "bar"}],
-           [{"type": "bar"}, {"type": "bar"}]]
-)
+    tax_revenue_change = ChangeAggregate(
+        baseline_simulation=baseline_sim,
+        reform_simulation=reform_sim,
+        variable="household_tax",
+        aggregate_type=ChangeAggregateType.SUM,
+    )
+    tax_revenue_change.run()
 
-fig.add_trace(
-    go.Bar(
-        x=["Winners", "No change", "Losers"],
-        y=[winners.result, no_change.result, losers.result],
-        marker_color=["green", "gray", "red"]
-    ),
-    row=1, col=1
-)
+    return {
+        "winners": winners.result / 1e6,  # Convert to millions
+        "losers": losers.result / 1e6,
+        "no_change": no_change.result / 1e6,
+        "total_change": total_change.result / 1e9,  # Convert to billions
+        "tax_revenue_change": tax_revenue_change.result / 1e9,
+    }
 
-fig.add_trace(
-    go.Bar(
-        x=[label for label, _, _ in gain_bands],
-        y=gain_counts,
-        marker_color="lightblue"
-    ),
-    row=1, col=2
-)
 
-fig.add_trace(
-    go.Bar(
-        x=age_group_labels,
-        y=age_group_winners,
-        marker_color="lightgreen"
-    ),
-    row=2, col=1
-)
+def analyse_impact_by_income_decile(
+    baseline_sim: Simulation, reform_sim: Simulation
+) -> dict:
+    """Analyse impact by income decile."""
+    decile_labels = []
+    decile_losers = []
+    decile_avg_loss = []
 
-fig.add_trace(
-    go.Bar(
-        x=age_group_labels,
-        y=age_group_avg_gain,
-        marker_color="orange"
-    ),
-    row=2, col=2
-)
+    for decile in range(1, 11):
+        label = f"Decile {decile}"
 
-fig.update_xaxes(title_text="Category", row=1, col=1)
-fig.update_xaxes(title_text="Gain amount", row=1, col=2)
-fig.update_xaxes(title_text="Age group", row=2, col=1)
-fig.update_xaxes(title_text="Age group", row=2, col=2)
+        # Count losers in this decile
+        count_agg = ChangeAggregate(
+            baseline_simulation=baseline_sim,
+            reform_simulation=reform_sim,
+            variable="household_net_income",
+            aggregate_type=ChangeAggregateType.COUNT,
+            change_leq=-1,
+            filter_variable="household_net_income",
+            quantile=10,
+            quantile_eq=decile,
+        )
+        count_agg.run()
 
-fig.update_yaxes(title_text="Number of people", row=1, col=1)
-fig.update_yaxes(title_text="Number of people", row=1, col=2)
-fig.update_yaxes(title_text="Number of winners", row=2, col=1)
-fig.update_yaxes(title_text="Average gain (£)", row=2, col=2)
+        # Average loss for all households in this decile
+        mean_agg = ChangeAggregate(
+            baseline_simulation=baseline_sim,
+            reform_simulation=reform_sim,
+            variable="household_net_income",
+            aggregate_type=ChangeAggregateType.MEAN,
+            filter_variable="household_net_income",
+            quantile=10,
+            quantile_eq=decile,
+        )
+        mean_agg.run()
 
-fig.update_layout(
-    title_text="Policy change impact analysis",
-    showlegend=False,
-    height=800,
-)
+        decile_labels.append(label)
+        decile_losers.append(count_agg.result / 1e6)  # Convert to millions
+        decile_avg_loss.append(mean_agg.result)
 
-# Print summary statistics
-print("=" * 60)
-print("Policy change impact summary")
-print("=" * 60)
-print(f"\nOverall impact:")
-print(f"  Winners: {winners.result:,.0f} people")
-print(f"  Losers: {losers.result:,.0f} people")
-print(f"  No change: {no_change.result:,.0f} people")
-print(f"\nFinancial impact:")
-print(f"  Total gains: £{total_gain.result:,.0f}")
-print(f"  Total losses: £{total_loss.result:,.0f}")
-print(f"  Net change: £{total_gain.result + total_loss.result:,.0f}")
-print(f"\nLarge winners (>10% gain): {large_winners.result:,.0f} people")
-print("=" * 60)
+    return {
+        "labels": decile_labels,
+        "losers": decile_losers,
+        "avg_loss": decile_avg_loss,
+    }
 
-fig.show()
+
+def visualise_results(
+    overall: dict, by_decile: dict, reform_name: str
+) -> None:
+    """Create visualisations of policy change impacts."""
+    fig = make_subplots(
+        rows=1,
+        cols=3,
+        subplot_titles=(
+            "Winners vs losers (millions)",
+            "Losers by income decile (millions)",
+            "Average loss by income decile (£)",
+        ),
+        specs=[[{"type": "bar"}, {"type": "bar"}, {"type": "bar"}]],
+    )
+
+    fig.add_trace(
+        go.Bar(
+            x=["Winners", "No change", "Losers"],
+            y=[
+                overall["winners"],
+                overall["no_change"],
+                overall["losers"],
+            ],
+            marker_color=["green", "gray", "red"],
+        ),
+        row=1,
+        col=1,
+    )
+
+    fig.add_trace(
+        go.Bar(
+            x=by_decile["labels"],
+            y=by_decile["losers"],
+            marker_color="lightcoral",
+        ),
+        row=1,
+        col=2,
+    )
+
+    fig.add_trace(
+        go.Bar(
+            x=by_decile["labels"],
+            y=by_decile["avg_loss"],
+            marker_color="orange",
+        ),
+        row=1,
+        col=3,
+    )
+
+    fig.update_xaxes(title_text="Category", row=1, col=1)
+    fig.update_xaxes(title_text="Income decile", row=1, col=2)
+    fig.update_xaxes(title_text="Income decile", row=1, col=3)
+
+    fig.update_layout(
+        title_text=f"Policy change impact analysis: {reform_name}",
+        showlegend=False,
+        height=400,
+    )
+
+    fig.show()
+
+
+def print_summary(overall: dict, decile: dict, reform_name: str) -> None:
+    """Print summary statistics."""
+    print("=" * 60)
+    print(f"Policy change impact summary: {reform_name}")
+    print("=" * 60)
+    print(f"\nOverall impact:")
+    print(f"  Winners: {overall['winners']:.2f}m households")
+    print(f"  Losers: {overall['losers']:.2f}m households")
+    print(f"  No change: {overall['no_change']:.2f}m households")
+    print(f"\nFinancial impact:")
+    print(f"  Net income change: £{overall['total_change']:.2f}bn (negative = loss)")
+    print(f"  Tax revenue change: £{overall['tax_revenue_change']:.2f}bn")
+    print(f"\nImpact by income decile:")
+    for i, label in enumerate(decile['labels']):
+        print(f"  {label}: {decile['losers'][i]:.2f}m losers, avg change £{decile['avg_loss'][i]:.0f}")
+    print("=" * 60)
+
+
+def main():
+    """Main execution function."""
+    year = 2026
+
+    print("Loading representative household data...")
+    dataset = load_representative_data(year=year)
+
+    print("Creating policy reform (zero personal allowance)...")
+    reform = create_personal_allowance_reform(year=year)
+
+    print("Running baseline simulation...")
+    baseline_sim = run_baseline_simulation(dataset)
+
+    print("Running reform simulation...")
+    reform_sim = run_reform_simulation(dataset, reform)
+
+    print("Analysing overall impact...")
+    overall_impact = analyse_overall_impact(baseline_sim, reform_sim)
+
+    print("Analysing impact by income decile...")
+    decile_impact = analyse_impact_by_income_decile(baseline_sim, reform_sim)
+
+    print_summary(overall_impact, decile_impact, reform.name)
+
+    print("\nGenerating visualisations...")
+    visualise_results(overall_impact, decile_impact, reform.name)
+
+
+if __name__ == "__main__":
+    main()
