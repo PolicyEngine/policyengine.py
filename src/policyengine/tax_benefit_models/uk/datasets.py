@@ -1,4 +1,4 @@
-from policyengine.core import Dataset
+from policyengine.core import Dataset, map_to_entity
 from pydantic import BaseModel, ConfigDict
 import pandas as pd
 from microdf import MicroDataFrame
@@ -30,103 +30,18 @@ class UKYearData(BaseModel):
         Raises:
             ValueError: If source or target entity is invalid.
         """
-        valid_entities = {"person", "benunit", "household"}
-        if source_entity not in valid_entities:
-            raise ValueError(
-                f"Invalid source entity '{source_entity}'. Must be one of {valid_entities}"
-            )
-        if target_entity not in valid_entities:
-            raise ValueError(
-                f"Invalid target entity '{target_entity}'. Must be one of {valid_entities}"
-            )
-
-        # Get source data
-        source_df = getattr(self, source_entity)
-        if columns:
-            # Select only requested columns (keep join keys)
-            join_keys = {"person_id", "benunit_id", "household_id"}
-            cols_to_keep = list(
-                set(columns) | (join_keys & set(source_df.columns))
-            )
-            source_df = source_df[cols_to_keep]
-
-        # Determine weight column for target entity
-        weight_col_map = {
-            "person": "person_weight",
-            "benunit": "benunit_weight",
-            "household": "household_weight",
+        entity_data = {
+            "person": self.person,
+            "benunit": self.benunit,
+            "household": self.household,
         }
-        target_weight = weight_col_map[target_entity]
-
-        # Same entity - return as is
-        if source_entity == target_entity:
-            return MicroDataFrame(
-                pd.DataFrame(source_df), weights=target_weight
-            )
-
-        # Map to different entity
-        target_df = getattr(self, target_entity)
-
-        # Person -> Benunit
-        if source_entity == "person" and target_entity == "benunit":
-            result = pd.DataFrame(target_df).merge(
-                pd.DataFrame(source_df), on="benunit_id", how="left"
-            )
-            return MicroDataFrame(result, weights=target_weight)
-
-        # Person -> Household
-        elif source_entity == "person" and target_entity == "household":
-            result = pd.DataFrame(target_df).merge(
-                pd.DataFrame(source_df), on="household_id", how="left"
-            )
-            return MicroDataFrame(result, weights=target_weight)
-
-        # Benunit -> Person
-        elif source_entity == "benunit" and target_entity == "person":
-            result = pd.DataFrame(target_df).merge(
-                pd.DataFrame(source_df), on="benunit_id", how="left"
-            )
-            return MicroDataFrame(result, weights=target_weight)
-
-        # Benunit -> Household
-        elif source_entity == "benunit" and target_entity == "household":
-            # Need to go through person to link benunit and household
-            person_link = pd.DataFrame(self.person)[
-                ["benunit_id", "household_id"]
-            ].drop_duplicates()
-            source_with_hh = pd.DataFrame(source_df).merge(
-                person_link, on="benunit_id", how="left"
-            )
-            result = pd.DataFrame(target_df).merge(
-                source_with_hh, on="household_id", how="left"
-            )
-            return MicroDataFrame(result, weights=target_weight)
-
-        # Household -> Person
-        elif source_entity == "household" and target_entity == "person":
-            result = pd.DataFrame(target_df).merge(
-                pd.DataFrame(source_df), on="household_id", how="left"
-            )
-            return MicroDataFrame(result, weights=target_weight)
-
-        # Household -> Benunit
-        elif source_entity == "household" and target_entity == "benunit":
-            # Need to go through person to link household and benunit
-            person_link = pd.DataFrame(self.person)[
-                ["benunit_id", "household_id"]
-            ].drop_duplicates()
-            source_with_bu = pd.DataFrame(source_df).merge(
-                person_link, on="household_id", how="left"
-            )
-            result = pd.DataFrame(target_df).merge(
-                source_with_bu, on="benunit_id", how="left"
-            )
-            return MicroDataFrame(result, weights=target_weight)
-
-        else:
-            raise ValueError(
-                f"Unsupported mapping from {source_entity} to {target_entity}"
-            )
+        return map_to_entity(
+            entity_data=entity_data,
+            source_entity=source_entity,
+            target_entity=target_entity,
+            person_entity="person",
+            columns=columns,
+        )
 
 
 class PolicyEngineUKDataset(Dataset):

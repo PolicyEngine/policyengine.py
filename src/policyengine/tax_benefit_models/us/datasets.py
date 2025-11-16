@@ -1,4 +1,4 @@
-from policyengine.core import Dataset
+from policyengine.core import Dataset, map_to_entity
 from pydantic import BaseModel, ConfigDict
 import pandas as pd
 from microdf import MicroDataFrame
@@ -33,163 +33,20 @@ class USYearData(BaseModel):
         Raises:
             ValueError: If source or target entity is invalid.
         """
-        valid_entities = {
-            "person",
-            "marital_unit",
-            "family",
-            "spm_unit",
-            "tax_unit",
-            "household",
+        entity_data = {
+            "person": self.person,
+            "marital_unit": self.marital_unit,
+            "family": self.family,
+            "spm_unit": self.spm_unit,
+            "tax_unit": self.tax_unit,
+            "household": self.household,
         }
-        if source_entity not in valid_entities:
-            raise ValueError(
-                f"Invalid source entity '{source_entity}'. Must be one of {valid_entities}"
-            )
-        if target_entity not in valid_entities:
-            raise ValueError(
-                f"Invalid target entity '{target_entity}'. Must be one of {valid_entities}"
-            )
-
-        # Get source data (as raw pandas DataFrame, not MicroDataFrame)
-        source_df = getattr(self, source_entity)
-        # Convert MicroDataFrame to plain pandas DataFrame to avoid weighted values
-        source_df = pd.DataFrame(source_df)
-
-        if columns:
-            # Select only requested columns (keep join keys)
-            join_keys = {
-                "person_id",
-                "marital_unit_id",
-                "family_id",
-                "spm_unit_id",
-                "tax_unit_id",
-                "household_id",
-            }
-            cols_to_keep = list(
-                set(columns) | (join_keys & set(source_df.columns))
-            )
-            source_df = source_df[cols_to_keep]
-
-        # Determine weight column for target entity
-        weight_col_map = {
-            "person": "person_weight",
-            "marital_unit": "marital_unit_weight",
-            "family": "family_weight",
-            "spm_unit": "spm_unit_weight",
-            "tax_unit": "tax_unit_weight",
-            "household": "household_weight",
-        }
-        target_weight = weight_col_map[target_entity]
-
-        # Same entity - return as is
-        if source_entity == target_entity:
-            return MicroDataFrame(
-                pd.DataFrame(source_df), weights=target_weight
-            )
-
-        # Map to different entity
-        target_df = getattr(self, target_entity)
-        target_key = f"{target_entity}_id"
-
-        # Person to group entity: aggregate person-level data to group level
-        if source_entity == "person" and target_entity != "person":
-            if target_key in source_df.columns:
-                # Aggregate person-level data to household level first
-                source_pd = source_df
-                # Get columns to aggregate (exclude join keys and weights)
-                join_keys = {
-                    "person_id",
-                    "marital_unit_id",
-                    "family_id",
-                    "spm_unit_id",
-                    "tax_unit_id",
-                    "household_id",
-                }
-                # Also exclude weight columns
-                weight_cols = {
-                    "person_weight",
-                    "marital_unit_weight",
-                    "family_weight",
-                    "spm_unit_weight",
-                    "tax_unit_weight",
-                    "household_weight",
-                }
-                agg_cols = [c for c in source_pd.columns if c not in join_keys and c not in weight_cols]
-                # Group by target key and sum
-                aggregated = source_pd.groupby(target_key, as_index=False)[agg_cols].sum()
-                # Merge with target, preserving original order
-                target_pd = pd.DataFrame(target_df)[[target_key, target_weight]]
-                # Add index to preserve order
-                target_pd = target_pd.reset_index(drop=False)
-                result = target_pd.merge(
-                    aggregated, on=target_key, how="left"
-                )
-                # Sort back to original order
-                result = result.sort_values('index').drop('index', axis=1).reset_index(drop=True)
-                # Fill NaN with 0 for households with no members in source entity
-                result[agg_cols] = result[agg_cols].fillna(0)
-                # Return MicroDataFrame with proper weights
-                return MicroDataFrame(result, weights=target_weight)
-
-        # Group entity to person: expand group-level data to person level
-        if source_entity != "person" and target_entity == "person":
-            source_key = f"{source_entity}_id"
-            target_pd = pd.DataFrame(target_df)
-            if source_key in target_pd.columns:
-                result = target_pd.merge(
-                    source_df, on=source_key, how="left"
-                )
-                return MicroDataFrame(result, weights=target_weight)
-
-        # Group to group: go through person table
-        if source_entity != "person" and target_entity != "person":
-            # Get person link table with both entity IDs
-            person_df = pd.DataFrame(self.person)
-            source_key = f"{source_entity}_id"
-
-            # Link source -> person -> target
-            if (
-                source_key in person_df.columns
-                and target_key in person_df.columns
-            ):
-                person_link = person_df[
-                    [source_key, target_key]
-                ].drop_duplicates()
-                # Join source data with target key
-                source_with_target = source_df.merge(
-                    person_link, on=source_key, how="left"
-                )
-                # Aggregate to target level
-                join_keys_all = {
-                    "person_id", "marital_unit_id", "family_id",
-                    "spm_unit_id", "tax_unit_id", "household_id",
-                }
-                weight_cols = {
-                    "person_weight",
-                    "marital_unit_weight",
-                    "family_weight",
-                    "spm_unit_weight",
-                    "tax_unit_weight",
-                    "household_weight",
-                }
-                agg_cols = [c for c in source_with_target.columns if c not in join_keys_all and c not in weight_cols]
-                aggregated = source_with_target.groupby(target_key, as_index=False)[agg_cols].sum()
-                # Merge with target, preserving original order
-                target_pd = pd.DataFrame(target_df)[[target_key, target_weight]]
-                # Add index to preserve order
-                target_pd = target_pd.reset_index(drop=False)
-                result = target_pd.merge(
-                    aggregated, on=target_key, how="left"
-                )
-                # Sort back to original order
-                result = result.sort_values('index').drop('index', axis=1).reset_index(drop=True)
-                # Fill NaN with 0
-                result[agg_cols] = result[agg_cols].fillna(0)
-                # Return MicroDataFrame with proper weights
-                return MicroDataFrame(result, weights=target_weight)
-
-        raise ValueError(
-            f"Unsupported mapping from {source_entity} to {target_entity}"
+        return map_to_entity(
+            entity_data=entity_data,
+            source_entity=source_entity,
+            target_entity=target_entity,
+            person_entity="person",
+            columns=columns,
         )
 
 

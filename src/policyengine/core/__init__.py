@@ -1,5 +1,5 @@
 from .variable import Variable
-from .dataset import Dataset
+from .dataset import Dataset, map_to_entity
 from .dynamic import Dynamic
 from .tax_benefit_model import TaxBenefitModel
 from .tax_benefit_model_version import TaxBenefitModelVersion

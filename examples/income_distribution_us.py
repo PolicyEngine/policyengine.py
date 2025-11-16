@@ -81,11 +81,15 @@ def calculate_income_decile_statistics(simulation: Simulation) -> dict:
             quantile_eq=decile_num,
         )
         if decile_num == 1:
-            print(f"    First Aggregate created ({time.time() - pre_create:.2f}s)")
+            print(
+                f"    First Aggregate created ({time.time() - pre_create:.2f}s)"
+            )
         pre_run = time.time()
         agg.run()
         if decile_num == 1:
-            print(f"    First Aggregate.run() complete ({time.time() - pre_run:.2f}s)")
+            print(
+                f"    First Aggregate.run() complete ({time.time() - pre_run:.2f}s)"
+            )
         market_incomes.append(agg.result / 1e9)
 
         agg = Aggregate(
@@ -165,17 +169,23 @@ def calculate_income_decile_statistics(simulation: Simulation) -> dict:
                 debug_timing=first_prog and decile_num == 1,
             )
             if first_prog and decile_num == 1:
-                print(f"    First benefit Aggregate created ({time.time() - pre_create:.2f}s)")
+                print(
+                    f"    First benefit Aggregate created ({time.time() - pre_create:.2f}s)"
+                )
                 pre_run = time.time()
             agg.run()
             if first_prog and decile_num == 1:
-                print(f"    First benefit Aggregate.run() complete ({time.time() - pre_run:.2f}s)")
+                print(
+                    f"    First benefit Aggregate.run() complete ({time.time() - pre_run:.2f}s)"
+                )
                 first_prog = False
             prog_by_decile.append(agg.result / 1e9)
         benefit_programs_by_decile[prog] = prog_by_decile
         print(f"  {prog} complete ({time.time() - prog_start:.2f}s)")
 
-    print(f"Person-level benefits complete ({time.time() - person_benefits_start:.2f}s)")
+    print(
+        f"Person-level benefits complete ({time.time() - person_benefits_start:.2f}s)"
+    )
 
     # SPM unit benefits (mapped to household for decile filtering)
     print("Calculating SPM unit benefit programs...")
@@ -222,7 +232,9 @@ def calculate_income_decile_statistics(simulation: Simulation) -> dict:
         print(f"  {prog} complete ({time.time() - prog_start:.2f}s)")
 
     print(f"Tax benefits complete ({time.time() - tax_benefits_start:.2f}s)")
-    print(f"\nTotal statistics calculation time: {time.time() - start_time:.2f}s")
+    print(
+        f"\nTotal statistics calculation time: {time.time() - start_time:.2f}s"
+    )
 
     return {
         "deciles": deciles,
@@ -260,6 +272,7 @@ def visualise_results(results: dict) -> None:
             y=results["market_incomes"],
             marker_color=COLORS["primary"],
             name="Market income",
+            showlegend=False,
         ),
         row=1,
         col=1,
@@ -272,30 +285,34 @@ def visualise_results(results: dict) -> None:
             y=results["taxes"],
             marker_color=COLORS["error"],
             name="Tax",
+            showlegend=False,
         ),
         row=1,
         col=2,
     )
 
-    # Benefits by program (stacked)
+    # Benefits by program (stacked) - with legend
     benefit_programs = [
-        ("Social Security", "social_security"),
-        ("Medicaid", "medicaid"),
-        ("SNAP", "snap"),
-        ("EITC", "eitc"),
-        ("CTC", "ctc"),
-        ("SSI", "ssi"),
-        ("TANF", "tanf"),
-        ("Unemployment", "unemployment_compensation"),
+        ("Social Security", "social_security", "#026AA2"),
+        ("Medicaid", "medicaid", "#319795"),
+        ("SNAP", "snap", "#22C55E"),
+        ("EITC", "eitc", "#FEC601"),
+        ("CTC", "ctc", "#1890FF"),
+        ("SSI", "ssi", "#EF4444"),
+        ("TANF", "tanf", "#667085"),
+        ("Unemployment", "unemployment_compensation", "#101828"),
     ]
 
-    for name, key in benefit_programs:
+    for name, key, color in benefit_programs:
         if key in results["benefit_programs_by_decile"]:
             fig.add_trace(
                 go.Bar(
                     x=results["deciles"],
                     y=results["benefit_programs_by_decile"][key],
                     name=name,
+                    marker_color=color,
+                    legendgroup="benefits",
+                    showlegend=True,
                 ),
                 row=2,
                 col=1,
@@ -308,6 +325,7 @@ def visualise_results(results: dict) -> None:
             y=results["counts"],
             marker_color=COLORS["info"],
             name="Households",
+            showlegend=False,
         ),
         row=2,
         col=2,
@@ -318,13 +336,28 @@ def visualise_results(results: dict) -> None:
     fig.update_xaxes(title_text="Income decile", row=2, col=1)
     fig.update_xaxes(title_text="Income decile", row=2, col=2)
 
-    fig.update_layout(
-        title_text="US household income distribution (Enhanced CPS 2024)",
-        showlegend=True,
-        barmode="stack",
+    # Apply PolicyEngine formatting
+    format_fig(
+        fig,
+        title="US household income distribution (Enhanced CPS 2024)",
+        show_legend=True,
         height=800,
-        width=1200,
-        legend=dict(orientation="h", yanchor="bottom", y=-0.15, xanchor="center", x=0.5),
+        width=1400,
+    )
+
+    # Override legend position for subplot layout
+    fig.update_layout(
+        barmode="stack",
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=0.45,
+            xanchor="left",
+            x=0.52,
+            bgcolor="white",
+            bordercolor="#E5E7EB",
+            borderwidth=1,
+        ),
     )
 
     fig.show()

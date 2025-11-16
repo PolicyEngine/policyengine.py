@@ -223,11 +223,53 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
             "household": pd.DataFrame(),
         }
 
+        # ID columns should be preserved from input dataset, not calculated
+        id_columns = {
+            "person_id",
+            "household_id",
+            "marital_unit_id",
+            "family_id",
+            "spm_unit_id",
+            "tax_unit_id",
+        }
+        weight_columns = {
+            "person_weight",
+            "household_weight",
+            "marital_unit_weight",
+            "family_weight",
+            "spm_unit_weight",
+            "tax_unit_weight",
+        }
+
+        # First, copy ID and weight columns from input dataset
+        for entity in data.keys():
+            input_df = pd.DataFrame(getattr(dataset.data, entity))
+            entity_id_col = f"{entity}_id"
+            entity_weight_col = f"{entity}_weight"
+
+            if entity_id_col in input_df.columns:
+                data[entity][entity_id_col] = input_df[entity_id_col].values
+            if entity_weight_col in input_df.columns:
+                data[entity][entity_weight_col] = input_df[
+                    entity_weight_col
+                ].values
+
+        # For person entity, also copy person-level group ID columns
+        person_input_df = pd.DataFrame(dataset.data.person)
+        for col in person_input_df.columns:
+            if col.startswith("person_") and col.endswith("_id"):
+                # Map person_household_id -> household_id, etc.
+                target_col = col.replace("person_", "")
+                if target_col in id_columns:
+                    data["person"][target_col] = person_input_df[col].values
+
+        # Then calculate non-ID, non-weight variables from simulation
         for entity, variables in entity_variables.items():
             for var in variables:
-                data[entity][var] = microsim.calculate(
-                    var, period=simulation.dataset.year, map_to=entity
-                ).values
+                if var not in id_columns and var not in weight_columns:
+                    data[entity][var] = microsim.calculate(
+                        var, period=simulation.dataset.year, map_to=entity
+                    ).values
 
         data["person"] = MicroDataFrame(
             data["person"], weights="person_weight"
