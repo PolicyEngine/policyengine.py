@@ -173,22 +173,13 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
                     "person_weight",
                     # Demographics
                     "age",
-                    "gender",
-                    "is_adult",
-                    "is_child",
                     # Income
                     "employment_income",
-                    "self_employment_income",
-                    "pension_income",
-                    "social_security",
-                    "ssi",
                     # Benefits
-                    "snap",
-                    "tanf",
-                    "medicare",
+                    "ssi",
+                    "social_security",
                     "medicaid",
-                    # Tax
-                    "payroll_tax",
+                    "unemployment_compensation",
                 ],
                 "marital_unit": [
                     "marital_unit_id",
@@ -212,7 +203,6 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
                     "employee_payroll_tax",
                     "eitc",
                     "ctc",
-                    "adjusted_gross_income",
                 ],
                 "household": [
                     "household_id",
@@ -302,50 +292,78 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
         # Extract entity IDs from dataset
         person_data = pd.DataFrame(dataset.data.person)
 
+        # Determine column naming convention
+        # Support both person_X_id (from create_datasets) and X_id (from custom datasets)
+        household_id_col = (
+            "person_household_id"
+            if "person_household_id" in person_data.columns
+            else "household_id"
+        )
+        marital_unit_id_col = (
+            "person_marital_unit_id"
+            if "person_marital_unit_id" in person_data.columns
+            else "marital_unit_id"
+        )
+        family_id_col = (
+            "person_family_id"
+            if "person_family_id" in person_data.columns
+            else "family_id"
+        )
+        spm_unit_id_col = (
+            "person_spm_unit_id"
+            if "person_spm_unit_id" in person_data.columns
+            else "spm_unit_id"
+        )
+        tax_unit_id_col = (
+            "person_tax_unit_id"
+            if "person_tax_unit_id" in person_data.columns
+            else "tax_unit_id"
+        )
+
         # Declare entities
         builder.declare_person_entity(
             "person", person_data["person_id"].values
         )
         builder.declare_entity(
-            "household", np.unique(person_data["household_id"].values)
+            "household", np.unique(person_data[household_id_col].values)
         )
         builder.declare_entity(
-            "spm_unit", np.unique(person_data["spm_unit_id"].values)
+            "spm_unit", np.unique(person_data[spm_unit_id_col].values)
         )
         builder.declare_entity(
-            "family", np.unique(person_data["family_id"].values)
+            "family", np.unique(person_data[family_id_col].values)
         )
         builder.declare_entity(
-            "tax_unit", np.unique(person_data["tax_unit_id"].values)
+            "tax_unit", np.unique(person_data[tax_unit_id_col].values)
         )
         builder.declare_entity(
-            "marital_unit", np.unique(person_data["marital_unit_id"].values)
+            "marital_unit", np.unique(person_data[marital_unit_id_col].values)
         )
 
         # Join persons to group entities
         builder.join_with_persons(
             builder.populations["household"],
-            person_data["household_id"].values,
+            person_data[household_id_col].values,
             np.array(["member"] * len(person_data)),
         )
         builder.join_with_persons(
             builder.populations["spm_unit"],
-            person_data["spm_unit_id"].values,
+            person_data[spm_unit_id_col].values,
             np.array(["member"] * len(person_data)),
         )
         builder.join_with_persons(
             builder.populations["family"],
-            person_data["family_id"].values,
+            person_data[family_id_col].values,
             np.array(["member"] * len(person_data)),
         )
         builder.join_with_persons(
             builder.populations["tax_unit"],
-            person_data["tax_unit_id"].values,
+            person_data[tax_unit_id_col].values,
             np.array(["member"] * len(person_data)),
         )
         builder.join_with_persons(
             builder.populations["marital_unit"],
-            person_data["marital_unit_id"].values,
+            person_data[marital_unit_id_col].values,
             np.array(["member"] * len(person_data)),
         )
 
@@ -354,13 +372,19 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
 
         # Set input variables for each entity
         # Skip ID columns as they're structural and already used in entity building
+        # Support both naming conventions
         id_columns = {
             "person_id",
             "household_id",
+            "person_household_id",
             "spm_unit_id",
+            "person_spm_unit_id",
             "family_id",
+            "person_family_id",
             "tax_unit_id",
+            "person_tax_unit_id",
             "marital_unit_id",
+            "person_marital_unit_id",
         }
 
         for entity_name, entity_df in [

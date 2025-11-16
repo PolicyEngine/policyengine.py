@@ -4,7 +4,7 @@ from importlib.util import find_spec
 
 if find_spec("policyengine_us") is not None:
     from policyengine.core import Dataset
-    from .datasets import USYearData, PolicyEngineUSDataset
+    from .datasets import USYearData, PolicyEngineUSDataset, create_datasets
     from .model import (
         PolicyEngineUS,
         PolicyEngineUSLatest,
@@ -23,6 +23,7 @@ if find_spec("policyengine_us") is not None:
     __all__ = [
         "USYearData",
         "PolicyEngineUSDataset",
+        "create_datasets",
         "PolicyEngineUS",
         "PolicyEngineUSLatest",
         "us_model",
