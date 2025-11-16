@@ -86,16 +86,27 @@ class USYearData(BaseModel):
 
         # Map to different entity
         target_df = getattr(self, target_entity)
-
-        # Direct mapping if join key exists in source
         target_key = f"{target_entity}_id"
-        if target_key in pd.DataFrame(source_df).columns:
-            result = pd.DataFrame(target_df).merge(
-                pd.DataFrame(source_df), on=target_key, how="left"
-            )
-            return MicroDataFrame(result, weights=target_weight)
 
-        # For more complex mappings, go through person table
+        # Person to group entity: aggregate person-level data to group level
+        if source_entity == "person" and target_entity != "person":
+            if target_key in pd.DataFrame(source_df).columns:
+                # Merge source (person) with target (group) on target_key
+                result = pd.DataFrame(target_df).merge(
+                    pd.DataFrame(source_df), on=target_key, how="left"
+                )
+                return MicroDataFrame(result, weights=target_weight)
+
+        # Group entity to person: expand group-level data to person level
+        if source_entity != "person" and target_entity == "person":
+            source_key = f"{source_entity}_id"
+            if source_key in pd.DataFrame(target_df).columns:
+                result = pd.DataFrame(target_df).merge(
+                    pd.DataFrame(source_df), on=source_key, how="left"
+                )
+                return MicroDataFrame(result, weights=target_weight)
+
+        # Group to group: go through person table
         if source_entity != "person" and target_entity != "person":
             # Get person link table with both entity IDs
             person_df = pd.DataFrame(self.person)
@@ -127,14 +138,17 @@ class PolicyEngineUSDataset(Dataset):
 
     data: USYearData | None = None
 
-    def __init__(self, **kwargs: dict):
-        super().__init__(**kwargs)
-
+    def model_post_init(self, __context):
+        """Called after Pydantic initialization."""
         # Make sure we are synchronised between in-memory and storage, at least on initialisation
-        if "data" in kwargs:
+        if self.data is not None:
             self.save()
-        elif "filepath" in kwargs:
-            self.load()
+        elif self.filepath and not self.data:
+            try:
+                self.load()
+            except FileNotFoundError:
+                # File doesn't exist yet, that's OK
+                pass
 
     def save(self) -> None:
         """Save dataset to HDF5 file."""

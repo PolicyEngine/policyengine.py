@@ -3,6 +3,7 @@
 from importlib.util import find_spec
 
 if find_spec("policyengine_us") is not None:
+    from policyengine.core import Dataset
     from .datasets import USYearData, PolicyEngineUSDataset
     from .model import (
         PolicyEngineUS,
@@ -12,6 +13,12 @@ if find_spec("policyengine_us") is not None:
     )
     from .analysis import general_policy_reform_analysis
     from .outputs import ProgramStatistics
+
+    # Rebuild Pydantic models to resolve forward references
+    Dataset.model_rebuild()
+    USYearData.model_rebuild()
+    PolicyEngineUSDataset.model_rebuild()
+    PolicyEngineUSLatest.model_rebuild()
 
     __all__ = [
         "USYearData",
