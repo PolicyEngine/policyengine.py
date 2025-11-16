@@ -34,7 +34,6 @@ class Aggregate(Output):
     )
 
     result: Any | None = None
-
     def run(self):
         # Convert quantile specification to describes_quantiles format
         if self.quantile is not None:
@@ -66,7 +65,7 @@ class Aggregate(Output):
         # Map variable to target entity if needed
         if var_obj.entity != target_entity:
             mapped = self.simulation.output_dataset.data.map_to_entity(
-                var_obj.entity, target_entity
+                var_obj.entity, target_entity, columns=[self.variable]
             )
             series = mapped[self.variable]
         else:
@@ -83,7 +82,7 @@ class Aggregate(Output):
             if filter_var_obj.entity != target_entity:
                 filter_mapped = (
                     self.simulation.output_dataset.data.map_to_entity(
-                        filter_var_obj.entity, target_entity
+                        filter_var_obj.entity, target_entity, columns=[self.filter_variable]
                     )
                 )
                 filter_series = filter_mapped[self.filter_variable]
@@ -95,14 +94,10 @@ class Aggregate(Output):
                     threshold = filter_series.quantile(self.filter_variable_eq)
                     series = series[filter_series <= threshold]
                 if self.filter_variable_leq is not None:
-                    threshold = filter_series.quantile(
-                        self.filter_variable_leq
-                    )
+                    threshold = filter_series.quantile(self.filter_variable_leq)
                     series = series[filter_series <= threshold]
                 if self.filter_variable_geq is not None:
-                    threshold = filter_series.quantile(
-                        self.filter_variable_geq
-                    )
+                    threshold = filter_series.quantile(self.filter_variable_geq)
                     series = series[filter_series >= threshold]
             else:
                 if self.filter_variable_eq is not None:
@@ -112,7 +107,7 @@ class Aggregate(Output):
                 if self.filter_variable_geq is not None:
                     series = series[filter_series >= self.filter_variable_geq]
 
-        # Aggregate
+        # Aggregate - MicroSeries will automatically apply weights
         if self.aggregate_type == AggregateType.SUM:
             self.result = series.sum()
         elif self.aggregate_type == AggregateType.MEAN:

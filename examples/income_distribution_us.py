@@ -10,6 +10,7 @@ Run: python examples/income_distribution_us.py
 """
 
 from pathlib import Path
+import time
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from policyengine.core import Simulation
@@ -55,6 +56,7 @@ def run_simulation(dataset: PolicyEngineUSDataset) -> Simulation:
 
 def calculate_income_decile_statistics(simulation: Simulation) -> dict:
     """Calculate total income, tax, and benefits by income deciles."""
+    start_time = time.time()
     deciles = [f"D{i}" for i in range(1, 11)]
     market_incomes = []
     taxes = []
@@ -63,7 +65,13 @@ def calculate_income_decile_statistics(simulation: Simulation) -> dict:
     counts = []
 
     # Calculate household-level aggregates by decile
+    print("Calculating main statistics by decile...")
+    main_stats_start = time.time()
     for decile_num in range(1, 11):
+        decile_start = time.time()
+
+        # Market income
+        pre_create = time.time()
         agg = Aggregate(
             simulation=simulation,
             variable="household_market_income",
@@ -72,7 +80,12 @@ def calculate_income_decile_statistics(simulation: Simulation) -> dict:
             quantile=10,
             quantile_eq=decile_num,
         )
+        if decile_num == 1:
+            print(f"    First Aggregate created ({time.time() - pre_create:.2f}s)")
+        pre_run = time.time()
         agg.run()
+        if decile_num == 1:
+            print(f"    First Aggregate.run() complete ({time.time() - pre_run:.2f}s)")
         market_incomes.append(agg.result / 1e9)
 
         agg = Aggregate(
@@ -119,18 +132,28 @@ def calculate_income_decile_statistics(simulation: Simulation) -> dict:
         agg.run()
         counts.append(agg.result / 1e6)
 
+        print(f"  D{decile_num} complete ({time.time() - decile_start:.2f}s)")
+
+    print(f"Main statistics complete ({time.time() - main_stats_start:.2f}s)")
+
     # Calculate individual benefit programs by decile
     benefit_programs_by_decile = {}
 
     # Person-level benefits (mapped to household for decile filtering)
+    print("Calculating person-level benefit programs...")
+    person_benefits_start = time.time()
+    first_prog = True
     for prog in [
         "ssi",
         "social_security",
         "medicaid",
         "unemployment_compensation",
     ]:
+        prog_start = time.time()
         prog_by_decile = []
         for decile_num in range(1, 11):
+            if first_prog and decile_num == 1:
+                pre_create = time.time()
             agg = Aggregate(
                 simulation=simulation,
                 variable=prog,
@@ -139,13 +162,26 @@ def calculate_income_decile_statistics(simulation: Simulation) -> dict:
                 filter_variable="household_net_income",
                 quantile=10,
                 quantile_eq=decile_num,
+                debug_timing=first_prog and decile_num == 1,
             )
+            if first_prog and decile_num == 1:
+                print(f"    First benefit Aggregate created ({time.time() - pre_create:.2f}s)")
+                pre_run = time.time()
             agg.run()
+            if first_prog and decile_num == 1:
+                print(f"    First benefit Aggregate.run() complete ({time.time() - pre_run:.2f}s)")
+                first_prog = False
             prog_by_decile.append(agg.result / 1e9)
         benefit_programs_by_decile[prog] = prog_by_decile
+        print(f"  {prog} complete ({time.time() - prog_start:.2f}s)")
+
+    print(f"Person-level benefits complete ({time.time() - person_benefits_start:.2f}s)")
 
     # SPM unit benefits (mapped to household for decile filtering)
+    print("Calculating SPM unit benefit programs...")
+    spm_benefits_start = time.time()
     for prog in ["snap", "tanf"]:
+        prog_start = time.time()
         prog_by_decile = []
         for decile_num in range(1, 11):
             agg = Aggregate(
@@ -160,9 +196,15 @@ def calculate_income_decile_statistics(simulation: Simulation) -> dict:
             agg.run()
             prog_by_decile.append(agg.result / 1e9)
         benefit_programs_by_decile[prog] = prog_by_decile
+        print(f"  {prog} complete ({time.time() - prog_start:.2f}s)")
+
+    print(f"SPM benefits complete ({time.time() - spm_benefits_start:.2f}s)")
 
     # Tax unit benefits (mapped to household for decile filtering)
+    print("Calculating tax unit benefit programs...")
+    tax_benefits_start = time.time()
     for prog in ["eitc", "ctc"]:
+        prog_start = time.time()
         prog_by_decile = []
         for decile_num in range(1, 11):
             agg = Aggregate(
@@ -177,6 +219,10 @@ def calculate_income_decile_statistics(simulation: Simulation) -> dict:
             agg.run()
             prog_by_decile.append(agg.result / 1e9)
         benefit_programs_by_decile[prog] = prog_by_decile
+        print(f"  {prog} complete ({time.time() - prog_start:.2f}s)")
+
+    print(f"Tax benefits complete ({time.time() - tax_benefits_start:.2f}s)")
+    print(f"\nTotal statistics calculation time: {time.time() - start_time:.2f}s")
 
     return {
         "deciles": deciles,

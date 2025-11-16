@@ -50,8 +50,11 @@ class USYearData(BaseModel):
                 f"Invalid target entity '{target_entity}'. Must be one of {valid_entities}"
             )
 
-        # Get source data
+        # Get source data (as raw pandas DataFrame, not MicroDataFrame)
         source_df = getattr(self, source_entity)
+        # Convert MicroDataFrame to plain pandas DataFrame to avoid weighted values
+        source_df = pd.DataFrame(source_df)
+
         if columns:
             # Select only requested columns (keep join keys)
             join_keys = {
@@ -90,19 +93,51 @@ class USYearData(BaseModel):
 
         # Person to group entity: aggregate person-level data to group level
         if source_entity == "person" and target_entity != "person":
-            if target_key in pd.DataFrame(source_df).columns:
-                # Merge source (person) with target (group) on target_key
-                result = pd.DataFrame(target_df).merge(
-                    pd.DataFrame(source_df), on=target_key, how="left"
+            if target_key in source_df.columns:
+                # Aggregate person-level data to household level first
+                source_pd = source_df
+                # Get columns to aggregate (exclude join keys and weights)
+                join_keys = {
+                    "person_id",
+                    "marital_unit_id",
+                    "family_id",
+                    "spm_unit_id",
+                    "tax_unit_id",
+                    "household_id",
+                }
+                # Also exclude weight columns
+                weight_cols = {
+                    "person_weight",
+                    "marital_unit_weight",
+                    "family_weight",
+                    "spm_unit_weight",
+                    "tax_unit_weight",
+                    "household_weight",
+                }
+                agg_cols = [c for c in source_pd.columns if c not in join_keys and c not in weight_cols]
+                # Group by target key and sum
+                aggregated = source_pd.groupby(target_key, as_index=False)[agg_cols].sum()
+                # Merge with target, preserving original order
+                target_pd = pd.DataFrame(target_df)[[target_key, target_weight]]
+                # Add index to preserve order
+                target_pd = target_pd.reset_index(drop=False)
+                result = target_pd.merge(
+                    aggregated, on=target_key, how="left"
                 )
+                # Sort back to original order
+                result = result.sort_values('index').drop('index', axis=1).reset_index(drop=True)
+                # Fill NaN with 0 for households with no members in source entity
+                result[agg_cols] = result[agg_cols].fillna(0)
+                # Return MicroDataFrame with proper weights
                 return MicroDataFrame(result, weights=target_weight)
 
         # Group entity to person: expand group-level data to person level
         if source_entity != "person" and target_entity == "person":
             source_key = f"{source_entity}_id"
-            if source_key in pd.DataFrame(target_df).columns:
-                result = pd.DataFrame(target_df).merge(
-                    pd.DataFrame(source_df), on=source_key, how="left"
+            target_pd = pd.DataFrame(target_df)
+            if source_key in target_pd.columns:
+                result = target_pd.merge(
+                    source_df, on=source_key, how="left"
                 )
                 return MicroDataFrame(result, weights=target_weight)
 
@@ -120,12 +155,37 @@ class USYearData(BaseModel):
                 person_link = person_df[
                     [source_key, target_key]
                 ].drop_duplicates()
-                source_with_target = pd.DataFrame(source_df).merge(
+                # Join source data with target key
+                source_with_target = source_df.merge(
                     person_link, on=source_key, how="left"
                 )
-                result = pd.DataFrame(target_df).merge(
-                    source_with_target, on=target_key, how="left"
+                # Aggregate to target level
+                join_keys_all = {
+                    "person_id", "marital_unit_id", "family_id",
+                    "spm_unit_id", "tax_unit_id", "household_id",
+                }
+                weight_cols = {
+                    "person_weight",
+                    "marital_unit_weight",
+                    "family_weight",
+                    "spm_unit_weight",
+                    "tax_unit_weight",
+                    "household_weight",
+                }
+                agg_cols = [c for c in source_with_target.columns if c not in join_keys_all and c not in weight_cols]
+                aggregated = source_with_target.groupby(target_key, as_index=False)[agg_cols].sum()
+                # Merge with target, preserving original order
+                target_pd = pd.DataFrame(target_df)[[target_key, target_weight]]
+                # Add index to preserve order
+                target_pd = target_pd.reset_index(drop=False)
+                result = target_pd.merge(
+                    aggregated, on=target_key, how="left"
                 )
+                # Sort back to original order
+                result = result.sort_values('index').drop('index', axis=1).reset_index(drop=True)
+                # Fill NaN with 0
+                result[agg_cols] = result[agg_cols].fillna(0)
+                # Return MicroDataFrame with proper weights
                 return MicroDataFrame(result, weights=target_weight)
 
         raise ValueError(
