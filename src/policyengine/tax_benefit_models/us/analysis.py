@@ -1,7 +1,10 @@
 """General utility functions for US policy reform analysis."""
 
 from policyengine.core import Simulation, OutputCollection
-from policyengine.outputs.decile_impact import DecileImpact, calculate_decile_impacts
+from policyengine.outputs.decile_impact import (
+    DecileImpact,
+    calculate_decile_impacts,
+)
 from .outputs import ProgramStatistics
 from pydantic import BaseModel
 import pandas as pd
@@ -65,30 +68,30 @@ def general_policy_reform_analysis(
         program_statistics.append(stats)
 
     # Create DataFrame
-    program_df = pd.DataFrame([
-        {
-            "baseline_simulation_id": p.baseline_simulation.id,
-            "reform_simulation_id": p.reform_simulation.id,
-            "program_name": p.program_name,
-            "entity": p.entity,
-            "is_tax": p.is_tax,
-            "baseline_total": p.baseline_total,
-            "reform_total": p.reform_total,
-            "change": p.change,
-            "baseline_count": p.baseline_count,
-            "reform_count": p.reform_count,
-            "winners": p.winners,
-            "losers": p.losers,
-        }
-        for p in program_statistics
-    ])
+    program_df = pd.DataFrame(
+        [
+            {
+                "baseline_simulation_id": p.baseline_simulation.id,
+                "reform_simulation_id": p.reform_simulation.id,
+                "program_name": p.program_name,
+                "entity": p.entity,
+                "is_tax": p.is_tax,
+                "baseline_total": p.baseline_total,
+                "reform_total": p.reform_total,
+                "change": p.change,
+                "baseline_count": p.baseline_count,
+                "reform_count": p.reform_count,
+                "winners": p.winners,
+                "losers": p.losers,
+            }
+            for p in program_statistics
+        ]
+    )
 
     program_collection = OutputCollection(
-        outputs=program_statistics,
-        dataframe=program_df
+        outputs=program_statistics, dataframe=program_df
     )
 
     return PolicyReformAnalysis(
-        decile_impacts=decile_impacts,
-        program_statistics=program_collection
+        decile_impacts=decile_impacts, program_statistics=program_collection
     )

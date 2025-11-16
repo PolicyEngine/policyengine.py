@@ -268,11 +268,15 @@ def print_summary(overall: dict, decile: dict, reform_name: str) -> None:
     print(f"  Losers: {overall['losers']:.2f}m households")
     print(f"  No change: {overall['no_change']:.2f}m households")
     print(f"\nFinancial impact:")
-    print(f"  Net income change: £{overall['total_change']:.2f}bn (negative = loss)")
+    print(
+        f"  Net income change: £{overall['total_change']:.2f}bn (negative = loss)"
+    )
     print(f"  Tax revenue change: £{overall['tax_revenue_change']:.2f}bn")
     print(f"\nImpact by income decile:")
-    for i, label in enumerate(decile['labels']):
-        print(f"  {label}: {decile['losers'][i]:.2f}m losers, avg change £{decile['avg_loss'][i]:.0f}")
+    for i, label in enumerate(decile["labels"]):
+        print(
+            f"  {label}: {decile['losers'][i]:.2f}m losers, avg change £{decile['avg_loss'][i]:.0f}"
+        )
     print("=" * 60)
 
 

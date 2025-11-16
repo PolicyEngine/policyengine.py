@@ -15,5 +15,9 @@ __all__ = [
 ]
 
 # Rebuild models to resolve forward references
+from policyengine.core import Dataset
+
+Dataset.model_rebuild()
+UKYearData.model_rebuild()
 PolicyEngineUKDataset.model_rebuild()
 PolicyEngineUKLatest.model_rebuild()

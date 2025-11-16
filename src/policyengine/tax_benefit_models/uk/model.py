@@ -1,4 +1,10 @@
-from policyengine.core import TaxBenefitModel, TaxBenefitModelVersion, Variable, Parameter, ParameterValue
+from policyengine.core import (
+    TaxBenefitModel,
+    TaxBenefitModelVersion,
+    Variable,
+    Parameter,
+    ParameterValue,
+)
 import datetime
 import requests
 from importlib.metadata import version
@@ -8,6 +14,7 @@ from microdf import MicroDataFrame
 from pathlib import Path
 from .datasets import PolicyEngineUKDataset, UKYearData
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
 
@@ -103,7 +110,9 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
     def run(self, simulation: "Simulation") -> "Simulation":
         from policyengine_uk import Microsimulation
         from policyengine_uk.data import UKSingleYearDataset
-        from policyengine.utils.parametric_reforms import simulation_modifier_from_parameter_values
+        from policyengine.utils.parametric_reforms import (
+            simulation_modifier_from_parameter_values,
+        )
 
         assert isinstance(simulation.dataset, PolicyEngineUKDataset)
 

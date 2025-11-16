@@ -37,18 +37,26 @@ class DecileImpact(Output):
         target_entity = self.entity or var_obj.entity
 
         # Get data from both simulations
-        baseline_data = getattr(self.baseline_simulation.output_dataset.data, target_entity)
-        reform_data = getattr(self.reform_simulation.output_dataset.data, target_entity)
+        baseline_data = getattr(
+            self.baseline_simulation.output_dataset.data, target_entity
+        )
+        reform_data = getattr(
+            self.reform_simulation.output_dataset.data, target_entity
+        )
 
         # Map income variable to target entity if needed
         if var_obj.entity != target_entity:
-            baseline_mapped = self.baseline_simulation.output_dataset.data.map_to_entity(
-                var_obj.entity, target_entity
+            baseline_mapped = (
+                self.baseline_simulation.output_dataset.data.map_to_entity(
+                    var_obj.entity, target_entity
+                )
             )
             baseline_income = baseline_mapped[self.income_variable]
 
-            reform_mapped = self.reform_simulation.output_dataset.data.map_to_entity(
-                var_obj.entity, target_entity
+            reform_mapped = (
+                self.reform_simulation.output_dataset.data.map_to_entity(
+                    var_obj.entity, target_entity
+                )
             )
             reform_income = reform_mapped[self.income_variable]
         else:
@@ -56,14 +64,22 @@ class DecileImpact(Output):
             reform_income = reform_data[self.income_variable]
 
         # Calculate deciles based on baseline income
-        decile_series = pd.qcut(baseline_income, self.quantiles, labels=False, duplicates='drop') + 1
+        decile_series = (
+            pd.qcut(
+                baseline_income,
+                self.quantiles,
+                labels=False,
+                duplicates="drop",
+            )
+            + 1
+        )
 
         # Calculate changes
         absolute_change = reform_income - baseline_income
         relative_change = (absolute_change / baseline_income) * 100
 
         # Filter to this decile
-        mask = (decile_series == self.decile)
+        mask = decile_series == self.decile
 
         # Populate results
         self.baseline_mean = float(baseline_income[mask].mean())
@@ -101,21 +117,23 @@ def calculate_decile_impacts(
         results.append(impact)
 
     # Create DataFrame
-    df = pd.DataFrame([
-        {
-            "baseline_simulation_id": r.baseline_simulation.id,
-            "reform_simulation_id": r.reform_simulation.id,
-            "income_variable": r.income_variable,
-            "decile": r.decile,
-            "baseline_mean": r.baseline_mean,
-            "reform_mean": r.reform_mean,
-            "absolute_change": r.absolute_change,
-            "relative_change": r.relative_change,
-            "count_better_off": r.count_better_off,
-            "count_worse_off": r.count_worse_off,
-            "count_no_change": r.count_no_change,
-        }
-        for r in results
-    ])
+    df = pd.DataFrame(
+        [
+            {
+                "baseline_simulation_id": r.baseline_simulation.id,
+                "reform_simulation_id": r.reform_simulation.id,
+                "income_variable": r.income_variable,
+                "decile": r.decile,
+                "baseline_mean": r.baseline_mean,
+                "reform_mean": r.reform_mean,
+                "absolute_change": r.absolute_change,
+                "relative_change": r.relative_change,
+                "count_better_off": r.count_better_off,
+                "count_worse_off": r.count_worse_off,
+                "count_no_change": r.count_no_change,
+            }
+            for r in results
+        ]
+    )
 
     return OutputCollection(outputs=results, dataframe=df)

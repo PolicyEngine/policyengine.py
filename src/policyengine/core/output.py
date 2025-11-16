@@ -2,7 +2,7 @@ from pydantic import BaseModel, ConfigDict
 import pandas as pd
 from typing import Generic, TypeVar
 
-T = TypeVar('T', bound='Output')
+T = TypeVar("T", bound="Output")
 
 
 class Output(BaseModel):

@@ -29,7 +29,7 @@ class Dataset(BaseModel):
     dataset_version: DatasetVersion | None = None
     filepath: str
     is_output_dataset: bool = False
-    tax_benefit_model: TaxBenefitModel = None
+    tax_benefit_model: TaxBenefitModel | None = None
     year: int
 
     data: BaseModel | None = None

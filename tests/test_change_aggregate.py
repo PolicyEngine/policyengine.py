@@ -8,37 +8,46 @@ from policyengine.tax_benefit_models.uk import (
     UKYearData,
     uk_latest,
 )
-from policyengine.outputs.change_aggregate import ChangeAggregate, ChangeAggregateType
+from policyengine.outputs.change_aggregate import (
+    ChangeAggregate,
+    ChangeAggregateType,
+)
 
 
 def test_change_aggregate_count():
     """Test counting people with any change."""
     person_df = MicroDataFrame(
-        pd.DataFrame({
-            "person_id": [1, 2, 3, 4],
-            "benunit_id": [1, 1, 2, 2],
-            "household_id": [1, 1, 2, 2],
-            "age": [30, 25, 40, 35],
-            "employment_income": [50000, 30000, 60000, 40000],
-            "person_weight": [1.0, 1.0, 1.0, 1.0],
-        }),
-        weights="person_weight"
+        pd.DataFrame(
+            {
+                "person_id": [1, 2, 3, 4],
+                "benunit_id": [1, 1, 2, 2],
+                "household_id": [1, 1, 2, 2],
+                "age": [30, 25, 40, 35],
+                "employment_income": [50000, 30000, 60000, 40000],
+                "person_weight": [1.0, 1.0, 1.0, 1.0],
+            }
+        ),
+        weights="person_weight",
     )
 
     benunit_df = MicroDataFrame(
-        pd.DataFrame({
-            "benunit_id": [1, 2],
-            "benunit_weight": [1.0, 1.0],
-        }),
-        weights="benunit_weight"
+        pd.DataFrame(
+            {
+                "benunit_id": [1, 2],
+                "benunit_weight": [1.0, 1.0],
+            }
+        ),
+        weights="benunit_weight",
     )
 
     household_df = MicroDataFrame(
-        pd.DataFrame({
-            "household_id": [1, 2],
-            "household_weight": [1.0, 1.0],
-        }),
-        weights="household_weight"
+        pd.DataFrame(
+            {
+                "household_id": [1, 2],
+                "household_weight": [1.0, 1.0],
+            }
+        ),
+        weights="household_weight",
     )
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -50,20 +59,24 @@ def test_change_aggregate_count():
             description="Baseline dataset",
             filepath=baseline_filepath,
             year=2024,
-            data=UKYearData(person=person_df, benunit=benunit_df, household=household_df),
+            data=UKYearData(
+                person=person_df, benunit=benunit_df, household=household_df
+            ),
         )
 
         # Reform: increase everyone's income by 1000
         reform_person_df = MicroDataFrame(
-            pd.DataFrame({
-                "person_id": [1, 2, 3, 4],
-                "benunit_id": [1, 1, 2, 2],
-                "household_id": [1, 1, 2, 2],
-                "age": [30, 25, 40, 35],
-                "employment_income": [51000, 31000, 61000, 41000],
-                "person_weight": [1.0, 1.0, 1.0, 1.0],
-            }),
-            weights="person_weight"
+            pd.DataFrame(
+                {
+                    "person_id": [1, 2, 3, 4],
+                    "benunit_id": [1, 1, 2, 2],
+                    "household_id": [1, 1, 2, 2],
+                    "age": [30, 25, 40, 35],
+                    "employment_income": [51000, 31000, 61000, 41000],
+                    "person_weight": [1.0, 1.0, 1.0, 1.0],
+                }
+            ),
+            weights="person_weight",
         )
 
         reform_dataset = PolicyEngineUKDataset(
@@ -71,7 +84,11 @@ def test_change_aggregate_count():
             description="Reform dataset",
             filepath=reform_filepath,
             year=2024,
-            data=UKYearData(person=reform_person_df, benunit=benunit_df, household=household_df),
+            data=UKYearData(
+                person=reform_person_df,
+                benunit=benunit_df,
+                household=household_df,
+            ),
         )
 
         baseline_sim = Simulation(
@@ -101,31 +118,37 @@ def test_change_aggregate_count():
 def test_change_aggregate_with_absolute_filter():
     """Test filtering by absolute change amount."""
     person_df = MicroDataFrame(
-        pd.DataFrame({
-            "person_id": [1, 2, 3, 4],
-            "benunit_id": [1, 1, 2, 2],
-            "household_id": [1, 1, 2, 2],
-            "age": [30, 25, 40, 35],
-            "employment_income": [50000, 30000, 60000, 40000],
-            "person_weight": [1.0, 1.0, 1.0, 1.0],
-        }),
-        weights="person_weight"
+        pd.DataFrame(
+            {
+                "person_id": [1, 2, 3, 4],
+                "benunit_id": [1, 1, 2, 2],
+                "household_id": [1, 1, 2, 2],
+                "age": [30, 25, 40, 35],
+                "employment_income": [50000, 30000, 60000, 40000],
+                "person_weight": [1.0, 1.0, 1.0, 1.0],
+            }
+        ),
+        weights="person_weight",
     )
 
     benunit_df = MicroDataFrame(
-        pd.DataFrame({
-            "benunit_id": [1, 2],
-            "benunit_weight": [1.0, 1.0],
-        }),
-        weights="benunit_weight"
+        pd.DataFrame(
+            {
+                "benunit_id": [1, 2],
+                "benunit_weight": [1.0, 1.0],
+            }
+        ),
+        weights="benunit_weight",
     )
 
     household_df = MicroDataFrame(
-        pd.DataFrame({
-            "household_id": [1, 2],
-            "household_weight": [1.0, 1.0],
-        }),
-        weights="household_weight"
+        pd.DataFrame(
+            {
+                "household_id": [1, 2],
+                "household_weight": [1.0, 1.0],
+            }
+        ),
+        weights="household_weight",
     )
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -137,20 +160,29 @@ def test_change_aggregate_with_absolute_filter():
             description="Baseline dataset",
             filepath=baseline_filepath,
             year=2024,
-            data=UKYearData(person=person_df, benunit=benunit_df, household=household_df),
+            data=UKYearData(
+                person=person_df, benunit=benunit_df, household=household_df
+            ),
         )
 
         # Reform: different gains for different people
         reform_person_df = MicroDataFrame(
-            pd.DataFrame({
-                "person_id": [1, 2, 3, 4],
-                "benunit_id": [1, 1, 2, 2],
-                "household_id": [1, 1, 2, 2],
-                "age": [30, 25, 40, 35],
-                "employment_income": [52000, 30500, 61500, 40200],  # Gains: 2000, 500, 1500, 200
-                "person_weight": [1.0, 1.0, 1.0, 1.0],
-            }),
-            weights="person_weight"
+            pd.DataFrame(
+                {
+                    "person_id": [1, 2, 3, 4],
+                    "benunit_id": [1, 1, 2, 2],
+                    "household_id": [1, 1, 2, 2],
+                    "age": [30, 25, 40, 35],
+                    "employment_income": [
+                        52000,
+                        30500,
+                        61500,
+                        40200,
+                    ],  # Gains: 2000, 500, 1500, 200
+                    "person_weight": [1.0, 1.0, 1.0, 1.0],
+                }
+            ),
+            weights="person_weight",
         )
 
         reform_dataset = PolicyEngineUKDataset(
@@ -158,7 +190,11 @@ def test_change_aggregate_with_absolute_filter():
             description="Reform dataset",
             filepath=reform_filepath,
             year=2024,
-            data=UKYearData(person=reform_person_df, benunit=benunit_df, household=household_df),
+            data=UKYearData(
+                person=reform_person_df,
+                benunit=benunit_df,
+                household=household_df,
+            ),
         )
 
         baseline_sim = Simulation(
@@ -189,31 +225,37 @@ def test_change_aggregate_with_absolute_filter():
 def test_change_aggregate_with_loss_filter():
     """Test filtering for losses (negative changes)."""
     person_df = MicroDataFrame(
-        pd.DataFrame({
-            "person_id": [1, 2, 3, 4],
-            "benunit_id": [1, 1, 2, 2],
-            "household_id": [1, 1, 2, 2],
-            "age": [30, 25, 40, 35],
-            "employment_income": [50000, 30000, 60000, 40000],
-            "person_weight": [1.0, 1.0, 1.0, 1.0],
-        }),
-        weights="person_weight"
+        pd.DataFrame(
+            {
+                "person_id": [1, 2, 3, 4],
+                "benunit_id": [1, 1, 2, 2],
+                "household_id": [1, 1, 2, 2],
+                "age": [30, 25, 40, 35],
+                "employment_income": [50000, 30000, 60000, 40000],
+                "person_weight": [1.0, 1.0, 1.0, 1.0],
+            }
+        ),
+        weights="person_weight",
     )
 
     benunit_df = MicroDataFrame(
-        pd.DataFrame({
-            "benunit_id": [1, 2],
-            "benunit_weight": [1.0, 1.0],
-        }),
-        weights="benunit_weight"
+        pd.DataFrame(
+            {
+                "benunit_id": [1, 2],
+                "benunit_weight": [1.0, 1.0],
+            }
+        ),
+        weights="benunit_weight",
     )
 
     household_df = MicroDataFrame(
-        pd.DataFrame({
-            "household_id": [1, 2],
-            "household_weight": [1.0, 1.0],
-        }),
-        weights="household_weight"
+        pd.DataFrame(
+            {
+                "household_id": [1, 2],
+                "household_weight": [1.0, 1.0],
+            }
+        ),
+        weights="household_weight",
     )
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -225,20 +267,29 @@ def test_change_aggregate_with_loss_filter():
             description="Baseline dataset",
             filepath=baseline_filepath,
             year=2024,
-            data=UKYearData(person=person_df, benunit=benunit_df, household=household_df),
+            data=UKYearData(
+                person=person_df, benunit=benunit_df, household=household_df
+            ),
         )
 
         # Reform: some people lose money
         reform_person_df = MicroDataFrame(
-            pd.DataFrame({
-                "person_id": [1, 2, 3, 4],
-                "benunit_id": [1, 1, 2, 2],
-                "household_id": [1, 1, 2, 2],
-                "age": [30, 25, 40, 35],
-                "employment_income": [49000, 29000, 60500, 39000],  # Changes: -1000, -1000, 500, -1000
-                "person_weight": [1.0, 1.0, 1.0, 1.0],
-            }),
-            weights="person_weight"
+            pd.DataFrame(
+                {
+                    "person_id": [1, 2, 3, 4],
+                    "benunit_id": [1, 1, 2, 2],
+                    "household_id": [1, 1, 2, 2],
+                    "age": [30, 25, 40, 35],
+                    "employment_income": [
+                        49000,
+                        29000,
+                        60500,
+                        39000,
+                    ],  # Changes: -1000, -1000, 500, -1000
+                    "person_weight": [1.0, 1.0, 1.0, 1.0],
+                }
+            ),
+            weights="person_weight",
         )
 
         reform_dataset = PolicyEngineUKDataset(
@@ -246,7 +297,11 @@ def test_change_aggregate_with_loss_filter():
             description="Reform dataset",
             filepath=reform_filepath,
             year=2024,
-            data=UKYearData(person=reform_person_df, benunit=benunit_df, household=household_df),
+            data=UKYearData(
+                person=reform_person_df,
+                benunit=benunit_df,
+                household=household_df,
+            ),
         )
 
         baseline_sim = Simulation(
@@ -277,31 +332,37 @@ def test_change_aggregate_with_loss_filter():
 def test_change_aggregate_with_relative_filter():
     """Test filtering by relative (percentage) change."""
     person_df = MicroDataFrame(
-        pd.DataFrame({
-            "person_id": [1, 2, 3, 4],
-            "benunit_id": [1, 1, 2, 2],
-            "household_id": [1, 1, 2, 2],
-            "age": [30, 25, 40, 35],
-            "employment_income": [50000, 20000, 60000, 40000],
-            "person_weight": [1.0, 1.0, 1.0, 1.0],
-        }),
-        weights="person_weight"
+        pd.DataFrame(
+            {
+                "person_id": [1, 2, 3, 4],
+                "benunit_id": [1, 1, 2, 2],
+                "household_id": [1, 1, 2, 2],
+                "age": [30, 25, 40, 35],
+                "employment_income": [50000, 20000, 60000, 40000],
+                "person_weight": [1.0, 1.0, 1.0, 1.0],
+            }
+        ),
+        weights="person_weight",
     )
 
     benunit_df = MicroDataFrame(
-        pd.DataFrame({
-            "benunit_id": [1, 2],
-            "benunit_weight": [1.0, 1.0],
-        }),
-        weights="benunit_weight"
+        pd.DataFrame(
+            {
+                "benunit_id": [1, 2],
+                "benunit_weight": [1.0, 1.0],
+            }
+        ),
+        weights="benunit_weight",
     )
 
     household_df = MicroDataFrame(
-        pd.DataFrame({
-            "household_id": [1, 2],
-            "household_weight": [1.0, 1.0],
-        }),
-        weights="household_weight"
+        pd.DataFrame(
+            {
+                "household_id": [1, 2],
+                "household_weight": [1.0, 1.0],
+            }
+        ),
+        weights="household_weight",
     )
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -313,21 +374,25 @@ def test_change_aggregate_with_relative_filter():
             description="Baseline dataset",
             filepath=baseline_filepath,
             year=2024,
-            data=UKYearData(person=person_df, benunit=benunit_df, household=household_df),
+            data=UKYearData(
+                person=person_df, benunit=benunit_df, household=household_df
+            ),
         )
 
         # Reform: different percentage gains
         reform_person_df = MicroDataFrame(
-            pd.DataFrame({
-                "person_id": [1, 2, 3, 4],
-                "benunit_id": [1, 1, 2, 2],
-                "household_id": [1, 1, 2, 2],
-                "age": [30, 25, 40, 35],
-                # Gains: 5000 (10%), 2000 (10%), 3000 (5%), 1000 (2.5%)
-                "employment_income": [55000, 22000, 63000, 41000],
-                "person_weight": [1.0, 1.0, 1.0, 1.0],
-            }),
-            weights="person_weight"
+            pd.DataFrame(
+                {
+                    "person_id": [1, 2, 3, 4],
+                    "benunit_id": [1, 1, 2, 2],
+                    "household_id": [1, 1, 2, 2],
+                    "age": [30, 25, 40, 35],
+                    # Gains: 5000 (10%), 2000 (10%), 3000 (5%), 1000 (2.5%)
+                    "employment_income": [55000, 22000, 63000, 41000],
+                    "person_weight": [1.0, 1.0, 1.0, 1.0],
+                }
+            ),
+            weights="person_weight",
         )
 
         reform_dataset = PolicyEngineUKDataset(
@@ -335,7 +400,11 @@ def test_change_aggregate_with_relative_filter():
             description="Reform dataset",
             filepath=reform_filepath,
             year=2024,
-            data=UKYearData(person=reform_person_df, benunit=benunit_df, household=household_df),
+            data=UKYearData(
+                person=reform_person_df,
+                benunit=benunit_df,
+                household=household_df,
+            ),
         )
 
         baseline_sim = Simulation(
@@ -366,31 +435,37 @@ def test_change_aggregate_with_relative_filter():
 def test_change_aggregate_sum():
     """Test summing changes."""
     person_df = MicroDataFrame(
-        pd.DataFrame({
-            "person_id": [1, 2, 3],
-            "benunit_id": [1, 1, 2],
-            "household_id": [1, 1, 2],
-            "age": [30, 25, 40],
-            "employment_income": [50000, 30000, 60000],
-            "person_weight": [1.0, 1.0, 1.0],
-        }),
-        weights="person_weight"
+        pd.DataFrame(
+            {
+                "person_id": [1, 2, 3],
+                "benunit_id": [1, 1, 2],
+                "household_id": [1, 1, 2],
+                "age": [30, 25, 40],
+                "employment_income": [50000, 30000, 60000],
+                "person_weight": [1.0, 1.0, 1.0],
+            }
+        ),
+        weights="person_weight",
     )
 
     benunit_df = MicroDataFrame(
-        pd.DataFrame({
-            "benunit_id": [1, 2],
-            "benunit_weight": [1.0, 1.0],
-        }),
-        weights="benunit_weight"
+        pd.DataFrame(
+            {
+                "benunit_id": [1, 2],
+                "benunit_weight": [1.0, 1.0],
+            }
+        ),
+        weights="benunit_weight",
     )
 
     household_df = MicroDataFrame(
-        pd.DataFrame({
-            "household_id": [1, 2],
-            "household_weight": [1.0, 1.0],
-        }),
-        weights="household_weight"
+        pd.DataFrame(
+            {
+                "household_id": [1, 2],
+                "household_weight": [1.0, 1.0],
+            }
+        ),
+        weights="household_weight",
     )
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -402,20 +477,24 @@ def test_change_aggregate_sum():
             description="Baseline dataset",
             filepath=baseline_filepath,
             year=2024,
-            data=UKYearData(person=person_df, benunit=benunit_df, household=household_df),
+            data=UKYearData(
+                person=person_df, benunit=benunit_df, household=household_df
+            ),
         )
 
         # Reform: everyone gains 1000
         reform_person_df = MicroDataFrame(
-            pd.DataFrame({
-                "person_id": [1, 2, 3],
-                "benunit_id": [1, 1, 2],
-                "household_id": [1, 1, 2],
-                "age": [30, 25, 40],
-                "employment_income": [51000, 31000, 61000],
-                "person_weight": [1.0, 1.0, 1.0],
-            }),
-            weights="person_weight"
+            pd.DataFrame(
+                {
+                    "person_id": [1, 2, 3],
+                    "benunit_id": [1, 1, 2],
+                    "household_id": [1, 1, 2],
+                    "age": [30, 25, 40],
+                    "employment_income": [51000, 31000, 61000],
+                    "person_weight": [1.0, 1.0, 1.0],
+                }
+            ),
+            weights="person_weight",
         )
 
         reform_dataset = PolicyEngineUKDataset(
@@ -423,7 +502,11 @@ def test_change_aggregate_sum():
             description="Reform dataset",
             filepath=reform_filepath,
             year=2024,
-            data=UKYearData(person=reform_person_df, benunit=benunit_df, household=household_df),
+            data=UKYearData(
+                person=reform_person_df,
+                benunit=benunit_df,
+                household=household_df,
+            ),
         )
 
         baseline_sim = Simulation(
@@ -453,31 +536,37 @@ def test_change_aggregate_sum():
 def test_change_aggregate_mean():
     """Test mean change."""
     person_df = MicroDataFrame(
-        pd.DataFrame({
-            "person_id": [1, 2, 3],
-            "benunit_id": [1, 1, 2],
-            "household_id": [1, 1, 2],
-            "age": [30, 25, 40],
-            "employment_income": [50000, 30000, 60000],
-            "person_weight": [1.0, 1.0, 1.0],
-        }),
-        weights="person_weight"
+        pd.DataFrame(
+            {
+                "person_id": [1, 2, 3],
+                "benunit_id": [1, 1, 2],
+                "household_id": [1, 1, 2],
+                "age": [30, 25, 40],
+                "employment_income": [50000, 30000, 60000],
+                "person_weight": [1.0, 1.0, 1.0],
+            }
+        ),
+        weights="person_weight",
     )
 
     benunit_df = MicroDataFrame(
-        pd.DataFrame({
-            "benunit_id": [1, 2],
-            "benunit_weight": [1.0, 1.0],
-        }),
-        weights="benunit_weight"
+        pd.DataFrame(
+            {
+                "benunit_id": [1, 2],
+                "benunit_weight": [1.0, 1.0],
+            }
+        ),
+        weights="benunit_weight",
     )
 
     household_df = MicroDataFrame(
-        pd.DataFrame({
-            "household_id": [1, 2],
-            "household_weight": [1.0, 1.0],
-        }),
-        weights="household_weight"
+        pd.DataFrame(
+            {
+                "household_id": [1, 2],
+                "household_weight": [1.0, 1.0],
+            }
+        ),
+        weights="household_weight",
     )
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -489,20 +578,28 @@ def test_change_aggregate_mean():
             description="Baseline dataset",
             filepath=baseline_filepath,
             year=2024,
-            data=UKYearData(person=person_df, benunit=benunit_df, household=household_df),
+            data=UKYearData(
+                person=person_df, benunit=benunit_df, household=household_df
+            ),
         )
 
         # Reform: different gains
         reform_person_df = MicroDataFrame(
-            pd.DataFrame({
-                "person_id": [1, 2, 3],
-                "benunit_id": [1, 1, 2],
-                "household_id": [1, 1, 2],
-                "age": [30, 25, 40],
-                "employment_income": [51000, 32000, 63000],  # Gains: 1000, 2000, 3000
-                "person_weight": [1.0, 1.0, 1.0],
-            }),
-            weights="person_weight"
+            pd.DataFrame(
+                {
+                    "person_id": [1, 2, 3],
+                    "benunit_id": [1, 1, 2],
+                    "household_id": [1, 1, 2],
+                    "age": [30, 25, 40],
+                    "employment_income": [
+                        51000,
+                        32000,
+                        63000,
+                    ],  # Gains: 1000, 2000, 3000
+                    "person_weight": [1.0, 1.0, 1.0],
+                }
+            ),
+            weights="person_weight",
         )
 
         reform_dataset = PolicyEngineUKDataset(
@@ -510,7 +607,11 @@ def test_change_aggregate_mean():
             description="Reform dataset",
             filepath=reform_filepath,
             year=2024,
-            data=UKYearData(person=reform_person_df, benunit=benunit_df, household=household_df),
+            data=UKYearData(
+                person=reform_person_df,
+                benunit=benunit_df,
+                household=household_df,
+            ),
         )
 
         baseline_sim = Simulation(
@@ -540,31 +641,37 @@ def test_change_aggregate_mean():
 def test_change_aggregate_with_filter_variable():
     """Test filtering by another variable (e.g., only adults)."""
     person_df = MicroDataFrame(
-        pd.DataFrame({
-            "person_id": [1, 2, 3, 4],
-            "benunit_id": [1, 1, 2, 2],
-            "household_id": [1, 1, 2, 2],
-            "age": [30, 25, 40, 15],  # Person 4 is a child
-            "employment_income": [50000, 30000, 60000, 5000],
-            "person_weight": [1.0, 1.0, 1.0, 1.0],
-        }),
-        weights="person_weight"
+        pd.DataFrame(
+            {
+                "person_id": [1, 2, 3, 4],
+                "benunit_id": [1, 1, 2, 2],
+                "household_id": [1, 1, 2, 2],
+                "age": [30, 25, 40, 15],  # Person 4 is a child
+                "employment_income": [50000, 30000, 60000, 5000],
+                "person_weight": [1.0, 1.0, 1.0, 1.0],
+            }
+        ),
+        weights="person_weight",
     )
 
     benunit_df = MicroDataFrame(
-        pd.DataFrame({
-            "benunit_id": [1, 2],
-            "benunit_weight": [1.0, 1.0],
-        }),
-        weights="benunit_weight"
+        pd.DataFrame(
+            {
+                "benunit_id": [1, 2],
+                "benunit_weight": [1.0, 1.0],
+            }
+        ),
+        weights="benunit_weight",
     )
 
     household_df = MicroDataFrame(
-        pd.DataFrame({
-            "household_id": [1, 2],
-            "household_weight": [1.0, 1.0],
-        }),
-        weights="household_weight"
+        pd.DataFrame(
+            {
+                "household_id": [1, 2],
+                "household_weight": [1.0, 1.0],
+            }
+        ),
+        weights="household_weight",
     )
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -576,20 +683,24 @@ def test_change_aggregate_with_filter_variable():
             description="Baseline dataset",
             filepath=baseline_filepath,
             year=2024,
-            data=UKYearData(person=person_df, benunit=benunit_df, household=household_df),
+            data=UKYearData(
+                person=person_df, benunit=benunit_df, household=household_df
+            ),
         )
 
         # Reform: everyone gains 1000
         reform_person_df = MicroDataFrame(
-            pd.DataFrame({
-                "person_id": [1, 2, 3, 4],
-                "benunit_id": [1, 1, 2, 2],
-                "household_id": [1, 1, 2, 2],
-                "age": [30, 25, 40, 15],
-                "employment_income": [51000, 31000, 61000, 6000],
-                "person_weight": [1.0, 1.0, 1.0, 1.0],
-            }),
-            weights="person_weight"
+            pd.DataFrame(
+                {
+                    "person_id": [1, 2, 3, 4],
+                    "benunit_id": [1, 1, 2, 2],
+                    "household_id": [1, 1, 2, 2],
+                    "age": [30, 25, 40, 15],
+                    "employment_income": [51000, 31000, 61000, 6000],
+                    "person_weight": [1.0, 1.0, 1.0, 1.0],
+                }
+            ),
+            weights="person_weight",
         )
 
         reform_dataset = PolicyEngineUKDataset(
@@ -597,7 +708,11 @@ def test_change_aggregate_with_filter_variable():
             description="Reform dataset",
             filepath=reform_filepath,
             year=2024,
-            data=UKYearData(person=reform_person_df, benunit=benunit_df, household=household_df),
+            data=UKYearData(
+                person=reform_person_df,
+                benunit=benunit_df,
+                household=household_df,
+            ),
         )
 
         baseline_sim = Simulation(
@@ -630,31 +745,37 @@ def test_change_aggregate_with_filter_variable():
 def test_change_aggregate_combined_filters():
     """Test combining multiple filter types."""
     person_df = MicroDataFrame(
-        pd.DataFrame({
-            "person_id": [1, 2, 3, 4, 5],
-            "benunit_id": [1, 1, 2, 2, 3],
-            "household_id": [1, 1, 2, 2, 3],
-            "age": [30, 25, 40, 35, 45],
-            "employment_income": [50000, 20000, 60000, 40000, 80000],
-            "person_weight": [1.0, 1.0, 1.0, 1.0, 1.0],
-        }),
-        weights="person_weight"
+        pd.DataFrame(
+            {
+                "person_id": [1, 2, 3, 4, 5],
+                "benunit_id": [1, 1, 2, 2, 3],
+                "household_id": [1, 1, 2, 2, 3],
+                "age": [30, 25, 40, 35, 45],
+                "employment_income": [50000, 20000, 60000, 40000, 80000],
+                "person_weight": [1.0, 1.0, 1.0, 1.0, 1.0],
+            }
+        ),
+        weights="person_weight",
     )
 
     benunit_df = MicroDataFrame(
-        pd.DataFrame({
-            "benunit_id": [1, 2, 3],
-            "benunit_weight": [1.0, 1.0, 1.0],
-        }),
-        weights="benunit_weight"
+        pd.DataFrame(
+            {
+                "benunit_id": [1, 2, 3],
+                "benunit_weight": [1.0, 1.0, 1.0],
+            }
+        ),
+        weights="benunit_weight",
     )
 
     household_df = MicroDataFrame(
-        pd.DataFrame({
-            "household_id": [1, 2, 3],
-            "household_weight": [1.0, 1.0, 1.0],
-        }),
-        weights="household_weight"
+        pd.DataFrame(
+            {
+                "household_id": [1, 2, 3],
+                "household_weight": [1.0, 1.0, 1.0],
+            }
+        ),
+        weights="household_weight",
     )
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -666,21 +787,25 @@ def test_change_aggregate_combined_filters():
             description="Baseline dataset",
             filepath=baseline_filepath,
             year=2024,
-            data=UKYearData(person=person_df, benunit=benunit_df, household=household_df),
+            data=UKYearData(
+                person=person_df, benunit=benunit_df, household=household_df
+            ),
         )
 
         # Reform: varying gains
         reform_person_df = MicroDataFrame(
-            pd.DataFrame({
-                "person_id": [1, 2, 3, 4, 5],
-                "benunit_id": [1, 1, 2, 2, 3],
-                "household_id": [1, 1, 2, 2, 3],
-                "age": [30, 25, 40, 35, 45],
-                # Changes: 10000 (20%), 2000 (10%), 3000 (5%), 800 (2%), 4000 (5%)
-                "employment_income": [60000, 22000, 63000, 40800, 84000],
-                "person_weight": [1.0, 1.0, 1.0, 1.0, 1.0],
-            }),
-            weights="person_weight"
+            pd.DataFrame(
+                {
+                    "person_id": [1, 2, 3, 4, 5],
+                    "benunit_id": [1, 1, 2, 2, 3],
+                    "household_id": [1, 1, 2, 2, 3],
+                    "age": [30, 25, 40, 35, 45],
+                    # Changes: 10000 (20%), 2000 (10%), 3000 (5%), 800 (2%), 4000 (5%)
+                    "employment_income": [60000, 22000, 63000, 40800, 84000],
+                    "person_weight": [1.0, 1.0, 1.0, 1.0, 1.0],
+                }
+            ),
+            weights="person_weight",
         )
 
         reform_dataset = PolicyEngineUKDataset(
@@ -688,7 +813,11 @@ def test_change_aggregate_combined_filters():
             description="Reform dataset",
             filepath=reform_filepath,
             year=2024,
-            data=UKYearData(person=reform_person_df, benunit=benunit_df, household=household_df),
+            data=UKYearData(
+                person=reform_person_df,
+                benunit=benunit_df,
+                household=household_df,
+            ),
         )
 
         baseline_sim = Simulation(

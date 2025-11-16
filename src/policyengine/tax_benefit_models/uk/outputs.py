@@ -2,7 +2,10 @@
 
 from policyengine.core import Output
 from policyengine.outputs.aggregate import Aggregate, AggregateType
-from policyengine.outputs.change_aggregate import ChangeAggregate, ChangeAggregateType
+from policyengine.outputs.change_aggregate import (
+    ChangeAggregate,
+    ChangeAggregateType,
+)
 from pydantic import ConfigDict
 from typing import TYPE_CHECKING
 

@@ -33,7 +33,14 @@ class USYearData(BaseModel):
         Raises:
             ValueError: If source or target entity is invalid.
         """
-        valid_entities = {"person", "marital_unit", "family", "spm_unit", "tax_unit", "household"}
+        valid_entities = {
+            "person",
+            "marital_unit",
+            "family",
+            "spm_unit",
+            "tax_unit",
+            "household",
+        }
         if source_entity not in valid_entities:
             raise ValueError(
                 f"Invalid source entity '{source_entity}'. Must be one of {valid_entities}"
@@ -47,7 +54,14 @@ class USYearData(BaseModel):
         source_df = getattr(self, source_entity)
         if columns:
             # Select only requested columns (keep join keys)
-            join_keys = {"person_id", "marital_unit_id", "family_id", "spm_unit_id", "tax_unit_id", "household_id"}
+            join_keys = {
+                "person_id",
+                "marital_unit_id",
+                "family_id",
+                "spm_unit_id",
+                "tax_unit_id",
+                "household_id",
+            }
             cols_to_keep = list(
                 set(columns) | (join_keys & set(source_df.columns))
             )
@@ -88,8 +102,13 @@ class USYearData(BaseModel):
             source_key = f"{source_entity}_id"
 
             # Link source -> person -> target
-            if source_key in person_df.columns and target_key in person_df.columns:
-                person_link = person_df[[source_key, target_key]].drop_duplicates()
+            if (
+                source_key in person_df.columns
+                and target_key in person_df.columns
+            ):
+                person_link = person_df[
+                    [source_key, target_key]
+                ].drop_duplicates()
                 source_with_target = pd.DataFrame(source_df).merge(
                     person_link, on=source_key, how="left"
                 )

@@ -1,4 +1,10 @@
-from policyengine.core import TaxBenefitModel, TaxBenefitModelVersion, Variable, Parameter, ParameterValue
+from policyengine.core import (
+    TaxBenefitModel,
+    TaxBenefitModelVersion,
+    Variable,
+    Parameter,
+    ParameterValue,
+)
 import datetime
 import requests
 from importlib.metadata import version
@@ -76,9 +82,7 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
                     name=param_node.name,
                     tax_benefit_model_version=self,
                     description=param_node.description,
-                    data_type=type(
-                        param_node(2025)
-                    ),
+                    data_type=type(param_node(2025)),
                     unit=param_node.metadata.get("unit"),
                 )
                 self.parameters.append(parameter)
@@ -103,7 +107,9 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
 
     def run(self, simulation: "Simulation") -> "Simulation":
         from policyengine_us import Microsimulation
-        from policyengine.utils.parametric_reforms import simulation_modifier_from_parameter_values
+        from policyengine.utils.parametric_reforms import (
+            simulation_modifier_from_parameter_values,
+        )
 
         assert isinstance(simulation.dataset, PolicyEngineUSDataset)
 

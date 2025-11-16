@@ -134,14 +134,17 @@ class PolicyEngineUKDataset(Dataset):
 
     data: UKYearData | None = None
 
-    def __init__(self, **kwargs: dict):
-        super().__init__(**kwargs)
-
+    def model_post_init(self, __context):
+        """Called after Pydantic initialization."""
         # Make sure we are synchronised between in-memory and storage, at least on initialisation
-        if "data" in kwargs:
+        if self.data is not None:
             self.save()
-        elif "filepath" in kwargs:
-            self.load()
+        elif self.filepath and not self.data:
+            try:
+                self.load()
+            except FileNotFoundError:
+                # File doesn't exist yet, that's OK
+                pass
 
     def save(self) -> None:
         """Save dataset to HDF5 file."""
@@ -188,6 +191,7 @@ def create_datasets(
 ) -> None:
     for dataset in datasets:
         from policyengine_uk import Microsimulation
+
         sim = Microsimulation(dataset=dataset)
         for year in years:
             year_dataset = sim.dataset[year]
@@ -202,27 +206,40 @@ def create_datasets(
                 household_df[["household_id", "household_weight"]],
                 left_on="person_household_id",
                 right_on="household_id",
-                how="left"
+                how="left",
             )
-            person_df = person_df.rename(columns={"household_weight": "person_weight"})
+            person_df = person_df.rename(
+                columns={"household_weight": "person_weight"}
+            )
             person_df = person_df.drop(columns=["household_id"])
 
             # Get household_id for each benunit from person table
-            benunit_household_map = person_df[["person_benunit_id", "person_household_id"]].drop_duplicates()
+            benunit_household_map = person_df[
+                ["person_benunit_id", "person_household_id"]
+            ].drop_duplicates()
             benunit_df = benunit_df.merge(
                 benunit_household_map,
                 left_on="benunit_id",
                 right_on="person_benunit_id",
-                how="left"
+                how="left",
             )
             benunit_df = benunit_df.merge(
                 household_df[["household_id", "household_weight"]],
                 left_on="person_household_id",
                 right_on="household_id",
-                how="left"
+                how="left",
             )
-            benunit_df = benunit_df.rename(columns={"household_weight": "benunit_weight"})
-            benunit_df = benunit_df.drop(columns=["person_benunit_id", "person_household_id", "household_id"], errors="ignore")
+            benunit_df = benunit_df.rename(
+                columns={"household_weight": "benunit_weight"}
+            )
+            benunit_df = benunit_df.drop(
+                columns=[
+                    "person_benunit_id",
+                    "person_household_id",
+                    "household_id",
+                ],
+                errors="ignore",
+            )
 
             uk_dataset = PolicyEngineUKDataset(
                 name=f"{dataset}-year-{year}",
@@ -231,8 +248,12 @@ def create_datasets(
                 year=year,
                 data=UKYearData(
                     person=MicroDataFrame(person_df, weights="person_weight"),
-                    benunit=MicroDataFrame(benunit_df, weights="benunit_weight"),
-                    household=MicroDataFrame(household_df, weights="household_weight"),
+                    benunit=MicroDataFrame(
+                        benunit_df, weights="benunit_weight"
+                    ),
+                    household=MicroDataFrame(
+                        household_df, weights="household_weight"
+                    ),
                 ),
             )
             uk_dataset.save()

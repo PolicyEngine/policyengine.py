@@ -11,6 +11,7 @@ from .dataset_version import DatasetVersion
 from .output import Output, OutputCollection
 
 # Rebuild models to resolve forward references
+Dataset.model_rebuild()
 TaxBenefitModelVersion.model_rebuild()
 Variable.model_rebuild()
 Parameter.model_rebuild()

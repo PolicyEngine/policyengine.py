@@ -176,7 +176,9 @@ def main():
     print(f"Total net income: £{total_net_income:.1f}bn")
     print(f"Total tax: £{total_tax:.1f}bn")
     print(f"Total households: {total_households:.1f}m")
-    print(f"Average effective tax rate: {total_tax / (total_net_income + total_tax) * 100:.1f}%")
+    print(
+        f"Average effective tax rate: {total_tax / (total_net_income + total_tax) * 100:.1f}%"
+    )
 
     print("\nGenerating visualisations...")
     visualise_results(results)
