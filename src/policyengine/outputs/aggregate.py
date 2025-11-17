@@ -34,6 +34,7 @@ class Aggregate(Output):
     )
 
     result: Any | None = None
+
     def run(self):
         # Convert quantile specification to describes_quantiles format
         if self.quantile is not None:
@@ -82,7 +83,9 @@ class Aggregate(Output):
             if filter_var_obj.entity != target_entity:
                 filter_mapped = (
                     self.simulation.output_dataset.data.map_to_entity(
-                        filter_var_obj.entity, target_entity, columns=[self.filter_variable]
+                        filter_var_obj.entity,
+                        target_entity,
+                        columns=[self.filter_variable],
                     )
                 )
                 filter_series = filter_mapped[self.filter_variable]
@@ -94,10 +97,14 @@ class Aggregate(Output):
                     threshold = filter_series.quantile(self.filter_variable_eq)
                     series = series[filter_series <= threshold]
                 if self.filter_variable_leq is not None:
-                    threshold = filter_series.quantile(self.filter_variable_leq)
+                    threshold = filter_series.quantile(
+                        self.filter_variable_leq
+                    )
                     series = series[filter_series <= threshold]
                 if self.filter_variable_geq is not None:
-                    threshold = filter_series.quantile(self.filter_variable_geq)
+                    threshold = filter_series.quantile(
+                        self.filter_variable_geq
+                    )
                     series = series[filter_series >= threshold]
             else:
                 if self.filter_variable_eq is not None:

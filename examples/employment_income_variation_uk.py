@@ -221,7 +221,6 @@ def extract_results_by_employment_income(
     pension_credit = []
     income_support = []
 
-
     for hh_idx, emp_income in enumerate(employment_incomes):
         # Get HBAI household net income
         agg = Aggregate(
@@ -267,7 +266,6 @@ def extract_results_by_employment_income(
             agg.run()
             benefit_list.append(agg.result)
 
-
         # Get household tax
         agg = Aggregate(
             simulation=simulation,
@@ -305,13 +303,19 @@ def visualise_results(results: dict) -> None:
     # Calculate net employment income (employment income minus tax)
     net_employment = [
         emp - tax
-        for emp, tax in zip(results["employment_income_hh"], results["household_tax"])
+        for emp, tax in zip(
+            results["employment_income_hh"], results["household_tax"]
+        )
     ]
 
     # Stack benefits and income components using PolicyEngine colors
     components = [
         ("Net employment income", net_employment, COLORS["primary"]),
-        ("Universal Credit", results["universal_credit"], COLORS["blue_secondary"]),
+        (
+            "Universal Credit",
+            results["universal_credit"],
+            COLORS["blue_secondary"],
+        ),
         ("Working Tax Credit", results["working_tax_credit"], COLORS["info"]),
         ("Child Tax Credit", results["child_tax_credit"], COLORS["success"]),
         ("Child Benefit", results["child_benefit"], COLORS["warning"]),
@@ -371,9 +375,15 @@ def main():
 
     print("\nSample results:")
     for emp_inc in [0, 25000, 50000, 100000]:
-        idx = employment_incomes.index(emp_inc) if emp_inc in employment_incomes else -1
+        idx = (
+            employment_incomes.index(emp_inc)
+            if emp_inc in employment_incomes
+            else -1
+        )
         if idx >= 0:
-            print(f"  Employment income £{emp_inc:,}: HBAI net income £{results['hbai_household_net_income'][idx]:,.0f}")
+            print(
+                f"  Employment income £{emp_inc:,}: HBAI net income £{results['hbai_household_net_income'][idx]:,.0f}"
+            )
 
     print("\nGenerating visualisation...")
     visualise_results(results)

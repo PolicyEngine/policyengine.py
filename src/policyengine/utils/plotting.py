@@ -20,7 +20,9 @@ COLORS = {
 }
 
 # Typography
-FONT_FAMILY = "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+FONT_FAMILY = (
+    "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+)
 FONT_SIZE_LABEL = 12
 FONT_SIZE_DEFAULT = 14
 FONT_SIZE_TITLE = 16
