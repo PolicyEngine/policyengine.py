@@ -19,7 +19,9 @@ class YearData(BaseModel):
 
         This should be implemented by subclasses to return the appropriate entities.
         """
-        raise NotImplementedError("Subclasses must implement entity_data property")
+        raise NotImplementedError(
+            "Subclasses must implement entity_data property"
+        )
 
     @property
     def person_entity(self) -> str:
@@ -252,7 +254,9 @@ def map_to_entity(
             # Handle divide operation
             if how == "divide":
                 # Get columns to divide (exclude ID and weight columns)
-                id_cols = {col for col in result.columns if col.endswith("_id")}
+                id_cols = {
+                    col for col in result.columns if col.endswith("_id")
+                }
                 weight_cols = {
                     col for col in result.columns if col.endswith("_weight")
                 }
@@ -372,7 +376,8 @@ def map_to_entity(
                 # Divide values by source group count (per-person share)
                 for col in agg_cols:
                     source_with_target[col] = (
-                        source_with_target[col] / source_with_target["__source_count"]
+                        source_with_target[col]
+                        / source_with_target["__source_count"]
                     )
 
                 # Now aggregate (sum of per-person shares) to target level

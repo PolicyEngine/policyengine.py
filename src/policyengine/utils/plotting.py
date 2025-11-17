@@ -1,6 +1,5 @@
 """Plotting utilities for PolicyEngine visualisations."""
 
-
 import plotly.graph_objects as go
 
 # PolicyEngine brand colours
