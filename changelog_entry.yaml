@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    - Just basemodels, no sqlmodels.
+    - Clean, working analysis at both household and macro level for uk and us.

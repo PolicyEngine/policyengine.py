@@ -1,9 +1,8 @@
 **/*.db
 **/__pycache__
 **/*.egg-info
+**/*.h5
+*.ipynb
 _build/
-simulations/
-test.*
-supabase/
 .env
-**/review.md
+**/.DS_Store

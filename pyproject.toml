@@ -13,20 +13,11 @@ authors = [
 license = {file = "LICENSE"}
 requires-python = ">=3.13"
 dependencies = [
-    "sqlalchemy>=2.0.0",
-    "sqlmodel>=0.0.21",
-    "alembic>=1.13.0",
-    "psycopg2-binary>=2.9.0",
-    "pymysql>=1.1.0",
-    "google-cloud-storage>=2.10.0",
-    "getpass4",
     "pydantic>=2.0.0",
     "pandas>=2.0.0",
-    "rich>=13.0.0",
-    "ipywidgets>=8.0.0",
     "microdf_python",
-    "tqdm>=4.67.1",
-    "blosc>=1.11.3",
+    "plotly>=5.0.0",
+    "requests>=2.31.0",
 ]
 
 [project.optional-dependencies]
@@ -64,13 +55,13 @@ where = ["src"]
 [tool.setuptools.package-data]
 "policyengine" = ["**/*"]
 
-[project.scripts]
-pe-migrate = "policyengine.migrations.runner:main"
-
 [tool.pytest.ini_options]
 addopts = "-v"
 testpaths = [
     "tests",
+]
+filterwarnings = [
+    "ignore::pydantic.warnings.PydanticDeprecatedSince20",
 ]
 
 [tool.black]
