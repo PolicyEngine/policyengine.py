@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 
 import pandas as pd
@@ -74,13 +75,19 @@ class PolicyEngineUSDataset(Dataset):
         filepath = Path(self.filepath)
         if not filepath.parent.exists():
             filepath.parent.mkdir(parents=True, exist_ok=True)
-        with pd.HDFStore(filepath, mode="w") as store:
-            store["person"] = pd.DataFrame(self.data.person)
-            store["marital_unit"] = pd.DataFrame(self.data.marital_unit)
-            store["family"] = pd.DataFrame(self.data.family)
-            store["spm_unit"] = pd.DataFrame(self.data.spm_unit)
-            store["tax_unit"] = pd.DataFrame(self.data.tax_unit)
-            store["household"] = pd.DataFrame(self.data.household)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                category=pd.errors.PerformanceWarning,
+                message=".*PyTables will pickle object types.*",
+            )
+            with pd.HDFStore(filepath, mode="w") as store:
+                store["person"] = pd.DataFrame(self.data.person)
+                store["marital_unit"] = pd.DataFrame(self.data.marital_unit)
+                store["family"] = pd.DataFrame(self.data.family)
+                store["spm_unit"] = pd.DataFrame(self.data.spm_unit)
+                store["tax_unit"] = pd.DataFrame(self.data.tax_unit)
+                store["household"] = pd.DataFrame(self.data.household)
 
     def load(self) -> None:
         """Load dataset from HDF5 file into this instance."""
