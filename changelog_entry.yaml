@@ -1,4 +1,15 @@
 - bump: minor
   changes:
-    - Just basemodels, no sqlmodels.
-    - Clean, working analysis at both household and macro level for uk and us.
+    added:
+    - Policy and Dynamic classes now support addition operator (__add__) to combine policies and dynamics.
+    - Parameter values are appended when combining policies/dynamics.
+    - Simulation modifiers are chained in sequence when combining policies/dynamics.
+    changed:
+    - Cleaned up unused dependencies (removed sqlalchemy, sqlmodel, alembic, psycopg2, pymysql, google-cloud-storage, getpass4, rich, ipywidgets, tqdm, blosc).
+    - Added missing dependencies (plotly, requests).
+    - Removed unused pe-migrate script entry point.
+    fixed:
+    - Fixed all ruff linting errors (148 errors resolved).
+    - Replaced star imports with explicit imports for better code clarity.
+    - Added explicit re-exports in __init__.py files.
+    - Silenced PyTables PerformanceWarning in US datasets.
