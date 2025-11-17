@@ -1,6 +1,8 @@
-from policyengine.core import ParameterValue
-from typing import Callable
+from collections.abc import Callable
+
 from policyengine_core.periods import period
+
+from policyengine.core import ParameterValue
 
 
 def simulation_modifier_from_parameter_values(

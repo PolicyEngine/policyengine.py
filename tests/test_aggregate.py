@@ -1,14 +1,16 @@
-import pandas as pd
-import tempfile
 import os
+import tempfile
+
+import pandas as pd
 from microdf import MicroDataFrame
-from policyengine.core import *
+
+from policyengine.core import Simulation
+from policyengine.outputs.aggregate import Aggregate, AggregateType
 from policyengine.tax_benefit_models.uk import (
     PolicyEngineUKDataset,
     UKYearData,
     uk_latest,
 )
-from policyengine.outputs.aggregate import Aggregate, AggregateType
 
 
 def test_aggregate_sum():

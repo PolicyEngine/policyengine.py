@@ -1,13 +1,15 @@
 """UK-specific output templates."""
 
+from typing import TYPE_CHECKING
+
+from pydantic import ConfigDict
+
 from policyengine.core import Output
 from policyengine.outputs.aggregate import Aggregate, AggregateType
 from policyengine.outputs.change_aggregate import (
     ChangeAggregate,
     ChangeAggregateType,
 )
-from pydantic import ConfigDict
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation

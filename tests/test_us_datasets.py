@@ -1,12 +1,13 @@
 """Tests for US dataset creation from HuggingFace paths."""
 
-import pytest
-import pandas as pd
-from pathlib import Path
 import shutil
+from pathlib import Path
+
+import pandas as pd
+
 from policyengine.tax_benefit_models.us import (
-    create_datasets,
     PolicyEngineUSDataset,
+    create_datasets,
 )
 
 

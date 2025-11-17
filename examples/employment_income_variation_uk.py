@@ -19,19 +19,21 @@ IMPORTANT NOTES FOR CUSTOM DATASETS:
 Run: python examples/employment_income_variation.py
 """
 
-import pandas as pd
 import tempfile
 from pathlib import Path
+
+import pandas as pd
 import plotly.graph_objects as go
 from microdf import MicroDataFrame
+
 from policyengine.core import Simulation
+from policyengine.outputs.aggregate import Aggregate, AggregateType
 from policyengine.tax_benefit_models.uk import (
     PolicyEngineUKDataset,
     UKYearData,
     uk_latest,
 )
-from policyengine.outputs.aggregate import Aggregate, AggregateType
-from policyengine.utils.plotting import format_fig, COLORS
+from policyengine.utils.plotting import COLORS, format_fig
 
 
 def create_dataset_with_varied_employment_income(
@@ -43,7 +45,7 @@ def create_dataset_with_varied_employment_income(
     Employment income varies across households.
     """
     n_households = len(employment_incomes)
-    n_people = n_households * 3  # 1 adult + 2 children per household
+    n_households * 3  # 1 adult + 2 children per household
 
     # Create person data - one adult + 2 children per household
     person_ids = []

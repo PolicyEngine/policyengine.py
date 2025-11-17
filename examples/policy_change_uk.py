@@ -11,18 +11,20 @@ This script demonstrates:
 Run: python examples/policy_change.py
 """
 
-from pathlib import Path
 import datetime
+from pathlib import Path
+
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from policyengine.core import Simulation, Policy, Parameter, ParameterValue
-from policyengine.tax_benefit_models.uk import (
-    PolicyEngineUKDataset,
-    uk_latest,
-)
+
+from policyengine.core import Parameter, ParameterValue, Policy, Simulation
 from policyengine.outputs.change_aggregate import (
     ChangeAggregate,
     ChangeAggregateType,
+)
+from policyengine.tax_benefit_models.uk import (
+    PolicyEngineUKDataset,
+    uk_latest,
 )
 
 
@@ -263,16 +265,16 @@ def print_summary(overall: dict, decile: dict, reform_name: str) -> None:
     print("=" * 60)
     print(f"Policy change impact summary: {reform_name}")
     print("=" * 60)
-    print(f"\nOverall impact:")
+    print("\nOverall impact:")
     print(f"  Winners: {overall['winners']:.2f}m households")
     print(f"  Losers: {overall['losers']:.2f}m households")
     print(f"  No change: {overall['no_change']:.2f}m households")
-    print(f"\nFinancial impact:")
+    print("\nFinancial impact:")
     print(
         f"  Net income change: £{overall['total_change']:.2f}bn (negative = loss)"
     )
     print(f"  Tax revenue change: £{overall['tax_revenue_change']:.2f}bn")
-    print(f"\nImpact by income decile:")
+    print("\nImpact by income decile:")
     for i, label in enumerate(decile["labels"]):
         print(
             f"  {label}: {decile['losers'][i]:.2f}m losers, avg change £{decile['avg_loss'][i]:.0f}"

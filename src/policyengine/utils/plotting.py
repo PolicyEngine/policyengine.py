@@ -1,8 +1,7 @@
 """Plotting utilities for PolicyEngine visualisations."""
 
-from typing import Optional
-import plotly.graph_objects as go
 
+import plotly.graph_objects as go
 
 # PolicyEngine brand colours
 COLORS = {
@@ -30,12 +29,12 @@ FONT_SIZE_TITLE = 16
 
 def format_fig(
     fig: go.Figure,
-    title: Optional[str] = None,
-    xaxis_title: Optional[str] = None,
-    yaxis_title: Optional[str] = None,
+    title: str | None = None,
+    xaxis_title: str | None = None,
+    yaxis_title: str | None = None,
     show_legend: bool = True,
-    height: Optional[int] = None,
-    width: Optional[int] = None,
+    height: int | None = None,
+    width: int | None = None,
 ) -> go.Figure:
     """Apply PolicyEngine visual style to a plotly figure.
 

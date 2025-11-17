@@ -1,19 +1,22 @@
+import datetime
+from importlib.metadata import version
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import pandas as pd
+import requests
+from microdf import MicroDataFrame
+
 from policyengine.core import (
+    Parameter,
+    ParameterValue,
     TaxBenefitModel,
     TaxBenefitModelVersion,
     Variable,
-    Parameter,
-    ParameterValue,
 )
-import datetime
-import requests
-from importlib.metadata import version
 from policyengine.utils import parse_safe_date
-import pandas as pd
-from microdf import MicroDataFrame
-from pathlib import Path
+
 from .datasets import PolicyEngineUKDataset, UKYearData
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
@@ -43,8 +46,8 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
 
     def __init__(self, **kwargs: dict):
         super().__init__(**kwargs)
-        from policyengine_uk.system import system
         from policyengine_core.enums import Enum
+        from policyengine_uk.system import system
 
         self.id = f"{self.model.id}@{self.version}"
 
@@ -110,6 +113,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
     def run(self, simulation: "Simulation") -> "Simulation":
         from policyengine_uk import Microsimulation
         from policyengine_uk.data import UKSingleYearDataset
+
         from policyengine.utils.parametric_reforms import (
             simulation_modifier_from_parameter_values,
         )

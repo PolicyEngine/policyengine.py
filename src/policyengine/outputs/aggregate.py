@@ -1,6 +1,7 @@
-from policyengine.core import *
 from enum import Enum
 from typing import Any
+
+from policyengine.core import Output, Simulation
 
 
 class AggregateType(str, Enum):

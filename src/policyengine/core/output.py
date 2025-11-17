@@ -1,6 +1,7 @@
-from pydantic import BaseModel, ConfigDict
+from typing import TypeVar
+
 import pandas as pd
-from typing import Generic, TypeVar
+from pydantic import BaseModel, ConfigDict
 
 T = TypeVar("T", bound="Output")
 
@@ -16,7 +17,7 @@ class Output(BaseModel):
         raise NotImplementedError("Subclasses must implement run()")
 
 
-class OutputCollection(BaseModel, Generic[T]):
+class OutputCollection[T: "Output"](BaseModel):
     """Container for a collection of outputs with their DataFrame representation."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)

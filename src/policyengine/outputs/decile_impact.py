@@ -1,6 +1,7 @@
-from policyengine.core import Simulation, Output, OutputCollection
-from pydantic import ConfigDict
 import pandas as pd
+from pydantic import ConfigDict
+
+from policyengine.core import Output, OutputCollection, Simulation
 
 
 class DecileImpact(Output):

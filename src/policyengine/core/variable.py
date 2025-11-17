@@ -1,5 +1,6 @@
-from pydantic import BaseModel
 from typing import Any
+
+from pydantic import BaseModel
 
 from .tax_benefit_model_version import TaxBenefitModelVersion
 

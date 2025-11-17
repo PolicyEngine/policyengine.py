@@ -10,14 +10,16 @@ Run: python examples/income_bands.py
 """
 
 from pathlib import Path
+
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+
 from policyengine.core import Simulation
+from policyengine.outputs.aggregate import Aggregate, AggregateType
 from policyengine.tax_benefit_models.uk import (
     PolicyEngineUKDataset,
     uk_latest,
 )
-from policyengine.outputs.aggregate import Aggregate, AggregateType
 
 
 def load_representative_data(year: int = 2026) -> PolicyEngineUKDataset:

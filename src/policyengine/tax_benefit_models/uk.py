@@ -1,6 +1,16 @@
 """PolicyEngine UK tax-benefit model - imports from uk/ module."""
 
-from .uk import *
+from .uk import (
+    PolicyEngineUK,
+    PolicyEngineUKDataset,
+    PolicyEngineUKLatest,
+    ProgrammeStatistics,
+    UKYearData,
+    create_datasets,
+    general_policy_reform_analysis,
+    uk_latest,
+    uk_model,
+)
 
 __all__ = [
     "UKYearData",

@@ -1,13 +1,15 @@
 """General utility functions for UK policy reform analysis."""
 
-from policyengine.core import Simulation, OutputCollection
+import pandas as pd
+from pydantic import BaseModel
+
+from policyengine.core import OutputCollection, Simulation
 from policyengine.outputs.decile_impact import (
     DecileImpact,
     calculate_decile_impacts,
 )
+
 from .outputs import ProgrammeStatistics
-from pydantic import BaseModel
-import pandas as pd
 
 
 class PolicyReformAnalysis(BaseModel):

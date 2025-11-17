@@ -4,16 +4,18 @@ This script tests how simulation.run() performance scales with dataset size
 by running simulations on random subsets of households.
 """
 
-from pathlib import Path
 import time
+from pathlib import Path
+
 import pandas as pd
+from microdf import MicroDataFrame
+
 from policyengine.core import Simulation
 from policyengine.tax_benefit_models.us import (
     PolicyEngineUSDataset,
     USYearData,
     us_latest,
 )
-from microdf import MicroDataFrame
 
 
 def create_subset_dataset(

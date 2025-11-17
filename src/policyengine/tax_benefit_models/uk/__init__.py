@@ -1,8 +1,8 @@
 """PolicyEngine UK tax-benefit model."""
 
-from .datasets import UKYearData, PolicyEngineUKDataset, create_datasets
-from .model import PolicyEngineUK, PolicyEngineUKLatest, uk_model, uk_latest
 from .analysis import general_policy_reform_analysis
+from .datasets import PolicyEngineUKDataset, UKYearData, create_datasets
+from .model import PolicyEngineUK, PolicyEngineUKLatest, uk_latest, uk_model
 from .outputs import ProgrammeStatistics
 
 __all__ = [

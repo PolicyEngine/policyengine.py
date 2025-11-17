@@ -9,17 +9,19 @@ This script demonstrates:
 Run: python examples/income_distribution_us.py
 """
 
-from pathlib import Path
 import time
+from pathlib import Path
+
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+
 from policyengine.core import Simulation
+from policyengine.outputs.aggregate import Aggregate, AggregateType
 from policyengine.tax_benefit_models.us import (
     PolicyEngineUSDataset,
     us_latest,
 )
-from policyengine.outputs.aggregate import Aggregate, AggregateType
-from policyengine.utils.plotting import format_fig, COLORS
+from policyengine.utils.plotting import COLORS, format_fig
 
 
 def load_representative_data(year: int = 2024) -> PolicyEngineUSDataset:

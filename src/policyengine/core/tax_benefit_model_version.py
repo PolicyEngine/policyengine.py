@@ -1,16 +1,16 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
 from .tax_benefit_model import TaxBenefitModel
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .variable import Variable
     from .parameter import Parameter
     from .parameter_value import ParameterValue
     from .simulation import Simulation
+    from .variable import Variable
 
 
 class TaxBenefitModelVersion(BaseModel):
