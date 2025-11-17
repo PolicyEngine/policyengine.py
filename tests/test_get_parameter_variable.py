@@ -19,7 +19,9 @@ def test_uk_get_variable():
 
 def test_uk_get_variable_not_found():
     """Test error handling when variable doesn't exist."""
-    with pytest.raises(ValueError, match="Variable 'nonexistent_variable' not found"):
+    with pytest.raises(
+        ValueError, match="Variable 'nonexistent_variable' not found"
+    ):
         uk_latest.get_variable("nonexistent_variable")
 
 
@@ -31,13 +33,18 @@ def test_uk_get_parameter():
     )
 
     assert param is not None
-    assert param.name == "gov.hmrc.income_tax.allowances.personal_allowance.amount"
+    assert (
+        param.name
+        == "gov.hmrc.income_tax.allowances.personal_allowance.amount"
+    )
     assert param.tax_benefit_model_version == uk_latest
 
 
 def test_uk_get_parameter_not_found():
     """Test error handling when parameter doesn't exist."""
-    with pytest.raises(ValueError, match="Parameter 'nonexistent.parameter' not found"):
+    with pytest.raises(
+        ValueError, match="Parameter 'nonexistent.parameter' not found"
+    ):
         uk_latest.get_parameter("nonexistent.parameter")
 
 
@@ -54,7 +61,9 @@ def test_us_get_variable():
 
 def test_us_get_variable_not_found():
     """Test error handling when variable doesn't exist."""
-    with pytest.raises(ValueError, match="Variable 'nonexistent_variable' not found"):
+    with pytest.raises(
+        ValueError, match="Variable 'nonexistent_variable' not found"
+    ):
         us_latest.get_variable("nonexistent_variable")
 
 
@@ -72,7 +81,9 @@ def test_us_get_parameter():
 
 def test_us_get_parameter_not_found():
     """Test error handling when parameter doesn't exist."""
-    with pytest.raises(ValueError, match="Parameter 'nonexistent.parameter' not found"):
+    with pytest.raises(
+        ValueError, match="Parameter 'nonexistent.parameter' not found"
+    ):
         us_latest.get_parameter("nonexistent.parameter")
 
 
