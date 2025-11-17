@@ -368,6 +368,38 @@ Household variables are replicated to all household members:
 # Each person in household gets the same household_net_income value
 ```
 
+### Direct entity mapping
+
+For complex multi-entity scenarios, you can use `map_to_entity` directly:
+
+```python
+# Map SPM unit SNAP benefits to household level
+household_snap = dataset.data.map_to_entity(
+    source_entity="spm_unit",
+    target_entity="household",
+    columns=["snap"],
+    how="sum"
+)
+
+# Split tax unit income equally among persons
+person_tax_income = dataset.data.map_to_entity(
+    source_entity="tax_unit",
+    target_entity="person",
+    columns=["taxable_income"],
+    how="divide"
+)
+
+# Map custom analysis values
+custom_analysis = dataset.data.map_to_entity(
+    source_entity="person",
+    target_entity="tax_unit",
+    values=custom_values_array,
+    how="sum"
+)
+```
+
+See the [Entity mapping section](core-concepts.md#entity-mapping) in Core Concepts for full documentation on aggregation methods.
+
 ## Data sources
 
 The US model can use several data sources:

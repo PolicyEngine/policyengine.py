@@ -8,6 +8,63 @@ from .dataset_version import DatasetVersion
 from .tax_benefit_model import TaxBenefitModel
 
 
+class YearData(BaseModel):
+    """Base class for entity-level data for a single year."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @property
+    def entity_data(self) -> dict[str, MicroDataFrame]:
+        """Return a dictionary of entity names to their data.
+
+        This should be implemented by subclasses to return the appropriate entities.
+        """
+        raise NotImplementedError(
+            "Subclasses must implement entity_data property"
+        )
+
+    @property
+    def person_entity(self) -> str:
+        """Return the name of the person-level entity.
+
+        Defaults to 'person' but can be overridden by subclasses.
+        """
+        return "person"
+
+    def map_to_entity(
+        self,
+        source_entity: str,
+        target_entity: str,
+        columns: list[str] = None,
+        values: list = None,
+        how: str = "sum",
+    ) -> MicroDataFrame:
+        """Map data from source entity to target entity using join keys.
+
+        Args:
+            source_entity (str): The source entity name.
+            target_entity (str): The target entity name.
+            columns (list[str], optional): List of column names to map. If None, maps all columns.
+            values (list, optional): List of values to use instead of column data.
+            how (str): Aggregation method ('sum' or 'first') when mapping to higher-level entities (default 'sum').
+
+        Returns:
+            MicroDataFrame: The mapped data at the target entity level.
+
+        Raises:
+            ValueError: If source or target entity is invalid.
+        """
+        return map_to_entity(
+            entity_data=self.entity_data,
+            source_entity=source_entity,
+            target_entity=target_entity,
+            person_entity=self.person_entity,
+            columns=columns,
+            values=values,
+            how=how,
+        )
+
+
 class Dataset(BaseModel):
     """Base class for datasets.
 
@@ -43,6 +100,8 @@ def map_to_entity(
     target_entity: str,
     person_entity: str = "person",
     columns: list[str] | None = None,
+    values: list | None = None,
+    how: str = "sum",
 ) -> MicroDataFrame:
     """Map data from source entity to target entity using join keys.
 
@@ -58,12 +117,17 @@ def map_to_entity(
         target_entity: The target entity name
         person_entity: The name of the person entity (default "person")
         columns: List of column names to map. If None, maps all columns
+        values: List of values to use instead of column data. If provided, creates a single unnamed column
+        how: Aggregation method (default 'sum')
+            - For person → group: 'sum' (aggregate), 'first' (take first value)
+            - For group → person: 'project' (broadcast), 'divide' (split equally)
+            - For group → group: 'sum', 'first', 'project', 'divide'
 
     Returns:
         MicroDataFrame: The mapped data at the target entity level
 
     Raises:
-        ValueError: If source or target entity is invalid
+        ValueError: If source or target entity is invalid or unsupported aggregation method
     """
     valid_entities = set(entity_data.keys())
 
@@ -78,6 +142,18 @@ def map_to_entity(
 
     # Get source data (convert to plain DataFrame to avoid weighted operations during mapping)
     source_df = pd.DataFrame(entity_data[source_entity])
+
+    # Handle values parameter - create a temporary column with the provided values
+    if values is not None:
+        if len(values) != len(source_df):
+            raise ValueError(
+                f"Length of values ({len(values)}) must match source entity length ({len(source_df)})"
+            )
+        # Create a temporary DataFrame with just ID columns and the values column
+        id_cols = {col for col in source_df.columns if col.endswith("_id")}
+        source_df = source_df[[col for col in id_cols]]
+        source_df["__mapped_value"] = values
+        columns = ["__mapped_value"]
 
     if columns:
         # Select only requested columns (keep all ID columns for joins)
@@ -118,10 +194,17 @@ def map_to_entity(
                 if c not in id_cols and c not in weight_cols
             ]
 
-            # Group by join key and sum
-            aggregated = source_df.groupby(join_key, as_index=False)[
-                agg_cols
-            ].sum()
+            # Group by join key and aggregate
+            if how == "sum":
+                aggregated = source_df.groupby(join_key, as_index=False)[
+                    agg_cols
+                ].sum()
+            elif how == "first":
+                aggregated = source_df.groupby(join_key, as_index=False)[
+                    agg_cols
+                ].first()
+            else:
+                raise ValueError(f"Unsupported aggregation method: {how}")
 
             # Rename join key to target key if needed
             if join_key != target_key:
@@ -146,6 +229,10 @@ def map_to_entity(
 
     # Group entity to person: expand group-level data to person level
     if source_entity != person_entity and target_entity == person_entity:
+        # Default to 'project' (broadcast) for group -> person if 'sum' was provided
+        if how == "sum":
+            how = "project"
+
         source_key = f"{source_entity}_id"
         # Check for both naming patterns
         person_source_key = f"{person_entity}_{source_entity}_id"
@@ -163,6 +250,40 @@ def map_to_entity(
                 source_df = source_df.rename(columns={source_key: join_key})
 
             result = target_pd.merge(source_df, on=join_key, how="left")
+
+            # Handle divide operation
+            if how == "divide":
+                # Get columns to divide (exclude ID and weight columns)
+                id_cols = {
+                    col for col in result.columns if col.endswith("_id")
+                }
+                weight_cols = {
+                    col for col in result.columns if col.endswith("_weight")
+                }
+                value_cols = [
+                    c
+                    for c in result.columns
+                    if c not in id_cols and c not in weight_cols
+                ]
+
+                # Count members in each group
+                group_counts = (
+                    target_pd.groupby(join_key, as_index=False)
+                    .size()
+                    .rename(columns={"size": "__group_count"})
+                )
+                result = result.merge(group_counts, on=join_key, how="left")
+
+                # Divide values by group count
+                for col in value_cols:
+                    result[col] = result[col] / result["__group_count"]
+
+                result = result.drop(columns=["__group_count"])
+            elif how not in ["project"]:
+                raise ValueError(
+                    f"Unsupported aggregation method for group->person: {how}. Use 'project' or 'divide'."
+                )
+
             return MicroDataFrame(result, weights=target_weight)
 
     # Group to group: go through person table
@@ -228,9 +349,43 @@ def map_to_entity(
                 if c not in id_cols and c not in weight_cols
             ]
 
-            aggregated = source_with_target.groupby(
-                target_link_key, as_index=False
-            )[agg_cols].sum()
+            if how == "sum":
+                aggregated = source_with_target.groupby(
+                    target_link_key, as_index=False
+                )[agg_cols].sum()
+            elif how == "first":
+                aggregated = source_with_target.groupby(
+                    target_link_key, as_index=False
+                )[agg_cols].first()
+            elif how == "project":
+                # Just take first value (broadcast to target groups)
+                aggregated = source_with_target.groupby(
+                    target_link_key, as_index=False
+                )[agg_cols].first()
+            elif how == "divide":
+                # Count persons in each source group
+                source_group_counts = (
+                    person_df.groupby(source_link_key, as_index=False)
+                    .size()
+                    .rename(columns={"size": "__source_count"})
+                )
+                source_with_target = source_with_target.merge(
+                    source_group_counts, on=source_link_key, how="left"
+                )
+
+                # Divide values by source group count (per-person share)
+                for col in agg_cols:
+                    source_with_target[col] = (
+                        source_with_target[col]
+                        / source_with_target["__source_count"]
+                    )
+
+                # Now aggregate (sum of per-person shares) to target level
+                aggregated = source_with_target.groupby(
+                    target_link_key, as_index=False
+                )[agg_cols].sum()
+            else:
+                raise ValueError(f"Unsupported aggregation method: {how}")
 
             # Rename target link key to target key if needed
             if target_link_key != target_key:

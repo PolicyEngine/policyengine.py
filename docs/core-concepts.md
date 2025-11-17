@@ -327,6 +327,119 @@ agg = Aggregate(
 When you request a household-level variable at person level:
 1. Replicates household values to all persons in that household (expansion)
 
+### Direct entity mapping
+
+You can also map data between entities directly using the `map_to_entity` method:
+
+```python
+# Map person income to household level (sum)
+household_income = dataset.data.map_to_entity(
+    source_entity="person",
+    target_entity="household",
+    columns=["employment_income"],
+    how="sum"
+)
+
+# Map household rent to person level (project/broadcast)
+person_rent = dataset.data.map_to_entity(
+    source_entity="household",
+    target_entity="person",
+    columns=["rent"],
+    how="project"
+)
+```
+
+#### Mapping with custom values
+
+You can map custom value arrays instead of existing columns:
+
+```python
+# Map custom per-person values to household level
+import numpy as np
+
+# Create custom values (e.g., imputed data)
+custom_values = np.array([100, 200, 150, 300])
+
+household_totals = dataset.data.map_to_entity(
+    source_entity="person",
+    target_entity="household",
+    values=custom_values,
+    how="sum"
+)
+```
+
+#### Aggregation methods
+
+The `how` parameter controls how values are mapped:
+
+**Person → Group (aggregation):**
+- `how='sum'` (default): Sum values within each group
+- `how='first'`: Take first person's value in each group
+
+```python
+# Sum person incomes to household level
+household_income = data.map_to_entity(
+    source_entity="person",
+    target_entity="household",
+    columns=["employment_income"],
+    how="sum"
+)
+
+# Take first person's age as household reference
+household_age = data.map_to_entity(
+    source_entity="person",
+    target_entity="household",
+    columns=["age"],
+    how="first"
+)
+```
+
+**Group → Person (expansion):**
+- `how='project'` (default): Broadcast group value to all members
+- `how='divide'`: Split group value equally among members
+
+```python
+# Broadcast household rent to each person
+person_rent = data.map_to_entity(
+    source_entity="household",
+    target_entity="person",
+    columns=["rent"],
+    how="project"
+)
+
+# Split household savings equally per person
+person_savings = data.map_to_entity(
+    source_entity="household",
+    target_entity="person",
+    columns=["total_savings"],
+    how="divide"
+)
+```
+
+**Group → Group (via person entity):**
+- `how='sum'` (default): Sum through person entity
+- `how='first'`: Take first source group's value
+- `how='project'`: Broadcast first source group's value
+- `how='divide'`: Split proportionally based on person counts
+
+```python
+# UK: Sum benunit benefits to household level
+household_benefits = data.map_to_entity(
+    source_entity="benunit",
+    target_entity="household",
+    columns=["universal_credit"],
+    how="sum"
+)
+
+# US: Map tax unit income to household, splitting by members
+household_from_tax = data.map_to_entity(
+    source_entity="tax_unit",
+    target_entity="household",
+    columns=["taxable_income"],
+    how="divide"
+)
+```
+
 ## Visualisation
 
 The package includes utilities for creating PolicyEngine-branded visualisations:

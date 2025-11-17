@@ -23,7 +23,10 @@ class Policy(BaseModel):
 
         # Combine simulation modifiers
         combined_modifier = None
-        if self.simulation_modifier is not None and other.simulation_modifier is not None:
+        if (
+            self.simulation_modifier is not None
+            and other.simulation_modifier is not None
+        ):
 
             def combined_modifier(sim):
                 sim = self.simulation_modifier(sim)

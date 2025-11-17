@@ -1,4 +1,5 @@
 from .dataset import Dataset
+from .dataset import YearData as YearData
 from .dataset import map_to_entity as map_to_entity
 from .dataset_version import DatasetVersion as DatasetVersion
 from .dynamic import Dynamic as Dynamic
