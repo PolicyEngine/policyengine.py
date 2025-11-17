@@ -83,6 +83,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                 parameter = Parameter(
                     id=self.id + "-" + param_node.name,
                     name=param_node.name,
+                    label=param_node.metadata.get("label", param_node.name),
                     tax_benefit_model_version=self,
                     description=param_node.description,
                     data_type=type(
