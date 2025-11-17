@@ -1,6 +1,0 @@
-- bump: patch
-  changes:
-    added:
-    - Policy and Dynamic classes now support addition operator (__add__) to combine policies and dynamics.
-    - Parameter values are appended when combining policies/dynamics.
-    - Simulation modifiers are chained in sequence when combining policies/dynamics.

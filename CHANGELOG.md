@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.1] - 2025-11-17 11:45:43
+
+### Added
+
+- Policy and Dynamic classes now support addition operator (__add__) to combine policies and dynamics.
+- Parameter values are appended when combining policies/dynamics.
+- Simulation modifiers are chained in sequence when combining policies/dynamics.
+
 ## [3.1.0] - 2025-11-17 10:25:50
 
 ## [3.0.0] - 2025-09-23 08:43:22
@@ -195,6 +203,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.1.1]: https://github.com/PolicyEngine/policyengine.py/compare/3.1.0...3.1.1
 [3.1.0]: https://github.com/PolicyEngine/policyengine.py/compare/3.0.0...3.1.0
 [3.0.0]: https://github.com/PolicyEngine/policyengine.py/compare/2.0.0...3.0.0
 [2.0.0]: https://github.com/PolicyEngine/policyengine.py/compare/1.0.0...2.0.0
