@@ -58,7 +58,7 @@ class PolicyEngineUSDataset(Dataset):
 
     data: USYearData | None = None
 
-    def model_post_init(self, __context):
+    def model_post_init(self, __context) -> None:
         """Called after Pydantic initialization."""
         # Make sure we are synchronised between in-memory and storage, at least on initialisation
         if self.data is not None:
