@@ -2,12 +2,12 @@ from pathlib import Path
 
 import pandas as pd
 from microdf import MicroDataFrame
-from pydantic import BaseModel, ConfigDict
+from pydantic import ConfigDict
 
-from policyengine.core import Dataset, map_to_entity
+from policyengine.core import Dataset, YearData
 
 
-class UKYearData(BaseModel):
+class UKYearData(YearData):
     """Entity-level data for a single year."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -16,34 +16,14 @@ class UKYearData(BaseModel):
     benunit: MicroDataFrame
     household: MicroDataFrame
 
-    def map_to_entity(
-        self, source_entity: str, target_entity: str, columns: list[str] = None
-    ) -> MicroDataFrame:
-        """Map data from source entity to target entity using join keys.
-
-        Args:
-            source_entity (str): The source entity name ('person', 'benunit', 'household').
-            target_entity (str): The target entity name ('person', 'benunit', 'household').
-            columns (list[str], optional): List of column names to map. If None, maps all columns.
-
-        Returns:
-            MicroDataFrame: The mapped data at the target entity level.
-
-        Raises:
-            ValueError: If source or target entity is invalid.
-        """
-        entity_data = {
+    @property
+    def entity_data(self) -> dict[str, MicroDataFrame]:
+        """Return a dictionary of entity names to their data."""
+        return {
             "person": self.person,
             "benunit": self.benunit,
             "household": self.household,
         }
-        return map_to_entity(
-            entity_data=entity_data,
-            source_entity=source_entity,
-            target_entity=target_entity,
-            person_entity="person",
-            columns=columns,
-        )
 
 
 class PolicyEngineUKDataset(Dataset):

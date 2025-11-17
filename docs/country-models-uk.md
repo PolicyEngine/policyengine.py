@@ -295,6 +295,42 @@ Valid region values:
 - `SCOTLAND`
 - `NORTHERN_IRELAND`
 
+## Entity mapping
+
+The UK model has a simpler entity structure than the US, with three levels: person → benunit → household.
+
+### Direct entity mapping
+
+You can map data between entities using the `map_to_entity` method:
+
+```python
+# Map person income to benunit level
+benunit_income = dataset.data.map_to_entity(
+    source_entity="person",
+    target_entity="benunit",
+    columns=["employment_income"],
+    how="sum"
+)
+
+# Split household rent equally among persons
+person_rent_share = dataset.data.map_to_entity(
+    source_entity="household",
+    target_entity="person",
+    columns=["rent"],
+    how="divide"
+)
+
+# Map benunit UC to household level
+household_uc = dataset.data.map_to_entity(
+    source_entity="benunit",
+    target_entity="household",
+    columns=["universal_credit"],
+    how="sum"
+)
+```
+
+See the [Entity mapping section](core-concepts.md#entity-mapping) in Core Concepts for full documentation on aggregation methods.
+
 ## Data sources
 
 The UK model can use several data sources:
