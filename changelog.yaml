@@ -170,3 +170,8 @@
     fixed:
     - Standardised saving and loading of simulations.
   date: 2025-11-18 11:09:18
+- bump: patch
+  changes:
+    fixed:
+    - Entity variables moved out to an editable constant.
+  date: 2025-11-18 13:46:23
