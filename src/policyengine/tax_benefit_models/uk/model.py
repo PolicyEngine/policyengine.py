@@ -44,6 +44,73 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
         upload_time
     )
 
+    entity_variables: dict[str, list[str]] = {
+        "person": [
+            # IDs and weights
+            "person_id",
+            "benunit_id",
+            "household_id",
+            "person_weight",
+            # Demographics
+            "age",
+            "gender",
+            "is_adult",
+            "is_SP_age",
+            "is_child",
+            # Income
+            "employment_income",
+            "self_employment_income",
+            "pension_income",
+            "private_pension_income",
+            "savings_interest_income",
+            "dividend_income",
+            "property_income",
+            "total_income",
+            "earned_income",
+            # Benefits
+            "universal_credit",
+            "child_benefit",
+            "pension_credit",
+            "income_support",
+            "working_tax_credit",
+            "child_tax_credit",
+            # Tax
+            "income_tax",
+            "national_insurance",
+        ],
+        "benunit": [
+            # IDs and weights
+            "benunit_id",
+            "benunit_weight",
+            # Structure
+            "family_type",
+            # Income and benefits
+            "universal_credit",
+            "child_benefit",
+            "working_tax_credit",
+            "child_tax_credit",
+        ],
+        "household": [
+            # IDs and weights
+            "household_id",
+            "household_weight",
+            # Income measures
+            "household_net_income",
+            "hbai_household_net_income",
+            "equiv_hbai_household_net_income",
+            "household_market_income",
+            "household_gross_income",
+            # Benefits and tax
+            "household_benefits",
+            "household_tax",
+            "vat",
+            # Housing
+            "rent",
+            "council_tax",
+            "tenure_type",
+        ],
+    }
+
     def __init__(self, **kwargs: dict):
         super().__init__(**kwargs)
         from policyengine_core.enums import Enum
@@ -153,80 +220,13 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
             )
             modifier(microsim)
 
-        entity_variables = {
-            "person": [
-                # IDs and weights
-                "person_id",
-                "benunit_id",
-                "household_id",
-                "person_weight",
-                # Demographics
-                "age",
-                "gender",
-                "is_adult",
-                "is_SP_age",
-                "is_child",
-                # Income
-                "employment_income",
-                "self_employment_income",
-                "pension_income",
-                "private_pension_income",
-                "savings_interest_income",
-                "dividend_income",
-                "property_income",
-                "total_income",
-                "earned_income",
-                # Benefits
-                "universal_credit",
-                "child_benefit",
-                "pension_credit",
-                "income_support",
-                "working_tax_credit",
-                "child_tax_credit",
-                # Tax
-                "income_tax",
-                "national_insurance",
-            ],
-            "benunit": [
-                # IDs and weights
-                "benunit_id",
-                "benunit_weight",
-                # Structure
-                "family_type",
-                # Income and benefits
-                "universal_credit",
-                "child_benefit",
-                "working_tax_credit",
-                "child_tax_credit",
-            ],
-            "household": [
-                # IDs and weights
-                "household_id",
-                "household_weight",
-                # Income measures
-                "household_net_income",
-                "hbai_household_net_income",
-                "equiv_hbai_household_net_income",
-                "household_market_income",
-                "household_gross_income",
-                # Benefits and tax
-                "household_benefits",
-                "household_tax",
-                "vat",
-                # Housing
-                "rent",
-                "council_tax",
-                "tenure_type",
-            ],
-        }
-
         data = {
             "person": pd.DataFrame(),
             "benunit": pd.DataFrame(),
             "household": pd.DataFrame(),
         }
 
-        for entity, variables in entity_variables.items():
+        for entity, variables in self.entity_variables.items():
             for var in variables:
                 data[entity][var] = microsim.calculate(
                     var, period=simulation.dataset.year, map_to=entity

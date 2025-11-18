@@ -45,6 +45,59 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
     version: str = None
     created_at: datetime.datetime = None
 
+    entity_variables: dict[str, list[str]] = {
+        "person": [
+            # IDs and weights
+            "person_id",
+            "marital_unit_id",
+            "family_id",
+            "spm_unit_id",
+            "tax_unit_id",
+            "household_id",
+            "person_weight",
+            # Demographics
+            "age",
+            # Income
+            "employment_income",
+            # Benefits
+            "ssi",
+            "social_security",
+            "medicaid",
+            "unemployment_compensation",
+        ],
+        "marital_unit": [
+            "marital_unit_id",
+            "marital_unit_weight",
+        ],
+        "family": [
+            "family_id",
+            "family_weight",
+        ],
+        "spm_unit": [
+            "spm_unit_id",
+            "spm_unit_weight",
+            "snap",
+            "tanf",
+            "spm_unit_net_income",
+        ],
+        "tax_unit": [
+            "tax_unit_id",
+            "tax_unit_weight",
+            "income_tax",
+            "employee_payroll_tax",
+            "eitc",
+            "ctc",
+        ],
+        "household": [
+            "household_id",
+            "household_weight",
+            "household_net_income",
+            "household_benefits",
+            "household_tax",
+            "household_market_income",
+        ],
+    }
+
     def __init__(self, **kwargs: dict):
         # Lazy-load package metadata if not provided
         if "version" not in kwargs or kwargs.get("version") is None:
@@ -156,59 +209,6 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
             )
             modifier(microsim)
 
-        entity_variables = {
-            "person": [
-                # IDs and weights
-                "person_id",
-                "marital_unit_id",
-                "family_id",
-                "spm_unit_id",
-                "tax_unit_id",
-                "household_id",
-                "person_weight",
-                # Demographics
-                "age",
-                # Income
-                "employment_income",
-                # Benefits
-                "ssi",
-                "social_security",
-                "medicaid",
-                "unemployment_compensation",
-            ],
-            "marital_unit": [
-                "marital_unit_id",
-                "marital_unit_weight",
-            ],
-            "family": [
-                "family_id",
-                "family_weight",
-            ],
-            "spm_unit": [
-                "spm_unit_id",
-                "spm_unit_weight",
-                "snap",
-                "tanf",
-                "spm_unit_net_income",
-            ],
-            "tax_unit": [
-                "tax_unit_id",
-                "tax_unit_weight",
-                "income_tax",
-                "employee_payroll_tax",
-                "eitc",
-                "ctc",
-            ],
-            "household": [
-                "household_id",
-                "household_weight",
-                "household_net_income",
-                "household_benefits",
-                "household_tax",
-                "household_market_income",
-            ],
-        }
-
         data = {
             "person": pd.DataFrame(),
             "marital_unit": pd.DataFrame(),
@@ -259,7 +259,7 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
                     data["person"][target_col] = person_input_df[col].values
 
         # Then calculate non-ID, non-weight variables from simulation
-        for entity, variables in entity_variables.items():
+        for entity, variables in self.entity_variables.items():
             for var in variables:
                 if var not in id_columns and var not in weight_columns:
                     data[entity][var] = microsim.calculate(
