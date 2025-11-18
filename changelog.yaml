@@ -165,3 +165,8 @@
     - Parameter values are appended when combining policies/dynamics.
     - Simulation modifiers are chained in sequence when combining policies/dynamics.
   date: 2025-11-17 11:45:43
+- bump: patch
+  changes:
+    fixed:
+    - Standardised saving and loading of simulations.
+  date: 2025-11-18 11:09:18

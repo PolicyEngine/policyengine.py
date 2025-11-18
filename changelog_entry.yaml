@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Standardised saving and loading of simulations.
