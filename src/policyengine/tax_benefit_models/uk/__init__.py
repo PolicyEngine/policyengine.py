@@ -1,26 +1,39 @@
 """PolicyEngine UK tax-benefit model."""
 
-from .analysis import general_policy_reform_analysis
-from .datasets import PolicyEngineUKDataset, UKYearData, create_datasets
-from .model import PolicyEngineUK, PolicyEngineUKLatest, uk_latest, uk_model
-from .outputs import ProgrammeStatistics
+from importlib.util import find_spec
 
-__all__ = [
-    "UKYearData",
-    "PolicyEngineUKDataset",
-    "create_datasets",
-    "PolicyEngineUK",
-    "PolicyEngineUKLatest",
-    "uk_model",
-    "uk_latest",
-    "general_policy_reform_analysis",
-    "ProgrammeStatistics",
-]
+if find_spec("policyengine_uk") is not None:
+    from policyengine.core import Dataset
 
-# Rebuild models to resolve forward references
-from policyengine.core import Dataset
+    from .analysis import general_policy_reform_analysis
+    from .datasets import (
+        PolicyEngineUKDataset,
+        UKYearData,
+        create_datasets,
+        ensure_datasets,
+        load_datasets,
+    )
+    from .model import PolicyEngineUK, PolicyEngineUKLatest, uk_latest, uk_model
+    from .outputs import ProgrammeStatistics
 
-Dataset.model_rebuild()
-UKYearData.model_rebuild()
-PolicyEngineUKDataset.model_rebuild()
-PolicyEngineUKLatest.model_rebuild()
+    # Rebuild Pydantic models to resolve forward references
+    Dataset.model_rebuild()
+    UKYearData.model_rebuild()
+    PolicyEngineUKDataset.model_rebuild()
+    PolicyEngineUKLatest.model_rebuild()
+
+    __all__ = [
+        "UKYearData",
+        "PolicyEngineUKDataset",
+        "create_datasets",
+        "load_datasets",
+        "ensure_datasets",
+        "PolicyEngineUK",
+        "PolicyEngineUKLatest",
+        "uk_model",
+        "uk_latest",
+        "general_policy_reform_analysis",
+        "ProgrammeStatistics",
+    ]
+else:
+    __all__ = []

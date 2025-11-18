@@ -6,7 +6,13 @@ if find_spec("policyengine_us") is not None:
     from policyengine.core import Dataset
 
     from .analysis import general_policy_reform_analysis
-    from .datasets import PolicyEngineUSDataset, USYearData, create_datasets
+    from .datasets import (
+        PolicyEngineUSDataset,
+        USYearData,
+        create_datasets,
+        ensure_datasets,
+        load_datasets,
+    )
     from .model import (
         PolicyEngineUS,
         PolicyEngineUSLatest,
@@ -25,6 +31,8 @@ if find_spec("policyengine_us") is not None:
         "USYearData",
         "PolicyEngineUSDataset",
         "create_datasets",
+        "load_datasets",
+        "ensure_datasets",
         "PolicyEngineUS",
         "PolicyEngineUSLatest",
         "us_model",

@@ -9,7 +9,10 @@ if find_spec("policyengine_us") is not None:
         PolicyEngineUSLatest,
         ProgramStatistics,
         USYearData,
+        create_datasets,
+        ensure_datasets,
         general_policy_reform_analysis,
+        load_datasets,
         us_latest,
         us_model,
     )
@@ -17,6 +20,9 @@ if find_spec("policyengine_us") is not None:
     __all__ = [
         "USYearData",
         "PolicyEngineUSDataset",
+        "create_datasets",
+        "load_datasets",
+        "ensure_datasets",
         "PolicyEngineUS",
         "PolicyEngineUSLatest",
         "us_model",

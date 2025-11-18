@@ -112,15 +112,21 @@ def create_datasets(
         "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5",
     ],
     years: list[int] = [2024, 2025, 2026, 2027, 2028],
-) -> None:
+    data_folder: str = "./data",
+) -> dict[str, PolicyEngineUSDataset]:
     """Create PolicyEngineUSDataset instances from HuggingFace dataset paths.
 
     Args:
         datasets: List of HuggingFace dataset paths (e.g., "hf://policyengine/policyengine-us-data/cps_2024.h5")
         years: List of years to extract data for
+        data_folder: Directory to save the dataset files
+
+    Returns:
+        Dictionary mapping dataset keys (e.g., "enhanced_cps_2024") to PolicyEngineUSDataset objects
     """
     from policyengine_us import Microsimulation
 
+    result = {}
     for dataset in datasets:
         sim = Microsimulation(dataset=dataset)
 
@@ -265,7 +271,7 @@ def create_datasets(
             us_dataset = PolicyEngineUSDataset(
                 name=f"{dataset}-year-{year}",
                 description=f"US Dataset for year {year} based on {dataset}",
-                filepath=f"./data/{Path(dataset).stem}_year_{year}.h5",
+                filepath=f"{data_folder}/{Path(dataset).stem}_year_{year}.h5",
                 year=year,
                 data=USYearData(
                     person=MicroDataFrame(person_df, weights="person_weight"),
@@ -285,3 +291,77 @@ def create_datasets(
                 ),
             )
             us_dataset.save()
+
+            dataset_key = f"{Path(dataset).stem}_{year}"
+            result[dataset_key] = us_dataset
+
+    return result
+
+
+def load_datasets(
+    datasets: list[str] = [
+        "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5",
+    ],
+    years: list[int] = [2024, 2025, 2026, 2027, 2028],
+    data_folder: str = "./data",
+) -> dict[str, PolicyEngineUSDataset]:
+    """Load PolicyEngineUSDataset instances from saved HDF5 files.
+
+    Args:
+        datasets: List of HuggingFace dataset paths (used to derive file names)
+        years: List of years to load data for
+        data_folder: Directory containing the dataset files
+
+    Returns:
+        Dictionary mapping dataset keys (e.g., "enhanced_cps_2024") to PolicyEngineUSDataset objects
+    """
+    result = {}
+    for dataset in datasets:
+        for year in years:
+            filepath = f"{data_folder}/{Path(dataset).stem}_year_{year}.h5"
+            us_dataset = PolicyEngineUSDataset(
+                name=f"{dataset}-year-{year}",
+                description=f"US Dataset for year {year} based on {dataset}",
+                filepath=filepath,
+                year=year,
+            )
+            us_dataset.load()
+
+            dataset_key = f"{Path(dataset).stem}_{year}"
+            result[dataset_key] = us_dataset
+
+    return result
+
+
+def ensure_datasets(
+    datasets: list[str] = [
+        "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5",
+    ],
+    years: list[int] = [2024, 2025, 2026, 2027, 2028],
+    data_folder: str = "./data",
+) -> dict[str, PolicyEngineUSDataset]:
+    """Ensure datasets exist, loading if available or creating if not.
+
+    Args:
+        datasets: List of HuggingFace dataset paths
+        years: List of years to load/create data for
+        data_folder: Directory containing or to save the dataset files
+
+    Returns:
+        Dictionary mapping dataset keys to PolicyEngineUSDataset objects
+    """
+    # Check if all dataset files exist
+    all_exist = True
+    for dataset in datasets:
+        for year in years:
+            filepath = Path(f"{data_folder}/{Path(dataset).stem}_year_{year}.h5")
+            if not filepath.exists():
+                all_exist = False
+                break
+        if not all_exist:
+            break
+
+    if all_exist:
+        return load_datasets(datasets=datasets, years=years, data_folder=data_folder)
+    else:
+        return create_datasets(datasets=datasets, years=years, data_folder=data_folder)
