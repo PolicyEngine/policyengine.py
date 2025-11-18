@@ -83,6 +83,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                 parameter = Parameter(
                     id=self.id + "-" + param_node.name,
                     name=param_node.name,
+                    label=param_node.metadata.get("label", param_node.name),
                     tax_benefit_model_version=self,
                     description=param_node.description,
                     data_type=type(
@@ -152,77 +153,72 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
             )
             modifier(microsim)
 
-        # Allow custom variable selection, or use defaults
-        if simulation.variables is not None:
-            entity_variables = simulation.variables
-        else:
-            # Default comprehensive variable set
-            entity_variables = {
-                "person": [
-                    # IDs and weights
-                    "person_id",
-                    "benunit_id",
-                    "household_id",
-                    "person_weight",
-                    # Demographics
-                    "age",
-                    "gender",
-                    "is_adult",
-                    "is_SP_age",
-                    "is_child",
-                    # Income
-                    "employment_income",
-                    "self_employment_income",
-                    "pension_income",
-                    "private_pension_income",
-                    "savings_interest_income",
-                    "dividend_income",
-                    "property_income",
-                    "total_income",
-                    "earned_income",
-                    # Benefits
-                    "universal_credit",
-                    "child_benefit",
-                    "pension_credit",
-                    "income_support",
-                    "working_tax_credit",
-                    "child_tax_credit",
-                    # Tax
-                    "income_tax",
-                    "national_insurance",
-                ],
-                "benunit": [
-                    # IDs and weights
-                    "benunit_id",
-                    "benunit_weight",
-                    # Structure
-                    "family_type",
-                    # Income and benefits
-                    "universal_credit",
-                    "child_benefit",
-                    "working_tax_credit",
-                    "child_tax_credit",
-                ],
-                "household": [
-                    # IDs and weights
-                    "household_id",
-                    "household_weight",
-                    # Income measures
-                    "household_net_income",
-                    "hbai_household_net_income",
-                    "equiv_hbai_household_net_income",
-                    "household_market_income",
-                    "household_gross_income",
-                    # Benefits and tax
-                    "household_benefits",
-                    "household_tax",
-                    "vat",
-                    # Housing
-                    "rent",
-                    "council_tax",
-                    "tenure_type",
-                ],
-            }
+        entity_variables = {
+            "person": [
+                # IDs and weights
+                "person_id",
+                "benunit_id",
+                "household_id",
+                "person_weight",
+                # Demographics
+                "age",
+                "gender",
+                "is_adult",
+                "is_SP_age",
+                "is_child",
+                # Income
+                "employment_income",
+                "self_employment_income",
+                "pension_income",
+                "private_pension_income",
+                "savings_interest_income",
+                "dividend_income",
+                "property_income",
+                "total_income",
+                "earned_income",
+                # Benefits
+                "universal_credit",
+                "child_benefit",
+                "pension_credit",
+                "income_support",
+                "working_tax_credit",
+                "child_tax_credit",
+                # Tax
+                "income_tax",
+                "national_insurance",
+            ],
+            "benunit": [
+                # IDs and weights
+                "benunit_id",
+                "benunit_weight",
+                # Structure
+                "family_type",
+                # Income and benefits
+                "universal_credit",
+                "child_benefit",
+                "working_tax_credit",
+                "child_tax_credit",
+            ],
+            "household": [
+                # IDs and weights
+                "household_id",
+                "household_weight",
+                # Income measures
+                "household_net_income",
+                "hbai_household_net_income",
+                "equiv_hbai_household_net_income",
+                "household_market_income",
+                "household_gross_income",
+                # Benefits and tax
+                "household_benefits",
+                "household_tax",
+                "vat",
+                # Housing
+                "rent",
+                "council_tax",
+                "tenure_type",
+            ],
+        }
 
         data = {
             "person": pd.DataFrame(),
@@ -247,6 +243,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
         )
 
         simulation.output_dataset = PolicyEngineUKDataset(
+            id=simulation.id,
             name=dataset.name,
             description=dataset.description,
             filepath=str(
@@ -262,7 +259,23 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
             ),
         )
 
+    def save(self, simulation: "Simulation"):
+        """Save the simulation's output dataset."""
         simulation.output_dataset.save()
+
+    def load(self, simulation: "Simulation"):
+        """Load the simulation's output dataset."""
+        simulation.output_dataset = PolicyEngineUKDataset(
+            id=simulation.id,
+            name=simulation.dataset.name,
+            description=simulation.dataset.description,
+            filepath=str(
+                Path(simulation.dataset.filepath).parent
+                / (simulation.id + ".h5")
+            ),
+            year=simulation.dataset.year,
+            is_output_dataset=True,
+        )
 
 
 uk_latest = PolicyEngineUKLatest()

@@ -21,10 +21,13 @@ class Simulation(BaseModel):
     tax_benefit_model_version: TaxBenefitModelVersion = None
     output_dataset: Dataset | None = None
 
-    variables: dict[str, list[str]] | None = Field(
-        default=None,
-        description="Optional dictionary mapping entity names to lists of variable names to calculate. If None, uses model defaults.",
-    )
-
     def run(self):
         self.tax_benefit_model_version.run(self)
+
+    def save(self):
+        """Save the simulation's output dataset."""
+        self.tax_benefit_model_version.save(self)
+
+    def load(self):
+        """Load the simulation's output dataset."""
+        self.tax_benefit_model_version.load(self)

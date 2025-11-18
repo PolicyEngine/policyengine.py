@@ -227,19 +227,6 @@ def test_us_simulation_from_dataset():
         simulation = Simulation(
             dataset=dataset,
             tax_benefit_model_version=us_latest,
-            variables={
-                "person": [
-                    "person_id",
-                    "person_weight",
-                    "age",
-                    "employment_income",
-                ],
-                "household": ["household_id", "household_weight"],
-                "marital_unit": ["marital_unit_id", "marital_unit_weight"],
-                "family": ["family_id", "family_weight"],
-                "spm_unit": ["spm_unit_id", "spm_unit_weight"],
-                "tax_unit": ["tax_unit_id", "tax_unit_weight"],
-            },
         )
 
         simulation.run()

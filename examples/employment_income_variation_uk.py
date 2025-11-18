@@ -162,42 +162,10 @@ def create_dataset_with_varied_employment_income(
 
 def run_simulation(dataset: PolicyEngineUKDataset) -> Simulation:
     """Run a single simulation for all employment income variations."""
-    # Specify additional variables to calculate beyond defaults
-    variables = {
-        "household": [
-            # Default variables
-            "household_id",
-            "household_weight",
-            "household_net_income",
-            "hbai_household_net_income",
-            "household_benefits",
-            "household_tax",
-        ],
-        "person": [
-            "person_id",
-            "benunit_id",
-            "household_id",
-            "person_weight",
-            "employment_income",
-            "age",
-        ],
-        "benunit": [
-            "benunit_id",
-            "benunit_weight",
-            # Individual benefits (at benunit level)
-            "universal_credit",
-            "child_benefit",
-            "working_tax_credit",
-            "child_tax_credit",
-            "pension_credit",
-            "income_support",
-        ],
-    }
 
     simulation = Simulation(
         dataset=dataset,
         tax_benefit_model_version=uk_latest,
-        variables=variables,
     )
     simulation.run()
     return simulation
