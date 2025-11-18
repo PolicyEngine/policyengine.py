@@ -171,56 +171,10 @@ def create_dataset_with_varied_employment_income(
 
 def run_simulation(dataset: PolicyEngineUSDataset) -> Simulation:
     """Run a single simulation for all employment income variations."""
-    # Specify variables to calculate
-    variables = {
-        "household": [
-            "household_id",
-            "household_weight",
-            "household_net_income",
-            "household_benefits",
-            "household_tax",
-            "household_market_income",
-        ],
-        "person": [
-            "person_id",
-            "household_id",
-            "marital_unit_id",
-            "family_id",
-            "spm_unit_id",
-            "tax_unit_id",
-            "person_weight",
-            "employment_income",
-            "age",
-        ],
-        "spm_unit": [
-            "spm_unit_id",
-            "spm_unit_weight",
-            "snap",
-            "tanf",
-            "spm_unit_net_income",
-        ],
-        "tax_unit": [
-            "tax_unit_id",
-            "tax_unit_weight",
-            "income_tax",
-            "employee_payroll_tax",
-            "eitc",
-            "ctc",
-        ],
-        "marital_unit": [
-            "marital_unit_id",
-            "marital_unit_weight",
-        ],
-        "family": [
-            "family_id",
-            "family_weight",
-        ],
-    }
 
     simulation = Simulation(
         dataset=dataset,
         tax_benefit_model_version=us_latest,
-        variables=variables,
     )
     simulation.run()
     return simulation

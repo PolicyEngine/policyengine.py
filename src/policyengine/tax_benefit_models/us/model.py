@@ -156,63 +156,58 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
             )
             modifier(microsim)
 
-        # Allow custom variable selection, or use defaults
-        if simulation.variables is not None:
-            entity_variables = simulation.variables
-        else:
-            # Default comprehensive variable set
-            entity_variables = {
-                "person": [
-                    # IDs and weights
-                    "person_id",
-                    "marital_unit_id",
-                    "family_id",
-                    "spm_unit_id",
-                    "tax_unit_id",
-                    "household_id",
-                    "person_weight",
-                    # Demographics
-                    "age",
-                    # Income
-                    "employment_income",
-                    # Benefits
-                    "ssi",
-                    "social_security",
-                    "medicaid",
-                    "unemployment_compensation",
-                ],
-                "marital_unit": [
-                    "marital_unit_id",
-                    "marital_unit_weight",
-                ],
-                "family": [
-                    "family_id",
-                    "family_weight",
-                ],
-                "spm_unit": [
-                    "spm_unit_id",
-                    "spm_unit_weight",
-                    "snap",
-                    "tanf",
-                    "spm_unit_net_income",
-                ],
-                "tax_unit": [
-                    "tax_unit_id",
-                    "tax_unit_weight",
-                    "income_tax",
-                    "employee_payroll_tax",
-                    "eitc",
-                    "ctc",
-                ],
-                "household": [
-                    "household_id",
-                    "household_weight",
-                    "household_net_income",
-                    "household_benefits",
-                    "household_tax",
-                    "household_market_income",
-                ],
-            }
+        entity_variables = {
+            "person": [
+                # IDs and weights
+                "person_id",
+                "marital_unit_id",
+                "family_id",
+                "spm_unit_id",
+                "tax_unit_id",
+                "household_id",
+                "person_weight",
+                # Demographics
+                "age",
+                # Income
+                "employment_income",
+                # Benefits
+                "ssi",
+                "social_security",
+                "medicaid",
+                "unemployment_compensation",
+            ],
+            "marital_unit": [
+                "marital_unit_id",
+                "marital_unit_weight",
+            ],
+            "family": [
+                "family_id",
+                "family_weight",
+            ],
+            "spm_unit": [
+                "spm_unit_id",
+                "spm_unit_weight",
+                "snap",
+                "tanf",
+                "spm_unit_net_income",
+            ],
+            "tax_unit": [
+                "tax_unit_id",
+                "tax_unit_weight",
+                "income_tax",
+                "employee_payroll_tax",
+                "eitc",
+                "ctc",
+            ],
+            "household": [
+                "household_id",
+                "household_weight",
+                "household_net_income",
+                "household_benefits",
+                "household_tax",
+                "household_market_income",
+            ],
+        }
 
         data = {
             "person": pd.DataFrame(),
@@ -291,6 +286,7 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
         )
 
         simulation.output_dataset = PolicyEngineUSDataset(
+            id=simulation.id,
             name=dataset.name,
             description=dataset.description,
             filepath=str(
@@ -309,7 +305,23 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
             ),
         )
 
+    def save(self, simulation: "Simulation"):
+        """Save the simulation's output dataset."""
         simulation.output_dataset.save()
+
+    def load(self, simulation: "Simulation"):
+        """Load the simulation's output dataset."""
+        simulation.output_dataset = PolicyEngineUSDataset(
+            id=simulation.id,
+            name=simulation.dataset.name,
+            description=simulation.dataset.description,
+            filepath=str(
+                Path(simulation.dataset.filepath).parent
+                / (simulation.id + ".h5")
+            ),
+            year=simulation.dataset.year,
+            is_output_dataset=True,
+        )
 
     def _build_simulation_from_dataset(self, microsim, dataset, system):
         """Build a PolicyEngine Core simulation from dataset entity IDs.

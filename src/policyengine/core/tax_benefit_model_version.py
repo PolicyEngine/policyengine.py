@@ -29,6 +29,16 @@ class TaxBenefitModelVersion(BaseModel):
             "The TaxBenefitModel class must define a method to execute simulations."
         )
 
+    def save(self, simulation: "Simulation"):
+        raise NotImplementedError(
+            "The TaxBenefitModel class must define a method to save simulations."
+        )
+
+    def load(self, simulation: "Simulation"):
+        raise NotImplementedError(
+            "The TaxBenefitModel class must define a method to load simulations."
+        )
+
     def get_parameter(self, name: str) -> "Parameter":
         """Get a parameter by name.
 
