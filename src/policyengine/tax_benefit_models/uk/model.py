@@ -44,7 +44,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
         upload_time
     )
 
-    entity_variables = {
+    entity_variables: dict[str, list[str]] = {
         "person": [
             # IDs and weights
             "person_id",

@@ -45,7 +45,7 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
     version: str = None
     created_at: datetime.datetime = None
 
-    entity_variables = {
+    entity_variables: dict[str, list[str]] = {
         "person": [
             # IDs and weights
             "person_id",
