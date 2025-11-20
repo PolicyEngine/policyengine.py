@@ -27,7 +27,7 @@ class Simulation(BaseModel):
     def ensure(self):
         try:
             self.tax_benefit_model_version.load(self)
-        except:
+        except Exception:
             self.run()
             self.save()
 
