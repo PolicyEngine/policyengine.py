@@ -265,17 +265,29 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
 
     def load(self, simulation: "Simulation"):
         """Load the simulation's output dataset."""
+        import os
+
+        filepath = str(
+            Path(simulation.dataset.filepath).parent / (simulation.id + ".h5")
+        )
+
         simulation.output_dataset = PolicyEngineUKDataset(
             id=simulation.id,
             name=simulation.dataset.name,
             description=simulation.dataset.description,
-            filepath=str(
-                Path(simulation.dataset.filepath).parent
-                / (simulation.id + ".h5")
-            ),
+            filepath=filepath,
             year=simulation.dataset.year,
             is_output_dataset=True,
         )
+
+        # Load timestamps from file system metadata
+        if os.path.exists(filepath):
+            simulation.created_at = datetime.datetime.fromtimestamp(
+                os.path.getctime(filepath)
+            )
+            simulation.updated_at = datetime.datetime.fromtimestamp(
+                os.path.getmtime(filepath)
+            )
 
 
 uk_latest = PolicyEngineUKLatest()

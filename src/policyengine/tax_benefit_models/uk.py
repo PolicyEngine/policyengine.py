@@ -1,33 +1,38 @@
 """PolicyEngine UK tax-benefit model - imports from uk/ module."""
 
-from .uk import (
-    PolicyEngineUK,
-    PolicyEngineUKDataset,
-    PolicyEngineUKLatest,
-    ProgrammeStatistics,
-    UKYearData,
-    create_datasets,
-    general_policy_reform_analysis,
-    uk_latest,
-    uk_model,
-)
+from importlib.util import find_spec
 
-__all__ = [
-    "UKYearData",
-    "PolicyEngineUKDataset",
-    "create_datasets",
-    "PolicyEngineUK",
-    "PolicyEngineUKLatest",
-    "uk_model",
-    "uk_latest",
-    "general_policy_reform_analysis",
-    "ProgrammeStatistics",
-]
+if find_spec("policyengine_uk") is not None:
+    from .uk import (
+        PolicyEngineUK,
+        PolicyEngineUKDataset,
+        PolicyEngineUKLatest,
+        ProgrammeStatistics,
+        UKYearData,
+        create_datasets,
+        ensure_datasets,
+        general_policy_reform_analysis,
+        load_datasets,
+        uk_latest,
+        uk_model,
+    )
 
-# Rebuild models to resolve forward references
-from policyengine.core import Dataset
+    __all__ = [
+        "UKYearData",
+        "PolicyEngineUKDataset",
+        "create_datasets",
+        "load_datasets",
+        "ensure_datasets",
+        "PolicyEngineUK",
+        "PolicyEngineUKLatest",
+        "uk_model",
+        "uk_latest",
+        "general_policy_reform_analysis",
+        "ProgrammeStatistics",
+    ]
 
-Dataset.model_rebuild()
-UKYearData.model_rebuild()
-PolicyEngineUKDataset.model_rebuild()
-PolicyEngineUKLatest.model_rebuild()
+    # Rebuild models to resolve forward references
+    PolicyEngineUKDataset.model_rebuild()
+    PolicyEngineUKLatest.model_rebuild()
+else:
+    __all__ = []
