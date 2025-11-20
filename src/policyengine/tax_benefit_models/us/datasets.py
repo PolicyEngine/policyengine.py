@@ -351,7 +351,9 @@ def ensure_datasets(
     all_exist = True
     for dataset in datasets:
         for year in years:
-            filepath = Path(f"{data_folder}/{Path(dataset).stem}_year_{year}.h5")
+            filepath = Path(
+                f"{data_folder}/{Path(dataset).stem}_year_{year}.h5"
+            )
             if not filepath.exists():
                 all_exist = False
                 break
@@ -359,6 +361,10 @@ def ensure_datasets(
             break
 
     if all_exist:
-        return load_datasets(datasets=datasets, years=years, data_folder=data_folder)
+        return load_datasets(
+            datasets=datasets, years=years, data_folder=data_folder
+        )
     else:
-        return create_datasets(datasets=datasets, years=years, data_folder=data_folder)
+        return create_datasets(
+            datasets=datasets, years=years, data_folder=data_folder
+        )

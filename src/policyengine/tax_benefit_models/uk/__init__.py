@@ -13,7 +13,12 @@ if find_spec("policyengine_uk") is not None:
         ensure_datasets,
         load_datasets,
     )
-    from .model import PolicyEngineUK, PolicyEngineUKLatest, uk_latest, uk_model
+    from .model import (
+        PolicyEngineUK,
+        PolicyEngineUKLatest,
+        uk_latest,
+        uk_model,
+    )
     from .outputs import ProgrammeStatistics
 
     # Rebuild Pydantic models to resolve forward references
