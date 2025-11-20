@@ -1,4 +1,4 @@
 - bump: patch
   changes:
     fixed:
-    - Entity variables moved out to an editable constant.
+    - Minor fixes
