@@ -24,6 +24,13 @@ class Simulation(BaseModel):
     def run(self):
         self.tax_benefit_model_version.run(self)
 
+    def ensure(self):
+        try:
+            self.tax_benefit_model_version.load(self)
+        except:
+            self.run()
+            self.save()
+
     def save(self):
         """Save the simulation's output dataset."""
         self.tax_benefit_model_version.save(self)

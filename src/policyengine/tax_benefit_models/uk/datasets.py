@@ -37,11 +37,7 @@ class PolicyEngineUKDataset(Dataset):
         if self.data is not None:
             self.save()
         elif self.filepath and not self.data:
-            try:
-                self.load()
-            except FileNotFoundError:
-                # File doesn't exist yet, that's OK
-                pass
+            self.load()
 
     def save(self) -> None:
         """Save dataset to HDF5 file."""
@@ -141,6 +137,7 @@ def create_datasets(
             )
 
             uk_dataset = PolicyEngineUKDataset(
+                id=f"{Path(dataset).stem}_year_{year}",
                 name=f"{dataset}-year-{year}",
                 description=f"UK Dataset for year {year} based on {dataset}",
                 filepath=f"{data_folder}/{Path(dataset).stem}_year_{year}.h5",
