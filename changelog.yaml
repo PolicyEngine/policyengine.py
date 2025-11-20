@@ -175,3 +175,8 @@
     fixed:
     - Entity variables moved out to an editable constant.
   date: 2025-11-18 13:46:23
+- bump: patch
+  changes:
+    fixed:
+    - Minor fixes
+  date: 2025-11-20 14:06:49
