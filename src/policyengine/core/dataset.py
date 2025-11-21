@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+import numpy as np
 import pandas as pd
 from microdf import MicroDataFrame
 from pydantic import BaseModel, ConfigDict, Field
@@ -100,7 +101,7 @@ def map_to_entity(
     target_entity: str,
     person_entity: str = "person",
     columns: list[str] | None = None,
-    values: list | None = None,
+    values: np.ndarray | None = None,
     how: str = "sum",
 ) -> MicroDataFrame:
     """Map data from source entity to target entity using join keys.
@@ -143,6 +144,9 @@ def map_to_entity(
     # Get source data (convert to plain DataFrame to avoid weighted operations during mapping)
     source_df = pd.DataFrame(entity_data[source_entity])
 
+    # Track if we should return a MicroSeries (values is a numpy array, not a list)
+    return_series = values is not None
+
     # Handle values parameter - create a temporary column with the provided values
     if values is not None:
         if len(values) != len(source_df):
@@ -166,7 +170,10 @@ def map_to_entity(
 
     # Same entity - return as is
     if source_entity == target_entity:
-        return MicroDataFrame(source_df, weights=target_weight)
+        result = MicroDataFrame(source_df, weights=target_weight)
+        if return_series:
+            return result["__mapped_value"]
+        return result
 
     # Get target data and key
     target_df = entity_data[target_entity]
@@ -225,7 +232,10 @@ def map_to_entity(
             # Fill NaN with 0 for groups with no members in source entity
             result[agg_cols] = result[agg_cols].fillna(0)
 
-            return MicroDataFrame(result, weights=target_weight)
+            result_df = MicroDataFrame(result, weights=target_weight)
+            if return_series:
+                return result_df["__mapped_value"]
+            return result_df
 
     # Group entity to person: expand group-level data to person level
     if source_entity != person_entity and target_entity == person_entity:
@@ -284,7 +294,10 @@ def map_to_entity(
                     f"Unsupported aggregation method for group->person: {how}. Use 'project' or 'divide'."
                 )
 
-            return MicroDataFrame(result, weights=target_weight)
+            result_df = MicroDataFrame(result, weights=target_weight)
+            if return_series:
+                return result_df["__mapped_value"]
+            return result_df
 
     # Group to group: go through person table
     if source_entity != person_entity and target_entity != person_entity:
@@ -408,7 +421,10 @@ def map_to_entity(
             # Fill NaN with 0
             result[agg_cols] = result[agg_cols].fillna(0)
 
-            return MicroDataFrame(result, weights=target_weight)
+            result_df = MicroDataFrame(result, weights=target_weight)
+            if return_series:
+                return result_df["__mapped_value"]
+            return result_df
 
     raise ValueError(
         f"Unsupported mapping from {source_entity} to {target_entity}"
