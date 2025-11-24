@@ -2,6 +2,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from .parameter_value import ParameterValue
 from .tax_benefit_model_version import TaxBenefitModelVersion
 
 
@@ -13,3 +14,4 @@ class Parameter(BaseModel):
     data_type: type | None = None
     tax_benefit_model_version: TaxBenefitModelVersion
     unit: str | None = None
+    parameter_values: list["ParameterValue"] = Field(default_factory=list)

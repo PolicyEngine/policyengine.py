@@ -167,6 +167,9 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
                         value=param_at_instant.value,
                     )
                     self.parameter_values.append(parameter_value)
+                    self.get_parameter(parameter.name).parameter_values.append(
+                        parameter_value
+                    )
 
     def run(self, simulation: "Simulation") -> "Simulation":
         from policyengine_us import Microsimulation
