@@ -190,3 +190,8 @@
     fixed:
     - Parameter values now accessible from models.
   date: 2025-11-24 16:23:57
+- bump: patch
+  changes:
+    fixed:
+    - Build error
+  date: 2025-11-24 16:34:53
