@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Parameter values now accessible from models.

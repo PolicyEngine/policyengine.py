@@ -185,3 +185,8 @@
     fixed:
     - Minor fixes
   date: 2025-11-21 12:59:36
+- bump: patch
+  changes:
+    fixed:
+    - Parameter values now accessible from models.
+  date: 2025-11-24 16:23:57
