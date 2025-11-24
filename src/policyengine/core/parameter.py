@@ -1,9 +1,13 @@
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
 from .parameter_value import ParameterValue
 from .tax_benefit_model_version import TaxBenefitModelVersion
+
+if TYPE_CHECKING:
+    from .parameter_value import ParameterValue
 
 
 class Parameter(BaseModel):
