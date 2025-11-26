@@ -369,19 +369,18 @@ class Simulation:
         region: RegionType,
         reform: ReformType | None,
     ) -> CountrySimulation:
-        """Apply US-specific regional filtering to a simulation."""
+        """Apply US-specific regional filtering to a simulation.
+
+        Note: Most US regions (states, congressional districts) now use
+        scoped datasets rather than filtering. Only NYC still requires
+        filtering from the national dataset (and is still using the pooled 
+        CPS by default). This should be replaced with an approach based on 
+        the new datasets.
+        """
         if region == "city/nyc":
             simulation = self._filter_us_simulation_by_nyc(
                 simulation=simulation,
                 simulation_type=simulation_type,
-                reform=reform,
-            )
-        elif region is not None and "state/" in region:
-            state = region.split("/")[1]
-            simulation = self._filter_us_simulation_by_state(
-                simulation=simulation,
-                simulation_type=simulation_type,
-                state=state,
                 reform=reform,
             )
         return simulation
@@ -396,22 +395,6 @@ class Simulation:
         df = simulation.to_input_dataframe()
         in_nyc = simulation.calculate("in_nyc", map_to="person").values
         return simulation_type(dataset=df[in_nyc], reform=reform)
-
-    def _filter_us_simulation_by_state(
-        self,
-        simulation: CountryMicrosimulation,
-        simulation_type: type,
-        state: str,
-        reform: ReformType | None,
-    ) -> CountrySimulation:
-        """Filter a US simulation to only include households in a specific state."""
-        df = simulation.to_input_dataframe()
-        state_code = simulation.calculate(
-            "state_code_str", map_to="person"
-        ).values
-        return simulation_type(
-            dataset=df[state_code == state.upper()], reform=reform
-        )
 
     def check_model_version(self) -> None:
         """
