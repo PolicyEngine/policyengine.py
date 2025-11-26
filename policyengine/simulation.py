@@ -146,11 +146,20 @@ class Simulation:
                             )
 
     def _set_data(self, file_address: str | None = None) -> None:
+        """Load and set the dataset for this simulation."""
+        # Step 1: Resolve file address (if None, get default)
+        file_address = self._resolve_file_address(file_address)
 
-        # filename refers to file's unique name + extension;
-        # file_address refers to URI + filename
+        # Step 2: Acquire the file (download if PE dataset, or use local path)
+        filepath, version = self._acquire_dataset_file(file_address)
+        self.data_version = version
 
-        # If None is passed, user wants default dataset; get URL, then continue initializing.
+        # Step 3: Load into country-specific format
+        time_period = self._set_data_time_period(file_address)
+        self.options.data = self._load_dataset_for_country(filepath, time_period)
+
+    def _resolve_file_address(self, file_address: str | None) -> str:
+        """If no file address provided, get the default dataset for this country/region."""
         if file_address is None:
             file_address = get_default_dataset(
                 country=self.options.country, region=self.options.region
@@ -159,31 +168,31 @@ class Simulation:
                 f"No data provided, using default dataset: {file_address}",
                 file=sys.stderr,
             )
+        return file_address
 
-        if file_address not in POLICYENGINE_DATASETS:
-            # If it's a local file, no URI present and unable to infer version.
-            filename = file_address
-            version = None
-
+    def _acquire_dataset_file(self, file_address: str) -> tuple[str, str | None]:
+        """
+        Get the dataset file, downloading from GCS if it's an official PE dataset.
+        Returns (filepath, version) where version is None for local files.
+        """
+        if file_address in POLICYENGINE_DATASETS:
+            return self._set_data_from_gs(file_address)
         else:
-            # All official PolicyEngine datasets are stored in GCS;
-            # load accordingly
-            filename, version = self._set_data_from_gs(file_address)
-            self.data_version = version
+            # Local file - no download needed, no version available
+            return file_address, None
 
-        time_period = self._set_data_time_period(file_address)
-
-        # UK needs custom loading
+    def _load_dataset_for_country(
+        self, filepath: str, time_period: int | None
+    ) -> Dataset:
+        """Load the dataset file using the appropriate country-specific loader."""
         if self.options.country == "us":
-            self.options.data = Dataset.from_file(
-                filename, time_period=time_period
-            )
-        else:
+            return Dataset.from_file(filepath, time_period=time_period)
+        elif self.options.country == "uk":
             from policyengine_uk.data import UKSingleYearDataset
 
-            self.options.data = UKSingleYearDataset(
-                file_path=filename,
-            )
+            return UKSingleYearDataset(file_path=filepath)
+        else:
+            raise ValueError(f"Unsupported country: {self.options.country}")
 
     def _initialise_simulations(self):
         self.baseline_simulation = self._initialise_simulation(
