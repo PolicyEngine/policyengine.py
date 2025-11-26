@@ -775,6 +775,74 @@ def uk_constituency_breakdown(
     return UKConstituencyBreakdownWithValues(**output)
 
 
+class UKLocalAreaBreakdownByLocalArea(BaseModel):
+    average_household_income_change: float
+    relative_household_income_change: float
+    x: int
+    y: int
+
+
+class UKLocalAreaBreakdownWithValues(BaseModel):
+    by_local_area: dict[str, UKLocalAreaBreakdownByLocalArea]
+
+
+UKLocalAreaBreakdown = UKLocalAreaBreakdownWithValues | None
+
+
+def uk_local_area_breakdown(
+    baseline: SingleEconomy, reform: SingleEconomy, country_id: str
+) -> UKLocalAreaBreakdown:
+    if country_id != "uk":
+        return None
+
+    output = {
+        "by_local_area": {},
+    }
+    # Note: Country-level aggregation (outcomes_by_region) removed for local areas
+    baseline_hnet = baseline.household_net_income
+    reform_hnet = reform.household_net_income
+
+    local_area_weights_path = download(
+        gcs_bucket="policyengine-uk-data-private",
+        filepath="local_authority_weights.h5",
+    )
+    with h5py.File(local_area_weights_path, "r") as f:
+        weights = f["2025"][
+            ...
+        ]  # {2025: array(n_local_areas, n_households) where cell i, j is the weight of household record j in local area i}
+
+    local_area_names_path = download(
+        gcs_bucket="policyengine-uk-data-private",
+        filepath="local_authorities_2021.csv",
+    )
+    local_area_names = pd.read_csv(
+        str(local_area_names_path)
+    )  # columns code (local area code), name (local area name), x, y (geographic position)
+
+    for i in range(len(local_area_names)):
+        name: str = local_area_names.iloc[i]["name"]
+        code: str = local_area_names.iloc[i]["code"]
+        weight: np.ndarray = weights[i]
+        baseline_income = MicroSeries(baseline_hnet, weights=weight)
+        reform_income = MicroSeries(reform_hnet, weights=weight)
+        average_household_income_change: float = (
+            reform_income.sum() - baseline_income.sum()
+        ) / baseline_income.count()
+        percent_household_income_change: float = (
+            reform_income.sum() / baseline_income.sum() - 1
+        )
+        output["by_local_area"][name] = {
+            "average_household_income_change": average_household_income_change,
+            "relative_household_income_change": percent_household_income_change,
+            "x": int(local_area_names.iloc[i]["x"]),  # Geographic positions
+            "y": int(local_area_names.iloc[i]["y"]),
+        }
+
+        # Note: Country-level aggregation and bucketing logic removed for local areas
+
+    return UKLocalAreaBreakdownWithValues(**output)
+
+
 class CliffImpactInSimulation(BaseModel):
     cliff_gap: float
     cliff_share: float
