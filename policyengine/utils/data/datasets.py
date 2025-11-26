@@ -27,19 +27,44 @@ DATASET_TIME_PERIODS = {
 
 
 def get_default_dataset(
-    country: str, region: str, version: Optional[str] = None
+    country: str, region: str | None, version: Optional[str] = None
 ) -> str:
     if country == "uk":
         return EFRS_2023
     elif country == "us":
-        if region is not None and region != "us":
-            return CPS_2023_POOLED
-        else:
-            return CPS_2023
+        return _get_default_us_dataset(region)
 
     raise ValueError(
         f"Unable to select a default dataset for country {country} and region {region}."
     )
+
+
+def _get_default_us_dataset(region: str | None) -> str:
+    """Get the default dataset for a US region."""
+    region_type = determine_us_region_type(region)
+
+    if region_type == "nationwide":
+        return CPS_2023
+    elif region_type == "city":
+        # TODO: Implement a better approach to this for our one
+        # city, New York City.
+        # Cities use the pooled CPS dataset
+        return CPS_2023_POOLED
+
+    # For state and congressional_district, region is guaranteed to be non-None
+    assert region is not None
+
+    if region_type == "state":
+        state_code = region.split("/")[1]
+        return get_us_state_dataset_path(state_code)
+    elif region_type == "congressional_district":
+        # Expected format: "congressional_district/CA-01"
+        district_str = region.split("/")[1]
+        state_code, district_num_str = district_str.split("-")
+        district_number = int(district_num_str)
+        return get_us_congressional_district_dataset_path(state_code, district_number)
+
+    raise ValueError(f"Unhandled US region type: {region_type}")
 
 
 def process_gs_path(path: str) -> Tuple[str, str]:
