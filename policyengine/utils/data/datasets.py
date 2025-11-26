@@ -1,6 +1,6 @@
 """Mainly simulation options and parameters."""
 
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Literal
 
 US_DATA_BUCKET = "gs://policyengine-us-data"
 
@@ -82,3 +82,35 @@ def get_us_congressional_district_dataset_path(
         GCS path to the Congressional district dataset.
     """
     return f"{US_DATA_BUCKET}/districts/{state_code.upper()}-{district_number:02d}.h5"
+
+
+USRegionType = Literal["nationwide", "city", "state", "congressional_district"]
+
+US_REGION_PREFIXES = ("city", "state", "congressional_district")
+
+
+def determine_us_region_type(region: str | None) -> USRegionType:
+    """
+    Determine the type of US region from a region string.
+
+    Args:
+        region: A region string (e.g., "us", "city/nyc", "state/CA",
+                "congressional_district/CA-01") or None.
+
+    Returns:
+        One of "nationwide", "city", "state", or "congressional_district".
+
+    Raises:
+        ValueError: If the region string has an unrecognized prefix.
+    """
+    if region is None or region == "us":
+        return "nationwide"
+
+    for prefix in US_REGION_PREFIXES:
+        if region.startswith(f"{prefix}/"):
+            return prefix
+
+    raise ValueError(
+        f"Unrecognized US region format: '{region}'. "
+        f"Expected 'us', or one of the following prefixes: {list(US_REGION_PREFIXES)}"
+    )
