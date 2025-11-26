@@ -270,18 +270,12 @@ class Simulation:
         time_period: TimePeriodType,
     ) -> CountrySimulation:
         if country == "us":
-            df = simulation.to_input_dataframe()
-            state_code = simulation.calculate(
-                "state_code_str", map_to="person"
-            ).values
-            if region == "city/nyc":
-                in_nyc = simulation.calculate("in_nyc", map_to="person").values
-                simulation = simulation_type(dataset=df[in_nyc], reform=reform)
-            elif "state/" in region:
-                state = region.split("/")[1]
-                simulation = simulation_type(
-                    dataset=df[state_code == state.upper()], reform=reform
-                )
+            simulation = self._apply_us_region_to_simulation(
+                simulation=simulation,
+                simulation_type=simulation_type,
+                region=region,
+                reform=reform,
+            )
         elif country == "uk":
             if "country/" in region:
                 region = region.split("/")[1]
@@ -358,6 +352,57 @@ class Simulation:
                 )
 
         return simulation
+
+    def _apply_us_region_to_simulation(
+        self,
+        simulation: CountryMicrosimulation,
+        simulation_type: type,
+        region: RegionType,
+        reform: ReformType | None,
+    ) -> CountrySimulation:
+        """Apply US-specific regional filtering to a simulation."""
+        if region == "city/nyc":
+            simulation = self._filter_us_simulation_by_nyc(
+                simulation=simulation,
+                simulation_type=simulation_type,
+                reform=reform,
+            )
+        elif region is not None and "state/" in region:
+            state = region.split("/")[1]
+            simulation = self._filter_us_simulation_by_state(
+                simulation=simulation,
+                simulation_type=simulation_type,
+                state=state,
+                reform=reform,
+            )
+        return simulation
+
+    def _filter_us_simulation_by_nyc(
+        self,
+        simulation: CountryMicrosimulation,
+        simulation_type: type,
+        reform: ReformType | None,
+    ) -> CountrySimulation:
+        """Filter a US simulation to only include NYC households."""
+        df = simulation.to_input_dataframe()
+        in_nyc = simulation.calculate("in_nyc", map_to="person").values
+        return simulation_type(dataset=df[in_nyc], reform=reform)
+
+    def _filter_us_simulation_by_state(
+        self,
+        simulation: CountryMicrosimulation,
+        simulation_type: type,
+        state: str,
+        reform: ReformType | None,
+    ) -> CountrySimulation:
+        """Filter a US simulation to only include households in a specific state."""
+        df = simulation.to_input_dataframe()
+        state_code = simulation.calculate(
+            "state_code_str", map_to="person"
+        ).values
+        return simulation_type(
+            dataset=df[state_code == state.upper()], reform=reform
+        )
 
     def check_model_version(self) -> None:
         """
