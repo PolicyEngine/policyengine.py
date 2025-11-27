@@ -5,6 +5,7 @@ on:
   push:
       branches:
         - main
+        - '0.x'  # Maintenance branch for legacy 0.x releases
 
       paths:
         - changelog_entry.yaml
