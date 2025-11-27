@@ -1,6 +1,0 @@
-- bump: minor
-  changes:
-    changed:
-    - Replaced US state filtering with conditional file loading for states and Congressional districts
-    - Updated data source URLs for state and district files
-    - Modified GCS loading to support new versioning introduced by -core v3.21.0
