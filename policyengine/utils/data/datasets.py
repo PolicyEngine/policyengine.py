@@ -2,6 +2,8 @@
 
 from typing import Tuple, Optional, Literal
 
+from policyengine_core.tools.google_cloud import parse_gs_url
+
 US_DATA_BUCKET = "gs://policyengine-us-data"
 
 EFRS_2023 = "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5"
@@ -67,14 +69,24 @@ def _get_default_us_dataset(region: str | None) -> str:
     raise ValueError(f"Unhandled US region type: {region_type}")
 
 
-def process_gs_path(path: str) -> Tuple[str, str]:
-    """Process a GS path to return bucket and object."""
-    if not path.startswith("gs://"):
-        raise ValueError(f"Invalid GS path: {path}")
+def process_gs_path(path: str) -> Tuple[str, str, Optional[str]]:
+    """
+    Process a GS path to return bucket, object, and optional version.
 
-    path = path[5:]  # Remove 'gs://'
-    bucket, obj = path.split("/", 1)
-    return bucket, obj
+    Supports:
+      - gs://bucket/path/file.h5
+      - gs://bucket/path/file.h5@1.2.3
+
+    Args:
+        path: A GCS URL in the format gs://bucket/path/to/file[@version]
+
+    Returns:
+        A tuple of (bucket, object_path, version) where version may be None.
+
+    Raises:
+        ValueError: If the path is not a valid gs:// URL.
+    """
+    return parse_gs_url(path)
 
 
 def get_us_state_dataset_path(state_code: str) -> str:
@@ -106,6 +118,7 @@ def get_us_congressional_district_dataset_path(
     Returns:
         GCS path to the Congressional district dataset.
     """
+    print(f"US_DATA_BUCKET in GET_DATASET_PATH: {US_DATA_BUCKET}")
     return f"{US_DATA_BUCKET}/districts/{state_code.upper()}-{district_number:02d}.h5"
 
 

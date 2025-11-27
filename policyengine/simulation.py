@@ -6,7 +6,6 @@ from typing import Literal
 from .utils.data.datasets import (
     get_default_dataset,
     process_gs_path,
-    POLICYENGINE_DATASETS,
     DATASET_TIME_PERIODS,
 )
 from policyengine_core.simulations import Simulation as CountrySimulation
@@ -149,6 +148,7 @@ class Simulation:
         """Load and set the dataset for this simulation."""
         # Step 1: Resolve file address (if None, get default)
         file_address = self._resolve_file_address(file_address)
+        print(f"Using dataset: {file_address}", file=sys.stderr)
 
         # Step 2: Acquire the file (download if PE dataset, or use local path)
         filepath, version = self._acquire_dataset_file(file_address)
@@ -172,10 +172,10 @@ class Simulation:
 
     def _acquire_dataset_file(self, file_address: str) -> tuple[str, str | None]:
         """
-        Get the dataset file, downloading from GCS if it's an official PE dataset.
+        Get the dataset file, downloading from GCS if it's a GCS path.
         Returns (filepath, version) where version is None for local files.
         """
-        if file_address in POLICYENGINE_DATASETS:
+        if file_address.startswith("gs://"):
             return self._set_data_from_gs(file_address)
         else:
             # Local file - no download needed, no version available
@@ -440,10 +440,19 @@ class Simulation:
     def _set_data_from_gs(self, file_address: str) -> tuple[str, str | None]:
         """
         Set the data from a GCS path and return the filename and version.
-        """
 
-        bucket, filename = process_gs_path(file_address)
-        version = self.options.data_version
+        Supports version specification in three ways (in priority order):
+        1. Explicit data_version option: Simulation(data="gs://...", data_version="1.2.3")
+        2. URL suffix: Simulation(data="gs://bucket/file.h5@1.2.3")
+        3. None (latest): Simulation(data="gs://bucket/file.h5")
+
+        Returns:
+            A tuple of (filename, version) where version may be None.
+        """
+        bucket, filename, url_version = process_gs_path(file_address)
+
+        # Priority: explicit option > URL suffix > None (latest)
+        version = self.options.data_version or url_version
 
         print(f"Downloading {filename} from bucket {bucket}", file=sys.stderr)
 
