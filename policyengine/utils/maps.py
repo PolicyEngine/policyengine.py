@@ -8,16 +8,16 @@ from policyengine.utils.charts import *
 
 def get_location_options_table(location_type: str) -> pd.DataFrame:
     if location_type == "parliamentary_constituencies":
-        area_names_file_path = download(
-            repo="policyengine/policyengine-uk-data",
-            filepath="constituencies_2024.csv",
+        area_names_local_path = download(
+            gcs_bucket="policyengine-uk-data-private",
+            gcs_key="constituencies_2024.csv",
         )
     elif location_type == "local_authorities":
-        area_names_file_path = download(
-            repo="policyengine/policyengine-uk-data",
-            filepath="local_authorities_2021.csv",
+        area_names_local_path = download(
+            gcs_bucket="policyengine-uk-data-private",
+            gcs_key="local_authorities_2021.csv",
         )
-    df = pd.read_csv(area_names_file_path)
+    df = pd.read_csv(area_names_local_path)
     return df
 
 

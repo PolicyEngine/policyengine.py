@@ -3,7 +3,7 @@ import diskcache
 from pathlib import Path
 from policyengine_core.data.dataset import atomic_write
 import logging
-from .simplified_google_storage_client import SimplifiedGoogleStorageClient
+from .version_aware_storage_client import VersionAwareStorageClient
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -11,12 +11,19 @@ logger = logging.getLogger(__name__)
 
 class CachingGoogleStorageClient(AbstractContextManager):
     """
-    Client for downloaded resources from a google storage bucket only when the CRC
-    of the blob changes.
+    Client for downloading resources from a Google Storage bucket with caching.
+
+    Only downloads when the CRC of the blob changes, using a disk-based cache
+    to persist downloaded data across sessions.
+
+    The client supports multiple versioning strategies via VersionAwareStorageClient:
+    - Generation-based: version is a GCS generation number
+    - Metadata-based: version is stored in blob.metadata["version"]
+    - Latest: when no version is specified, gets the latest blob
     """
 
     def __init__(self):
-        self.client = SimplifiedGoogleStorageClient()
+        self.client = VersionAwareStorageClient()
         self.cache = diskcache.Cache()
 
     def _data_key(
@@ -36,6 +43,17 @@ class CachingGoogleStorageClient(AbstractContextManager):
     ):
         """
         Atomically write the latest version of the cloud storage blob to the target path.
+
+        Args:
+            bucket: The GCS bucket name.
+            key: The blob path within the bucket.
+            target: The local file path to write the downloaded content to.
+            version: Optional version string. Can be a GCS generation number,
+                a metadata version string, or None for latest.
+            return_version: If True, return the version string of the downloaded blob.
+
+        Returns:
+            The version string if return_version is True, otherwise None.
         """
         if version is None:
             # If no version is specified, get the latest version from the cache

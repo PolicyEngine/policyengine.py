@@ -6,7 +6,6 @@ from typing import Literal
 from .utils.data.datasets import (
     get_default_dataset,
     process_gs_path,
-    POLICYENGINE_DATASETS,
     DATASET_TIME_PERIODS,
 )
 from policyengine_core.simulations import Simulation as CountrySimulation
@@ -146,11 +145,23 @@ class Simulation:
                             )
 
     def _set_data(self, file_address: str | None = None) -> None:
+        """Load and set the dataset for this simulation."""
+        # Step 1: Resolve file address (if None, get default)
+        file_address = self._resolve_file_address(file_address)
+        print(f"Using dataset: {file_address}", file=sys.stderr)
 
-        # filename refers to file's unique name + extension;
-        # file_address refers to URI + filename
+        # Step 2: Acquire the file (download if PE dataset, or use local path)
+        filepath, version = self._acquire_dataset_file(file_address)
+        self.data_version = version
 
-        # If None is passed, user wants default dataset; get URL, then continue initializing.
+        # Step 3: Load into country-specific format
+        time_period = self._set_data_time_period(file_address)
+        self.options.data = self._load_dataset_for_country(
+            filepath, time_period
+        )
+
+    def _resolve_file_address(self, file_address: str | None) -> str:
+        """If no file address provided, get the default dataset for this country/region."""
         if file_address is None:
             file_address = get_default_dataset(
                 country=self.options.country, region=self.options.region
@@ -159,31 +170,33 @@ class Simulation:
                 f"No data provided, using default dataset: {file_address}",
                 file=sys.stderr,
             )
+        return file_address
 
-        if file_address not in POLICYENGINE_DATASETS:
-            # If it's a local file, no URI present and unable to infer version.
-            filename = file_address
-            version = None
-
+    def _acquire_dataset_file(
+        self, file_address: str
+    ) -> tuple[str, str | None]:
+        """
+        Get the dataset file, downloading from GCS if it's a GCS path.
+        Returns (filepath, version) where version is None for local files.
+        """
+        if file_address.startswith("gs://"):
+            return self._set_data_from_gs(file_address)
         else:
-            # All official PolicyEngine datasets are stored in GCS;
-            # load accordingly
-            filename, version = self._set_data_from_gs(file_address)
-            self.data_version = version
+            # Local file - no download needed, no version available
+            return file_address, None
 
-        time_period = self._set_data_time_period(file_address)
-
-        # UK needs custom loading
+    def _load_dataset_for_country(
+        self, filepath: str, time_period: int | None
+    ) -> Dataset:
+        """Load the dataset file using the appropriate country-specific loader."""
         if self.options.country == "us":
-            self.options.data = Dataset.from_file(
-                filename, time_period=time_period
-            )
-        else:
+            return Dataset.from_file(filepath, time_period=time_period)
+        elif self.options.country == "uk":
             from policyengine_uk.data import UKSingleYearDataset
 
-            self.options.data = UKSingleYearDataset(
-                file_path=filename,
-            )
+            return UKSingleYearDataset(file_path=filepath)
+        else:
+            raise ValueError(f"Unsupported country: {self.options.country}")
 
     def _initialise_simulations(self):
         self.baseline_simulation = self._initialise_simulation(
@@ -270,18 +283,12 @@ class Simulation:
         time_period: TimePeriodType,
     ) -> CountrySimulation:
         if country == "us":
-            df = simulation.to_input_dataframe()
-            state_code = simulation.calculate(
-                "state_code_str", map_to="person"
-            ).values
-            if region == "city/nyc":
-                in_nyc = simulation.calculate("in_nyc", map_to="person").values
-                simulation = simulation_type(dataset=df[in_nyc], reform=reform)
-            elif "state/" in region:
-                state = region.split("/")[1]
-                simulation = simulation_type(
-                    dataset=df[state_code == state.upper()], reform=reform
-                )
+            simulation = self._apply_us_region_to_simulation(
+                simulation=simulation,
+                simulation_type=simulation_type,
+                region=region,
+                reform=reform,
+            )
         elif country == "uk":
             if "country/" in region:
                 region = region.split("/")[1]
@@ -294,14 +301,14 @@ class Simulation:
                 )
             elif "constituency/" in region:
                 constituency = region.split("/")[1]
-                constituency_names_file_path = download(
+                constituency_names_local_path = download(
                     gcs_bucket="policyengine-uk-data-private",
-                    filepath="constituencies_2024.csv",
+                    gcs_key="constituencies_2024.csv",
                 )
-                constituency_names_file_path = Path(
-                    constituency_names_file_path
+                constituency_names_local_path = Path(
+                    constituency_names_local_path
                 )
-                constituency_names = pd.read_csv(constituency_names_file_path)
+                constituency_names = pd.read_csv(constituency_names_local_path)
                 if constituency in constituency_names.code.values:
                     constituency_id = constituency_names[
                         constituency_names.code == constituency
@@ -312,14 +319,14 @@ class Simulation:
                     ].index[0]
                 else:
                     raise ValueError(
-                        f"Constituency {constituency} not found. See {constituency_names_file_path} for the list of available constituencies."
+                        f"Constituency {constituency} not found. See {constituency_names_local_path} for the list of available constituencies."
                     )
-                weights_file_path = download(
+                weights_local_path = download(
                     gcs_bucket="policyengine-uk-data-private",
-                    filepath="parliamentary_constituency_weights.h5",
+                    gcs_key="parliamentary_constituency_weights.h5",
                 )
 
-                with h5py.File(weights_file_path, "r") as f:
+                with h5py.File(weights_local_path, "r") as f:
                     weights = f[str(time_period)][...]
 
                 simulation.set_input(
@@ -329,26 +336,26 @@ class Simulation:
                 )
             elif "local_authority/" in region:
                 la = region.split("/")[1]
-                la_names_file_path = download(
+                la_names_local_path = download(
                     gcs_bucket="policyengine-uk-data-private",
-                    filepath="local_authorities_2021.csv",
+                    gcs_key="local_authorities_2021.csv",
                 )
-                la_names_file_path = Path(la_names_file_path)
-                la_names = pd.read_csv(la_names_file_path)
+                la_names_local_path = Path(la_names_local_path)
+                la_names = pd.read_csv(la_names_local_path)
                 if la in la_names.code.values:
                     la_id = la_names[la_names.code == la].index[0]
                 elif la in la_names.name.values:
                     la_id = la_names[la_names.name == la].index[0]
                 else:
                     raise ValueError(
-                        f"Local authority {la} not found. See {la_names_file_path} for the list of available local authorities."
+                        f"Local authority {la} not found. See {la_names_local_path} for the list of available local authorities."
                     )
-                weights_file_path = download(
+                weights_local_path = download(
                     gcs_bucket="policyengine-uk-data-private",
-                    filepath="local_authority_weights.h5",
+                    gcs_key="local_authority_weights.h5",
                 )
 
-                with h5py.File(weights_file_path, "r") as f:
+                with h5py.File(weights_local_path, "r") as f:
                     weights = f[str(self.time_period)][...]
 
                 simulation.set_input(
@@ -358,6 +365,40 @@ class Simulation:
                 )
 
         return simulation
+
+    def _apply_us_region_to_simulation(
+        self,
+        simulation: CountryMicrosimulation,
+        simulation_type: type,
+        region: RegionType,
+        reform: ReformType | None,
+    ) -> CountrySimulation:
+        """Apply US-specific regional filtering to a simulation.
+
+        Note: Most US regions (states, congressional districts) now use
+        scoped datasets rather than filtering. Only NYC still requires
+        filtering from the national dataset (and is still using the pooled
+        CPS by default). This should be replaced with an approach based on
+        the new datasets.
+        """
+        if region == "city/nyc":
+            simulation = self._filter_us_simulation_by_nyc(
+                simulation=simulation,
+                simulation_type=simulation_type,
+                reform=reform,
+            )
+        return simulation
+
+    def _filter_us_simulation_by_nyc(
+        self,
+        simulation: CountryMicrosimulation,
+        simulation_type: type,
+        reform: ReformType | None,
+    ) -> CountrySimulation:
+        """Filter a US simulation to only include NYC households."""
+        df = simulation.to_input_dataframe()
+        in_nyc = simulation.calculate("in_nyc", map_to="person").values
+        return simulation_type(dataset=df[in_nyc], reform=reform)
 
     def check_model_version(self) -> None:
         """
@@ -402,19 +443,30 @@ class Simulation:
 
     def _set_data_from_gs(self, file_address: str) -> tuple[str, str | None]:
         """
-        Set the data from a GCS path and return the filename and version.
+        Download data from a GCS path and return the local path and version.
+
+        Supports version specification in three ways (in priority order):
+        1. Explicit data_version option: Simulation(data="gs://...", data_version="1.2.3")
+        2. URL suffix: Simulation(data="gs://bucket/file.h5@1.2.3")
+        3. None (latest): Simulation(data="gs://bucket/file.h5")
+
+        Returns:
+            A tuple of (local_path, version) where:
+            - local_path: The local filesystem path where the file was saved
+            - version: The version string, or None if not available
         """
+        bucket, gcs_key, url_version = process_gs_path(file_address)
 
-        bucket, filename = process_gs_path(file_address)
-        version = self.options.data_version
+        # Priority: explicit option > URL suffix > None (latest)
+        version = self.options.data_version or url_version
 
-        print(f"Downloading {filename} from bucket {bucket}", file=sys.stderr)
+        print(f"Downloading {gcs_key} from bucket {bucket}", file=sys.stderr)
 
-        filepath, version = download(
-            filepath=filename,
+        local_path, version = download(
+            gcs_key=gcs_key,
             gcs_bucket=bucket,
             version=version,
             return_version=True,
         )
 
-        return filename, version
+        return local_path, version

@@ -712,21 +712,21 @@ def uk_constituency_breakdown(
     baseline_hnet = baseline.household_net_income
     reform_hnet = reform.household_net_income
 
-    constituency_weights_path = download(
+    constituency_weights_local_path = download(
         gcs_bucket="policyengine-uk-data-private",
-        filepath="parliamentary_constituency_weights.h5",
+        gcs_key="parliamentary_constituency_weights.h5",
     )
-    with h5py.File(constituency_weights_path, "r") as f:
+    with h5py.File(constituency_weights_local_path, "r") as f:
         weights = f["2025"][
             ...
         ]  # {2025: array(650, 100180) where cell i, j is the weight of household record i in constituency j}
 
-    constituency_names_path = download(
+    constituency_names_local_path = download(
         gcs_bucket="policyengine-uk-data-private",
-        filepath="constituencies_2024.csv",
+        gcs_key="constituencies_2024.csv",
     )
     constituency_names = pd.read_csv(
-        constituency_names_path
+        constituency_names_local_path
     )  # columns code (constituency code), name (constituency name), x, y (geographic position)
 
     for i in range(len(constituency_names)):
