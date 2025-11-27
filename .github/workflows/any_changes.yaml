@@ -5,7 +5,6 @@ on:
   pull_request:
     branches:
       - main
-      - '0.x'  # Maintenance branch for legacy 0.x releases
 
 jobs:
   docs:
