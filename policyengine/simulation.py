@@ -297,14 +297,14 @@ class Simulation:
                 )
             elif "constituency/" in region:
                 constituency = region.split("/")[1]
-                constituency_names_file_path = download(
+                constituency_names_local_path = download(
                     gcs_bucket="policyengine-uk-data-private",
-                    filepath="constituencies_2024.csv",
+                    gcs_key="constituencies_2024.csv",
                 )
-                constituency_names_file_path = Path(
-                    constituency_names_file_path
+                constituency_names_local_path = Path(
+                    constituency_names_local_path
                 )
-                constituency_names = pd.read_csv(constituency_names_file_path)
+                constituency_names = pd.read_csv(constituency_names_local_path)
                 if constituency in constituency_names.code.values:
                     constituency_id = constituency_names[
                         constituency_names.code == constituency
@@ -315,14 +315,14 @@ class Simulation:
                     ].index[0]
                 else:
                     raise ValueError(
-                        f"Constituency {constituency} not found. See {constituency_names_file_path} for the list of available constituencies."
+                        f"Constituency {constituency} not found. See {constituency_names_local_path} for the list of available constituencies."
                     )
-                weights_file_path = download(
+                weights_local_path = download(
                     gcs_bucket="policyengine-uk-data-private",
-                    filepath="parliamentary_constituency_weights.h5",
+                    gcs_key="parliamentary_constituency_weights.h5",
                 )
 
-                with h5py.File(weights_file_path, "r") as f:
+                with h5py.File(weights_local_path, "r") as f:
                     weights = f[str(time_period)][...]
 
                 simulation.set_input(
@@ -332,26 +332,26 @@ class Simulation:
                 )
             elif "local_authority/" in region:
                 la = region.split("/")[1]
-                la_names_file_path = download(
+                la_names_local_path = download(
                     gcs_bucket="policyengine-uk-data-private",
-                    filepath="local_authorities_2021.csv",
+                    gcs_key="local_authorities_2021.csv",
                 )
-                la_names_file_path = Path(la_names_file_path)
-                la_names = pd.read_csv(la_names_file_path)
+                la_names_local_path = Path(la_names_local_path)
+                la_names = pd.read_csv(la_names_local_path)
                 if la in la_names.code.values:
                     la_id = la_names[la_names.code == la].index[0]
                 elif la in la_names.name.values:
                     la_id = la_names[la_names.name == la].index[0]
                 else:
                     raise ValueError(
-                        f"Local authority {la} not found. See {la_names_file_path} for the list of available local authorities."
+                        f"Local authority {la} not found. See {la_names_local_path} for the list of available local authorities."
                     )
-                weights_file_path = download(
+                weights_local_path = download(
                     gcs_bucket="policyengine-uk-data-private",
-                    filepath="local_authority_weights.h5",
+                    gcs_key="local_authority_weights.h5",
                 )
 
-                with h5py.File(weights_file_path, "r") as f:
+                with h5py.File(weights_local_path, "r") as f:
                     weights = f[str(self.time_period)][...]
 
                 simulation.set_input(
@@ -439,7 +439,7 @@ class Simulation:
 
     def _set_data_from_gs(self, file_address: str) -> tuple[str, str | None]:
         """
-        Set the data from a GCS path and return the filename and version.
+        Download data from a GCS path and return the local path and version.
 
         Supports version specification in three ways (in priority order):
         1. Explicit data_version option: Simulation(data="gs://...", data_version="1.2.3")
@@ -447,20 +447,22 @@ class Simulation:
         3. None (latest): Simulation(data="gs://bucket/file.h5")
 
         Returns:
-            A tuple of (filename, version) where version may be None.
+            A tuple of (local_path, version) where:
+            - local_path: The local filesystem path where the file was saved
+            - version: The version string, or None if not available
         """
-        bucket, filename, url_version = process_gs_path(file_address)
+        bucket, gcs_key, url_version = process_gs_path(file_address)
 
         # Priority: explicit option > URL suffix > None (latest)
         version = self.options.data_version or url_version
 
-        print(f"Downloading {filename} from bucket {bucket}", file=sys.stderr)
+        print(f"Downloading {gcs_key} from bucket {bucket}", file=sys.stderr)
 
-        filepath, version = download(
-            filepath=filename,
+        local_path, version = download(
+            gcs_key=gcs_key,
             gcs_bucket=bucket,
             version=version,
             return_version=True,
         )
 
-        return filename, version
+        return local_path, version
