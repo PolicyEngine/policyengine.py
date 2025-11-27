@@ -9,7 +9,9 @@ class TestProcessGsPath:
 
     def test_basic_path(self):
         """Test parsing a basic gs:// path without version."""
-        bucket, path, version = process_gs_path("gs://my-bucket/path/to/file.h5")
+        bucket, path, version = process_gs_path(
+            "gs://my-bucket/path/to/file.h5"
+        )
         assert bucket == "my-bucket"
         assert path == "path/to/file.h5"
         assert version is None

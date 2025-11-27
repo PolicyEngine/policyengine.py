@@ -60,7 +60,9 @@ class VersionAwareStorageClient:
 
         if version is None:
             # No version specified: return latest
-            logger.debug(f"No version specified for {bucket_name}/{key}, using latest")
+            logger.debug(
+                f"No version specified for {bucket_name}/{key}, using latest"
+            )
             return bucket.blob(key)
 
         # Try generation-based first (if version looks like an integer)

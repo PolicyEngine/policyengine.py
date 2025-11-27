@@ -64,7 +64,9 @@ def _get_default_us_dataset(region: str | None) -> str:
         district_str = region.split("/")[1]
         state_code, district_num_str = district_str.split("-")
         district_number = int(district_num_str)
-        return get_us_congressional_district_dataset_path(state_code, district_number)
+        return get_us_congressional_district_dataset_path(
+            state_code, district_number
+        )
 
     raise ValueError(f"Unhandled US region type: {region_type}")
 

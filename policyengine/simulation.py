@@ -156,7 +156,9 @@ class Simulation:
 
         # Step 3: Load into country-specific format
         time_period = self._set_data_time_period(file_address)
-        self.options.data = self._load_dataset_for_country(filepath, time_period)
+        self.options.data = self._load_dataset_for_country(
+            filepath, time_period
+        )
 
     def _resolve_file_address(self, file_address: str | None) -> str:
         """If no file address provided, get the default dataset for this country/region."""
@@ -170,7 +172,9 @@ class Simulation:
             )
         return file_address
 
-    def _acquire_dataset_file(self, file_address: str) -> tuple[str, str | None]:
+    def _acquire_dataset_file(
+        self, file_address: str
+    ) -> tuple[str, str | None]:
         """
         Get the dataset file, downloading from GCS if it's a GCS path.
         Returns (filepath, version) where version is None for local files.
@@ -373,8 +377,8 @@ class Simulation:
 
         Note: Most US regions (states, congressional districts) now use
         scoped datasets rather than filtering. Only NYC still requires
-        filtering from the national dataset (and is still using the pooled 
-        CPS by default). This should be replaced with an approach based on 
+        filtering from the national dataset (and is still using the pooled
+        CPS by default). This should be replaced with an approach based on
         the new datasets.
         """
         if region == "city/nyc":

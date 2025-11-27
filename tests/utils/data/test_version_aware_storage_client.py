@@ -53,7 +53,9 @@ class TestVersionAwareStorageClient:
         "policyengine.utils.data.version_aware_storage_client.Client",
         autospec=True,
     )
-    def test_get_latest_version__returns_version_from_metadata(self, mock_client_class):
+    def test_get_latest_version__returns_version_from_metadata(
+        self, mock_client_class
+    ):
         """Test that _get_latest_version returns the version from blob metadata."""
         mock_instance = mock_client_class.return_value
         bucket = mock_instance.get_bucket.return_value
@@ -72,7 +74,9 @@ class TestVersionAwareStorageClient:
         "policyengine.utils.data.version_aware_storage_client.Client",
         autospec=True,
     )
-    def test_get_latest_version__returns_none_when_no_metadata(self, mock_client_class):
+    def test_get_latest_version__returns_none_when_no_metadata(
+        self, mock_client_class
+    ):
         """Test that _get_latest_version returns None when blob has no metadata."""
         mock_instance = mock_client_class.return_value
         bucket = mock_instance.get_bucket.return_value
@@ -129,14 +133,18 @@ class TestVersionAwareStorageClient:
         "policyengine.utils.data.version_aware_storage_client.Client",
         autospec=True,
     )
-    def test_get_blob__generation_version_uses_generation(self, mock_client_class):
+    def test_get_blob__generation_version_uses_generation(
+        self, mock_client_class
+    ):
         """Test that numeric version strings are treated as GCS generations."""
         mock_instance = mock_client_class.return_value
         bucket = mock_instance.bucket.return_value
         expected_blob = bucket.blob.return_value
 
         client = VersionAwareStorageClient()
-        result = client.get_blob("test_bucket", "test_key", version="1234567890")
+        result = client.get_blob(
+            "test_bucket", "test_key", version="1234567890"
+        )
 
         assert result == expected_blob
         mock_instance.bucket.assert_called_with("test_bucket")
@@ -146,7 +154,9 @@ class TestVersionAwareStorageClient:
         "policyengine.utils.data.version_aware_storage_client.Client",
         autospec=True,
     )
-    def test_get_blob__metadata_version_searches_blobs(self, mock_client_class):
+    def test_get_blob__metadata_version_searches_blobs(
+        self, mock_client_class
+    ):
         """Test that semantic version strings search blob metadata."""
         mock_instance = mock_client_class.return_value
         bucket = mock_instance.bucket.return_value
@@ -171,7 +181,9 @@ class TestVersionAwareStorageClient:
         "policyengine.utils.data.version_aware_storage_client.Client",
         autospec=True,
     )
-    def test_get_blob__metadata_version_not_found_raises(self, mock_client_class):
+    def test_get_blob__metadata_version_not_found_raises(
+        self, mock_client_class
+    ):
         """Test that missing metadata version raises ValueError."""
         mock_instance = mock_client_class.return_value
         bucket = mock_instance.bucket.return_value
@@ -191,7 +203,9 @@ class TestVersionAwareStorageClient:
         "policyengine.utils.data.version_aware_storage_client.Client",
         autospec=True,
     )
-    def test_get_blob__generation_fallback_to_metadata(self, mock_client_class):
+    def test_get_blob__generation_fallback_to_metadata(
+        self, mock_client_class
+    ):
         """Test that generation lookup falls back to metadata if reload fails."""
         mock_instance = mock_client_class.return_value
         bucket = mock_instance.bucket.return_value

@@ -17,7 +17,9 @@ class MockedStorageSupport:
             data.encode(),
             crc,
         )
-        self.mock_storage_client._get_latest_version.return_value = VALID_VERSION
+        self.mock_storage_client._get_latest_version.return_value = (
+            VALID_VERSION
+        )
 
     def given_crc_changes_on_download(
         self, data: str, initial_crc: str, download_crc: str
@@ -28,7 +30,9 @@ class MockedStorageSupport:
             data.encode(),
             download_crc,
         )
-        self.mock_storage_client._get_latest_version.return_value = VALID_VERSION
+        self.mock_storage_client._get_latest_version.return_value = (
+            VALID_VERSION
+        )
 
 
 @pytest.fixture()
