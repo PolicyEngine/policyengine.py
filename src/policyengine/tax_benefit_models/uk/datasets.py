@@ -40,14 +40,37 @@ class PolicyEngineUKDataset(Dataset):
             self.load()
 
     def save(self) -> None:
-        """Save dataset to HDF5 file."""
+        """Save dataset to HDF5 file.
+
+        Converts object columns to categorical dtype to avoid slow pickle serialization.
+        """
         filepath = Path(self.filepath)
         if not filepath.parent.exists():
             filepath.parent.mkdir(parents=True, exist_ok=True)
+
+        # Convert DataFrames and optimize object columns to categorical
+        person_df = pd.DataFrame(self.data.person)
+        benunit_df = pd.DataFrame(self.data.benunit)
+        household_df = pd.DataFrame(self.data.household)
+
+        # Convert object columns to categorical to avoid pickle serialization
+        for col in person_df.columns:
+            if person_df[col].dtype == "object":
+                person_df[col] = person_df[col].astype("category")
+
+        for col in benunit_df.columns:
+            if benunit_df[col].dtype == "object":
+                benunit_df[col] = benunit_df[col].astype("category")
+
+        for col in household_df.columns:
+            if household_df[col].dtype == "object":
+                household_df[col] = household_df[col].astype("category")
+
         with pd.HDFStore(filepath, mode="w") as store:
-            store["person"] = pd.DataFrame(self.data.person)
-            store["benunit"] = pd.DataFrame(self.data.benunit)
-            store["household"] = pd.DataFrame(self.data.household)
+            # Use format='table' to support categorical dtypes
+            store.put("person", person_df, format="table")
+            store.put("benunit", benunit_df, format="table")
+            store.put("household", household_df, format="table")
 
     def load(self) -> None:
         """Load dataset from HDF5 file into this instance."""
