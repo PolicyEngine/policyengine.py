@@ -31,6 +31,7 @@ class Simulation(BaseModel):
         cached_result = _cache.get(self.id)
         if cached_result:
             self.output_dataset = cached_result.output_dataset
+            return
         try:
             self.tax_benefit_model_version.load(self)
         except Exception:
