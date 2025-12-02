@@ -3,10 +3,13 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from .cache import LRUCache
 from .dataset import Dataset
 from .dynamic import Dynamic
 from .policy import Policy
 from .tax_benefit_model_version import TaxBenefitModelVersion
+
+_cache: LRUCache["Simulation"] = LRUCache(max_size=100)
 
 
 class Simulation(BaseModel):
@@ -25,11 +28,16 @@ class Simulation(BaseModel):
         self.tax_benefit_model_version.run(self)
 
     def ensure(self):
+        cached_result = _cache.get(self.id)
+        if cached_result:
+            return cached_result
         try:
             self.tax_benefit_model_version.load(self)
         except Exception:
             self.run()
             self.save()
+
+        _cache.add(self.id, self)
 
     def save(self):
         """Save the simulation's output dataset."""
