@@ -200,3 +200,8 @@
     fixed:
     - Dataset speedup with better handling of string cols.
   date: 2025-12-02 00:20:11
+- bump: patch
+  changes:
+    fixed:
+    - Added caching of saved simulations
+  date: 2025-12-02 12:48:37
