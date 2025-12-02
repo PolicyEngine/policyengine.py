@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.8] - 2025-12-02 00:20:11
+
+### Fixed
+
+- Dataset speedup with better handling of string cols.
+
 ## [3.1.7] - 2025-11-24 16:34:53
 
 ### Fixed
@@ -239,6 +245,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.1.8]: https://github.com/PolicyEngine/policyengine.py/compare/3.1.7...3.1.8
 [3.1.7]: https://github.com/PolicyEngine/policyengine.py/compare/3.1.6...3.1.7
 [3.1.6]: https://github.com/PolicyEngine/policyengine.py/compare/3.1.5...3.1.6
 [3.1.5]: https://github.com/PolicyEngine/policyengine.py/compare/3.1.4...3.1.5

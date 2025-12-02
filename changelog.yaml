@@ -195,3 +195,8 @@
     fixed:
     - Build error
   date: 2025-11-24 16:34:53
+- bump: patch
+  changes:
+    fixed:
+    - Dataset speedup with better handling of string cols.
+  date: 2025-12-02 00:20:11

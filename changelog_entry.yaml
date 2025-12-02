@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Dataset speedup with better handling of string cols.
