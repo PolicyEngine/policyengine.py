@@ -30,7 +30,7 @@ class Simulation(BaseModel):
     def ensure(self):
         cached_result = _cache.get(self.id)
         if cached_result:
-            return cached_result
+            self.output_dataset = cached_result.output_dataset
         try:
             self.tax_benefit_model_version.load(self)
         except Exception:
