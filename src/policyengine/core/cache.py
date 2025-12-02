@@ -47,7 +47,7 @@ class LRUCache(Generic[T]):
     def _check_memory_usage(self) -> None:
         """Check memory usage and warn at threshold crossings."""
         process = psutil.Process()
-        memory_gb = process.memory_info().rss / (1024 ** 3)
+        memory_gb = process.memory_info().rss / (1024**3)
 
         for threshold in _MEMORY_THRESHOLDS_GB:
             if memory_gb >= threshold and threshold not in _warned_thresholds:
