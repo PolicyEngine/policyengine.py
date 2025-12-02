@@ -205,3 +205,8 @@
     fixed:
     - Added caching of saved simulations
   date: 2025-12-02 12:48:37
+- bump: patch
+  changes:
+    fixed:
+    - Caching failure.
+  date: 2025-12-02 13:02:37
