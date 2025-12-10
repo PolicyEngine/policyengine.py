@@ -196,8 +196,8 @@ def load_datasets(
         for year in years:
             filepath = f"{data_folder}/{Path(dataset).stem}_year_{year}.h5"
             uk_dataset = PolicyEngineUKDataset(
-                name=f"{dataset}-year-{year}",
-                description=f"UK Dataset for year {year} based on {dataset}",
+                name=f"{Path(dataset).stem}-year-{year}",
+                description=f"UK Dataset for year {year} based on {Path(dataset).stem}",
                 filepath=filepath,
                 year=int(year),
             )

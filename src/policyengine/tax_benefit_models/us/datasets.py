@@ -317,8 +317,8 @@ def load_datasets(
         for year in years:
             filepath = f"{data_folder}/{Path(dataset).stem}_year_{year}.h5"
             us_dataset = PolicyEngineUSDataset(
-                name=f"{dataset}-year-{year}",
-                description=f"US Dataset for year {year} based on {dataset}",
+                name=f"{Path(dataset).stem}-year-{year}",
+                description=f"US Dataset for year {year} based on {Path(dataset).stem}",
                 filepath=filepath,
                 year=year,
             )

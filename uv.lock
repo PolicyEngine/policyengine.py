@@ -1080,12 +1080,13 @@ wheels = [
 
 [[package]]
 name = "policyengine"
-version = "3.1.7"
+version = "3.1.12"
 source = { editable = "." }
 dependencies = [
     { name = "microdf-python" },
     { name = "pandas" },
     { name = "plotly" },
+    { name = "psutil" },
     { name = "pydantic" },
     { name = "requests" },
 ]
@@ -1133,6 +1134,7 @@ requires-dist = [
     { name = "policyengine-uk", marker = "extra == 'uk'", specifier = ">=2.51.0" },
     { name = "policyengine-us", marker = "extra == 'dev'", specifier = ">=1.213.1" },
     { name = "policyengine-us", marker = "extra == 'us'", specifier = ">=1.213.1" },
+    { name = "psutil", specifier = ">=5.9.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.26.0" },

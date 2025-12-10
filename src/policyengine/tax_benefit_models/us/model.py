@@ -141,6 +141,7 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
                 parameter = Parameter(
                     id=self.id + "-" + param_node.name,
                     name=param_node.name,
+                    label=param_node.metadata.get("label"),
                     tax_benefit_model_version=self,
                     description=param_node.description,
                     data_type=type(param_node(2025)),
