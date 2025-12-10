@@ -111,7 +111,6 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
 
         self.id = f"{self.model.id}@{self.version}"
 
-        self.variables = []
         for var_obj in system.variables.values():
             variable = Variable(
                 id=self.id + "-" + var_obj.name,
@@ -133,9 +132,8 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
                         var_obj.possible_values._value2member_map_.values(),
                     )
                 )
-            self.variables.append(variable)
+            self.add_variable(variable)
 
-        self.parameters = []
         from policyengine_core.parameters import Parameter as CoreParameter
 
         for param_node in system.parameters.get_descendants():
@@ -147,29 +145,9 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
                     description=param_node.description,
                     data_type=type(param_node(2025)),
                     unit=param_node.metadata.get("unit"),
+                    _core_param=param_node,  # Store for lazy value loading
                 )
-                self.parameters.append(parameter)
-
-                for i in range(len(param_node.values_list)):
-                    param_at_instant = param_node.values_list[i]
-                    if i + 1 < len(param_node.values_list):
-                        next_instant = param_node.values_list[i + 1]
-                    else:
-                        next_instant = None
-                    parameter_value = ParameterValue(
-                        parameter=parameter,
-                        start_date=parse_safe_date(
-                            param_at_instant.instant_str
-                        ),
-                        end_date=parse_safe_date(next_instant.instant_str)
-                        if next_instant
-                        else None,
-                        value=param_at_instant.value,
-                    )
-                    self.parameter_values.append(parameter_value)
-                    self.get_parameter(parameter.name).parameter_values.append(
-                        parameter_value
-                    )
+                self.add_parameter(parameter)
 
     def run(self, simulation: "Simulation") -> "Simulation":
         from policyengine_us import Microsimulation

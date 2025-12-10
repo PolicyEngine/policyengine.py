@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
 
 class TaxBenefitModelVersion(BaseModel):
+    model_config = {"arbitrary_types_allowed": True}
+
     id: str = Field(default_factory=lambda: str(uuid4()))
     model: TaxBenefitModel
     version: str
@@ -23,6 +25,14 @@ class TaxBenefitModelVersion(BaseModel):
     variables: list["Variable"] = Field(default_factory=list)
     parameters: list["Parameter"] = Field(default_factory=list)
     parameter_values: list["ParameterValue"] = Field(default_factory=list)
+
+    # Lookup dicts for O(1) access (excluded from serialization)
+    variables_by_name: dict[str, "Variable"] = Field(
+        default_factory=dict, exclude=True
+    )
+    parameters_by_name: dict[str, "Parameter"] = Field(
+        default_factory=dict, exclude=True
+    )
 
     def run(self, simulation: "Simulation") -> "Simulation":
         raise NotImplementedError(
@@ -39,40 +49,28 @@ class TaxBenefitModelVersion(BaseModel):
             "The TaxBenefitModel class must define a method to load simulations."
         )
 
+    def add_parameter(self, param: "Parameter") -> None:
+        """Add a parameter and index it for fast lookup."""
+        self.parameters.append(param)
+        self.parameters_by_name[param.name] = param
+
+    def add_variable(self, var: "Variable") -> None:
+        """Add a variable and index it for fast lookup."""
+        self.variables.append(var)
+        self.variables_by_name[var.name] = var
+
     def get_parameter(self, name: str) -> "Parameter":
-        """Get a parameter by name.
-
-        Args:
-            name: The parameter name (e.g., "gov.hmrc.income_tax.allowances.personal_allowance.amount")
-
-        Returns:
-            Parameter: The matching parameter
-
-        Raises:
-            ValueError: If parameter not found
-        """
-        for param in self.parameters:
-            if param.name == name:
-                return param
+        """Get a parameter by name (O(1) lookup)."""
+        if name in self.parameters_by_name:
+            return self.parameters_by_name[name]
         raise ValueError(
             f"Parameter '{name}' not found in {self.model.id} version {self.version}"
         )
 
     def get_variable(self, name: str) -> "Variable":
-        """Get a variable by name.
-
-        Args:
-            name: The variable name (e.g., "income_tax", "household_net_income")
-
-        Returns:
-            Variable: The matching variable
-
-        Raises:
-            ValueError: If variable not found
-        """
-        for var in self.variables:
-            if var.name == name:
-                return var
+        """Get a variable by name (O(1) lookup)."""
+        if name in self.variables_by_name:
+            return self.variables_by_name[name]
         raise ValueError(
             f"Variable '{name}' not found in {self.model.id} version {self.version}"
         )

@@ -266,8 +266,8 @@ def create_datasets(
 
             us_dataset = PolicyEngineUSDataset(
                 id=f"{Path(dataset).stem}_year_{year}",
-                name=f"{dataset}-year-{year}",
-                description=f"US Dataset for year {year} based on {dataset}",
+                name=f"{Path(dataset).stem}-year-{year}",
+                description=f"US Dataset for year {year} based on {Path(dataset).stem}",
                 filepath=f"{data_folder}/{Path(dataset).stem}_year_{year}.h5",
                 year=int(year),
                 data=USYearData(
