@@ -269,7 +269,7 @@ def create_datasets(
                 name=f"{dataset}-year-{year}",
                 description=f"US Dataset for year {year} based on {dataset}",
                 filepath=f"{data_folder}/{Path(dataset).stem}_year_{year}.h5",
-                year=year,
+                year=int(year),
                 data=USYearData(
                     person=MicroDataFrame(person_df, weights="person_weight"),
                     household=MicroDataFrame(

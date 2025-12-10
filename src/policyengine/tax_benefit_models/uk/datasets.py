@@ -164,7 +164,7 @@ def create_datasets(
                 name=f"{dataset}-year-{year}",
                 description=f"UK Dataset for year {year} based on {dataset}",
                 filepath=f"{data_folder}/{Path(dataset).stem}_year_{year}.h5",
-                year=year,
+                year=int(year),
                 data=UKYearData(
                     person=MicroDataFrame(person_df, weights="person_weight"),
                     benunit=MicroDataFrame(
@@ -199,7 +199,7 @@ def load_datasets(
                 name=f"{dataset}-year-{year}",
                 description=f"UK Dataset for year {year} based on {dataset}",
                 filepath=filepath,
-                year=year,
+                year=int(year),
             )
             uk_dataset.load()
 
