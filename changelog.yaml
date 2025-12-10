@@ -220,3 +220,8 @@
     fixed:
     - Bug where all datasets would be the last year.
   date: 2025-12-10 14:43:52
+- bump: patch
+  changes:
+    fixed:
+    - Naming improvements.
+  date: 2025-12-10 19:29:28
