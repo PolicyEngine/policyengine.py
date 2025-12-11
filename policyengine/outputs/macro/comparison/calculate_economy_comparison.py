@@ -870,6 +870,7 @@ class EconomyComparison(BaseModel):
     intra_wealth_decile: IntraWealthDecileImpact
     labor_supply_response: LaborSupplyResponse
     constituency_impact: UKConstituencyBreakdown
+    local_authority_impact: UKLocalAreaBreakdown
     cliff_impact: CliffImpact | None
 
 
@@ -899,6 +900,9 @@ def calculate_economy_comparison(
     labor_supply_response_data = labor_supply_response(baseline, reform)
     constituency_impact_data: UKConstituencyBreakdown = (
         uk_constituency_breakdown(baseline, reform, country_id)
+    )
+    local_authority_impact_data: UKLocalAreaBreakdown = (
+        uk_local_area_breakdown(baseline, reform, country_id)
     )
     wealth_decile_impact_data = wealth_decile_impact(
         baseline, reform, country_id
@@ -938,5 +942,6 @@ def calculate_economy_comparison(
         intra_wealth_decile=intra_wealth_decile_impact_data,
         labor_supply_response=labor_supply_response_data,
         constituency_impact=constituency_impact_data,
+        local_authority_impact=local_authority_impact_data,
         cliff_impact=cliff_impact,
     )
