@@ -29,7 +29,10 @@ def test_get_location_options_table_local_authorities():
 
 def test_plot_hex_map_local_authorities():
     """Test plotting hex map for local authorities."""
-    from policyengine.utils.maps import get_location_options_table, plot_hex_map
+    from policyengine.utils.maps import (
+        get_location_options_table,
+        plot_hex_map,
+    )
 
     # Get local authority names
     df = get_location_options_table("local_authorities")
@@ -47,7 +50,10 @@ def test_plot_hex_map_local_authorities():
 
 def test_plot_hex_map_parliamentary_constituencies():
     """Test plotting hex map for parliamentary constituencies."""
-    from policyengine.utils.maps import get_location_options_table, plot_hex_map
+    from policyengine.utils.maps import (
+        get_location_options_table,
+        plot_hex_map,
+    )
 
     # Get constituency names
     df = get_location_options_table("parliamentary_constituencies")
