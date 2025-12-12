@@ -5,7 +5,12 @@ from importlib.util import find_spec
 if find_spec("policyengine_uk") is not None:
     from policyengine.core import Dataset
 
-    from .analysis import general_policy_reform_analysis
+    from .analysis import (
+        UKHouseholdInput,
+        UKHouseholdOutput,
+        calculate_household_impact,
+        economic_impact_analysis,
+    )
     from .datasets import (
         PolicyEngineUKDataset,
         UKYearData,
@@ -37,7 +42,10 @@ if find_spec("policyengine_uk") is not None:
         "PolicyEngineUKLatest",
         "uk_model",
         "uk_latest",
-        "general_policy_reform_analysis",
+        "economic_impact_analysis",
+        "calculate_household_impact",
+        "UKHouseholdInput",
+        "UKHouseholdOutput",
         "ProgrammeStatistics",
     ]
 else:
