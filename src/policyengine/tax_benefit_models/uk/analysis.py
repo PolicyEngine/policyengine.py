@@ -19,7 +19,7 @@ class PolicyReformAnalysis(BaseModel):
     programme_statistics: OutputCollection[ProgrammeStatistics]
 
 
-def general_policy_reform_analysis(
+def economic_impact_analysis(
     baseline_simulation: Simulation,
     reform_simulation: Simulation,
 ) -> PolicyReformAnalysis:
@@ -28,10 +28,23 @@ def general_policy_reform_analysis(
     Returns:
         PolicyReformAnalysis containing decile impacts and programme statistics
     """
+    baseline_simulation.ensure()
+    reform_simulation.ensure()
+
+    assert (
+        len(baseline_simulation.dataset.data.household) > 100
+    ), "Baseline simulation must have more than 100 households"
+    assert (
+        len(reform_simulation.dataset.data.household) > 100
+    ), "Reform simulation must have more than 100 households"
+
     # Decile impact
     decile_impacts = calculate_decile_impacts(
-        baseline_simulation=baseline_simulation,
-        reform_simulation=reform_simulation,
+        dataset=baseline_simulation.dataset,
+        tax_benefit_model_version=baseline_simulation.tax_benefit_model_version,
+        baseline_policy=baseline_simulation.policy,
+        reform_policy=reform_simulation.policy,
+        dynamic=baseline_simulation.dynamic,
     )
 
     # Major programmes to analyse
