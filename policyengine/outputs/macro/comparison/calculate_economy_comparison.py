@@ -775,53 +775,53 @@ def uk_constituency_breakdown(
     return UKConstituencyBreakdownWithValues(**output)
 
 
-class UKLocalAreaBreakdownByLocalArea(BaseModel):
+class UKLocalAuthorityBreakdownByLocalAuthority(BaseModel):
     average_household_income_change: float
     relative_household_income_change: float
     x: int
     y: int
 
 
-class UKLocalAreaBreakdownWithValues(BaseModel):
-    by_local_area: dict[str, UKLocalAreaBreakdownByLocalArea]
+class UKLocalAuthorityBreakdownWithValues(BaseModel):
+    by_local_authority: dict[str, UKLocalAuthorityBreakdownByLocalAuthority]
 
 
-UKLocalAreaBreakdown = UKLocalAreaBreakdownWithValues | None
+UKLocalAuthorityBreakdown = UKLocalAuthorityBreakdownWithValues | None
 
 
-def uk_local_area_breakdown(
+def uk_local_authority_breakdown(
     baseline: SingleEconomy, reform: SingleEconomy, country_id: str
-) -> UKLocalAreaBreakdown:
+) -> UKLocalAuthorityBreakdown:
     if country_id != "uk":
         return None
 
     output = {
-        "by_local_area": {},
+        "by_local_authority": {},
     }
-    # Note: Country-level aggregation (outcomes_by_region) removed for local areas
+    # Note: Country-level aggregation (outcomes_by_region) removed for local authorities
     baseline_hnet = baseline.household_net_income
     reform_hnet = reform.household_net_income
 
-    local_area_weights_local_path = download(
+    local_authority_weights_local_path = download(
         gcs_bucket="policyengine-uk-data-private",
         gcs_key="local_authority_weights.h5",
     )
-    with h5py.File(local_area_weights_local_path, "r") as f:
+    with h5py.File(local_authority_weights_local_path, "r") as f:
         weights = f["2025"][
             ...
-        ]  # {2025: array(n_local_areas, n_households) where cell i, j is the weight of household record j in local area i}
+        ]  # {2025: array(n_local_authorities, n_households) where cell i, j is the weight of household record j in local authority i}
 
-    local_area_names_local_path = download(
+    local_authority_names_local_path = download(
         gcs_bucket="policyengine-uk-data-private",
         gcs_key="local_authorities_2021.csv",
     )
-    local_area_names = pd.read_csv(
-        local_area_names_local_path
-    )  # columns code (local area code), name (local area name), x, y (geographic position)
+    local_authority_names = pd.read_csv(
+        local_authority_names_local_path
+    )  # columns code (local authority code), name (local authority name), x, y (geographic position)
 
-    for i in range(len(local_area_names)):
-        name: str = local_area_names.iloc[i]["name"]
-        code: str = local_area_names.iloc[i]["code"]
+    for i in range(len(local_authority_names)):
+        name: str = local_authority_names.iloc[i]["name"]
+        code: str = local_authority_names.iloc[i]["code"]
         weight: np.ndarray = weights[i]
         baseline_income = MicroSeries(baseline_hnet, weights=weight)
         reform_income = MicroSeries(reform_hnet, weights=weight)
@@ -831,16 +831,18 @@ def uk_local_area_breakdown(
         percent_household_income_change: float = (
             reform_income.sum() / baseline_income.sum() - 1
         )
-        output["by_local_area"][name] = {
+        output["by_local_authority"][name] = {
             "average_household_income_change": average_household_income_change,
             "relative_household_income_change": percent_household_income_change,
-            "x": int(local_area_names.iloc[i]["x"]),  # Geographic positions
-            "y": int(local_area_names.iloc[i]["y"]),
+            "x": int(
+                local_authority_names.iloc[i]["x"]
+            ),  # Geographic positions
+            "y": int(local_authority_names.iloc[i]["y"]),
         }
 
-        # Note: Country-level aggregation and bucketing logic removed for local areas
+        # Note: Country-level aggregation and bucketing logic removed for local authorities
 
-    return UKLocalAreaBreakdownWithValues(**output)
+    return UKLocalAuthorityBreakdownWithValues(**output)
 
 
 class CliffImpactInSimulation(BaseModel):
@@ -870,7 +872,7 @@ class EconomyComparison(BaseModel):
     intra_wealth_decile: IntraWealthDecileImpact
     labor_supply_response: LaborSupplyResponse
     constituency_impact: UKConstituencyBreakdown
-    local_authority_impact: UKLocalAreaBreakdown
+    local_authority_impact: UKLocalAuthorityBreakdown
     cliff_impact: CliffImpact | None
 
 
@@ -901,8 +903,8 @@ def calculate_economy_comparison(
     constituency_impact_data: UKConstituencyBreakdown = (
         uk_constituency_breakdown(baseline, reform, country_id)
     )
-    local_authority_impact_data: UKLocalAreaBreakdown = (
-        uk_local_area_breakdown(baseline, reform, country_id)
+    local_authority_impact_data: UKLocalAuthorityBreakdown = (
+        uk_local_authority_breakdown(baseline, reform, country_id)
     )
     wealth_decile_impact_data = wealth_decile_impact(
         baseline, reform, country_id
