@@ -356,7 +356,7 @@ class Simulation:
                 )
 
                 with h5py.File(weights_local_path, "r") as f:
-                    weights = f[str(self.time_period)][...]
+                    weights = f[str(time_period)][...]
 
                 simulation.set_input(
                     "household_weight",

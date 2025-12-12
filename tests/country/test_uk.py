@@ -148,11 +148,9 @@ def test_uk_simulation_invalid_local_authority_raises_error():
     """Test that invalid local authority raises ValueError."""
     from policyengine import Simulation
 
-    sim = Simulation(
-        scope="macro",
-        country="uk",
-        region="local_authority/InvalidLocalAuthority123",
-    )
-
     with pytest.raises(ValueError, match="Local authority .* not found"):
-        sim.calculate_single_economy()
+        Simulation(
+            scope="macro",
+            country="uk",
+            region="local_authority/InvalidLocalAuthority123",
+        )
