@@ -74,11 +74,11 @@ def test_uk_macro_comparison_has_local_authority_impact():
 
     # Check structure
     la_impact = result.local_authority_impact
-    assert hasattr(la_impact, "by_local_area")
-    assert len(la_impact.by_local_area) > 0
+    assert hasattr(la_impact, "by_local_authority")
+    assert len(la_impact.by_local_authority) > 0
 
     # Check each local authority has required fields
-    for name, data in la_impact.by_local_area.items():
+    for name, data in la_impact.by_local_authority.items():
         assert hasattr(data, "average_household_income_change")
         assert hasattr(data, "relative_household_income_change")
         assert hasattr(data, "x")
