@@ -145,3 +145,8 @@
     - Updated data source URLs for state and district files
     - Modified GCS loading to support new versioning introduced by -core v3.21.0
   date: 2025-11-27 23:35:33
+- bump: minor
+  changes:
+    added:
+    - Local authority impacts
+  date: 2025-12-12 08:52:47
