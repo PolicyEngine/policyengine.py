@@ -36,6 +36,11 @@ class TestUKModel:
                 assert pv.value is not None
                 assert pv.parameter is param
 
+    def test_model_version_parameter_values_aggregates_all(self):
+        """model_version.parameter_values should aggregate all parameter values."""
+        all_values = uk_latest.parameter_values
+        assert len(all_values) >= 100
+
 
 class TestUSModel:
     """Tests for PolicyEngine US model."""
@@ -66,3 +71,8 @@ class TestUSModel:
                 assert pv.start_date is not None
                 assert pv.value is not None
                 assert pv.parameter is param
+
+    def test_model_version_parameter_values_aggregates_all(self):
+        """model_version.parameter_values should aggregate all parameter values."""
+        all_values = us_latest.parameter_values
+        assert len(all_values) >= 100
