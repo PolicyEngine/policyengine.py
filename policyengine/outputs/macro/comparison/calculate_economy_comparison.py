@@ -834,7 +834,9 @@ def uk_local_authority_breakdown(
         output["by_local_authority"][name] = {
             "average_household_income_change": average_household_income_change,
             "relative_household_income_change": percent_household_income_change,
-            "x": int(local_authority_names.iloc[i]["x"]),  # Geographic positions
+            "x": int(
+                local_authority_names.iloc[i]["x"]
+            ),  # Geographic positions
             "y": int(local_authority_names.iloc[i]["y"]),
         }
 
