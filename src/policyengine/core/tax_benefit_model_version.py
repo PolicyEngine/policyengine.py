@@ -28,11 +28,11 @@ class TaxBenefitModelVersion(BaseModel):
     @property
     def parameter_values(self) -> list["ParameterValue"]:
         """Aggregate all parameter values from all parameters."""
-        yield from (
+        return [
             pv
             for parameter in self.parameters
             for pv in parameter.parameter_values
-        )
+        ]
 
     # Lookup dicts for O(1) access (excluded from serialization)
     variables_by_name: dict[str, "Variable"] = Field(

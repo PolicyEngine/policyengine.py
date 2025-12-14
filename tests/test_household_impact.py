@@ -1,18 +1,21 @@
 """Tests for calculate_household_impact functions."""
 
-import pytest
 
 from policyengine.tax_benefit_models.uk import (
     UKHouseholdInput,
     UKHouseholdOutput,
-    calculate_household_impact as calculate_uk_household_impact,
     uk_latest,
+)
+from policyengine.tax_benefit_models.uk import (
+    calculate_household_impact as calculate_uk_household_impact,
 )
 from policyengine.tax_benefit_models.us import (
     USHouseholdInput,
     USHouseholdOutput,
-    calculate_household_impact as calculate_us_household_impact,
     us_latest,
+)
+from policyengine.tax_benefit_models.us import (
+    calculate_household_impact as calculate_us_household_impact,
 )
 
 

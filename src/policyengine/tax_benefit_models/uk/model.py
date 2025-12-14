@@ -9,12 +9,10 @@ from microdf import MicroDataFrame
 
 from policyengine.core import (
     Parameter,
-    ParameterValue,
     TaxBenefitModel,
     TaxBenefitModelVersion,
     Variable,
 )
-from policyengine.utils import parse_safe_date
 
 from .datasets import PolicyEngineUKDataset, UKYearData
 

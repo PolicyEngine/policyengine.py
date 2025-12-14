@@ -8,10 +8,14 @@ Run: python examples/household_impact_example.py
 
 from policyengine.tax_benefit_models.uk import (
     UKHouseholdInput,
+)
+from policyengine.tax_benefit_models.uk import (
     calculate_household_impact as calculate_uk_impact,
 )
 from policyengine.tax_benefit_models.us import (
     USHouseholdInput,
+)
+from policyengine.tax_benefit_models.us import (
     calculate_household_impact as calculate_us_impact,
 )
 
