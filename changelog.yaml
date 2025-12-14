@@ -230,3 +230,8 @@
     fixed:
     - Improvements to loading taxbenefitsystems.
   date: 2025-12-10 21:59:24
+- bump: patch
+  changes:
+    added:
+    - Household impacts
+  date: 2025-12-14 23:51:27
