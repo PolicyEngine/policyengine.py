@@ -9,12 +9,10 @@ from microdf import MicroDataFrame
 
 from policyengine.core import (
     Parameter,
-    ParameterValue,
     TaxBenefitModel,
     TaxBenefitModelVersion,
     Variable,
 )
-from policyengine.utils import parse_safe_date
 
 from .datasets import PolicyEngineUKDataset, UKYearData
 
@@ -108,6 +106,11 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
             "rent",
             "council_tax",
             "tenure_type",
+            # Poverty measures
+            "in_poverty_bhc",
+            "in_poverty_ahc",
+            "in_relative_poverty_bhc",
+            "in_relative_poverty_ahc",
         ],
     }
 

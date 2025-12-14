@@ -2,6 +2,10 @@ import pandas as pd
 from pydantic import ConfigDict
 
 from policyengine.core import Output, OutputCollection, Simulation
+from policyengine.core.dataset import Dataset
+from policyengine.core.dynamic import Dynamic
+from policyengine.core.policy import Policy
+from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
 
 
 class DecileImpact(Output):
@@ -93,8 +97,11 @@ class DecileImpact(Output):
 
 
 def calculate_decile_impacts(
-    baseline_simulation: Simulation,
-    reform_simulation: Simulation,
+    dataset: Dataset,
+    tax_benefit_model_version: TaxBenefitModelVersion,
+    baseline_policy: Policy | None = None,
+    reform_policy: Policy | None = None,
+    dynamic: Dynamic | None = None,
     income_variable: str = "equiv_hbai_household_net_income",
     entity: str | None = None,
     quantiles: int = 10,
@@ -104,6 +111,19 @@ def calculate_decile_impacts(
     Returns:
         OutputCollection containing list of DecileImpact objects and DataFrame
     """
+    baseline_simulation = Simulation(
+        dataset=dataset,
+        tax_benefit_model_version=tax_benefit_model_version,
+        policy=baseline_policy,
+        dynamic=dynamic,
+    )
+    reform_simulation = Simulation(
+        dataset=dataset,
+        tax_benefit_model_version=tax_benefit_model_version,
+        policy=reform_policy,
+        dynamic=dynamic,
+    )
+
     results = []
     for decile in range(1, quantiles + 1):
         impact = DecileImpact(
