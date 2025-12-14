@@ -32,7 +32,7 @@ class TaxBenefitModelVersion(BaseModel):
             pv
             for parameter in self.parameters
             for pv in parameter.parameter_values
-        )   
+        )
 
     # Lookup dicts for O(1) access (excluded from serialization)
     variables_by_name: dict[str, "Variable"] = Field(

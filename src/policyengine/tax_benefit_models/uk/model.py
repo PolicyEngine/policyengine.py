@@ -108,6 +108,11 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
             "rent",
             "council_tax",
             "tenure_type",
+            # Poverty measures
+            "in_poverty_bhc",
+            "in_poverty_ahc",
+            "in_relative_poverty_bhc",
+            "in_relative_poverty_ahc",
         ],
     }
 

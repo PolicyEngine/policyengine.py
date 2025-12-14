@@ -64,7 +64,9 @@ def calculate_household_impact(
     for i, person in enumerate(household_input.people):
         for key, value in person.items():
             if key not in person_data:
-                person_data[key] = [0.0] * n_people  # Default to 0 for numeric fields
+                person_data[key] = [
+                    0.0
+                ] * n_people  # Default to 0 for numeric fields
             person_data[key][i] = value
 
     # Build entity data with defaults
@@ -104,12 +106,24 @@ def calculate_household_impact(
         tax_unit_data[key] = [value]
 
     # Create MicroDataFrames
-    person_df = MicroDataFrame(pd.DataFrame(person_data), weights="person_weight")
-    household_df = MicroDataFrame(pd.DataFrame(household_data), weights="household_weight")
-    marital_unit_df = MicroDataFrame(pd.DataFrame(marital_unit_data), weights="marital_unit_weight")
-    family_df = MicroDataFrame(pd.DataFrame(family_data), weights="family_weight")
-    spm_unit_df = MicroDataFrame(pd.DataFrame(spm_unit_data), weights="spm_unit_weight")
-    tax_unit_df = MicroDataFrame(pd.DataFrame(tax_unit_data), weights="tax_unit_weight")
+    person_df = MicroDataFrame(
+        pd.DataFrame(person_data), weights="person_weight"
+    )
+    household_df = MicroDataFrame(
+        pd.DataFrame(household_data), weights="household_weight"
+    )
+    marital_unit_df = MicroDataFrame(
+        pd.DataFrame(marital_unit_data), weights="marital_unit_weight"
+    )
+    family_df = MicroDataFrame(
+        pd.DataFrame(family_data), weights="family_weight"
+    )
+    spm_unit_df = MicroDataFrame(
+        pd.DataFrame(spm_unit_data), weights="spm_unit_weight"
+    )
+    tax_unit_df = MicroDataFrame(
+        pd.DataFrame(tax_unit_data), weights="tax_unit_weight"
+    )
 
     # Create temporary dataset
     tmpdir = tempfile.mkdtemp()
@@ -148,7 +162,9 @@ def calculate_household_impact(
         except (ValueError, TypeError):
             return str(value)
 
-    def extract_entity_outputs(entity_name: str, entity_data, n_rows: int) -> list[dict[str, Any]]:
+    def extract_entity_outputs(
+        entity_name: str, entity_data, n_rows: int
+    ) -> list[dict[str, Any]]:
         outputs = []
         for i in range(n_rows):
             row_dict = {}
@@ -159,7 +175,9 @@ def calculate_household_impact(
 
     return USHouseholdOutput(
         person=extract_entity_outputs("person", output_data.person, n_people),
-        marital_unit=extract_entity_outputs("marital_unit", output_data.marital_unit, 1),
+        marital_unit=extract_entity_outputs(
+            "marital_unit", output_data.marital_unit, 1
+        ),
         family=extract_entity_outputs("family", output_data.family, 1),
         spm_unit=extract_entity_outputs("spm_unit", output_data.spm_unit, 1),
         tax_unit=extract_entity_outputs("tax_unit", output_data.tax_unit, 1),
@@ -189,12 +207,12 @@ def economic_impact_analysis(
     baseline_simulation.ensure()
     reform_simulation.ensure()
 
-    assert (
-        len(baseline_simulation.dataset.data.household) > 100
-    ), "Baseline simulation must have more than 100 households"
-    assert (
-        len(reform_simulation.dataset.data.household) > 100
-    ), "Reform simulation must have more than 100 households"
+    assert len(baseline_simulation.dataset.data.household) > 100, (
+        "Baseline simulation must have more than 100 households"
+    )
+    assert len(reform_simulation.dataset.data.household) > 100, (
+        "Reform simulation must have more than 100 households"
+    )
 
     # Decile impact (using household_net_income for US)
     decile_impacts = calculate_decile_impacts(

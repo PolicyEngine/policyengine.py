@@ -72,7 +72,9 @@ class TestUKHouseholdImpact:
 
         # Check all household variables are present
         for var in uk_latest.entity_variables["household"]:
-            assert var in result.household, f"Missing household variable: {var}"
+            assert var in result.household, (
+                f"Missing household variable: {var}"
+            )
 
         # Check all person variables are present
         for var in uk_latest.entity_variables["person"]:
@@ -125,7 +127,13 @@ class TestUSHouseholdImpact:
     def test_single_adult_with_employment_income(self):
         """Single adult with employment income should pay tax."""
         household = USHouseholdInput(
-            people=[{"age": 30, "employment_income": 50000, "is_tax_unit_head": True}],
+            people=[
+                {
+                    "age": 30,
+                    "employment_income": 50000,
+                    "is_tax_unit_head": True,
+                }
+            ],
             tax_unit={"filing_status": "SINGLE"},
             year=2024,
         )
@@ -138,14 +146,22 @@ class TestUSHouseholdImpact:
     def test_output_contains_all_entity_variables(self):
         """Output should contain all variables from entity_variables."""
         household = USHouseholdInput(
-            people=[{"age": 30, "employment_income": 25000, "is_tax_unit_head": True}],
+            people=[
+                {
+                    "age": 30,
+                    "employment_income": 25000,
+                    "is_tax_unit_head": True,
+                }
+            ],
             year=2024,
         )
         result = calculate_us_household_impact(household)
 
         # Check all household variables are present
         for var in us_latest.entity_variables["household"]:
-            assert var in result.household, f"Missing household variable: {var}"
+            assert var in result.household, (
+                f"Missing household variable: {var}"
+            )
 
         # Check all person variables are present
         for var in us_latest.entity_variables["person"]:
@@ -154,7 +170,13 @@ class TestUSHouseholdImpact:
     def test_output_is_json_serializable(self):
         """Output should be JSON serializable."""
         household = USHouseholdInput(
-            people=[{"age": 30, "employment_income": 25000, "is_tax_unit_head": True}],
+            people=[
+                {
+                    "age": 30,
+                    "employment_income": 25000,
+                    "is_tax_unit_head": True,
+                }
+            ],
             year=2024,
         )
         result = calculate_us_household_impact(household)
@@ -167,7 +189,13 @@ class TestUSHouseholdImpact:
     def test_input_is_json_serializable(self):
         """Input should be JSON serializable."""
         household = USHouseholdInput(
-            people=[{"age": 30, "employment_income": 25000, "is_tax_unit_head": True}],
+            people=[
+                {
+                    "age": 30,
+                    "employment_income": 25000,
+                    "is_tax_unit_head": True,
+                }
+            ],
             year=2024,
         )
 
