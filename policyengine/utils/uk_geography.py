@@ -56,6 +56,8 @@ def should_zero_constituency(region: str | None, code: str, name: str) -> bool:
 
     if region_type == "uk":
         return False
+    # region is guaranteed to be non-None for non-uk region types
+    assert region is not None
     if region_type == "country":
         target = region.split("/")[1]
         return get_country_from_code(code) != target
@@ -73,6 +75,8 @@ def should_zero_local_authority(region: str | None, code: str, name: str) -> boo
 
     if region_type == "uk":
         return False
+    # region is guaranteed to be non-None for non-uk region types
+    assert region is not None
     if region_type == "country":
         target = region.split("/")[1]
         return get_country_from_code(code) != target
