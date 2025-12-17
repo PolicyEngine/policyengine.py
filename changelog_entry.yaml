@@ -1,4 +1,4 @@
 - bump: patch
   changes:
     changed:
-    - Filtered nationwide subnational results when user is running sim at subnational level
+    - Filter nationwide subnational results when user is running sim at subnational level
