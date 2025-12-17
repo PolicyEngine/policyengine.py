@@ -708,8 +708,8 @@ def uk_constituency_breakdown(
         "by_constituency": {},
         "outcomes_by_region": {},
     }
-    for region in ["uk", "england", "scotland", "wales", "northern_ireland"]:
-        output["outcomes_by_region"][region] = {
+    for region_ in ["uk", "england", "scotland", "wales", "northern_ireland"]:
+        output["outcomes_by_region"][region_] = {
             "Gain more than 5%": 0,
             "Gain less than 5%": 0,
             "No change": 0,
