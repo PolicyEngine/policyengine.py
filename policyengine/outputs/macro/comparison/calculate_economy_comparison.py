@@ -926,7 +926,9 @@ def calculate_economy_comparison(
         uk_constituency_breakdown(baseline, reform, country_id, options.region)
     )
     local_authority_impact_data: UKLocalAuthorityBreakdown = (
-        uk_local_authority_breakdown(baseline, reform, country_id, options.region)
+        uk_local_authority_breakdown(
+            baseline, reform, country_id, options.region
+        )
     )
     wealth_decile_impact_data = wealth_decile_impact(
         baseline, reform, country_id

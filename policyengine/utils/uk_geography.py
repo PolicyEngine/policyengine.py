@@ -69,7 +69,9 @@ def should_zero_constituency(region: str | None, code: str, name: str) -> bool:
     return False
 
 
-def should_zero_local_authority(region: str | None, code: str, name: str) -> bool:
+def should_zero_local_authority(
+    region: str | None, code: str, name: str
+) -> bool:
     """Return True if this local authority's impacts should be zeroed out."""
     region_type = determine_uk_region_type(region)
 
