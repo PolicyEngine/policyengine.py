@@ -2,15 +2,12 @@
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from policyengine.utils.parameter_labels import (
     _generate_bracket_label,
     _generate_breakdown_label,
     build_scale_lookup,
     generate_label_for_parameter,
 )
-
 from tests.fixtures.parameter_labels_fixtures import (
     PARAM_WITH_EXPLICIT_LABEL,
     PARAM_WITHOUT_LABEL_NO_PARENT,
@@ -22,13 +19,10 @@ from tests.fixtures.parameter_labels_fixtures import (
     SCALE_WITHOUT_LABEL,
     VARIABLE_WITH_FILING_STATUS_ENUM,
     VARIABLE_WITH_STATE_CODE_ENUM,
-    MockFilingStatus,
-    MockStateCode,
     create_mock_parameter,
     create_mock_parent_node,
     create_mock_scale,
     create_mock_system,
-    create_mock_variable,
 )
 
 
