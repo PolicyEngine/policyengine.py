@@ -1,6 +1,5 @@
 """Tests for calculate_household_impact functions."""
 
-
 from policyengine.tax_benefit_models.uk import (
     UKHouseholdInput,
     UKHouseholdOutput,

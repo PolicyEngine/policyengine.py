@@ -406,9 +406,7 @@ class TestIntegrationWithRealEnums:
             name="gov.territories.pr.tax.income.tax_rate.amount[0].rate"
         )
         system = create_mock_system()
-        scale_lookup = {
-            "gov.territories.pr.tax.income.tax_rate.amount": scale
-        }
+        scale_lookup = {"gov.territories.pr.tax.income.tax_rate.amount": scale}
 
         # When
         result = generate_label_for_parameter(param, system, scale_lookup)
