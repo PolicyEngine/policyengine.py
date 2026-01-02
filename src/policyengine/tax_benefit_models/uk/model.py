@@ -13,6 +13,10 @@ from policyengine.core import (
     TaxBenefitModelVersion,
     Variable,
 )
+from policyengine.utils.parameter_labels import (
+    build_scale_lookup,
+    generate_label_for_parameter,
+)
 
 from .datasets import PolicyEngineUKDataset, UKYearData
 
@@ -146,17 +150,21 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
 
         from policyengine_core.parameters import Parameter as CoreParameter
 
+        scale_lookup = build_scale_lookup(system)
+
         for param_node in system.parameters.get_descendants():
             if isinstance(param_node, CoreParameter):
                 parameter = Parameter(
                     id=self.id + "-" + param_node.name,
                     name=param_node.name,
-                    label=param_node.metadata.get("label", param_node.name),
+                    label=generate_label_for_parameter(
+                        param_node, system, scale_lookup
+                    ),
                     tax_benefit_model_version=self,
                     description=param_node.description,
                     data_type=type(param_node(2025)),
                     unit=param_node.metadata.get("unit"),
-                    _core_param=param_node,  # Store for lazy value loading
+                    _core_param=param_node,
                 )
                 self.add_parameter(parameter)
 
