@@ -1,6 +1,5 @@
 """Tests for UK and US tax-benefit model versions."""
 
-
 from policyengine.tax_benefit_models.uk import uk_latest
 from policyengine.tax_benefit_models.us import us_latest
 

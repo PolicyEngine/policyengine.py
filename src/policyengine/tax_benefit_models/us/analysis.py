@@ -14,13 +14,13 @@ from policyengine.outputs.decile_impact import (
     DecileImpact,
     calculate_decile_impacts,
 )
-from policyengine.outputs.poverty import (
-    Poverty,
-    calculate_us_poverty_rates,
-)
 from policyengine.outputs.inequality import (
     Inequality,
     calculate_us_inequality,
+)
+from policyengine.outputs.poverty import (
+    Poverty,
+    calculate_us_poverty_rates,
 )
 
 from .datasets import PolicyEngineUSDataset, USYearData

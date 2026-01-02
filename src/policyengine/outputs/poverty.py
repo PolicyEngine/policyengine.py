@@ -67,8 +67,10 @@ class Poverty(Output):
     def run(self):
         """Calculate poverty headcount and rate."""
         # Get poverty variable info
-        poverty_var_obj = self.simulation.tax_benefit_model_version.get_variable(
-            self.poverty_variable
+        poverty_var_obj = (
+            self.simulation.tax_benefit_model_version.get_variable(
+                self.poverty_variable
+            )
         )
 
         # Get target entity data
@@ -88,8 +90,10 @@ class Poverty(Output):
 
         # Apply demographic filter if specified
         if self.filter_variable is not None:
-            filter_var_obj = self.simulation.tax_benefit_model_version.get_variable(
-                self.filter_variable
+            filter_var_obj = (
+                self.simulation.tax_benefit_model_version.get_variable(
+                    self.filter_variable
+                )
             )
 
             if filter_var_obj.entity != target_entity:
