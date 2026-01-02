@@ -55,6 +55,8 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
             "person_weight",
             # Demographics
             "age",
+            "is_child",
+            "is_adult",
             # Income
             "employment_income",
             # Benefits
@@ -77,6 +79,9 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
             "snap",
             "tanf",
             "spm_unit_net_income",
+            # Poverty measures
+            "spm_unit_is_in_spm_poverty",
+            "spm_unit_is_in_deep_spm_poverty",
         ],
         "tax_unit": [
             "tax_unit_id",

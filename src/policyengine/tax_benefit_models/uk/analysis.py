@@ -14,6 +14,10 @@ from policyengine.outputs.decile_impact import (
     DecileImpact,
     calculate_decile_impacts,
 )
+from policyengine.outputs.poverty import (
+    Poverty,
+    calculate_uk_poverty_rates,
+)
 
 from .datasets import PolicyEngineUKDataset, UKYearData
 from .model import uk_latest
@@ -175,6 +179,8 @@ class PolicyReformAnalysis(BaseModel):
 
     decile_impacts: OutputCollection[DecileImpact]
     programme_statistics: OutputCollection[ProgrammeStatistics]
+    baseline_poverty: OutputCollection[Poverty]
+    reform_poverty: OutputCollection[Poverty]
 
 
 def economic_impact_analysis(
@@ -262,7 +268,13 @@ def economic_impact_analysis(
         outputs=programme_statistics, dataframe=programme_df
     )
 
+    # Calculate poverty rates for both simulations
+    baseline_poverty = calculate_uk_poverty_rates(baseline_simulation)
+    reform_poverty = calculate_uk_poverty_rates(reform_simulation)
+
     return PolicyReformAnalysis(
         decile_impacts=decile_impacts,
         programme_statistics=programme_collection,
+        baseline_poverty=baseline_poverty,
+        reform_poverty=reform_poverty,
     )
