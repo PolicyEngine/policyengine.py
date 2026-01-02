@@ -17,6 +17,13 @@ from policyengine.outputs.poverty import (
     calculate_uk_poverty_rates,
     calculate_us_poverty_rates,
 )
+from policyengine.outputs.inequality import (
+    Inequality,
+    UK_INEQUALITY_INCOME_VARIABLE,
+    US_INEQUALITY_INCOME_VARIABLE,
+    calculate_uk_inequality,
+    calculate_us_inequality,
+)
 
 __all__ = [
     "Output",
@@ -34,4 +41,9 @@ __all__ = [
     "US_POVERTY_VARIABLES",
     "calculate_uk_poverty_rates",
     "calculate_us_poverty_rates",
+    "Inequality",
+    "UK_INEQUALITY_INCOME_VARIABLE",
+    "US_INEQUALITY_INCOME_VARIABLE",
+    "calculate_uk_inequality",
+    "calculate_us_inequality",
 ]

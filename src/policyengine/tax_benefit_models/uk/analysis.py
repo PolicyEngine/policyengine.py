@@ -18,6 +18,10 @@ from policyengine.outputs.poverty import (
     Poverty,
     calculate_uk_poverty_rates,
 )
+from policyengine.outputs.inequality import (
+    Inequality,
+    calculate_uk_inequality,
+)
 
 from .datasets import PolicyEngineUKDataset, UKYearData
 from .model import uk_latest
@@ -181,6 +185,8 @@ class PolicyReformAnalysis(BaseModel):
     programme_statistics: OutputCollection[ProgrammeStatistics]
     baseline_poverty: OutputCollection[Poverty]
     reform_poverty: OutputCollection[Poverty]
+    baseline_inequality: Inequality
+    reform_inequality: Inequality
 
 
 def economic_impact_analysis(
@@ -272,9 +278,15 @@ def economic_impact_analysis(
     baseline_poverty = calculate_uk_poverty_rates(baseline_simulation)
     reform_poverty = calculate_uk_poverty_rates(reform_simulation)
 
+    # Calculate inequality for both simulations
+    baseline_inequality = calculate_uk_inequality(baseline_simulation)
+    reform_inequality = calculate_uk_inequality(reform_simulation)
+
     return PolicyReformAnalysis(
         decile_impacts=decile_impacts,
         programme_statistics=programme_collection,
         baseline_poverty=baseline_poverty,
         reform_poverty=reform_poverty,
+        baseline_inequality=baseline_inequality,
+        reform_inequality=reform_inequality,
     )
