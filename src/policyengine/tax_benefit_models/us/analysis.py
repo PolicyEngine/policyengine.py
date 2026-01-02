@@ -14,6 +14,14 @@ from policyengine.outputs.decile_impact import (
     DecileImpact,
     calculate_decile_impacts,
 )
+from policyengine.outputs.inequality import (
+    Inequality,
+    calculate_us_inequality,
+)
+from policyengine.outputs.poverty import (
+    Poverty,
+    calculate_us_poverty_rates,
+)
 
 from .datasets import PolicyEngineUSDataset, USYearData
 from .model import us_latest
@@ -193,6 +201,10 @@ class PolicyReformAnalysis(BaseModel):
 
     decile_impacts: OutputCollection[DecileImpact]
     program_statistics: OutputCollection[ProgramStatistics]
+    baseline_poverty: OutputCollection[Poverty]
+    reform_poverty: OutputCollection[Poverty]
+    baseline_inequality: Inequality
+    reform_inequality: Inequality
 
 
 def economic_impact_analysis(
@@ -283,6 +295,19 @@ def economic_impact_analysis(
         outputs=program_statistics, dataframe=program_df
     )
 
+    # Calculate poverty rates for both simulations
+    baseline_poverty = calculate_us_poverty_rates(baseline_simulation)
+    reform_poverty = calculate_us_poverty_rates(reform_simulation)
+
+    # Calculate inequality for both simulations
+    baseline_inequality = calculate_us_inequality(baseline_simulation)
+    reform_inequality = calculate_us_inequality(reform_simulation)
+
     return PolicyReformAnalysis(
-        decile_impacts=decile_impacts, program_statistics=program_collection
+        decile_impacts=decile_impacts,
+        program_statistics=program_collection,
+        baseline_poverty=baseline_poverty,
+        reform_poverty=reform_poverty,
+        baseline_inequality=baseline_inequality,
+        reform_inequality=reform_inequality,
     )
