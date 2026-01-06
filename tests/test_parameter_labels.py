@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 from policyengine.utils.parameter_labels import (
+    _find_breakdown_parent,
     _generate_bracket_label,
     _generate_breakdown_label,
     build_scale_lookup,
@@ -407,3 +408,200 @@ class TestIntegrationWithRealEnums:
 
         # Then
         assert result == "Puerto Rico tax rate (bracket 1 rate)"
+
+
+class TestFindBreakdownParent:
+    """Tests for the _find_breakdown_parent function."""
+
+    def test__given_direct_child__then_returns_parent(self):
+        # Given
+        parent = create_mock_parent_node(
+            name="gov.snap.max_allotment",
+            label="SNAP max allotment",
+            breakdown=["snap_region", "range(1, 9)"],
+        )
+        param = create_mock_parameter(
+            name="gov.snap.max_allotment.CONTIGUOUS_US",
+            parent=parent,
+        )
+
+        # When
+        result = _find_breakdown_parent(param)
+
+        # Then
+        assert result == parent
+
+    def test__given_nested_child__then_returns_breakdown_ancestor(self):
+        # Given
+        breakdown_parent = create_mock_parent_node(
+            name="gov.snap.max_allotment",
+            label="SNAP max allotment",
+            breakdown=["snap_region", "range(1, 9)"],
+        )
+        intermediate = create_mock_parent_node(
+            name="gov.snap.max_allotment.CONTIGUOUS_US",
+            parent=breakdown_parent,
+        )
+        param = create_mock_parameter(
+            name="gov.snap.max_allotment.CONTIGUOUS_US.1",
+            parent=intermediate,
+        )
+
+        # When
+        result = _find_breakdown_parent(param)
+
+        # Then
+        assert result == breakdown_parent
+
+    def test__given_no_breakdown_in_ancestry__then_returns_none(self):
+        # Given
+        parent = create_mock_parent_node(
+            name="gov.tax.rate",
+            label="Tax rate",
+        )
+        param = create_mock_parameter(
+            name="gov.tax.rate.value",
+            parent=parent,
+        )
+
+        # When
+        result = _find_breakdown_parent(param)
+
+        # Then
+        assert result is None
+
+
+class TestNestedBreakdownLabels:
+    """Tests for nested breakdown label generation."""
+
+    def test__given_nested_breakdown_with_enum_and_range__then_generates_full_label(
+        self,
+    ):
+        # Given
+        breakdown_parent = create_mock_parent_node(
+            name="gov.snap.max_allotment",
+            label="SNAP max allotment",
+            breakdown=["snap_region", "range(1, 9)"],
+            breakdown_labels=["SNAP region", "Household size"],
+        )
+        intermediate = create_mock_parent_node(
+            name="gov.snap.max_allotment.CONTIGUOUS_US",
+            parent=breakdown_parent,
+        )
+        param = create_mock_parameter(
+            name="gov.snap.max_allotment.CONTIGUOUS_US.1",
+            parent=intermediate,
+        )
+        system = create_mock_system()
+        scale_lookup = {}
+
+        # When
+        result = generate_label_for_parameter(param, system, scale_lookup)
+
+        # Then
+        # Without snap_region enum in system, uses breakdown_label for first dimension too
+        assert result == "SNAP max allotment (SNAP region CONTIGUOUS_US, Household size 1)"
+
+    def test__given_breakdown_labels_for_range__then_includes_semantic_label(
+        self,
+    ):
+        # Given
+        parent = create_mock_parent_node(
+            name="gov.benefits.amount",
+            label="Benefit amount",
+            breakdown=["range(1, 5)"],
+            breakdown_labels=["Number of dependants"],
+        )
+        param = create_mock_parameter(
+            name="gov.benefits.amount.3",
+            parent=parent,
+        )
+        system = create_mock_system()
+        scale_lookup = {}
+
+        # When
+        result = generate_label_for_parameter(param, system, scale_lookup)
+
+        # Then
+        assert result == "Benefit amount (Number of dependants 3)"
+
+    def test__given_enum_with_breakdown_label__then_prefers_enum_value(self):
+        # Given
+        parent = create_mock_parent_node(
+            name="gov.exemptions.personal",
+            label="Personal exemption",
+            breakdown=["filing_status"],
+            breakdown_labels=["Filing status"],
+        )
+        param = create_mock_parameter(
+            name="gov.exemptions.personal.SINGLE",
+            parent=parent,
+        )
+        system = create_mock_system(
+            variables={"filing_status": VARIABLE_WITH_FILING_STATUS_ENUM}
+        )
+        scale_lookup = {}
+
+        # When
+        result = generate_label_for_parameter(param, system, scale_lookup)
+
+        # Then
+        # Enum value "Single" is used, not "Filing status SINGLE"
+        assert result == "Personal exemption (Single)"
+
+    def test__given_three_level_nesting__then_generates_all_dimensions(self):
+        # Given
+        breakdown_parent = create_mock_parent_node(
+            name="gov.irs.sales_tax",
+            label="State sales tax",
+            breakdown=["state_code", "range(1, 7)", "range(1, 20)"],
+            breakdown_labels=["State", "Income bracket", "Exemption count"],
+        )
+        level1 = create_mock_parent_node(
+            name="gov.irs.sales_tax.CA",
+            parent=breakdown_parent,
+        )
+        level2 = create_mock_parent_node(
+            name="gov.irs.sales_tax.CA.3",
+            parent=level1,
+        )
+        param = create_mock_parameter(
+            name="gov.irs.sales_tax.CA.3.5",
+            parent=level2,
+        )
+        system = create_mock_system(
+            variables={"state_code": VARIABLE_WITH_STATE_CODE_ENUM}
+        )
+        scale_lookup = {}
+
+        # When
+        result = generate_label_for_parameter(param, system, scale_lookup)
+
+        # Then
+        assert result == "State sales tax (CA, Income bracket 3, Exemption count 5)"
+
+    def test__given_missing_breakdown_labels__then_uses_raw_values(self):
+        # Given
+        breakdown_parent = create_mock_parent_node(
+            name="gov.snap.max_allotment",
+            label="SNAP max allotment",
+            breakdown=["snap_region", "range(1, 9)"],
+            # No breakdown_labels provided
+        )
+        intermediate = create_mock_parent_node(
+            name="gov.snap.max_allotment.CONTIGUOUS_US",
+            parent=breakdown_parent,
+        )
+        param = create_mock_parameter(
+            name="gov.snap.max_allotment.CONTIGUOUS_US.1",
+            parent=intermediate,
+        )
+        system = create_mock_system()
+        scale_lookup = {}
+
+        # When
+        result = generate_label_for_parameter(param, system, scale_lookup)
+
+        # Then
+        # Falls back to raw values when no breakdown_labels
+        assert result == "SNAP max allotment (CONTIGUOUS_US, 1)"

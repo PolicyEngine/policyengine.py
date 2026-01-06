@@ -38,16 +38,21 @@ def create_mock_parent_node(
     name: str,
     label: str | None = None,
     breakdown: list[str] | None = None,
+    breakdown_labels: list[str] | None = None,
+    parent: Any = None,
 ) -> MagicMock:
     """Create a mock parent ParameterNode with optional breakdown metadata."""
-    parent = MagicMock()
-    parent.name = name
-    parent.metadata = {}
+    node = MagicMock()
+    node.name = name
+    node.metadata = {}
+    node.parent = parent
     if label:
-        parent.metadata["label"] = label
+        node.metadata["label"] = label
     if breakdown:
-        parent.metadata["breakdown"] = breakdown
-    return parent
+        node.metadata["breakdown"] = breakdown
+    if breakdown_labels:
+        node.metadata["breakdown_labels"] = breakdown_labels
+    return node
 
 
 def create_mock_scale(
