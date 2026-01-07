@@ -11,6 +11,7 @@ class MockFilingStatus(Enum):
     SINGLE = "Single"
     JOINT = "Joint"
     HEAD_OF_HOUSEHOLD = "Head of household"
+    MARRIED_FILING_JOINTLY = "Married filing jointly"
 
 
 class MockStateCode(Enum):
