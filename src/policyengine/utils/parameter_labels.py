@@ -162,34 +162,6 @@ def _format_dimension_value(value, var_name, dim_label, system):
     return value
 
 
-def _generate_breakdown_label_simple(param_node, system):
-    """
-    Generate label for a direct child of a breakdown parameter.
-
-    Kept for backwards compatibility with single-level breakdowns.
-    """
-    parent = param_node.parent
-    parent_label = parent.metadata.get("label")
-    breakdown_vars = parent.metadata.get("breakdown", [])
-
-    if not parent_label:
-        return None
-
-    child_key = param_node.name.split(".")[-1]
-
-    for var_name in breakdown_vars:
-        var = system.variables.get(var_name)
-        if var and hasattr(var, "possible_values") and var.possible_values:
-            enum_class = var.possible_values
-            try:
-                enum_value = enum_class[child_key].value
-                return f"{parent_label} ({enum_value})"
-            except (KeyError, AttributeError):
-                continue
-
-    return f"{parent_label} ({child_key})"
-
-
 def _generate_bracket_label(param_name, scale_lookup):
     """Generate label for a bracket parameter."""
     match = re.match(r"^(.+)\[(\d+)\]\.(\w+)$", param_name)
