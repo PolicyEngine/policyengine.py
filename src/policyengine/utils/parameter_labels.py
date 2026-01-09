@@ -146,7 +146,7 @@ def _format_dimension_value(value, var_name, dim_label, system):
         str: Formatted dimension value
     """
     # First, try to get enum display value
-    if var_name and not var_name.startswith("range(") and not var_name.startswith("list("):
+    if var_name and isinstance(var_name, str) and not var_name.startswith("range(") and not var_name.startswith("list("):
         var = system.variables.get(var_name)
         if var and hasattr(var, "possible_values") and var.possible_values:
             try:
