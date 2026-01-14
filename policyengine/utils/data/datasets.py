@@ -46,7 +46,7 @@ def _get_default_us_dataset(region: str | None) -> str:
     region_type = determine_us_region_type(region)
 
     if region_type == "nationwide":
-        return CPS_2023
+        return ECPS_2024
     elif region_type == "city":
         # TODO: Implement a better approach to this for our one
         # city, New York City.
