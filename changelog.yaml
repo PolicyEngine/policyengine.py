@@ -155,3 +155,9 @@
     changed:
     - Updated code to properly refer to local authorities
   date: 2025-12-12 12:51:00
+- bump: minor
+  changes:
+    changed:
+    - Use Enhanced CPS (enhanced_cps_2024.h5) as the default dataset for US nationwide
+      simulations instead of CPS 2023.
+  date: 2026-01-14 20:28:29
