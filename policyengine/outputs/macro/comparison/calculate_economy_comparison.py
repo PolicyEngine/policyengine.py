@@ -845,6 +845,120 @@ def uk_local_authority_breakdown(
     return UKLocalAuthorityBreakdownWithValues(**output)
 
 
+# US Congressional District Breakdown Models
+
+# State FIPS to abbreviation mapping
+STATE_FIPS_TO_ABBREV = {
+    1: "AL", 2: "AK", 4: "AZ", 5: "AR", 6: "CA", 8: "CO", 9: "CT", 10: "DE",
+    11: "DC", 12: "FL", 13: "GA", 15: "HI", 16: "ID", 17: "IL", 18: "IN",
+    19: "IA", 20: "KS", 21: "KY", 22: "LA", 23: "ME", 24: "MD", 25: "MA",
+    26: "MI", 27: "MN", 28: "MS", 29: "MO", 30: "MT", 31: "NE", 32: "NV",
+    33: "NH", 34: "NJ", 35: "NM", 36: "NY", 37: "NC", 38: "ND", 39: "OH",
+    40: "OK", 41: "OR", 42: "PA", 44: "RI", 45: "SC", 46: "SD", 47: "TN",
+    48: "TX", 49: "UT", 50: "VT", 51: "VA", 53: "WA", 54: "WV", 55: "WI",
+    56: "WY", 72: "PR",
+}
+
+
+def geoid_to_district_name(geoid: int) -> str:
+    """Convert congressional district geoid (SSDD format) to name like 'GA-05'."""
+    state_fips = geoid // 100
+    district_num = geoid % 100
+    state_abbrev = STATE_FIPS_TO_ABBREV.get(state_fips, f"S{state_fips}")
+    return f"{state_abbrev}-{district_num:02d}"
+
+
+class USCongressionalDistrictImpact(BaseModel):
+    district: str  # e.g., "GA-05"
+    average_household_income_change: float
+    relative_household_income_change: float
+
+
+class USCongressionalDistrictBreakdownWithValues(BaseModel):
+    districts: List[USCongressionalDistrictImpact]
+
+
+USCongressionalDistrictBreakdown = USCongressionalDistrictBreakdownWithValues | None
+
+
+def us_congressional_district_breakdown(
+    baseline: SingleEconomy, reform: SingleEconomy, country_id: str
+) -> USCongressionalDistrictBreakdown:
+    """Break down results by US congressional district using household geoids.
+
+    This function groups households by their congressional_district_geoid and
+    computes aggregate income changes per district. Only works for US simulations
+    that have district assignments (typically state-level datasets).
+
+    Args:
+        baseline: Baseline economy with household-level data
+        reform: Reform economy with household-level data
+        country_id: Country identifier (must be "us")
+
+    Returns:
+        District-level breakdown or None if not applicable
+    """
+    if country_id != "us":
+        return None
+
+    if baseline.congressional_district_geoid is None:
+        return None
+
+    # Group households by district
+    from collections import defaultdict
+
+    district_indices: dict[int, list[int]] = defaultdict(list)
+    for i, geoid in enumerate(baseline.congressional_district_geoid):
+        if geoid > 0:  # Filter out 0 (unassigned)
+            district_indices[geoid].append(i)
+
+    if not district_indices:
+        return None
+
+    districts: list[USCongressionalDistrictImpact] = []
+
+    # Calculate district-level impacts
+    for geoid, indices in district_indices.items():
+        district_name = geoid_to_district_name(geoid)
+
+        # Extract household data for this district
+        weights = [baseline.household_weight[i] for i in indices]
+        baseline_incomes = [baseline.household_net_income[i] for i in indices]
+        reform_incomes = [reform.household_net_income[i] for i in indices]
+
+        baseline_income = MicroSeries(baseline_incomes, weights=weights)
+        reform_income = MicroSeries(reform_incomes, weights=weights)
+
+        total_households = baseline_income.count()
+
+        if total_households == 0 or baseline_income.sum() == 0:
+            continue
+
+        average_household_income_change = (
+            reform_income.sum() - baseline_income.sum()
+        ) / total_households
+
+        relative_household_income_change = (
+            reform_income.sum() / baseline_income.sum() - 1
+        )
+
+        districts.append(
+            USCongressionalDistrictImpact(
+                district=district_name,
+                average_household_income_change=float(average_household_income_change),
+                relative_household_income_change=float(relative_household_income_change),
+            )
+        )
+
+    if not districts:
+        return None
+
+    # Sort by district name for consistent ordering
+    districts.sort(key=lambda d: d.district)
+
+    return USCongressionalDistrictBreakdownWithValues(districts=districts)
+
+
 class CliffImpactInSimulation(BaseModel):
     cliff_gap: float
     cliff_share: float
@@ -873,6 +987,7 @@ class EconomyComparison(BaseModel):
     labor_supply_response: LaborSupplyResponse
     constituency_impact: UKConstituencyBreakdown
     local_authority_impact: UKLocalAuthorityBreakdown
+    congressional_district_impact: USCongressionalDistrictBreakdown  # US only
     cliff_impact: CliffImpact | None
 
 
@@ -905,6 +1020,9 @@ def calculate_economy_comparison(
     )
     local_authority_impact_data: UKLocalAuthorityBreakdown = (
         uk_local_authority_breakdown(baseline, reform, country_id)
+    )
+    congressional_district_impact_data: USCongressionalDistrictBreakdown = (
+        us_congressional_district_breakdown(baseline, reform, country_id)
     )
     wealth_decile_impact_data = wealth_decile_impact(
         baseline, reform, country_id
@@ -945,5 +1063,6 @@ def calculate_economy_comparison(
         labor_supply_response=labor_supply_response_data,
         constituency_impact=constituency_impact_data,
         local_authority_impact=local_authority_impact_data,
+        congressional_district_impact=congressional_district_impact_data,
         cliff_impact=cliff_impact,
     )
