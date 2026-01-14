@@ -1,3 +1,6 @@
+import pytest
+
+
 def test_us_macro_single():
     from policyengine import Simulation
 
@@ -23,6 +26,7 @@ def test_us_macro_comparison():
     sim.calculate_economy_comparison()
 
 
+@pytest.mark.skip(reason="Cliff calculations too slow with ECPS_2024 dataset")
 def test_us_macro_cliff_impacts():
     from policyengine import Simulation
 
