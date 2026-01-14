@@ -53,6 +53,9 @@ class SingleEconomy(BaseModel):
     programs: Dict[str, float] | None
     cliff_gap: float | None = None
     cliff_share: float | None = None
+    congressional_district_geoid: List[int] | None = (
+        None  # US only: SSDD format
+    )
 
 
 @dataclass
@@ -342,6 +345,28 @@ class GeneralEconomyTask:
             cliff_share=cliff_share,
         )
 
+    def calculate_congressional_district_geoid(self) -> List[int] | None:
+        """Calculate congressional district geoid for US households.
+
+        Returns list of geoids in SSDD format (state FIPS * 100 + district number),
+        or None if not available (non-US or variable doesn't exist).
+        """
+        if self.country_id != "us":
+            return None
+
+        try:
+            geoids = (
+                self.simulation.calculate("congressional_district_geoid")
+                .astype(int)
+                .tolist()
+            )
+            # Check if we have any non-zero values (0 means unassigned)
+            if all(g == 0 for g in geoids):
+                return None
+            return geoids
+        except Exception:
+            return None
+
 
 class CliffImpactInSimulation(BaseModel):
     cliff_gap: float
@@ -411,6 +436,11 @@ def calculate_single_economy(
         cliff_gap = None
         cliff_share = None
 
+    # US congressional district geoids
+    congressional_district_geoid = (
+        task_manager.calculate_congressional_district_geoid()
+    )
+
     return SingleEconomy(
         **{
             "total_net_income": total_net_income,
@@ -447,5 +477,6 @@ def calculate_single_economy(
             "programs": uk_programs,
             "cliff_gap": cliff_gap if include_cliffs else None,
             "cliff_share": cliff_share if include_cliffs else None,
+            "congressional_district_geoid": congressional_district_geoid,
         }
     )
