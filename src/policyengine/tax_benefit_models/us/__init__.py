@@ -12,6 +12,7 @@ if find_spec("policyengine_us") is not None:
         economic_impact_analysis,
     )
     from .datasets import (
+        DEFAULT_US_DATASET,
         PolicyEngineUSDataset,
         USYearData,
         create_datasets,
@@ -33,6 +34,7 @@ if find_spec("policyengine_us") is not None:
     PolicyEngineUSLatest.model_rebuild()
 
     __all__ = [
+        "DEFAULT_US_DATASET",
         "USYearData",
         "PolicyEngineUSDataset",
         "create_datasets",

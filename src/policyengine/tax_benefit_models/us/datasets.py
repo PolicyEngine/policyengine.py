@@ -7,6 +7,9 @@ from pydantic import ConfigDict
 
 from policyengine.core import Dataset, YearData
 
+# Default dataset for US simulations
+DEFAULT_US_DATASET = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
+
 
 class USYearData(YearData):
     """Entity-level data for a single year."""
@@ -105,7 +108,7 @@ class PolicyEngineUSDataset(Dataset):
 
 def create_datasets(
     datasets: list[str] = [
-        "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5",
+        DEFAULT_US_DATASET,
     ],
     years: list[int] = [2024, 2025, 2026, 2027, 2028],
     data_folder: str = "./data",
@@ -297,7 +300,7 @@ def create_datasets(
 
 def load_datasets(
     datasets: list[str] = [
-        "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5",
+        DEFAULT_US_DATASET,
     ],
     years: list[int] = [2024, 2025, 2026, 2027, 2028],
     data_folder: str = "./data",
@@ -332,7 +335,7 @@ def load_datasets(
 
 def ensure_datasets(
     datasets: list[str] = [
-        "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5",
+        DEFAULT_US_DATASET,
     ],
     years: list[int] = [2024, 2025, 2026, 2027, 2028],
     data_folder: str = "./data",
