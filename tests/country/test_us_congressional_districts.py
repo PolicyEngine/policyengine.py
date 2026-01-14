@@ -4,10 +4,10 @@ import pytest
 from tests.fixtures.simulation import create_mock_single_economy
 from policyengine.outputs.macro.comparison.calculate_economy_comparison import (
     us_congressional_district_breakdown,
-    geoid_to_district_name,
     USCongressionalDistrictBreakdownWithValues,
     USCongressionalDistrictImpact,
 )
+from policyengine.utils.geography import geoid_to_district_name
 
 
 class TestGeoidToDistrictName:
