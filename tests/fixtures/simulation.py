@@ -106,7 +106,14 @@ def mock_single_economy_with_ga_districts():
     - GA-06 (geoid 1306): 3 households
     """
     return create_mock_single_economy(
-        household_net_income=[50000.0, 60000.0, 70000.0, 80000.0, 90000.0, 100000.0],
+        household_net_income=[
+            50000.0,
+            60000.0,
+            70000.0,
+            80000.0,
+            90000.0,
+            100000.0,
+        ],
         household_weight=[1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0],
         congressional_district_geoid=[1305, 1305, 1305, 1306, 1306, 1306],
     )
@@ -123,9 +130,36 @@ def mock_single_economy_with_multi_state_districts():
     - NC-12 (geoid 3712): 2 households
     """
     return create_mock_single_economy(
-        household_net_income=[50000.0, 60000.0, 70000.0, 80000.0, 40000.0, 45000.0, 55000.0, 65000.0],
-        household_weight=[1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0],
-        congressional_district_geoid=[1305, 1305, 1306, 1306, 3704, 3704, 3712, 3712],
+        household_net_income=[
+            50000.0,
+            60000.0,
+            70000.0,
+            80000.0,
+            40000.0,
+            45000.0,
+            55000.0,
+            65000.0,
+        ],
+        household_weight=[
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+        ],
+        congressional_district_geoid=[
+            1305,
+            1305,
+            1306,
+            1306,
+            3704,
+            3704,
+            3712,
+            3712,
+        ],
     )
 
 

@@ -53,7 +53,9 @@ class SingleEconomy(BaseModel):
     programs: Dict[str, float] | None
     cliff_gap: float | None = None
     cliff_share: float | None = None
-    congressional_district_geoid: List[int] | None = None  # US only: SSDD format
+    congressional_district_geoid: List[int] | None = (
+        None  # US only: SSDD format
+    )
 
 
 @dataclass

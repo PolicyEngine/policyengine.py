@@ -66,7 +66,9 @@ class TestUsCongressionalDistrictBreakdown:
         country_id = "uk"
 
         # When
-        result = us_congressional_district_breakdown(baseline, reform, country_id)
+        result = us_congressional_district_breakdown(
+            baseline, reform, country_id
+        )
 
         # Then
         assert result is None
@@ -80,7 +82,9 @@ class TestUsCongressionalDistrictBreakdown:
         country_id = "us"
 
         # When
-        result = us_congressional_district_breakdown(baseline, reform, country_id)
+        result = us_congressional_district_breakdown(
+            baseline, reform, country_id
+        )
 
         # Then
         assert result is None
@@ -94,7 +98,9 @@ class TestUsCongressionalDistrictBreakdown:
         country_id = "us"
 
         # When
-        result = us_congressional_district_breakdown(baseline, reform, country_id)
+        result = us_congressional_district_breakdown(
+            baseline, reform, country_id
+        )
 
         # Then
         assert result is None
@@ -108,7 +114,9 @@ class TestUsCongressionalDistrictBreakdown:
         country_id = "us"
 
         # When
-        result = us_congressional_district_breakdown(baseline, reform, country_id)
+        result = us_congressional_district_breakdown(
+            baseline, reform, country_id
+        )
 
         # Then
         assert result is not None
@@ -125,7 +133,9 @@ class TestUsCongressionalDistrictBreakdown:
         country_id = "us"
 
         # When
-        result = us_congressional_district_breakdown(baseline, reform, country_id)
+        result = us_congressional_district_breakdown(
+            baseline, reform, country_id
+        )
 
         # Then
         assert len(result.districts) == 2
@@ -142,7 +152,9 @@ class TestUsCongressionalDistrictBreakdown:
         country_id = "us"
 
         # When
-        result = us_congressional_district_breakdown(baseline, reform, country_id)
+        result = us_congressional_district_breakdown(
+            baseline, reform, country_id
+        )
 
         # Then
         assert len(result.districts) == 4
@@ -159,7 +171,9 @@ class TestUsCongressionalDistrictBreakdown:
         country_id = "us"
 
         # When
-        result = us_congressional_district_breakdown(baseline, reform, country_id)
+        result = us_congressional_district_breakdown(
+            baseline, reform, country_id
+        )
 
         # Then
         for district in result.districts:
@@ -181,7 +195,9 @@ class TestUsCongressionalDistrictBreakdown:
         country_id = "us"
 
         # When
-        result = us_congressional_district_breakdown(baseline, reform, country_id)
+        result = us_congressional_district_breakdown(
+            baseline, reform, country_id
+        )
 
         # Then
         assert len(result.districts) == 1
@@ -205,7 +221,9 @@ class TestUsCongressionalDistrictBreakdown:
         country_id = "us"
 
         # When
-        result = us_congressional_district_breakdown(baseline, reform, country_id)
+        result = us_congressional_district_breakdown(
+            baseline, reform, country_id
+        )
 
         # Then
         assert len(result.districts) == 1
@@ -214,7 +232,9 @@ class TestUsCongressionalDistrictBreakdown:
         assert district.average_household_income_change == -1000.0
         assert district.relative_household_income_change < 0
 
-    def test__given_weighted_households__then_calculates_weighted_averages(self):
+    def test__given_weighted_households__then_calculates_weighted_averages(
+        self,
+    ):
         # Given: households with different weights
         baseline = create_mock_single_economy(
             household_net_income=[50000.0, 100000.0],
@@ -229,7 +249,9 @@ class TestUsCongressionalDistrictBreakdown:
         country_id = "us"
 
         # When
-        result = us_congressional_district_breakdown(baseline, reform, country_id)
+        result = us_congressional_district_breakdown(
+            baseline, reform, country_id
+        )
 
         # Then
         district = result.districts[0]
@@ -247,7 +269,9 @@ class TestUsCongressionalDistrictBreakdown:
         country_id = "us"
 
         # When
-        result = us_congressional_district_breakdown(baseline, reform, country_id)
+        result = us_congressional_district_breakdown(
+            baseline, reform, country_id
+        )
 
         # Then
         for district in result.districts:
@@ -263,7 +287,9 @@ class TestUsCongressionalDistrictBreakdown:
 class TestCongressionalDistrictGeoidExtraction:
     """Tests for congressional_district_geoid extraction in SingleEconomy."""
 
-    def test__given_us_simulation_with_state_dataset__then_geoid_is_extracted(self):
+    def test__given_us_simulation_with_state_dataset__then_geoid_is_extracted(
+        self,
+    ):
         """Integration test: verify geoid extraction works with real simulation.
 
         Note: This test requires network access to download state dataset.
@@ -288,8 +314,12 @@ class TestCongressionalDistrictGeoidExtraction:
         assert result.congressional_district_geoid is not None
         assert len(result.congressional_district_geoid) > 0
         # All geoids should be in Georgia (FIPS 13xx)
-        non_zero_geoids = [g for g in result.congressional_district_geoid if g > 0]
+        non_zero_geoids = [
+            g for g in result.congressional_district_geoid if g > 0
+        ]
         assert len(non_zero_geoids) > 0
         for geoid in non_zero_geoids:
             state_fips = geoid // 100
-            assert state_fips == 13, f"Expected GA (13), got state FIPS {state_fips}"
+            assert (
+                state_fips == 13
+            ), f"Expected GA (13), got state FIPS {state_fips}"
