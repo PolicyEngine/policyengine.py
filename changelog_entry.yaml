@@ -1,6 +1,0 @@
-- bump: minor
-  changes:
-    added:
-    - Congressional district breakdowns for US state-level simulations
-    - New `congressional_district_impact` field in `EconomyComparison` with district-level `average_household_income_change` and `relative_household_income_change`
-    - Geography utilities module (`policyengine/utils/geography.py`) with `STATE_FIPS_TO_ABBREV` mapping and `geoid_to_district_name()` helper

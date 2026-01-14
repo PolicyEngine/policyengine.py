@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-01-14 22:18:25
+
+### Added
+
+- Congressional district breakdowns for US state-level simulations
+- New `congressional_district_impact` field in `EconomyComparison` with district-level `average_household_income_change` and `relative_household_income_change`
+- Geography utilities module (`policyengine/utils/geography.py`) with `STATE_FIPS_TO_ABBREV` mapping and `geoid_to_district_name()` helper
+
 ## [0.9.0] - 2026-01-14 20:28:29
 
 ### Changed
@@ -201,6 +209,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[0.10.0]: https://github.com/PolicyEngine/policyengine.py/compare/0.9.0...0.10.0
 [0.9.0]: https://github.com/PolicyEngine/policyengine.py/compare/0.8.1...0.9.0
 [0.8.1]: https://github.com/PolicyEngine/policyengine.py/compare/0.8.0...0.8.1
 [0.8.0]: https://github.com/PolicyEngine/policyengine.py/compare/0.7.0...0.8.0
