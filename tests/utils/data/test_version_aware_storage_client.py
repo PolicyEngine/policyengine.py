@@ -164,10 +164,13 @@ class TestVersionAwareStorageClient:
         # Create mock blobs with different metadata versions
         blob1 = MagicMock()
         blob1.metadata = {"version": "1.0.0"}
+        blob1.generation = 100
         blob2 = MagicMock()
         blob2.metadata = {"version": "1.2.3"}
+        blob2.generation = 200
         blob3 = MagicMock()
         blob3.metadata = None
+        blob3.generation = 150
 
         bucket.list_blobs.return_value = [blob1, blob3, blob2]
 
@@ -175,6 +178,45 @@ class TestVersionAwareStorageClient:
         result = client.get_blob("test_bucket", "test_key", version="1.2.3")
 
         assert result == blob2
+        bucket.list_blobs.assert_called_with(prefix="test_key", versions=True)
+
+    @patch(
+        "policyengine.utils.data.version_aware_storage_client.Client",
+        autospec=True,
+    )
+    def test_get_blob__metadata_version_returns_newest_when_multiple_match(
+        self, mock_client_class
+    ):
+        """Test that when multiple blobs have the same version, the newest (highest generation) is returned."""
+        mock_instance = mock_client_class.return_value
+        bucket = mock_instance.bucket.return_value
+
+        # Create mock blobs with the SAME metadata version but different generations
+        oldest_blob = MagicMock()
+        oldest_blob.metadata = {"version": "1.2.3"}
+        oldest_blob.generation = 100
+
+        middle_blob = MagicMock()
+        middle_blob.metadata = {"version": "1.2.3"}
+        middle_blob.generation = 200
+
+        newest_blob = MagicMock()
+        newest_blob.metadata = {"version": "1.2.3"}
+        newest_blob.generation = 300
+
+        # Return blobs in non-sorted order to ensure we're not relying on order
+        bucket.list_blobs.return_value = [
+            middle_blob,
+            oldest_blob,
+            newest_blob,
+        ]
+
+        client = VersionAwareStorageClient()
+        result = client.get_blob("test_bucket", "test_key", version="1.2.3")
+
+        # Should return the blob with the highest generation number
+        assert result == newest_blob
+        assert result.generation == 300
         bucket.list_blobs.assert_called_with(prefix="test_key", versions=True)
 
     @patch(
@@ -217,6 +259,7 @@ class TestVersionAwareStorageClient:
         # Set up metadata-based lookup to succeed
         metadata_blob = MagicMock()
         metadata_blob.metadata = {"version": "999"}
+        metadata_blob.generation = 100
         bucket.list_blobs.return_value = [metadata_blob]
 
         client = VersionAwareStorageClient()

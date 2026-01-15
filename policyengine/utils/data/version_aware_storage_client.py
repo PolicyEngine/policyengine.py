@@ -112,16 +112,23 @@ class VersionAwareStorageClient:
             f"Searching for blob {bucket.name}/{key} with metadata version '{version}'"
         )
         versions = bucket.list_blobs(prefix=key, versions=True)
+        matching_blobs = []
         for blob in versions:
             if blob.metadata and blob.metadata.get("version") == version:
-                logger.info(
-                    f"Found blob {bucket.name}/{key} with metadata version '{version}'"
-                )
-                return blob
+                matching_blobs.append(blob)
 
-        raise ValueError(
-            f"No blob found with version '{version}' for {bucket.name}/{key}"
+        if not matching_blobs:
+            raise ValueError(
+                f"No blob found with version '{version}' for {bucket.name}/{key}"
+            )
+
+        # Return the blob with the highest generation number (newest)
+        newest_blob = max(matching_blobs, key=lambda b: b.generation)
+        logger.info(
+            f"Found blob {bucket.name}/{key} with metadata version '{version}' "
+            f"(generation {newest_blob.generation})"
         )
+        return newest_blob
 
     def crc32c(
         self,
