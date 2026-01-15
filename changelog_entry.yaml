@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Fixed `_get_blob_by_metadata_version` to return the newest blob (highest generation) when multiple blobs match the requested version.

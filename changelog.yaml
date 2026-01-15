@@ -170,3 +170,9 @@
     - Geography utilities module (`policyengine/utils/geography.py`) with `STATE_FIPS_TO_ABBREV`
       mapping and `geoid_to_district_name()` helper
   date: 2026-01-14 22:18:25
+- bump: patch
+  changes:
+    fixed:
+    - Fixed `_get_blob_by_metadata_version` to return the newest blob (highest generation)
+      when multiple blobs match the requested version.
+  date: 2026-01-15 01:58:14
