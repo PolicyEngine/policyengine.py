@@ -12,8 +12,8 @@ def test_enum_encode_with_pandas_series():
     """Test that Enum.encode works with pandas Series."""
     enum_items = [SampleEnum.VALUE_A, SampleEnum.VALUE_B, SampleEnum.VALUE_A]
     series = pd.Series(enum_items)
-    
+
     encoded = SampleEnum.encode(series)
-    
+
     assert len(encoded) == 3
     assert list(encoded) == [0, 1, 0]
