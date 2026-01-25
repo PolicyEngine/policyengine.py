@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.16] - 2026-01-25 14:20:29
+
+### Changed
+
+- Bumped policyengine-core minimum version to 3.23.5 for pandas 3.0 compatibility
+
 ## [3.1.15] - 2025-12-14 23:51:27
 
 ### Added
@@ -287,6 +293,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.1.16]: https://github.com/PolicyEngine/policyengine.py/compare/3.1.15...3.1.16
 [3.1.15]: https://github.com/PolicyEngine/policyengine.py/compare/3.1.14...3.1.15
 [3.1.14]: https://github.com/PolicyEngine/policyengine.py/compare/3.1.13...3.1.14
 [3.1.13]: https://github.com/PolicyEngine/policyengine.py/compare/3.1.12...3.1.13

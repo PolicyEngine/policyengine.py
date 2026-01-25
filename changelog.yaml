@@ -235,3 +235,8 @@
     added:
     - Household impacts
   date: 2025-12-14 23:51:27
+- bump: patch
+  changes:
+    changed:
+    - Bumped policyengine-core minimum version to 3.23.5 for pandas 3.0 compatibility
+  date: 2026-01-25 14:20:29
