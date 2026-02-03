@@ -156,16 +156,6 @@ class TestDetermineUsRegionType:
         # Then
         assert result == "congressional_district"
 
-    def test__given__city_region__then__returns_city(self):
-        # Given
-        region = "city/nyc"
-
-        # When
-        result = determine_us_region_type(region)
-
-        # Then
-        assert result == "city"
-
     def test__given__invalid_region__then__raises_value_error(self):
         # Given
         region = "invalid/something"

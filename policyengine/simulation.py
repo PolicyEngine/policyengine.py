@@ -376,18 +376,10 @@ class Simulation:
         """Apply US-specific regional filtering to a simulation.
 
         Note: Most US regions (states, congressional districts) now use
-        scoped datasets rather than filtering. Only NYC still requires
-        filtering from the national dataset (and is still using the pooled
-        CPS by default). This should be replaced with an approach based on
-        the new datasets.
+        scoped datasets rather than filtering. Place-level regions use
+        the parent state's dataset and filter by place_fips.
         """
-        if region == "city/nyc":
-            simulation = self._filter_us_simulation_by_nyc(
-                simulation=simulation,
-                simulation_type=simulation_type,
-                reform=reform,
-            )
-        elif isinstance(region, str) and region.startswith("place/"):
+        if isinstance(region, str) and region.startswith("place/"):
             simulation = self._filter_us_simulation_by_place(
                 simulation=simulation,
                 simulation_type=simulation_type,
@@ -395,17 +387,6 @@ class Simulation:
                 reform=reform,
             )
         return simulation
-
-    def _filter_us_simulation_by_nyc(
-        self,
-        simulation: CountryMicrosimulation,
-        simulation_type: type,
-        reform: ReformType | None,
-    ) -> CountrySimulation:
-        """Filter a US simulation to only include NYC households."""
-        df = simulation.to_input_dataframe()
-        in_nyc = simulation.calculate("in_nyc", map_to="person").values
-        return simulation_type(dataset=df[in_nyc], reform=reform)
 
     def _filter_us_simulation_by_place(
         self,
