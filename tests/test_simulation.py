@@ -72,6 +72,9 @@ class TestSimulation:
         def test__calculates_correct_cliff_metrics(
             self, mock_simulation_with_cliff_vars
         ):
+            from policyengine.outputs.macro.single.calculate_single_economy import (
+                GeneralEconomyTask,
+            )
 
             task = object.__new__(GeneralEconomyTask)
             task.simulation = mock_simulation_with_cliff_vars
