@@ -1,7 +1,11 @@
-from policyengine.simulation import SimulationOptions
 from unittest.mock import patch, Mock
 import pytest
-from policyengine.utils.data.datasets import CPS_2023
+
+# Constants that don't require heavy imports
+SAMPLE_DATASET_FILENAME = "frs_2023_24.h5"
+SAMPLE_DATASET_BUCKET_NAME = "policyengine-uk-data-private"
+SAMPLE_DATASET_URI_PREFIX = "gs://"
+SAMPLE_DATASET_FILE_ADDRESS = f"{SAMPLE_DATASET_URI_PREFIX}{SAMPLE_DATASET_BUCKET_NAME}/{SAMPLE_DATASET_FILENAME}"
 
 non_data_uk_sim_options = {
     "country": "uk",
@@ -21,25 +25,34 @@ non_data_us_sim_options = {
     "baseline": None,
 }
 
-uk_sim_options_no_data = SimulationOptions.model_validate(
-    {
-        **non_data_uk_sim_options,
-        "data": None,
-    }
-)
 
-us_sim_options_cps_dataset = SimulationOptions.model_validate(
-    {**non_data_us_sim_options, "data": CPS_2023}
-)
+# Lazy-loaded simulation options to avoid importing policyengine.simulation at collection time
+def get_uk_sim_options_no_data():
+    from policyengine.simulation import SimulationOptions
 
-SAMPLE_DATASET_FILENAME = "frs_2023_24.h5"
-SAMPLE_DATASET_BUCKET_NAME = "policyengine-uk-data-private"
-SAMPLE_DATASET_URI_PREFIX = "gs://"
-SAMPLE_DATASET_FILE_ADDRESS = f"{SAMPLE_DATASET_URI_PREFIX}{SAMPLE_DATASET_BUCKET_NAME}/{SAMPLE_DATASET_FILENAME}"
+    return SimulationOptions.model_validate(
+        {
+            **non_data_uk_sim_options,
+            "data": None,
+        }
+    )
 
-uk_sim_options_pe_dataset = SimulationOptions.model_validate(
-    {**non_data_uk_sim_options, "data": SAMPLE_DATASET_FILE_ADDRESS}
-)
+
+def get_us_sim_options_cps_dataset():
+    from policyengine.simulation import SimulationOptions
+    from policyengine.utils.data.datasets import CPS_2023
+
+    return SimulationOptions.model_validate(
+        {**non_data_us_sim_options, "data": CPS_2023}
+    )
+
+
+def get_uk_sim_options_pe_dataset():
+    from policyengine.simulation import SimulationOptions
+
+    return SimulationOptions.model_validate(
+        {**non_data_uk_sim_options, "data": SAMPLE_DATASET_FILE_ADDRESS}
+    )
 
 
 @pytest.fixture
