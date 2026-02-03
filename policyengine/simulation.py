@@ -410,10 +410,13 @@ class Simulation:
 
         _, place_fips_code = parse_us_place_region(region)
         df = simulation.to_input_dataframe()
-        household_place_fips = simulation.calculate("place_fips").values
+        # Get place_fips at person level since to_input_dataframe() is person-level
+        person_place_fips = simulation.calculate(
+            "place_fips", map_to="person"
+        ).values
         # place_fips may be stored as bytes in HDF5; handle both str and bytes
-        mask = (household_place_fips == place_fips_code) | (
-            household_place_fips == place_fips_code.encode()
+        mask = (person_place_fips == place_fips_code) | (
+            person_place_fips == place_fips_code.encode()
         )
         return simulation_type(dataset=df[mask], reform=reform)
 

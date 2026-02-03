@@ -169,7 +169,32 @@ def parse_us_place_region(region: str) -> Tuple[str, str]:
 
     Returns:
         A tuple of (state_code, place_fips).
+
+    Raises:
+        ValueError: If the region format is invalid or missing required parts.
     """
+    if not region.startswith("place/"):
+        raise ValueError(
+            f"Invalid place region format: '{region}'. "
+            "Expected format: 'place/{{STATE}}-{{PLACE_FIPS}}'"
+        )
+
     place_str = region.split("/")[1]
-    state_code, place_fips = place_str.split("-")
+    if "-" not in place_str:
+        raise ValueError(
+            f"Invalid place region format: '{region}'. "
+            "Expected format: 'place/{{STATE}}-{{PLACE_FIPS}}'"
+        )
+
+    state_code, place_fips = place_str.split("-", 1)
+
+    if not state_code:
+        raise ValueError(
+            f"Invalid place region: '{region}'. State code cannot be empty."
+        )
+    if not place_fips:
+        raise ValueError(
+            f"Invalid place region: '{region}'. Place FIPS code cannot be empty."
+        )
+
     return state_code, place_fips
