@@ -387,6 +387,13 @@ class Simulation:
                 simulation_type=simulation_type,
                 reform=reform,
             )
+        elif isinstance(region, str) and region.startswith("place/"):
+            simulation = self._filter_us_simulation_by_place(
+                simulation=simulation,
+                simulation_type=simulation_type,
+                region=region,
+                reform=reform,
+            )
         return simulation
 
     def _filter_us_simulation_by_nyc(
@@ -399,6 +406,35 @@ class Simulation:
         df = simulation.to_input_dataframe()
         in_nyc = simulation.calculate("in_nyc", map_to="person").values
         return simulation_type(dataset=df[in_nyc], reform=reform)
+
+    def _filter_us_simulation_by_place(
+        self,
+        simulation: CountryMicrosimulation,
+        simulation_type: type,
+        region: str,
+        reform: ReformType | None,
+    ) -> CountrySimulation:
+        """Filter a US simulation to only include households in a specific Census place.
+
+        Args:
+            simulation: The microsimulation to filter.
+            simulation_type: The type of simulation to create.
+            region: A place region string (e.g., "place/NJ-57000").
+            reform: The reform to apply to the filtered simulation.
+
+        Returns:
+            A new simulation containing only households in the specified place.
+        """
+        from policyengine.utils.data.datasets import parse_us_place_region
+
+        _, place_fips_code = parse_us_place_region(region)
+        df = simulation.to_input_dataframe()
+        household_place_fips = simulation.calculate("place_fips").values
+        # place_fips may be stored as bytes in HDF5; handle both str and bytes
+        mask = (household_place_fips == place_fips_code) | (
+            household_place_fips == place_fips_code.encode()
+        )
+        return simulation_type(dataset=df[mask], reform=reform)
 
     def check_model_version(self) -> None:
         """
