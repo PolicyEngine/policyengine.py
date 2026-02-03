@@ -5,8 +5,43 @@ import pandas as pd
 from unittest.mock import Mock, patch
 
 from tests.fixtures.country.us_places import (
+    # Place FIPS Constants
+    NJ_PATERSON_FIPS,
+    NJ_NEWARK_FIPS,
+    NJ_JERSEY_CITY_FIPS,
+    CA_LOS_ANGELES_FIPS,
+    TX_HOUSTON_FIPS,
+    NONEXISTENT_PLACE_FIPS,
+    # Region String Constants
+    NJ_PATERSON_REGION,
+    NJ_NEWARK_REGION,
+    # Test Data Arrays
+    MIXED_PLACES_WITH_PATERSON,
+    PLACES_WITHOUT_PATERSON,
+    ALL_PATERSON_PLACES,
+    MIXED_PLACES_BYTES,
+    MULTIPLE_NJ_PLACES,
+    TWO_PLACES_FOR_REFORM_TEST,
+    # Expected Results Constants
+    EXPECTED_PATERSON_COUNT_IN_MIXED,
+    EXPECTED_PATERSON_COUNT_IN_BYTES,
+    EXPECTED_NEWARK_COUNT_IN_MULTIPLE_NJ,
+    MINI_DATASET_PATERSON_COUNT,
+    MINI_DATASET_PATERSON_IDS,
+    MINI_DATASET_NEWARK_COUNT,
+    MINI_DATASET_NEWARK_IDS,
+    MINI_DATASET_JERSEY_CITY_COUNT,
+    MINI_DATASET_JERSEY_CITY_IDS,
+    MINI_DATASET_PATERSON_TOTAL_WEIGHT,
+    MINI_DATASET_NEWARK_TOTAL_WEIGHT,
+    MINI_DATASET_JERSEY_CITY_TOTAL_WEIGHT,
+    MINI_DATASET_BYTES_PATERSON_COUNT,
+    MINI_DATASET_BYTES_PATERSON_IDS,
+    # Factory Functions
     create_mock_simulation_with_place_fips,
     create_mock_simulation_with_bytes_place_fips,
+    create_mock_simulation_type,
+    create_simulation_instance,
 )
 
 
@@ -17,56 +52,43 @@ class TestFilterUsSimulationByPlace:
         self,
     ):
         # Given
-        place_fips_values = ["57000", "57000", "44000", "35000", "57000"]
-        mock_sim = create_mock_simulation_with_place_fips(place_fips_values)
-
-        mock_simulation_type = Mock()
-        mock_simulation_type.return_value = Mock()
-
-        region = "place/NJ-57000"
-        reform = None
+        mock_sim = create_mock_simulation_with_place_fips(
+            MIXED_PLACES_WITH_PATERSON
+        )
+        mock_simulation_type = create_mock_simulation_type()
 
         # When
-        from policyengine.simulation import Simulation
-
-        sim_instance = object.__new__(Simulation)
+        sim_instance = create_simulation_instance()
         result = sim_instance._filter_us_simulation_by_place(
             simulation=mock_sim,
             simulation_type=mock_simulation_type,
-            region=region,
-            reform=reform,
+            region=NJ_PATERSON_REGION,
+            reform=None,
         )
 
         # Then
         call_args = mock_simulation_type.call_args
         filtered_df = call_args.kwargs["dataset"]
 
-        # Should have 3 households with place_fips "57000"
-        assert len(filtered_df) == 3
-        assert all(filtered_df["place_fips"] == "57000")
+        assert len(filtered_df) == EXPECTED_PATERSON_COUNT_IN_MIXED
+        assert all(filtered_df["place_fips"] == NJ_PATERSON_FIPS)
 
     def test__given__no_households_in_target_place__then__returns_empty_dataset(
         self,
     ):
         # Given
-        place_fips_values = ["44000", "35000", "51000"]
-        mock_sim = create_mock_simulation_with_place_fips(place_fips_values)
-
-        mock_simulation_type = Mock()
-        mock_simulation_type.return_value = Mock()
-
-        region = "place/NJ-57000"  # No households have this place
-        reform = None
+        mock_sim = create_mock_simulation_with_place_fips(
+            PLACES_WITHOUT_PATERSON
+        )
+        mock_simulation_type = create_mock_simulation_type()
 
         # When
-        from policyengine.simulation import Simulation
-
-        sim_instance = object.__new__(Simulation)
+        sim_instance = create_simulation_instance()
         result = sim_instance._filter_us_simulation_by_place(
             simulation=mock_sim,
             simulation_type=mock_simulation_type,
-            region=region,
-            reform=reform,
+            region=NJ_PATERSON_REGION,
+            reform=None,
         )
 
         # Then
@@ -79,86 +101,64 @@ class TestFilterUsSimulationByPlace:
         self,
     ):
         # Given
-        place_fips_values = ["57000", "57000", "57000"]
-        mock_sim = create_mock_simulation_with_place_fips(place_fips_values)
-
-        mock_simulation_type = Mock()
-        mock_simulation_type.return_value = Mock()
-
-        region = "place/NJ-57000"
-        reform = None
+        mock_sim = create_mock_simulation_with_place_fips(ALL_PATERSON_PLACES)
+        mock_simulation_type = create_mock_simulation_type()
 
         # When
-        from policyengine.simulation import Simulation
-
-        sim_instance = object.__new__(Simulation)
+        sim_instance = create_simulation_instance()
         result = sim_instance._filter_us_simulation_by_place(
             simulation=mock_sim,
             simulation_type=mock_simulation_type,
-            region=region,
-            reform=reform,
+            region=NJ_PATERSON_REGION,
+            reform=None,
         )
 
         # Then
         call_args = mock_simulation_type.call_args
         filtered_df = call_args.kwargs["dataset"]
 
-        assert len(filtered_df) == 3
+        assert len(filtered_df) == len(ALL_PATERSON_PLACES)
 
     def test__given__bytes_place_fips_in_dataset__then__still_filters_correctly(
         self,
     ):
         # Given: place_fips stored as bytes (as it might be in HDF5)
-        place_fips_values = [b"57000", b"57000", b"44000", b"35000"]
         mock_sim = create_mock_simulation_with_bytes_place_fips(
-            place_fips_values
+            MIXED_PLACES_BYTES
         )
-
-        mock_simulation_type = Mock()
-        mock_simulation_type.return_value = Mock()
-
-        region = "place/NJ-57000"
-        reform = None
+        mock_simulation_type = create_mock_simulation_type()
 
         # When
-        from policyengine.simulation import Simulation
-
-        sim_instance = object.__new__(Simulation)
+        sim_instance = create_simulation_instance()
         result = sim_instance._filter_us_simulation_by_place(
             simulation=mock_sim,
             simulation_type=mock_simulation_type,
-            region=region,
-            reform=reform,
+            region=NJ_PATERSON_REGION,
+            reform=None,
         )
 
         # Then
         call_args = mock_simulation_type.call_args
         filtered_df = call_args.kwargs["dataset"]
 
-        # Should match 2 households with bytes b"57000"
-        assert len(filtered_df) == 2
+        assert len(filtered_df) == EXPECTED_PATERSON_COUNT_IN_BYTES
 
     def test__given__reform_provided__then__passes_reform_to_simulation_type(
         self,
     ):
         # Given
-        place_fips_values = ["57000", "44000"]
-        mock_sim = create_mock_simulation_with_place_fips(place_fips_values)
-
-        mock_simulation_type = Mock()
-        mock_simulation_type.return_value = Mock()
-
-        region = "place/NJ-57000"
+        mock_sim = create_mock_simulation_with_place_fips(
+            TWO_PLACES_FOR_REFORM_TEST
+        )
+        mock_simulation_type = create_mock_simulation_type()
         mock_reform = Mock()
 
         # When
-        from policyengine.simulation import Simulation
-
-        sim_instance = object.__new__(Simulation)
+        sim_instance = create_simulation_instance()
         result = sim_instance._filter_us_simulation_by_place(
             simulation=mock_sim,
             simulation_type=mock_simulation_type,
-            region=region,
+            region=NJ_PATERSON_REGION,
             reform=mock_reform,
         )
 
@@ -170,40 +170,24 @@ class TestFilterUsSimulationByPlace:
         self,
     ):
         # Given: Multiple NJ places
-        place_fips_values = [
-            "57000",  # Paterson
-            "51000",  # Newark
-            "36000",  # Jersey City
-            "57000",  # Paterson
-            "51000",  # Newark
-        ]
-        mock_sim = create_mock_simulation_with_place_fips(place_fips_values)
+        mock_sim = create_mock_simulation_with_place_fips(MULTIPLE_NJ_PLACES)
+        mock_simulation_type = create_mock_simulation_type()
 
-        mock_simulation_type = Mock()
-        mock_simulation_type.return_value = Mock()
-
-        # Filter for Newark only
-        region = "place/NJ-51000"
-        reform = None
-
-        # When
-        from policyengine.simulation import Simulation
-
-        sim_instance = object.__new__(Simulation)
+        # When: Filter for Newark only
+        sim_instance = create_simulation_instance()
         result = sim_instance._filter_us_simulation_by_place(
             simulation=mock_sim,
             simulation_type=mock_simulation_type,
-            region=region,
-            reform=reform,
+            region=NJ_NEWARK_REGION,
+            reform=None,
         )
 
         # Then
         call_args = mock_simulation_type.call_args
         filtered_df = call_args.kwargs["dataset"]
 
-        # Should have 2 Newark households
-        assert len(filtered_df) == 2
-        assert all(filtered_df["place_fips"] == "51000")
+        assert len(filtered_df) == EXPECTED_NEWARK_COUNT_IN_MULTIPLE_NJ
+        assert all(filtered_df["place_fips"] == NJ_NEWARK_FIPS)
 
 
 class TestApplyUsRegionToSimulationWithPlace:
@@ -211,15 +195,9 @@ class TestApplyUsRegionToSimulationWithPlace:
 
     def test__given__place_region__then__calls_filter_by_place(self):
         # Given
-        from policyengine.simulation import Simulation
-
-        sim_instance = object.__new__(Simulation)
-
+        sim_instance = create_simulation_instance()
         mock_simulation = Mock()
         mock_simulation_type = Mock
-
-        region = "place/NJ-57000"
-        reform = None
 
         # When / Then
         with patch.object(
@@ -230,15 +208,15 @@ class TestApplyUsRegionToSimulationWithPlace:
             result = sim_instance._apply_us_region_to_simulation(
                 simulation=mock_simulation,
                 simulation_type=mock_simulation_type,
-                region=region,
-                reform=reform,
+                region=NJ_PATERSON_REGION,
+                reform=None,
             )
 
             mock_filter.assert_called_once_with(
                 simulation=mock_simulation,
                 simulation_type=mock_simulation_type,
-                region=region,
-                reform=reform,
+                region=NJ_PATERSON_REGION,
+                reform=None,
             )
 
 
@@ -248,47 +226,47 @@ class TestMiniDatasetPlaceFiltering:
     Uses the mini_place_dataset fixture from conftest.py.
     """
 
-    def test__given__mini_dataset__then__paterson_filter_returns_4_households(
+    def test__given__mini_dataset__then__paterson_filter_returns_correct_count(
         self, mini_place_dataset
     ):
         # Given
         df = mini_place_dataset
-        target_place_fips = "57000"  # Paterson
 
         # When
-        filtered_df = df[df["place_fips"] == target_place_fips]
+        filtered_df = df[df["place_fips"] == NJ_PATERSON_FIPS]
 
         # Then
-        assert len(filtered_df) == 4
-        assert filtered_df["household_id"].tolist() == [0, 1, 4, 7]
+        assert len(filtered_df) == MINI_DATASET_PATERSON_COUNT
+        assert filtered_df["household_id"].tolist() == MINI_DATASET_PATERSON_IDS
 
-    def test__given__mini_dataset__then__newark_filter_returns_3_households(
+    def test__given__mini_dataset__then__newark_filter_returns_correct_count(
         self, mini_place_dataset
     ):
         # Given
         df = mini_place_dataset
-        target_place_fips = "51000"  # Newark
 
         # When
-        filtered_df = df[df["place_fips"] == target_place_fips]
+        filtered_df = df[df["place_fips"] == NJ_NEWARK_FIPS]
 
         # Then
-        assert len(filtered_df) == 3
-        assert filtered_df["household_id"].tolist() == [2, 5, 8]
+        assert len(filtered_df) == MINI_DATASET_NEWARK_COUNT
+        assert filtered_df["household_id"].tolist() == MINI_DATASET_NEWARK_IDS
 
-    def test__given__mini_dataset__then__jersey_city_filter_returns_3_households(
+    def test__given__mini_dataset__then__jersey_city_filter_returns_correct_count(
         self, mini_place_dataset
     ):
         # Given
         df = mini_place_dataset
-        target_place_fips = "36000"  # Jersey City
 
         # When
-        filtered_df = df[df["place_fips"] == target_place_fips]
+        filtered_df = df[df["place_fips"] == NJ_JERSEY_CITY_FIPS]
 
         # Then
-        assert len(filtered_df) == 3
-        assert filtered_df["household_id"].tolist() == [3, 6, 9]
+        assert len(filtered_df) == MINI_DATASET_JERSEY_CITY_COUNT
+        assert (
+            filtered_df["household_id"].tolist()
+            == MINI_DATASET_JERSEY_CITY_IDS
+        )
 
     def test__given__mini_dataset__then__total_weight_sums_correctly_per_place(
         self, mini_place_dataset
@@ -297,33 +275,29 @@ class TestMiniDatasetPlaceFiltering:
         df = mini_place_dataset
 
         # When
-        paterson_weight = df[df["place_fips"] == "57000"][
+        paterson_weight = df[df["place_fips"] == NJ_PATERSON_FIPS][
             "household_weight"
         ].sum()
-        newark_weight = df[df["place_fips"] == "51000"][
+        newark_weight = df[df["place_fips"] == NJ_NEWARK_FIPS][
             "household_weight"
         ].sum()
-        jersey_city_weight = df[df["place_fips"] == "36000"][
+        jersey_city_weight = df[df["place_fips"] == NJ_JERSEY_CITY_FIPS][
             "household_weight"
         ].sum()
 
         # Then
-        # Paterson: 1000 + 1500 + 800 + 900 = 4200
-        assert paterson_weight == 4200.0
-        # Newark: 2000 + 1800 + 1400 = 5200
-        assert newark_weight == 5200.0
-        # Jersey City: 1200 + 1100 + 1300 = 3600
-        assert jersey_city_weight == 3600.0
+        assert paterson_weight == MINI_DATASET_PATERSON_TOTAL_WEIGHT
+        assert newark_weight == MINI_DATASET_NEWARK_TOTAL_WEIGHT
+        assert jersey_city_weight == MINI_DATASET_JERSEY_CITY_TOTAL_WEIGHT
 
     def test__given__mini_dataset__then__nonexistent_place_returns_empty(
         self, mini_place_dataset
     ):
         # Given
         df = mini_place_dataset
-        target_place_fips = "99999"  # Non-existent place
 
         # When
-        filtered_df = df[df["place_fips"] == target_place_fips]
+        filtered_df = df[df["place_fips"] == NONEXISTENT_PLACE_FIPS]
 
         # Then
         assert len(filtered_df) == 0
@@ -333,14 +307,16 @@ class TestMiniDatasetPlaceFiltering:
     ):
         # Given
         df = mini_place_dataset_with_bytes
-        target_place_fips = "57000"
 
         # When: Filter handling both str and bytes
-        mask = (df["place_fips"] == target_place_fips) | (
-            df["place_fips"] == target_place_fips.encode()
+        mask = (df["place_fips"] == NJ_PATERSON_FIPS) | (
+            df["place_fips"] == NJ_PATERSON_FIPS.encode()
         )
         filtered_df = df[mask]
 
         # Then
-        assert len(filtered_df) == 2
-        assert filtered_df["household_id"].tolist() == [0, 1]
+        assert len(filtered_df) == MINI_DATASET_BYTES_PATERSON_COUNT
+        assert (
+            filtered_df["household_id"].tolist()
+            == MINI_DATASET_BYTES_PATERSON_IDS
+        )
