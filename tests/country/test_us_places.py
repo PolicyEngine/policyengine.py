@@ -237,7 +237,9 @@ class TestMiniDatasetPlaceFiltering:
 
         # Then
         assert len(filtered_df) == MINI_DATASET_PATERSON_COUNT
-        assert filtered_df["household_id"].tolist() == MINI_DATASET_PATERSON_IDS
+        assert (
+            filtered_df["household_id"].tolist() == MINI_DATASET_PATERSON_IDS
+        )
 
     def test__given__mini_dataset__then__newark_filter_returns_correct_count(
         self, mini_place_dataset
