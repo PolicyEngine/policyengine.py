@@ -1,57 +1,24 @@
 """Tests for US place-level (city) filtering functionality."""
 
 import pytest
-import numpy as np
 import pandas as pd
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
+
+from tests.fixtures.country.us_places import (
+    create_mock_simulation_with_place_fips,
+    create_mock_simulation_with_bytes_place_fips,
+)
 
 
 class TestFilterUsSimulationByPlace:
     """Tests for the _filter_us_simulation_by_place method."""
-
-    def _create_mock_simulation_with_place_fips(
-        self,
-        place_fips_values: list[str],
-        household_ids: list[int] | None = None,
-    ) -> Mock:
-        """Create a mock simulation with place_fips data.
-
-        Args:
-            place_fips_values: List of place FIPS codes for each household.
-            household_ids: Optional list of household IDs.
-
-        Returns:
-            Mock simulation object.
-        """
-        if household_ids is None:
-            household_ids = list(range(len(place_fips_values)))
-
-        mock_sim = Mock()
-
-        # Mock calculate to return place_fips values
-        mock_calculate_result = Mock()
-        mock_calculate_result.values = np.array(place_fips_values)
-        mock_sim.calculate.return_value = mock_calculate_result
-
-        # Mock to_input_dataframe to return a DataFrame
-        df = pd.DataFrame(
-            {
-                "household_id": household_ids,
-                "place_fips": place_fips_values,
-            }
-        )
-        mock_sim.to_input_dataframe.return_value = df
-
-        return mock_sim
 
     def test__given__households_in_target_place__then__filters_to_matching_households(
         self,
     ):
         # Given
         place_fips_values = ["57000", "57000", "44000", "35000", "57000"]
-        mock_sim = self._create_mock_simulation_with_place_fips(
-            place_fips_values
-        )
+        mock_sim = create_mock_simulation_with_place_fips(place_fips_values)
 
         mock_simulation_type = Mock()
         mock_simulation_type.return_value = Mock()
@@ -71,7 +38,6 @@ class TestFilterUsSimulationByPlace:
         )
 
         # Then
-        # Check that simulation_type was called with filtered data
         call_args = mock_simulation_type.call_args
         filtered_df = call_args.kwargs["dataset"]
 
@@ -84,9 +50,7 @@ class TestFilterUsSimulationByPlace:
     ):
         # Given
         place_fips_values = ["44000", "35000", "51000"]
-        mock_sim = self._create_mock_simulation_with_place_fips(
-            place_fips_values
-        )
+        mock_sim = create_mock_simulation_with_place_fips(place_fips_values)
 
         mock_simulation_type = Mock()
         mock_simulation_type.return_value = Mock()
@@ -116,9 +80,7 @@ class TestFilterUsSimulationByPlace:
     ):
         # Given
         place_fips_values = ["57000", "57000", "57000"]
-        mock_sim = self._create_mock_simulation_with_place_fips(
-            place_fips_values
-        )
+        mock_sim = create_mock_simulation_with_place_fips(place_fips_values)
 
         mock_simulation_type = Mock()
         mock_simulation_type.return_value = Mock()
@@ -148,19 +110,9 @@ class TestFilterUsSimulationByPlace:
     ):
         # Given: place_fips stored as bytes (as it might be in HDF5)
         place_fips_values = [b"57000", b"57000", b"44000", b"35000"]
-        mock_sim = Mock()
-
-        mock_calculate_result = Mock()
-        mock_calculate_result.values = np.array(place_fips_values)
-        mock_sim.calculate.return_value = mock_calculate_result
-
-        df = pd.DataFrame(
-            {
-                "household_id": [0, 1, 2, 3],
-                "place_fips": place_fips_values,
-            }
+        mock_sim = create_mock_simulation_with_bytes_place_fips(
+            place_fips_values
         )
-        mock_sim.to_input_dataframe.return_value = df
 
         mock_simulation_type = Mock()
         mock_simulation_type.return_value = Mock()
@@ -191,9 +143,7 @@ class TestFilterUsSimulationByPlace:
     ):
         # Given
         place_fips_values = ["57000", "44000"]
-        mock_sim = self._create_mock_simulation_with_place_fips(
-            place_fips_values
-        )
+        mock_sim = create_mock_simulation_with_place_fips(place_fips_values)
 
         mock_simulation_type = Mock()
         mock_simulation_type.return_value = Mock()
@@ -227,9 +177,7 @@ class TestFilterUsSimulationByPlace:
             "57000",  # Paterson
             "51000",  # Newark
         ]
-        mock_sim = self._create_mock_simulation_with_place_fips(
-            place_fips_values
-        )
+        mock_sim = create_mock_simulation_with_place_fips(place_fips_values)
 
         mock_simulation_type = Mock()
         mock_simulation_type.return_value = Mock()
@@ -273,13 +221,12 @@ class TestApplyUsRegionToSimulationWithPlace:
         region = "place/NJ-57000"
         reform = None
 
-        # Mock _filter_us_simulation_by_place
+        # When / Then
         with patch.object(
             sim_instance,
             "_filter_us_simulation_by_place",
             return_value=Mock(),
         ) as mock_filter:
-            # When
             result = sim_instance._apply_us_region_to_simulation(
                 simulation=mock_simulation,
                 simulation_type=mock_simulation_type,
@@ -287,7 +234,6 @@ class TestApplyUsRegionToSimulationWithPlace:
                 reform=reform,
             )
 
-            # Then
             mock_filter.assert_called_once_with(
                 simulation=mock_simulation,
                 simulation_type=mock_simulation_type,
@@ -297,58 +243,10 @@ class TestApplyUsRegionToSimulationWithPlace:
 
 
 class TestMiniDatasetPlaceFiltering:
-    """Integration-style tests using a mini in-memory dataset."""
+    """Integration-style tests using a mini in-memory dataset.
 
-    @pytest.fixture
-    def mini_place_dataset(self) -> pd.DataFrame:
-        """Create a mini dataset with place_fips for testing.
-
-        Simulates 10 households across 3 NJ places:
-        - Paterson (57000): 4 households
-        - Newark (51000): 3 households
-        - Jersey City (36000): 3 households
-        """
-        return pd.DataFrame(
-            {
-                "household_id": list(range(10)),
-                "place_fips": [
-                    "57000",
-                    "57000",
-                    "51000",
-                    "36000",
-                    "57000",
-                    "51000",
-                    "36000",
-                    "57000",
-                    "51000",
-                    "36000",
-                ],
-                "household_weight": [
-                    1000.0,
-                    1500.0,
-                    2000.0,
-                    1200.0,
-                    800.0,
-                    1800.0,
-                    1100.0,
-                    900.0,
-                    1400.0,
-                    1300.0,
-                ],
-                "household_net_income": [
-                    50000.0,
-                    60000.0,
-                    75000.0,
-                    45000.0,
-                    55000.0,
-                    80000.0,
-                    40000.0,
-                    65000.0,
-                    70000.0,
-                    48000.0,
-                ],
-            }
-        )
+    Uses the mini_place_dataset fixture from conftest.py.
+    """
 
     def test__given__mini_dataset__then__paterson_filter_returns_4_households(
         self, mini_place_dataset
@@ -430,15 +328,11 @@ class TestMiniDatasetPlaceFiltering:
         # Then
         assert len(filtered_df) == 0
 
-    def test__given__mini_dataset_with_bytes_fips__then__filtering_works(self):
-        # Given: Dataset with bytes place_fips (as might come from HDF5)
-        df = pd.DataFrame(
-            {
-                "household_id": [0, 1, 2, 3],
-                "place_fips": [b"57000", b"57000", b"51000", b"51000"],
-                "household_weight": [1000.0, 1000.0, 1000.0, 1000.0],
-            }
-        )
+    def test__given__mini_dataset_with_bytes_fips__then__filtering_works(
+        self, mini_place_dataset_with_bytes
+    ):
+        # Given
+        df = mini_place_dataset_with_bytes
         target_place_fips = "57000"
 
         # When: Filter handling both str and bytes

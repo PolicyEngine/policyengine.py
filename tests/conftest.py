@@ -12,3 +12,8 @@ from tests.fixtures.simulation import (
     mock_single_economy_without_districts,
     mock_single_economy_with_null_districts,
 )
+
+from tests.fixtures.country.us_places import (
+    mini_place_dataset,
+    mini_place_dataset_with_bytes,
+)
