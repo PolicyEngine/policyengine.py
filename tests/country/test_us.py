@@ -2,22 +2,34 @@ import pytest
 
 
 def test_us_macro_single():
+    """Test US macro single economy calculation using a state dataset.
+
+    Uses Delaware (smallest state by population with data) to reduce memory
+    usage in CI while still testing the full simulation pipeline.
+    """
     from policyengine import Simulation
 
     sim = Simulation(
         scope="macro",
         country="us",
+        region="state/DE",
     )
 
     sim.calculate_single_economy()
 
 
 def test_us_macro_comparison():
+    """Test US macro economy comparison using a state dataset.
+
+    Uses Delaware (smallest state by population with data) to reduce memory
+    usage in CI while still testing the full comparison pipeline.
+    """
     from policyengine import Simulation
 
     sim = Simulation(
         scope="macro",
         country="us",
+        region="state/DE",
         reform={
             "gov.usda.snap.income.deductions.earned_income": {"2025": 0.05}
         },
