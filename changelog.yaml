@@ -176,3 +176,12 @@
     - Fixed `_get_blob_by_metadata_version` to return the newest blob (highest generation)
       when multiple blobs match the requested version.
   date: 2026-01-15 01:58:14
+- bump: minor
+  changes:
+    added:
+    - Place-level (city) impact analysis for US Census places with population over
+      100,000.
+    - Input validation for place region strings.
+    removed:
+    - Deprecated "city/nyc" region format (use "place/NY-51000" instead).
+  date: 2026-02-04 00:21:29

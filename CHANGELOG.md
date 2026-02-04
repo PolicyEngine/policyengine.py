@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-02-04 00:21:29
+
+### Added
+
+- Place-level (city) impact analysis for US Census places with population over 100,000.
+- Input validation for place region strings.
+
 ## [0.10.1] - 2026-01-15 01:58:14
 
 ### Fixed
@@ -215,6 +222,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[0.11.0]: https://github.com/PolicyEngine/policyengine.py/compare/0.10.1...0.11.0
 [0.10.1]: https://github.com/PolicyEngine/policyengine.py/compare/0.10.0...0.10.1
 [0.10.0]: https://github.com/PolicyEngine/policyengine.py/compare/0.9.0...0.10.0
 [0.9.0]: https://github.com/PolicyEngine/policyengine.py/compare/0.8.1...0.9.0
