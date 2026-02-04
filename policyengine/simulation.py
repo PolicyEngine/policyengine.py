@@ -376,29 +376,49 @@ class Simulation:
         """Apply US-specific regional filtering to a simulation.
 
         Note: Most US regions (states, congressional districts) now use
-        scoped datasets rather than filtering. Only NYC still requires
-        filtering from the national dataset (and is still using the pooled
-        CPS by default). This should be replaced with an approach based on
-        the new datasets.
+        scoped datasets rather than filtering. Place-level regions use
+        the parent state's dataset and filter by place_fips.
         """
-        if region == "city/nyc":
-            simulation = self._filter_us_simulation_by_nyc(
+        if isinstance(region, str) and region.startswith("place/"):
+            simulation = self._filter_us_simulation_by_place(
                 simulation=simulation,
                 simulation_type=simulation_type,
+                region=region,
                 reform=reform,
             )
         return simulation
 
-    def _filter_us_simulation_by_nyc(
+    def _filter_us_simulation_by_place(
         self,
         simulation: CountryMicrosimulation,
         simulation_type: type,
+        region: str,
         reform: ReformType | None,
     ) -> CountrySimulation:
-        """Filter a US simulation to only include NYC households."""
+        """Filter a US simulation to only include households in a specific Census place.
+
+        Args:
+            simulation: The microsimulation to filter.
+            simulation_type: The type of simulation to create.
+            region: A place region string (e.g., "place/NJ-57000").
+            reform: The reform to apply to the filtered simulation.
+
+        Returns:
+            A new simulation containing only households in the specified place.
+        """
+        from policyengine.utils.data.datasets import parse_us_place_region
+
+        _, place_fips_code = parse_us_place_region(region)
         df = simulation.to_input_dataframe()
-        in_nyc = simulation.calculate("in_nyc", map_to="person").values
-        return simulation_type(dataset=df[in_nyc], reform=reform)
+        # Get place_fips at person level since to_input_dataframe() is person-level
+        person_place_fips = simulation.calculate(
+            "place_fips", map_to="person"
+        ).values
+        # place_fips may be stored as bytes in HDF5; handle both str and bytes
+        mask = (person_place_fips == place_fips_code) | (
+            person_place_fips == place_fips_code.encode()
+        )
+        return simulation_type(dataset=df[mask], reform=reform)
 
     def check_model_version(self) -> None:
         """

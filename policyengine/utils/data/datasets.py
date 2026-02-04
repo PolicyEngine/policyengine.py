@@ -47,13 +47,8 @@ def _get_default_us_dataset(region: str | None) -> str:
 
     if region_type == "nationwide":
         return ECPS_2024
-    elif region_type == "city":
-        # TODO: Implement a better approach to this for our one
-        # city, New York City.
-        # Cities use the pooled CPS dataset
-        return CPS_2023_POOLED
 
-    # For state and congressional_district, region is guaranteed to be non-None
+    # For state, congressional_district, and place, region is guaranteed to be non-None
     assert region is not None
 
     if region_type == "state":
@@ -67,6 +62,11 @@ def _get_default_us_dataset(region: str | None) -> str:
         return get_us_congressional_district_dataset_path(
             state_code, district_number
         )
+
+    elif region_type == "place":
+        # Expected format: "place/NJ-57000"
+        state_code, _ = parse_us_place_region(region)
+        return get_us_state_dataset_path(state_code)
 
     raise ValueError(f"Unhandled US region type: {region_type}")
 
@@ -124,9 +124,11 @@ def get_us_congressional_district_dataset_path(
     return f"{US_DATA_BUCKET}/districts/{state_code.upper()}-{district_number:02d}.h5"
 
 
-USRegionType = Literal["nationwide", "city", "state", "congressional_district"]
+USRegionType = Literal[
+    "nationwide", "state", "congressional_district", "place"
+]
 
-US_REGION_PREFIXES = ("city", "state", "congressional_district")
+US_REGION_PREFIXES = ("state", "congressional_district", "place")
 
 
 def determine_us_region_type(region: str | None) -> USRegionType:
@@ -134,11 +136,11 @@ def determine_us_region_type(region: str | None) -> USRegionType:
     Determine the type of US region from a region string.
 
     Args:
-        region: A region string (e.g., "us", "city/nyc", "state/CA",
-                "congressional_district/CA-01") or None.
+        region: A region string (e.g., "us", "state/CA",
+                "congressional_district/CA-01", "place/NJ-57000") or None.
 
     Returns:
-        One of "nationwide", "city", "state", or "congressional_district".
+        One of "nationwide", "state", "congressional_district", or "place".
 
     Raises:
         ValueError: If the region string has an unrecognized prefix.
@@ -154,3 +156,45 @@ def determine_us_region_type(region: str | None) -> USRegionType:
         f"Unrecognized US region format: '{region}'. "
         f"Expected 'us', or one of the following prefixes: {list(US_REGION_PREFIXES)}"
     )
+
+
+def parse_us_place_region(region: str) -> Tuple[str, str]:
+    """Parse a place region string into (state_code, place_fips).
+
+    Format: 'place/{STATE}-{PLACE_FIPS}'
+    Example: 'place/NJ-57000' -> ('NJ', '57000')
+
+    Args:
+        region: A place region string (e.g., "place/NJ-57000").
+
+    Returns:
+        A tuple of (state_code, place_fips).
+
+    Raises:
+        ValueError: If the region format is invalid or missing required parts.
+    """
+    if not region.startswith("place/"):
+        raise ValueError(
+            f"Invalid place region format: '{region}'. "
+            "Expected format: 'place/{{STATE}}-{{PLACE_FIPS}}'"
+        )
+
+    place_str = region.split("/")[1]
+    if "-" not in place_str:
+        raise ValueError(
+            f"Invalid place region format: '{region}'. "
+            "Expected format: 'place/{{STATE}}-{{PLACE_FIPS}}'"
+        )
+
+    state_code, place_fips = place_str.split("-", 1)
+
+    if not state_code:
+        raise ValueError(
+            f"Invalid place region: '{region}'. State code cannot be empty."
+        )
+    if not place_fips:
+        raise ValueError(
+            f"Invalid place region: '{region}'. Place FIPS code cannot be empty."
+        )
+
+    return state_code, place_fips
