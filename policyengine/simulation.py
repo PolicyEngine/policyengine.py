@@ -47,6 +47,79 @@ RegionType = Optional[str]
 SubsampleType = Optional[int]
 
 
+# =============================================================================
+# Variable Validation Functions
+# =============================================================================
+
+
+def get_variable(tax_benefit_system: Any, variable_name: str) -> Any:
+    """Get a variable from the tax-benefit system, raising if not found.
+
+    Args:
+        tax_benefit_system: The tax-benefit system to search.
+        variable_name: The name of the variable to find.
+
+    Returns:
+        The variable object from the tax-benefit system.
+
+    Raises:
+        ValueError: If the variable is not found.
+    """
+    if variable_name not in tax_benefit_system.variables:
+        raise ValueError(
+            f"Variable '{variable_name}' not found in tax-benefit system"
+        )
+    return tax_benefit_system.variables[variable_name]
+
+
+def validate_variable_entity(
+    tax_benefit_system: Any,
+    variable_name: str,
+    expected_entity: str,
+) -> None:
+    """Validate that a variable belongs to the expected entity type.
+
+    Args:
+        tax_benefit_system: The tax-benefit system containing the variable.
+        variable_name: The name of the variable to validate.
+        expected_entity: The expected entity key (e.g., "household", "person").
+
+    Raises:
+        ValueError: If the variable is not found or belongs to a different entity.
+    """
+    variable = get_variable(tax_benefit_system, variable_name)
+    actual_entity = variable.entity.key
+
+    if actual_entity != expected_entity:
+        raise ValueError(
+            f"Variable '{variable_name}' is a {actual_entity}-level variable, "
+            f"not a {expected_entity}-level variable."
+        )
+
+
+def validate_household_variable(
+    tax_benefit_system: Any,
+    variable_name: str,
+) -> None:
+    """Validate that a variable is a household-level variable.
+
+    Args:
+        tax_benefit_system: The tax-benefit system containing the variable.
+        variable_name: The name of the variable to validate.
+
+    Raises:
+        ValueError: If the variable is not found or is not household-level.
+    """
+    variable = get_variable(tax_benefit_system, variable_name)
+
+    if variable.entity.key != "household":
+        raise ValueError(
+            f"Variable '{variable_name}' is a {variable.entity.key}-level variable, "
+            f"not a household-level variable. Only household-level variables can be "
+            f"used for filtering to preserve household integrity."
+        )
+
+
 class SimulationOptions(BaseModel):
     country: CountryType = Field(..., description="The country to simulate.")
     scope: ScopeType = Field(..., description="The scope of the simulation.")
@@ -452,17 +525,7 @@ class Simulation:
         Raises:
             ValueError: If the variable is not a household-level variable.
         """
-        tbs = simulation.tax_benefit_system
-        if variable_name not in tbs.variables:
-            raise ValueError(f"Variable '{variable_name}' not found in tax-benefit system")
-
-        variable = tbs.variables[variable_name]
-        if variable.entity.key != "household":
-            raise ValueError(
-                f"Variable '{variable_name}' is a {variable.entity.key}-level variable, "
-                f"not a household-level variable. Only household-level variables can be "
-                f"used for filtering to preserve household integrity."
-            )
+        validate_household_variable(simulation.tax_benefit_system, variable_name)
 
         # Build entity relationships
         entity_rel = self._build_entity_relationships(simulation)
