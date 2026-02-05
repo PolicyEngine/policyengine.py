@@ -388,6 +388,41 @@ class Simulation:
             )
         return simulation
 
+    def _build_entity_relationships(
+        self,
+        simulation: CountryMicrosimulation,
+    ) -> pd.DataFrame:
+        """Build a DataFrame mapping each person to their containing entities.
+
+        Creates an explicit relationship map between persons and all entity
+        types (household, tax_unit, etc.). This enables filtering at any
+        entity level while preserving the integrity of all related entities.
+
+        Args:
+            simulation: The microsimulation to extract relationships from.
+
+        Returns:
+            A DataFrame indexed by person with columns for each entity ID.
+        """
+        entity_rel = pd.DataFrame({"person_id": simulation.calculate("person_id").values})
+
+        # Add household relationship (required for all countries)
+        entity_rel["household_id"] = simulation.calculate(
+            "household_id", map_to="person"
+        ).values
+
+        # Add country-specific entity relationships
+        tbs = simulation.tax_benefit_system
+        optional_entities = ["tax_unit_id", "spm_unit_id", "family_id", "marital_unit_id"]
+
+        for entity_id in optional_entities:
+            if entity_id in tbs.variables:
+                entity_rel[entity_id] = simulation.calculate(
+                    entity_id, map_to="person"
+                ).values
+
+        return entity_rel
+
     def _filter_simulation_by_household_variable(
         self,
         simulation: CountryMicrosimulation,
@@ -398,8 +433,9 @@ class Simulation:
     ) -> CountrySimulation:
         """Filter a simulation to only include households where a variable matches a value.
 
-        Uses household-level filtering to preserve household integrity - all persons
-        in matching households are kept together.
+        Uses the entity relationship approach: builds an explicit map of all
+        entity relationships, filters at the household level, and keeps all
+        persons in matching households to preserve entity integrity.
 
         Args:
             simulation: The microsimulation to filter.
@@ -416,7 +452,6 @@ class Simulation:
         Raises:
             ValueError: If the variable is not a household-level variable.
         """
-        # Validate that the variable is household-level
         tbs = simulation.tax_benefit_system
         if variable_name not in tbs.variables:
             raise ValueError(f"Variable '{variable_name}' not found in tax-benefit system")
@@ -429,28 +464,28 @@ class Simulation:
                 f"used for filtering to preserve household integrity."
             )
 
-        df = simulation.to_input_dataframe()
+        # Build entity relationships
+        entity_rel = self._build_entity_relationships(simulation)
 
-        # Find the household_id column
-        hh_id_cols = [c for c in df.columns if c.startswith("household_id__")]
-        if not hh_id_cols:
-            raise ValueError("Could not find household_id column in dataframe")
-        hh_id_col = hh_id_cols[0]
+        # Get household-level variable values
+        hh_values = simulation.calculate(variable_name).values
+        hh_ids = simulation.calculate("household_id").values
 
-        # Get variable values at person level (since df is person-level)
-        values = simulation.calculate(variable_name, map_to="person").values
-
-        # Create mask, handling potential bytes encoding for string values
+        # Create mask for matching households, handling bytes encoding
         if isinstance(variable_value, str):
-            mask = (values == variable_value) | (values == variable_value.encode())
+            hh_mask = (hh_values == variable_value) | (hh_values == variable_value.encode())
         else:
-            mask = values == variable_value
+            hh_mask = hh_values == variable_value
 
-        # Get household IDs where any person matches
-        matching_hh_ids = df.loc[mask, hh_id_col].unique()
+        matching_hh_ids = set(hh_ids[hh_mask])
 
-        # Keep ALL persons in matching households
-        subset_df = df[df[hh_id_col].isin(matching_hh_ids)]
+        # Filter entity_rel to persons in matching households
+        person_mask = entity_rel["household_id"].isin(matching_hh_ids)
+        filtered_entity_rel = entity_rel[person_mask]
+
+        # Filter the input DataFrame using the filtered person indices
+        df = simulation.to_input_dataframe()
+        subset_df = df.iloc[filtered_entity_rel.index]
 
         return simulation_type(dataset=subset_df, reform=reform)
 
