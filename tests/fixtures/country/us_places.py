@@ -1,9 +1,15 @@
-"""Test fixtures for US place-level filtering tests."""
+"""Test fixtures for US place-level filtering tests.
+
+These fixtures support testing the entity_rel filtering approach which:
+1. Builds explicit entity relationships (person -> household, tax_unit, etc.)
+2. Filters at household level to preserve entity integrity
+3. Creates new simulations from filtered DataFrames
+"""
 
 import pytest
 import numpy as np
 import pandas as pd
-from unittest.mock import Mock
+from unittest.mock import Mock, MagicMock
 
 # =============================================================================
 # Place FIPS Constants
@@ -123,34 +129,129 @@ MINI_DATASET_BYTES_PATERSON_IDS = [0, 1]
 # =============================================================================
 
 
+def create_mock_tax_benefit_system(
+    household_variables: list[str] | None = None,
+) -> Mock:
+    """Create a mock tax benefit system with variable entity information.
+
+    Args:
+        household_variables: List of variable names that are household-level.
+            Defaults to ["place_fips"].
+
+    Returns:
+        Mock TaxBenefitSystem with variables dict containing entity info.
+    """
+    if household_variables is None:
+        household_variables = ["place_fips"]
+
+    mock_tbs = Mock()
+    mock_tbs.variables = {}
+
+    for var_name in household_variables:
+        mock_var = Mock()
+        mock_var.entity = Mock()
+        mock_var.entity.key = "household"
+        mock_tbs.variables[var_name] = mock_var
+
+    # Add standard entity ID variables
+    for entity_id in [
+        "person_id",
+        "household_id",
+        "tax_unit_id",
+        "spm_unit_id",
+        "family_id",
+        "marital_unit_id",
+    ]:
+        mock_var = Mock()
+        mock_var.entity = Mock()
+        # Entity IDs belong to their respective entities
+        entity_name = entity_id.replace("_id", "")
+        mock_var.entity.key = (
+            entity_name if entity_name != "person" else "person"
+        )
+        mock_tbs.variables[entity_id] = mock_var
+
+    return mock_tbs
+
+
 def create_mock_simulation_with_place_fips(
     place_fips_values: list[str],
     household_ids: list[int] | None = None,
+    persons_per_household: int = 1,
 ) -> Mock:
-    """Create a mock simulation with place_fips data.
+    """Create a mock simulation with place_fips data for entity_rel filtering.
+
+    Supports the entity_rel approach by mocking:
+    - calculate() with variable-specific return values
+    - tax_benefit_system.variables for entity validation
+    - to_input_dataframe() returning person-level DataFrame
 
     Args:
         place_fips_values: List of place FIPS codes for each household.
         household_ids: Optional list of household IDs.
+        persons_per_household: Number of persons per household (default 1).
 
     Returns:
-        Mock simulation object with calculate() and to_input_dataframe() configured.
+        Mock simulation object configured for entity_rel filtering.
     """
     if household_ids is None:
         household_ids = list(range(len(place_fips_values)))
 
+    num_households = len(place_fips_values)
+    num_persons = num_households * persons_per_household
+
+    # Create person-level data by repeating household data
+    person_ids = list(range(num_persons))
+    person_household_ids = []
+    person_place_fips = []
+    for i, (hh_id, place) in enumerate(zip(household_ids, place_fips_values)):
+        for _ in range(persons_per_household):
+            person_household_ids.append(hh_id)
+            person_place_fips.append(place)
+
     mock_sim = Mock()
 
-    # Mock calculate to return place_fips values
-    mock_calculate_result = Mock()
-    mock_calculate_result.values = np.array(place_fips_values)
-    mock_sim.calculate.return_value = mock_calculate_result
+    # Mock tax_benefit_system
+    mock_sim.tax_benefit_system = create_mock_tax_benefit_system()
 
-    # Mock to_input_dataframe to return a DataFrame
+    # Mock calculate to return different values based on variable and map_to
+    def mock_calculate(variable_name, map_to=None, period=None):
+        result = Mock()
+        if variable_name == "place_fips":
+            if map_to == "person":
+                result.values = np.array(person_place_fips)
+            else:
+                result.values = np.array(place_fips_values)
+        elif variable_name == "person_id":
+            result.values = np.array(person_ids)
+        elif variable_name == "household_id":
+            if map_to == "person":
+                result.values = np.array(person_household_ids)
+            else:
+                result.values = np.array(household_ids)
+        elif variable_name in [
+            "tax_unit_id",
+            "spm_unit_id",
+            "family_id",
+            "marital_unit_id",
+        ]:
+            # For simplicity, use household_id as proxy for other entity IDs
+            if map_to == "person":
+                result.values = np.array(person_household_ids)
+            else:
+                result.values = np.array(household_ids)
+        else:
+            result.values = np.array([])
+        return result
+
+    mock_sim.calculate = mock_calculate
+
+    # Mock to_input_dataframe to return person-level DataFrame
     df = pd.DataFrame(
         {
-            "household_id": household_ids,
-            "place_fips": place_fips_values,
+            "person_id__2024": person_ids,
+            "household_id__2024": person_household_ids,
+            "place_fips__2024": person_place_fips,
         }
     )
     mock_sim.to_input_dataframe.return_value = df
@@ -161,29 +262,70 @@ def create_mock_simulation_with_place_fips(
 def create_mock_simulation_with_bytes_place_fips(
     place_fips_values: list[bytes],
     household_ids: list[int] | None = None,
+    persons_per_household: int = 1,
 ) -> Mock:
     """Create a mock simulation with bytes place_fips data (as from HDF5).
 
     Args:
         place_fips_values: List of place FIPS codes as bytes.
         household_ids: Optional list of household IDs.
+        persons_per_household: Number of persons per household (default 1).
 
     Returns:
-        Mock simulation object with calculate() and to_input_dataframe() configured.
+        Mock simulation object configured for entity_rel filtering.
     """
     if household_ids is None:
         household_ids = list(range(len(place_fips_values)))
 
-    mock_sim = Mock()
+    num_households = len(place_fips_values)
+    num_persons = num_households * persons_per_household
 
-    mock_calculate_result = Mock()
-    mock_calculate_result.values = np.array(place_fips_values)
-    mock_sim.calculate.return_value = mock_calculate_result
+    person_ids = list(range(num_persons))
+    person_household_ids = []
+    person_place_fips = []
+    for i, (hh_id, place) in enumerate(zip(household_ids, place_fips_values)):
+        for _ in range(persons_per_household):
+            person_household_ids.append(hh_id)
+            person_place_fips.append(place)
+
+    mock_sim = Mock()
+    mock_sim.tax_benefit_system = create_mock_tax_benefit_system()
+
+    def mock_calculate(variable_name, map_to=None, period=None):
+        result = Mock()
+        if variable_name == "place_fips":
+            if map_to == "person":
+                result.values = np.array(person_place_fips)
+            else:
+                result.values = np.array(place_fips_values)
+        elif variable_name == "person_id":
+            result.values = np.array(person_ids)
+        elif variable_name == "household_id":
+            if map_to == "person":
+                result.values = np.array(person_household_ids)
+            else:
+                result.values = np.array(household_ids)
+        elif variable_name in [
+            "tax_unit_id",
+            "spm_unit_id",
+            "family_id",
+            "marital_unit_id",
+        ]:
+            if map_to == "person":
+                result.values = np.array(person_household_ids)
+            else:
+                result.values = np.array(household_ids)
+        else:
+            result.values = np.array([])
+        return result
+
+    mock_sim.calculate = mock_calculate
 
     df = pd.DataFrame(
         {
-            "household_id": household_ids,
-            "place_fips": place_fips_values,
+            "person_id__2024": person_ids,
+            "household_id__2024": person_household_ids,
+            "place_fips__2024": person_place_fips,
         }
     )
     mock_sim.to_input_dataframe.return_value = df
