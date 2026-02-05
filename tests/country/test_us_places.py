@@ -1,7 +1,14 @@
-"""Tests for US place-level (city) filtering functionality."""
+"""Tests for US place-level (city) filtering functionality.
+
+Tests the entity_rel filtering approach which:
+1. Builds explicit entity relationships (person -> household, tax_unit, etc.)
+2. Filters at household level to preserve entity integrity
+3. Creates new simulations from filtered DataFrames
+"""
 
 import pytest
 import pandas as pd
+import numpy as np
 from unittest.mock import Mock, patch
 
 from tests.fixtures.country.us_places import (
@@ -42,11 +49,50 @@ from tests.fixtures.country.us_places import (
     create_mock_simulation_with_bytes_place_fips,
     create_mock_simulation_type,
     create_simulation_instance,
+    create_mock_tax_benefit_system,
 )
 
 
+class TestBuildEntityRelationships:
+    """Tests for the _build_entity_relationships method."""
+
+    def test__given__simulation__then__returns_dataframe_with_person_and_household_ids(
+        self,
+    ):
+        # Given
+        mock_sim = create_mock_simulation_with_place_fips(
+            MIXED_PLACES_WITH_PATERSON, persons_per_household=2
+        )
+
+        # When
+        sim_instance = create_simulation_instance()
+        entity_rel = sim_instance._build_entity_relationships(mock_sim)
+
+        # Then
+        assert "person_id" in entity_rel.columns
+        assert "household_id" in entity_rel.columns
+        # 5 households * 2 persons each = 10 persons
+        assert len(entity_rel) == 10
+
+    def test__given__simulation__then__includes_optional_entity_ids_when_available(
+        self,
+    ):
+        # Given
+        mock_sim = create_mock_simulation_with_place_fips(
+            MIXED_PLACES_WITH_PATERSON
+        )
+
+        # When
+        sim_instance = create_simulation_instance()
+        entity_rel = sim_instance._build_entity_relationships(mock_sim)
+
+        # Then: Optional US entity IDs should be present
+        assert "tax_unit_id" in entity_rel.columns
+        assert "spm_unit_id" in entity_rel.columns
+
+
 class TestFilterUsSimulationByPlace:
-    """Tests for the _filter_us_simulation_by_place method."""
+    """Tests for the _filter_us_simulation_by_place method using entity_rel approach."""
 
     def test__given__households_in_target_place__then__filters_to_matching_households(
         self,
@@ -70,8 +116,10 @@ class TestFilterUsSimulationByPlace:
         call_args = mock_simulation_type.call_args
         filtered_df = call_args.kwargs["dataset"]
 
+        # With entity_rel, DataFrame is person-level
         assert len(filtered_df) == EXPECTED_PATERSON_COUNT_IN_MIXED
-        assert all(filtered_df["place_fips"] == NJ_PATERSON_FIPS)
+        # Verify all records belong to Paterson households
+        assert all(filtered_df["place_fips__2024"] == NJ_PATERSON_FIPS)
 
     def test__given__no_households_in_target_place__then__returns_empty_dataset(
         self,
@@ -187,7 +235,109 @@ class TestFilterUsSimulationByPlace:
         filtered_df = call_args.kwargs["dataset"]
 
         assert len(filtered_df) == EXPECTED_NEWARK_COUNT_IN_MULTIPLE_NJ
-        assert all(filtered_df["place_fips"] == NJ_NEWARK_FIPS)
+        assert all(filtered_df["place_fips__2024"] == NJ_NEWARK_FIPS)
+
+    def test__given__multi_person_households__then__preserves_all_persons(
+        self,
+    ):
+        # Given: 3 households with 2 persons each, only first household in Paterson
+        mock_sim = create_mock_simulation_with_place_fips(
+            [NJ_PATERSON_FIPS, NJ_NEWARK_FIPS, NJ_JERSEY_CITY_FIPS],
+            persons_per_household=2,
+        )
+        mock_simulation_type = create_mock_simulation_type()
+
+        # When
+        sim_instance = create_simulation_instance()
+        result = sim_instance._filter_us_simulation_by_place(
+            simulation=mock_sim,
+            simulation_type=mock_simulation_type,
+            region=NJ_PATERSON_REGION,
+            reform=None,
+        )
+
+        # Then: Should have 2 persons (both from the Paterson household)
+        call_args = mock_simulation_type.call_args
+        filtered_df = call_args.kwargs["dataset"]
+
+        assert len(filtered_df) == 2  # 1 household * 2 persons
+        # All persons should be from household 0
+        assert all(filtered_df["household_id__2024"] == 0)
+
+
+class TestFilterSimulationByHouseholdVariable:
+    """Tests for _filter_simulation_by_household_variable validation and behavior."""
+
+    def test__given__non_household_variable__then__raises_value_error(self):
+        # Given: A mock with a person-level variable
+        mock_sim = Mock()
+        mock_tbs = Mock()
+        mock_var = Mock()
+        mock_var.entity = Mock()
+        mock_var.entity.key = "person"  # Not household-level
+        mock_tbs.variables = {"age": mock_var}
+        mock_sim.tax_benefit_system = mock_tbs
+
+        mock_simulation_type = create_mock_simulation_type()
+
+        # When / Then
+        sim_instance = create_simulation_instance()
+        with pytest.raises(ValueError) as exc_info:
+            sim_instance._filter_simulation_by_household_variable(
+                simulation=mock_sim,
+                simulation_type=mock_simulation_type,
+                variable_name="age",
+                variable_value=30,
+                reform=None,
+            )
+
+        assert "person-level variable" in str(exc_info.value)
+        assert "household-level variable" in str(exc_info.value)
+
+    def test__given__nonexistent_variable__then__raises_value_error(self):
+        # Given
+        mock_sim = Mock()
+        mock_tbs = Mock()
+        mock_tbs.variables = {}  # Empty - no variables
+        mock_sim.tax_benefit_system = mock_tbs
+
+        mock_simulation_type = create_mock_simulation_type()
+
+        # When / Then
+        sim_instance = create_simulation_instance()
+        with pytest.raises(ValueError) as exc_info:
+            sim_instance._filter_simulation_by_household_variable(
+                simulation=mock_sim,
+                simulation_type=mock_simulation_type,
+                variable_name="nonexistent_var",
+                variable_value="test",
+                reform=None,
+            )
+
+        assert "not found" in str(exc_info.value)
+
+    def test__given__household_variable__then__filters_successfully(self):
+        # Given
+        mock_sim = create_mock_simulation_with_place_fips(
+            MIXED_PLACES_WITH_PATERSON
+        )
+        mock_simulation_type = create_mock_simulation_type()
+
+        # When
+        sim_instance = create_simulation_instance()
+        result = sim_instance._filter_simulation_by_household_variable(
+            simulation=mock_sim,
+            simulation_type=mock_simulation_type,
+            variable_name="place_fips",
+            variable_value=NJ_PATERSON_FIPS,
+            reform=None,
+        )
+
+        # Then: Should create simulation with filtered data
+        assert mock_simulation_type.called
+        call_args = mock_simulation_type.call_args
+        filtered_df = call_args.kwargs["dataset"]
+        assert len(filtered_df) == EXPECTED_PATERSON_COUNT_IN_MIXED
 
 
 class TestApplyUsRegionToSimulationWithPlace:
