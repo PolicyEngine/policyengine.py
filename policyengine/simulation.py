@@ -477,7 +477,9 @@ class Simulation:
         Returns:
             A DataFrame indexed by person with columns for each entity ID.
         """
-        entity_rel = pd.DataFrame({"person_id": simulation.calculate("person_id").values})
+        entity_rel = pd.DataFrame(
+            {"person_id": simulation.calculate("person_id").values}
+        )
 
         # Add household relationship (required for all countries)
         entity_rel["household_id"] = simulation.calculate(
@@ -486,7 +488,12 @@ class Simulation:
 
         # Add country-specific entity relationships
         tbs = simulation.tax_benefit_system
-        optional_entities = ["tax_unit_id", "spm_unit_id", "family_id", "marital_unit_id"]
+        optional_entities = [
+            "tax_unit_id",
+            "spm_unit_id",
+            "family_id",
+            "marital_unit_id",
+        ]
 
         for entity_id in optional_entities:
             if entity_id in tbs.variables:
@@ -525,7 +532,9 @@ class Simulation:
         Raises:
             ValueError: If the variable is not a household-level variable.
         """
-        validate_household_variable(simulation.tax_benefit_system, variable_name)
+        validate_household_variable(
+            simulation.tax_benefit_system, variable_name
+        )
 
         # Build entity relationships
         entity_rel = self._build_entity_relationships(simulation)
@@ -536,7 +545,9 @@ class Simulation:
 
         # Create mask for matching households, handling bytes encoding
         if isinstance(variable_value, str):
-            hh_mask = (hh_values == variable_value) | (hh_values == variable_value.encode())
+            hh_mask = (hh_values == variable_value) | (
+                hh_values == variable_value.encode()
+            )
         else:
             hh_mask = hh_values == variable_value
 

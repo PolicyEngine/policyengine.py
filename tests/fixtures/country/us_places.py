@@ -129,7 +129,9 @@ MINI_DATASET_BYTES_PATERSON_IDS = [0, 1]
 # =============================================================================
 
 
-def create_mock_tax_benefit_system(household_variables: list[str] | None = None) -> Mock:
+def create_mock_tax_benefit_system(
+    household_variables: list[str] | None = None,
+) -> Mock:
     """Create a mock tax benefit system with variable entity information.
 
     Args:
@@ -152,12 +154,21 @@ def create_mock_tax_benefit_system(household_variables: list[str] | None = None)
         mock_tbs.variables[var_name] = mock_var
 
     # Add standard entity ID variables
-    for entity_id in ["person_id", "household_id", "tax_unit_id", "spm_unit_id", "family_id", "marital_unit_id"]:
+    for entity_id in [
+        "person_id",
+        "household_id",
+        "tax_unit_id",
+        "spm_unit_id",
+        "family_id",
+        "marital_unit_id",
+    ]:
         mock_var = Mock()
         mock_var.entity = Mock()
         # Entity IDs belong to their respective entities
         entity_name = entity_id.replace("_id", "")
-        mock_var.entity.key = entity_name if entity_name != "person" else "person"
+        mock_var.entity.key = (
+            entity_name if entity_name != "person" else "person"
+        )
         mock_tbs.variables[entity_id] = mock_var
 
     return mock_tbs
@@ -218,7 +229,12 @@ def create_mock_simulation_with_place_fips(
                 result.values = np.array(person_household_ids)
             else:
                 result.values = np.array(household_ids)
-        elif variable_name in ["tax_unit_id", "spm_unit_id", "family_id", "marital_unit_id"]:
+        elif variable_name in [
+            "tax_unit_id",
+            "spm_unit_id",
+            "family_id",
+            "marital_unit_id",
+        ]:
             # For simplicity, use household_id as proxy for other entity IDs
             if map_to == "person":
                 result.values = np.array(person_household_ids)
@@ -231,11 +247,13 @@ def create_mock_simulation_with_place_fips(
     mock_sim.calculate = mock_calculate
 
     # Mock to_input_dataframe to return person-level DataFrame
-    df = pd.DataFrame({
-        "person_id__2024": person_ids,
-        "household_id__2024": person_household_ids,
-        "place_fips__2024": person_place_fips,
-    })
+    df = pd.DataFrame(
+        {
+            "person_id__2024": person_ids,
+            "household_id__2024": person_household_ids,
+            "place_fips__2024": person_place_fips,
+        }
+    )
     mock_sim.to_input_dataframe.return_value = df
 
     return mock_sim
@@ -287,7 +305,12 @@ def create_mock_simulation_with_bytes_place_fips(
                 result.values = np.array(person_household_ids)
             else:
                 result.values = np.array(household_ids)
-        elif variable_name in ["tax_unit_id", "spm_unit_id", "family_id", "marital_unit_id"]:
+        elif variable_name in [
+            "tax_unit_id",
+            "spm_unit_id",
+            "family_id",
+            "marital_unit_id",
+        ]:
             if map_to == "person":
                 result.values = np.array(person_household_ids)
             else:
@@ -298,11 +321,13 @@ def create_mock_simulation_with_bytes_place_fips(
 
     mock_sim.calculate = mock_calculate
 
-    df = pd.DataFrame({
-        "person_id__2024": person_ids,
-        "household_id__2024": person_household_ids,
-        "place_fips__2024": person_place_fips,
-    })
+    df = pd.DataFrame(
+        {
+            "person_id__2024": person_ids,
+            "household_id__2024": person_household_ids,
+            "place_fips__2024": person_place_fips,
+        }
+    )
     mock_sim.to_input_dataframe.return_value = df
 
     return mock_sim
