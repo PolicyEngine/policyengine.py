@@ -185,3 +185,16 @@
     removed:
     - Deprecated "city/nyc" region format (use "place/NY-51000" instead).
   date: 2026-02-04 00:21:29
+- bump: minor
+  changes:
+    added:
+    - Entity relationship approach for simulation filtering that preserves household
+      integrity
+    - Reusable variable validation functions (`get_variable`, `validate_variable_entity`,
+      `validate_household_variable`)
+    changed:
+    - Refactored `_filter_simulation_by_household_variable` to use explicit entity
+      relationship mapping
+    - Place-level filtering now builds entity_rel DataFrame for cleaner filtering
+      logic
+  date: 2026-02-05 19:34:09

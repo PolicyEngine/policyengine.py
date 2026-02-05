@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-02-05 19:34:09
+
+### Added
+
+- Entity relationship approach for simulation filtering that preserves household integrity
+- Reusable variable validation functions (`get_variable`, `validate_variable_entity`, `validate_household_variable`)
+
+### Changed
+
+- Refactored `_filter_simulation_by_household_variable` to use explicit entity relationship mapping
+- Place-level filtering now builds entity_rel DataFrame for cleaner filtering logic
+
 ## [0.11.0] - 2026-02-04 00:21:29
 
 ### Added
@@ -222,6 +234,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[0.12.0]: https://github.com/PolicyEngine/policyengine.py/compare/0.11.0...0.12.0
 [0.11.0]: https://github.com/PolicyEngine/policyengine.py/compare/0.10.1...0.11.0
 [0.10.1]: https://github.com/PolicyEngine/policyengine.py/compare/0.10.0...0.10.1
 [0.10.0]: https://github.com/PolicyEngine/policyengine.py/compare/0.9.0...0.10.0
