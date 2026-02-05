@@ -388,6 +388,72 @@ class Simulation:
             )
         return simulation
 
+    def _filter_simulation_by_household_variable(
+        self,
+        simulation: CountryMicrosimulation,
+        simulation_type: type,
+        variable_name: str,
+        variable_value: Any,
+        reform: ReformType | None,
+    ) -> CountrySimulation:
+        """Filter a simulation to only include households where a variable matches a value.
+
+        Uses household-level filtering to preserve household integrity - all persons
+        in matching households are kept together.
+
+        Args:
+            simulation: The microsimulation to filter.
+            simulation_type: The type of simulation to create (e.g., Microsimulation).
+            variable_name: The name of the variable to filter on. Must be a
+                household-level variable.
+            variable_value: The value to match. For string variables that may be
+                stored as bytes in HDF5, both str and bytes versions are checked.
+            reform: Optional reform to apply to the filtered simulation.
+
+        Returns:
+            A new simulation containing only households where the variable matches.
+
+        Raises:
+            ValueError: If the variable is not a household-level variable.
+        """
+        # Validate that the variable is household-level
+        tbs = simulation.tax_benefit_system
+        if variable_name not in tbs.variables:
+            raise ValueError(f"Variable '{variable_name}' not found in tax-benefit system")
+
+        variable = tbs.variables[variable_name]
+        if variable.entity.key != "household":
+            raise ValueError(
+                f"Variable '{variable_name}' is a {variable.entity.key}-level variable, "
+                f"not a household-level variable. Only household-level variables can be "
+                f"used for filtering to preserve household integrity."
+            )
+
+        df = simulation.to_input_dataframe()
+
+        # Find the household_id column
+        hh_id_cols = [c for c in df.columns if c.startswith("household_id__")]
+        if not hh_id_cols:
+            raise ValueError("Could not find household_id column in dataframe")
+        hh_id_col = hh_id_cols[0]
+
+        # Get variable values at person level (since df is person-level)
+        values = simulation.calculate(variable_name, map_to="person").values
+
+        # Create mask, handling potential bytes encoding for string values
+        if isinstance(variable_value, str):
+            mask = (values == variable_value) | (values == variable_value.encode())
+        else:
+            mask = values == variable_value
+
+        # Get household IDs where any person matches
+        matching_hh_ids = df.loc[mask, hh_id_col].unique()
+
+        # Keep ALL persons in matching households
+        subset_df = df[df[hh_id_col].isin(matching_hh_ids)]
+
+        return simulation_type(dataset=subset_df, reform=reform)
+
     def _filter_us_simulation_by_place(
         self,
         simulation: CountryMicrosimulation,
@@ -409,16 +475,14 @@ class Simulation:
         from policyengine.utils.data.datasets import parse_us_place_region
 
         _, place_fips_code = parse_us_place_region(region)
-        df = simulation.to_input_dataframe()
-        # Get place_fips at person level since to_input_dataframe() is person-level
-        person_place_fips = simulation.calculate(
-            "place_fips", map_to="person"
-        ).values
-        # place_fips may be stored as bytes in HDF5; handle both str and bytes
-        mask = (person_place_fips == place_fips_code) | (
-            person_place_fips == place_fips_code.encode()
+
+        return self._filter_simulation_by_household_variable(
+            simulation=simulation,
+            simulation_type=simulation_type,
+            variable_name="place_fips",
+            variable_value=place_fips_code,
+            reform=reform,
         )
-        return simulation_type(dataset=df[mask], reform=reform)
 
     def check_model_version(self) -> None:
         """
