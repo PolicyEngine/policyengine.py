@@ -126,6 +126,13 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
         self.id = f"{self.model.id}@{self.version}"
 
         for var_obj in system.variables.values():
+            # Serialize default_value for JSON compatibility
+            default_val = var_obj.default_value
+            if var_obj.value_type is Enum:
+                default_val = default_val.name
+            elif var_obj.value_type is datetime.date:
+                default_val = default_val.isoformat()
+
             variable = Variable(
                 id=self.id + "-" + var_obj.name,
                 name=var_obj.name,
@@ -135,6 +142,8 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                 data_type=var_obj.value_type
                 if var_obj.value_type is not Enum
                 else str,
+                default_value=default_val,
+                value_type=var_obj.value_type,
             )
             if (
                 hasattr(var_obj, "possible_values")
