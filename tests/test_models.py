@@ -1,4 +1,4 @@
-"""Tests for UK and US tax-benefit model versions."""
+"""Tests for UK and US tax-benefit model versions and core models."""
 
 import re
 
@@ -146,3 +146,39 @@ class TestUSModel:
                     f"Label '{p.label}' doesn't match expected bracket format"
                 )
                 break
+
+
+class TestVariableDefaultValue:
+    """Tests for Variable default_value and value_type fields."""
+
+    def test_us_age_variable_has_default_value_40(self):
+        """US age variable should have default_value of 40."""
+        age_var = next((v for v in us_latest.variables if v.name == "age"), None)
+        assert age_var is not None, "age variable not found in US model"
+        assert age_var.default_value == 40, (
+            f"Expected age default_value to be 40, got {age_var.default_value}"
+        )
+
+    def test_us_enum_variable_has_string_default_value(self):
+        """Enum variables should have string default_value (not enum object)."""
+        # age_group is an enum with default WORKING_AGE
+        age_group_var = next(
+            (v for v in us_latest.variables if v.name == "age_group"), None
+        )
+        assert age_group_var is not None, "age_group variable not found in US model"
+        assert age_group_var.default_value == "WORKING_AGE", (
+            f"Expected age_group default_value to be 'WORKING_AGE', "
+            f"got {age_group_var.default_value}"
+        )
+
+    def test_us_variables_have_value_type(self):
+        """US variables should have value_type set."""
+        age_var = next((v for v in us_latest.variables if v.name == "age"), None)
+        assert age_var is not None, "age variable not found in US model"
+        assert age_var.value_type is not None, "age variable should have value_type"
+
+    def test_uk_age_variable_has_default_value(self):
+        """UK age variable should have default_value set."""
+        age_var = next((v for v in uk_latest.variables if v.name == "age"), None)
+        assert age_var is not None, "age variable not found in UK model"
+        assert age_var.default_value is not None, "UK age should have default_value"
