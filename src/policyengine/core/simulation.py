@@ -21,6 +21,16 @@ class Simulation(BaseModel):
     dynamic: Dynamic | None = None
     dataset: Dataset = None
 
+    # Regional filtering parameters
+    filter_field: str | None = Field(
+        default=None,
+        description="Household-level variable to filter dataset by (e.g., 'place_fips', 'country')",
+    )
+    filter_value: str | None = Field(
+        default=None,
+        description="Value to match when filtering (e.g., '44000', 'ENGLAND')",
+    )
+
     tax_benefit_model_version: TaxBenefitModelVersion = None
     output_dataset: Dataset | None = None
 
