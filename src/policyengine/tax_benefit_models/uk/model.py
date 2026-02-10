@@ -123,6 +123,11 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
         from policyengine_core.enums import Enum
         from policyengine_uk.system import system
 
+        # Attach region registry
+        from policyengine.countries.uk.regions import uk_region_registry
+
+        self.region_registry = uk_region_registry
+
         self.id = f"{self.model.id}@{self.version}"
 
         for var_obj in system.variables.values():

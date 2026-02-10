@@ -9,6 +9,21 @@ from policyengine.tax_benefit_models.us import us_latest
 class TestUKModel:
     """Tests for PolicyEngine UK model."""
 
+    def test_has_region_registry(self):
+        """UK model should have a region registry attached."""
+        assert uk_latest.region_registry is not None
+        assert uk_latest.region_registry.country_id == "uk"
+
+    def test_can_get_region_by_code(self):
+        """UK model should be able to look up regions by code."""
+        uk = uk_latest.get_region("uk")
+        assert uk is not None
+        assert uk.label == "United Kingdom"
+
+        england = uk_latest.get_region("country/england")
+        assert england is not None
+        assert england.label == "England"
+
     def test_has_hundreds_of_parameters(self):
         """UK model should have hundreds of parameters."""
         assert len(uk_latest.parameters) >= 100
@@ -64,6 +79,21 @@ class TestUKModel:
 
 class TestUSModel:
     """Tests for PolicyEngine US model."""
+
+    def test_has_region_registry(self):
+        """US model should have a region registry attached."""
+        assert us_latest.region_registry is not None
+        assert us_latest.region_registry.country_id == "us"
+
+    def test_can_get_region_by_code(self):
+        """US model should be able to look up regions by code."""
+        us = us_latest.get_region("us")
+        assert us is not None
+        assert us.label == "United States"
+
+        ca = us_latest.get_region("state/ca")
+        assert ca is not None
+        assert ca.label == "California"
 
     def test_has_hundreds_of_parameters(self):
         """US model should have hundreds of parameters."""
