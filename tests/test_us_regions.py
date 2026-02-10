@@ -1,7 +1,10 @@
 """Tests for US region definitions."""
 
-from policyengine.countries.us.data import AT_LARGE_STATES, DISTRICT_COUNTS, US_PLACES, US_STATES
-from policyengine.countries.us.regions import US_DATA_BUCKET, us_region_registry
+from policyengine.countries.us.data import DISTRICT_COUNTS, US_STATES
+from policyengine.countries.us.regions import (
+    US_DATA_BUCKET,
+    us_region_registry,
+)
 
 
 class TestUSStates:
@@ -46,7 +49,9 @@ class TestUSDistrictCounts:
         """
         # When/Then
         for state in US_STATES:
-            assert state in DISTRICT_COUNTS, f"Missing district count for {state}"
+            assert state in DISTRICT_COUNTS, (
+                f"Missing district count for {state}"
+            )
 
     def test__given_district_counts__then_total_is_436(self):
         """Given: DISTRICT_COUNTS dictionary
@@ -101,7 +106,9 @@ class TestUSRegionRegistry:
         assert national.code == "us"
         assert national.label == "United States"
         assert national.region_type == "national"
-        assert national.dataset_path == f"{US_DATA_BUCKET}/enhanced_cps_2024.h5"
+        assert (
+            national.dataset_path == f"{US_DATA_BUCKET}/enhanced_cps_2024.h5"
+        )
 
     def test__given_us_registry__then_has_51_states(self):
         """Given: US region registry
@@ -171,7 +178,10 @@ class TestUSRegionRegistry:
 
         # Then
         assert dc_al is not None
-        assert dc_al.label == "District of Columbia's at-large congressional district"
+        assert (
+            dc_al.label
+            == "District of Columbia's at-large congressional district"
+        )
         assert dc_al.parent_code == "state/dc"
 
     def test__given_us_registry__then_has_places(self):
@@ -204,14 +214,18 @@ class TestUSRegionRegistry:
         assert la.state_code == "CA"
         assert la.dataset_path is None  # No dedicated dataset
 
-    def test__given_california__then_children_include_districts_and_places(self):
+    def test__given_california__then_children_include_districts_and_places(
+        self,
+    ):
         """Given: California state region
         When: Getting its children
         Then: Includes all 52 districts and 10+ places
         """
         # When
         ca_children = us_region_registry.get_children("state/ca")
-        district_children = [c for c in ca_children if c.region_type == "congressional_district"]
+        district_children = [
+            c for c in ca_children if c.region_type == "congressional_district"
+        ]
         place_children = [c for c in ca_children if c.region_type == "place"]
 
         # Then

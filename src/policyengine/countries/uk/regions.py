@@ -11,13 +11,12 @@ data filtering. They modify household_weight based on pre-computed weights
 from H5 files stored in GCS.
 """
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from policyengine.core.region import Region, RegionRegistry
 
 if TYPE_CHECKING:
-    import pandas as pd
+    pass
 
 UK_DATA_BUCKET = "gs://policyengine-uk-data-private"
 
@@ -53,7 +52,10 @@ def _load_constituencies_from_csv() -> list[dict]:
         import pandas as pd
 
         df = pd.read_csv(csv_path)
-        return [{"code": row["code"], "name": row["name"]} for _, row in df.iterrows()]
+        return [
+            {"code": row["code"], "name": row["name"]}
+            for _, row in df.iterrows()
+        ]
     except Exception:
         # If download fails, return empty list
         return []
@@ -82,7 +84,10 @@ def _load_local_authorities_from_csv() -> list[dict]:
         import pandas as pd
 
         df = pd.read_csv(csv_path)
-        return [{"code": row["code"], "name": row["name"]} for _, row in df.iterrows()]
+        return [
+            {"code": row["code"], "name": row["name"]}
+            for _, row in df.iterrows()
+        ]
     except Exception:
         # If download fails, return empty list
         return []

@@ -12,7 +12,9 @@ from pydantic import BaseModel, Field, PrivateAttr
 
 # Region type literals for US and UK
 USRegionType = Literal["national", "state", "congressional_district", "place"]
-UKRegionType = Literal["national", "country", "constituency", "local_authority"]
+UKRegionType = Literal[
+    "national", "country", "constituency", "local_authority"
+]
 RegionType = USRegionType | UKRegionType
 
 
@@ -38,7 +40,9 @@ class Region(BaseModel):
         ...,
         description="Unique region code with type prefix (e.g., 'state/ca', 'place/NJ-57000')",
     )
-    label: str = Field(..., description="Human-readable label (e.g., 'California')")
+    label: str = Field(
+        ..., description="Human-readable label (e.g., 'California')"
+    )
     region_type: RegionType = Field(
         ..., description="Type of region (e.g., 'state', 'place')"
     )
@@ -74,7 +78,8 @@ class Region(BaseModel):
         default=None, description="Two-letter state code (e.g., 'CA', 'NJ')"
     )
     state_name: str | None = Field(
-        default=None, description="Full state name (e.g., 'California', 'New Jersey')"
+        default=None,
+        description="Full state name (e.g., 'California', 'New Jersey')",
     )
 
     def __hash__(self) -> int:
@@ -95,7 +100,9 @@ class RegionRegistry(BaseModel):
     Indices are rebuilt automatically after initialization.
     """
 
-    country_id: str = Field(..., description="Country identifier (e.g., 'us', 'uk')")
+    country_id: str = Field(
+        ..., description="Country identifier (e.g., 'us', 'uk')"
+    )
     regions: list[Region] = Field(default_factory=list)
 
     # Private indexed lookups (excluded from serialization)
@@ -177,7 +184,9 @@ class RegionRegistry(BaseModel):
             List of regions with dataset_path set and requires_filter False
         """
         return [
-            r for r in self.regions if r.dataset_path is not None and not r.requires_filter
+            r
+            for r in self.regions
+            if r.dataset_path is not None and not r.requires_filter
         ]
 
     def get_filter_regions(self) -> list[Region]:

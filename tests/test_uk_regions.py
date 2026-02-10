@@ -66,7 +66,10 @@ class TestUKRegionRegistry:
         assert national.code == "uk"
         assert national.label == "United Kingdom"
         assert national.region_type == "national"
-        assert national.dataset_path == f"{UK_DATA_BUCKET}/enhanced_frs_2023_24.h5"
+        assert (
+            national.dataset_path
+            == f"{UK_DATA_BUCKET}/enhanced_frs_2023_24.h5"
+        )
         assert not national.requires_filter
 
     def test__given_uk_registry__then_has_four_country_regions(self):
@@ -188,7 +191,9 @@ class TestUKRegionRegistry:
 class TestUKRegionRegistryBuilder:
     """Tests for UK registry builder with optional regions."""
 
-    def test__given_builder_without_optional_regions__then_returns_5_regions(self):
+    def test__given_builder_without_optional_regions__then_returns_5_regions(
+        self,
+    ):
         """Given: build_uk_region_registry with optional regions disabled
         When: Building registry
         Then: Returns 5 base regions only

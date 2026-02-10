@@ -81,9 +81,7 @@ def _generate_breakdown_label(param_node, system, breakdown_parent=None):
     breakdown_labels = breakdown_parent.metadata.get("breakdown_labels", [])
 
     # Collect dimension values from breakdown parent to param_node
-    dimension_values = _collect_dimension_values(
-        param_node, breakdown_parent
-    )
+    dimension_values = _collect_dimension_values(param_node, breakdown_parent)
 
     if not dimension_values:
         return None
@@ -146,7 +144,12 @@ def _format_dimension_value(value, var_name, dim_label, system):
         str: Formatted dimension value
     """
     # First, try to get enum display value
-    if var_name and isinstance(var_name, str) and not var_name.startswith("range(") and not var_name.startswith("list("):
+    if (
+        var_name
+        and isinstance(var_name, str)
+        and not var_name.startswith("range(")
+        and not var_name.startswith("list(")
+    ):
         var = system.variables.get(var_name)
         if var and hasattr(var, "possible_values") and var.possible_values:
             try:
