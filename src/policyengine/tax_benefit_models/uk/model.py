@@ -182,6 +182,143 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                 )
                 self.add_parameter(parameter)
 
+    def _build_entity_relationships(
+        self, dataset: PolicyEngineUKDataset
+    ) -> pd.DataFrame:
+        """Build a DataFrame mapping each person to their containing entities.
+
+        Creates an explicit relationship map between persons and all entity
+        types (benunit, household). This enables filtering at any entity
+        level while preserving the integrity of all related entities.
+
+        Args:
+            dataset: The dataset to extract relationships from.
+
+        Returns:
+            A DataFrame indexed by person with columns for each entity ID.
+        """
+        person_data = pd.DataFrame(dataset.data.person)
+
+        # Determine column naming convention
+        benunit_id_col = (
+            "person_benunit_id"
+            if "person_benunit_id" in person_data.columns
+            else "benunit_id"
+        )
+        household_id_col = (
+            "person_household_id"
+            if "person_household_id" in person_data.columns
+            else "household_id"
+        )
+
+        entity_rel = pd.DataFrame(
+            {
+                "person_id": person_data["person_id"].values,
+                "benunit_id": person_data[benunit_id_col].values,
+                "household_id": person_data[household_id_col].values,
+            }
+        )
+
+        return entity_rel
+
+    def _filter_dataset_by_household_variable(
+        self,
+        dataset: PolicyEngineUKDataset,
+        variable_name: str,
+        variable_value: str,
+    ) -> PolicyEngineUKDataset:
+        """Filter a dataset to only include households where a variable matches.
+
+        Uses the entity relationship approach: builds an explicit map of all
+        entity relationships, filters at the household level, and keeps all
+        persons in matching households to preserve entity integrity.
+
+        Args:
+            dataset: The dataset to filter.
+            variable_name: The name of the household-level variable to filter on.
+            variable_value: The value to match. Handles both str and bytes encoding.
+
+        Returns:
+            A new filtered dataset containing only matching households.
+        """
+        # Build entity relationships
+        entity_rel = self._build_entity_relationships(dataset)
+
+        # Get household-level variable values
+        household_data = pd.DataFrame(dataset.data.household)
+
+        if variable_name not in household_data.columns:
+            raise ValueError(
+                f"Variable '{variable_name}' not found in household data. "
+                f"Available columns: {list(household_data.columns)}"
+            )
+
+        hh_values = household_data[variable_name].values
+        hh_ids = household_data["household_id"].values
+
+        # Create mask for matching households, handling bytes encoding
+        if isinstance(variable_value, str):
+            hh_mask = (hh_values == variable_value) | (
+                hh_values == variable_value.encode()
+            )
+        else:
+            hh_mask = hh_values == variable_value
+
+        matching_hh_ids = set(hh_ids[hh_mask])
+
+        if len(matching_hh_ids) == 0:
+            raise ValueError(
+                f"No households found matching {variable_name}={variable_value}"
+            )
+
+        # Filter entity_rel to persons in matching households
+        person_mask = entity_rel["household_id"].isin(matching_hh_ids)
+        filtered_entity_rel = entity_rel[person_mask]
+
+        # Get the filtered entity IDs
+        filtered_person_ids = set(filtered_entity_rel["person_id"])
+        filtered_household_ids = matching_hh_ids
+        filtered_benunit_ids = set(filtered_entity_rel["benunit_id"])
+
+        # Filter each entity DataFrame
+        person_df = pd.DataFrame(dataset.data.person)
+        household_df = pd.DataFrame(dataset.data.household)
+        benunit_df = pd.DataFrame(dataset.data.benunit)
+
+        filtered_person = person_df[
+            person_df["person_id"].isin(filtered_person_ids)
+        ]
+        filtered_household = household_df[
+            household_df["household_id"].isin(filtered_household_ids)
+        ]
+        filtered_benunit = benunit_df[
+            benunit_df["benunit_id"].isin(filtered_benunit_ids)
+        ]
+
+        # Create filtered dataset
+        return PolicyEngineUKDataset(
+            id=dataset.id + f"_filtered_{variable_name}_{variable_value}",
+            name=dataset.name,
+            description=f"{dataset.description} (filtered: {variable_name}={variable_value})",
+            filepath=dataset.filepath,
+            year=dataset.year,
+            is_output_dataset=dataset.is_output_dataset,
+            data=UKYearData(
+                person=MicroDataFrame(
+                    filtered_person.reset_index(drop=True),
+                    weights="person_weight",
+                ),
+                benunit=MicroDataFrame(
+                    filtered_benunit.reset_index(drop=True),
+                    weights="benunit_weight",
+                ),
+                household=MicroDataFrame(
+                    filtered_household.reset_index(drop=True),
+                    weights="household_weight",
+                ),
+            ),
+        )
+
     def run(self, simulation: "Simulation") -> "Simulation":
         from policyengine_uk import Microsimulation
         from policyengine_uk.data import UKSingleYearDataset
@@ -194,6 +331,13 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
 
         dataset = simulation.dataset
         dataset.load()
+
+        # Apply regional filtering if specified
+        if simulation.filter_field and simulation.filter_value:
+            dataset = self._filter_dataset_by_household_variable(
+                dataset, simulation.filter_field, simulation.filter_value
+            )
+
         input_data = UKSingleYearDataset(
             person=dataset.data.person,
             benunit=dataset.data.benunit,
