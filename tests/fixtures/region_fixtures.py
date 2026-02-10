@@ -71,7 +71,9 @@ def create_sample_us_registry() -> RegionRegistry:
             create_national_region(),
             create_state_region("CA", "California"),
             create_state_region("NY", "New York"),
-            create_place_region("CA", "44000", "Los Angeles city", "California"),
+            create_place_region(
+                "CA", "44000", "Los Angeles city", "California"
+            ),
         ],
     )
 
@@ -84,7 +86,9 @@ STATE_CALIFORNIA = create_state_region("CA", "California")
 
 STATE_NEW_YORK = create_state_region("NY", "New York")
 
-PLACE_LOS_ANGELES = create_place_region("CA", "44000", "Los Angeles city", "California")
+PLACE_LOS_ANGELES = create_place_region(
+    "CA", "44000", "Los Angeles city", "California"
+)
 
 SIMPLE_REGION = Region(
     code="state/ca",

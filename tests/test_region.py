@@ -1,16 +1,10 @@
 """Tests for Region and RegionRegistry classes."""
 
-import pytest
-
 from policyengine.core.region import Region, RegionRegistry
-
 from tests.fixtures.region_fixtures import (
     FILTER_REGION,
     REGION_WITH_DATASET,
-    SIMPLE_REGION,
-    create_sample_us_registry,
     create_state_region,
-    sample_registry,
 )
 
 
@@ -68,9 +62,17 @@ class TestRegion:
         Then: They are equal regardless of other fields
         """
         # Given
-        region1 = Region(code="state/ca", label="California", region_type="state")
-        region2 = Region(code="state/ca", label="California (different)", region_type="state")
-        region3 = Region(code="state/ny", label="New York", region_type="state")
+        region1 = Region(
+            code="state/ca", label="California", region_type="state"
+        )
+        region2 = Region(
+            code="state/ca",
+            label="California (different)",
+            region_type="state",
+        )
+        region3 = Region(
+            code="state/ny", label="New York", region_type="state"
+        )
 
         # Then
         assert region1 == region2
@@ -82,9 +84,17 @@ class TestRegion:
         Then: Regions with same code are deduplicated
         """
         # Given
-        region1 = Region(code="state/ca", label="California", region_type="state")
-        region2 = Region(code="state/ca", label="California (duplicate)", region_type="state")
-        region3 = Region(code="state/ny", label="New York", region_type="state")
+        region1 = Region(
+            code="state/ca", label="California", region_type="state"
+        )
+        region2 = Region(
+            code="state/ca",
+            label="California (duplicate)",
+            region_type="state",
+        )
+        region3 = Region(
+            code="state/ny", label="New York", region_type="state"
+        )
 
         # When
         region_set = {region1, region2, region3}
@@ -98,7 +108,9 @@ class TestRegion:
 class TestRegionRegistry:
     """Tests for the RegionRegistry class."""
 
-    def test__given_registry_with_regions__then_length_is_correct(self, sample_registry):
+    def test__given_registry_with_regions__then_length_is_correct(
+        self, sample_registry
+    ):
         """Given: Registry with 4 regions
         When: Checking length
         Then: Length is 4
@@ -106,7 +118,9 @@ class TestRegionRegistry:
         # Then
         assert len(sample_registry) == 4
 
-    def test__given_registry__then_can_iterate_over_regions(self, sample_registry):
+    def test__given_registry__then_can_iterate_over_regions(
+        self, sample_registry
+    ):
         """Given: Registry with regions
         When: Iterating
         Then: All region codes are accessible
@@ -119,7 +133,9 @@ class TestRegionRegistry:
         assert "state/ca" in codes
         assert "place/CA-44000" in codes
 
-    def test__given_existing_code__then_code_is_in_registry(self, sample_registry):
+    def test__given_existing_code__then_code_is_in_registry(
+        self, sample_registry
+    ):
         """Given: Registry with state/ca
         When: Checking if code exists
         Then: Returns True for existing, False for missing
@@ -142,7 +158,9 @@ class TestRegionRegistry:
         assert ca.label == "California"
         assert missing is None
 
-    def test__given_type__then_get_by_type_returns_matching_regions(self, sample_registry):
+    def test__given_type__then_get_by_type_returns_matching_regions(
+        self, sample_registry
+    ):
         """Given: Registry with 2 states and 1 place
         When: Getting by type
         Then: Returns correct regions for each type
@@ -158,7 +176,9 @@ class TestRegionRegistry:
         assert len(places) == 1
         assert counties == []
 
-    def test__given_registry__then_get_national_returns_national_region(self, sample_registry):
+    def test__given_registry__then_get_national_returns_national_region(
+        self, sample_registry
+    ):
         """Given: Registry with national region
         When: Getting national
         Then: Returns the national region
@@ -171,7 +191,9 @@ class TestRegionRegistry:
         assert national.code == "us"
         assert national.region_type == "national"
 
-    def test__given_parent_code__then_get_children_returns_child_regions(self, sample_registry):
+    def test__given_parent_code__then_get_children_returns_child_regions(
+        self, sample_registry
+    ):
         """Given: Registry with states under "us"
         When: Getting children of "us"
         Then: Returns state regions
@@ -214,7 +236,9 @@ class TestRegionRegistry:
         assert len(filter_regions) == 1
         assert filter_regions[0].code == "place/CA-44000"
 
-    def test__given_registry__then_can_add_region_dynamically(self, sample_registry):
+    def test__given_registry__then_can_add_region_dynamically(
+        self, sample_registry
+    ):
         """Given: Registry with 4 regions
         When: Adding a new region
         Then: Registry contains 5 regions and new region is indexed

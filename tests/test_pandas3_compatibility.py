@@ -1,4 +1,5 @@
 """Test pandas 3.0 compatibility with enum encoding."""
+
 import pandas as pd
 from policyengine_core.enums import Enum
 
