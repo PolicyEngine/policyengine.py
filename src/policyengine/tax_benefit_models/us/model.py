@@ -363,7 +363,7 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
         from policyengine_us.system import system
 
         from policyengine.utils.parametric_reforms import (
-            simulation_modifier_from_parameter_values,
+            reform_dict_from_parameter_values,
         )
 
         assert isinstance(simulation.dataset, PolicyEngineUSDataset)
@@ -377,33 +377,51 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
                 dataset, simulation.filter_field, simulation.filter_value
             )
 
-        # Build simulation from entity IDs using PolicyEngine Core pattern
-        microsim = Microsimulation()
+        # Build reform dict from policy and dynamic parameter values
+        # US requires reforms to be passed at Microsimulation construction time
+        # (unlike UK which supports p.update() after construction)
+        reform_dict = None
+
+        # Collect policy reforms
+        if simulation.policy:
+            if simulation.policy.simulation_modifier is not None:
+                # Custom simulation modifier - extract parameter values if available
+                # Fall back to parameter_values if no custom modifier logic needed
+                if simulation.policy.parameter_values:
+                    reform_dict = reform_dict_from_parameter_values(
+                        simulation.policy.parameter_values
+                    )
+            elif simulation.policy.parameter_values:
+                reform_dict = reform_dict_from_parameter_values(
+                    simulation.policy.parameter_values
+                )
+
+        # Merge dynamic reforms into reform_dict
+        if simulation.dynamic:
+            dynamic_reform = None
+            if simulation.dynamic.simulation_modifier is not None:
+                if simulation.dynamic.parameter_values:
+                    dynamic_reform = reform_dict_from_parameter_values(
+                        simulation.dynamic.parameter_values
+                    )
+            elif simulation.dynamic.parameter_values:
+                dynamic_reform = reform_dict_from_parameter_values(
+                    simulation.dynamic.parameter_values
+                )
+
+            if dynamic_reform:
+                if reform_dict is None:
+                    reform_dict = dynamic_reform
+                else:
+                    # Merge dynamic reforms into policy reforms
+                    for param_name, period_values in dynamic_reform.items():
+                        if param_name not in reform_dict:
+                            reform_dict[param_name] = {}
+                        reform_dict[param_name].update(period_values)
+
+        # Create Microsimulation with reform at construction time
+        microsim = Microsimulation(reform=reform_dict)
         self._build_simulation_from_dataset(microsim, dataset, system)
-
-        # Apply policy reforms
-        if (
-            simulation.policy
-            and simulation.policy.simulation_modifier is not None
-        ):
-            simulation.policy.simulation_modifier(microsim)
-        elif simulation.policy:
-            modifier = simulation_modifier_from_parameter_values(
-                simulation.policy.parameter_values
-            )
-            modifier(microsim)
-
-        # Apply dynamic reforms
-        if (
-            simulation.dynamic
-            and simulation.dynamic.simulation_modifier is not None
-        ):
-            simulation.dynamic.simulation_modifier(microsim)
-        elif simulation.dynamic:
-            modifier = simulation_modifier_from_parameter_values(
-                simulation.dynamic.parameter_values
-            )
-            modifier(microsim)
 
         data = {
             "person": pd.DataFrame(),
