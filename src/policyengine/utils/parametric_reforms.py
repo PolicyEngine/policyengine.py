@@ -34,6 +34,18 @@ def simulation_modifier_from_parameter_values(
                 start=start_period,
                 stop=stop_period,
             )
+
+        # Clear caches so calculations use updated parameter values
+        simulation.tax_benefit_system.reset_parameter_caches()
+
+        # Clear computed variable caches (but preserve input variables)
+        # Variables with formulas are computed; those without are inputs
+        for population in simulation.populations.values():
+            for var_name, holder in population._holders.items():
+                variable = simulation.tax_benefit_system.get_variable(var_name)
+                if variable.formulas:  # Only clear computed variables
+                    holder.delete_arrays()
+
         return simulation
 
     return modifier
