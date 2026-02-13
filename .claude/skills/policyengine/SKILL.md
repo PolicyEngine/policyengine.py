@@ -1,4 +1,48 @@
-# PolicyEngine.py Quick Reference
+---
+name: policyengine
+description: Guide for using policyengine.py to perform tax-benefit microsimulation analysis. Use when working with simulations, datasets, policy reforms, or aggregations.
+allowed-tools: Read, Grep, Glob, Bash, Edit, Write
+---
+
+# PolicyEngine.py Guide
+
+This skill helps you use the policyengine.py package for tax-benefit microsimulation analysis.
+
+## Quick reference
+
+For full documentation, see the supporting files in this directory:
+- [quick-reference.md](quick-reference.md) - Syntax cheat sheet and imports
+- [working-with-simulations.md](working-with-simulations.md) - Deep dive on simulations, caching, and entity mapping
+
+## Core workflow
+
+1. **Create or load a dataset** with microdata (person, household, etc.)
+2. **Run a simulation** applying tax-benefit rules to the dataset
+3. **Extract results** using output classes (Aggregate, ChangeAggregate)
+4. **Visualise** using built-in plotting utilities
+
+## Package structure
+
+```
+policyengine
+├── core/
+│   ├── Dataset, YearData         # Data containers
+│   ├── Simulation                # Runs tax-benefit calculations
+│   │   ├── .run()                # Execute simulation
+│   │   ├── .ensure()             # Run if needed (cached)
+│   │   ├── .save()               # Save to disk
+│   │   └── .load()               # Load from disk
+│   ├── Policy, Parameter         # Define reforms
+│   └── map_to_entity()          # Entity mapping utility
+├── outputs/
+│   ├── Aggregate                 # Calculate statistics
+│   └── ChangeAggregate          # Analyse reforms
+├── tax_benefit_models/
+│   ├── uk/                      # UK-specific models
+│   └── us/                      # US-specific models
+└── utils/
+    └── plotting                 # Visualisation tools
+```
 
 ## Imports cheat sheet
 
@@ -29,6 +73,25 @@ from policyengine.utils.plotting import format_fig, COLORS
 from microdf import MicroDataFrame
 import pandas as pd
 import numpy as np
+```
+
+## Entity structures
+
+### UK entities
+```
+household
+    └── benunit (benefit unit - family claiming benefits together)
+            └── person
+```
+
+### US entities
+```
+household
+    ├── tax_unit (federal tax filing unit)
+    ├── spm_unit (Supplemental Poverty Measure unit)
+    ├── family (Census definition)
+    └── marital_unit (married couple or single)
+            └── person
 ```
 
 ## Minimal working example (UK)
@@ -83,69 +146,10 @@ output = sim.output_dataset.data
 print(output.household[["household_net_income"]])
 ```
 
-## Minimal working example (US)
-
-```python
-import pandas as pd
-from microdf import MicroDataFrame
-from policyengine.tax_benefit_models.us import (
-    PolicyEngineUSDataset, USYearData, us_latest
-)
-from policyengine.core import Simulation
-
-# Person data (US requires more entity links)
-person_df = MicroDataFrame(pd.DataFrame({
-    "person_id": [0, 1],
-    "person_household_id": [0, 0],
-    "person_tax_unit_id": [0, 0],
-    "person_spm_unit_id": [0, 0],
-    "person_family_id": [0, 0],
-    "person_marital_unit_id": [0, 0],
-    "age": [35, 33],
-    "employment_income": [60000, 40000],
-    "person_weight": [1.0, 1.0],
-}), weights="person_weight")
-
-# Create minimal entity dataframes
-entities = {}
-for entity in ["tax_unit", "spm_unit", "family", "marital_unit"]:
-    entities[entity] = MicroDataFrame(pd.DataFrame({
-        f"{entity}_id": [0],
-        f"{entity}_weight": [1.0],
-    }), weights=f"{entity}_weight")
-
-household_df = MicroDataFrame(pd.DataFrame({
-    "household_id": [0],
-    "state_code": ["CA"],
-    "household_weight": [1.0],
-}), weights="household_weight")
-
-# Create dataset
-dataset = PolicyEngineUSDataset(
-    name="Example",
-    filepath="./temp.h5",
-    year=2024,
-    data=USYearData(
-        person=person_df,
-        tax_unit=entities["tax_unit"],
-        spm_unit=entities["spm_unit"],
-        family=entities["family"],
-        marital_unit=entities["marital_unit"],
-        household=household_df,
-    )
-)
-
-# Run simulation
-sim = Simulation(dataset=dataset, tax_benefit_model_version=us_latest)
-sim.run()
-
-# Get results
-print(sim.output_dataset.data.household[["household_net_income"]])
-```
-
 ## Common patterns
 
-### Parameter sweep (vary one input)
+### Pattern 1: Parameter sweep (vary one input)
+
 ```python
 n = 50
 incomes = np.linspace(0, 100000, n)
@@ -163,7 +167,8 @@ person_df = MicroDataFrame(pd.DataFrame({
 # ... then run simulation once for all scenarios
 ```
 
-### Policy reform
+### Pattern 2: Policy reform
+
 ```python
 import datetime
 from policyengine.core import Policy, Parameter, ParameterValue
@@ -190,7 +195,8 @@ policy = Policy(
 reform_sim = Simulation(dataset=dataset, tax_benefit_model_version=uk_latest, policy=policy)
 ```
 
-### Extract aggregate statistics
+### Pattern 3: Extract aggregate statistics
+
 ```python
 from policyengine.outputs.aggregate import Aggregate, AggregateType
 
@@ -219,12 +225,13 @@ count = Aggregate(
     entity="person",
     aggregate_type=AggregateType.COUNT,
     filter_variable="age",
-    filter_geq=65,  # Age >= 65
+    filter_geq=65,
 )
 count.run()
 ```
 
-### Compare baseline vs reform
+### Pattern 4: Compare baseline vs reform
+
 ```python
 from policyengine.outputs.change_aggregate import ChangeAggregate, ChangeAggregateType
 
@@ -246,10 +253,11 @@ revenue = ChangeAggregate(
 revenue.run()
 ```
 
-### Entity mapping
+### Pattern 5: Entity mapping
+
 ```python
 # Sum person income to household
-household_income = dataset.data.map_to_entity(
+household_income = output.map_to_entity(
     source_entity="person",
     target_entity="household",
     columns=["employment_income"],
@@ -257,7 +265,7 @@ household_income = dataset.data.map_to_entity(
 )
 
 # Broadcast household rent to persons
-person_rent = dataset.data.map_to_entity(
+person_rent = output.map_to_entity(
     source_entity="household",
     target_entity="person",
     columns=["rent"],
@@ -265,19 +273,11 @@ person_rent = dataset.data.map_to_entity(
 )
 
 # Divide household value equally per person
-per_person = dataset.data.map_to_entity(
+per_person = output.map_to_entity(
     source_entity="household",
     target_entity="person",
     columns=["total_savings"],
     how="divide"
-)
-
-# Map custom values
-custom_totals = dataset.data.map_to_entity(
-    source_entity="person",
-    target_entity="household",
-    values=custom_array,
-    how="sum"
 )
 ```
 
@@ -293,35 +293,12 @@ custom_totals = dataset.data.map_to_entity(
 - **Household**: `household_id`, `state_code`, `household_weight`
 - **Other entities**: Each needs `{entity}_id` and `{entity}_weight`
 
-## Common UK regions
-```python
-["LONDON", "SOUTH_EAST", "SOUTH_WEST", "EAST_OF_ENGLAND",
- "WEST_MIDLANDS", "EAST_MIDLANDS", "YORKSHIRE",
- "NORTH_WEST", "NORTH_EAST", "WALES", "SCOTLAND", "NORTHERN_IRELAND"]
-```
+## Common pitfalls
 
-## Common US state codes
-```python
-["CA", "NY", "TX", "FL", "PA", "IL", "OH", "GA", "NC", "MI", ...]
-```
-
-## Aggregate filter options
-```python
-# Exact match
-filter_eq=value
-
-# Greater than/equal
-filter_geq=value
-
-# Less than/equal
-filter_leq=value
-
-# Quantile filtering (deciles)
-quantile=10          # Split into 10 groups
-quantile_eq=1        # First decile only
-quantile_geq=9       # Top two deciles
-quantile_leq=2       # Bottom two deciles
-```
+- **Always set would_claim variables**: `"would_claim_uc": [True] * n_benunits` (UK)
+- **Set disability variables to avoid spikes**: `"is_disabled_for_benefits": [False]`, `"uc_limited_capability_for_WRA": [False]`
+- **Use consistent ID linkages**: Person IDs must map to valid household/benunit IDs
+- **Use `sim.ensure()` for caching**: Avoids redundant simulation runs
 
 ## Common parameters
 
@@ -345,17 +322,18 @@ gov.ssa.payroll.rate.employee
 gov.usda.snap.normal_allotment.max[1]
 ```
 
-## Troubleshooting
+## MicroDataFrame
 
-| Issue | Solution |
-|-------|----------|
-| No UC calculated | Set `would_claim_uc=True` |
-| Random UC spikes | Set `is_disabled_for_benefits=False`, `uc_limited_capability_for_WRA=False` |
-| KeyError on column | Check variable name in docs, may be different entity level |
-| Empty results | Check weights sum correctly, verify ID linkages |
-| Slow performance | Use parameter sweep pattern (one simulation for N scenarios) |
+A pandas DataFrame that automatically handles weights for survey microdata:
+
+```python
+df = MicroDataFrame(pd_dataframe, weights="weight_column_name")
+df.sum()   # Automatically weighted
+df.mean()  # Automatically weighted
+```
 
 ## Visualisation template
+
 ```python
 from policyengine.utils.plotting import format_fig, COLORS
 import plotly.graph_objects as go
@@ -365,3 +343,14 @@ fig.add_trace(go.Scatter(x=x_vals, y=y_vals, line=dict(color=COLORS["primary"]))
 format_fig(fig, title="Title", xaxis_title="X", yaxis_title="Y")
 fig.show()
 ```
+
+## Response patterns
+
+When user asks to:
+
+1. **"Analyse a family with £X income"** → Use synthetic scenario pattern
+2. **"How does income vary from £0 to £100k"** → Use parameter sweep pattern
+3. **"What if we increased personal allowance?"** → Use policy reform pattern
+4. **"How many people benefit?"** → Use aggregate extraction pattern
+5. **"Compare US vs UK"** → Create both datasets, run separately
+6. **"Show me the phase-out"** → Use sweep + visualisation patterns
