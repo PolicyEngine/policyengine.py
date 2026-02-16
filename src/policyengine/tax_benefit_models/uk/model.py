@@ -13,6 +13,10 @@ from policyengine.core import (
     TaxBenefitModelVersion,
     Variable,
 )
+from policyengine.utils.entity_utils import (
+    build_entity_relationships,
+    filter_dataset_by_household_variable,
+)
 from policyengine.utils.parameter_labels import (
     build_scale_lookup,
     generate_label_for_parameter,
@@ -22,6 +26,8 @@ from .datasets import PolicyEngineUKDataset, UKYearData
 
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
+
+UK_GROUP_ENTITIES = ["benunit", "household"]
 
 
 class PolicyEngineUK(TaxBenefitModel):
@@ -123,6 +129,11 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
         from policyengine_core.enums import Enum
         from policyengine_uk.system import system
 
+        # Attach region registry
+        from policyengine.countries.uk.regions import uk_region_registry
+
+        self.region_registry = uk_region_registry
+
         self.id = f"{self.model.id}@{self.version}"
 
         for var_obj in system.variables.values():
@@ -177,6 +188,40 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                 )
                 self.add_parameter(parameter)
 
+    def _build_entity_relationships(
+        self, dataset: PolicyEngineUKDataset
+    ) -> pd.DataFrame:
+        """Build a DataFrame mapping each person to their containing entities."""
+        person_data = pd.DataFrame(dataset.data.person)
+        return build_entity_relationships(person_data, UK_GROUP_ENTITIES)
+
+    def _filter_dataset_by_household_variable(
+        self,
+        dataset: PolicyEngineUKDataset,
+        variable_name: str,
+        variable_value: str,
+    ) -> PolicyEngineUKDataset:
+        """Filter a dataset to only include households where a variable matches."""
+        filtered = filter_dataset_by_household_variable(
+            entity_data=dataset.data.entity_data,
+            group_entities=UK_GROUP_ENTITIES,
+            variable_name=variable_name,
+            variable_value=variable_value,
+        )
+        return PolicyEngineUKDataset(
+            id=dataset.id + f"_filtered_{variable_name}_{variable_value}",
+            name=dataset.name,
+            description=f"{dataset.description} (filtered: {variable_name}={variable_value})",
+            filepath=dataset.filepath,
+            year=dataset.year,
+            is_output_dataset=dataset.is_output_dataset,
+            data=UKYearData(
+                person=filtered["person"],
+                benunit=filtered["benunit"],
+                household=filtered["household"],
+            ),
+        )
+
     def run(self, simulation: "Simulation") -> "Simulation":
         from policyengine_uk import Microsimulation
         from policyengine_uk.data import UKSingleYearDataset
@@ -189,6 +234,13 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
 
         dataset = simulation.dataset
         dataset.load()
+
+        # Apply regional filtering if specified
+        if simulation.filter_field and simulation.filter_value:
+            dataset = self._filter_dataset_by_household_variable(
+                dataset, simulation.filter_field, simulation.filter_value
+            )
+
         input_data = UKSingleYearDataset(
             person=dataset.data.person,
             benunit=dataset.data.benunit,

@@ -13,6 +13,10 @@ from policyengine.core import (
     TaxBenefitModelVersion,
     Variable,
 )
+from policyengine.utils.entity_utils import (
+    build_entity_relationships,
+    filter_dataset_by_household_variable,
+)
 from policyengine.utils.parameter_labels import (
     build_scale_lookup,
     generate_label_for_parameter,
@@ -22,6 +26,8 @@ from .datasets import PolicyEngineUSDataset, USYearData
 
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
+
+US_GROUP_ENTITIES = ["household", "tax_unit", "spm_unit", "family", "marital_unit"]
 
 
 class PolicyEngineUS(TaxBenefitModel):
@@ -116,6 +122,11 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
         from policyengine_core.enums import Enum
         from policyengine_us.system import system
 
+        # Attach region registry
+        from policyengine.countries.us.regions import us_region_registry
+
+        self.region_registry = us_region_registry
+
         self.id = f"{self.model.id}@{self.version}"
 
         for var_obj in system.variables.values():
@@ -170,12 +181,50 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
                 )
                 self.add_parameter(parameter)
 
+    def _build_entity_relationships(
+        self, dataset: PolicyEngineUSDataset
+    ) -> pd.DataFrame:
+        """Build a DataFrame mapping each person to their containing entities."""
+        person_data = pd.DataFrame(dataset.data.person)
+        return build_entity_relationships(person_data, US_GROUP_ENTITIES)
+
+    def _filter_dataset_by_household_variable(
+        self,
+        dataset: PolicyEngineUSDataset,
+        variable_name: str,
+        variable_value: str,
+    ) -> PolicyEngineUSDataset:
+        """Filter a dataset to only include households where a variable matches."""
+        filtered = filter_dataset_by_household_variable(
+            entity_data=dataset.data.entity_data,
+            group_entities=US_GROUP_ENTITIES,
+            variable_name=variable_name,
+            variable_value=variable_value,
+        )
+        return PolicyEngineUSDataset(
+            id=dataset.id + f"_filtered_{variable_name}_{variable_value}",
+            name=dataset.name,
+            description=f"{dataset.description} (filtered: {variable_name}={variable_value})",
+            filepath=dataset.filepath,
+            year=dataset.year,
+            is_output_dataset=dataset.is_output_dataset,
+            data=USYearData(
+                person=filtered["person"],
+                marital_unit=filtered["marital_unit"],
+                family=filtered["family"],
+                spm_unit=filtered["spm_unit"],
+                tax_unit=filtered["tax_unit"],
+                household=filtered["household"],
+            ),
+        )
+
     def run(self, simulation: "Simulation") -> "Simulation":
         from policyengine_us import Microsimulation
         from policyengine_us.system import system
 
         from policyengine.utils.parametric_reforms import (
-            simulation_modifier_from_parameter_values,
+            build_reform_dict,
+            merge_reform_dicts,
         )
 
         assert isinstance(simulation.dataset, PolicyEngineUSDataset)
@@ -183,33 +232,22 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
         dataset = simulation.dataset
         dataset.load()
 
-        # Build simulation from entity IDs using PolicyEngine Core pattern
-        microsim = Microsimulation()
+        # Apply regional filtering if specified
+        if simulation.filter_field and simulation.filter_value:
+            dataset = self._filter_dataset_by_household_variable(
+                dataset, simulation.filter_field, simulation.filter_value
+            )
+
+        # Build reform dict from policy and dynamic parameter values.
+        # US requires reforms at Microsimulation construction time
+        # (unlike UK which supports p.update() after construction).
+        policy_reform = build_reform_dict(simulation.policy)
+        dynamic_reform = build_reform_dict(simulation.dynamic)
+        reform_dict = merge_reform_dicts(policy_reform, dynamic_reform)
+
+        # Create Microsimulation with reform at construction time
+        microsim = Microsimulation(reform=reform_dict)
         self._build_simulation_from_dataset(microsim, dataset, system)
-
-        # Apply policy reforms
-        if (
-            simulation.policy
-            and simulation.policy.simulation_modifier is not None
-        ):
-            simulation.policy.simulation_modifier(microsim)
-        elif simulation.policy:
-            modifier = simulation_modifier_from_parameter_values(
-                simulation.policy.parameter_values
-            )
-            modifier(microsim)
-
-        # Apply dynamic reforms
-        if (
-            simulation.dynamic
-            and simulation.dynamic.simulation_modifier is not None
-        ):
-            simulation.dynamic.simulation_modifier(microsim)
-        elif simulation.dynamic:
-            modifier = simulation_modifier_from_parameter_values(
-                simulation.dynamic.parameter_values
-            )
-            modifier(microsim)
 
         data = {
             "person": pd.DataFrame(),
