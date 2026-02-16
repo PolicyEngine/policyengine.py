@@ -13,6 +13,10 @@ from policyengine.core import (
     TaxBenefitModelVersion,
     Variable,
 )
+from policyengine.utils.entity_utils import (
+    build_entity_relationships,
+    filter_dataset_by_household_variable,
+)
 from policyengine.utils.parameter_labels import (
     build_scale_lookup,
     generate_label_for_parameter,
@@ -22,6 +26,8 @@ from .datasets import PolicyEngineUSDataset, USYearData
 
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
+
+US_GROUP_ENTITIES = ["household", "tax_unit", "spm_unit", "family", "marital_unit"]
 
 
 class PolicyEngineUS(TaxBenefitModel):
@@ -178,60 +184,9 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
     def _build_entity_relationships(
         self, dataset: PolicyEngineUSDataset
     ) -> pd.DataFrame:
-        """Build a DataFrame mapping each person to their containing entities.
-
-        Creates an explicit relationship map between persons and all entity
-        types (household, tax_unit, spm_unit, family, marital_unit). This
-        enables filtering at any entity level while preserving the integrity
-        of all related entities.
-
-        Args:
-            dataset: The dataset to extract relationships from.
-
-        Returns:
-            A DataFrame indexed by person with columns for each entity ID.
-        """
+        """Build a DataFrame mapping each person to their containing entities."""
         person_data = pd.DataFrame(dataset.data.person)
-
-        # Determine column naming convention
-        household_id_col = (
-            "person_household_id"
-            if "person_household_id" in person_data.columns
-            else "household_id"
-        )
-        tax_unit_id_col = (
-            "person_tax_unit_id"
-            if "person_tax_unit_id" in person_data.columns
-            else "tax_unit_id"
-        )
-        spm_unit_id_col = (
-            "person_spm_unit_id"
-            if "person_spm_unit_id" in person_data.columns
-            else "spm_unit_id"
-        )
-        family_id_col = (
-            "person_family_id"
-            if "person_family_id" in person_data.columns
-            else "family_id"
-        )
-        marital_unit_id_col = (
-            "person_marital_unit_id"
-            if "person_marital_unit_id" in person_data.columns
-            else "marital_unit_id"
-        )
-
-        entity_rel = pd.DataFrame(
-            {
-                "person_id": person_data["person_id"].values,
-                "household_id": person_data[household_id_col].values,
-                "tax_unit_id": person_data[tax_unit_id_col].values,
-                "spm_unit_id": person_data[spm_unit_id_col].values,
-                "family_id": person_data[family_id_col].values,
-                "marital_unit_id": person_data[marital_unit_id_col].values,
-            }
-        )
-
-        return entity_rel
+        return build_entity_relationships(person_data, US_GROUP_ENTITIES)
 
     def _filter_dataset_by_household_variable(
         self,
@@ -239,90 +194,13 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
         variable_name: str,
         variable_value: str,
     ) -> PolicyEngineUSDataset:
-        """Filter a dataset to only include households where a variable matches.
-
-        Uses the entity relationship approach: builds an explicit map of all
-        entity relationships, filters at the household level, and keeps all
-        persons in matching households to preserve entity integrity.
-
-        Args:
-            dataset: The dataset to filter.
-            variable_name: The name of the household-level variable to filter on.
-            variable_value: The value to match. Handles both str and bytes encoding.
-
-        Returns:
-            A new filtered dataset containing only matching households.
-        """
-        # Build entity relationships
-        entity_rel = self._build_entity_relationships(dataset)
-
-        # Get household-level variable values
-        household_data = pd.DataFrame(dataset.data.household)
-
-        if variable_name not in household_data.columns:
-            raise ValueError(
-                f"Variable '{variable_name}' not found in household data. "
-                f"Available columns: {list(household_data.columns)}"
-            )
-
-        hh_values = household_data[variable_name].values
-        hh_ids = household_data["household_id"].values
-
-        # Create mask for matching households, handling bytes encoding
-        if isinstance(variable_value, str):
-            hh_mask = (hh_values == variable_value) | (
-                hh_values == variable_value.encode()
-            )
-        else:
-            hh_mask = hh_values == variable_value
-
-        matching_hh_ids = set(hh_ids[hh_mask])
-
-        if len(matching_hh_ids) == 0:
-            raise ValueError(
-                f"No households found matching {variable_name}={variable_value}"
-            )
-
-        # Filter entity_rel to persons in matching households
-        person_mask = entity_rel["household_id"].isin(matching_hh_ids)
-        filtered_entity_rel = entity_rel[person_mask]
-
-        # Get the filtered entity IDs
-        filtered_person_ids = set(filtered_entity_rel["person_id"])
-        filtered_household_ids = matching_hh_ids
-        filtered_tax_unit_ids = set(filtered_entity_rel["tax_unit_id"])
-        filtered_spm_unit_ids = set(filtered_entity_rel["spm_unit_id"])
-        filtered_family_ids = set(filtered_entity_rel["family_id"])
-        filtered_marital_unit_ids = set(filtered_entity_rel["marital_unit_id"])
-
-        # Filter each entity DataFrame
-        person_df = pd.DataFrame(dataset.data.person)
-        household_df = pd.DataFrame(dataset.data.household)
-        tax_unit_df = pd.DataFrame(dataset.data.tax_unit)
-        spm_unit_df = pd.DataFrame(dataset.data.spm_unit)
-        family_df = pd.DataFrame(dataset.data.family)
-        marital_unit_df = pd.DataFrame(dataset.data.marital_unit)
-
-        filtered_person = person_df[
-            person_df["person_id"].isin(filtered_person_ids)
-        ]
-        filtered_household = household_df[
-            household_df["household_id"].isin(filtered_household_ids)
-        ]
-        filtered_tax_unit = tax_unit_df[
-            tax_unit_df["tax_unit_id"].isin(filtered_tax_unit_ids)
-        ]
-        filtered_spm_unit = spm_unit_df[
-            spm_unit_df["spm_unit_id"].isin(filtered_spm_unit_ids)
-        ]
-        filtered_family = family_df[
-            family_df["family_id"].isin(filtered_family_ids)
-        ]
-        filtered_marital_unit = marital_unit_df[
-            marital_unit_df["marital_unit_id"].isin(filtered_marital_unit_ids)
-        ]
-
-        # Create filtered dataset
+        """Filter a dataset to only include households where a variable matches."""
+        filtered = filter_dataset_by_household_variable(
+            entity_data=dataset.data.entity_data,
+            group_entities=US_GROUP_ENTITIES,
+            variable_name=variable_name,
+            variable_value=variable_value,
+        )
         return PolicyEngineUSDataset(
             id=dataset.id + f"_filtered_{variable_name}_{variable_value}",
             name=dataset.name,
@@ -331,30 +209,12 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
             year=dataset.year,
             is_output_dataset=dataset.is_output_dataset,
             data=USYearData(
-                person=MicroDataFrame(
-                    filtered_person.reset_index(drop=True),
-                    weights="person_weight",
-                ),
-                household=MicroDataFrame(
-                    filtered_household.reset_index(drop=True),
-                    weights="household_weight",
-                ),
-                tax_unit=MicroDataFrame(
-                    filtered_tax_unit.reset_index(drop=True),
-                    weights="tax_unit_weight",
-                ),
-                spm_unit=MicroDataFrame(
-                    filtered_spm_unit.reset_index(drop=True),
-                    weights="spm_unit_weight",
-                ),
-                family=MicroDataFrame(
-                    filtered_family.reset_index(drop=True),
-                    weights="family_weight",
-                ),
-                marital_unit=MicroDataFrame(
-                    filtered_marital_unit.reset_index(drop=True),
-                    weights="marital_unit_weight",
-                ),
+                person=filtered["person"],
+                marital_unit=filtered["marital_unit"],
+                family=filtered["family"],
+                spm_unit=filtered["spm_unit"],
+                tax_unit=filtered["tax_unit"],
+                household=filtered["household"],
             ),
         )
 
@@ -363,7 +223,8 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
         from policyengine_us.system import system
 
         from policyengine.utils.parametric_reforms import (
-            reform_dict_from_parameter_values,
+            build_reform_dict,
+            merge_reform_dicts,
         )
 
         assert isinstance(simulation.dataset, PolicyEngineUSDataset)
@@ -377,47 +238,12 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
                 dataset, simulation.filter_field, simulation.filter_value
             )
 
-        # Build reform dict from policy and dynamic parameter values
-        # US requires reforms to be passed at Microsimulation construction time
-        # (unlike UK which supports p.update() after construction)
-        reform_dict = None
-
-        # Collect policy reforms
-        if simulation.policy:
-            if simulation.policy.simulation_modifier is not None:
-                # Custom simulation modifier - extract parameter values if available
-                # Fall back to parameter_values if no custom modifier logic needed
-                if simulation.policy.parameter_values:
-                    reform_dict = reform_dict_from_parameter_values(
-                        simulation.policy.parameter_values
-                    )
-            elif simulation.policy.parameter_values:
-                reform_dict = reform_dict_from_parameter_values(
-                    simulation.policy.parameter_values
-                )
-
-        # Merge dynamic reforms into reform_dict
-        if simulation.dynamic:
-            dynamic_reform = None
-            if simulation.dynamic.simulation_modifier is not None:
-                if simulation.dynamic.parameter_values:
-                    dynamic_reform = reform_dict_from_parameter_values(
-                        simulation.dynamic.parameter_values
-                    )
-            elif simulation.dynamic.parameter_values:
-                dynamic_reform = reform_dict_from_parameter_values(
-                    simulation.dynamic.parameter_values
-                )
-
-            if dynamic_reform:
-                if reform_dict is None:
-                    reform_dict = dynamic_reform
-                else:
-                    # Merge dynamic reforms into policy reforms
-                    for param_name, period_values in dynamic_reform.items():
-                        if param_name not in reform_dict:
-                            reform_dict[param_name] = {}
-                        reform_dict[param_name].update(period_values)
+        # Build reform dict from policy and dynamic parameter values.
+        # US requires reforms at Microsimulation construction time
+        # (unlike UK which supports p.update() after construction).
+        policy_reform = build_reform_dict(simulation.policy)
+        dynamic_reform = build_reform_dict(simulation.dynamic)
+        reform_dict = merge_reform_dicts(policy_reform, dynamic_reform)
 
         # Create Microsimulation with reform at construction time
         microsim = Microsimulation(reform=reform_dict)
