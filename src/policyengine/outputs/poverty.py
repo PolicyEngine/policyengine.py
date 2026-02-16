@@ -1,6 +1,6 @@
 """Poverty analysis output types."""
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import pandas as pd
@@ -9,7 +9,7 @@ from pydantic import ConfigDict
 from policyengine.core import Output, OutputCollection, Simulation
 
 
-class UKPovertyType(str, Enum):
+class UKPovertyType(StrEnum):
     """UK poverty measure types."""
 
     ABSOLUTE_BHC = "absolute_bhc"
@@ -18,7 +18,7 @@ class UKPovertyType(str, Enum):
     RELATIVE_AHC = "relative_ahc"
 
 
-class USPovertyType(str, Enum):
+class USPovertyType(StrEnum):
     """US poverty measure types."""
 
     SPM = "spm"

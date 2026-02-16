@@ -3,9 +3,6 @@
 name: Code changes
 on:
   pull_request:
-    branches:
-      - main
-
     paths:
       - src/**
       - tests/**
