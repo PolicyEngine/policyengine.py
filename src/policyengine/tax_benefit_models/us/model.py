@@ -65,6 +65,7 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
             "person_weight",
             # Demographics
             "age",
+            "is_male",
             "is_child",
             "is_adult",
             # Income
