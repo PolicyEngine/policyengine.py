@@ -62,6 +62,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
             # Demographics
             "age",
             "gender",
+            "is_male",
             "is_adult",
             "is_SP_age",
             "is_child",
