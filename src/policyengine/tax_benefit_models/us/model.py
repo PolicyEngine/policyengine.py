@@ -66,6 +66,7 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
             # Demographics
             "age",
             "is_male",
+            "race",
             "is_child",
             "is_adult",
             # Income
