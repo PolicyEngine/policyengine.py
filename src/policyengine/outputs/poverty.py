@@ -243,6 +243,14 @@ def calculate_us_poverty_rates(
     return OutputCollection(outputs=results, dataframe=df)
 
 
+# Race group definitions (US only — race Enum stored as string names)
+RACE_GROUPS = {
+    "white": {"filter_variable": "race", "filter_variable_eq": "WHITE"},
+    "black": {"filter_variable": "race", "filter_variable_eq": "BLACK"},
+    "hispanic": {"filter_variable": "race", "filter_variable_eq": "HISPANIC"},
+    "other": {"filter_variable": "race", "filter_variable_eq": "OTHER"},
+}
+
 # Gender group definitions (same for UK and US — both use is_male boolean)
 GENDER_GROUPS = {
     "male": {"filter_variable": "is_male", "filter_variable_eq": True},
@@ -390,6 +398,47 @@ def calculate_us_poverty_by_gender(
     results = []
 
     for group_name, filters in GENDER_GROUPS.items():
+        group_results = calculate_us_poverty_rates(simulation, **filters)
+        for pov in group_results.outputs:
+            pov.filter_variable = group_name
+            results.append(pov)
+
+    df = pd.DataFrame(
+        [
+            {
+                "simulation_id": r.simulation.id,
+                "poverty_type": r.poverty_type,
+                "poverty_variable": r.poverty_variable,
+                "filter_variable": r.filter_variable,
+                "headcount": r.headcount,
+                "total_population": r.total_population,
+                "rate": r.rate,
+            }
+            for r in results
+        ]
+    )
+
+    return OutputCollection(outputs=results, dataframe=df)
+
+
+def calculate_us_poverty_by_race(
+    simulation: Simulation,
+) -> OutputCollection[Poverty]:
+    """Calculate US poverty rates broken down by race.
+
+    Computes poverty rates for white, black, hispanic, and other
+    racial groups across all US poverty types using the race Enum
+    variable (stored as string names in the output dataset).
+
+    US-only — the UK does not have a race variable.
+
+    Returns:
+        OutputCollection containing Poverty objects for each
+        race x poverty type combination (4 x 2 = 8 records).
+    """
+    results = []
+
+    for group_name, filters in RACE_GROUPS.items():
         group_results = calculate_us_poverty_rates(simulation, **filters)
         for pov in group_results.outputs:
             pov.filter_variable = group_name
