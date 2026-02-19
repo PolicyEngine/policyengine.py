@@ -241,3 +241,91 @@ def calculate_us_poverty_rates(
     )
 
     return OutputCollection(outputs=results, dataframe=df)
+
+
+# Age group definitions (same for UK and US)
+AGE_GROUPS = {
+    "child": {"filter_variable": "age", "filter_variable_leq": 17},
+    "adult": {
+        "filter_variable": "age",
+        "filter_variable_geq": 18,
+        "filter_variable_leq": 64,
+    },
+    "senior": {"filter_variable": "age", "filter_variable_geq": 65},
+}
+
+
+def calculate_uk_poverty_by_age(
+    simulation: Simulation,
+) -> OutputCollection[Poverty]:
+    """Calculate UK poverty rates broken down by age group.
+
+    Computes poverty rates for child (< 18), adult (18-64), and
+    senior (65+) groups across all UK poverty types.
+
+    Returns:
+        OutputCollection containing Poverty objects for each
+        age group x poverty type combination (3 x 4 = 12 records).
+    """
+    results = []
+
+    for group_name, filters in AGE_GROUPS.items():
+        group_results = calculate_uk_poverty_rates(simulation, **filters)
+        for pov in group_results.outputs:
+            pov.filter_variable = group_name
+            results.append(pov)
+
+    df = pd.DataFrame(
+        [
+            {
+                "simulation_id": r.simulation.id,
+                "poverty_type": r.poverty_type,
+                "poverty_variable": r.poverty_variable,
+                "filter_variable": r.filter_variable,
+                "headcount": r.headcount,
+                "total_population": r.total_population,
+                "rate": r.rate,
+            }
+            for r in results
+        ]
+    )
+
+    return OutputCollection(outputs=results, dataframe=df)
+
+
+def calculate_us_poverty_by_age(
+    simulation: Simulation,
+) -> OutputCollection[Poverty]:
+    """Calculate US poverty rates broken down by age group.
+
+    Computes poverty rates for child (< 18), adult (18-64), and
+    senior (65+) groups across all US poverty types.
+
+    Returns:
+        OutputCollection containing Poverty objects for each
+        age group x poverty type combination (3 x 2 = 6 records).
+    """
+    results = []
+
+    for group_name, filters in AGE_GROUPS.items():
+        group_results = calculate_us_poverty_rates(simulation, **filters)
+        for pov in group_results.outputs:
+            pov.filter_variable = group_name
+            results.append(pov)
+
+    df = pd.DataFrame(
+        [
+            {
+                "simulation_id": r.simulation.id,
+                "poverty_type": r.poverty_type,
+                "poverty_variable": r.poverty_variable,
+                "filter_variable": r.filter_variable,
+                "headcount": r.headcount,
+                "total_population": r.total_population,
+                "rate": r.rate,
+            }
+            for r in results
+        ]
+    )
+
+    return OutputCollection(outputs=results, dataframe=df)
