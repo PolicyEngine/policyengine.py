@@ -51,6 +51,7 @@ class Poverty(Output):
 
     simulation: Simulation
     poverty_variable: str
+    poverty_type: str | None = None
     entity: str = "person"
 
     # Optional demographic filters
@@ -151,10 +152,11 @@ def calculate_uk_poverty_rates(
     """
     results = []
 
-    for poverty_variable in UK_POVERTY_VARIABLES.values():
+    for poverty_type, poverty_variable in UK_POVERTY_VARIABLES.items():
         poverty = Poverty(
             simulation=simulation,
             poverty_variable=poverty_variable,
+            poverty_type=str(poverty_type),
             entity="person",
             filter_variable=filter_variable,
             filter_variable_eq=filter_variable_eq,
@@ -168,6 +170,7 @@ def calculate_uk_poverty_rates(
         [
             {
                 "simulation_id": r.simulation.id,
+                "poverty_type": r.poverty_type,
                 "poverty_variable": r.poverty_variable,
                 "filter_variable": r.filter_variable,
                 "filter_variable_eq": r.filter_variable_eq,
@@ -205,10 +208,11 @@ def calculate_us_poverty_rates(
     """
     results = []
 
-    for poverty_variable in US_POVERTY_VARIABLES.values():
+    for poverty_type, poverty_variable in US_POVERTY_VARIABLES.items():
         poverty = Poverty(
             simulation=simulation,
             poverty_variable=poverty_variable,
+            poverty_type=str(poverty_type),
             entity="person",
             filter_variable=filter_variable,
             filter_variable_eq=filter_variable_eq,
@@ -222,6 +226,7 @@ def calculate_us_poverty_rates(
         [
             {
                 "simulation_id": r.simulation.id,
+                "poverty_type": r.poverty_type,
                 "poverty_variable": r.poverty_variable,
                 "filter_variable": r.filter_variable,
                 "filter_variable_eq": r.filter_variable_eq,
