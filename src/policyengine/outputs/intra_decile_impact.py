@@ -131,7 +131,7 @@ def compute_intra_decile_impacts(
     """
     results = []
     for decile in range(1, quantiles + 1):
-        impact = IntraDecileImpact(
+        impact = IntraDecileImpact.model_construct(
             baseline_simulation=baseline_simulation,
             reform_simulation=reform_simulation,
             income_variable=income_variable,
@@ -144,7 +144,7 @@ def compute_intra_decile_impacts(
         results.append(impact)
 
     # Overall average (decile=0): arithmetic mean of decile proportions
-    overall = IntraDecileImpact(
+    overall = IntraDecileImpact.model_construct(
         baseline_simulation=baseline_simulation,
         reform_simulation=reform_simulation,
         income_variable=income_variable,

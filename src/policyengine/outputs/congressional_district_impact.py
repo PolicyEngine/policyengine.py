@@ -92,7 +92,7 @@ def compute_us_congressional_district_impacts(
     Returns:
         CongressionalDistrictImpact with district_results populated.
     """
-    impact = CongressionalDistrictImpact(
+    impact = CongressionalDistrictImpact.model_construct(
         baseline_simulation=baseline_simulation,
         reform_simulation=reform_simulation,
     )

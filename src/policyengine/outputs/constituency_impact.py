@@ -115,7 +115,7 @@ def compute_uk_constituency_impacts(
     Returns:
         ConstituencyImpact with constituency_results populated.
     """
-    impact = ConstituencyImpact(
+    impact = ConstituencyImpact.model_construct(
         baseline_simulation=baseline_simulation,
         reform_simulation=reform_simulation,
         weight_matrix_path=weight_matrix_path,
