@@ -2,12 +2,10 @@
 
 from unittest.mock import MagicMock
 
-import numpy as np
 import pandas as pd
 from microdf import MicroDataFrame
 
 from policyengine.outputs.congressional_district_impact import (
-    CongressionalDistrictImpact,
     compute_us_congressional_district_impacts,
 )
 

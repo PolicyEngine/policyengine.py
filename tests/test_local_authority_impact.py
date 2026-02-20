@@ -10,7 +10,6 @@ import pandas as pd
 from microdf import MicroDataFrame
 
 from policyengine.outputs.local_authority_impact import (
-    LocalAuthorityImpact,
     compute_uk_local_authority_impacts,
 )
 
