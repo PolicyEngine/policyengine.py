@@ -12,6 +12,10 @@ from policyengine.outputs.constituency_impact import (
     ConstituencyImpact,
     compute_uk_constituency_impacts,
 )
+from policyengine.outputs.local_authority_impact import (
+    LocalAuthorityImpact,
+    compute_uk_local_authority_impacts,
+)
 from policyengine.outputs.decile_impact import (
     DecileImpact,
     calculate_decile_impacts,
@@ -58,4 +62,6 @@ __all__ = [
     "compute_us_congressional_district_impacts",
     "ConstituencyImpact",
     "compute_uk_constituency_impacts",
+    "LocalAuthorityImpact",
+    "compute_uk_local_authority_impacts",
 ]
