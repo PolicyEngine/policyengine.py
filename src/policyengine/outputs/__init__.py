@@ -8,6 +8,10 @@ from policyengine.outputs.congressional_district_impact import (
     CongressionalDistrictImpact,
     compute_us_congressional_district_impacts,
 )
+from policyengine.outputs.constituency_impact import (
+    ConstituencyImpact,
+    compute_uk_constituency_impacts,
+)
 from policyengine.outputs.decile_impact import (
     DecileImpact,
     calculate_decile_impacts,
@@ -52,4 +56,6 @@ __all__ = [
     "calculate_us_inequality",
     "CongressionalDistrictImpact",
     "compute_us_congressional_district_impacts",
+    "ConstituencyImpact",
+    "compute_uk_constituency_impacts",
 ]
