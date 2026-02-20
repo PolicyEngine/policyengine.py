@@ -16,6 +16,7 @@ class DecileImpact(Output):
     baseline_simulation: Simulation
     reform_simulation: Simulation
     income_variable: str = "equiv_hbai_household_net_income"
+    decile_variable: str | None = None  # If set, use pre-computed grouping variable
     entity: str | None = None
     decile: int
     quantiles: int = 10
@@ -68,16 +69,19 @@ class DecileImpact(Output):
             baseline_income = baseline_data[self.income_variable]
             reform_income = reform_data[self.income_variable]
 
-        # Calculate deciles based on baseline income
-        decile_series = (
-            pd.qcut(
-                baseline_income,
-                self.quantiles,
-                labels=False,
-                duplicates="drop",
+        # Calculate deciles: use pre-computed variable or qcut
+        if self.decile_variable:
+            decile_series = baseline_data[self.decile_variable]
+        else:
+            decile_series = (
+                pd.qcut(
+                    baseline_income,
+                    self.quantiles,
+                    labels=False,
+                    duplicates="drop",
+                )
+                + 1
             )
-            + 1
-        )
 
         # Calculate changes
         absolute_change = reform_income - baseline_income
