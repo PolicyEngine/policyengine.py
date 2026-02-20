@@ -51,6 +51,7 @@ class Poverty(Output):
 
     simulation: Simulation
     poverty_variable: str
+    poverty_type: str | None = None
     entity: str = "person"
 
     # Optional demographic filters
@@ -151,10 +152,11 @@ def calculate_uk_poverty_rates(
     """
     results = []
 
-    for poverty_variable in UK_POVERTY_VARIABLES.values():
+    for poverty_type, poverty_variable in UK_POVERTY_VARIABLES.items():
         poverty = Poverty(
             simulation=simulation,
             poverty_variable=poverty_variable,
+            poverty_type=str(poverty_type),
             entity="person",
             filter_variable=filter_variable,
             filter_variable_eq=filter_variable_eq,
@@ -168,6 +170,7 @@ def calculate_uk_poverty_rates(
         [
             {
                 "simulation_id": r.simulation.id,
+                "poverty_type": r.poverty_type,
                 "poverty_variable": r.poverty_variable,
                 "filter_variable": r.filter_variable,
                 "filter_variable_eq": r.filter_variable_eq,
@@ -205,10 +208,11 @@ def calculate_us_poverty_rates(
     """
     results = []
 
-    for poverty_variable in US_POVERTY_VARIABLES.values():
+    for poverty_type, poverty_variable in US_POVERTY_VARIABLES.items():
         poverty = Poverty(
             simulation=simulation,
             poverty_variable=poverty_variable,
+            poverty_type=str(poverty_type),
             entity="person",
             filter_variable=filter_variable,
             filter_variable_eq=filter_variable_eq,
@@ -222,11 +226,231 @@ def calculate_us_poverty_rates(
         [
             {
                 "simulation_id": r.simulation.id,
+                "poverty_type": r.poverty_type,
                 "poverty_variable": r.poverty_variable,
                 "filter_variable": r.filter_variable,
                 "filter_variable_eq": r.filter_variable_eq,
                 "filter_variable_leq": r.filter_variable_leq,
                 "filter_variable_geq": r.filter_variable_geq,
+                "headcount": r.headcount,
+                "total_population": r.total_population,
+                "rate": r.rate,
+            }
+            for r in results
+        ]
+    )
+
+    return OutputCollection(outputs=results, dataframe=df)
+
+
+# Race group definitions (US only — race Enum stored as string names)
+RACE_GROUPS = {
+    "white": {"filter_variable": "race", "filter_variable_eq": "WHITE"},
+    "black": {"filter_variable": "race", "filter_variable_eq": "BLACK"},
+    "hispanic": {"filter_variable": "race", "filter_variable_eq": "HISPANIC"},
+    "other": {"filter_variable": "race", "filter_variable_eq": "OTHER"},
+}
+
+# Gender group definitions (same for UK and US — both use is_male boolean)
+GENDER_GROUPS = {
+    "male": {"filter_variable": "is_male", "filter_variable_eq": True},
+    "female": {"filter_variable": "is_male", "filter_variable_eq": False},
+}
+
+# Age group definitions (same for UK and US)
+AGE_GROUPS = {
+    "child": {"filter_variable": "age", "filter_variable_leq": 17},
+    "adult": {
+        "filter_variable": "age",
+        "filter_variable_geq": 18,
+        "filter_variable_leq": 64,
+    },
+    "senior": {"filter_variable": "age", "filter_variable_geq": 65},
+}
+
+
+def calculate_uk_poverty_by_age(
+    simulation: Simulation,
+) -> OutputCollection[Poverty]:
+    """Calculate UK poverty rates broken down by age group.
+
+    Computes poverty rates for child (< 18), adult (18-64), and
+    senior (65+) groups across all UK poverty types.
+
+    Returns:
+        OutputCollection containing Poverty objects for each
+        age group x poverty type combination (3 x 4 = 12 records).
+    """
+    results = []
+
+    for group_name, filters in AGE_GROUPS.items():
+        group_results = calculate_uk_poverty_rates(simulation, **filters)
+        for pov in group_results.outputs:
+            pov.filter_variable = group_name
+            results.append(pov)
+
+    df = pd.DataFrame(
+        [
+            {
+                "simulation_id": r.simulation.id,
+                "poverty_type": r.poverty_type,
+                "poverty_variable": r.poverty_variable,
+                "filter_variable": r.filter_variable,
+                "headcount": r.headcount,
+                "total_population": r.total_population,
+                "rate": r.rate,
+            }
+            for r in results
+        ]
+    )
+
+    return OutputCollection(outputs=results, dataframe=df)
+
+
+def calculate_us_poverty_by_age(
+    simulation: Simulation,
+) -> OutputCollection[Poverty]:
+    """Calculate US poverty rates broken down by age group.
+
+    Computes poverty rates for child (< 18), adult (18-64), and
+    senior (65+) groups across all US poverty types.
+
+    Returns:
+        OutputCollection containing Poverty objects for each
+        age group x poverty type combination (3 x 2 = 6 records).
+    """
+    results = []
+
+    for group_name, filters in AGE_GROUPS.items():
+        group_results = calculate_us_poverty_rates(simulation, **filters)
+        for pov in group_results.outputs:
+            pov.filter_variable = group_name
+            results.append(pov)
+
+    df = pd.DataFrame(
+        [
+            {
+                "simulation_id": r.simulation.id,
+                "poverty_type": r.poverty_type,
+                "poverty_variable": r.poverty_variable,
+                "filter_variable": r.filter_variable,
+                "headcount": r.headcount,
+                "total_population": r.total_population,
+                "rate": r.rate,
+            }
+            for r in results
+        ]
+    )
+
+    return OutputCollection(outputs=results, dataframe=df)
+
+
+def calculate_uk_poverty_by_gender(
+    simulation: Simulation,
+) -> OutputCollection[Poverty]:
+    """Calculate UK poverty rates broken down by gender.
+
+    Computes poverty rates for male and female groups across
+    all UK poverty types using the is_male boolean variable.
+
+    Returns:
+        OutputCollection containing Poverty objects for each
+        gender x poverty type combination (2 x 4 = 8 records).
+    """
+    results = []
+
+    for group_name, filters in GENDER_GROUPS.items():
+        group_results = calculate_uk_poverty_rates(simulation, **filters)
+        for pov in group_results.outputs:
+            pov.filter_variable = group_name
+            results.append(pov)
+
+    df = pd.DataFrame(
+        [
+            {
+                "simulation_id": r.simulation.id,
+                "poverty_type": r.poverty_type,
+                "poverty_variable": r.poverty_variable,
+                "filter_variable": r.filter_variable,
+                "headcount": r.headcount,
+                "total_population": r.total_population,
+                "rate": r.rate,
+            }
+            for r in results
+        ]
+    )
+
+    return OutputCollection(outputs=results, dataframe=df)
+
+
+def calculate_us_poverty_by_gender(
+    simulation: Simulation,
+) -> OutputCollection[Poverty]:
+    """Calculate US poverty rates broken down by gender.
+
+    Computes poverty rates for male and female groups across
+    all US poverty types using the is_male boolean variable.
+
+    Returns:
+        OutputCollection containing Poverty objects for each
+        gender x poverty type combination (2 x 2 = 4 records).
+    """
+    results = []
+
+    for group_name, filters in GENDER_GROUPS.items():
+        group_results = calculate_us_poverty_rates(simulation, **filters)
+        for pov in group_results.outputs:
+            pov.filter_variable = group_name
+            results.append(pov)
+
+    df = pd.DataFrame(
+        [
+            {
+                "simulation_id": r.simulation.id,
+                "poverty_type": r.poverty_type,
+                "poverty_variable": r.poverty_variable,
+                "filter_variable": r.filter_variable,
+                "headcount": r.headcount,
+                "total_population": r.total_population,
+                "rate": r.rate,
+            }
+            for r in results
+        ]
+    )
+
+    return OutputCollection(outputs=results, dataframe=df)
+
+
+def calculate_us_poverty_by_race(
+    simulation: Simulation,
+) -> OutputCollection[Poverty]:
+    """Calculate US poverty rates broken down by race.
+
+    Computes poverty rates for white, black, hispanic, and other
+    racial groups across all US poverty types using the race Enum
+    variable (stored as string names in the output dataset).
+
+    US-only — the UK does not have a race variable.
+
+    Returns:
+        OutputCollection containing Poverty objects for each
+        race x poverty type combination (4 x 2 = 8 records).
+    """
+    results = []
+
+    for group_name, filters in RACE_GROUPS.items():
+        group_results = calculate_us_poverty_rates(simulation, **filters)
+        for pov in group_results.outputs:
+            pov.filter_variable = group_name
+            results.append(pov)
+
+    df = pd.DataFrame(
+        [
+            {
+                "simulation_id": r.simulation.id,
+                "poverty_type": r.poverty_type,
+                "poverty_variable": r.poverty_variable,
+                "filter_variable": r.filter_variable,
                 "headcount": r.headcount,
                 "total_population": r.total_population,
                 "rate": r.rate,

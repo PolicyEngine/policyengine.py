@@ -65,6 +65,8 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
             "person_weight",
             # Demographics
             "age",
+            "is_male",
+            "race",
             "is_child",
             "is_adult",
             # Income
@@ -98,13 +100,16 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
             "tax_unit_weight",
             "income_tax",
             "employee_payroll_tax",
+            "household_state_income_tax",
             "eitc",
             "ctc",
         ],
         "household": [
             "household_id",
             "household_weight",
+            "household_count_people",
             "household_net_income",
+            "household_income_decile",
             "household_benefits",
             "household_tax",
             "household_market_income",
