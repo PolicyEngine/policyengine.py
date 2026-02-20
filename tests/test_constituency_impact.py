@@ -10,7 +10,6 @@ import pandas as pd
 from microdf import MicroDataFrame
 
 from policyengine.outputs.constituency_impact import (
-    ConstituencyImpact,
     compute_uk_constituency_impacts,
 )
 

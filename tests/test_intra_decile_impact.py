@@ -8,7 +8,6 @@ from microdf import MicroDataFrame
 
 from policyengine.outputs.decile_impact import DecileImpact
 from policyengine.outputs.intra_decile_impact import (
-    IntraDecileImpact,
     compute_intra_decile_impacts,
 )
 
