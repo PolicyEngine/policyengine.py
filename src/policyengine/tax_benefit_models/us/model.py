@@ -113,6 +113,7 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
             "household_benefits",
             "household_tax",
             "household_market_income",
+            "congressional_district_geoid",
         ],
     }
 

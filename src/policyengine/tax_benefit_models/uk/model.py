@@ -107,6 +107,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
             # Income measures
             "household_net_income",
             "household_income_decile",
+            "household_wealth_decile",
             "hbai_household_net_income",
             "equiv_hbai_household_net_income",
             "household_market_income",
