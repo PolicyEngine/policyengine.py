@@ -107,7 +107,9 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
         "household": [
             "household_id",
             "household_weight",
+            "household_count_people",
             "household_net_income",
+            "household_income_decile",
             "household_benefits",
             "household_tax",
             "household_market_income",

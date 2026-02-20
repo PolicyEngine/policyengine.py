@@ -103,8 +103,10 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
             # IDs and weights
             "household_id",
             "household_weight",
+            "household_count_people",
             # Income measures
             "household_net_income",
+            "household_income_decile",
             "hbai_household_net_income",
             "equiv_hbai_household_net_income",
             "household_market_income",
