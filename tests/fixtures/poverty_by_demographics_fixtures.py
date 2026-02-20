@@ -34,7 +34,9 @@ RACE_GROUP_COUNT = len(RACE_GROUPS)  # 4
 
 AGE_GROUP_NAMES = list(AGE_GROUPS.keys())  # ["child", "adult", "senior"]
 GENDER_GROUP_NAMES = list(GENDER_GROUPS.keys())  # ["male", "female"]
-RACE_GROUP_NAMES = list(RACE_GROUPS.keys())  # ["white", "black", "hispanic", "other"]
+RACE_GROUP_NAMES = list(
+    RACE_GROUPS.keys()
+)  # ["white", "black", "hispanic", "other"]
 
 EXPECTED_UK_BY_AGE_COUNT = AGE_GROUP_COUNT * UK_POVERTY_TYPE_COUNT  # 12
 EXPECTED_US_BY_AGE_COUNT = AGE_GROUP_COUNT * US_POVERTY_TYPE_COUNT  # 6

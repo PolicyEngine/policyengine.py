@@ -10,7 +10,6 @@ from unittest.mock import patch
 
 from policyengine.outputs.poverty import (
     AGE_GROUPS,
-    GENDER_GROUPS,
     RACE_GROUPS,
     calculate_uk_poverty_by_age,
     calculate_uk_poverty_by_gender,
@@ -31,7 +30,6 @@ from tests.fixtures.poverty_by_demographics_fixtures import (
     make_uk_mock_collection,
     make_us_mock_collection,
 )
-
 
 # ---------------------------------------------------------------------------
 # UK poverty by age
@@ -54,7 +52,9 @@ class TestCalculateUkPovertyByAge:
         assert len(result.outputs) == EXPECTED_UK_BY_AGE_COUNT
 
     @patch("policyengine.outputs.poverty.calculate_uk_poverty_rates")
-    def test__given_simulation__then_calls_base_once_per_age_group(self, mock_rates):
+    def test__given_simulation__then_calls_base_once_per_age_group(
+        self, mock_rates
+    ):
         # Given
         sim = make_mock_simulation()
         mock_rates.return_value = make_uk_mock_collection(sim)
@@ -81,7 +81,9 @@ class TestCalculateUkPovertyByAge:
         assert filter_vars == set(AGE_GROUP_NAMES)
 
     @patch("policyengine.outputs.poverty.calculate_uk_poverty_rates")
-    def test__given_simulation__then_passes_correct_filter_kwargs(self, mock_rates):
+    def test__given_simulation__then_passes_correct_filter_kwargs(
+        self, mock_rates
+    ):
         # Given
         sim = make_mock_simulation()
         mock_rates.return_value = make_uk_mock_collection(sim)
@@ -239,7 +241,9 @@ class TestCalculateUsPovertyByRace:
         assert len(result.outputs) == EXPECTED_US_BY_RACE_COUNT
 
     @patch("policyengine.outputs.poverty.calculate_us_poverty_rates")
-    def test__given_simulation__then_calls_base_once_per_race_group(self, mock_rates):
+    def test__given_simulation__then_calls_base_once_per_race_group(
+        self, mock_rates
+    ):
         # Given
         sim = make_mock_simulation()
         mock_rates.return_value = make_us_mock_collection(sim)
@@ -282,7 +286,9 @@ class TestCalculateUsPovertyByRace:
         assert white_call.kwargs["filter_variable_eq"] == "WHITE"
 
     @patch("policyengine.outputs.poverty.calculate_us_poverty_rates")
-    def test__given_simulation__then_dataframe_has_correct_row_count(self, mock_rates):
+    def test__given_simulation__then_dataframe_has_correct_row_count(
+        self, mock_rates
+    ):
         # Given
         sim = make_mock_simulation()
         mock_rates.return_value = make_us_mock_collection(sim)
