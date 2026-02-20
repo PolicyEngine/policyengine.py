@@ -4,6 +4,10 @@ from policyengine.outputs.change_aggregate import (
     ChangeAggregate,
     ChangeAggregateType,
 )
+from policyengine.outputs.congressional_district_impact import (
+    CongressionalDistrictImpact,
+    compute_us_congressional_district_impacts,
+)
 from policyengine.outputs.decile_impact import (
     DecileImpact,
     calculate_decile_impacts,
@@ -46,4 +50,6 @@ __all__ = [
     "US_INEQUALITY_INCOME_VARIABLE",
     "calculate_uk_inequality",
     "calculate_us_inequality",
+    "CongressionalDistrictImpact",
+    "compute_us_congressional_district_impacts",
 ]
