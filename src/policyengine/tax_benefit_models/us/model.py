@@ -100,6 +100,7 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
             "tax_unit_weight",
             "income_tax",
             "employee_payroll_tax",
+            "household_state_income_tax",
             "eitc",
             "ctc",
         ],
