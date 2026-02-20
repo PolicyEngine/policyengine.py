@@ -114,7 +114,7 @@ def compute_uk_local_authority_impacts(
     Returns:
         LocalAuthorityImpact with local_authority_results populated.
     """
-    impact = LocalAuthorityImpact(
+    impact = LocalAuthorityImpact.model_construct(
         baseline_simulation=baseline_simulation,
         reform_simulation=reform_simulation,
         weight_matrix_path=weight_matrix_path,
