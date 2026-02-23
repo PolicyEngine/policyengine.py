@@ -43,7 +43,8 @@ dev = [
     "ruff>=0.5.0",
     "policyengine_core>=3.23.6",
     "policyengine-uk>=2.51.0",
-    "policyengine-us>=1.213.1",
+    "policyengine-us>=1.213.1",    "towncrier>=24.8.0",
+
 ]
 
 [tool.setuptools]
@@ -103,3 +104,36 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
+
+[tool.towncrier]
+package = "policyengine"
+directory = "changelog.d"
+filename = "CHANGELOG.md"
+title_format = "## [{version}] - {project_date}"
+issue_format = ""
+underlines = ["", "", ""]
+
+[[tool.towncrier.type]]
+directory = "breaking"
+name = "Breaking changes"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "added"
+name = "Added"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "changed"
+name = "Changed"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "fixed"
+name = "Fixed"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "removed"
+name = "Removed"
+showcontent = true
