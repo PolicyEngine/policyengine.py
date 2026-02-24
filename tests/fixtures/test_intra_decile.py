@@ -3,7 +3,6 @@
 import numpy as np
 from unittest.mock import MagicMock
 
-
 # Standard decile assignment: one household per decile (1-10)
 DECILES_1_TO_10 = list(range(1, 11))
 NUM_DECILES = 10
