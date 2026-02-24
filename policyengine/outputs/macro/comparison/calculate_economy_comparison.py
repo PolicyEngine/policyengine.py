@@ -410,7 +410,7 @@ class IntraDecileImpact(BaseModel):
     all: Dict[str, float]
 
 
-def compute_income_change(baseline_values, reform_values):
+def _compute_income_change(baseline_values, reform_values):
     """Percentage income change with a floor of 1 on the baseline
     to avoid division by zero for zero/negative incomes."""
     absolute_change = reform_values - baseline_values
@@ -431,7 +431,7 @@ def intra_decile_impact(
         baseline.household_count_people, weights=baseline_income.weights
     )
     decile = MicroSeries(baseline.household_income_decile).values
-    income_change = compute_income_change(
+    income_change = _compute_income_change(
         baseline_income.values, reform_income.values
     )
 
@@ -500,7 +500,7 @@ def intra_wealth_decile_impact(
         baseline.household_count_people, weights=baseline_income.weights
     )
     decile = MicroSeries(baseline.household_wealth_decile).values
-    income_change = compute_income_change(
+    income_change = _compute_income_change(
         baseline_income.values, reform_income.values
     )
 
