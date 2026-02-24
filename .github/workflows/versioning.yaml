@@ -4,6 +4,7 @@ name: Versioning updates
 on:
   push:
       branches:
+        - main
         - '0.x'
 
       paths:
