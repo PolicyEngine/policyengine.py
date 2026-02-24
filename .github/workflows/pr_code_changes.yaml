@@ -44,8 +44,6 @@ jobs:
           run: uv pip install -e .[dev] --system
         - name: Install policyengine
           run: uv pip install policyengine --system
-        - name: UV sync
-          run: uv sync
         - name: Run tests with coverage
           run: make test
           env:
