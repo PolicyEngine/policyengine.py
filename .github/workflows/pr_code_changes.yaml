@@ -25,6 +25,10 @@ jobs:
           run: ruff check .
   Test:
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.13', '3.14']
     steps:
         - name: Checkout repo
           uses: actions/checkout@v4
@@ -34,14 +38,13 @@ jobs:
         - name: Set up Python
           uses: actions/setup-python@v5
           with:
-              python-version: '3.13'
-            
+              python-version: ${{ matrix.python-version }}
+              allow-prereleases: true
+
         - name: Install package
           run: uv pip install -e .[dev] --system
         - name: Install policyengine
           run: uv pip install policyengine --system
-        - name: UV sync
-          run: uv sync
         - name: Run tests with coverage
           run: make test
           env:

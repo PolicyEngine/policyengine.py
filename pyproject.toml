@@ -12,6 +12,10 @@ authors = [
 ]
 license = {file = "LICENSE"}
 requires-python = ">=3.13"
+classifiers = [
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
 dependencies = [
     "pydantic>=2.0.0",
     "pandas>=2.0.0",

@@ -1,10 +1,10 @@
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from policyengine.core import Output, Simulation
 
 
-class AggregateType(str, Enum):
+class AggregateType(StrEnum):
     SUM = "sum"
     MEAN = "mean"
     COUNT = "count"
