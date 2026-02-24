@@ -4,8 +4,7 @@ name: Versioning updates
 on:
   push:
       branches:
-        - main
-        - '0.x'  # Maintenance branch for legacy 0.x releases
+        - '0.x'
 
       paths:
         - changelog_entry.yaml
