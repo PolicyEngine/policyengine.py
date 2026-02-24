@@ -23,9 +23,7 @@ class TestComputeIncomeChange:
     """Direct unit tests for the income change formula."""
 
     def test__given_4pct_gain__returns_0_04(self):
-        result = _compute_income_change(
-            np.array([1000.0]), np.array([1040.0])
-        )
+        result = _compute_income_change(np.array([1000.0]), np.array([1040.0]))
         assert result[0] == pytest.approx(0.04)
 
 
@@ -44,7 +42,9 @@ class TestIntraDecileImpact:
         result = intra_decile_impact(baseline, reform)
 
         for pct in result.deciles["Gain more than 5%"]:
-            assert pct == 0.0, f"5% gain incorrectly classified as >5% (got {pct})"
+            assert (
+                pct == 0.0
+            ), f"5% gain incorrectly classified as >5% (got {pct})"
         for pct in result.deciles["Gain less than 5%"]:
             assert pct == 1.0, f"5% gain not classified as <5% (got {pct})"
 
@@ -76,7 +76,9 @@ class TestIntraDecileImpact:
         result = intra_decile_impact(baseline, reform)
 
         total = sum(result.all[label] for label in result.all)
-        assert abs(total - 1.0) < 1e-9, f"Proportions should sum to 1, got {total}"
+        assert (
+            abs(total - 1.0) < 1e-9
+        ), f"Proportions should sum to 1, got {total}"
 
     def test__given_zero_baseline__classifies_gain_as_above_5pct(self):
         """When baseline income is 0, the max(B, 1) floor means the
@@ -86,7 +88,9 @@ class TestIntraDecileImpact:
         result = intra_decile_impact(baseline, reform)
 
         for pct in result.deciles["Gain more than 5%"]:
-            assert pct == 1.0, f"Zero baseline with $100 gain should be >5% (got {pct})"
+            assert (
+                pct == 1.0
+            ), f"Zero baseline with $100 gain should be >5% (got {pct})"
         for label in result.all:
             assert not np.isnan(result.all[label])
             assert not np.isinf(result.all[label])
@@ -106,7 +110,9 @@ class TestIntraDecileImpact:
         result = intra_decile_impact(baseline, reform)
 
         for pct in result.deciles["Gain more than 5%"]:
-            assert pct == 0.0, "4% gain incorrectly classified as >5% (doubling bug)"
+            assert (
+                pct == 0.0
+            ), "4% gain incorrectly classified as >5% (doubling bug)"
         for pct in result.deciles["Gain less than 5%"]:
             assert pct == 1.0, "4% gain not classified as <5%"
 
