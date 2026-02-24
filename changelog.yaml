@@ -240,3 +240,8 @@
     changed:
     - Bumped policyengine-core minimum version to 3.23.5 for pandas 3.0 compatibility
   date: 2026-01-25 14:20:29
+- bump: minor
+  changes:
+    added:
+    - Python 3.14 support
+  date: 2026-02-24 17:31:22
