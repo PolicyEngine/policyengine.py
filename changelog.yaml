@@ -198,3 +198,8 @@
     - Place-level filtering now builds entity_rel DataFrame for cleaner filtering
       logic
   date: 2026-02-05 19:34:09
+- bump: patch
+  changes:
+    fixed:
+    - Fix intra-decile income change formula that doubled all percentage changes.
+  date: 2026-02-24 20:12:20
