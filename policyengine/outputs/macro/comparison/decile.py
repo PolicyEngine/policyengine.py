@@ -108,12 +108,7 @@ def calculate_income_specific_decile_winners_losers(
     # Filter out negative decile values due to negative incomes
     absolute_change = (reform_income - baseline_income).values
     capped_baseline_income = np.maximum(baseline_income.values, 1)
-    capped_reform_income = (
-        np.maximum(reform_income.values, 1) + absolute_change
-    )
-    income_change = (
-        capped_reform_income - capped_baseline_income
-    ) / capped_baseline_income
+    income_change = absolute_change / capped_baseline_income
 
     # Within each decile, calculate the percentage of people who:
     # 1. Gained more than 5% of their income
