@@ -137,10 +137,30 @@ def test_write_results_json():
         path = Path(tmpdir) / "results.json"
         results.write(path)
 
-        data = json.loads(path.read_text())
+        raw = path.read_text()
+        assert raw.endswith("\n"), "File should end with a newline"
+        data = json.loads(raw)
         assert data["metadata"]["title"] == "Write Test"
         assert data["values"]["x"]["value"] == 42
         assert data["values"]["x"]["source_line"] == 1
+
+
+def test_write_creates_parent_directories():
+    """ResultsJson.write() creates parent directories if needed."""
+    results = ResultsJson(
+        metadata=ResultsMetadata(
+            title="Nested",
+            repo="PolicyEngine/test",
+        ),
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "sub" / "dir" / "results.json"
+        results.write(path)
+
+        assert path.exists()
+        data = json.loads(path.read_text())
+        assert data["metadata"]["title"] == "Nested"
 
 
 def test_empty_results_json():

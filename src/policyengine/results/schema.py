@@ -110,5 +110,6 @@ class ResultsJson(BaseModel):
     def write(self, path: str | Path) -> None:
         """Write validated results.json to disk."""
         path = Path(path)
-        data = json.loads(self.model_dump_json())
-        path.write_text(json.dumps(data, indent=2))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = self.model_dump(mode="json")
+        path.write_text(json.dumps(data, indent=2) + "\n")
