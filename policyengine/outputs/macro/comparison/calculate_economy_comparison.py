@@ -3,6 +3,10 @@
 from microdf import MicroSeries
 import numpy as np
 from policyengine.utils.data_download import download
+from policyengine.utils.uk_geography import (
+    should_zero_constituency,
+    should_zero_local_authority,
+)
 import pandas as pd
 import h5py
 from pydantic import BaseModel
@@ -694,7 +698,10 @@ UKConstituencyBreakdown = UKConstituencyBreakdownWithValues | None
 
 
 def uk_constituency_breakdown(
-    baseline: SingleEconomy, reform: SingleEconomy, country_id: str
+    baseline: SingleEconomy,
+    reform: SingleEconomy,
+    country_id: str,
+    region: str | None = None,
 ) -> UKConstituencyBreakdown:
     if country_id != "uk":
         return None
@@ -703,8 +710,8 @@ def uk_constituency_breakdown(
         "by_constituency": {},
         "outcomes_by_region": {},
     }
-    for region in ["uk", "england", "scotland", "wales", "northern_ireland"]:
-        output["outcomes_by_region"][region] = {
+    for region_ in ["uk", "england", "scotland", "wales", "northern_ireland"]:
+        output["outcomes_by_region"][region_] = {
             "Gain more than 5%": 0,
             "Gain less than 5%": 0,
             "No change": 0,
@@ -734,15 +741,21 @@ def uk_constituency_breakdown(
     for i in range(len(constituency_names)):
         name: str = constituency_names.iloc[i]["name"]
         code: str = constituency_names.iloc[i]["code"]
-        weight: np.ndarray = weights[i]
-        baseline_income = MicroSeries(baseline_hnet, weights=weight)
-        reform_income = MicroSeries(reform_hnet, weights=weight)
-        average_household_income_change: float = (
-            reform_income.sum() - baseline_income.sum()
-        ) / baseline_income.count()
-        percent_household_income_change: float = (
-            reform_income.sum() / baseline_income.sum() - 1
-        )
+
+        if should_zero_constituency(region, code, name):
+            average_household_income_change = 0.0
+            percent_household_income_change = 0.0
+        else:
+            weight: np.ndarray = weights[i]
+            baseline_income = MicroSeries(baseline_hnet, weights=weight)
+            reform_income = MicroSeries(reform_hnet, weights=weight)
+            average_household_income_change = (
+                reform_income.sum() - baseline_income.sum()
+            ) / baseline_income.count()
+            percent_household_income_change = (
+                reform_income.sum() / baseline_income.sum() - 1
+            )
+
         output["by_constituency"][name] = {
             "average_household_income_change": average_household_income_change,
             "relative_household_income_change": percent_household_income_change,
@@ -750,29 +763,31 @@ def uk_constituency_breakdown(
             "y": int(constituency_names.iloc[i]["y"]),
         }
 
-        regions = ["uk"]
-        if "E" in code:
-            regions.append("england")
-        elif "S" in code:
-            regions.append("scotland")
-        elif "W" in code:
-            regions.append("wales")
-        elif "N" in code:
-            regions.append("northern_ireland")
+        # Only count non-zeroed constituencies in outcomes_by_region
+        if not should_zero_constituency(region, code, name):
+            regions = ["uk"]
+            if "E" in code:
+                regions.append("england")
+            elif "S" in code:
+                regions.append("scotland")
+            elif "W" in code:
+                regions.append("wales")
+            elif "N" in code:
+                regions.append("northern_ireland")
 
-        if percent_household_income_change > 0.05:
-            bucket = "Gain more than 5%"
-        elif percent_household_income_change > 1e-3:
-            bucket = "Gain less than 5%"
-        elif percent_household_income_change > -1e-3:
-            bucket = "No change"
-        elif percent_household_income_change > -0.05:
-            bucket = "Lose less than 5%"
-        else:
-            bucket = "Lose more than 5%"
+            if percent_household_income_change > 0.05:
+                bucket = "Gain more than 5%"
+            elif percent_household_income_change > 1e-3:
+                bucket = "Gain less than 5%"
+            elif percent_household_income_change > -1e-3:
+                bucket = "No change"
+            elif percent_household_income_change > -0.05:
+                bucket = "Lose less than 5%"
+            else:
+                bucket = "Lose more than 5%"
 
-        for region_ in regions:
-            output["outcomes_by_region"][region_][bucket] += 1
+            for region_ in regions:
+                output["outcomes_by_region"][region_][bucket] += 1
 
     return UKConstituencyBreakdownWithValues(**output)
 
@@ -792,7 +807,10 @@ UKLocalAuthorityBreakdown = UKLocalAuthorityBreakdownWithValues | None
 
 
 def uk_local_authority_breakdown(
-    baseline: SingleEconomy, reform: SingleEconomy, country_id: str
+    baseline: SingleEconomy,
+    reform: SingleEconomy,
+    country_id: str,
+    region: str | None = None,
 ) -> UKLocalAuthorityBreakdown:
     if country_id != "uk":
         return None
@@ -824,15 +842,21 @@ def uk_local_authority_breakdown(
     for i in range(len(local_authority_names)):
         name: str = local_authority_names.iloc[i]["name"]
         code: str = local_authority_names.iloc[i]["code"]
-        weight: np.ndarray = weights[i]
-        baseline_income = MicroSeries(baseline_hnet, weights=weight)
-        reform_income = MicroSeries(reform_hnet, weights=weight)
-        average_household_income_change: float = (
-            reform_income.sum() - baseline_income.sum()
-        ) / baseline_income.count()
-        percent_household_income_change: float = (
-            reform_income.sum() / baseline_income.sum() - 1
-        )
+
+        if should_zero_local_authority(region, code, name):
+            average_household_income_change = 0.0
+            percent_household_income_change = 0.0
+        else:
+            weight: np.ndarray = weights[i]
+            baseline_income = MicroSeries(baseline_hnet, weights=weight)
+            reform_income = MicroSeries(reform_hnet, weights=weight)
+            average_household_income_change = (
+                reform_income.sum() - baseline_income.sum()
+            ) / baseline_income.count()
+            percent_household_income_change = (
+                reform_income.sum() / baseline_income.sum() - 1
+            )
+
         output["by_local_authority"][name] = {
             "average_household_income_change": average_household_income_change,
             "relative_household_income_change": percent_household_income_change,
@@ -841,8 +865,6 @@ def uk_local_authority_breakdown(
             ),  # Geographic positions
             "y": int(local_authority_names.iloc[i]["y"]),
         }
-
-        # Note: Country-level aggregation and bucketing logic removed for local authorities
 
     return UKLocalAuthorityBreakdownWithValues(**output)
 
@@ -1004,10 +1026,12 @@ def calculate_economy_comparison(
     intra_decile_impact_data = intra_decile_impact(baseline, reform)
     labor_supply_response_data = labor_supply_response(baseline, reform)
     constituency_impact_data: UKConstituencyBreakdown = (
-        uk_constituency_breakdown(baseline, reform, country_id)
+        uk_constituency_breakdown(baseline, reform, country_id, options.region)
     )
     local_authority_impact_data: UKLocalAuthorityBreakdown = (
-        uk_local_authority_breakdown(baseline, reform, country_id)
+        uk_local_authority_breakdown(
+            baseline, reform, country_id, options.region
+        )
     )
     congressional_district_impact_data: USCongressionalDistrictBreakdown = (
         us_congressional_district_breakdown(baseline, reform, country_id)
