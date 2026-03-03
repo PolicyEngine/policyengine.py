@@ -59,7 +59,7 @@ def _load_constituencies_from_csv() -> list[dict]:
             {"code": row["code"], "name": row["name"]}
             for _, row in df.iterrows()
         ]
-    except (IOError, OSError, KeyError, ValueError) as exc:
+    except (OSError, KeyError, ValueError) as exc:
         logger.warning("Failed to load constituencies CSV: %s", exc)
         return []
     except Exception:
@@ -96,7 +96,7 @@ def _load_local_authorities_from_csv() -> list[dict]:
             {"code": row["code"], "name": row["name"]}
             for _, row in df.iterrows()
         ]
-    except (IOError, OSError, KeyError, ValueError) as exc:
+    except (OSError, KeyError, ValueError) as exc:
         logger.warning("Failed to load local authorities CSV: %s", exc)
         return []
     except Exception:

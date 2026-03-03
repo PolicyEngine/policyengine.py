@@ -11,7 +11,6 @@ from microdf import MicroDataFrame
 
 from policyengine.outputs.poverty import Poverty
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

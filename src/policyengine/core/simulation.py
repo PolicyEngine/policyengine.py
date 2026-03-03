@@ -4,13 +4,13 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-logger = logging.getLogger(__name__)
-
 from .cache import LRUCache
 from .dataset import Dataset
 from .dynamic import Dynamic
 from .policy import Policy
 from .tax_benefit_model_version import TaxBenefitModelVersion
+
+logger = logging.getLogger(__name__)
 
 _cache: LRUCache["Simulation"] = LRUCache(max_size=100)
 
