@@ -1,7 +1,11 @@
 """Shared utilities for entity relationship building and dataset filtering."""
 
+import logging
+
 import pandas as pd
 from microdf import MicroDataFrame
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_id_column(
@@ -16,7 +20,13 @@ def _resolve_id_column(
     bare = f"{entity_name}_id"
     if prefixed in person_data.columns:
         return prefixed
-    return bare
+    if bare in person_data.columns:
+        return bare
+    raise ValueError(
+        f"No ID column found for entity '{entity_name}'. "
+        f"Tried '{prefixed}' and '{bare}'. "
+        f"Available columns: {list(person_data.columns)}"
+    )
 
 
 def build_entity_relationships(
@@ -115,6 +125,13 @@ def filter_dataset_by_household_variable(
         if entity_name in filtered_ids and id_col in df.columns:
             filtered_df = df[df[id_col].isin(filtered_ids[entity_name])]
         else:
+            if entity_name != "person":
+                logger.warning(
+                    "Entity '%s' not in filtered_ids or missing '%s' column; "
+                    "passing through unfiltered.",
+                    entity_name,
+                    id_col,
+                )
             filtered_df = df
 
         weight_col = f"{entity_name}_weight"

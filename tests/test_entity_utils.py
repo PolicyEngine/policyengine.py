@@ -105,6 +105,23 @@ class TestBuildEntityRelationships:
 
         assert list(result["household_id"]) == [10, 20]
 
+    def test__given_missing_id_column__then_raises_value_error(self):
+        """Given: Person data without any matching ID column for entity
+        When: Building entity relationships
+        Then: Raises ValueError with informative message
+        """
+        person_data = pd.DataFrame(
+            {
+                "person_id": [1, 2],
+                "some_other_col": [10, 20],
+            }
+        )
+
+        with pytest.raises(
+            ValueError, match="No ID column found for entity 'household'"
+        ):
+            build_entity_relationships(person_data, ["household"])
+
 
 class TestFilterDatasetByHouseholdVariable:
     """Tests for the shared filter_dataset_by_household_variable function."""

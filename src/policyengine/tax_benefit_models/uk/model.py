@@ -1,4 +1,5 @@
 import datetime
+import logging
 from importlib.metadata import version
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -37,20 +38,32 @@ class PolicyEngineUK(TaxBenefitModel):
 
 uk_model = PolicyEngineUK()
 
-pkg_version = version("policyengine-uk")
+_logger = logging.getLogger(__name__)
 
-# Get published time from PyPI
-response = requests.get("https://pypi.org/pypi/policyengine-uk/json")
-data = response.json()
-upload_time = data["releases"][pkg_version][0]["upload_time_iso_8601"]
+
+def _get_uk_package_metadata():
+    """Get PolicyEngine UK package version and upload time (lazy-loaded)."""
+    pkg_version = version("policyengine-uk")
+    try:
+        response = requests.get(
+            "https://pypi.org/pypi/policyengine-uk/json",
+            timeout=10,
+        )
+        response.raise_for_status()
+        data = response.json()
+        upload_time = data["releases"][pkg_version][0]["upload_time_iso_8601"]
+    except (requests.RequestException, KeyError, IndexError) as exc:
+        _logger.warning(
+            "Could not fetch PyPI metadata for policyengine-uk: %s", exc
+        )
+        upload_time = None
+    return pkg_version, upload_time
 
 
 class PolicyEngineUKLatest(TaxBenefitModelVersion):
     model: TaxBenefitModel = uk_model
-    version: str = pkg_version
-    created_at: datetime.datetime = datetime.datetime.fromisoformat(
-        upload_time
-    )
+    version: str = None
+    created_at: datetime.datetime = None
 
     entity_variables: dict[str, list[str]] = {
         "person": [
@@ -129,6 +142,15 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
     }
 
     def __init__(self, **kwargs: dict):
+        # Lazy-load package metadata if not provided
+        if "version" not in kwargs or kwargs.get("version") is None:
+            pkg_version, upload_time = _get_uk_package_metadata()
+            kwargs["version"] = pkg_version
+            if upload_time is not None:
+                kwargs["created_at"] = datetime.datetime.fromisoformat(
+                    upload_time
+                )
+
         super().__init__(**kwargs)
         from policyengine_core.enums import Enum
         from policyengine_uk.system import system

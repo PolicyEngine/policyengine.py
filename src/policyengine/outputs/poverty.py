@@ -60,6 +60,9 @@ class Poverty(Output):
     filter_variable_leq: Any | None = None
     filter_variable_geq: Any | None = None
 
+    # Convenience group label (set by by_age/by_gender/by_race wrappers)
+    filter_group: str | None = None
+
     # Results populated by run()
     headcount: float | None = None
     total_population: float | None = None
@@ -286,7 +289,7 @@ def calculate_uk_poverty_by_age(
     for group_name, filters in AGE_GROUPS.items():
         group_results = calculate_uk_poverty_rates(simulation, **filters)
         for pov in group_results.outputs:
-            pov.filter_variable = group_name
+            pov.filter_group = group_name
             results.append(pov)
 
     df = pd.DataFrame(
@@ -296,6 +299,7 @@ def calculate_uk_poverty_by_age(
                 "poverty_type": r.poverty_type,
                 "poverty_variable": r.poverty_variable,
                 "filter_variable": r.filter_variable,
+                "filter_group": r.filter_group,
                 "headcount": r.headcount,
                 "total_population": r.total_population,
                 "rate": r.rate,
@@ -324,7 +328,7 @@ def calculate_us_poverty_by_age(
     for group_name, filters in AGE_GROUPS.items():
         group_results = calculate_us_poverty_rates(simulation, **filters)
         for pov in group_results.outputs:
-            pov.filter_variable = group_name
+            pov.filter_group = group_name
             results.append(pov)
 
     df = pd.DataFrame(
@@ -334,6 +338,7 @@ def calculate_us_poverty_by_age(
                 "poverty_type": r.poverty_type,
                 "poverty_variable": r.poverty_variable,
                 "filter_variable": r.filter_variable,
+                "filter_group": r.filter_group,
                 "headcount": r.headcount,
                 "total_population": r.total_population,
                 "rate": r.rate,
@@ -362,7 +367,7 @@ def calculate_uk_poverty_by_gender(
     for group_name, filters in GENDER_GROUPS.items():
         group_results = calculate_uk_poverty_rates(simulation, **filters)
         for pov in group_results.outputs:
-            pov.filter_variable = group_name
+            pov.filter_group = group_name
             results.append(pov)
 
     df = pd.DataFrame(
@@ -372,6 +377,7 @@ def calculate_uk_poverty_by_gender(
                 "poverty_type": r.poverty_type,
                 "poverty_variable": r.poverty_variable,
                 "filter_variable": r.filter_variable,
+                "filter_group": r.filter_group,
                 "headcount": r.headcount,
                 "total_population": r.total_population,
                 "rate": r.rate,
@@ -400,7 +406,7 @@ def calculate_us_poverty_by_gender(
     for group_name, filters in GENDER_GROUPS.items():
         group_results = calculate_us_poverty_rates(simulation, **filters)
         for pov in group_results.outputs:
-            pov.filter_variable = group_name
+            pov.filter_group = group_name
             results.append(pov)
 
     df = pd.DataFrame(
@@ -410,6 +416,7 @@ def calculate_us_poverty_by_gender(
                 "poverty_type": r.poverty_type,
                 "poverty_variable": r.poverty_variable,
                 "filter_variable": r.filter_variable,
+                "filter_group": r.filter_group,
                 "headcount": r.headcount,
                 "total_population": r.total_population,
                 "rate": r.rate,
@@ -441,7 +448,7 @@ def calculate_us_poverty_by_race(
     for group_name, filters in RACE_GROUPS.items():
         group_results = calculate_us_poverty_rates(simulation, **filters)
         for pov in group_results.outputs:
-            pov.filter_variable = group_name
+            pov.filter_group = group_name
             results.append(pov)
 
     df = pd.DataFrame(
@@ -451,6 +458,7 @@ def calculate_us_poverty_by_race(
                 "poverty_type": r.poverty_type,
                 "poverty_variable": r.poverty_variable,
                 "filter_variable": r.filter_variable,
+                "filter_group": r.filter_group,
                 "headcount": r.headcount,
                 "total_population": r.total_population,
                 "rate": r.rate,

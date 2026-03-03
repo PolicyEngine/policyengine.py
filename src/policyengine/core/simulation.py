@@ -1,7 +1,10 @@
+import logging
 from datetime import datetime
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 from .cache import LRUCache
 from .dataset import Dataset
@@ -44,7 +47,15 @@ class Simulation(BaseModel):
             return
         try:
             self.tax_benefit_model_version.load(self)
+        except FileNotFoundError:
+            self.run()
+            self.save()
         except Exception:
+            logger.warning(
+                "Unexpected error loading simulation %s; falling back to run()",
+                self.id,
+                exc_info=True,
+            )
             self.run()
             self.save()
 

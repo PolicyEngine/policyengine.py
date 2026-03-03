@@ -11,12 +11,15 @@ data filtering. They modify household_weight based on pre-computed weights
 from H5 files stored in GCS.
 """
 
+import logging
 from typing import TYPE_CHECKING
 
 from policyengine.core.region import Region, RegionRegistry
 
 if TYPE_CHECKING:
     pass
+
+logger = logging.getLogger(__name__)
 
 UK_DATA_BUCKET = "gs://policyengine-uk-data-private"
 
@@ -56,8 +59,13 @@ def _load_constituencies_from_csv() -> list[dict]:
             {"code": row["code"], "name": row["name"]}
             for _, row in df.iterrows()
         ]
+    except (IOError, OSError, KeyError, ValueError) as exc:
+        logger.warning("Failed to load constituencies CSV: %s", exc)
+        return []
     except Exception:
-        # If download fails, return empty list
+        logger.error(
+            "Unexpected error loading constituencies CSV", exc_info=True
+        )
         return []
 
 
@@ -88,8 +96,13 @@ def _load_local_authorities_from_csv() -> list[dict]:
             {"code": row["code"], "name": row["name"]}
             for _, row in df.iterrows()
         ]
+    except (IOError, OSError, KeyError, ValueError) as exc:
+        logger.warning("Failed to load local authorities CSV: %s", exc)
+        return []
     except Exception:
-        # If download fails, return empty list
+        logger.error(
+            "Unexpected error loading local authorities CSV", exc_info=True
+        )
         return []
 
 

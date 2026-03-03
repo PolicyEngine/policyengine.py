@@ -13,8 +13,8 @@ if TYPE_CHECKING:
 
 
 def reform_dict_from_parameter_values(
-    parameter_values: list[ParameterValue],
-) -> dict:
+    parameter_values: list[ParameterValue] | None,
+) -> dict | None:
     """
     Convert a list of ParameterValue objects to a reform dict format.
 

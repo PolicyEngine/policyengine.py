@@ -66,7 +66,7 @@ class TestCalculateUkPovertyByAge:
         assert mock_rates.call_count == len(AGE_GROUPS)
 
     @patch("policyengine.outputs.poverty.calculate_uk_poverty_rates")
-    def test__given_simulation__then_filter_variable_set_to_group_name(
+    def test__given_simulation__then_filter_group_set_to_group_name(
         self, mock_rates
     ):
         # Given
@@ -77,8 +77,8 @@ class TestCalculateUkPovertyByAge:
         result = calculate_uk_poverty_by_age(sim)
 
         # Then
-        filter_vars = {o.filter_variable for o in result.outputs}
-        assert filter_vars == set(AGE_GROUP_NAMES)
+        filter_groups = {o.filter_group for o in result.outputs}
+        assert filter_groups == set(AGE_GROUP_NAMES)
 
     @patch("policyengine.outputs.poverty.calculate_uk_poverty_rates")
     def test__given_simulation__then_passes_correct_filter_kwargs(
@@ -119,7 +119,7 @@ class TestCalculateUsPovertyByAge:
         assert len(result.outputs) == EXPECTED_US_BY_AGE_COUNT
 
     @patch("policyengine.outputs.poverty.calculate_us_poverty_rates")
-    def test__given_simulation__then_filter_variable_set_to_group_name(
+    def test__given_simulation__then_filter_group_set_to_group_name(
         self, mock_rates
     ):
         # Given
@@ -130,8 +130,8 @@ class TestCalculateUsPovertyByAge:
         result = calculate_us_poverty_by_age(sim)
 
         # Then
-        filter_vars = {o.filter_variable for o in result.outputs}
-        assert filter_vars == set(AGE_GROUP_NAMES)
+        filter_groups = {o.filter_group for o in result.outputs}
+        assert filter_groups == set(AGE_GROUP_NAMES)
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +155,7 @@ class TestCalculateUkPovertyByGender:
         assert len(result.outputs) == EXPECTED_UK_BY_GENDER_COUNT
 
     @patch("policyengine.outputs.poverty.calculate_uk_poverty_rates")
-    def test__given_simulation__then_filter_variable_set_to_gender_names(
+    def test__given_simulation__then_filter_group_set_to_gender_names(
         self, mock_rates
     ):
         # Given
@@ -166,8 +166,8 @@ class TestCalculateUkPovertyByGender:
         result = calculate_uk_poverty_by_gender(sim)
 
         # Then
-        filter_vars = {o.filter_variable for o in result.outputs}
-        assert filter_vars == set(GENDER_GROUP_NAMES)
+        filter_groups = {o.filter_group for o in result.outputs}
+        assert filter_groups == set(GENDER_GROUP_NAMES)
 
     @patch("policyengine.outputs.poverty.calculate_uk_poverty_rates")
     def test__given_simulation__then_passes_is_male_filter(self, mock_rates):
@@ -205,7 +205,7 @@ class TestCalculateUsPovertyByGender:
         assert len(result.outputs) == EXPECTED_US_BY_GENDER_COUNT
 
     @patch("policyengine.outputs.poverty.calculate_us_poverty_rates")
-    def test__given_simulation__then_filter_variable_set_to_gender_names(
+    def test__given_simulation__then_filter_group_set_to_gender_names(
         self, mock_rates
     ):
         # Given
@@ -216,8 +216,8 @@ class TestCalculateUsPovertyByGender:
         result = calculate_us_poverty_by_gender(sim)
 
         # Then
-        filter_vars = {o.filter_variable for o in result.outputs}
-        assert filter_vars == set(GENDER_GROUP_NAMES)
+        filter_groups = {o.filter_group for o in result.outputs}
+        assert filter_groups == set(GENDER_GROUP_NAMES)
 
 
 # ---------------------------------------------------------------------------
@@ -255,7 +255,7 @@ class TestCalculateUsPovertyByRace:
         assert mock_rates.call_count == len(RACE_GROUPS)
 
     @patch("policyengine.outputs.poverty.calculate_us_poverty_rates")
-    def test__given_simulation__then_filter_variable_set_to_race_names(
+    def test__given_simulation__then_filter_group_set_to_race_names(
         self, mock_rates
     ):
         # Given
@@ -266,8 +266,8 @@ class TestCalculateUsPovertyByRace:
         result = calculate_us_poverty_by_race(sim)
 
         # Then
-        filter_vars = {o.filter_variable for o in result.outputs}
-        assert filter_vars == set(RACE_GROUP_NAMES)
+        filter_groups = {o.filter_group for o in result.outputs}
+        assert filter_groups == set(RACE_GROUP_NAMES)
 
     @patch("policyengine.outputs.poverty.calculate_us_poverty_rates")
     def test__given_simulation__then_passes_race_filter_with_correct_eq_value(
