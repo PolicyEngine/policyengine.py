@@ -27,7 +27,13 @@ from .datasets import PolicyEngineUSDataset, USYearData
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
 
-US_GROUP_ENTITIES = ["household", "tax_unit", "spm_unit", "family", "marital_unit"]
+US_GROUP_ENTITIES = [
+    "household",
+    "tax_unit",
+    "spm_unit",
+    "family",
+    "marital_unit",
+]
 
 
 class PolicyEngineUS(TaxBenefitModel):
@@ -146,6 +152,7 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
             variable = Variable(
                 id=self.id + "-" + var_obj.name,
                 name=var_obj.name,
+                label=getattr(var_obj, "label", None),
                 tax_benefit_model_version=self,
                 entity=var_obj.entity.key,
                 description=var_obj.documentation,

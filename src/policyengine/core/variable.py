@@ -8,6 +8,7 @@ from .tax_benefit_model_version import TaxBenefitModelVersion
 class Variable(BaseModel):
     id: str
     name: str
+    label: str | None = None
     tax_benefit_model_version: TaxBenefitModelVersion
     entity: str
     description: str | None = None

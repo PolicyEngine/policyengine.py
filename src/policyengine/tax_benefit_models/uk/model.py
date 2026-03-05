@@ -173,6 +173,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
             variable = Variable(
                 id=self.id + "-" + var_obj.name,
                 name=var_obj.name,
+                label=getattr(var_obj, "label", None),
                 tax_benefit_model_version=self,
                 entity=var_obj.entity.key,
                 description=var_obj.documentation,
