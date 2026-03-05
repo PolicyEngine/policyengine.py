@@ -26,7 +26,9 @@ def _make_sim(household_data: dict) -> MagicMock:
     return sim
 
 
-def _make_weight_matrix_and_csv(tmpdir, n_constituencies, n_households, weights, csv_rows):
+def _make_weight_matrix_and_csv(
+    tmpdir, n_constituencies, n_households, weights, csv_rows
+):
     """Create a temp H5 weight matrix and CSV metadata file."""
     h5_path = os.path.join(tmpdir, "weights.h5")
     with h5py.File(h5_path, "w") as f:
@@ -148,4 +150,10 @@ def test_relative_change():
         )
 
     # 10% increase
-    assert abs(impact.constituency_results[0]["relative_household_income_change"] - 0.1) < 1e-6
+    assert (
+        abs(
+            impact.constituency_results[0]["relative_household_income_change"]
+            - 0.1
+        )
+        < 1e-6
+    )

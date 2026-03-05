@@ -27,7 +27,13 @@ from .datasets import PolicyEngineUSDataset, USYearData
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
 
-US_GROUP_ENTITIES = ["household", "tax_unit", "spm_unit", "family", "marital_unit"]
+US_GROUP_ENTITIES = [
+    "household",
+    "tax_unit",
+    "spm_unit",
+    "family",
+    "marital_unit",
+]
 
 
 class PolicyEngineUS(TaxBenefitModel):

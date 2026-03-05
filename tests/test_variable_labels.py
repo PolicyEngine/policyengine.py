@@ -12,7 +12,6 @@ from tests.fixtures.variable_label_fixtures import (
     create_mock_openfisca_variable,
 )
 
-
 # ---------------------------------------------------------------------------
 # Unit tests for Variable model
 # ---------------------------------------------------------------------------
@@ -109,7 +108,9 @@ class TestUSVariableLabels:
         )
         assert var is not None, "employment_income not found in US model"
         assert var.label is not None, "employment_income should have a label"
-        assert len(var.label) > 0, "employment_income label should be non-empty"
+        assert len(var.label) > 0, (
+            "employment_income label should be non-empty"
+        )
 
     def test_income_tax_has_label(self):
         """income_tax should have a non-empty label."""
