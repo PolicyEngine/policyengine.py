@@ -1,4 +1,5 @@
 import datetime
+import logging
 from importlib.metadata import version
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -13,6 +14,10 @@ from policyengine.core import (
     TaxBenefitModelVersion,
     Variable,
 )
+from policyengine.utils.entity_utils import (
+    build_entity_relationships,
+    filter_dataset_by_household_variable,
+)
 from policyengine.utils.parameter_labels import (
     build_scale_lookup,
     generate_label_for_parameter,
@@ -23,6 +28,8 @@ from .datasets import PolicyEngineUKDataset, UKYearData
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
 
+UK_GROUP_ENTITIES = ["benunit", "household"]
+
 
 class PolicyEngineUK(TaxBenefitModel):
     id: str = "policyengine-uk"
@@ -31,20 +38,32 @@ class PolicyEngineUK(TaxBenefitModel):
 
 uk_model = PolicyEngineUK()
 
-pkg_version = version("policyengine-uk")
+_logger = logging.getLogger(__name__)
 
-# Get published time from PyPI
-response = requests.get("https://pypi.org/pypi/policyengine-uk/json")
-data = response.json()
-upload_time = data["releases"][pkg_version][0]["upload_time_iso_8601"]
+
+def _get_uk_package_metadata():
+    """Get PolicyEngine UK package version and upload time (lazy-loaded)."""
+    pkg_version = version("policyengine-uk")
+    try:
+        response = requests.get(
+            "https://pypi.org/pypi/policyengine-uk/json",
+            timeout=10,
+        )
+        response.raise_for_status()
+        data = response.json()
+        upload_time = data["releases"][pkg_version][0]["upload_time_iso_8601"]
+    except (requests.RequestException, KeyError, IndexError) as exc:
+        _logger.warning(
+            "Could not fetch PyPI metadata for policyengine-uk: %s", exc
+        )
+        upload_time = None
+    return pkg_version, upload_time
 
 
 class PolicyEngineUKLatest(TaxBenefitModelVersion):
     model: TaxBenefitModel = uk_model
-    version: str = pkg_version
-    created_at: datetime.datetime = datetime.datetime.fromisoformat(
-        upload_time
-    )
+    version: str = None
+    created_at: datetime.datetime = None
 
     entity_variables: dict[str, list[str]] = {
         "person": [
@@ -56,6 +75,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
             # Demographics
             "age",
             "gender",
+            "is_male",
             "is_adult",
             "is_SP_age",
             "is_child",
@@ -96,8 +116,11 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
             # IDs and weights
             "household_id",
             "household_weight",
+            "household_count_people",
             # Income measures
             "household_net_income",
+            "household_income_decile",
+            "household_wealth_decile",
             "hbai_household_net_income",
             "equiv_hbai_household_net_income",
             "household_market_income",
@@ -119,13 +142,34 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
     }
 
     def __init__(self, **kwargs: dict):
+        # Lazy-load package metadata if not provided
+        if "version" not in kwargs or kwargs.get("version") is None:
+            pkg_version, upload_time = _get_uk_package_metadata()
+            kwargs["version"] = pkg_version
+            if upload_time is not None:
+                kwargs["created_at"] = datetime.datetime.fromisoformat(
+                    upload_time
+                )
+
         super().__init__(**kwargs)
         from policyengine_core.enums import Enum
         from policyengine_uk.system import system
 
+        # Attach region registry
+        from policyengine.countries.uk.regions import uk_region_registry
+
+        self.region_registry = uk_region_registry
+
         self.id = f"{self.model.id}@{self.version}"
 
         for var_obj in system.variables.values():
+            # Serialize default_value for JSON compatibility
+            default_val = var_obj.default_value
+            if var_obj.value_type is Enum:
+                default_val = default_val.name
+            elif var_obj.value_type is datetime.date:
+                default_val = default_val.isoformat()
+
             variable = Variable(
                 id=self.id + "-" + var_obj.name,
                 name=var_obj.name,
@@ -135,6 +179,8 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                 data_type=var_obj.value_type
                 if var_obj.value_type is not Enum
                 else str,
+                default_value=default_val,
+                value_type=var_obj.value_type,
             )
             if (
                 hasattr(var_obj, "possible_values")
@@ -168,6 +214,40 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                 )
                 self.add_parameter(parameter)
 
+    def _build_entity_relationships(
+        self, dataset: PolicyEngineUKDataset
+    ) -> pd.DataFrame:
+        """Build a DataFrame mapping each person to their containing entities."""
+        person_data = pd.DataFrame(dataset.data.person)
+        return build_entity_relationships(person_data, UK_GROUP_ENTITIES)
+
+    def _filter_dataset_by_household_variable(
+        self,
+        dataset: PolicyEngineUKDataset,
+        variable_name: str,
+        variable_value: str,
+    ) -> PolicyEngineUKDataset:
+        """Filter a dataset to only include households where a variable matches."""
+        filtered = filter_dataset_by_household_variable(
+            entity_data=dataset.data.entity_data,
+            group_entities=UK_GROUP_ENTITIES,
+            variable_name=variable_name,
+            variable_value=variable_value,
+        )
+        return PolicyEngineUKDataset(
+            id=dataset.id + f"_filtered_{variable_name}_{variable_value}",
+            name=dataset.name,
+            description=f"{dataset.description} (filtered: {variable_name}={variable_value})",
+            filepath=dataset.filepath,
+            year=dataset.year,
+            is_output_dataset=dataset.is_output_dataset,
+            data=UKYearData(
+                person=filtered["person"],
+                benunit=filtered["benunit"],
+                household=filtered["household"],
+            ),
+        )
+
     def run(self, simulation: "Simulation") -> "Simulation":
         from policyengine_uk import Microsimulation
         from policyengine_uk.data import UKSingleYearDataset
@@ -180,6 +260,13 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
 
         dataset = simulation.dataset
         dataset.load()
+
+        # Apply regional filtering if specified
+        if simulation.filter_field and simulation.filter_value:
+            dataset = self._filter_dataset_by_household_variable(
+                dataset, simulation.filter_field, simulation.filter_value
+            )
+
         input_data = UKSingleYearDataset(
             person=dataset.data.person,
             benunit=dataset.data.benunit,

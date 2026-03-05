@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from uuid import uuid4
 
@@ -8,6 +9,8 @@ from .dataset import Dataset
 from .dynamic import Dynamic
 from .policy import Policy
 from .tax_benefit_model_version import TaxBenefitModelVersion
+
+logger = logging.getLogger(__name__)
 
 _cache: LRUCache["Simulation"] = LRUCache(max_size=100)
 
@@ -20,6 +23,16 @@ class Simulation(BaseModel):
     policy: Policy | None = None
     dynamic: Dynamic | None = None
     dataset: Dataset = None
+
+    # Regional filtering parameters
+    filter_field: str | None = Field(
+        default=None,
+        description="Household-level variable to filter dataset by (e.g., 'place_fips', 'country')",
+    )
+    filter_value: str | None = Field(
+        default=None,
+        description="Value to match when filtering (e.g., '44000', 'ENGLAND')",
+    )
 
     tax_benefit_model_version: TaxBenefitModelVersion = None
     output_dataset: Dataset | None = None
@@ -34,7 +47,15 @@ class Simulation(BaseModel):
             return
         try:
             self.tax_benefit_model_version.load(self)
+        except FileNotFoundError:
+            self.run()
+            self.save()
         except Exception:
+            logger.warning(
+                "Unexpected error loading simulation %s; falling back to run()",
+                self.id,
+                exc_info=True,
+            )
             self.run()
             self.save()
 

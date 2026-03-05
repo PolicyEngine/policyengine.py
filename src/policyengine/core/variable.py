@@ -13,3 +13,5 @@ class Variable(BaseModel):
     description: str | None = None
     data_type: type = None
     possible_values: list[Any] | None = None
+    default_value: Any = None
+    value_type: type | None = None

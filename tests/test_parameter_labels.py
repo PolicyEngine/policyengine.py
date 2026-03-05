@@ -435,7 +435,9 @@ class TestSingleLevelBreakdownParam:
         result = generate_label_for_parameter(param, system, scale_lookup)
 
         # Then: Label uses enum display value
-        assert result == "Tax exemption by filing status (Married filing jointly)"
+        assert (
+            result == "Tax exemption by filing status (Married filing jointly)"
+        )
 
     def test__given_single_level_breakdown_without_enum__then_generates_label_with_raw_key(
         self,
@@ -642,7 +644,10 @@ class TestNestedBreakdownLabels:
 
         # Then
         # Without snap_region enum in system, uses breakdown_label for first dimension too
-        assert result == "SNAP max allotment (SNAP region CONTIGUOUS_US, Household size 1)"
+        assert (
+            result
+            == "SNAP max allotment (SNAP region CONTIGUOUS_US, Household size 1)"
+        )
 
     def test__given_breakdown_labels_for_range__then_includes_semantic_label(
         self,
@@ -720,7 +725,10 @@ class TestNestedBreakdownLabels:
         result = generate_label_for_parameter(param, system, scale_lookup)
 
         # Then
-        assert result == "State sales tax (CA, Income bracket 3, Exemption count 5)"
+        assert (
+            result
+            == "State sales tax (CA, Income bracket 3, Exemption count 5)"
+        )
 
     def test__given_missing_breakdown_labels__then_uses_raw_values(self):
         # Given
@@ -785,9 +793,13 @@ class TestMixedNestedBreakdowns:
         result = generate_label_for_parameter(param, system, scale_lookup)
 
         # Then: Enum values use display names, range uses breakdown_label
-        assert result == "Earned income credit (CA, Number of children 2, Single)"
+        assert (
+            result == "Earned income credit (CA, Number of children 2, Single)"
+        )
 
-    def test__given_range_enum_range_nesting__then_formats_each_correctly(self):
+    def test__given_range_enum_range_nesting__then_formats_each_correctly(
+        self,
+    ):
         # Given: range -> enum -> range nesting
         breakdown_parent = create_mock_parent_node(
             name="gov.childcare.subsidy",
@@ -821,13 +833,18 @@ class TestMixedNestedBreakdowns:
             == "Childcare subsidy (Age group 2, Head of household, Household size 5)"
         )
 
-    def test__given_partial_breakdown_labels__then_uses_labels_where_available(self):
+    def test__given_partial_breakdown_labels__then_uses_labels_where_available(
+        self,
+    ):
         # Given: breakdown_labels list shorter than breakdown list
         breakdown_parent = create_mock_parent_node(
             name="gov.benefits.utility",
             label="Utility allowance",
             breakdown=["area_code", "range(1, 20)", "housing_type"],
-            breakdown_labels=["Area", "Household size"],  # Missing label for housing_type
+            breakdown_labels=[
+                "Area",
+                "Household size",
+            ],  # Missing label for housing_type
         )
         level1 = create_mock_parent_node(
             name="gov.benefits.utility.AREA_1",
@@ -848,7 +865,10 @@ class TestMixedNestedBreakdowns:
         result = generate_label_for_parameter(param, system, scale_lookup)
 
         # Then: Uses breakdown_labels where available, raw value for missing label
-        assert result == "Utility allowance (Area AREA_1, Household size 3, RENTER)"
+        assert (
+            result
+            == "Utility allowance (Area AREA_1, Household size 3, RENTER)"
+        )
 
     def test__given_four_level_nesting_with_mixed_types__then_generates_all_dimensions(
         self,
@@ -857,8 +877,18 @@ class TestMixedNestedBreakdowns:
         breakdown_parent = create_mock_parent_node(
             name="gov.irs.deductions.sales_tax",
             label="State sales tax deduction",
-            breakdown=["state_code", "filing_status", "range(1, 7)", "range(1, 20)"],
-            breakdown_labels=["State", "Filing status", "Exemption count", "Income bracket"],
+            breakdown=[
+                "state_code",
+                "filing_status",
+                "range(1, 7)",
+                "range(1, 20)",
+            ],
+            breakdown_labels=[
+                "State",
+                "Filing status",
+                "Exemption count",
+                "Income bracket",
+            ],
         )
         level1 = create_mock_parent_node(
             name="gov.irs.deductions.sales_tax.NY",

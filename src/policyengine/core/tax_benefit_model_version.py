@@ -9,6 +9,7 @@ from .tax_benefit_model import TaxBenefitModel
 if TYPE_CHECKING:
     from .parameter import Parameter
     from .parameter_value import ParameterValue
+    from .region import Region, RegionRegistry
     from .simulation import Simulation
     from .variable import Variable
 
@@ -24,6 +25,11 @@ class TaxBenefitModelVersion(BaseModel):
 
     variables: list["Variable"] = Field(default_factory=list)
     parameters: list["Parameter"] = Field(default_factory=list)
+
+    # Region registry for geographic simulations
+    region_registry: "RegionRegistry | None" = Field(
+        default=None, description="Registry of supported geographic regions"
+    )
 
     @property
     def parameter_values(self) -> list["ParameterValue"]:
@@ -82,6 +88,19 @@ class TaxBenefitModelVersion(BaseModel):
         raise ValueError(
             f"Variable '{name}' not found in {self.model.id} version {self.version}"
         )
+
+    def get_region(self, code: str) -> "Region | None":
+        """Get a region by its code.
+
+        Args:
+            code: Region code (e.g., 'state/ca', 'place/NJ-57000')
+
+        Returns:
+            The Region if found, None if not found or no region registry
+        """
+        if self.region_registry is None:
+            return None
+        return self.region_registry.get(code)
 
     def __repr__(self) -> str:
         # Give the id and version, and the number of variables, parameters, parameter values
