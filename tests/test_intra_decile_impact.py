@@ -20,7 +20,9 @@ def _make_variable_mock(name: str, entity: str) -> MagicMock:
     return var
 
 
-def _make_sim(household_data: dict, variables: list | None = None) -> MagicMock:
+def _make_sim(
+    household_data: dict, variables: list | None = None
+) -> MagicMock:
     """Create a mock Simulation with household-level data."""
     hh_df = MicroDataFrame(
         pd.DataFrame(household_data),
@@ -70,8 +72,12 @@ def test_intra_decile_no_change():
 
     for r in results.outputs:
         assert r.no_change == 1.0 or abs(r.no_change - 1.0) < 1e-9
-        assert r.lose_more_than_5pct == 0.0 or abs(r.lose_more_than_5pct) < 1e-9
-        assert r.gain_more_than_5pct == 0.0 or abs(r.gain_more_than_5pct) < 1e-9
+        assert (
+            r.lose_more_than_5pct == 0.0 or abs(r.lose_more_than_5pct) < 1e-9
+        )
+        assert (
+            r.gain_more_than_5pct == 0.0 or abs(r.gain_more_than_5pct) < 1e-9
+        )
 
 
 def test_intra_decile_all_large_gain():
@@ -102,7 +108,10 @@ def test_intra_decile_all_large_gain():
     )
 
     for r in results.outputs:
-        assert r.gain_more_than_5pct == 1.0 or abs(r.gain_more_than_5pct - 1.0) < 1e-9
+        assert (
+            r.gain_more_than_5pct == 1.0
+            or abs(r.gain_more_than_5pct - 1.0) < 1e-9
+        )
         assert r.no_change == 0.0 or abs(r.no_change) < 1e-9
 
 

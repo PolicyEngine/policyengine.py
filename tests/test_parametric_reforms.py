@@ -196,9 +196,7 @@ class TestSimulationModifierFromParameterValues:
 
         mock_simulation = MagicMock()
         mock_param_node = MagicMock()
-        mock_simulation.tax_benefit_system.parameters.get_child.return_value = (
-            mock_param_node
-        )
+        mock_simulation.tax_benefit_system.parameters.get_child.return_value = mock_param_node
 
         param_values = [SINGLE_PARAM_VALUE]
         modifier = simulation_modifier_from_parameter_values(param_values)
@@ -222,9 +220,7 @@ class TestSimulationModifierFromParameterValues:
 
         mock_simulation = MagicMock()
         mock_param_node = MagicMock()
-        mock_simulation.tax_benefit_system.parameters.get_child.return_value = (
-            mock_param_node
-        )
+        mock_simulation.tax_benefit_system.parameters.get_child.return_value = mock_param_node
 
         param_values = MULTIPLE_DIFFERENT_PARAMS
         modifier = simulation_modifier_from_parameter_values(param_values)
@@ -246,11 +242,11 @@ class TestSimulationModifierFromParameterValues:
 
         mock_simulation = MagicMock()
         mock_param_node = MagicMock()
-        mock_simulation.tax_benefit_system.parameters.get_child.return_value = (
-            mock_param_node
-        )
+        mock_simulation.tax_benefit_system.parameters.get_child.return_value = mock_param_node
 
-        modifier = simulation_modifier_from_parameter_values([SINGLE_PARAM_VALUE])
+        modifier = simulation_modifier_from_parameter_values(
+            [SINGLE_PARAM_VALUE]
+        )
 
         # When
         result = modifier(mock_simulation)
