@@ -15,3 +15,5 @@ class Variable(BaseModel):
     possible_values: list[Any] | None = None
     default_value: Any = None
     value_type: type | None = None
+    adds: list[str] | None = None
+    subtracts: list[str] | None = None
