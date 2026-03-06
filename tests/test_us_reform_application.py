@@ -5,7 +5,6 @@ a reform dict and passing it to Microsimulation at construction time,
 fixing the p.update() bug that exists in the US country package.
 """
 
-
 from policyengine.tax_benefit_models.us import (
     calculate_household_impact as calculate_us_household_impact,
 )

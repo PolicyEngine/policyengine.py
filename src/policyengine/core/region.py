@@ -12,9 +12,7 @@ from pydantic import BaseModel, Field, PrivateAttr
 
 # Region type literals for US and UK
 USRegionType = Literal["national", "state", "congressional_district", "place"]
-UKRegionType = Literal[
-    "national", "country", "constituency", "local_authority"
-]
+UKRegionType = Literal["national", "country", "constituency", "local_authority"]
 RegionType = USRegionType | UKRegionType
 
 
@@ -40,9 +38,7 @@ class Region(BaseModel):
         ...,
         description="Unique region code with type prefix (e.g., 'state/ca', 'place/NJ-57000')",
     )
-    label: str = Field(
-        ..., description="Human-readable label (e.g., 'California')"
-    )
+    label: str = Field(..., description="Human-readable label (e.g., 'California')")
     region_type: RegionType = Field(
         ..., description="Type of region (e.g., 'state', 'place')"
     )
@@ -100,9 +96,7 @@ class RegionRegistry(BaseModel):
     Indices are rebuilt automatically after initialization.
     """
 
-    country_id: str = Field(
-        ..., description="Country identifier (e.g., 'us', 'uk')"
-    )
+    country_id: str = Field(..., description="Country identifier (e.g., 'us', 'uk')")
     regions: list[Region] = Field(default_factory=list)
 
     # Private indexed lookups (excluded from serialization)

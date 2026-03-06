@@ -26,9 +26,7 @@ from policyengine.utils.plotting import COLORS, format_fig
 
 def load_representative_data(year: int = 2024) -> PolicyEngineUSDataset:
     """Load representative household microdata for a given year."""
-    dataset_path = (
-        Path(__file__).parent / "data" / f"enhanced_cps_2024_year_{year}.h5"
-    )
+    dataset_path = Path(__file__).parent / "data" / f"enhanced_cps_2024_year_{year}.h5"
 
     if not dataset_path.exists():
         raise FileNotFoundError(
@@ -83,15 +81,11 @@ def calculate_income_decile_statistics(simulation: Simulation) -> dict:
             quantile_eq=decile_num,
         )
         if decile_num == 1:
-            print(
-                f"    First Aggregate created ({time.time() - pre_create:.2f}s)"
-            )
+            print(f"    First Aggregate created ({time.time() - pre_create:.2f}s)")
         pre_run = time.time()
         agg.run()
         if decile_num == 1:
-            print(
-                f"    First Aggregate.run() complete ({time.time() - pre_run:.2f}s)"
-            )
+            print(f"    First Aggregate.run() complete ({time.time() - pre_run:.2f}s)")
         market_incomes.append(agg.result / 1e9)
 
         agg = Aggregate(
@@ -234,9 +228,7 @@ def calculate_income_decile_statistics(simulation: Simulation) -> dict:
         print(f"  {prog} complete ({time.time() - prog_start:.2f}s)")
 
     print(f"Tax benefits complete ({time.time() - tax_benefits_start:.2f}s)")
-    print(
-        f"\nTotal statistics calculation time: {time.time() - start_time:.2f}s"
-    )
+    print(f"\nTotal statistics calculation time: {time.time() - start_time:.2f}s")
 
     return {
         "deciles": deciles,
@@ -392,9 +384,7 @@ def main():
     print(f"Total benefits: ${total_benefits:.1f}bn")
     print(f"Total net income: ${total_net_income:.1f}bn")
     print(f"Total households: {total_households:.1f}m")
-    print(
-        f"Average effective tax rate: {total_tax / total_market_income * 100:.1f}%"
-    )
+    print(f"Average effective tax rate: {total_tax / total_market_income * 100:.1f}%")
 
     print("\nBenefit programs by decile:")
     benefit_programs = [

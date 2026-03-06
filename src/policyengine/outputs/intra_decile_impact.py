@@ -58,9 +58,7 @@ class IntraDecileImpact(Output):
         baseline_data = getattr(
             self.baseline_simulation.output_dataset.data, self.entity
         )
-        reform_data = getattr(
-            self.reform_simulation.output_dataset.data, self.entity
-        )
+        reform_data = getattr(self.reform_simulation.output_dataset.data, self.entity)
 
         baseline_income = baseline_data[self.income_variable].values
         reform_income = reform_data[self.income_variable].values

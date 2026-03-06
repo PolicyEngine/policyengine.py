@@ -20,9 +20,7 @@ class YearData(BaseModel):
 
         This should be implemented by subclasses to return the appropriate entities.
         """
-        raise NotImplementedError(
-            "Subclasses must implement entity_data property"
-        )
+        raise NotImplementedError("Subclasses must implement entity_data property")
 
     @property
     def person_entity(self) -> str:
@@ -184,17 +182,13 @@ def map_to_entity(
         # Check for both naming patterns: "entity_id" and "person_entity_id"
         person_target_key = f"{person_entity}_{target_entity}_id"
         join_key = (
-            person_target_key
-            if person_target_key in source_df.columns
-            else target_key
+            person_target_key if person_target_key in source_df.columns else target_key
         )
 
         if join_key in source_df.columns:
             # Get columns to aggregate (exclude ID and weight columns)
             id_cols = {col for col in source_df.columns if col.endswith("_id")}
-            weight_cols = {
-                col for col in source_df.columns if col.endswith("_weight")
-            }
+            weight_cols = {col for col in source_df.columns if col.endswith("_weight")}
             agg_cols = [
                 c
                 for c in source_df.columns
@@ -203,9 +197,7 @@ def map_to_entity(
 
             # Group by join key and aggregate
             if how == "sum":
-                aggregated = source_df.groupby(join_key, as_index=False)[
-                    agg_cols
-                ].sum()
+                aggregated = source_df.groupby(join_key, as_index=False)[agg_cols].sum()
             elif how == "first":
                 aggregated = source_df.groupby(join_key, as_index=False)[
                     agg_cols
@@ -224,9 +216,7 @@ def map_to_entity(
 
             # Sort back to original order
             result = (
-                result.sort_values("index")
-                .drop("index", axis=1)
-                .reset_index(drop=True)
+                result.sort_values("index").drop("index", axis=1).reset_index(drop=True)
             )
 
             # Fill NaN with 0 for groups with no members in source entity
@@ -249,9 +239,7 @@ def map_to_entity(
 
         target_pd = pd.DataFrame(target_df)
         join_key = (
-            person_source_key
-            if person_source_key in target_pd.columns
-            else source_key
+            person_source_key if person_source_key in target_pd.columns else source_key
         )
 
         if join_key in target_pd.columns:
@@ -264,12 +252,8 @@ def map_to_entity(
             # Handle divide operation
             if how == "divide":
                 # Get columns to divide (exclude ID and weight columns)
-                id_cols = {
-                    col for col in result.columns if col.endswith("_id")
-                }
-                weight_cols = {
-                    col for col in result.columns if col.endswith("_weight")
-                }
+                id_cols = {col for col in result.columns if col.endswith("_id")}
+                weight_cols = {col for col in result.columns if col.endswith("_weight")}
                 value_cols = [
                     c
                     for c in result.columns
@@ -311,14 +295,10 @@ def map_to_entity(
 
         # Determine which keys exist in person table
         source_link_key = (
-            person_source_key
-            if person_source_key in person_df.columns
-            else source_key
+            person_source_key if person_source_key in person_df.columns else source_key
         )
         target_link_key = (
-            person_target_key
-            if person_target_key in person_df.columns
-            else target_key
+            person_target_key if person_target_key in person_df.columns else target_key
         )
 
         # Link source -> person -> target
@@ -332,10 +312,7 @@ def map_to_entity(
 
             # Rename source key to match link key if needed
             source_df_copy = source_df.copy()
-            if (
-                source_link_key != source_key
-                and source_key in source_df_copy.columns
-            ):
+            if source_link_key != source_key and source_key in source_df_copy.columns:
                 source_df_copy = source_df_copy.rename(
                     columns={source_key: source_link_key}
                 )
@@ -346,15 +323,9 @@ def map_to_entity(
             )
 
             # Aggregate to target level
-            id_cols = {
-                col
-                for col in source_with_target.columns
-                if col.endswith("_id")
-            }
+            id_cols = {col for col in source_with_target.columns if col.endswith("_id")}
             weight_cols = {
-                col
-                for col in source_with_target.columns
-                if col.endswith("_weight")
+                col for col in source_with_target.columns if col.endswith("_weight")
             }
             agg_cols = [
                 c
@@ -389,8 +360,7 @@ def map_to_entity(
                 # Divide values by source group count (per-person share)
                 for col in agg_cols:
                     source_with_target[col] = (
-                        source_with_target[col]
-                        / source_with_target["__source_count"]
+                        source_with_target[col] / source_with_target["__source_count"]
                     )
 
                 # Now aggregate (sum of per-person shares) to target level
@@ -402,9 +372,7 @@ def map_to_entity(
 
             # Rename target link key to target key if needed
             if target_link_key != target_key:
-                aggregated = aggregated.rename(
-                    columns={target_link_key: target_key}
-                )
+                aggregated = aggregated.rename(columns={target_link_key: target_key})
 
             # Merge with target, preserving original order
             target_pd = pd.DataFrame(target_df)[[target_key, target_weight]]
@@ -413,9 +381,7 @@ def map_to_entity(
 
             # Sort back to original order
             result = (
-                result.sort_values("index")
-                .drop("index", axis=1)
-                .reset_index(drop=True)
+                result.sort_values("index").drop("index", axis=1).reset_index(drop=True)
             )
 
             # Fill NaN with 0
@@ -426,6 +392,4 @@ def map_to_entity(
                 return result_df["__mapped_value"]
             return result_df
 
-    raise ValueError(
-        f"Unsupported mapping from {source_entity} to {target_entity}"
-    )
+    raise ValueError(f"Unsupported mapping from {source_entity} to {target_entity}")

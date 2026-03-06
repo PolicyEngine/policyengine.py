@@ -74,9 +74,7 @@ class TestUKHouseholdImpact:
 
         # Check all household variables are present
         for var in uk_latest.entity_variables["household"]:
-            assert var in result.household, (
-                f"Missing household variable: {var}"
-            )
+            assert var in result.household, f"Missing household variable: {var}"
 
         # Check all person variables are present
         for var in uk_latest.entity_variables["person"]:
@@ -161,9 +159,7 @@ class TestUSHouseholdImpact:
 
         # Check all household variables are present
         for var in us_latest.entity_variables["household"]:
-            assert var in result.household, (
-                f"Missing household variable: {var}"
-            )
+            assert var in result.household, f"Missing household variable: {var}"
 
         # Check all person variables are present
         for var in us_latest.entity_variables["person"]:

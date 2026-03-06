@@ -82,9 +82,7 @@ def run_baseline_simulation(dataset: PolicyEngineUKDataset) -> Simulation:
     return simulation
 
 
-def run_reform_simulation(
-    dataset: PolicyEngineUKDataset, policy: Policy
-) -> Simulation:
+def run_reform_simulation(dataset: PolicyEngineUKDataset, policy: Policy) -> Simulation:
     """Run reform microsimulation with policy changes."""
     simulation = Simulation(
         dataset=dataset,
@@ -95,9 +93,7 @@ def run_reform_simulation(
     return simulation
 
 
-def analyse_overall_impact(
-    baseline_sim: Simulation, reform_sim: Simulation
-) -> dict:
+def analyse_overall_impact(baseline_sim: Simulation, reform_sim: Simulation) -> dict:
     """Analyse overall winners, losers, and financial impact."""
     winners = ChangeAggregate(
         baseline_simulation=baseline_sim,
@@ -198,9 +194,7 @@ def analyse_impact_by_income_decile(
     }
 
 
-def visualise_results(
-    overall: dict, by_decile: dict, reform_name: str
-) -> None:
+def visualise_results(overall: dict, by_decile: dict, reform_name: str) -> None:
     """Create visualisations of policy change impacts."""
     fig = make_subplots(
         rows=1,
@@ -270,9 +264,7 @@ def print_summary(overall: dict, decile: dict, reform_name: str) -> None:
     print(f"  Losers: {overall['losers']:.2f}m households")
     print(f"  No change: {overall['no_change']:.2f}m households")
     print("\nFinancial impact:")
-    print(
-        f"  Net income change: £{overall['total_change']:.2f}bn (negative = loss)"
-    )
+    print(f"  Net income change: £{overall['total_change']:.2f}bn (negative = loss)")
     print(f"  Tax revenue change: £{overall['tax_revenue_change']:.2f}bn")
     print("\nImpact by income decile:")
     for i, label in enumerate(decile["labels"]):

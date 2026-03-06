@@ -233,10 +233,7 @@ class TestSimulationModifierFromParameterValues:
         modifier(mock_simulation)
 
         # Then
-        assert (
-            mock_simulation.tax_benefit_system.parameters.get_child.call_count
-            == 3
-        )
+        assert mock_simulation.tax_benefit_system.parameters.get_child.call_count == 3
         assert mock_param_node.update.call_count == 3
 
     def test__given_modifier__then_returns_simulation(self):

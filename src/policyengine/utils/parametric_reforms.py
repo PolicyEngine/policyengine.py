@@ -67,14 +67,10 @@ def simulation_modifier_from_parameter_values(
 
     def modifier(simulation):
         for pv in parameter_values:
-            p = simulation.tax_benefit_system.parameters.get_child(
-                pv.parameter.name
-            )
+            p = simulation.tax_benefit_system.parameters.get_child(pv.parameter.name)
             start_period = period(pv.start_date.strftime("%Y-%m-%d"))
             stop_period = (
-                period(pv.end_date.strftime("%Y-%m-%d"))
-                if pv.end_date
-                else None
+                period(pv.end_date.strftime("%Y-%m-%d")) if pv.end_date else None
             )
             p.update(
                 value=pv.value,
@@ -101,15 +97,11 @@ def build_reform_dict(policy_or_dynamic: Policy | Dynamic | None) -> dict | None
     if policy_or_dynamic is None:
         return None
     if policy_or_dynamic.parameter_values:
-        return reform_dict_from_parameter_values(
-            policy_or_dynamic.parameter_values
-        )
+        return reform_dict_from_parameter_values(policy_or_dynamic.parameter_values)
     return None
 
 
-def merge_reform_dicts(
-    base: dict | None, override: dict | None
-) -> dict | None:
+def merge_reform_dicts(base: dict | None, override: dict | None) -> dict | None:
     """Merge two reform dicts, with override values taking precedence.
 
     Either or both dicts can be None. When both have entries for the same

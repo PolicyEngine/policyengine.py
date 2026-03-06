@@ -23,9 +23,7 @@ class Parameter(BaseModel):
 
     # Lazy loading: store core param ref, build values on demand
     _core_param: Any = PrivateAttr(default=None)
-    _parameter_values: list["ParameterValue"] | None = PrivateAttr(
-        default=None
-    )
+    _parameter_values: list["ParameterValue"] | None = PrivateAttr(default=None)
 
     def __init__(self, _core_param: Any = None, **data):
         super().__init__(**data)
@@ -48,9 +46,7 @@ class Parameter(BaseModel):
                         next_instant = None
                     pv = ParameterValue(
                         parameter=self,
-                        start_date=parse_safe_date(
-                            param_at_instant.instant_str
-                        ),
+                        start_date=parse_safe_date(param_at_instant.instant_str),
                         end_date=parse_safe_date(next_instant.instant_str)
                         if next_instant
                         else None,

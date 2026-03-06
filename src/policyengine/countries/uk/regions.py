@@ -55,17 +55,12 @@ def _load_constituencies_from_csv() -> list[dict]:
         import pandas as pd
 
         df = pd.read_csv(csv_path)
-        return [
-            {"code": row["code"], "name": row["name"]}
-            for _, row in df.iterrows()
-        ]
+        return [{"code": row["code"], "name": row["name"]} for _, row in df.iterrows()]
     except (OSError, KeyError, ValueError) as exc:
         logger.warning("Failed to load constituencies CSV: %s", exc)
         return []
     except Exception:
-        logger.error(
-            "Unexpected error loading constituencies CSV", exc_info=True
-        )
+        logger.error("Unexpected error loading constituencies CSV", exc_info=True)
         return []
 
 
@@ -92,17 +87,12 @@ def _load_local_authorities_from_csv() -> list[dict]:
         import pandas as pd
 
         df = pd.read_csv(csv_path)
-        return [
-            {"code": row["code"], "name": row["name"]}
-            for _, row in df.iterrows()
-        ]
+        return [{"code": row["code"], "name": row["name"]} for _, row in df.iterrows()]
     except (OSError, KeyError, ValueError) as exc:
         logger.warning("Failed to load local authorities CSV: %s", exc)
         return []
     except Exception:
-        logger.error(
-            "Unexpected error loading local authorities CSV", exc_info=True
-        )
+        logger.error("Unexpected error loading local authorities CSV", exc_info=True)
         return []
 
 

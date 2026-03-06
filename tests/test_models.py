@@ -167,11 +167,7 @@ class TestUSModel:
     def test__given_bracket_label__then_follows_expected_format(self):
         """Bracket labels should follow the format 'Scale label (bracket N field)'."""
         for p in us_latest.parameters:
-            if (
-                "[0].rate" in p.name
-                and p.label
-                and "bracket" in p.label.lower()
-            ):
+            if "[0].rate" in p.name and p.label and "bracket" in p.label.lower():
                 assert re.search(r"\(bracket \d+ rate\)", p.label), (
                     f"Label '{p.label}' doesn't match expected bracket format"
                 )

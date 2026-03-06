@@ -28,9 +28,7 @@ from .model import uk_latest
 from .outputs import ProgrammeStatistics
 
 
-def _create_entity_output_model(
-    entity: str, variables: list[str]
-) -> type[BaseModel]:
+def _create_entity_output_model(entity: str, variables: list[str]) -> type[BaseModel]:
     """Create a dynamic Pydantic model for entity output variables."""
     fields = {var: (float, ...) for var in variables}
     return create_model(f"{entity.title()}Output", **fields)
@@ -83,9 +81,7 @@ def calculate_household_impact(
     for i, person in enumerate(household_input.people):
         for key, value in person.items():
             if key not in person_data:
-                person_data[key] = [
-                    0.0
-                ] * n_people  # Default to 0 for numeric fields
+                person_data[key] = [0.0] * n_people  # Default to 0 for numeric fields
             person_data[key][i] = value
 
     # Build benunit data with defaults
@@ -109,12 +105,8 @@ def calculate_household_impact(
         household_data[key] = [value]
 
     # Create MicroDataFrames
-    person_df = MicroDataFrame(
-        pd.DataFrame(person_data), weights="person_weight"
-    )
-    benunit_df = MicroDataFrame(
-        pd.DataFrame(benunit_data), weights="benunit_weight"
-    )
+    person_df = MicroDataFrame(pd.DataFrame(person_data), weights="person_weight")
+    benunit_df = MicroDataFrame(pd.DataFrame(benunit_data), weights="benunit_weight")
     household_df = MicroDataFrame(
         pd.DataFrame(household_data), weights="household_weight"
     )
