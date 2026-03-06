@@ -182,8 +182,14 @@ def test_intra_decile_with_decile_variable():
     decile_2 = next(r for r in results.outputs if r.decile == 2)
 
     # All gains are 10% → all in gain_more_than_5pct
-    assert decile_1.gain_more_than_5pct == 1.0 or abs(decile_1.gain_more_than_5pct - 1.0) < 1e-9
-    assert decile_2.gain_more_than_5pct == 1.0 or abs(decile_2.gain_more_than_5pct - 1.0) < 1e-9
+    assert (
+        decile_1.gain_more_than_5pct == 1.0
+        or abs(decile_1.gain_more_than_5pct - 1.0) < 1e-9
+    )
+    assert (
+        decile_2.gain_more_than_5pct == 1.0
+        or abs(decile_2.gain_more_than_5pct - 1.0) < 1e-9
+    )
 
 
 # ---------------------------------------------------------------------------

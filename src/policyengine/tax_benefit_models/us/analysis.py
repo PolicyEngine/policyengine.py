@@ -72,9 +72,7 @@ def calculate_household_impact(
     for i, person in enumerate(household_input.people):
         for key, value in person.items():
             if key not in person_data:
-                person_data[key] = [
-                    0.0
-                ] * n_people  # Default to 0 for numeric fields
+                person_data[key] = [0.0] * n_people  # Default to 0 for numeric fields
             person_data[key][i] = value
 
     # Build entity data with defaults
@@ -114,24 +112,16 @@ def calculate_household_impact(
         tax_unit_data[key] = [value]
 
     # Create MicroDataFrames
-    person_df = MicroDataFrame(
-        pd.DataFrame(person_data), weights="person_weight"
-    )
+    person_df = MicroDataFrame(pd.DataFrame(person_data), weights="person_weight")
     household_df = MicroDataFrame(
         pd.DataFrame(household_data), weights="household_weight"
     )
     marital_unit_df = MicroDataFrame(
         pd.DataFrame(marital_unit_data), weights="marital_unit_weight"
     )
-    family_df = MicroDataFrame(
-        pd.DataFrame(family_data), weights="family_weight"
-    )
-    spm_unit_df = MicroDataFrame(
-        pd.DataFrame(spm_unit_data), weights="spm_unit_weight"
-    )
-    tax_unit_df = MicroDataFrame(
-        pd.DataFrame(tax_unit_data), weights="tax_unit_weight"
-    )
+    family_df = MicroDataFrame(pd.DataFrame(family_data), weights="family_weight")
+    spm_unit_df = MicroDataFrame(pd.DataFrame(spm_unit_data), weights="spm_unit_weight")
+    tax_unit_df = MicroDataFrame(pd.DataFrame(tax_unit_data), weights="tax_unit_weight")
 
     # Create temporary dataset
     tmpdir = tempfile.mkdtemp()

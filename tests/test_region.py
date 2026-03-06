@@ -62,17 +62,13 @@ class TestRegion:
         Then: They are equal regardless of other fields
         """
         # Given
-        region1 = Region(
-            code="state/ca", label="California", region_type="state"
-        )
+        region1 = Region(code="state/ca", label="California", region_type="state")
         region2 = Region(
             code="state/ca",
             label="California (different)",
             region_type="state",
         )
-        region3 = Region(
-            code="state/ny", label="New York", region_type="state"
-        )
+        region3 = Region(code="state/ny", label="New York", region_type="state")
 
         # Then
         assert region1 == region2
@@ -84,17 +80,13 @@ class TestRegion:
         Then: Regions with same code are deduplicated
         """
         # Given
-        region1 = Region(
-            code="state/ca", label="California", region_type="state"
-        )
+        region1 = Region(code="state/ca", label="California", region_type="state")
         region2 = Region(
             code="state/ca",
             label="California (duplicate)",
             region_type="state",
         )
-        region3 = Region(
-            code="state/ny", label="New York", region_type="state"
-        )
+        region3 = Region(code="state/ny", label="New York", region_type="state")
 
         # When
         region_set = {region1, region2, region3}
@@ -118,9 +110,7 @@ class TestRegionRegistry:
         # Then
         assert len(sample_registry) == 4
 
-    def test__given_registry__then_can_iterate_over_regions(
-        self, sample_registry
-    ):
+    def test__given_registry__then_can_iterate_over_regions(self, sample_registry):
         """Given: Registry with regions
         When: Iterating
         Then: All region codes are accessible
@@ -133,9 +123,7 @@ class TestRegionRegistry:
         assert "state/ca" in codes
         assert "place/CA-44000" in codes
 
-    def test__given_existing_code__then_code_is_in_registry(
-        self, sample_registry
-    ):
+    def test__given_existing_code__then_code_is_in_registry(self, sample_registry):
         """Given: Registry with state/ca
         When: Checking if code exists
         Then: Returns True for existing, False for missing
@@ -236,9 +224,7 @@ class TestRegionRegistry:
         assert len(filter_regions) == 1
         assert filter_regions[0].code == "place/CA-44000"
 
-    def test__given_registry__then_can_add_region_dynamically(
-        self, sample_registry
-    ):
+    def test__given_registry__then_can_add_region_dynamically(self, sample_registry):
         """Given: Registry with 4 regions
         When: Adding a new region
         Then: Registry contains 5 regions and new region is indexed

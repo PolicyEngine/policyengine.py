@@ -77,12 +77,8 @@ class PolicyEngineUKDataset(Dataset):
         filepath = self.filepath
         with pd.HDFStore(filepath, mode="r") as store:
             self.data = UKYearData(
-                person=MicroDataFrame(
-                    store["person"], weights="person_weight"
-                ),
-                benunit=MicroDataFrame(
-                    store["benunit"], weights="benunit_weight"
-                ),
+                person=MicroDataFrame(store["person"], weights="person_weight"),
+                benunit=MicroDataFrame(store["benunit"], weights="benunit_weight"),
                 household=MicroDataFrame(
                     store["household"], weights="household_weight"
                 ),
@@ -126,9 +122,7 @@ def create_datasets(
                 right_on="household_id",
                 how="left",
             )
-            person_df = person_df.rename(
-                columns={"household_weight": "person_weight"}
-            )
+            person_df = person_df.rename(columns={"household_weight": "person_weight"})
             person_df = person_df.drop(columns=["household_id"])
 
             # Get household_id for each benunit from person table
@@ -167,12 +161,8 @@ def create_datasets(
                 year=int(year),
                 data=UKYearData(
                     person=MicroDataFrame(person_df, weights="person_weight"),
-                    benunit=MicroDataFrame(
-                        benunit_df, weights="benunit_weight"
-                    ),
-                    household=MicroDataFrame(
-                        household_df, weights="household_weight"
-                    ),
+                    benunit=MicroDataFrame(benunit_df, weights="benunit_weight"),
+                    household=MicroDataFrame(household_df, weights="household_weight"),
                 ),
             )
             uk_dataset.save()
@@ -231,9 +221,7 @@ def ensure_datasets(
     all_exist = True
     for dataset in datasets:
         for year in years:
-            filepath = Path(
-                f"{data_folder}/{Path(dataset).stem}_year_{year}.h5"
-            )
+            filepath = Path(f"{data_folder}/{Path(dataset).stem}_year_{year}.h5")
             if not filepath.exists():
                 all_exist = False
                 break
@@ -241,10 +229,6 @@ def ensure_datasets(
             break
 
     if all_exist:
-        return load_datasets(
-            datasets=datasets, years=years, data_folder=data_folder
-        )
+        return load_datasets(datasets=datasets, years=years, data_folder=data_folder)
     else:
-        return create_datasets(
-            datasets=datasets, years=years, data_folder=data_folder
-        )
+        return create_datasets(datasets=datasets, years=years, data_folder=data_folder)

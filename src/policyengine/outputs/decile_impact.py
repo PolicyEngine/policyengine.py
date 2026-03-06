@@ -46,9 +46,7 @@ class DecileImpact(Output):
         baseline_data = getattr(
             self.baseline_simulation.output_dataset.data, target_entity
         )
-        reform_data = getattr(
-            self.reform_simulation.output_dataset.data, target_entity
-        )
+        reform_data = getattr(self.reform_simulation.output_dataset.data, target_entity)
 
         # Map income variable to target entity if needed
         if var_obj.entity != target_entity:
@@ -59,10 +57,8 @@ class DecileImpact(Output):
             )
             baseline_income = baseline_mapped[self.income_variable]
 
-            reform_mapped = (
-                self.reform_simulation.output_dataset.data.map_to_entity(
-                    var_obj.entity, target_entity
-                )
+            reform_mapped = self.reform_simulation.output_dataset.data.map_to_entity(
+                var_obj.entity, target_entity
             )
             reform_income = reform_mapped[self.income_variable]
         else:

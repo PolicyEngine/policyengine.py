@@ -30,9 +30,7 @@ def test_map_same_entity():
         weights="household_weight",
     )
 
-    data = UKYearData(
-        person=person_df, benunit=benunit_df, household=household_df
-    )
+    data = UKYearData(person=person_df, benunit=benunit_df, household=household_df)
 
     # Test person -> person
     result = data.map_to_entity("person", "person")
@@ -79,9 +77,7 @@ def test_map_person_to_benunit():
         weights="household_weight",
     )
 
-    data = UKYearData(
-        person=person_df, benunit=benunit_df, household=household_df
-    )
+    data = UKYearData(person=person_df, benunit=benunit_df, household=household_df)
 
     result = data.map_to_entity("person", "benunit", columns=["income"])
 
@@ -131,9 +127,7 @@ def test_map_person_to_household():
         weights="household_weight",
     )
 
-    data = UKYearData(
-        person=person_df, benunit=benunit_df, household=household_df
-    )
+    data = UKYearData(person=person_df, benunit=benunit_df, household=household_df)
 
     result = data.map_to_entity("person", "household", columns=["income"])
 
@@ -179,9 +173,7 @@ def test_map_benunit_to_person():
         weights="household_weight",
     )
 
-    data = UKYearData(
-        person=person_df, benunit=benunit_df, household=household_df
-    )
+    data = UKYearData(person=person_df, benunit=benunit_df, household=household_df)
 
     result = data.map_to_entity("benunit", "person", columns=["total_benefit"])
 
@@ -229,13 +221,9 @@ def test_map_benunit_to_household():
         weights="household_weight",
     )
 
-    data = UKYearData(
-        person=person_df, benunit=benunit_df, household=household_df
-    )
+    data = UKYearData(person=person_df, benunit=benunit_df, household=household_df)
 
-    result = data.map_to_entity(
-        "benunit", "household", columns=["total_benefit"]
-    )
+    result = data.map_to_entity("benunit", "household", columns=["total_benefit"])
 
     # Should have household data (aggregated)
     assert len(result) == 2
@@ -245,9 +233,7 @@ def test_map_benunit_to_household():
     # Benefits should be aggregated at household level
     # Household 1 has benunit 1 (1000)
     # Household 2 has benunit 2 (500) and benunit 3 (300) = 800
-    household_benefits = result.set_index("household_id")[
-        "total_benefit"
-    ].to_dict()
+    household_benefits = result.set_index("household_id")["total_benefit"].to_dict()
     assert household_benefits[1] == 1000
     assert household_benefits[2] == 800
 
@@ -282,9 +268,7 @@ def test_map_household_to_person():
         weights="household_weight",
     )
 
-    data = UKYearData(
-        person=person_df, benunit=benunit_df, household=household_df
-    )
+    data = UKYearData(person=person_df, benunit=benunit_df, household=household_df)
 
     result = data.map_to_entity("household", "person")
 
@@ -326,9 +310,7 @@ def test_map_household_to_benunit():
         weights="household_weight",
     )
 
-    data = UKYearData(
-        person=person_df, benunit=benunit_df, household=household_df
-    )
+    data = UKYearData(person=person_df, benunit=benunit_df, household=household_df)
 
     result = data.map_to_entity("household", "benunit", columns=["rent"])
 
@@ -370,9 +352,7 @@ def test_map_with_column_selection():
         weights="household_weight",
     )
 
-    data = UKYearData(
-        person=person_df, benunit=benunit_df, household=household_df
-    )
+    data = UKYearData(person=person_df, benunit=benunit_df, household=household_df)
 
     # Map only age to household (aggregated)
     result = data.map_to_entity("person", "household", columns=["age"])
@@ -409,9 +389,7 @@ def test_invalid_entity_names():
         weights="household_weight",
     )
 
-    data = UKYearData(
-        person=person_df, benunit=benunit_df, household=household_df
-    )
+    data = UKYearData(person=person_df, benunit=benunit_df, household=household_df)
 
     with pytest.raises(ValueError, match="Invalid source entity"):
         data.map_to_entity("invalid", "person")

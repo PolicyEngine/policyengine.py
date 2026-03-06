@@ -77,10 +77,8 @@ class Inequality(Output):
     def run(self):
         """Calculate inequality metrics."""
         # Get income variable info
-        income_var_obj = (
-            self.simulation.tax_benefit_model_version.get_variable(
-                self.income_variable
-            )
+        income_var_obj = self.simulation.tax_benefit_model_version.get_variable(
+            self.income_variable
         )
 
         # Get target entity data
@@ -107,19 +105,15 @@ class Inequality(Output):
 
         # Apply demographic filter if specified
         if self.filter_variable is not None:
-            filter_var_obj = (
-                self.simulation.tax_benefit_model_version.get_variable(
-                    self.filter_variable
-                )
+            filter_var_obj = self.simulation.tax_benefit_model_version.get_variable(
+                self.filter_variable
             )
 
             if filter_var_obj.entity != target_entity:
-                filter_mapped = (
-                    self.simulation.output_dataset.data.map_to_entity(
-                        filter_var_obj.entity,
-                        target_entity,
-                        columns=[self.filter_variable],
-                    )
+                filter_mapped = self.simulation.output_dataset.data.map_to_entity(
+                    filter_var_obj.entity,
+                    target_entity,
+                    columns=[self.filter_variable],
                 )
                 filter_series = filter_mapped[self.filter_variable]
             else:
@@ -168,19 +162,14 @@ class Inequality(Output):
                 # Top 10% share
                 top_10_mask = weight_fractions > 0.9
                 self.top_10_share = float(
-                    np.sum(
-                        sorted_values[top_10_mask]
-                        * sorted_weights[top_10_mask]
-                    )
+                    np.sum(sorted_values[top_10_mask] * sorted_weights[top_10_mask])
                     / total_income
                 )
 
                 # Top 1% share
                 top_1_mask = weight_fractions > 0.99
                 self.top_1_share = float(
-                    np.sum(
-                        sorted_values[top_1_mask] * sorted_weights[top_1_mask]
-                    )
+                    np.sum(sorted_values[top_1_mask] * sorted_weights[top_1_mask])
                     / total_income
                 )
 
@@ -188,8 +177,7 @@ class Inequality(Output):
                 bottom_50_mask = weight_fractions <= 0.5
                 self.bottom_50_share = float(
                     np.sum(
-                        sorted_values[bottom_50_mask]
-                        * sorted_weights[bottom_50_mask]
+                        sorted_values[bottom_50_mask] * sorted_weights[bottom_50_mask]
                     )
                     / total_income
                 )

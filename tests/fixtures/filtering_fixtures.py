@@ -87,9 +87,7 @@ def create_us_test_dataset() -> PolicyEngineUSDataset:
         is_output_dataset=False,
         data=USYearData(
             person=MicroDataFrame(person_data, weights="person_weight"),
-            household=MicroDataFrame(
-                household_data, weights="household_weight"
-            ),
+            household=MicroDataFrame(household_data, weights="household_weight"),
             tax_unit=MicroDataFrame(tax_unit_data, weights="tax_unit_weight"),
             spm_unit=MicroDataFrame(spm_unit_data, weights="spm_unit_weight"),
             family=MicroDataFrame(family_data, weights="family_weight"),
@@ -146,9 +144,7 @@ def create_uk_test_dataset() -> PolicyEngineUKDataset:
         data=UKYearData(
             person=MicroDataFrame(person_data, weights="person_weight"),
             benunit=MicroDataFrame(benunit_data, weights="benunit_weight"),
-            household=MicroDataFrame(
-                household_data, weights="household_weight"
-            ),
+            household=MicroDataFrame(household_data, weights="household_weight"),
         ),
     )
 

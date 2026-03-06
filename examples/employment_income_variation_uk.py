@@ -125,17 +125,12 @@ def create_dataset_with_varied_employment_income(
         "region": ["LONDON"] * n_households,  # Required by policyengine-uk
         "council_tax": [0.0] * n_households,  # Simplified - no council tax
         "rent": [median_annual_rent] * n_households,  # Median UK rent
-        "tenure_type": ["RENT_PRIVATELY"]
-        * n_households,  # Required for uprating
+        "tenure_type": ["RENT_PRIVATELY"] * n_households,  # Required for uprating
     }
 
     # Create MicroDataFrames
-    person_df = MicroDataFrame(
-        pd.DataFrame(person_data), weights="person_weight"
-    )
-    benunit_df = MicroDataFrame(
-        pd.DataFrame(benunit_data), weights="benunit_weight"
-    )
+    person_df = MicroDataFrame(pd.DataFrame(person_data), weights="person_weight")
+    benunit_df = MicroDataFrame(pd.DataFrame(benunit_data), weights="benunit_weight")
     household_df = MicroDataFrame(
         pd.DataFrame(household_data), weights="household_weight"
     )
@@ -273,9 +268,7 @@ def visualise_results(results: dict) -> None:
     # Calculate net employment income (employment income minus tax)
     net_employment = [
         emp - tax
-        for emp, tax in zip(
-            results["employment_income_hh"], results["household_tax"]
-        )
+        for emp, tax in zip(results["employment_income_hh"], results["household_tax"])
     ]
 
     # Stack benefits and income components using PolicyEngine colors
@@ -339,17 +332,11 @@ def main():
     simulation = run_simulation(dataset)
 
     print("Extracting results using aggregate filters...")
-    results = extract_results_by_employment_income(
-        simulation, employment_incomes
-    )
+    results = extract_results_by_employment_income(simulation, employment_incomes)
 
     print("\nSample results:")
     for emp_inc in [0, 25000, 50000, 100000]:
-        idx = (
-            employment_incomes.index(emp_inc)
-            if emp_inc in employment_incomes
-            else -1
-        )
+        idx = employment_incomes.index(emp_inc) if emp_inc in employment_incomes else -1
         if idx >= 0:
             print(
                 f"  Employment income £{emp_inc:,}: HBAI net income £{results['hbai_household_net_income'][idx]:,.0f}"

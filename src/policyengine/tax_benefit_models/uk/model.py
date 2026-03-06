@@ -53,9 +53,7 @@ def _get_uk_package_metadata():
         data = response.json()
         upload_time = data["releases"][pkg_version][0]["upload_time_iso_8601"]
     except (requests.RequestException, KeyError, IndexError) as exc:
-        _logger.warning(
-            "Could not fetch PyPI metadata for policyengine-uk: %s", exc
-        )
+        _logger.warning("Could not fetch PyPI metadata for policyengine-uk: %s", exc)
         upload_time = None
     return pkg_version, upload_time
 
@@ -147,9 +145,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
             pkg_version, upload_time = _get_uk_package_metadata()
             kwargs["version"] = pkg_version
             if upload_time is not None:
-                kwargs["created_at"] = datetime.datetime.fromisoformat(
-                    upload_time
-                )
+                kwargs["created_at"] = datetime.datetime.fromisoformat(upload_time)
 
         super().__init__(**kwargs)
         from policyengine_core.enums import Enum
@@ -176,9 +172,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                 tax_benefit_model_version=self,
                 entity=var_obj.entity.key,
                 description=var_obj.documentation,
-                data_type=var_obj.value_type
-                if var_obj.value_type is not Enum
-                else str,
+                data_type=var_obj.value_type if var_obj.value_type is not Enum else str,
                 default_value=default_val,
                 value_type=var_obj.value_type,
             )
@@ -275,10 +269,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
         )
         microsim = Microsimulation(dataset=input_data)
 
-        if (
-            simulation.policy
-            and simulation.policy.simulation_modifier is not None
-        ):
+        if simulation.policy and simulation.policy.simulation_modifier is not None:
             simulation.policy.simulation_modifier(microsim)
         elif simulation.policy:
             modifier = simulation_modifier_from_parameter_values(
@@ -286,10 +277,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
             )
             modifier(microsim)
 
-        if (
-            simulation.dynamic
-            and simulation.dynamic.simulation_modifier is not None
-        ):
+        if simulation.dynamic and simulation.dynamic.simulation_modifier is not None:
             simulation.dynamic.simulation_modifier(microsim)
         elif simulation.dynamic:
             modifier = simulation_modifier_from_parameter_values(
@@ -309,12 +297,8 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                     var, period=simulation.dataset.year, map_to=entity
                 ).values
 
-        data["person"] = MicroDataFrame(
-            data["person"], weights="person_weight"
-        )
-        data["benunit"] = MicroDataFrame(
-            data["benunit"], weights="benunit_weight"
-        )
+        data["person"] = MicroDataFrame(data["person"], weights="person_weight")
+        data["benunit"] = MicroDataFrame(data["benunit"], weights="benunit_weight")
         data["household"] = MicroDataFrame(
             data["household"], weights="household_weight"
         )
@@ -324,8 +308,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
             name=dataset.name,
             description=dataset.description,
             filepath=str(
-                Path(simulation.dataset.filepath).parent
-                / (simulation.id + ".h5")
+                Path(simulation.dataset.filepath).parent / (simulation.id + ".h5")
             ),
             year=simulation.dataset.year,
             is_output_dataset=True,
