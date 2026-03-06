@@ -35,7 +35,6 @@ us = [
     "policyengine-us>=1.213.1",
 ]
 dev = [
-    "black",
     "pytest",
     "furo",
     "autodoc_pydantic",
@@ -69,24 +68,6 @@ testpaths = [
 filterwarnings = [
     "ignore::pydantic.warnings.PydanticDeprecatedSince20",
 ]
-
-[tool.black]
-line-length = 79
-target-version = ['py311']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
 
 [tool.ruff]
 line-length = 79
