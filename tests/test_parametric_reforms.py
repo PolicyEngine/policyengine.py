@@ -1,6 +1,7 @@
 """Tests for parametric reforms utility functions."""
 
-from datetime import date
+from datetime import date, datetime
+from unittest.mock import MagicMock
 
 from policyengine.utils.parametric_reforms import (
     reform_dict_from_parameter_values,
@@ -192,8 +193,6 @@ class TestSimulationModifierFromParameterValues:
         Then: Calls p.update() for each parameter value
         """
         # Given
-        from unittest.mock import MagicMock
-
         mock_simulation = MagicMock()
         mock_param_node = MagicMock()
         mock_simulation.tax_benefit_system.parameters.get_child.return_value = (
@@ -218,8 +217,6 @@ class TestSimulationModifierFromParameterValues:
         Then: Applies updates for all parameter values
         """
         # Given
-        from unittest.mock import MagicMock
-
         mock_simulation = MagicMock()
         mock_param_node = MagicMock()
         mock_simulation.tax_benefit_system.parameters.get_child.return_value = (
@@ -245,8 +242,6 @@ class TestSimulationModifierFromParameterValues:
         Then: Returns the simulation object
         """
         # Given
-        from unittest.mock import MagicMock
-
         mock_simulation = MagicMock()
         mock_param_node = MagicMock()
         mock_simulation.tax_benefit_system.parameters.get_child.return_value = (
@@ -260,3 +255,140 @@ class TestSimulationModifierFromParameterValues:
 
         # Then
         assert result is mock_simulation
+
+    def test__given_modifier__then_clears_parameter_caches(self):
+        """Given: Modifier function
+        When: Calling with a simulation
+        Then: Clears parameter caches on the tax benefit system
+        """
+        # Given
+        mock_simulation = MagicMock()
+        mock_param_node = MagicMock()
+        mock_simulation.tax_benefit_system.parameters.get_child.return_value = (
+            mock_param_node
+        )
+
+        modifier = simulation_modifier_from_parameter_values([SINGLE_PARAM_VALUE])
+
+        # When
+        modifier(mock_simulation)
+
+        # Then
+        mock_simulation.tax_benefit_system.reset_parameter_caches.assert_called_once()
+
+    def test__given_modifier__then_clears_computed_variable_caches(self):
+        """Given: Modifier function and a simulation with computed variables
+        When: Calling the modifier
+        Then: Clears holder arrays for variables that have formulas, preserves input variables
+        """
+        # Given
+        mock_holder_computed = MagicMock()
+        mock_holder_input = MagicMock()
+
+        mock_variable_computed = MagicMock()
+        mock_variable_computed.formulas = {"2000-01-01": lambda: None}
+
+        mock_variable_input = MagicMock()
+        mock_variable_input.formulas = {}
+
+        mock_population = MagicMock()
+        mock_population._holders = {
+            "computed_var": mock_holder_computed,
+            "input_var": mock_holder_input,
+        }
+
+        mock_simulation = MagicMock()
+        mock_param_node = MagicMock()
+        mock_simulation.tax_benefit_system.parameters.get_child.return_value = (
+            mock_param_node
+        )
+        mock_simulation.populations = {"person": mock_population}
+        mock_simulation.tax_benefit_system.get_variable.side_effect = (
+            lambda name: mock_variable_computed
+            if name == "computed_var"
+            else mock_variable_input
+        )
+
+        modifier = simulation_modifier_from_parameter_values([SINGLE_PARAM_VALUE])
+
+        # When
+        modifier(mock_simulation)
+
+        # Then
+        mock_holder_computed.delete_arrays.assert_called_once()
+        mock_holder_input.delete_arrays.assert_not_called()
+
+
+# Integration tests using the UK tax-benefit model
+
+def test_parameter_reform_affects_calculation():
+    """Test that modifying a parameter actually changes the calculation result."""
+    from policyengine.core.policy import ParameterValue as PEParameterValue
+    from policyengine.core.policy import Policy as PEPolicy
+    from policyengine.tax_benefit_models.uk import uk_latest
+    from policyengine.tax_benefit_models.uk.analysis import (
+        UKHouseholdInput,
+        calculate_household_impact,
+    )
+
+    param_lookup = {p.name: p for p in uk_latest.parameters}
+    pe_param = param_lookup["gov.dwp.universal_credit.standard_allowance.amount.SINGLE_OLD"]
+
+    pe_input = UKHouseholdInput(
+        people=[{"age": 30, "employment_income": 0}],
+        benunit={},
+        household={},
+        year=2026,
+    )
+
+    # Baseline
+    baseline = calculate_household_impact(pe_input, policy=None)
+    baseline_uc = baseline.benunit[0]["universal_credit"]
+
+    # Reform - increase standard allowance
+    pv = PEParameterValue(
+        parameter=pe_param,
+        value=533.0,
+        start_date=datetime(2026, 1, 1),
+        end_date=None,
+    )
+    policy = PEPolicy(name="Test", description="Test", parameter_values=[pv])
+    reform = calculate_household_impact(pe_input, policy=policy)
+    reform_uc = reform.benunit[0]["universal_credit"]
+
+    # UC should increase
+    assert reform_uc > baseline_uc
+    assert abs(reform_uc - 533 * 12) < 1
+
+
+def test_parameter_reform_preserves_inputs():
+    """Test that input variables are preserved when applying a reform."""
+    from policyengine.core.policy import ParameterValue as PEParameterValue
+    from policyengine.core.policy import Policy as PEPolicy
+    from policyengine.tax_benefit_models.uk import uk_latest
+    from policyengine.tax_benefit_models.uk.analysis import (
+        UKHouseholdInput,
+        calculate_household_impact,
+    )
+
+    param_lookup = {p.name: p for p in uk_latest.parameters}
+    pe_param = param_lookup["gov.dwp.universal_credit.standard_allowance.amount.SINGLE_OLD"]
+
+    pe_input = UKHouseholdInput(
+        people=[{"age": 30, "employment_income": 5000}],
+        benunit={},
+        household={},
+        year=2026,
+    )
+
+    pv = PEParameterValue(
+        parameter=pe_param,
+        value=533.0,
+        start_date=datetime(2026, 1, 1),
+        end_date=None,
+    )
+    policy = PEPolicy(name="Test", description="Test", parameter_values=[pv])
+    reform = calculate_household_impact(pe_input, policy=policy)
+
+    assert reform.person[0]["employment_income"] == 5000
+    assert reform.person[0]["age"] == 30
