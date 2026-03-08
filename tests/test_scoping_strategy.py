@@ -1,6 +1,6 @@
 """Tests for region scoping strategies."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd

@@ -12,7 +12,7 @@ Provides two concrete strategies for scoping datasets to sub-national regions:
 import logging
 from abc import abstractmethod
 from pathlib import Path
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal
 
 import h5py
 import numpy as np
@@ -20,7 +20,9 @@ import pandas as pd
 from microdf import MicroDataFrame
 from pydantic import BaseModel, Discriminator
 
-from policyengine.utils.entity_utils import filter_dataset_by_household_variable
+from policyengine.utils.entity_utils import (
+    filter_dataset_by_household_variable,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -208,7 +210,7 @@ class WeightReplacementStrategy(RegionScopingStrategy):
     ) -> str | None:
         """Find the column linking an entity to its household."""
         candidates = [
-            f"person_household_id",
+            "person_household_id",
             f"{entity_name}_household_id",
             "household_id",
         ]
@@ -223,6 +225,6 @@ class WeightReplacementStrategy(RegionScopingStrategy):
 
 
 ScopingStrategy = Annotated[
-    Union[RowFilterStrategy, WeightReplacementStrategy],
+    RowFilterStrategy | WeightReplacementStrategy,
     Discriminator("strategy_type"),
 ]
