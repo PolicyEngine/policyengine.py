@@ -249,8 +249,12 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
         )
 
     def run(self, simulation: "Simulation") -> "Simulation":
+        import policyengine_uk.data.economic_assumptions as ea
         from policyengine_uk import Microsimulation
-        from policyengine_uk.data import UKSingleYearDataset
+        from policyengine_uk.data import (
+            UKMultiYearDataset,
+            UKSingleYearDataset,
+        )
 
         from policyengine.utils.parametric_reforms import (
             simulation_modifier_from_parameter_values,
@@ -267,13 +271,41 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                 dataset, simulation.filter_field, simulation.filter_value
             )
 
+        # Use plain DataFrames to avoid MicroDataFrame copy overhead
         input_data = UKSingleYearDataset(
-            person=dataset.data.person,
-            benunit=dataset.data.benunit,
-            household=dataset.data.household,
+            person=pd.DataFrame(dataset.data.person),
+            benunit=pd.DataFrame(dataset.data.benunit),
+            household=pd.DataFrame(dataset.data.household),
             fiscal_year=dataset.year,
         )
-        microsim = Microsimulation(dataset=input_data)
+
+        # Patch apply_uprating to skip redundant deep copy of
+        # the multi-year dataset (each year is already copied
+        # individually by extend_single_year_dataset)
+        _orig_apply_uprating = ea.apply_uprating
+
+        def _apply_uprating_no_copy(
+            dataset, tax_benefit_system_parameters=None
+        ):
+            if not isinstance(dataset, UKMultiYearDataset):
+                raise TypeError("dataset must be of type UKMultiYearDataset.")
+            for year in dataset.datasets.keys():
+                if year == min(dataset.datasets.keys()):
+                    continue
+                current_year = dataset.datasets[year]
+                prev_year = dataset.datasets[year - 1]
+                ea.apply_single_year_uprating(
+                    current_year,
+                    prev_year,
+                    tax_benefit_system_parameters,
+                )
+            return dataset
+
+        ea.apply_uprating = _apply_uprating_no_copy
+        try:
+            microsim = Microsimulation(dataset=input_data)
+        finally:
+            ea.apply_uprating = _orig_apply_uprating
 
         if (
             simulation.policy
