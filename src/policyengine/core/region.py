@@ -10,6 +10,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, PrivateAttr
 
+from .scoping_strategy import ScopingStrategy
+
 # Region type literals for US and UK
 USRegionType = Literal["national", "state", "congressional_district", "place"]
 UKRegionType = Literal["national", "country", "constituency", "local_authority"]
@@ -55,7 +57,13 @@ class Region(BaseModel):
         description="GCS path to dedicated dataset (e.g., 'gs://policyengine-us-data/states/CA.h5')",
     )
 
-    # Filtering configuration (for regions that filter from parent datasets)
+    # Scoping strategy (preferred over legacy filter fields)
+    scoping_strategy: ScopingStrategy | None = Field(
+        default=None,
+        description="Strategy for scoping dataset to this region (row filtering or weight replacement)",
+    )
+
+    # Legacy filtering configuration (kept for backward compatibility)
     requires_filter: bool = Field(
         default=False,
         description="True if this region filters from a parent dataset rather than having its own",

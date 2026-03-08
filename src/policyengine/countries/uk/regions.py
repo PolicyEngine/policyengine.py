@@ -15,6 +15,10 @@ import logging
 from typing import TYPE_CHECKING
 
 from policyengine.core.region import Region, RegionRegistry
+from policyengine.core.scoping_strategy import (
+    RowFilterStrategy,
+    WeightReplacementStrategy,
+)
 
 if TYPE_CHECKING:
     pass
@@ -138,11 +142,15 @@ def build_uk_region_registry(
                 requires_filter=True,
                 filter_field="country",
                 filter_value=code.upper(),
+                scoping_strategy=RowFilterStrategy(
+                    variable_name="country",
+                    variable_value=code.upper(),
+                ),
             )
         )
 
     # 3. Constituencies (optional, loaded from CSV)
-    # Note: These use weight adjustment, not data filtering
+    # Note: These use weight replacement, not data filtering
     if include_constituencies:
         constituencies = _load_constituencies_from_csv()
         for const in constituencies:
@@ -153,13 +161,20 @@ def build_uk_region_registry(
                     region_type="constituency",
                     parent_code="uk",
                     requires_filter=True,
-                    filter_field="household_weight",  # Uses weight adjustment
+                    filter_field="household_weight",
                     filter_value=const["code"],
+                    scoping_strategy=WeightReplacementStrategy(
+                        weight_matrix_bucket="policyengine-uk-data-private",
+                        weight_matrix_key="parliamentary_constituency_weights.h5",
+                        lookup_csv_bucket="policyengine-uk-data-private",
+                        lookup_csv_key="constituencies_2024.csv",
+                        region_code=const["code"],
+                    ),
                 )
             )
 
     # 4. Local Authorities (optional, loaded from CSV)
-    # Note: These use weight adjustment, not data filtering
+    # Note: These use weight replacement, not data filtering
     if include_local_authorities:
         local_authorities = _load_local_authorities_from_csv()
         for la in local_authorities:
@@ -170,8 +185,15 @@ def build_uk_region_registry(
                     region_type="local_authority",
                     parent_code="uk",
                     requires_filter=True,
-                    filter_field="household_weight",  # Uses weight adjustment
+                    filter_field="household_weight",
                     filter_value=la["code"],
+                    scoping_strategy=WeightReplacementStrategy(
+                        weight_matrix_bucket="policyengine-uk-data-private",
+                        weight_matrix_key="local_authority_weights.h5",
+                        lookup_csv_bucket="policyengine-uk-data-private",
+                        lookup_csv_key="local_authorities_2021.csv",
+                        region_code=la["code"],
+                    ),
                 )
             )
 

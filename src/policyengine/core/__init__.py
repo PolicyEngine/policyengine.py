@@ -12,6 +12,10 @@ from .policy import Policy as Policy
 from .region import Region as Region
 from .region import RegionRegistry as RegionRegistry
 from .region import RegionType as RegionType
+from .scoping_strategy import RegionScopingStrategy as RegionScopingStrategy
+from .scoping_strategy import RowFilterStrategy as RowFilterStrategy
+from .scoping_strategy import ScopingStrategy as ScopingStrategy
+from .scoping_strategy import WeightReplacementStrategy as WeightReplacementStrategy
 from .simulation import Simulation as Simulation
 from .tax_benefit_model import TaxBenefitModel as TaxBenefitModel
 from .tax_benefit_model_version import (

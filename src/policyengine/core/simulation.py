@@ -2,12 +2,13 @@ import logging
 from datetime import datetime
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .cache import LRUCache
 from .dataset import Dataset
 from .dynamic import Dynamic
 from .policy import Policy
+from .scoping_strategy import RowFilterStrategy, ScopingStrategy
 from .tax_benefit_model_version import TaxBenefitModelVersion
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,13 @@ class Simulation(BaseModel):
     dynamic: Dynamic | None = None
     dataset: Dataset = None
 
-    # Regional filtering parameters
+    # Scoping strategy (preferred over legacy filter fields)
+    scoping_strategy: ScopingStrategy | None = Field(
+        default=None,
+        description="Strategy for scoping dataset to a sub-national region",
+    )
+
+    # Legacy regional filtering parameters (kept for backward compatibility)
     filter_field: str | None = Field(
         default=None,
         description="Household-level variable to filter dataset by (e.g., 'place_fips', 'country')",
@@ -35,6 +42,24 @@ class Simulation(BaseModel):
     )
 
     tax_benefit_model_version: TaxBenefitModelVersion = None
+
+    @model_validator(mode="after")
+    def _auto_construct_strategy(self) -> "Simulation":
+        """Auto-construct a RowFilterStrategy from legacy filter fields.
+
+        If filter_field and filter_value are set but scoping_strategy is not,
+        create a RowFilterStrategy for backward compatibility.
+        """
+        if (
+            self.scoping_strategy is None
+            and self.filter_field is not None
+            and self.filter_value is not None
+        ):
+            self.scoping_strategy = RowFilterStrategy(
+                variable_name=self.filter_field,
+                variable_value=self.filter_value,
+            )
+        return self
     output_dataset: Dataset | None = None
 
     def run(self):
