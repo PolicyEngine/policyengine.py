@@ -113,7 +113,10 @@ class TestUSHouseholdReformApplication:
         result2 = calculate_us_household_impact(household, policy=policy)
 
         # Then
-        assert result1.tax_unit[0]["income_tax"] == result2.tax_unit[0]["income_tax"]
+        assert (
+            result1.tax_unit[0]["income_tax"]
+            == result2.tax_unit[0]["income_tax"]
+        )
 
     def test__given_custom_deduction_value__then_tax_reflects_value(self):
         """Given: Custom standard deduction value

@@ -82,7 +82,9 @@ def simulation_modifier_from_parameter_values(
     return modifier
 
 
-def build_reform_dict(policy_or_dynamic: Policy | Dynamic | None) -> dict | None:
+def build_reform_dict(
+    policy_or_dynamic: Policy | Dynamic | None,
+) -> dict | None:
     """Extract a reform dict from a Policy or Dynamic object.
 
     If the object has parameter_values, converts them to reform dict format.
