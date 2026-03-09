@@ -27,4 +27,4 @@ build-package:
 	python -m build
 
 test:
-	pytest tests
+	pytest tests --cov=policyengine --cov-report=term-missing

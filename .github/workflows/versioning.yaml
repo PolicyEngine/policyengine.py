@@ -7,7 +7,7 @@ on:
       - main
 
     paths:
-      - changelog_entry.yaml
+      - changelog.d/**
       - .github/**
   workflow_dispatch:
 
@@ -27,7 +27,7 @@ jobs:
         with:
           python-version: 3.13
       - name: Build changelog
-        run: pip install yaml-changelog && make changelog
+        run: pip install yaml-changelog towncrier && make changelog
       - name: Preview changelog update
         run: ".github/get-changelog-diff.sh"
       - name: Update changelog
@@ -66,3 +66,10 @@ jobs:
           user: __token__
           password: ${{ secrets.PYPI }}
           skip_existing: true
+      - name: Create GitHub Release
+        run: |
+          VERSION=$(python .github/fetch_version.py)
+          gh release create "$VERSION" \
+            --title "v$VERSION" \
+            --notes "See [CHANGELOG.md](https://github.com/PolicyEngine/policyengine.py/blob/main/CHANGELOG.md) for details." \
+            --latest
