@@ -1,3 +1,11 @@
+## [3.2.1] - 2026-03-10
+
+### Changed
+
+- Migrated from changelog_entry.yaml to towncrier fragments to eliminate merge conflicts.
+- Switched code formatter from black to ruff format.
+
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
