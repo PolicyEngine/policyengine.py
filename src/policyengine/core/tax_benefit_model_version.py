@@ -8,6 +8,7 @@ from .tax_benefit_model import TaxBenefitModel
 
 if TYPE_CHECKING:
     from .parameter import Parameter
+    from .parameter_node import ParameterNode
     from .parameter_value import ParameterValue
     from .region import Region, RegionRegistry
     from .simulation import Simulation
@@ -25,6 +26,7 @@ class TaxBenefitModelVersion(BaseModel):
 
     variables: list["Variable"] = Field(default_factory=list)
     parameters: list["Parameter"] = Field(default_factory=list)
+    parameter_nodes: list["ParameterNode"] = Field(default_factory=list)
 
     # Region registry for geographic simulations
     region_registry: "RegionRegistry | None" = Field(
@@ -41,6 +43,9 @@ class TaxBenefitModelVersion(BaseModel):
     # Lookup dicts for O(1) access (excluded from serialization)
     variables_by_name: dict[str, "Variable"] = Field(default_factory=dict, exclude=True)
     parameters_by_name: dict[str, "Parameter"] = Field(
+        default_factory=dict, exclude=True
+    )
+    parameter_nodes_by_name: dict[str, "ParameterNode"] = Field(
         default_factory=dict, exclude=True
     )
 
@@ -69,6 +74,11 @@ class TaxBenefitModelVersion(BaseModel):
         self.variables.append(var)
         self.variables_by_name[var.name] = var
 
+    def add_parameter_node(self, node: "ParameterNode") -> None:
+        """Add a parameter node and index it for fast lookup."""
+        self.parameter_nodes.append(node)
+        self.parameter_nodes_by_name[node.name] = node
+
     def get_parameter(self, name: str) -> "Parameter":
         """Get a parameter by name (O(1) lookup)."""
         if name in self.parameters_by_name:
@@ -85,6 +95,14 @@ class TaxBenefitModelVersion(BaseModel):
             f"Variable '{name}' not found in {self.model.id} version {self.version}"
         )
 
+    def get_parameter_node(self, name: str) -> "ParameterNode":
+        """Get a parameter node by name (O(1) lookup)."""
+        if name in self.parameter_nodes_by_name:
+            return self.parameter_nodes_by_name[name]
+        raise ValueError(
+            f"ParameterNode '{name}' not found in {self.model.id} version {self.version}"
+        )
+
     def get_region(self, code: str) -> "Region | None":
         """Get a region by its code.
 
@@ -99,5 +117,5 @@ class TaxBenefitModelVersion(BaseModel):
         return self.region_registry.get(code)
 
     def __repr__(self) -> str:
-        # Give the id and version, and the number of variables, parameters, parameter values
-        return f"<TaxBenefitModelVersion id={self.id} variables={len(self.variables)} parameters={len(self.parameters)} parameter_values={len(self.parameter_values)}>"
+        # Give the id and version, and the number of variables, parameters, parameter nodes, parameter values
+        return f"<TaxBenefitModelVersion id={self.id} variables={len(self.variables)} parameters={len(self.parameters)} parameter_nodes={len(self.parameter_nodes)} parameter_values={len(self.parameter_values)}>"

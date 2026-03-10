@@ -6,6 +6,7 @@ from .dynamic import Dynamic as Dynamic
 from .output import Output as Output
 from .output import OutputCollection as OutputCollection
 from .parameter import Parameter as Parameter
+from .parameter_node import ParameterNode as ParameterNode
 from .parameter_value import ParameterValue as ParameterValue
 from .policy import Policy as Policy
 from .region import Region as Region
@@ -23,4 +24,5 @@ Dataset.model_rebuild()
 TaxBenefitModelVersion.model_rebuild()
 Variable.model_rebuild()
 Parameter.model_rebuild()
+ParameterNode.model_rebuild()
 ParameterValue.model_rebuild()

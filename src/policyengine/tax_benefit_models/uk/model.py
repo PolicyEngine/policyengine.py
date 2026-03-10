@@ -10,6 +10,7 @@ from microdf import MicroDataFrame
 
 from policyengine.core import (
     Parameter,
+    ParameterNode,
     TaxBenefitModel,
     TaxBenefitModelVersion,
     Variable,
@@ -189,6 +190,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
             self.add_variable(variable)
 
         from policyengine_core.parameters import Parameter as CoreParameter
+        from policyengine_core.parameters import ParameterNode as CoreParameterNode
 
         scale_lookup = build_scale_lookup(system)
 
@@ -207,6 +209,15 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                     _core_param=param_node,
                 )
                 self.add_parameter(parameter)
+            elif isinstance(param_node, CoreParameterNode):
+                node = ParameterNode(
+                    id=self.id + "-" + param_node.name,
+                    name=param_node.name,
+                    label=param_node.metadata.get("label"),
+                    description=param_node.description,
+                    tax_benefit_model_version=self,
+                )
+                self.add_parameter_node(node)
 
     def _build_entity_relationships(
         self, dataset: PolicyEngineUKDataset
