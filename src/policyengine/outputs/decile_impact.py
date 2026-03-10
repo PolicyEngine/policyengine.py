@@ -16,9 +16,7 @@ class DecileImpact(Output):
     baseline_simulation: Simulation
     reform_simulation: Simulation
     income_variable: str = "equiv_hbai_household_net_income"
-    decile_variable: str | None = (
-        None  # If set, use pre-computed grouping variable
-    )
+    decile_variable: str | None = None  # If set, use pre-computed grouping variable
     entity: str | None = None
     decile: int
     quantiles: int = 10

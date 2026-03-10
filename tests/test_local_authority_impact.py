@@ -66,9 +66,7 @@ def test_basic_local_authority_reweighting():
     assert impact.local_authority_results is not None
     assert len(impact.local_authority_results) == 2
 
-    by_code = {
-        r["local_authority_code"]: r for r in impact.local_authority_results
-    }
+    by_code = {r["local_authority_code"]: r for r in impact.local_authority_results}
 
     la1 = by_code["LA001"]
     # Weighted change: (1*3000 + 1*3000) / 2 = 3000

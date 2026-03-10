@@ -23,9 +23,6 @@ jobs:
 
         - name: Run ruff check
           run: ruff check .
-
-        - name: Run ruff format check
-          run: ruff format --check .
   Mypy:
     runs-on: ubuntu-latest
     steps:

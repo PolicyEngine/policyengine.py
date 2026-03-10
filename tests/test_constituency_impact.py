@@ -145,9 +145,6 @@ def test_relative_change():
 
     # 10% increase
     assert (
-        abs(
-            impact.constituency_results[0]["relative_household_income_change"]
-            - 0.1
-        )
+        abs(impact.constituency_results[0]["relative_household_income_change"] - 0.1)
         < 1e-6
     )
