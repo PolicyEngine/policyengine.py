@@ -48,9 +48,93 @@ print(f"Total UC spending: £{agg.result / 1e9:.1f}bn")
 
 ## Installation
 
+### As a library
+
 ```bash
 pip install policyengine
 ```
+
+This installs both UK and US country models. To install only one:
+
+```bash
+pip install policyengine[uk]    # UK model only
+pip install policyengine[us]    # US model only
+```
+
+### For development
+
+```bash
+git clone https://github.com/PolicyEngine/policyengine.py.git
+cd policyengine.py
+uv pip install -e .[dev]        # install with dev dependencies (pytest, ruff, mypy, etc.)
+```
+
+## Development
+
+### Running configurations
+
+| Configuration | Install | Use case |
+|---------------|---------|----------|
+| **Library user** | `pip install policyengine` | Using the package in your own code |
+| **UK only** | `pip install policyengine[uk]` | Only need UK simulations |
+| **US only** | `pip install policyengine[us]` | Only need US simulations |
+| **Developer** | `uv pip install -e .[dev]` | Contributing to the package |
+
+### Common commands
+
+```bash
+make format           # ruff format
+make test             # pytest with coverage
+make docs             # build Jupyter Book documentation
+make clean            # remove caches, build artifacts, .h5 files
+```
+
+### Testing
+
+Tests require a `HUGGING_FACE_TOKEN` environment variable for downloading datasets:
+
+```bash
+export HUGGING_FACE_TOKEN=hf_...
+make test
+```
+
+To run a specific test:
+
+```bash
+pytest tests/test_models.py -v
+pytest tests/test_parametric_reforms.py -k "test_uk" -v
+```
+
+### Linting and type checking
+
+```bash
+ruff format .                    # format code
+ruff check .                     # lint
+mypy src/policyengine            # type check (informational — not yet enforced in CI)
+```
+
+### CI pipeline
+
+PRs trigger the following checks:
+
+| Check | Status | Command |
+|-------|--------|---------|
+| Lint + format | Required | `ruff check .` + `ruff format --check .` |
+| Tests (Python 3.13) | Required | `make test` |
+| Tests (Python 3.14) | Required | `make test` |
+| Mypy | Informational | `mypy src/policyengine` |
+| Docs build | Required | Jupyter Book build |
+
+### Versioning and releases
+
+This project uses [towncrier](https://towncrier.readthedocs.io/) for changelog management. When making a PR, add a changelog fragment:
+
+```bash
+# Fragment types: breaking, added, changed, fixed, removed
+echo "Description of change" > changelog.d/my-change.added
+```
+
+On merge, the versioning workflow bumps the version, builds the changelog, and creates a GitHub Release.
 
 ## Features
 

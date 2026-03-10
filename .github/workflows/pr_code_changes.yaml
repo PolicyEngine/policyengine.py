@@ -23,6 +23,20 @@ jobs:
 
         - name: Run ruff check
           run: ruff check .
+  Mypy:
+    runs-on: ubuntu-latest
+    steps:
+        - uses: actions/checkout@v4
+        - name: Install uv
+          uses: astral-sh/setup-uv@v5
+        - name: Set up Python
+          uses: actions/setup-python@v5
+          with:
+              python-version: '3.13'
+        - name: Install package
+          run: uv pip install -e .[dev] --system
+        - name: Run mypy (informational)
+          run: mypy src/policyengine || echo "::warning::mypy found errors (non-blocking until codebase is clean)"
   Test:
     runs-on: macos-latest
     strategy:
