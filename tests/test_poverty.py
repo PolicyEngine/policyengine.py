@@ -192,19 +192,11 @@ def test_poverty_variable_mappings():
     # UK mappings
     assert UK_POVERTY_VARIABLES[UKPovertyType.ABSOLUTE_BHC] == "in_poverty_bhc"
     assert UK_POVERTY_VARIABLES[UKPovertyType.ABSOLUTE_AHC] == "in_poverty_ahc"
-    assert (
-        UK_POVERTY_VARIABLES[UKPovertyType.RELATIVE_BHC]
-        == "in_relative_poverty_bhc"
-    )
-    assert (
-        UK_POVERTY_VARIABLES[UKPovertyType.RELATIVE_AHC]
-        == "in_relative_poverty_ahc"
-    )
+    assert UK_POVERTY_VARIABLES[UKPovertyType.RELATIVE_BHC] == "in_relative_poverty_bhc"
+    assert UK_POVERTY_VARIABLES[UKPovertyType.RELATIVE_AHC] == "in_relative_poverty_ahc"
 
     # US mappings
-    assert (
-        US_POVERTY_VARIABLES[USPovertyType.SPM] == "spm_unit_is_in_spm_poverty"
-    )
+    assert US_POVERTY_VARIABLES[USPovertyType.SPM] == "spm_unit_is_in_spm_poverty"
     assert (
         US_POVERTY_VARIABLES[USPovertyType.SPM_DEEP]
         == "spm_unit_is_in_deep_spm_poverty"

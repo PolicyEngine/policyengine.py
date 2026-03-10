@@ -241,9 +241,7 @@ class TestUSFilterDatasetByHouseholdVariable:
                 variable_value="value",
             )
 
-    def test__given_filtered_dataset__then_has_updated_metadata(
-        self, us_test_dataset
-    ):
+    def test__given_filtered_dataset__then_has_updated_metadata(self, us_test_dataset):
         """Given: US dataset
         When: Filtering by place_fips
         Then: Filtered dataset has updated id and description
@@ -413,9 +411,7 @@ class TestUKFilterDatasetByHouseholdVariable:
                 variable_value="WALES",
             )
 
-    def test__given_filtered_dataset__then_has_updated_metadata(
-        self, uk_test_dataset
-    ):
+    def test__given_filtered_dataset__then_has_updated_metadata(self, uk_test_dataset):
         """Given: UK dataset
         When: Filtering by country
         Then: Filtered dataset has updated id and description

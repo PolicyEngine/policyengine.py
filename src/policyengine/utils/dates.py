@@ -40,6 +40,4 @@ def parse_safe_date(date_string: str) -> datetime:
                 if date_obj.year < 1:
                     return date_obj.replace(year=1)
                 return date_obj
-        raise ValueError(
-            f"Invalid date format: {date_string}. Expected YYYY-MM-DD"
-        )
+        raise ValueError(f"Invalid date format: {date_string}. Expected YYYY-MM-DD")

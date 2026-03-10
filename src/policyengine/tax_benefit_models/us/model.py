@@ -149,9 +149,7 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
                 tax_benefit_model_version=self,
                 entity=var_obj.entity.key,
                 description=var_obj.documentation,
-                data_type=var_obj.value_type
-                if var_obj.value_type is not Enum
-                else str,
+                data_type=var_obj.value_type if var_obj.value_type is not Enum else str,
                 default_value=default_val,
                 value_type=var_obj.value_type,
             )
@@ -291,9 +289,7 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
             if entity_id_col in input_df.columns:
                 data[entity][entity_id_col] = input_df[entity_id_col].values
             if entity_weight_col in input_df.columns:
-                data[entity][entity_weight_col] = input_df[
-                    entity_weight_col
-                ].values
+                data[entity][entity_weight_col] = input_df[entity_weight_col].values
 
         # For person entity, also copy person-level group ID columns
         person_input_df = pd.DataFrame(dataset.data.person)
@@ -312,21 +308,13 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
                         var, period=simulation.dataset.year, map_to=entity
                     ).values
 
-        data["person"] = MicroDataFrame(
-            data["person"], weights="person_weight"
-        )
+        data["person"] = MicroDataFrame(data["person"], weights="person_weight")
         data["marital_unit"] = MicroDataFrame(
             data["marital_unit"], weights="marital_unit_weight"
         )
-        data["family"] = MicroDataFrame(
-            data["family"], weights="family_weight"
-        )
-        data["spm_unit"] = MicroDataFrame(
-            data["spm_unit"], weights="spm_unit_weight"
-        )
-        data["tax_unit"] = MicroDataFrame(
-            data["tax_unit"], weights="tax_unit_weight"
-        )
+        data["family"] = MicroDataFrame(data["family"], weights="family_weight")
+        data["spm_unit"] = MicroDataFrame(data["spm_unit"], weights="spm_unit_weight")
+        data["tax_unit"] = MicroDataFrame(data["tax_unit"], weights="tax_unit_weight")
         data["household"] = MicroDataFrame(
             data["household"], weights="household_weight"
         )
@@ -336,8 +324,7 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
             name=dataset.name,
             description=dataset.description,
             filepath=str(
-                Path(simulation.dataset.filepath).parent
-                / (simulation.id + ".h5")
+                Path(simulation.dataset.filepath).parent / (simulation.id + ".h5")
             ),
             year=simulation.dataset.year,
             is_output_dataset=True,
@@ -433,18 +420,14 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
         )
 
         # Declare entities
-        builder.declare_person_entity(
-            "person", person_data["person_id"].values
-        )
+        builder.declare_person_entity("person", person_data["person_id"].values)
         builder.declare_entity(
             "household", np.unique(person_data[household_id_col].values)
         )
         builder.declare_entity(
             "spm_unit", np.unique(person_data[spm_unit_id_col].values)
         )
-        builder.declare_entity(
-            "family", np.unique(person_data[family_id_col].values)
-        )
+        builder.declare_entity("family", np.unique(person_data[family_id_col].values))
         builder.declare_entity(
             "tax_unit", np.unique(person_data[tax_unit_id_col].values)
         )

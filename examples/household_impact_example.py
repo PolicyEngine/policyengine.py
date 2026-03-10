@@ -34,13 +34,9 @@ def uk_example():
     result = calculate_uk_impact(household)
 
     print("\nSingle adult, £50k income:")
-    print(
-        f"  Net income: £{result.household['hbai_household_net_income']:,.0f}"
-    )
+    print(f"  Net income: £{result.household['hbai_household_net_income']:,.0f}")
     print(f"  Income tax: £{result.person[0]['income_tax']:,.0f}")
-    print(
-        f"  National Insurance: £{result.person[0]['national_insurance']:,.0f}"
-    )
+    print(f"  National Insurance: £{result.person[0]['national_insurance']:,.0f}")
     print(f"  Total tax: £{result.household['household_tax']:,.0f}")
 
     # Family with two children, £30k income, renting
@@ -64,9 +60,7 @@ def uk_example():
     result = calculate_uk_impact(household)
 
     print("\nFamily (2 adults, 2 children), £30k income, renting:")
-    print(
-        f"  Net income: £{result.household['hbai_household_net_income']:,.0f}"
-    )
+    print(f"  Net income: £{result.household['hbai_household_net_income']:,.0f}")
     print(f"  Income tax: £{result.person[0]['income_tax']:,.0f}")
     print(f"  Child benefit: £{result.benunit[0]['child_benefit']:,.0f}")
     print(f"  Universal credit: £{result.benunit[0]['universal_credit']:,.0f}")
@@ -81,9 +75,7 @@ def us_example():
 
     # Single adult earning $50,000
     household = USHouseholdInput(
-        people=[
-            {"age": 35, "employment_income": 50_000, "is_tax_unit_head": True}
-        ],
+        people=[{"age": 35, "employment_income": 50_000, "is_tax_unit_head": True}],
         tax_unit={"filing_status": "SINGLE"},
         household={"state_code_str": "CA"},
         year=2024,

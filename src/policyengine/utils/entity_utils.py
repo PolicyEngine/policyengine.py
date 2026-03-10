@@ -8,9 +8,7 @@ from microdf import MicroDataFrame
 logger = logging.getLogger(__name__)
 
 
-def _resolve_id_column(
-    person_data: pd.DataFrame, entity_name: str
-) -> str:
+def _resolve_id_column(person_data: pd.DataFrame, entity_name: str) -> str:
     """Resolve the ID column name for a group entity in person data.
 
     Tries `person_{entity}_id` first (standard convention), falls back
@@ -95,9 +93,7 @@ def filter_dataset_by_household_variable(
     hh_ids = household_data["household_id"].values
 
     if isinstance(variable_value, str):
-        hh_mask = (hh_values == variable_value) | (
-            hh_values == variable_value.encode()
-        )
+        hh_mask = (hh_values == variable_value) | (hh_values == variable_value.encode())
     else:
         hh_mask = hh_values == variable_value
 

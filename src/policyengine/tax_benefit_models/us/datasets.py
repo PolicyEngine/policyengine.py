@@ -70,21 +70,13 @@ class PolicyEngineUSDataset(Dataset):
         filepath = self.filepath
         with pd.HDFStore(filepath, mode="r") as store:
             self.data = USYearData(
-                person=MicroDataFrame(
-                    store["person"], weights="person_weight"
-                ),
+                person=MicroDataFrame(store["person"], weights="person_weight"),
                 marital_unit=MicroDataFrame(
                     store["marital_unit"], weights="marital_unit_weight"
                 ),
-                family=MicroDataFrame(
-                    store["family"], weights="family_weight"
-                ),
-                spm_unit=MicroDataFrame(
-                    store["spm_unit"], weights="spm_unit_weight"
-                ),
-                tax_unit=MicroDataFrame(
-                    store["tax_unit"], weights="tax_unit_weight"
-                ),
+                family=MicroDataFrame(store["family"], weights="family_weight"),
+                spm_unit=MicroDataFrame(store["spm_unit"], weights="spm_unit_weight"),
+                tax_unit=MicroDataFrame(store["tax_unit"], weights="tax_unit_weight"),
                 household=MicroDataFrame(
                     store["household"], weights="household_weight"
                 ),
@@ -241,9 +233,7 @@ def create_datasets(
                             how="left",
                         )
                         entity_df = entity_df.rename(
-                            columns={
-                                "household_weight": f"{entity_name}_weight"
-                            }
+                            columns={"household_weight": f"{entity_name}_weight"}
                         )
                         entity_df = entity_df.drop(
                             columns=[
@@ -272,19 +262,13 @@ def create_datasets(
                 year=int(year),
                 data=USYearData(
                     person=MicroDataFrame(person_df, weights="person_weight"),
-                    household=MicroDataFrame(
-                        household_df, weights="household_weight"
-                    ),
+                    household=MicroDataFrame(household_df, weights="household_weight"),
                     marital_unit=MicroDataFrame(
                         marital_unit_df, weights="marital_unit_weight"
                     ),
                     family=MicroDataFrame(family_df, weights="family_weight"),
-                    spm_unit=MicroDataFrame(
-                        spm_unit_df, weights="spm_unit_weight"
-                    ),
-                    tax_unit=MicroDataFrame(
-                        tax_unit_df, weights="tax_unit_weight"
-                    ),
+                    spm_unit=MicroDataFrame(spm_unit_df, weights="spm_unit_weight"),
+                    tax_unit=MicroDataFrame(tax_unit_df, weights="tax_unit_weight"),
                 ),
             )
             us_dataset.save()
@@ -351,9 +335,7 @@ def ensure_datasets(
     all_exist = True
     for dataset in datasets:
         for year in years:
-            filepath = Path(
-                f"{data_folder}/{Path(dataset).stem}_year_{year}.h5"
-            )
+            filepath = Path(f"{data_folder}/{Path(dataset).stem}_year_{year}.h5")
             if not filepath.exists():
                 all_exist = False
                 break
@@ -361,10 +343,6 @@ def ensure_datasets(
             break
 
     if all_exist:
-        return load_datasets(
-            datasets=datasets, years=years, data_folder=data_folder
-        )
+        return load_datasets(datasets=datasets, years=years, data_folder=data_folder)
     else:
-        return create_datasets(
-            datasets=datasets, years=years, data_folder=data_folder
-        )
+        return create_datasets(datasets=datasets, years=years, data_folder=data_folder)

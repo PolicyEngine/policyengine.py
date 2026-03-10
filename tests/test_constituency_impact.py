@@ -26,7 +26,9 @@ def _make_sim(household_data: dict) -> MagicMock:
     return sim
 
 
-def _make_weight_matrix_and_csv(tmpdir, n_constituencies, n_households, weights, csv_rows):
+def _make_weight_matrix_and_csv(
+    tmpdir, n_constituencies, n_households, weights, csv_rows
+):
     """Create a temp H5 weight matrix and CSV metadata file."""
     h5_path = os.path.join(tmpdir, "weights.h5")
     with h5py.File(h5_path, "w") as f:
@@ -66,9 +68,7 @@ def test_basic_constituency_reweighting():
         h5_path, csv_path = _make_weight_matrix_and_csv(
             tmpdir, 2, n_hh, weight_matrix, csv_rows
         )
-        impact = compute_uk_constituency_impacts(
-            baseline, reform, h5_path, csv_path
-        )
+        impact = compute_uk_constituency_impacts(baseline, reform, h5_path, csv_path)
 
     assert impact.constituency_results is not None
     assert len(impact.constituency_results) == 2
@@ -113,9 +113,7 @@ def test_zero_weight_constituency_skipped():
         h5_path, csv_path = _make_weight_matrix_and_csv(
             tmpdir, 2, 2, weight_matrix, csv_rows
         )
-        impact = compute_uk_constituency_impacts(
-            baseline, reform, h5_path, csv_path
-        )
+        impact = compute_uk_constituency_impacts(baseline, reform, h5_path, csv_path)
 
     assert len(impact.constituency_results) == 1
     assert impact.constituency_results[0]["constituency_code"] == "C001"
@@ -143,9 +141,10 @@ def test_relative_change():
         h5_path, csv_path = _make_weight_matrix_and_csv(
             tmpdir, 1, 1, weight_matrix, csv_rows
         )
-        impact = compute_uk_constituency_impacts(
-            baseline, reform, h5_path, csv_path
-        )
+        impact = compute_uk_constituency_impacts(baseline, reform, h5_path, csv_path)
 
     # 10% increase
-    assert abs(impact.constituency_results[0]["relative_household_income_change"] - 0.1) < 1e-6
+    assert (
+        abs(impact.constituency_results[0]["relative_household_income_change"] - 0.1)
+        < 1e-6
+    )

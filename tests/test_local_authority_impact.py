@@ -60,12 +60,8 @@ def test_basic_local_authority_reweighting():
     ]
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        h5_path, csv_path = _make_weight_matrix_and_csv(
-            tmpdir, weight_matrix, csv_rows
-        )
-        impact = compute_uk_local_authority_impacts(
-            baseline, reform, h5_path, csv_path
-        )
+        h5_path, csv_path = _make_weight_matrix_and_csv(tmpdir, weight_matrix, csv_rows)
+        impact = compute_uk_local_authority_impacts(baseline, reform, h5_path, csv_path)
 
     assert impact.local_authority_results is not None
     assert len(impact.local_authority_results) == 2
@@ -105,12 +101,8 @@ def test_zero_weight_la_skipped():
     ]
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        h5_path, csv_path = _make_weight_matrix_and_csv(
-            tmpdir, weight_matrix, csv_rows
-        )
-        impact = compute_uk_local_authority_impacts(
-            baseline, reform, h5_path, csv_path
-        )
+        h5_path, csv_path = _make_weight_matrix_and_csv(tmpdir, weight_matrix, csv_rows)
+        impact = compute_uk_local_authority_impacts(baseline, reform, h5_path, csv_path)
 
     assert len(impact.local_authority_results) == 1
     assert impact.local_authority_results[0]["local_authority_code"] == "LA001"

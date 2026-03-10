@@ -17,9 +17,7 @@ from policyengine.utils.parametric_reforms import (
 class TestBuildEntityRelationships:
     """Tests for the shared build_entity_relationships function."""
 
-    def test__given_us_style_entities__then_returns_all_columns(
-        self, us_test_dataset
-    ):
+    def test__given_us_style_entities__then_returns_all_columns(self, us_test_dataset):
         """Given: Person data with 5 group entities (US style)
         When: Building entity relationships
         Then: DataFrame has person_id + all 5 entity ID columns
@@ -45,9 +43,7 @@ class TestBuildEntityRelationships:
         }
         assert set(result.columns) == expected_columns
 
-    def test__given_uk_style_entities__then_returns_all_columns(
-        self, uk_test_dataset
-    ):
+    def test__given_uk_style_entities__then_returns_all_columns(self, uk_test_dataset):
         """Given: Person data with 2 group entities (UK style)
         When: Building entity relationships
         Then: DataFrame has person_id + 2 entity ID columns
@@ -67,9 +63,7 @@ class TestBuildEntityRelationships:
         """
         person_data = pd.DataFrame(us_test_dataset.data.person)
 
-        result = build_entity_relationships(
-            person_data, ["household", "tax_unit"]
-        )
+        result = build_entity_relationships(person_data, ["household", "tax_unit"])
 
         assert len(result) == 6
 
