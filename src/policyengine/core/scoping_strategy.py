@@ -152,9 +152,7 @@ class WeightReplacementStrategy(RegionScopingStrategy):
             df = pd.DataFrame(mdf)
             if entity_name == "household":
                 df["household_weight"] = region_weights
-                result[entity_name] = MicroDataFrame(
-                    df, weights="household_weight"
-                )
+                result[entity_name] = MicroDataFrame(df, weights="household_weight")
             else:
                 weight_col = f"{entity_name}_weight"
                 if weight_col in df.columns:
@@ -165,9 +163,7 @@ class WeightReplacementStrategy(RegionScopingStrategy):
                     weight_map = dict(zip(hh_ids, region_weights))
 
                     # Find the entity's household ID column
-                    person_hh_col = self._find_household_id_column(
-                        df, entity_name
-                    )
+                    person_hh_col = self._find_household_id_column(df, entity_name)
                     if person_hh_col:
                         new_weights = np.array(
                             [
@@ -205,9 +201,7 @@ class WeightReplacementStrategy(RegionScopingStrategy):
         )
 
     @staticmethod
-    def _find_household_id_column(
-        df: pd.DataFrame, entity_name: str
-    ) -> str | None:
+    def _find_household_id_column(df: pd.DataFrame, entity_name: str) -> str | None:
         """Find the column linking an entity to its household."""
         candidates = [
             "person_household_id",

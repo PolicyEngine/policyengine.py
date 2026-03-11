@@ -198,9 +198,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                             get_parameter,
                         )
 
-                        param = get_parameter(
-                            system.parameters, var_obj.adds
-                        )
+                        param = get_parameter(system.parameters, var_obj.adds)
                         variable.adds = list(param("2025-01-01"))
                     except (ValueError, Exception):
                         variable.adds = None
@@ -213,9 +211,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                             get_parameter,
                         )
 
-                        param = get_parameter(
-                            system.parameters, var_obj.subtracts
-                        )
+                        param = get_parameter(system.parameters, var_obj.subtracts)
                         variable.subtracts = list(param("2025-01-01"))
                     except (ValueError, Exception):
                         variable.subtracts = None

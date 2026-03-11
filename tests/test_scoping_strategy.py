@@ -19,27 +19,19 @@ class TestRowFilterStrategy:
     """Tests for RowFilterStrategy."""
 
     def test__given_row_filter__then_has_correct_strategy_type(self):
-        strategy = RowFilterStrategy(
-            variable_name="country", variable_value="ENGLAND"
-        )
+        strategy = RowFilterStrategy(variable_name="country", variable_value="ENGLAND")
         assert strategy.strategy_type == "row_filter"
 
     def test__given_row_filter__then_serialization_roundtrip_works(self):
-        strategy = RowFilterStrategy(
-            variable_name="place_fips", variable_value="44000"
-        )
+        strategy = RowFilterStrategy(variable_name="place_fips", variable_value="44000")
         json_str = strategy.model_dump_json()
         restored = RowFilterStrategy.model_validate_json(json_str)
         assert restored.variable_name == "place_fips"
         assert restored.variable_value == "44000"
         assert restored.strategy_type == "row_filter"
 
-    def test__given_row_filter__then_apply_filters_correctly(
-        self, uk_test_entity_data
-    ):
-        strategy = RowFilterStrategy(
-            variable_name="country", variable_value="ENGLAND"
-        )
+    def test__given_row_filter__then_apply_filters_correctly(self, uk_test_entity_data):
+        strategy = RowFilterStrategy(variable_name="country", variable_value="ENGLAND")
         result = strategy.apply(
             entity_data=uk_test_entity_data,
             group_entities=["benunit", "household"],
@@ -50,9 +42,7 @@ class TestRowFilterStrategy:
         assert all(household_df["country"] == "ENGLAND")
 
     def test__given_row_filter__then_cache_key_is_descriptive(self):
-        strategy = RowFilterStrategy(
-            variable_name="country", variable_value="ENGLAND"
-        )
+        strategy = RowFilterStrategy(variable_name="country", variable_value="ENGLAND")
         assert "row_filter" in strategy.cache_key
         assert "country" in strategy.cache_key
         assert "ENGLAND" in strategy.cache_key
@@ -119,9 +109,7 @@ class TestWeightReplacementStrategy:
             )
 
         mock_download.side_effect = lambda bucket, file_path: (
-            str(lookup_csv_path)
-            if file_path.endswith(".csv")
-            else str(weights_h5_path)
+            str(lookup_csv_path) if file_path.endswith(".csv") else str(weights_h5_path)
         )
 
         strategy = WeightReplacementStrategy(
@@ -168,9 +156,7 @@ class TestWeightReplacementStrategy:
             f.create_dataset("2024", data=np.array([[100.0, 200.0]]))
 
         mock_download.side_effect = lambda bucket, file_path: (
-            str(lookup_csv_path)
-            if file_path.endswith(".csv")
-            else str(weights_h5_path)
+            str(lookup_csv_path) if file_path.endswith(".csv") else str(weights_h5_path)
         )
 
         strategy = WeightReplacementStrategy(
@@ -219,13 +205,9 @@ class TestWeightReplacementStrategy:
         assert idx == 1
 
     def test__given_lookup_csv_without_match__then_raises_value_error(self):
-        lookup_df = pd.DataFrame(
-            {"code": ["A", "B"], "name": ["Foo", "Bar"]}
-        )
+        lookup_df = pd.DataFrame({"code": ["A", "B"], "name": ["Foo", "Bar"]})
         with pytest.raises(ValueError, match="not found in lookup CSV"):
-            WeightReplacementStrategy._find_region_index(
-                lookup_df, "NONEXISTENT"
-            )
+            WeightReplacementStrategy._find_region_index(lookup_df, "NONEXISTENT")
 
 
 class TestScopingStrategyDiscriminatedUnion:
@@ -278,9 +260,7 @@ class TestSimulationScopingStrategy:
         assert sim.scoping_strategy is None
 
     def test__given_explicit_strategy__then_simulation_stores_it(self):
-        strategy = RowFilterStrategy(
-            variable_name="country", variable_value="ENGLAND"
-        )
+        strategy = RowFilterStrategy(variable_name="country", variable_value="ENGLAND")
         sim = Simulation(scoping_strategy=strategy)
         assert sim.scoping_strategy is not None
         assert isinstance(sim.scoping_strategy, RowFilterStrategy)
@@ -355,7 +335,5 @@ def uk_test_entity_data() -> dict[str, MicroDataFrame]:
     return {
         "person": MicroDataFrame(person_data, weights="person_weight"),
         "benunit": MicroDataFrame(benunit_data, weights="benunit_weight"),
-        "household": MicroDataFrame(
-            household_data, weights="household_weight"
-        ),
+        "household": MicroDataFrame(household_data, weights="household_weight"),
     }

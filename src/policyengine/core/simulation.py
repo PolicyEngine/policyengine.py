@@ -60,6 +60,7 @@ class Simulation(BaseModel):
                 variable_value=self.filter_value,
             )
         return self
+
     output_dataset: Dataset | None = None
 
     def run(self):
