@@ -1,5 +1,6 @@
 """Tests for UK region definitions."""
 
+from policyengine.core.scoping_strategy import RowFilterStrategy
 from policyengine.countries.uk.regions import (
     UK_COUNTRIES,
     UK_DATA_BUCKET,
@@ -97,6 +98,19 @@ class TestUKRegionRegistry:
         assert england.filter_field == "country"
         assert england.filter_value == "ENGLAND"
         assert england.dataset_path is None
+
+    def test__given_country_regions__then_have_row_filter_strategy(self):
+        """Given: UK country regions
+        When: Checking their scoping strategies
+        Then: Each has a RowFilterStrategy with correct variable/value
+        """
+        for code, name in UK_COUNTRIES.items():
+            region = uk_region_registry.get(f"country/{code}")
+            assert region is not None
+            assert region.scoping_strategy is not None
+            assert isinstance(region.scoping_strategy, RowFilterStrategy)
+            assert region.scoping_strategy.variable_name == "country"
+            assert region.scoping_strategy.variable_value == code.upper()
 
     def test__given_scotland_region__then_filters_from_national(self):
         """Given: Scotland country region

@@ -198,9 +198,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                             get_parameter,
                         )
 
-                        param = get_parameter(
-                            system.parameters, var_obj.adds
-                        )
+                        param = get_parameter(system.parameters, var_obj.adds)
                         variable.adds = list(param("2025-01-01"))
                     except (ValueError, Exception):
                         variable.adds = None
@@ -213,9 +211,7 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                             get_parameter,
                         )
 
-                        param = get_parameter(
-                            system.parameters, var_obj.subtracts
-                        )
+                        param = get_parameter(system.parameters, var_obj.subtracts)
                         variable.subtracts = list(param("2025-01-01"))
                     except (ValueError, Exception):
                         variable.subtracts = None
@@ -300,8 +296,27 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
         dataset = simulation.dataset
         dataset.load()
 
-        # Apply regional filtering if specified
-        if simulation.filter_field and simulation.filter_value:
+        # Apply regional scoping if specified
+        if simulation.scoping_strategy:
+            scoped_data = simulation.scoping_strategy.apply(
+                entity_data=dataset.data.entity_data,
+                group_entities=UK_GROUP_ENTITIES,
+                year=dataset.year,
+            )
+            dataset = PolicyEngineUKDataset(
+                id=dataset.id + "_scoped",
+                name=dataset.name,
+                description=dataset.description,
+                filepath=dataset.filepath,
+                year=dataset.year,
+                is_output_dataset=dataset.is_output_dataset,
+                data=UKYearData(
+                    person=scoped_data["person"],
+                    benunit=scoped_data["benunit"],
+                    household=scoped_data["household"],
+                ),
+            )
+        elif simulation.filter_field and simulation.filter_value:
             dataset = self._filter_dataset_by_household_variable(
                 dataset, simulation.filter_field, simulation.filter_value
             )

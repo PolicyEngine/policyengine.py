@@ -40,6 +40,25 @@ class TestSimulationFilterParameters:
         assert simulation.filter_field == "place_fips"
         assert simulation.filter_value == "44000"
 
+    def test__given_filter_params__then_auto_constructs_scoping_strategy(self):
+        """Given: Simulation created with legacy filter parameters
+        When: Checking scoping_strategy
+        Then: RowFilterStrategy is auto-constructed
+        """
+        from policyengine.core.scoping_strategy import RowFilterStrategy
+
+        # When
+        simulation = Simulation(
+            filter_field="place_fips",
+            filter_value="44000",
+        )
+
+        # Then
+        assert simulation.scoping_strategy is not None
+        assert isinstance(simulation.scoping_strategy, RowFilterStrategy)
+        assert simulation.scoping_strategy.variable_name == "place_fips"
+        assert simulation.scoping_strategy.variable_value == "44000"
+
 
 class TestUSBuildEntityRelationships:
     """Tests for US model _build_entity_relationships method."""

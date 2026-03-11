@@ -188,25 +188,19 @@ class TestVariableAddsSubtracts:
         assert var.adds is not None, "employment_income should have adds"
         assert isinstance(var.adds, list), "adds should be a list"
         assert len(var.adds) > 0, "adds should not be empty"
-        assert all(
-            isinstance(name, str) for name in var.adds
-        ), "all adds entries should be strings"
+        assert all(isinstance(name, str) for name in var.adds), (
+            "all adds entries should be strings"
+        )
 
     def test_us_variable_with_parameter_path_adds_resolves_to_list(self):
         """US variables whose core adds is a parameter path should resolve to list[str]."""
         # household_state_benefits uses adds as a parameter path string
         # "gov.household.household_state_benefits"
         var = next(
-            (
-                v
-                for v in us_latest.variables
-                if v.name == "household_state_benefits"
-            ),
+            (v for v in us_latest.variables if v.name == "household_state_benefits"),
             None,
         )
-        assert var is not None, (
-            "household_state_benefits not found in US model"
-        )
+        assert var is not None, "household_state_benefits not found in US model"
         assert var.adds is not None, (
             "household_state_benefits should have adds (resolved from param path)"
         )
@@ -217,17 +211,13 @@ class TestVariableAddsSubtracts:
 
     def test_us_variable_without_adds_has_none(self):
         """US variables without adds should have adds=None."""
-        age_var = next(
-            (v for v in us_latest.variables if v.name == "age"), None
-        )
+        age_var = next((v for v in us_latest.variables if v.name == "age"), None)
         assert age_var is not None, "age variable not found in US model"
         assert age_var.adds is None, "age should not have adds"
 
     def test_us_variable_without_subtracts_has_none(self):
         """US variables without subtracts should have subtracts=None."""
-        age_var = next(
-            (v for v in us_latest.variables if v.name == "age"), None
-        )
+        age_var = next((v for v in us_latest.variables if v.name == "age"), None)
         assert age_var is not None, "age variable not found in US model"
         assert age_var.subtracts is None, "age should not have subtracts"
 
@@ -251,9 +241,7 @@ class TestVariableAddsSubtracts:
 
     def test_uk_variable_without_adds_has_none(self):
         """UK variables without adds should have adds=None."""
-        age_var = next(
-            (v for v in uk_latest.variables if v.name == "age"), None
-        )
+        age_var = next((v for v in uk_latest.variables if v.name == "age"), None)
         assert age_var is not None, "age variable not found in UK model"
         assert age_var.adds is None, "age should not have adds"
 
