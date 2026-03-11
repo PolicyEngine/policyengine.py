@@ -171,6 +171,39 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
                         var_obj.possible_values._value2member_map_.values(),
                     )
                 )
+            # Extract and resolve adds/subtracts.
+            # Core stores these as either list[str] or a parameter path string.
+            # Resolve parameter paths to lists so consumers always get list[str].
+            if hasattr(var_obj, "adds") and var_obj.adds is not None:
+                if isinstance(var_obj.adds, str):
+                    try:
+                        from policyengine_core.parameters.operations.get_parameter import (
+                            get_parameter,
+                        )
+
+                        param = get_parameter(
+                            system.parameters, var_obj.adds
+                        )
+                        variable.adds = list(param("2025-01-01"))
+                    except (ValueError, Exception):
+                        variable.adds = None
+                else:
+                    variable.adds = var_obj.adds
+            if hasattr(var_obj, "subtracts") and var_obj.subtracts is not None:
+                if isinstance(var_obj.subtracts, str):
+                    try:
+                        from policyengine_core.parameters.operations.get_parameter import (
+                            get_parameter,
+                        )
+
+                        param = get_parameter(
+                            system.parameters, var_obj.subtracts
+                        )
+                        variable.subtracts = list(param("2025-01-01"))
+                    except (ValueError, Exception):
+                        variable.subtracts = None
+                else:
+                    variable.subtracts = var_obj.subtracts
             self.add_variable(variable)
 
         from policyengine_core.parameters import Parameter as CoreParameter
