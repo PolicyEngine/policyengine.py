@@ -104,9 +104,7 @@ class IntraDecileImpact(Output):
         for lower, upper in zip(BOUNDS[:-1], BOUNDS[1:]):
             in_category = (income_change > lower) & (income_change <= upper)
             in_both = in_decile & in_category
-            proportions.append(
-                float(np.sum(people[in_both]) / people_in_decile)
-            )
+            proportions.append(float(np.sum(people[in_both]) / people_in_decile))
 
         self.lose_more_than_5pct = proportions[0]
         self.lose_less_than_5pct = proportions[1]
@@ -152,15 +150,11 @@ def compute_intra_decile_impacts(
         entity=entity,
         decile=0,
         quantiles=quantiles,
-        lose_more_than_5pct=sum(r.lose_more_than_5pct for r in results)
-        / quantiles,
-        lose_less_than_5pct=sum(r.lose_less_than_5pct for r in results)
-        / quantiles,
+        lose_more_than_5pct=sum(r.lose_more_than_5pct for r in results) / quantiles,
+        lose_less_than_5pct=sum(r.lose_less_than_5pct for r in results) / quantiles,
         no_change=sum(r.no_change for r in results) / quantiles,
-        gain_less_than_5pct=sum(r.gain_less_than_5pct for r in results)
-        / quantiles,
-        gain_more_than_5pct=sum(r.gain_more_than_5pct for r in results)
-        / quantiles,
+        gain_less_than_5pct=sum(r.gain_less_than_5pct for r in results) / quantiles,
+        gain_more_than_5pct=sum(r.gain_more_than_5pct for r in results) / quantiles,
     )
     results.append(overall)
 

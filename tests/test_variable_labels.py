@@ -108,9 +108,7 @@ class TestUSVariableLabels:
         )
         assert var is not None, "employment_income not found in US model"
         assert var.label is not None, "employment_income should have a label"
-        assert len(var.label) > 0, (
-            "employment_income label should be non-empty"
-        )
+        assert len(var.label) > 0, "employment_income label should be non-empty"
 
     def test_income_tax_has_label(self):
         """income_tax should have a non-empty label."""
@@ -126,9 +124,7 @@ class TestUSVariableLabels:
         """Most US variables should have non-empty labels."""
         total = len(us_latest.variables)
         with_label = sum(
-            1
-            for v in us_latest.variables
-            if v.label is not None and len(v.label) > 0
+            1 for v in us_latest.variables if v.label is not None and len(v.label) > 0
         )
         ratio = with_label / total
         assert ratio > 0.5, (
@@ -177,9 +173,7 @@ class TestUKVariableLabels:
         """Most UK variables should have non-empty labels."""
         total = len(uk_latest.variables)
         with_label = sum(
-            1
-            for v in uk_latest.variables
-            if v.label is not None and len(v.label) > 0
+            1 for v in uk_latest.variables if v.label is not None and len(v.label) > 0
         )
         ratio = with_label / total
         assert ratio > 0.5, (
