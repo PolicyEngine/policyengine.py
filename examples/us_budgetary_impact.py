@@ -79,7 +79,7 @@ def main():
         aggregate_type=ChangeAggregateType.SUM,
     )
     tax_change.run()
-    print(f"\nQuick budgetary result:")
+    print("\nQuick budgetary result:")
     print(f"  Tax revenue change: ${tax_change.result / 1e9:.2f}B")
 
     # Count winners and losers
@@ -143,8 +143,12 @@ def main():
     bi = analysis.baseline_inequality
     ri = analysis.reform_inequality
     print(f"  Gini:           baseline={bi.gini:.4f}  reform={ri.gini:.4f}")
-    print(f"  Top 10% share:  baseline={bi.top_10_share:.4f}  reform={ri.top_10_share:.4f}")
-    print(f"  Top 1% share:   baseline={bi.top_1_share:.4f}  reform={ri.top_1_share:.4f}")
+    print(
+        f"  Top 10% share:  baseline={bi.top_10_share:.4f}  reform={ri.top_10_share:.4f}"
+    )
+    print(
+        f"  Top 1% share:   baseline={bi.top_1_share:.4f}  reform={ri.top_1_share:.4f}"
+    )
 
 
 if __name__ == "__main__":
