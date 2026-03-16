@@ -14,5 +14,6 @@ We do this by:
 - [Regions and scoping](regions-and-scoping.md): Sub-national analysis (states, constituencies, districts)
 - [UK tax-benefit model](country-models-uk.md): Entities, parameters, reform examples
 - [US tax-benefit model](country-models-us.md): Entities, parameters, reform examples
+- [Examples](examples.md): Complete working scripts
 - [Visualisation](visualisation.md): Publication-ready charts with Plotly
 - [Development](dev.md): Setup, testing, CI, architecture

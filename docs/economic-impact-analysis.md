@@ -283,5 +283,5 @@ avg_loss.run()
 
 ## Examples
 
-- `examples/policy_change_uk.py`: Full UK reform analysis with ChangeAggregate and visualisation
-- `examples/us_budgetary_impact.py`: US budgetary impact comparing both approaches
+- [UK policy reform analysis](examples.md#uk-policy-reform-analysis): Full reform analysis with ChangeAggregate and visualisation
+- [US budgetary impact](examples.md#us-budgetary-impact): Budgetary impact comparing both approaches

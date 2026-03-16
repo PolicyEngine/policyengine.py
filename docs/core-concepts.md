@@ -583,7 +583,7 @@ COLORS = {
 
 ### 1. Analyse employment income variation
 
-See `examples/employment_income_variation_uk.py` for a complete example of:
+See [UK employment income variation](examples.md#uk-employment-income-variation) for a complete example of:
 - Creating custom datasets with varied parameters
 - Running single simulations
 - Extracting results with filters
@@ -591,7 +591,7 @@ See `examples/employment_income_variation_uk.py` for a complete example of:
 
 ### 2. Policy reform analysis
 
-See `examples/policy_change_uk.py` for:
+See [UK policy reform analysis](examples.md#uk-policy-reform-analysis) for:
 - Applying parametric reforms
 - Comparing baseline and reform
 - Analysing winners/losers by decile
@@ -599,7 +599,7 @@ See `examples/policy_change_uk.py` for:
 
 ### 3. Distributional analysis
 
-See `examples/income_distribution_us.py` for:
+See [US income distribution](examples.md#us-income-distribution) for:
 - Loading representative microdata
 - Calculating statistics by income decile
 - Mapping variables across entity levels
@@ -659,4 +659,4 @@ See `examples/income_distribution_us.py` for:
   - [UK tax-benefit model](country-models-uk.md)
   - [US tax-benefit model](country-models-us.md)
 - [Visualisation](visualisation.md): Publication-ready charts
-- See `examples/` for complete working scripts
+- [Examples](examples.md): Complete working scripts

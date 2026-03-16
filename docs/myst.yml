@@ -15,6 +15,7 @@ project:
     - file: regions-and-scoping.md
     - file: country-models-uk.md
     - file: country-models-us.md
+    - file: examples.md
     - file: visualisation.md
     - file: dev.md
 
