@@ -47,10 +47,15 @@ class Aggregate(Output):
 
         # Get variable object
         var_obj = next(
-            v
-            for v in self.simulation.tax_benefit_model_version.variables
-            if v.name == self.variable
+            (
+                v
+                for v in self.simulation.tax_benefit_model_version.variables
+                if v.name == self.variable
+            ),
+            None,
         )
+        if var_obj is None:
+            raise ValueError(f"Variable '{self.variable}' not found in model")
 
         # Get the target entity data
         target_entity = self.entity or var_obj.entity
@@ -68,10 +73,17 @@ class Aggregate(Output):
         # Apply filters
         if self.filter_variable is not None:
             filter_var_obj = next(
-                v
-                for v in self.simulation.tax_benefit_model_version.variables
-                if v.name == self.filter_variable
+                (
+                    v
+                    for v in self.simulation.tax_benefit_model_version.variables
+                    if v.name == self.filter_variable
+                ),
+                None,
             )
+            if filter_var_obj is None:
+                raise ValueError(
+                    f"Filter variable '{self.filter_variable}' not found in model"
+                )
 
             if filter_var_obj.entity != target_entity:
                 filter_mapped = self.simulation.output_dataset.data.map_to_entity(
