@@ -1,3 +1,14 @@
+## [3.2.2] - 2026-03-17
+
+### Changed
+
+- Consolidate CI/CD workflows into a unified push workflow with two-phase sentinel pattern, enforce changelog fragments on PRs
+
+### Fixed
+
+- Use GITHUB_TOKEN instead of missing POLICYENGINE_GITHUB PAT in push workflow
+
+
 ## [3.2.1] - 2026-03-10
 
 ### Changed
