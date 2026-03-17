@@ -1,3 +1,10 @@
+## [3.2.3] - 2026-03-17
+
+### Fixed
+
+- Use GitHub App token in push workflow Versioning job to enable auto-triggering of Phase 2 (Publish)
+
+
 ## [3.2.2] - 2026-03-17
 
 ### Changed
