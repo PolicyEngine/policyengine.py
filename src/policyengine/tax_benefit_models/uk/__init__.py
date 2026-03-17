@@ -37,6 +37,9 @@ if find_spec("policyengine_uk") is not None:
     PolicyEngineUKLatest.model_rebuild()
     ProgrammeStatistics.model_rebuild(_types_namespace={"Simulation": Simulation})
     BudgetSummaryItem.model_rebuild(_types_namespace={"Simulation": Simulation})
+    PolicyReformAnalysis.model_rebuild(
+        _types_namespace={"BudgetSummaryItem": BudgetSummaryItem}
+    )
 
     __all__ = [
         "UKYearData",
