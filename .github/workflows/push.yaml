@@ -1,9 +1,12 @@
 # Unified workflow for pushes to main.
 #
 # Phase 1 (normal push): Lint + Test → Docs + Versioning
-#   Versioning commits with message "Update package version", triggering Phase 2.
+#   Versioning commits with message "Update package version".
+#   GITHUB_TOKEN commits don't re-trigger workflows, so Phase 2
+#   must be started manually via workflow_dispatch.
 #
 # Phase 2 (sentinel commit): Lint + Test → Publish to PyPI + GitHub Release
+#   Trigger manually after Phase 1 completes, or via workflow_dispatch.
 
 name: Push to main
 
@@ -97,7 +100,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.POLICYENGINE_GITHUB }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -118,7 +121,7 @@ jobs:
     needs: [Lint, Test]
     if: github.event.head_commit.message == 'Update package version'
     env:
-      GH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
