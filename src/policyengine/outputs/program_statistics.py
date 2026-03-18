@@ -83,8 +83,8 @@ def compute_program_statistics(
             )
             stats.run()
             results.append(stats)
-        except (KeyError, ValueError):
-            logger.warning("Skipping program %s: variable not found", prog_name)
+        except (KeyError, ValueError) as exc:
+            logger.warning("Skipping program %s: %s", prog_name, exc, exc_info=True)
             continue
 
     df = pd.DataFrame(

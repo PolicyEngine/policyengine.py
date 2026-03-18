@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from microdf import MicroDataFrame
 from pydantic import BaseModel, Field
@@ -16,7 +17,12 @@ from policyengine.outputs.decile_impact import compute_decile_impacts
 from policyengine.outputs.inequality import calculate_us_inequality
 from policyengine.outputs.intra_decile_impact import compute_intra_decile_impacts
 from policyengine.outputs.policy_reform_analysis import PolicyReformAnalysis
-from policyengine.outputs.poverty import calculate_us_poverty_rates
+from policyengine.outputs.poverty import (
+    calculate_us_poverty_by_age,
+    calculate_us_poverty_by_gender,
+    calculate_us_poverty_by_race,
+    calculate_us_poverty_rates,
+)
 from policyengine.outputs.program_statistics import compute_program_statistics
 
 from .datasets import PolicyEngineUSDataset, USYearData
@@ -219,8 +225,6 @@ def economic_impact_analysis(
     )
 
     # Household counts — raw weight sums to avoid MicroSeries double-weighting
-    import numpy as np
-
     hh_weight_baseline = baseline_simulation.output_dataset.data.household[
         "household_weight"
     ]
@@ -242,12 +246,6 @@ def economic_impact_analysis(
     reform_poverty = calculate_us_poverty_rates(reform_simulation)
 
     # Poverty by demographics
-    from policyengine.outputs.poverty import (
-        calculate_us_poverty_by_age,
-        calculate_us_poverty_by_gender,
-        calculate_us_poverty_by_race,
-    )
-
     baseline_poverty_by_age = calculate_us_poverty_by_age(baseline_simulation)
     reform_poverty_by_age = calculate_us_poverty_by_age(reform_simulation)
     baseline_poverty_by_gender = calculate_us_poverty_by_gender(baseline_simulation)

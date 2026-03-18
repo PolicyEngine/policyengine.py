@@ -34,10 +34,15 @@ class DecileImpact(Output):
         """Calculate impact for this specific decile."""
         # Get variable object to determine entity
         var_obj = next(
-            v
-            for v in self.baseline_simulation.tax_benefit_model_version.variables
-            if v.name == self.income_variable
+            (
+                v
+                for v in self.baseline_simulation.tax_benefit_model_version.variables
+                if v.name == self.income_variable
+            ),
+            None,
         )
+        if var_obj is None:
+            raise ValueError(f"Variable '{self.income_variable}' not found in model")
 
         # Get target entity
         target_entity = self.entity or var_obj.entity
@@ -120,7 +125,7 @@ def compute_decile_impacts(
     """
     results = []
     for decile in range(1, quantiles + 1):
-        impact = DecileImpact(
+        impact = DecileImpact.model_construct(
             baseline_simulation=baseline_simulation,
             reform_simulation=reform_simulation,
             income_variable=income_variable,
