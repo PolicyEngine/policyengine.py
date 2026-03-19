@@ -10,7 +10,11 @@ from pydantic import BaseModel, Field, create_model
 
 from policyengine.core import Simulation
 from policyengine.core.policy import Policy
-from policyengine.outputs.analysis_strategy import InequalityResult, PovertyResult
+from policyengine.outputs.analysis_strategy import (
+    InequalityResult,
+    PovertyResult,
+    ProgramDefinition,
+)
 from policyengine.outputs.economic_impact import (
     economic_impact_analysis as _shared_economic_impact_analysis,
 )
@@ -189,18 +193,18 @@ class UKAnalysisStrategy:
         ]
 
     @property
-    def programs(self) -> dict[str, dict]:
+    def programs(self) -> dict[str, ProgramDefinition]:
         return {
-            "income_tax": {"entity": "person", "is_tax": True},
-            "national_insurance": {"entity": "person", "is_tax": True},
-            "vat": {"entity": "household", "is_tax": True},
-            "council_tax": {"entity": "household", "is_tax": True},
-            "universal_credit": {"entity": "person", "is_tax": False},
-            "child_benefit": {"entity": "person", "is_tax": False},
-            "pension_credit": {"entity": "person", "is_tax": False},
-            "income_support": {"entity": "person", "is_tax": False},
-            "working_tax_credit": {"entity": "person", "is_tax": False},
-            "child_tax_credit": {"entity": "person", "is_tax": False},
+            "income_tax": ProgramDefinition(entity="person", is_tax=True),
+            "national_insurance": ProgramDefinition(entity="person", is_tax=True),
+            "vat": ProgramDefinition(entity="household", is_tax=True),
+            "council_tax": ProgramDefinition(entity="household", is_tax=True),
+            "universal_credit": ProgramDefinition(entity="person", is_tax=False),
+            "child_benefit": ProgramDefinition(entity="person", is_tax=False),
+            "pension_credit": ProgramDefinition(entity="person", is_tax=False),
+            "income_support": ProgramDefinition(entity="person", is_tax=False),
+            "working_tax_credit": ProgramDefinition(entity="person", is_tax=False),
+            "child_tax_credit": ProgramDefinition(entity="person", is_tax=False),
         }
 
     def compute_poverty(
@@ -228,6 +232,9 @@ class UKAnalysisStrategy:
         )
 
 
+UK_STRATEGY = UKAnalysisStrategy()
+
+
 def economic_impact_analysis(
     baseline_simulation: Simulation,
     reform_simulation: Simulation,
@@ -236,5 +243,5 @@ def economic_impact_analysis(
     return _shared_economic_impact_analysis(
         baseline_simulation,
         reform_simulation,
-        UKAnalysisStrategy(),
+        UK_STRATEGY,
     )

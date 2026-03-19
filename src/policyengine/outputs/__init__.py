@@ -4,6 +4,7 @@ from policyengine.outputs.analysis_strategy import (
     AnalysisStrategy,
     InequalityResult,
     PovertyResult,
+    ProgramDefinition,
 )
 from policyengine.outputs.budget_summary import (
     BudgetSummaryItem,
@@ -107,6 +108,7 @@ __all__ = [
     "compute_program_statistics",
     "PolicyReformAnalysis",
     "AnalysisStrategy",
+    "ProgramDefinition",
     "PovertyResult",
     "InequalityResult",
     "economic_impact_analysis",

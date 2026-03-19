@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, TypedDict, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict
 
@@ -12,6 +12,13 @@ from policyengine.outputs.poverty import Poverty
 
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
+
+
+class ProgramDefinition(TypedDict):
+    """Definition of a program for program statistics computation."""
+
+    entity: str
+    is_tax: bool
 
 
 class PovertyResult(BaseModel):
@@ -60,8 +67,8 @@ class AnalysisStrategy(Protocol):
         ...
 
     @property
-    def programs(self) -> dict[str, dict]:
-        """Program definitions: name -> {"entity": str, "is_tax": bool}."""
+    def programs(self) -> dict[str, ProgramDefinition]:
+        """Program definitions: name -> ProgramDefinition."""
         ...
 
     def compute_poverty(

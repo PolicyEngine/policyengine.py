@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import pandas as pd
 
 from policyengine.core import OutputCollection
+from policyengine.outputs.analysis_strategy import ProgramDefinition
 
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
@@ -18,15 +19,15 @@ logger = logging.getLogger(__name__)
 def compute_program_statistics(
     baseline_simulation: Simulation,
     reform_simulation: Simulation,
-    programs: dict[str, dict],
+    programs: dict[str, ProgramDefinition],
 ) -> OutputCollection:
     """Compute per-program statistics for a policy reform.
 
     Args:
         baseline_simulation: Already-run baseline simulation.
         reform_simulation: Already-run reform simulation.
-        programs: Mapping of program name to config dict with keys
-            ``"entity"`` (str) and ``"is_tax"`` (bool).
+        programs: Mapping of program name to :class:`ProgramDefinition`
+            with keys ``"entity"`` (str) and ``"is_tax"`` (bool).
             Example::
 
                 {

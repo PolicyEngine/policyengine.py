@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from policyengine.outputs.analysis_strategy import AnalysisStrategy
 from policyengine.outputs.budget_summary import compute_budget_summary
 from policyengine.outputs.decile_impact import compute_decile_impacts
 from policyengine.outputs.intra_decile_impact import compute_intra_decile_impacts
@@ -14,7 +15,6 @@ from policyengine.outputs.program_statistics import compute_program_statistics
 
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
-    from policyengine.outputs.analysis_strategy import AnalysisStrategy
 
 
 def economic_impact_analysis(
@@ -29,6 +29,14 @@ def economic_impact_analysis(
 
     Both simulations must already be run (i.e. ``ensure()`` called).
     """
+    if not isinstance(strategy, AnalysisStrategy):
+        raise TypeError(
+            f"strategy must implement the AnalysisStrategy protocol, "
+            f"but got {type(strategy).__name__}. Ensure it defines: "
+            f"income_variable, budget_variable_names, programs, "
+            f"compute_poverty(), and compute_inequality()."
+        )
+
     baseline_simulation.ensure()
     reform_simulation.ensure()
 

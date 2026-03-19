@@ -10,7 +10,11 @@ from pydantic import BaseModel, Field
 
 from policyengine.core import Simulation
 from policyengine.core.policy import Policy
-from policyengine.outputs.analysis_strategy import InequalityResult, PovertyResult
+from policyengine.outputs.analysis_strategy import (
+    InequalityResult,
+    PovertyResult,
+    ProgramDefinition,
+)
 from policyengine.outputs.economic_impact import (
     economic_impact_analysis as _shared_economic_impact_analysis,
 )
@@ -207,14 +211,14 @@ class USAnalysisStrategy:
         ]
 
     @property
-    def programs(self) -> dict[str, dict]:
+    def programs(self) -> dict[str, ProgramDefinition]:
         return {
-            "income_tax": {"entity": "tax_unit", "is_tax": True},
-            "employee_payroll_tax": {"entity": "person", "is_tax": True},
-            "snap": {"entity": "spm_unit", "is_tax": False},
-            "tanf": {"entity": "spm_unit", "is_tax": False},
-            "ssi": {"entity": "spm_unit", "is_tax": False},
-            "social_security": {"entity": "person", "is_tax": False},
+            "income_tax": ProgramDefinition(entity="tax_unit", is_tax=True),
+            "employee_payroll_tax": ProgramDefinition(entity="person", is_tax=True),
+            "snap": ProgramDefinition(entity="spm_unit", is_tax=False),
+            "tanf": ProgramDefinition(entity="spm_unit", is_tax=False),
+            "ssi": ProgramDefinition(entity="spm_unit", is_tax=False),
+            "social_security": ProgramDefinition(entity="person", is_tax=False),
         }
 
     def compute_poverty(
@@ -244,6 +248,9 @@ class USAnalysisStrategy:
         )
 
 
+US_STRATEGY = USAnalysisStrategy()
+
+
 def economic_impact_analysis(
     baseline_simulation: Simulation,
     reform_simulation: Simulation,
@@ -252,5 +259,5 @@ def economic_impact_analysis(
     return _shared_economic_impact_analysis(
         baseline_simulation,
         reform_simulation,
-        USAnalysisStrategy(),
+        US_STRATEGY,
     )

@@ -1,1 +1,1 @@
-Shared compute functions for economic impact analysis: CountryConfig, BudgetSummaryItem, compute_program_statistics, compute_decile_impacts, and PolicyReformAnalysis
+Shared compute functions for economic impact analysis: AnalysisStrategy protocol, economic_impact_analysis, BudgetSummaryItem, compute_program_statistics, compute_decile_impacts, and PolicyReformAnalysis
