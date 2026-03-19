@@ -54,21 +54,24 @@ class BudgetSummaryItem(Output):
 def compute_budget_summary(
     baseline_simulation: Simulation,
     reform_simulation: Simulation,
-    variables: dict[str, str],
+    variable_names: list[str],
 ) -> OutputCollection[BudgetSummaryItem]:
     """Compute budget totals for each variable under baseline and reform.
 
     Args:
         baseline_simulation: Already-run baseline simulation.
         reform_simulation: Already-run reform simulation.
-        variables: Mapping of variable name to entity,
-            e.g. ``{"household_tax": "household"}``.
+        variable_names: Variable names to aggregate. The entity for each
+            variable is looked up from the tax-benefit model version
+            attached to the baseline simulation.
 
     Returns:
         OutputCollection of BudgetSummaryItem objects with a DataFrame.
     """
+    tbm = baseline_simulation.tax_benefit_model_version
     results: list[BudgetSummaryItem] = []
-    for var_name, entity in variables.items():
+    for var_name in variable_names:
+        entity = tbm.get_variable(var_name).entity
         item = BudgetSummaryItem(
             baseline_simulation=baseline_simulation,
             reform_simulation=reform_simulation,

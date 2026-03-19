@@ -1,6 +1,5 @@
 """Tests for the new economic impact output modules."""
 
-from dataclasses import FrozenInstanceError
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -8,8 +7,8 @@ import pandas as pd
 import pytest
 from microdf import MicroDataFrame
 
+from policyengine.outputs.analysis_strategy import AnalysisStrategy
 from policyengine.outputs.change_aggregate import ChangeAggregate, ChangeAggregateType
-from policyengine.outputs.country_config import UK_CONFIG, US_CONFIG
 from policyengine.outputs.decile_impact import DecileImpact, compute_decile_impacts
 
 # ---------------------------------------------------------------------------
@@ -40,32 +39,15 @@ def _make_sim(household_data: dict, variables: list | None = None) -> MagicMock:
 
 
 # ---------------------------------------------------------------------------
-# CountryConfig tests
+# AnalysisStrategy tests
 # ---------------------------------------------------------------------------
 
 
-def test_us_config_is_frozen():
-    """US_CONFIG should be immutable."""
-    with pytest.raises(FrozenInstanceError):
-        US_CONFIG.country_id = "uk"
+def test_us_strategy_programs():
+    """USAnalysisStrategy should contain expected program keys."""
+    from policyengine.tax_benefit_models.us.analysis import USAnalysisStrategy
 
-
-def test_uk_config_is_frozen():
-    """UK_CONFIG should be immutable."""
-    with pytest.raises(FrozenInstanceError):
-        UK_CONFIG.country_id = "us"
-
-
-def test_us_config_has_correct_country_id():
-    assert US_CONFIG.country_id == "us"
-
-
-def test_uk_config_has_correct_country_id():
-    assert UK_CONFIG.country_id == "uk"
-
-
-def test_us_config_programs():
-    """US_CONFIG should contain expected program keys."""
+    strategy = USAnalysisStrategy()
     expected = {
         "income_tax",
         "employee_payroll_tax",
@@ -74,34 +56,23 @@ def test_us_config_programs():
         "ssi",
         "social_security",
     }
-    assert set(US_CONFIG.programs.keys()) == expected
+    assert set(strategy.programs.keys()) == expected
 
 
-def test_uk_config_programs():
-    """UK_CONFIG should contain expected programme keys."""
-    expected = {
-        "income_tax",
-        "national_insurance",
-        "vat",
-        "council_tax",
-        "universal_credit",
-        "child_benefit",
-        "pension_credit",
-        "income_support",
-        "working_tax_credit",
-        "child_tax_credit",
-    }
-    assert set(UK_CONFIG.programs.keys()) == expected
+def test_us_strategy_conforms_to_protocol():
+    """USAnalysisStrategy should satisfy the AnalysisStrategy protocol."""
+    from policyengine.tax_benefit_models.us.analysis import USAnalysisStrategy
+
+    assert isinstance(USAnalysisStrategy(), AnalysisStrategy)
 
 
-def test_country_config_program_structure():
+def test_us_strategy_program_structure():
     """Each program entry should have 'entity' and 'is_tax' keys."""
-    for name, info in US_CONFIG.programs.items():
+    from policyengine.tax_benefit_models.us.analysis import USAnalysisStrategy
+
+    for name, info in USAnalysisStrategy().programs.items():
         assert "entity" in info, f"US program {name} missing 'entity'"
         assert "is_tax" in info, f"US program {name} missing 'is_tax'"
-    for name, info in UK_CONFIG.programs.items():
-        assert "entity" in info, f"UK programme {name} missing 'entity'"
-        assert "is_tax" in info, f"UK programme {name} missing 'is_tax'"
 
 
 # ---------------------------------------------------------------------------

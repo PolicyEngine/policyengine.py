@@ -4,18 +4,17 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import pandas as pd
 from microdf import MicroDataFrame
 from pydantic import BaseModel, Field
 
 from policyengine.core import Simulation
 from policyengine.core.policy import Policy
-from policyengine.outputs.budget_summary import compute_budget_summary
-from policyengine.outputs.country_config import US_CONFIG
-from policyengine.outputs.decile_impact import compute_decile_impacts
+from policyengine.outputs.analysis_strategy import InequalityResult, PovertyResult
+from policyengine.outputs.economic_impact import (
+    economic_impact_analysis as _shared_economic_impact_analysis,
+)
 from policyengine.outputs.inequality import calculate_us_inequality
-from policyengine.outputs.intra_decile_impact import compute_intra_decile_impacts
 from policyengine.outputs.policy_reform_analysis import PolicyReformAnalysis
 from policyengine.outputs.poverty import (
     calculate_us_poverty_by_age,
@@ -23,7 +22,6 @@ from policyengine.outputs.poverty import (
     calculate_us_poverty_by_race,
     calculate_us_poverty_rates,
 )
-from policyengine.outputs.program_statistics import compute_program_statistics
 
 from .datasets import PolicyEngineUSDataset, USYearData
 from .model import us_latest
@@ -187,91 +185,72 @@ def calculate_household_impact(
     )
 
 
+# ---------------------------------------------------------------------------
+# US analysis strategy
+# ---------------------------------------------------------------------------
+
+
+class USAnalysisStrategy:
+    """Country-specific strategy for US economic impact analysis."""
+
+    @property
+    def income_variable(self) -> str:
+        return "household_net_income"
+
+    @property
+    def budget_variable_names(self) -> list[str]:
+        return [
+            "household_tax",
+            "household_benefits",
+            "household_net_income",
+            "household_state_income_tax",
+        ]
+
+    @property
+    def programs(self) -> dict[str, dict]:
+        return {
+            "income_tax": {"entity": "tax_unit", "is_tax": True},
+            "employee_payroll_tax": {"entity": "person", "is_tax": True},
+            "snap": {"entity": "spm_unit", "is_tax": False},
+            "tanf": {"entity": "spm_unit", "is_tax": False},
+            "ssi": {"entity": "spm_unit", "is_tax": False},
+            "social_security": {"entity": "person", "is_tax": False},
+        }
+
+    def compute_poverty(
+        self,
+        baseline: Simulation,
+        reform: Simulation,
+    ) -> PovertyResult:
+        return PovertyResult(
+            baseline_poverty=calculate_us_poverty_rates(baseline),
+            reform_poverty=calculate_us_poverty_rates(reform),
+            baseline_poverty_by_age=calculate_us_poverty_by_age(baseline),
+            reform_poverty_by_age=calculate_us_poverty_by_age(reform),
+            baseline_poverty_by_gender=calculate_us_poverty_by_gender(baseline),
+            reform_poverty_by_gender=calculate_us_poverty_by_gender(reform),
+            baseline_poverty_by_race=calculate_us_poverty_by_race(baseline),
+            reform_poverty_by_race=calculate_us_poverty_by_race(reform),
+        )
+
+    def compute_inequality(
+        self,
+        baseline: Simulation,
+        reform: Simulation,
+    ) -> InequalityResult:
+        return InequalityResult(
+            baseline_inequality=calculate_us_inequality(baseline),
+            reform_inequality=calculate_us_inequality(reform),
+        )
+
+
 def economic_impact_analysis(
     baseline_simulation: Simulation,
     reform_simulation: Simulation,
 ) -> PolicyReformAnalysis:
-    """Perform comprehensive economic impact analysis of a US policy reform.
-
-    Calls individual compute functions and assembles the results into
-    a single ``PolicyReformAnalysis`` object.
-
-    Both simulations must already be run (i.e. ``ensure()`` called).
-    """
-    baseline_simulation.ensure()
-    reform_simulation.ensure()
-
-    config = US_CONFIG
-
-    # Decile impacts
-    decile_impacts = compute_decile_impacts(
+    """Perform comprehensive economic impact analysis of a US policy reform."""
+    return _shared_economic_impact_analysis(
         baseline_simulation,
         reform_simulation,
-        income_variable=config.income_variable,
-    )
-
-    # Intra-decile impacts
-    intra_decile_impacts = compute_intra_decile_impacts(
-        baseline_simulation,
-        reform_simulation,
-        income_variable=config.income_variable,
-    )
-
-    # Budget summary
-    budget = compute_budget_summary(
-        baseline_simulation,
-        reform_simulation,
-        config.budget_variables,
-    )
-
-    # Household counts — raw weight sums to avoid MicroSeries double-weighting
-    hh_weight_baseline = baseline_simulation.output_dataset.data.household[
-        "household_weight"
-    ]
-    hh_weight_reform = reform_simulation.output_dataset.data.household[
-        "household_weight"
-    ]
-    household_count_baseline = float(np.array(hh_weight_baseline).sum())
-    household_count_reform = float(np.array(hh_weight_reform).sum())
-
-    # Program statistics
-    programs = compute_program_statistics(
-        baseline_simulation,
-        reform_simulation,
-        config.programs,
-    )
-
-    # Poverty — overall
-    baseline_poverty = calculate_us_poverty_rates(baseline_simulation)
-    reform_poverty = calculate_us_poverty_rates(reform_simulation)
-
-    # Poverty by demographics
-    baseline_poverty_by_age = calculate_us_poverty_by_age(baseline_simulation)
-    reform_poverty_by_age = calculate_us_poverty_by_age(reform_simulation)
-    baseline_poverty_by_gender = calculate_us_poverty_by_gender(baseline_simulation)
-    reform_poverty_by_gender = calculate_us_poverty_by_gender(reform_simulation)
-    baseline_poverty_by_race = calculate_us_poverty_by_race(baseline_simulation)
-    reform_poverty_by_race = calculate_us_poverty_by_race(reform_simulation)
-
-    # Inequality
-    baseline_inequality = calculate_us_inequality(baseline_simulation)
-    reform_inequality = calculate_us_inequality(reform_simulation)
-
-    return PolicyReformAnalysis(
-        decile_impacts=decile_impacts,
-        intra_decile_impacts=intra_decile_impacts,
-        budget_summary=budget,
-        household_count_baseline=household_count_baseline,
-        household_count_reform=household_count_reform,
-        program_statistics=programs,
-        baseline_poverty=baseline_poverty,
-        reform_poverty=reform_poverty,
-        baseline_poverty_by_age=baseline_poverty_by_age,
-        reform_poverty_by_age=reform_poverty_by_age,
-        baseline_poverty_by_gender=baseline_poverty_by_gender,
-        reform_poverty_by_gender=reform_poverty_by_gender,
-        baseline_poverty_by_race=baseline_poverty_by_race,
-        reform_poverty_by_race=reform_poverty_by_race,
-        baseline_inequality=baseline_inequality,
-        reform_inequality=reform_inequality,
+        USAnalysisStrategy(),
     )

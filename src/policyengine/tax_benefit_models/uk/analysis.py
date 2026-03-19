@@ -10,14 +10,17 @@ from pydantic import BaseModel, Field, create_model
 
 from policyengine.core import Simulation
 from policyengine.core.policy import Policy
-from policyengine.outputs.budget_summary import compute_budget_summary
-from policyengine.outputs.country_config import UK_CONFIG
-from policyengine.outputs.decile_impact import compute_decile_impacts
+from policyengine.outputs.analysis_strategy import InequalityResult, PovertyResult
+from policyengine.outputs.economic_impact import (
+    economic_impact_analysis as _shared_economic_impact_analysis,
+)
 from policyengine.outputs.inequality import calculate_uk_inequality
-from policyengine.outputs.intra_decile_impact import compute_intra_decile_impacts
 from policyengine.outputs.policy_reform_analysis import PolicyReformAnalysis
-from policyengine.outputs.poverty import calculate_uk_poverty_rates
-from policyengine.outputs.program_statistics import compute_program_statistics
+from policyengine.outputs.poverty import (
+    calculate_uk_poverty_by_age,
+    calculate_uk_poverty_by_gender,
+    calculate_uk_poverty_rates,
+)
 
 from .datasets import PolicyEngineUKDataset, UKYearData
 from .model import uk_latest
@@ -165,94 +168,73 @@ def calculate_household_impact(
     )
 
 
+# ---------------------------------------------------------------------------
+# UK analysis strategy
+# ---------------------------------------------------------------------------
+
+
+class UKAnalysisStrategy:
+    """Country-specific strategy for UK economic impact analysis."""
+
+    @property
+    def income_variable(self) -> str:
+        return "equiv_hbai_household_net_income"
+
+    @property
+    def budget_variable_names(self) -> list[str]:
+        return [
+            "household_tax",
+            "household_benefits",
+            "household_net_income",
+        ]
+
+    @property
+    def programs(self) -> dict[str, dict]:
+        return {
+            "income_tax": {"entity": "person", "is_tax": True},
+            "national_insurance": {"entity": "person", "is_tax": True},
+            "vat": {"entity": "household", "is_tax": True},
+            "council_tax": {"entity": "household", "is_tax": True},
+            "universal_credit": {"entity": "person", "is_tax": False},
+            "child_benefit": {"entity": "person", "is_tax": False},
+            "pension_credit": {"entity": "person", "is_tax": False},
+            "income_support": {"entity": "person", "is_tax": False},
+            "working_tax_credit": {"entity": "person", "is_tax": False},
+            "child_tax_credit": {"entity": "person", "is_tax": False},
+        }
+
+    def compute_poverty(
+        self,
+        baseline: Simulation,
+        reform: Simulation,
+    ) -> PovertyResult:
+        return PovertyResult(
+            baseline_poverty=calculate_uk_poverty_rates(baseline),
+            reform_poverty=calculate_uk_poverty_rates(reform),
+            baseline_poverty_by_age=calculate_uk_poverty_by_age(baseline),
+            reform_poverty_by_age=calculate_uk_poverty_by_age(reform),
+            baseline_poverty_by_gender=calculate_uk_poverty_by_gender(baseline),
+            reform_poverty_by_gender=calculate_uk_poverty_by_gender(reform),
+        )
+
+    def compute_inequality(
+        self,
+        baseline: Simulation,
+        reform: Simulation,
+    ) -> InequalityResult:
+        return InequalityResult(
+            baseline_inequality=calculate_uk_inequality(baseline),
+            reform_inequality=calculate_uk_inequality(reform),
+        )
+
+
 def economic_impact_analysis(
     baseline_simulation: Simulation,
     reform_simulation: Simulation,
 ) -> PolicyReformAnalysis:
-    """Perform comprehensive economic impact analysis of a UK policy reform.
-
-    Calls individual compute functions and assembles the results into
-    a single ``PolicyReformAnalysis`` object.
-
-    Both simulations must already be run (i.e. ``ensure()`` called).
-    """
-    baseline_simulation.ensure()
-    reform_simulation.ensure()
-
-    config = UK_CONFIG
-
-    # Decile impacts
-    decile_impacts = compute_decile_impacts(
+    """Perform comprehensive economic impact analysis of a UK policy reform."""
+    return _shared_economic_impact_analysis(
         baseline_simulation,
         reform_simulation,
-        income_variable=config.income_variable,
-    )
-
-    # Intra-decile impacts
-    intra_decile_impacts = compute_intra_decile_impacts(
-        baseline_simulation,
-        reform_simulation,
-        income_variable=config.income_variable,
-    )
-
-    # Budget summary
-    budget = compute_budget_summary(
-        baseline_simulation,
-        reform_simulation,
-        config.budget_variables,
-    )
-
-    # Household counts — raw weight sums to avoid MicroSeries double-weighting
-    import numpy as np
-
-    hh_weight_baseline = baseline_simulation.output_dataset.data.household[
-        "household_weight"
-    ]
-    hh_weight_reform = reform_simulation.output_dataset.data.household[
-        "household_weight"
-    ]
-    household_count_baseline = float(np.array(hh_weight_baseline).sum())
-    household_count_reform = float(np.array(hh_weight_reform).sum())
-
-    # Programme statistics
-    programmes = compute_program_statistics(
-        baseline_simulation,
-        reform_simulation,
-        config.programs,
-    )
-
-    # Poverty — overall
-    baseline_poverty = calculate_uk_poverty_rates(baseline_simulation)
-    reform_poverty = calculate_uk_poverty_rates(reform_simulation)
-
-    # Poverty by demographics
-    from policyengine.outputs.poverty import (
-        calculate_uk_poverty_by_age,
-        calculate_uk_poverty_by_gender,
-    )
-
-    baseline_poverty_by_age = calculate_uk_poverty_by_age(baseline_simulation)
-    reform_poverty_by_age = calculate_uk_poverty_by_age(reform_simulation)
-    baseline_poverty_by_gender = calculate_uk_poverty_by_gender(baseline_simulation)
-    reform_poverty_by_gender = calculate_uk_poverty_by_gender(reform_simulation)
-
-    # Inequality
-    baseline_inequality = calculate_uk_inequality(baseline_simulation)
-    reform_inequality = calculate_uk_inequality(reform_simulation)
-
-    return PolicyReformAnalysis(
-        decile_impacts=decile_impacts,
-        intra_decile_impacts=intra_decile_impacts,
-        budget_summary=budget,
-        household_count_baseline=household_count_baseline,
-        household_count_reform=household_count_reform,
-        program_statistics=programmes,
-        baseline_poverty=baseline_poverty,
-        reform_poverty=reform_poverty,
-        baseline_poverty_by_age=baseline_poverty_by_age,
-        reform_poverty_by_age=reform_poverty_by_age,
-        baseline_poverty_by_gender=baseline_poverty_by_gender,
-        reform_poverty_by_gender=reform_poverty_by_gender,
-        baseline_inequality=baseline_inequality,
-        reform_inequality=reform_inequality,
+        UKAnalysisStrategy(),
     )

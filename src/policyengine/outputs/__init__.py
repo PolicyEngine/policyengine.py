@@ -1,5 +1,10 @@
 from policyengine.core import Output, OutputCollection
 from policyengine.outputs.aggregate import Aggregate, AggregateType
+from policyengine.outputs.analysis_strategy import (
+    AnalysisStrategy,
+    InequalityResult,
+    PovertyResult,
+)
 from policyengine.outputs.budget_summary import (
     BudgetSummaryItem,
     compute_budget_summary,
@@ -16,11 +21,13 @@ from policyengine.outputs.constituency_impact import (
     ConstituencyImpact,
     compute_uk_constituency_impacts,
 )
-from policyengine.outputs.country_config import UK_CONFIG, US_CONFIG, CountryConfig
 from policyengine.outputs.decile_impact import (
     DecileImpact,
     calculate_decile_impacts,
     compute_decile_impacts,
+)
+from policyengine.outputs.economic_impact import (
+    economic_impact_analysis,
 )
 from policyengine.outputs.inequality import (
     UK_INEQUALITY_INCOME_VARIABLE,
@@ -99,7 +106,8 @@ __all__ = [
     "compute_decile_impacts",
     "compute_program_statistics",
     "PolicyReformAnalysis",
-    "CountryConfig",
-    "US_CONFIG",
-    "UK_CONFIG",
+    "AnalysisStrategy",
+    "PovertyResult",
+    "InequalityResult",
+    "economic_impact_analysis",
 ]

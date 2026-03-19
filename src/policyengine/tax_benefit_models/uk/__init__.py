@@ -5,11 +5,16 @@ from importlib.util import find_spec
 if find_spec("policyengine_uk") is not None:
     from policyengine.core import Dataset
     from policyengine.core.simulation import Simulation
+    from policyengine.outputs.analysis_strategy import (
+        AnalysisStrategy,
+        InequalityResult,
+        PovertyResult,
+    )
     from policyengine.outputs.budget_summary import BudgetSummaryItem
-    from policyengine.outputs.country_config import UK_CONFIG
     from policyengine.outputs.policy_reform_analysis import PolicyReformAnalysis
 
     from .analysis import (
+        UKAnalysisStrategy,
         UKHouseholdInput,
         UKHouseholdOutput,
         calculate_household_impact,
@@ -57,7 +62,10 @@ if find_spec("policyengine_uk") is not None:
         "UKHouseholdOutput",
         "ProgrammeStatistics",
         "PolicyReformAnalysis",
-        "UK_CONFIG",
+        "UKAnalysisStrategy",
+        "AnalysisStrategy",
+        "PovertyResult",
+        "InequalityResult",
     ]
 else:
     __all__ = []
