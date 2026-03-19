@@ -34,10 +34,15 @@ class DecileImpact(Output):
         """Calculate impact for this specific decile."""
         # Get variable object to determine entity
         var_obj = next(
-            v
-            for v in self.baseline_simulation.tax_benefit_model_version.variables
-            if v.name == self.income_variable
+            (
+                v
+                for v in self.baseline_simulation.tax_benefit_model_version.variables
+                if v.name == self.income_variable
+            ),
+            None,
         )
+        if var_obj is None:
+            raise ValueError(f"Variable '{self.income_variable}' not found in model")
 
         # Get target entity
         target_entity = self.entity or var_obj.entity
@@ -94,6 +99,63 @@ class DecileImpact(Output):
         self.count_better_off = float((absolute_change[mask] > 0).sum())
         self.count_worse_off = float((absolute_change[mask] < 0).sum())
         self.count_no_change = float((absolute_change[mask] == 0).sum())
+
+
+def compute_decile_impacts(
+    baseline_simulation: Simulation,
+    reform_simulation: Simulation,
+    income_variable: str = "equiv_hbai_household_net_income",
+    entity: str | None = None,
+    quantiles: int = 10,
+) -> OutputCollection[DecileImpact]:
+    """Calculate decile-by-decile impact using already-run simulations.
+
+    Unlike ``calculate_decile_impacts`` this does **not** create new
+    Simulation objects — it works directly with the provided ones.
+
+    Args:
+        baseline_simulation: Already-run baseline simulation.
+        reform_simulation: Already-run reform simulation.
+        income_variable: Variable to measure income changes.
+        entity: Entity to aggregate on (default: variable's entity).
+        quantiles: Number of quantiles (default 10 for deciles).
+
+    Returns:
+        OutputCollection of DecileImpact objects with a DataFrame.
+    """
+    results = []
+    for decile in range(1, quantiles + 1):
+        impact = DecileImpact.model_construct(
+            baseline_simulation=baseline_simulation,
+            reform_simulation=reform_simulation,
+            income_variable=income_variable,
+            entity=entity,
+            decile=decile,
+            quantiles=quantiles,
+        )
+        impact.run()
+        results.append(impact)
+
+    df = pd.DataFrame(
+        [
+            {
+                "baseline_simulation_id": r.baseline_simulation.id,
+                "reform_simulation_id": r.reform_simulation.id,
+                "income_variable": r.income_variable,
+                "decile": r.decile,
+                "baseline_mean": r.baseline_mean,
+                "reform_mean": r.reform_mean,
+                "absolute_change": r.absolute_change,
+                "relative_change": r.relative_change,
+                "count_better_off": r.count_better_off,
+                "count_worse_off": r.count_worse_off,
+                "count_no_change": r.count_no_change,
+            }
+            for r in results
+        ]
+    )
+
+    return OutputCollection(outputs=results, dataframe=df)
 
 
 def calculate_decile_impacts(

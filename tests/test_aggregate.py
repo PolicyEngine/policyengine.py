@@ -478,7 +478,7 @@ def test_aggregate_invalid_variable():
             variable="nonexistent_variable",
             aggregate_type=AggregateType.SUM,
         )
-        with pytest.raises(StopIteration):
+        with pytest.raises(ValueError):
             agg.run()
 
         # Invalid filter variable name should raise error on run()
@@ -488,5 +488,5 @@ def test_aggregate_invalid_variable():
             aggregate_type=AggregateType.SUM,
             filter_variable="nonexistent_filter",
         )
-        with pytest.raises(StopIteration):
+        with pytest.raises(ValueError):
             agg.run()
