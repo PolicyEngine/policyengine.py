@@ -1,3 +1,10 @@
+## [3.3.0] - 2026-03-20
+
+### Added
+
+- Added documentation for economic impact analysis, advanced outputs (DecileImpact, Poverty, Inequality, IntraDecileImpact), regions and scoping strategies, simulation lifecycle (ensure vs run), Dynamic class, data loading, and simulation modifiers. Added US budgetary impact example script. Fixed PR docs CI to use MyST matching production.
+
+
 ## [3.2.4] - 2026-03-17
 
 ### Changed
