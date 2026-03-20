@@ -13,24 +13,15 @@ on:
 
 jobs:
   Test:
-      runs-on: ubuntu-latest
-      name: Test documentation builds
-      steps:
-          - name: Checkout repo
-            uses: actions/checkout@v4
-          - name: Install uv
-            uses: astral-sh/setup-uv@v5
-
-          - name: Set up Python
-            uses: actions/setup-python@v5
-            with:
-                python-version: '3.13'
-              
-          - name: Install package
-            run: uv pip install -e .[dev] --system
-          - name: Install policyengine
-            run: uv pip install policyengine --system
-          - name: Install JB
-            run: uv pip install "jupyter-book>=2.0.0a0" --system
-          - name: Test documentation builds
-            run: cd docs && jupyter book build
+    runs-on: ubuntu-latest
+    name: Test documentation builds
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+      - name: Install MyST
+        run: npm install -g mystmd
+      - name: Test documentation builds
+        run: cd docs && myst build --html

@@ -363,11 +363,9 @@ When creating custom datasets, validate:
 
 ## Examples
 
-See working examples in the `examples/` directory:
-
-- `employment_income_variation_uk.py`: Vary employment income, analyse benefit phase-outs
-- `policy_change_uk.py`: Apply reforms, analyse winners/losers
-- `income_bands_uk.py`: Create income band scenarios
+- [UK employment income variation](examples.md#uk-employment-income-variation): Vary employment income, analyse benefit phase-outs
+- [UK policy reform analysis](examples.md#uk-policy-reform-analysis): Apply reforms, analyse winners/losers
+- [UK income bands](examples.md#uk-income-bands): Calculate net income and tax by income decile
 
 ## References
 
