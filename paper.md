@@ -55,11 +55,11 @@ PolicyEngine is built on the PolicyEngine Core framework, which extends the Open
 
 **Policy and Parameter** classes define the reform system. The Policy class bundles parametric reforms that modify tax-benefit system parameters. The Parameter class represents system settings (tax rates, benefit thresholds, income limits), while ParameterValue supports time-bound values, enabling phased policy implementations across multiple years.
 
-**Variable and TaxBenefitModelVersion** classes encapsulate country-specific logic. Each Variable is a computed quantity (income tax, benefit entitlement) with entity mappings. The TaxBenefitModelVersion class represents a versioned country model, storing variables, parameters, and execution logic. The framework uses importlib to conditionally import country packages, allowing graceful operation when only one country is installed.
+**Variable** classes encapsulate country-specific logic. Each Variable is a computed quantity (income tax, benefit entitlement) with entity mappings. Versioned country models store variables, parameters, and execution logic. The framework conditionally imports country packages, allowing graceful operation when only one country is installed.
 
 **Output classes** provide standardized analysis. These include Aggregate for sum, mean, and count statistics; DecileImpact and IntraDecileImpact for distributional analysis by income decile; Poverty and Inequality for welfare metrics; ChangeAggregate for baseline-versus-reform comparisons; and region-specific classes such as CongressionalDistrictImpact (US) and ConstituencyImpact (UK). All output classes produce PolicyEngine-branded Plotly visualizations.
 
-**Region and RegionRegistry** classes manage geographic scope, enabling sub-national analysis for regions within each country.
+**Region** classes manage geographic scope, enabling sub-national analysis for regions within each country.
 
 The country-specific models (policyengine-us and policyengine-uk) define parameters as YAML files organized by government department and indexed by time period, and implement variables as Python classes specifying computation logic, entity scope, and time period. The US model covers federal and state-level tax and benefit programs and the UK model contains over 700 variable definitions.
 
