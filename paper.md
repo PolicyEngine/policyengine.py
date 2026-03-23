@@ -18,6 +18,9 @@ authors:
     orcid: 0009-0004-1093-6272
     affiliation: 1
     corresponding: true
+  - name: Pavel Makarchuk
+    orcid: 0000-0000-0000-0000
+    affiliation: 1
 affiliations:
   - name: PolicyEngine
     index: 1
