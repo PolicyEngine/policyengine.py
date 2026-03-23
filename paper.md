@@ -44,10 +44,8 @@ In the US, TAXSIM [@taxsim] at the National Bureau of Economic Research provides
 
 PolicyEngine differentiates itself in several ways:
 
-- **Multi-country, unified framework**: a single Python package supports the UK and US tax-benefit systems, enabling cross-country analysis with a consistent API.
-- **Fully open-source and pip-installable**: users can install and run the model without institutional access or license fees.
-- **Comprehensive program coverage**: the UK model covers over 37 programs spanning income tax, National Insurance, Universal Credit, Child Benefit, Council Tax, and devolved policies in Scotland and Wales; the US model covers federal income tax, payroll taxes, SNAP, SSI, Medicaid, TANF, and state-level tax systems.
-- **Integration with the PolicyEngine web application**: the models power an interactive web interface at [policyengine.org](https://policyengine.org) that allows non-technical users to explore policy reforms in both countries.
+- **Multi-country, open-source framework**: a single pip-installable Python package supports the US and UK tax-benefit systems under a consistent API, with no institutional access or license fees required.
+- **Comprehensive program coverage**: the US model covers over 11 programs including federal income tax, payroll taxes, state income taxes, SNAP, SSI, Social Security, Medicare, Medicaid, EITC, CTC, and TANF; the UK model covers over 37 programs spanning income tax, National Insurance, Universal Credit, Child Benefit, Council Tax, and devolved policies in Scotland and Wales.
 - **Programmatic reform API**: users can define hypothetical policy reforms as parameter dictionaries with date-bound values, compose multiple reforms, or implement structural changes — and evaluate their impact on any household or the full population.
 - **Distributional analysis outputs**: built-in output classes compute decile impacts, intra-decile distributions, poverty rates, inequality metrics (Gini coefficients), budgetary impacts, and regional breakdowns (UK parliamentary constituencies, US congressional districts).
 - **Labor supply dynamics**: behavioral response modules model both intensive margin (hours adjustment) and extensive margin (participation) responses to policy changes.
