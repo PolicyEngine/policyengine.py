@@ -1,5 +1,5 @@
 ---
-title: "PolicyEngine: An Open-Source Tax-Benefit Microsimulation Framework"
+title: "PolicyEngine: A Tax-Benefit Microsimulation Framework"
 tags:
   - Python
   - microsimulation
