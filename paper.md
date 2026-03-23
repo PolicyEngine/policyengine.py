@@ -61,8 +61,6 @@ PolicyEngine is built on the PolicyEngine Core framework, which extends the Open
 
 **Region** classes manage geographic scope, enabling sub-national analysis for regions within each country.
 
-The country-specific models (policyengine-us and policyengine-uk) define parameters as YAML files organized by government department and indexed by time period, and implement variables as Python classes specifying computation logic, entity scope, and time period. The US model covers federal and state-level tax and benefit programs and the UK model contains over 700 variable definitions.
-
 # Research Impact Statement
 
 PolicyEngine has demonstrated research impact across government, academia, and policy research in both the US and UK.
