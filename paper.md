@@ -10,20 +10,20 @@ tags:
 authors:
   - name: Max Ghenis
     orcid: 0000-0000-0000-0000
-    affiliation: 1
+    affiliation: '1'
   - name: Nikhil Woodruff
-    orcid: 0000-0000-0000-0000
-    affiliation: 1
-  - name: Pavel Makarchuk
-    orcid: 0000-0000-0000-0000
-    affiliation: 1
+    orcid: 0009-0009-5004-4910
+    affiliation: '1'
   - name: Vahid Ahmadi
     orcid: 0009-0004-1093-6272
-    affiliation: 1
+    affiliation: '1'
     corresponding: true
+  - name: Pavel Makarchuk
+    orcid: 0000-0000-0000-0000
+    affiliation: '1'
 affiliations:
   - name: PolicyEngine
-    index: 1
+    index: '1'
 date: 19 March 2026
 bibliography: paper.bib
 ---
