@@ -30,70 +30,35 @@ bibliography: paper.bib
 
 # Summary
 
-PolicyEngine is an open-source, multi-country microsimulation framework for tax-benefit policy analysis, implemented in Python. The policyengine package provides a unified interface for running policy simulations, analyzing distributional impacts, and visualizing results across the US and the UK. It delegates country-specific tax-benefit calculations to dedicated country packages (policyengine-us and policyengine-uk) while providing shared abstractions for simulations, datasets, parametric reforms, and output analysis. The framework supports both individual household simulations and population-wide microsimulations using representative survey microdata with calibrated weights. PolicyEngine powers an interactive web application at [policyengine.org](https://policyengine.org) that enables non-technical users to explore policy reforms in both countries.
+PolicyEngine.py [@policyengine_py] is an open-source, multi-country microsimulation framework for tax-benefit policy analysis, implemented in Python. The package provides a unified interface for running policy simulations, analyzing distributional impacts, and visualizing results across the US and the UK. It delegates country-specific tax-benefit calculations to dedicated country packages (policyengine-us and policyengine-uk) while providing shared abstractions for simulations, datasets, parametric reforms, and output analysis. The framework supports both individual household simulations and population-wide microsimulations using representative survey microdata with calibrated weights. PolicyEngine powers an interactive web application at [policyengine.org](https://policyengine.org) that enables non-technical users to explore policy reforms in both countries.
 
 # Statement of Need
 
 Tax-benefit microsimulation models are essential tools for evaluating the distributional impacts of fiscal policy. Governments, think tanks, and researchers rely on such models to estimate how policy reforms affect household incomes, poverty rates, and government budgets. Existing microsimulation models face significant access barriers. TAXSIM [@taxsim] at NBER computes only tax liabilities and omits the benefit side of the ledger entirely. The models maintained by the Congressional Budget Office and the Tax Policy Center are fully proprietary and unavailable to external researchers. In the UK, UKMOD [@sutherland2014euromod], maintained by the University of Essex, requires a formal application and institutional affiliation to access, and the models maintained by HM Treasury and the Institute for Fiscal Studies are similarly proprietary.
-PolicyEngine addresses these gaps by providing a fully open-source Python microsimulation framework that spans multiple countries under a consistent API. Users can supply their own microdata or use built-in datasets, and compute the impact of current law or hypothetical policy reforms on any household or a full national population. The Simulation class supports individual household analysis, while population-level aggregate analysis uses representative survey datasets with calibrated weights. Because existing proprietary models cannot be independently verified, PolicyEngine enables fully reproducible and transparent policy analysis. The framework's open development on GitHub enables external validation, community contributions, and reproducible policy analysis across countries.
+PolicyEngine addresses these gaps by providing an open-source Python microsimulation framework that spans multiple countries under a consistent API. Users can supply their own microdata or use built-in datasets, and compute the impact of current law or hypothetical policy reforms on any household or a national population. The Simulation class supports individual household analysis, while population-level aggregate analysis uses representative survey datasets with calibrated weights. Because existing proprietary models cannot be independently verified, PolicyEngine enables reproducible and transparent policy analysis. The framework's open development on GitHub enables external validation, community contributions, and reproducible policy analysis across countries.
 
 # State of the Field
 
 The primary UK microsimulation models include UKMOD, maintained by the Institute for Social and Economic Research (ISER), University of Essex, as part of the EUROMOD family [@sutherland2014euromod], and proprietary models maintained by HM Treasury and the Institute for Fiscal Studies. OpenFisca [@openfisca] pioneered the open-source approach to tax-benefit microsimulation in France. PolicyEngine originated from OpenFisca and builds on this foundation through the PolicyEngine Core framework [@policyengine_core].
 
+Rather than contributing these features directly to OpenFisca, PolicyEngine introduced a separate analyst-facing layer because the project required capabilities that cut across countries and sit downstream of legislative modeling: harmonized dataset handling, a stable reform API, standardized distributional outputs, and integration with a public-facing web application. This design lets country model packages focus on statutory rules while shared analysis workflows evolve independently.
+
 PolicyEngine differentiates itself in several ways:
 
 - **Open-source, multi-country framework**: a single Python package supports the US and UK tax-benefit systems under a consistent API, with no institutional access or license fees required.
 - **Comprehensive program coverage**: the US model covers over 11 programs including federal income tax, payroll taxes, state income taxes, SNAP, SSI, Social Security, Medicare, Medicaid, EITC, CTC, and TANF; the UK model covers over 37 programs spanning income tax, National Insurance, Universal Credit, Child Benefit, Council Tax, and devolved policies in Scotland and Wales.
-- **Programmatic reform and economic analysis**: users can define hypothetical policy reforms as date-bound parameter values, compose multiple reforms with the `+` operator, or implement structural changes via simulation modifiers — and evaluate their impact on any household or the full population. Built-in output classes compute decile impacts, intra-decile distributions, poverty rates, inequality metrics (Gini coefficients), budgetary impacts, and regional breakdowns (US congressional districts, UK parliamentary constituencies and local authorities). Behavioral response modules model both intensive margin (hours adjustment) and extensive margin (participation) labor supply responses to policy changes.
+- **Separated modeling, analysis, and data layers**: the project splits reusable engine logic into PolicyEngine Core, country-agnostic analysis workflows into PolicyEngine.py, country legislation into policyengine-us and policyengine-uk, and enhanced survey microdata into companion repositories [@policyengine_core; @pe_us_data; @pe_uk_data]. This separation allows each layer to be versioned and updated independently as legislation, methodology, and microdata change.
+- **Programmatic reform and economic analysis**: users can define hypothetical policy reforms as date-bound parameter values, compose multiple reforms with the `+` operator, or implement structural changes via simulation modifiers, then evaluate impacts on households, poverty, inequality, government budgets, and subnational regions. Behavioral response modules model both intensive-margin (hours adjustment) and extensive-margin (participation) labor supply responses to policy changes.
 
 # Software Design
 
 ![PolicyEngine architecture. Country packages provide tax-benefit rules and parameters; the core framework runs simulations on microdata and produces standardized analytical outputs.](architecture.png){width="100%"}
 
-PolicyEngine is built on the PolicyEngine Core framework, which extends the OpenFisca microsimulation engine. The policyengine.py package is organized as a country-agnostic layer with the following core components.
+PolicyEngine is built as a four-layer architecture. PolicyEngine Core extends the OpenFisca engine with reusable simulation abstractions, versioned parameters, and dataset interfaces shared across countries [@policyengine_core]. PolicyEngine.py adds country-agnostic analyst workflows, including baseline-versus-reform comparisons, standardized output types, and visualization helpers. The policyengine-us and policyengine-uk packages contain statutory logic, variables, and entity structures specific to each tax-benefit system. Companion data repositories hold enhanced survey microdata and calibration pipelines for the CPS and Family Resources Survey [@pe_us_data; @pe_uk_data].
 
-A minimal example demonstrates the API:
+This split trades some packaging complexity for clearer ownership and release independence. Legislative changes in a country package do not require duplicating shared output logic; methodological changes to distributional analysis do not require modifying statutory formulas; and microdata refreshes can be versioned separately from the modeling libraries. It also supports different contributor workflows, since legal rules, data calibration, and analyst-facing outputs are maintained by overlapping but distinct groups.
 
-```python
-import datetime
-from policyengine.core import (
-    Parameter, ParameterValue, Policy, Simulation,
-)
-from policyengine.tax_benefit_models.uk import (
-    economic_impact_analysis, uk_latest,
-)
-
-param = Parameter(
-    name="gov.hmrc.income_tax.allowances.personal_allowance.amount",
-    tax_benefit_model_version=uk_latest,
-)
-reform = Policy(
-    name="Zero personal allowance",
-    parameter_values=[
-        ParameterValue(
-            parameter=param,
-            start_date=datetime.date(2026, 1, 1),
-            end_date=datetime.date(2026, 12, 31),
-            value=0,
-        ),
-    ],
-)
-
-baseline = Simulation(tax_benefit_model_version=uk_latest)
-reformed = Simulation(
-    tax_benefit_model_version=uk_latest, policy=reform,
-)
-analysis = economic_impact_analysis(baseline, reformed)
-```
-
-**Simulation and Dataset** classes provide the primary interface. The Simulation class executes tax-benefit models on datasets and applies policy reforms; `run()` always recomputes while `ensure()` uses an LRU cache with disk persistence. The Dataset class represents microdata containing entity-level data (persons, households, benefit units, tax units) with survey weights and entity relationships. Country-specific datasets — the Current Population Survey for the US and the Enhanced Family Resources Survey for the UK — are loaded from companion data repositories [@pe_us_data; @pe_uk_data].
-
-**Policy and Parameter** classes define the reform system. The Policy class bundles parametric reforms that modify tax-benefit system parameters. The Parameter class represents system settings (tax rates, benefit thresholds, income limits), while ParameterValue supports time-bound values, enabling phased policy implementations across multiple years.
-
-**Variable** classes encapsulate country-specific logic. Each Variable is a computed quantity (income tax, benefit entitlement) with entity mappings. Versioned country models store variables, parameters, and execution logic. The framework conditionally imports country packages, allowing graceful operation when only one country is installed.
-
-**Output classes** provide standardized analysis. These include Aggregate for sum, mean, and count statistics; DecileImpact and IntraDecileImpact for distributional analysis by income decile; Poverty and Inequality for welfare metrics; ChangeAggregate for baseline-versus-reform comparisons; and region-specific classes such as CongressionalDistrictImpact (US), ConstituencyImpact, and LocalAuthorityImpact (UK). Visualisation utilities produce PolicyEngine-branded Plotly charts.
+At runtime, a simulation combines a country model version, a microdataset, and optional reform or behavioral modifiers. PolicyEngine.py then applies a consistent analysis layer across countries, producing decile tables, poverty and inequality metrics, aggregate program statistics, and regional breakdowns from the resulting entity-level outputs. The repository documentation includes runnable examples for both household-level and population-level analyses.
 
 PolicyEngine models static fiscal impacts; it does not model macroeconomic feedback effects or general equilibrium responses.
 
