@@ -24,7 +24,7 @@ authors:
 affiliations:
   - name: PolicyEngine, Washington, DC, United States
     index: '1'
-date: 19 March 2026
+date: 2 April 2026
 bibliography: paper.bib
 ---
 
