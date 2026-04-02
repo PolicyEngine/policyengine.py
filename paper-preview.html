@@ -1,202 +1,359 @@
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <meta name="dcterms.date" content="2026-03-19" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PolicyEngine: A Tax-Benefit Microsimulation Framework</title>
   <style>
-    /* Default styles provided by pandoc.
-    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
-    */
-    html {
-      color: #1a1a1a;
-      background-color: #fdfdfd;
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400&display=swap');
+
+    :root {
+      --pe-blue: #2c6496;
+      --pe-dark: #1a3a5c;
+      --pe-light: #e8f0f8;
+      --accent: #2c6496;
+      --accent-hover: #1a3a5c;
+      --text: #1e293b;
+      --text-secondary: #475569;
+      --bg: #f7f8fa;
+      --bg-card: #ffffff;
+      --border: #dfe3ea;
+      --code-bg: #f1f4f8;
     }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
     body {
+      font-family: 'Lora', 'Charter', Georgia, serif;
+      font-size: 16.5px;
+      line-height: 1.78;
+      color: var(--text);
+      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Header ── */
+    .paper-header {
+      background: linear-gradient(135deg, var(--pe-dark) 0%, var(--pe-blue) 100%);
+      color: white;
+      padding: 3rem 2rem 2.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .paper-header::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      right: -15%;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .header-inner {
+      max-width: 820px;
       margin: 0 auto;
-      max-width: 36em;
-      padding-left: 50px;
-      padding-right: 50px;
-      padding-top: 50px;
-      padding-bottom: 50px;
-      hyphens: auto;
-      overflow-wrap: break-word;
-      text-rendering: optimizeLegibility;
-      font-kerning: normal;
+      position: relative;
     }
-    @media (max-width: 600px) {
-      body {
-        font-size: 0.9em;
-        padding: 12px;
-      }
-      h1 {
-        font-size: 1.8em;
-      }
+
+    .paper-label {
+      font-family: 'Inter', -apple-system, sans-serif;
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 0.75rem;
     }
-    @media print {
-      html {
-        background-color: white;
-      }
-      body {
-        background-color: transparent;
-        color: black;
-        font-size: 12pt;
-      }
-      p, h2, h3 {
-        orphans: 3;
-        widows: 3;
-      }
-      h2, h3, h4 {
-        page-break-after: avoid;
-      }
+
+    .paper-title {
+      font-family: 'Lora', Georgia, serif;
+      font-size: 2rem;
+      font-weight: 700;
+      line-height: 1.25;
+      margin-bottom: 1.5rem;
+      letter-spacing: -0.01em;
     }
-    p {
-      margin: 1em 0;
+
+    .authors-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem 1.5rem;
+      margin-bottom: 0.5rem;
+      font-family: 'Inter', -apple-system, sans-serif;
     }
-    a {
-      color: #1a1a1a;
+
+    .author-name {
+      font-size: 0.88rem;
+      font-weight: 500;
     }
-    a:visited {
-      color: #1a1a1a;
+
+    .author-name .corr {
+      color: #93c5fd;
+      font-size: 0.72rem;
+      vertical-align: super;
     }
-    img {
-      max-width: 100%;
-    }
-    svg {
-      height: auto;
-      max-width: 100%;
-    }
-    h1, h2, h3, h4, h5, h6 {
-      margin-top: 1.4em;
-    }
-    h5, h6 {
-      font-size: 1em;
-      font-style: italic;
-    }
-    h6 {
-      font-weight: normal;
-    }
-    ol, ul {
-      padding-left: 1.7em;
-      margin-top: 1em;
-    }
-    li > ol, li > ul {
-      margin-top: 0;
-    }
-    blockquote {
-      margin: 1em 0 1em 1.7em;
-      padding-left: 1em;
-      border-left: 2px solid #e6e6e6;
-      color: #606060;
-    }
-    code {
-      white-space: pre-wrap;
-      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
-      font-size: 85%;
-      margin: 0;
-      hyphens: manual;
-    }
-    pre {
-      margin: 1em 0;
-      overflow: auto;
-    }
-    pre code {
-      padding: 0;
-      overflow: visible;
-      overflow-wrap: normal;
-    }
-    .sourceCode {
-     background-color: transparent;
-     overflow: visible;
-    }
-    hr {
-      border: none;
-      border-top: 1px solid #1a1a1a;
-      height: 1px;
-      margin: 1em 0;
-    }
-    table {
-      margin: 1em 0;
-      border-collapse: collapse;
-      width: 100%;
-      overflow-x: auto;
-      display: block;
-      font-variant-numeric: lining-nums tabular-nums;
-    }
-    table caption {
-      margin-bottom: 0.75em;
-    }
-    tbody {
-      margin-top: 0.5em;
-      border-top: 1px solid #1a1a1a;
-      border-bottom: 1px solid #1a1a1a;
-    }
-    th {
-      border-top: 1px solid #1a1a1a;
-      padding: 0.25em 0.5em 0.25em 0.5em;
-    }
-    td {
-      padding: 0.125em 0.5em 0.25em 0.5em;
-    }
-    header {
-      margin-bottom: 4em;
-      text-align: center;
-    }
-    #TOC li {
-      list-style: none;
-    }
-    #TOC ul {
-      padding-left: 1.3em;
-    }
-    #TOC > ul {
-      padding-left: 0;
-    }
-    #TOC a:not(:hover) {
+
+    .author-name .orcid-link {
+      opacity: 0.5;
+      margin-left: 2px;
+      font-size: 0.75rem;
       text-decoration: none;
+      color: white;
     }
-    span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: min(4vw, 1.5em);}
-    div.column{flex: auto; overflow-x: auto;}
-    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
-    /* The extra [class] is a hack that increases specificity enough to
-       override a similar rule in reveal.js */
-    ul.task-list[class]{list-style: none;}
-    ul.task-list li input[type="checkbox"] {
-      font-size: inherit;
-      width: 0.8em;
-      margin: 0 0.8em 0.2em -1.6em;
-      vertical-align: middle;
+
+    .author-name .orcid-link:hover { opacity: 0.8; }
+
+    .affiliation-line {
+      font-family: 'Inter', -apple-system, sans-serif;
+      font-size: 0.78rem;
+      opacity: 0.55;
+      font-style: italic;
+      margin-bottom: 0.25rem;
     }
-    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
-    /* CSS for citations */
-    div.csl-bib-body { }
-    div.csl-entry {
-      clear: both;
+
+    .date-line {
+      font-family: 'Inter', -apple-system, sans-serif;
+      font-size: 0.73rem;
+      opacity: 0.4;
     }
-    .hanging-indent div.csl-entry {
-      margin-left:2em;
-      text-indent:-2em;
+
+    .tags-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+      margin-top: 1.15rem;
     }
-    div.csl-left-margin {
-      min-width:2em;
-      float:left;
+
+    .tag {
+      font-family: 'Inter', -apple-system, sans-serif;
+      font-size: 0.67rem;
+      font-weight: 500;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 999px;
+      padding: 0.18rem 0.6rem;
+      letter-spacing: 0.02em;
     }
-    div.csl-right-inline {
-      margin-left:2em;
-      padding-left:1em;
+
+    /* ── Layout ── */
+    .container {
+      max-width: 1080px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 210px 1fr;
+      gap: 2.5rem;
+      padding: 2rem 2rem 4rem;
     }
-    div.csl-indent {
-      margin-left: 2em;
-    }  </style>
+
+    /* ── Sidebar ── */
+    .sidebar {
+      position: sticky;
+      top: 1.5rem;
+      align-self: start;
+      font-family: 'Inter', -apple-system, sans-serif;
+    }
+
+    .sidebar h2 {
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-secondary);
+      font-weight: 600;
+      margin-bottom: 0.6rem;
+      padding-bottom: 0.45rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar ul { list-style: none; }
+
+    .sidebar li { margin-bottom: 0.15rem; }
+
+    .sidebar a {
+      font-size: 0.77rem;
+      color: var(--text-secondary);
+      text-decoration: none;
+      display: block;
+      padding: 0.25rem 0.55rem;
+      border-radius: 4px;
+      transition: all 0.15s;
+      line-height: 1.35;
+    }
+
+    .sidebar a:hover {
+      color: var(--accent);
+      background: var(--pe-light);
+    }
+
+    /* ── Article ── */
+    .paper-body {
+      background: var(--bg-card);
+      border-radius: 6px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.03);
+      padding: 2.25rem 2.5rem;
+      max-width: 760px;
+    }
+
+    .paper-body h1 {
+      font-family: 'Lora', Georgia, serif;
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--text);
+      margin: 2.5rem 0 0.8rem;
+      padding-bottom: 0.3rem;
+      border-bottom: 2px solid var(--accent);
+    }
+
+    .paper-body h1:first-child { margin-top: 0; }
+
+    .paper-body p { margin-bottom: 0.95rem; }
+
+    .paper-body a {
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(44,100,150,0.25);
+      transition: border-color 0.15s;
+    }
+
+    .paper-body a:hover { border-bottom-color: var(--accent); }
+
+    .paper-body strong {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .paper-body ul, .paper-body ol {
+      margin: 0.5rem 0 1.1rem 1.3rem;
+    }
+
+    .paper-body li { margin-bottom: 0.5rem; }
+
+    .paper-body li strong { color: var(--accent-hover); }
+
+    .paper-body code {
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 0.84em;
+      background: var(--code-bg);
+      color: #6e3a8a;
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+    }
+
+    /* ── Citations ── */
+    .citation { color: var(--text-secondary); }
+
+    #references + div, #refs {
+      font-size: 0.84rem;
+      line-height: 1.6;
+      font-family: 'Inter', -apple-system, sans-serif;
+    }
+
+    .csl-entry {
+      margin-bottom: 0.7rem;
+      padding-left: 2em;
+      text-indent: -2em;
+      color: var(--text-secondary);
+    }
+
+    .csl-entry a { word-break: break-all; font-size: 0.82em; }
+
+    /* ── Footer ── */
+    .paper-footer {
+      text-align: center;
+      padding: 1.25rem;
+      font-family: 'Inter', -apple-system, sans-serif;
+      font-size: 0.73rem;
+      color: var(--text-secondary);
+      border-top: 1px solid var(--border);
+      margin-top: 2rem;
+    }
+
+    .paper-footer a { color: var(--accent); text-decoration: none; }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .container {
+        grid-template-columns: 1fr;
+        padding: 1rem;
+      }
+      .sidebar {
+        position: static;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 0.5rem;
+      }
+      .sidebar h2 { width: 100%; }
+      .sidebar ul { display: flex; flex-wrap: wrap; gap: 0.2rem; }
+      .paper-body { padding: 1.25rem; }
+      .paper-header { padding: 2rem 1rem; }
+      .paper-title { font-size: 1.5rem; }
+    }
+
+    @media print {
+      body { background: white; }
+      .paper-header { background: none !important; color: var(--text); padding: 1rem 0; }
+      .tag { border-color: var(--border); color: var(--text-secondary); }
+      .sidebar { display: none; }
+      .container { grid-template-columns: 1fr; }
+      .paper-body { box-shadow: none; padding: 0; }
+    }
+  </style>
 </head>
 <body>
-<header id="title-block-header">
-<h1 class="title">PolicyEngine: A Tax-Benefit Microsimulation
+
+<!-- Header -->
+<div class="paper-header">
+  <div class="header-inner">
+    <div class="paper-label">JOSS Paper Preview</div>
+    <h1 class="paper-title">PolicyEngine: A Tax-Benefit Microsimulation
 Framework</h1>
-<p class="date">19 March 2026</p>
-</header>
+    <div class="authors-grid">
+      <span class="author-name">Max
+Ghenis<sup>1</sup> <a class="orcid-link" href="https://orcid.org/0000-0000-0000-0000" title="ORCID">&#9679;</a></span>
+      <span class="author-name">Nikhil
+Woodruff<sup>1</sup> <a class="orcid-link" href="https://orcid.org/0009-0009-5004-4910" title="ORCID">&#9679;</a></span>
+      <span class="author-name">Vahid
+Ahmadi<sup>1</sup> <span class="corr">*</span> <a class="orcid-link" href="https://orcid.org/0009-0004-1093-6272" title="ORCID">&#9679;</a></span>
+      <span class="author-name">Pavel
+Makarchuk<sup>1</sup> <a class="orcid-link" href="https://orcid.org/0009-0003-4869-7409" title="ORCID">&#9679;</a></span>
+    </div>
+    <div class="affiliation-line"><sup>1</sup> PolicyEngine, Washington,
+DC, United States</div>
+    <div class="date-line">19 March 2026</div>
+    <div class="tags-row">
+      <span class="tag">Python</span>
+      <span class="tag">microsimulation</span>
+      <span class="tag">tax</span>
+      <span class="tag">benefit</span>
+      <span class="tag">public policy</span>
+      <span class="tag">economic analysis</span>
+    </div>
+  </div>
+</div>
+
+<!-- Content -->
+<div class="container">
+  <nav class="sidebar">
+    <h2>Contents</h2>
+    <ul>
+      <li><a href="#summary">Summary</a></li>
+      <li><a href="#statement-of-need">Statement of Need</a></li>
+      <li><a href="#state-of-the-field">State of the Field</a></li>
+      <li><a href="#software-design">Software Design</a></li>
+      <li><a href="#research-impact-statement">Research Impact</a></li>
+      <li><a href="#acknowledgements">Acknowledgements</a></li>
+      <li><a href="#ai-usage-disclosure">AI Disclosure</a></li>
+      <li><a href="#references">References</a></li>
+    </ul>
+  </nav>
+
+  <article class="paper-body">
 <h1 id="summary">Summary</h1>
 <p>PolicyEngine.py <span class="citation"
 data-cites="policyengine_py">(PolicyEngine Contributors 2026)</span> is
@@ -613,5 +770,12 @@ Budget</span></em>. <a
 href="https://arxiv.org/abs/2602.15607">https://arxiv.org/abs/2602.15607</a>.
 </div>
 </div>
+  </article>
+</div>
+
+<div class="paper-footer">
+  JOSS Paper Preview &mdash; Generated from <code>paper.md</code> &bull; <a href="https://joss.theoj.org">Journal of Open Source Software</a>
+</div>
+
 </body>
 </html>
