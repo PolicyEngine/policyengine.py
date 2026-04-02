@@ -398,12 +398,16 @@ transparent policy analysis. The framework’s open development on GitHub
 enables external validation, community contributions, and reproducible
 policy analysis across countries.</p>
 <h1 id="state-of-the-field">State of the Field</h1>
-<p>The primary UK microsimulation models include UKMOD, maintained by
-the Institute for Social and Economic Research (ISER), University of
-Essex, as part of the EUROMOD family <span class="citation"
-data-cites="sutherland2014euromod">(Sutherland and Figari 2013)</span>,
-and proprietary models maintained by HM Treasury and the Institute for
-Fiscal Studies. OpenFisca <span class="citation"
+<p>Tax-benefit microsimulation — pioneered by Orcutt <span class="citation"
+data-cites="orcutt1957">(1957)</span> and surveyed by Bourguignon and
+Spadaro <span class="citation"
+data-cites="bourguignon2006">(2006)</span> — underpins much of modern
+fiscal policy evaluation. The primary UK microsimulation models include
+UKMOD, maintained by the Institute for Social and Economic Research
+(ISER), University of Essex, as part of the EUROMOD family <span
+class="citation" data-cites="sutherland2014euromod">(Sutherland and
+Figari 2013)</span>, and proprietary models maintained by HM Treasury
+and the Institute for Fiscal Studies. OpenFisca <span class="citation"
 data-cites="openfisca">(OpenFisca Contributors 2024)</span> pioneered
 the open-source approach to tax-benefit microsimulation in France.
 PolicyEngine originated from OpenFisca and builds on this foundation
@@ -480,10 +484,38 @@ rules, data calibration, and analyst-facing outputs are maintained by
 overlapping but distinct groups.</p>
 <p>As shown in Figure 1, at runtime a simulation combines three inputs:
 policies from a country model version, household microdata, and optional
-behavioral response parameters. PolicyEngine.py then applies a
-consistent analysis layer across countries, producing decile tables,
-poverty and inequality metrics, aggregate program statistics, and
-regional breakdowns from the resulting entity-level outputs.</p>
+behavioral response parameters. The following example doubles the US
+federal standard deduction for single filers and runs a full
+distributional analysis:</p>
+<pre><code class="language-python">import datetime
+from policyengine.core import Parameter, ParameterValue, Policy, Simulation
+from policyengine.tax_benefit_models.us import (
+    economic_impact_analysis, us_latest,
+)
+
+param = Parameter(
+    name="gov.irs.deductions.standard.amount.SINGLE",
+    tax_benefit_model_version=us_latest,
+)
+reform = Policy(
+    name="Double standard deduction",
+    parameter_values=[
+        ParameterValue(
+            parameter=param,
+            start_date=datetime.date(2026, 1, 1),
+            end_date=datetime.date(2026, 12, 31),
+            value=30_950,
+        ),
+    ],
+)
+baseline = Simulation(tax_benefit_model_version=us_latest)
+reformed = Simulation(tax_benefit_model_version=us_latest, policy=reform)
+analysis = economic_impact_analysis(baseline, reformed)</code></pre>
+<p>The <code>analysis</code> object contains decile impacts,
+program-by-program statistics, poverty rates, and inequality metrics.
+PolicyEngine.py then applies a consistent analysis layer across
+countries, producing these outputs from the resulting entity-level
+data.</p>
 <p>PolicyEngine models static fiscal impacts; it does not model
 macroeconomic feedback effects or general equilibrium responses.</p>
 <h1 id="research-impact-statement">Research Impact Statement</h1>
@@ -612,6 +644,13 @@ href="https://www.anthropic.com/claude">https://www.anthropic.com/claude</a>.
 Arnold Ventures. 2023. <em>Public Finance Program</em>. <a
 href="https://www.arnoldventures.org/work/public-finance">https://www.arnoldventures.org/work/public-finance</a>.
 </div>
+<div id="ref-bourguignon2006" class="csl-entry" role="listitem">
+Bourguignon, François, and Amedeo Spadaro. 2006.
+<span>"Microsimulation as a Tool for Evaluating Redistribution
+Policies."</span> <em>The Journal of Economic Inequality</em> 4:
+77–106. <a
+href="https://doi.org/10.1007/s10888-005-9012-6">https://doi.org/10.1007/s10888-005-9012-6</a>.
+</div>
 <div id="ref-pe_dctc" class="csl-entry" role="listitem">
 Council of the District of Columbia. 2023. <em><span>District Child Tax
 Credit Amendment Act</span> of 2023</em>. <a
@@ -723,6 +762,12 @@ href="https://mcgarvey.house.gov/media/press-releases/congressman-morgan-mcgarve
 Office of Senator Cory Booker. 2026. <em>Booker Announces <span>Keep
 Your Pay Act</span></em>. <a
 href="https://www.booker.senate.gov/news/press/booker-announces-keep-your-pay-act">https://www.booker.senate.gov/news/press/booker-announces-keep-your-pay-act</a>.
+</div>
+<div id="ref-orcutt1957" class="csl-entry" role="listitem">
+Orcutt, Guy H. 1957. <span>"A New Type of Socio-Economic
+System."</span> <em>Review of Economics and Statistics</em> 39 (2):
+116–23. <a
+href="https://doi.org/10.2307/1928528">https://doi.org/10.2307/1928528</a>.
 </div>
 <div id="ref-openfisca" class="csl-entry" role="listitem">
 OpenFisca Contributors. 2024. <em><span>OpenFisca</span>: Open Rules as
