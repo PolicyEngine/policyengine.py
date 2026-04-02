@@ -9,7 +9,7 @@ tags:
   - economic analysis
 authors:
   - name: Max Ghenis
-    orcid: 0000-0000-0000-0000
+    orcid: 0000-0002-1335-8277
     affiliation: '1'
   - name: Nikhil Woodruff
     orcid: 0009-0009-5004-4910
