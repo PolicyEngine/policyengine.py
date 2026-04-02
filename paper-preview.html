@@ -448,17 +448,7 @@ adjustment) and extensive-margin (participation) labor supply responses
 to policy changes.</li>
 </ul>
 <h1 id="software-design">Software Design</h1>
-<figure>
-<img src="architecture.png" style="width:100.0%"
-alt="PolicyEngine architecture. Three inputs — policies (tax-benefit rules and parameters from country packages), households (survey microdata with calibrated weights), and dynamics (behavioural response elasticities) — feed into the Simulation engine, which produces standardized analytical outputs including decile impacts, poverty rates, inequality metrics, regional breakdowns, and budgetary impacts." />
-<figcaption aria-hidden="true">PolicyEngine architecture. Three inputs — policies
-(tax-benefit rules and parameters from country packages), households
-(survey microdata with calibrated weights), and dynamics (behavioural
-response elasticities) — feed into the Simulation engine, which produces
-standardized analytical outputs including decile impacts, poverty rates,
-inequality metrics, regional breakdowns, and budgetary impacts.</figcaption>
-</figure>
-<p>Figure 1 illustrates the high-level architecture. PolicyEngine is built as a four-layer system. PolicyEngine Core
+<p>PolicyEngine is built as a four-layer system. PolicyEngine Core
 extends the OpenFisca engine with reusable simulation abstractions,
 versioned parameters, and dataset interfaces shared across countries
 <span class="citation" data-cites="policyengine_core">(Woodruff et al.
@@ -470,6 +460,16 @@ specific to each tax-benefit system. Companion data repositories hold
 enhanced survey microdata and calibration pipelines for the CPS <span class="citation"
 data-cites="woodruff2024enhanced_cps">(Woodruff and Ghenis 2024)</span>
 and Family Resources Survey.</p>
+<figure>
+<img src="architecture.png" style="width:100.0%"
+alt="PolicyEngine architecture. Three inputs — policies (tax-benefit rules and parameters from country packages), households (survey microdata with calibrated weights), and dynamics (behavioural response elasticities) — feed into the Simulation engine, which produces standardized analytical outputs including decile impacts, poverty rates, inequality metrics, regional breakdowns, and budgetary impacts." />
+<figcaption aria-hidden="true">PolicyEngine architecture. Three inputs — policies
+(tax-benefit rules and parameters from country packages), households
+(survey microdata with calibrated weights), and dynamics (behavioural
+response elasticities) — feed into the Simulation engine, which produces
+standardized analytical outputs including decile impacts, poverty rates,
+inequality metrics, regional breakdowns, and budgetary impacts.</figcaption>
+</figure>
 <p>This split trades some packaging complexity for clearer ownership and
 release independence. Legislative changes in a country package do not
 require duplicating shared output logic; methodological changes to
@@ -478,13 +478,12 @@ microdata refreshes can be versioned separately from the modeling
 libraries. It also supports different contributor workflows, since legal
 rules, data calibration, and analyst-facing outputs are maintained by
 overlapping but distinct groups.</p>
-<p>At runtime, as shown in Figure 1, a simulation combines a country model version, a
-microdataset, and optional reform or behavioral modifiers.
-PolicyEngine.py then applies a consistent analysis layer across
-countries, producing decile tables, poverty and inequality metrics,
-aggregate program statistics, and regional breakdowns from the resulting
-entity-level outputs. The repository documentation includes runnable
-examples for both household-level and population-level analyses.</p>
+<p>As shown in Figure 1, at runtime a simulation combines three inputs:
+policies from a country model version, household microdata, and optional
+behavioral response parameters. PolicyEngine.py then applies a
+consistent analysis layer across countries, producing decile tables,
+poverty and inequality metrics, aggregate program statistics, and
+regional breakdowns from the resulting entity-level outputs.</p>
 <p>PolicyEngine models static fiscal impacts; it does not model
 macroeconomic feedback effects or general equilibrium responses.</p>
 <h1 id="research-impact-statement">Research Impact Statement</h1>
@@ -595,7 +594,7 @@ data-cites="sutherland2014euromod">(Sutherland and Figari
 2013)</span>.</p>
 <h1 id="ai-usage-disclosure">AI Usage Disclosure</h1>
 <p>Generative AI tools — Claude Opus 4 by Anthropic <span
-class="citation" data-cites="claude2025">(Anthropic 2025)</span> — were
+class="citation" data-cites="claude2026">(Anthropic 2026)</span> — were
 used to assist with code refactoring and drafting of this paper. All
 AI-assisted outputs were reviewed, edited, and validated by human
 authors, who made all core design decisions regarding software
@@ -605,8 +604,8 @@ of all submitted materials.</p>
 <h1 class="unnumbered" id="references">References</h1>
 <div id="refs" class="references csl-bib-body hanging-indent"
 role="list">
-<div id="ref-claude2025" class="csl-entry" role="listitem">
-Anthropic. 2025. <em>Claude</em>. Released. <a
+<div id="ref-claude2026" class="csl-entry" role="listitem">
+Anthropic. 2026. <em>Claude</em>. Released. <a
 href="https://www.anthropic.com/claude">https://www.anthropic.com/claude</a>.
 </div>
 <div id="ref-arnold_ventures" class="csl-entry" role="listitem">
@@ -621,7 +620,7 @@ href="https://lims.dccouncil.gov/Legislation/B25-0190">https://lims.dccouncil.go
 <div id="ref-atlanta_fed_prd" class="csl-entry" role="listitem">
 Federal Reserve Bank of Atlanta. 2021. <em>Policy Rules Database</em>.
 <a
-href="https://www.atlantafed.org/economic-mobility-and-resilience/advancing-careers-for-low-income-families/policy-rules-database">https://www.atlantafed.org/economic-mobility-and-resilience/advancing-careers-for-low-income-families/policy-rules-database</a>.
+href="https://github.com/Research-Division/policy-rules-database">https://github.com/Research-Division/policy-rules-database</a>.
 </div>
 <div id="ref-pe_nber_mou" class="csl-entry" role="listitem">
 Feenberg, Daniel R. 2024. <span>“<span>TAXSIM</span> – <span
