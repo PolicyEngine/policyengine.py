@@ -52,13 +52,13 @@ PolicyEngine differentiates itself in several ways:
 
 # Software Design
 
-![PolicyEngine architecture. Three inputs — policies (tax-benefit rules and parameters from country packages), households (survey microdata with calibrated weights), and dynamics (behavioural response elasticities) — feed into the Simulation engine, which produces standardized analytical outputs including decile impacts, poverty rates, inequality metrics, regional breakdowns, and budgetary impacts.](architecture.png){width="100%"}
+PolicyEngine is built as a four-layer system. PolicyEngine Core extends the OpenFisca engine with reusable simulation abstractions, versioned parameters, and dataset interfaces shared across countries [@policyengine_core]. PolicyEngine.py adds country-agnostic analyst workflows, including baseline-versus-reform comparisons, standardized output types, and visualization helpers. The policyengine-us and policyengine-uk packages contain statutory logic, variables, and entity structures specific to each tax-benefit system. Companion data repositories hold enhanced survey microdata and calibration pipelines for the CPS [@woodruff2024enhanced_cps] and Family Resources Survey.
 
-Figure 1 illustrates the high-level architecture. PolicyEngine is built as a four-layer system. PolicyEngine Core extends the OpenFisca engine with reusable simulation abstractions, versioned parameters, and dataset interfaces shared across countries [@policyengine_core]. PolicyEngine.py adds country-agnostic analyst workflows, including baseline-versus-reform comparisons, standardized output types, and visualization helpers. The policyengine-us and policyengine-uk packages contain statutory logic, variables, and entity structures specific to each tax-benefit system. Companion data repositories hold enhanced survey microdata and calibration pipelines for the CPS [@woodruff2024enhanced_cps] and Family Resources Survey.
+![PolicyEngine architecture. Three inputs — policies (tax-benefit rules and parameters from country packages), households (survey microdata with calibrated weights), and dynamics (behavioural response elasticities) — feed into the Simulation engine, which produces standardized analytical outputs including decile impacts, poverty rates, inequality metrics, regional breakdowns, and budgetary impacts.](architecture.png){width="100%"}
 
 This split trades some packaging complexity for clearer ownership and release independence. Legislative changes in a country package do not require duplicating shared output logic; methodological changes to distributional analysis do not require modifying statutory formulas; and microdata refreshes can be versioned separately from the modeling libraries. It also supports different contributor workflows, since legal rules, data calibration, and analyst-facing outputs are maintained by overlapping but distinct groups.
 
-At runtime, as shown in Figure 1, a simulation combines a country model version, a microdataset, and optional reform or behavioral modifiers. PolicyEngine.py then applies a consistent analysis layer across countries, producing decile tables, poverty and inequality metrics, aggregate program statistics, and regional breakdowns from the resulting entity-level outputs. The repository documentation includes runnable examples for both household-level and population-level analyses.
+As shown in Figure 1, at runtime a simulation combines three inputs: policies from a country model version, household microdata, and optional behavioral response parameters. PolicyEngine.py then applies a consistent analysis layer across countries, producing decile tables, poverty and inequality metrics, aggregate program statistics, and regional breakdowns from the resulting entity-level outputs.
 
 PolicyEngine models static fiscal impacts; it does not model macroeconomic feedback effects or general equilibrium responses.
 
@@ -84,6 +84,6 @@ We acknowledge contributions from all PolicyEngine contributors, and thank the O
 
 # AI Usage Disclosure
 
-Generative AI tools — Claude Opus 4 by Anthropic [@claude2025] — were used to assist with code refactoring and drafting of this paper. All AI-assisted outputs were reviewed, edited, and validated by human authors, who made all core design decisions regarding software architecture, policy modeling, and parameter implementation. The authors remain fully responsible for the accuracy, originality, and correctness of all submitted materials.
+Generative AI tools — Claude Opus 4 by Anthropic [@claude2026] — were used to assist with code refactoring and drafting of this paper. All AI-assisted outputs were reviewed, edited, and validated by human authors, who made all core design decisions regarding software architecture, policy modeling, and parameter implementation. The authors remain fully responsible for the accuracy, originality, and correctness of all submitted materials.
 
 # References
