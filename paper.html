@@ -1,309 +1,327 @@
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PolicyEngine: A Tax-Benefit Microsimulation Framework</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400&display=swap');
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PolicyEngine: A Tax-Benefit Microsimulation Framework</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400&display=swap');
 
-    :root {
-      --pe-blue: #2c6496;
-      --pe-dark: #1a3a5c;
-      --pe-light: #e8f0f8;
-      --accent: #2c6496;
-      --accent-hover: #1a3a5c;
-      --text: #1e293b;
-      --text-secondary: #475569;
-      --bg: #f7f8fa;
-      --bg-card: #ffffff;
-      --border: #dfe3ea;
-      --code-bg: #f1f4f8;
-    }
+:root {
+  --blue-600: #2563eb;
+  --blue-700: #1d4ed8;
+  --blue-50: #eff6ff;
+  --slate-50: #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+}
 
-    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
-    body {
-      font-family: 'Lora', 'Charter', Georgia, serif;
-      font-size: 16.5px;
-      line-height: 1.78;
-      color: var(--text);
-      background: var(--bg);
-      -webkit-font-smoothing: antialiased;
-    }
+body {
+  font-family: 'Lora', Georgia, serif;
+  font-size: 16.5px;
+  line-height: 1.8;
+  color: var(--slate-800);
+  background: #f5f5f0;
+  -webkit-font-smoothing: antialiased;
+}
 
-    /* ── Header ── */
-    .paper-header {
-      background: linear-gradient(135deg, var(--pe-dark) 0%, var(--pe-blue) 100%);
-      color: white;
-      padding: 3rem 2rem 2.5rem;
-      position: relative;
-      overflow: hidden;
-    }
+/* ─── Header ─── */
+.paper-header {
+  background: linear-gradient(160deg, #0f172a 0%, #1e3a5f 40%, #1d4ed8 100%);
+  color: white;
+  padding: 3.5rem 2rem 3rem;
+  position: relative;
+  overflow: hidden;
+}
 
-    .paper-header::before {
-      content: '';
-      position: absolute;
-      top: -40%;
-      right: -15%;
-      width: 500px;
-      height: 500px;
-      background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%);
-      pointer-events: none;
-    }
+.paper-header::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -20%;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(59,130,246,0.15) 0%, transparent 70%);
+  pointer-events: none;
+}
 
-    .header-inner {
-      max-width: 820px;
-      margin: 0 auto;
-      position: relative;
-    }
+.header-inner {
+  max-width: 780px;
+  margin: 0 auto;
+  position: relative;
+}
 
-    .paper-label {
-      font-family: 'Inter', -apple-system, sans-serif;
-      font-size: 0.68rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.14em;
-      color: rgba(255,255,255,0.5);
-      margin-bottom: 0.75rem;
-    }
+.paper-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: rgba(255,255,255,0.5);
+  margin-bottom: 1rem;
+}
 
-    .paper-title {
-      font-family: 'Lora', Georgia, serif;
-      font-size: 2rem;
-      font-weight: 700;
-      line-height: 1.25;
-      margin-bottom: 1.5rem;
-      letter-spacing: -0.01em;
-    }
+.paper-title {
+  font-family: 'Lora', Georgia, serif;
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.25;
+  margin-bottom: 1.75rem;
+  letter-spacing: -0.01em;
+}
 
-    .authors-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.4rem 1.5rem;
-      margin-bottom: 0.5rem;
-      font-family: 'Inter', -apple-system, sans-serif;
-    }
+.authors-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.5rem;
+  margin-bottom: 0.5rem;
+  font-family: 'Inter', sans-serif;
+}
 
-    .author-name {
-      font-size: 0.88rem;
-      font-weight: 500;
-    }
+.author-name {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
 
-    .author-name .corr {
-      color: #93c5fd;
-      font-size: 0.72rem;
-      vertical-align: super;
-    }
+.author-name .corr {
+  color: #93c5fd;
+  font-size: 0.75rem;
+  vertical-align: super;
+}
 
-    .author-name .orcid-link {
-      opacity: 0.5;
-      margin-left: 2px;
-      font-size: 0.75rem;
-      text-decoration: none;
-      color: white;
-    }
+.author-name .orcid {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  vertical-align: -1px;
+  margin-left: 3px;
+  opacity: 0.6;
+}
 
-    .author-name .orcid-link:hover { opacity: 0.8; }
+.affiliation-line {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.8rem;
+  opacity: 0.6;
+  font-style: italic;
+  margin-bottom: 0.3rem;
+}
 
-    .affiliation-line {
-      font-family: 'Inter', -apple-system, sans-serif;
-      font-size: 0.78rem;
-      opacity: 0.55;
-      font-style: italic;
-      margin-bottom: 0.25rem;
-    }
+.date-line {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.75rem;
+  opacity: 0.45;
+}
 
-    .date-line {
-      font-family: 'Inter', -apple-system, sans-serif;
-      font-size: 0.73rem;
-      opacity: 0.4;
-    }
+.tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 1.25rem;
+}
 
-    .tags-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.3rem;
-      margin-top: 1.15rem;
-    }
+.tag {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.68rem;
+  font-weight: 500;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  letter-spacing: 0.02em;
+}
 
-    .tag {
-      font-family: 'Inter', -apple-system, sans-serif;
-      font-size: 0.67rem;
-      font-weight: 500;
-      background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.18);
-      border-radius: 999px;
-      padding: 0.18rem 0.6rem;
-      letter-spacing: 0.02em;
-    }
+/* ─── Layout ─── */
+.container {
+  max-width: 1060px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 3rem;
+  padding: 2.5rem 2rem 4rem;
+}
 
-    /* ── Layout ── */
-    .container {
-      max-width: 1080px;
-      margin: 0 auto;
-      display: grid;
-      grid-template-columns: 210px 1fr;
-      gap: 2.5rem;
-      padding: 2rem 2rem 4rem;
-    }
+/* ─── Sidebar TOC ─── */
+.sidebar {
+  position: sticky;
+  top: 1.5rem;
+  align-self: start;
+  font-family: 'Inter', sans-serif;
+}
 
-    /* ── Sidebar ── */
-    .sidebar {
-      position: sticky;
-      top: 1.5rem;
-      align-self: start;
-      font-family: 'Inter', -apple-system, sans-serif;
-    }
+.sidebar h2 {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--slate-500);
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--slate-200);
+}
 
-    .sidebar h2 {
-      font-size: 0.6rem;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: var(--text-secondary);
-      font-weight: 600;
-      margin-bottom: 0.6rem;
-      padding-bottom: 0.45rem;
-      border-bottom: 1px solid var(--border);
-    }
+.sidebar ul {
+  list-style: none;
+}
 
-    .sidebar ul { list-style: none; }
+.sidebar li {
+  margin-bottom: 0.25rem;
+}
 
-    .sidebar li { margin-bottom: 0.15rem; }
+.sidebar a {
+  font-size: 0.78rem;
+  color: var(--slate-500);
+  text-decoration: none;
+  display: block;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  transition: all 0.15s;
+  line-height: 1.4;
+}
 
-    .sidebar a {
-      font-size: 0.77rem;
-      color: var(--text-secondary);
-      text-decoration: none;
-      display: block;
-      padding: 0.25rem 0.55rem;
-      border-radius: 4px;
-      transition: all 0.15s;
-      line-height: 1.35;
-    }
+.sidebar a:hover {
+  color: var(--blue-700);
+  background: var(--blue-50);
+}
 
-    .sidebar a:hover {
-      color: var(--accent);
-      background: var(--pe-light);
-    }
+/* ─── Article ─── */
+.paper-body {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04);
+  padding: 2.5rem 2.75rem;
+  max-width: 760px;
+}
 
-    /* ── Article ── */
-    .paper-body {
-      background: var(--bg-card);
-      border-radius: 6px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.03);
-      padding: 2.25rem 2.5rem;
-      max-width: 760px;
-    }
+.paper-body h1 {
+  font-family: 'Lora', Georgia, serif;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--slate-900);
+  margin: 2.75rem 0 0.9rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 2px solid var(--blue-600);
+}
 
-    .paper-body h1 {
-      font-family: 'Lora', Georgia, serif;
-      font-size: 1.35rem;
-      font-weight: 700;
-      color: var(--text);
-      margin: 2.5rem 0 0.8rem;
-      padding-bottom: 0.3rem;
-      border-bottom: 2px solid var(--accent);
-    }
+.paper-body h1:first-child {
+  margin-top: 0;
+}
 
-    .paper-body h1:first-child { margin-top: 0; }
+.paper-body p {
+  margin-bottom: 1rem;
+}
 
-    .paper-body p { margin-bottom: 0.95rem; }
+.paper-body a {
+  color: var(--blue-600);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(37,99,235,0.3);
+  transition: border-color 0.15s;
+}
 
-    .paper-body a {
-      color: var(--accent);
-      text-decoration: none;
-      border-bottom: 1px solid rgba(44,100,150,0.25);
-      transition: border-color 0.15s;
-    }
+.paper-body a:hover {
+  border-bottom-color: var(--blue-600);
+}
 
-    .paper-body a:hover { border-bottom-color: var(--accent); }
+.paper-body strong {
+  font-weight: 600;
+  color: var(--slate-900);
+}
 
-    .paper-body strong {
-      font-weight: 600;
-      color: var(--text);
-    }
+.paper-body ul, .paper-body ol {
+  margin: 0.6rem 0 1.2rem 1.4rem;
+}
 
-    .paper-body ul, .paper-body ol {
-      margin: 0.5rem 0 1.1rem 1.3rem;
-    }
+.paper-body li {
+  margin-bottom: 0.55rem;
+}
 
-    .paper-body li { margin-bottom: 0.5rem; }
+.paper-body li strong {
+  color: var(--blue-700);
+}
 
-    .paper-body li strong { color: var(--accent-hover); }
+.paper-body code {
+  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-size: 0.85em;
+  background: var(--slate-100);
+  color: #be185d;
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  border: 1px solid var(--slate-200);
+}
 
-    .paper-body code {
-      font-family: 'JetBrains Mono', 'SF Mono', monospace;
-      font-size: 0.84em;
-      background: var(--code-bg);
-      color: #6e3a8a;
-      padding: 0.1em 0.35em;
-      border-radius: 3px;
-      border: 1px solid var(--border);
-    }
+/* ─── Citations ─── */
+.paper-body .citation {
+  color: var(--slate-600);
+}
 
-    /* ── Citations ── */
-    .citation { color: var(--text-secondary); }
+#references + div,
+#refs {
+  font-size: 0.85rem;
+  line-height: 1.65;
+  font-family: 'Inter', sans-serif;
+}
 
-    #references + div, #refs {
-      font-size: 0.84rem;
-      line-height: 1.6;
-      font-family: 'Inter', -apple-system, sans-serif;
-    }
+.csl-entry {
+  margin-bottom: 0.8rem;
+  padding-left: 2em;
+  text-indent: -2em;
+  color: var(--slate-600);
+}
 
-    .csl-entry {
-      margin-bottom: 0.7rem;
-      padding-left: 2em;
-      text-indent: -2em;
-      color: var(--text-secondary);
-    }
+.csl-entry a {
+  word-break: break-all;
+  font-size: 0.82em;
+}
 
-    .csl-entry a { word-break: break-all; font-size: 0.82em; }
+/* ─── Footer ─── */
+.paper-footer {
+  text-align: center;
+  padding: 1.5rem;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.75rem;
+  color: var(--slate-500);
+  border-top: 1px solid var(--slate-200);
+  margin-top: 2rem;
+}
 
-    /* ── Footer ── */
-    .paper-footer {
-      text-align: center;
-      padding: 1.25rem;
-      font-family: 'Inter', -apple-system, sans-serif;
-      font-size: 0.73rem;
-      color: var(--text-secondary);
-      border-top: 1px solid var(--border);
-      margin-top: 2rem;
-    }
+/* ─── Responsive ─── */
+@media (max-width: 768px) {
+  .container {
+    grid-template-columns: 1fr;
+    padding: 1rem;
+  }
+  .sidebar {
+    position: static;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--slate-200);
+    margin-bottom: 0.5rem;
+  }
+  .sidebar h2 { width: 100%; }
+  .sidebar ul { display: flex; flex-wrap: wrap; gap: 0.2rem; }
+  .paper-body { padding: 1.5rem; }
+  .paper-header { padding: 2rem 1rem; }
+  .paper-title { font-size: 1.5rem; }
+}
 
-    .paper-footer a { color: var(--accent); text-decoration: none; }
-
-    /* ── Responsive ── */
-    @media (max-width: 768px) {
-      .container {
-        grid-template-columns: 1fr;
-        padding: 1rem;
-      }
-      .sidebar {
-        position: static;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.3rem;
-        padding-bottom: 0.75rem;
-        border-bottom: 1px solid var(--border);
-        margin-bottom: 0.5rem;
-      }
-      .sidebar h2 { width: 100%; }
-      .sidebar ul { display: flex; flex-wrap: wrap; gap: 0.2rem; }
-      .paper-body { padding: 1.25rem; }
-      .paper-header { padding: 2rem 1rem; }
-      .paper-title { font-size: 1.5rem; }
-    }
-
-    @media print {
-      body { background: white; }
-      .paper-header { background: none !important; color: var(--text); padding: 1rem 0; }
-      .tag { border-color: var(--border); color: var(--text-secondary); }
-      .sidebar { display: none; }
-      .container { grid-template-columns: 1fr; }
-      .paper-body { box-shadow: none; padding: 0; }
-    }
-  </style>
+@media print {
+  body { background: white; }
+  .paper-header { background: none !important; color: var(--slate-900); padding: 1rem 0; }
+  .tag { border-color: var(--slate-300); color: var(--slate-600); }
+  .sidebar { display: none; }
+  .container { grid-template-columns: 1fr; }
+  .paper-body { box-shadow: none; padding: 0; }
+}
+</style>
 </head>
 <body>
 
@@ -311,20 +329,14 @@
 <div class="paper-header">
   <div class="header-inner">
     <div class="paper-label">JOSS Paper Preview</div>
-    <h1 class="paper-title">PolicyEngine: A Tax-Benefit Microsimulation
-Framework</h1>
+    <h1 class="paper-title">PolicyEngine: A Tax-Benefit Microsimulation Framework</h1>
     <div class="authors-grid">
-      <span class="author-name">Max
-Ghenis<sup>1</sup> <a class="orcid-link" href="https://orcid.org/0000-0000-0000-0000" title="ORCID">&#9679;</a></span>
-      <span class="author-name">Nikhil
-Woodruff<sup>1</sup> <a class="orcid-link" href="https://orcid.org/0009-0009-5004-4910" title="ORCID">&#9679;</a></span>
-      <span class="author-name">Vahid
-Ahmadi<sup>1</sup> <span class="corr">*</span> <a class="orcid-link" href="https://orcid.org/0009-0004-1093-6272" title="ORCID">&#9679;</a></span>
-      <span class="author-name">Pavel
-Makarchuk<sup>1</sup> <a class="orcid-link" href="https://orcid.org/0009-0003-4869-7409" title="ORCID">&#9679;</a></span>
+      <span class="author-name">Max Ghenis<sup>1</sup></span>
+      <span class="author-name">Nikhil Woodruff<sup>1</sup></span>
+      <span class="author-name">Pavel Makarchuk<sup>1</sup></span>
+      <span class="author-name">Vahid Ahmadi<sup>1</sup> <span class="corr">*</span></span>
     </div>
-    <div class="affiliation-line"><sup>1</sup> PolicyEngine, Washington,
-DC, United States</div>
+    <div class="affiliation-line"><sup>1</sup> PolicyEngine</div>
     <div class="date-line">19 March 2026</div>
     <div class="tags-row">
       <span class="tag">Python</span>
@@ -355,19 +367,17 @@ DC, United States</div>
 
   <article class="paper-body">
 <h1 id="summary">Summary</h1>
-<p>PolicyEngine.py <span class="citation"
-data-cites="policyengine_py">(PolicyEngine Contributors 2026)</span> is
-an open-source, multi-country microsimulation framework for tax-benefit
-policy analysis, implemented in Python. The package provides a unified
-interface for running policy simulations, analyzing distributional
-impacts, and visualizing results across the US and the UK. It delegates
-country-specific tax-benefit calculations to dedicated country packages
-(policyengine-us and policyengine-uk) while providing shared
-abstractions for simulations, datasets, parametric reforms, and output
-analysis. The framework supports both individual household simulations
-and population-wide microsimulations using representative survey
-microdata with calibrated weights. PolicyEngine powers an interactive
-web application at <a
+<p>PolicyEngine is an open-source, multi-country microsimulation
+framework for tax-benefit policy analysis, implemented in Python. The
+policyengine package provides a unified interface for running policy
+simulations, analyzing distributional impacts, and visualizing results
+across the US and the UK. It delegates country-specific tax-benefit
+calculations to dedicated country packages (policyengine-us and
+policyengine-uk) while providing shared abstractions for simulations,
+datasets, parametric reforms, and output analysis. The framework
+supports both individual household simulations and population-wide
+microsimulations using representative survey microdata with calibrated
+weights. PolicyEngine powers an interactive web application at <a
 href="https://policyengine.org">policyengine.org</a> that enables
 non-technical users to explore policy reforms in both countries.</p>
 <h1 id="statement-of-need">Statement of Need</h1>
@@ -386,37 +396,32 @@ Figari 2013)</span>, maintained by the University of Essex, requires a
 formal application and institutional affiliation to access, and the
 models maintained by HM Treasury and the Institute for Fiscal Studies
 are similarly proprietary. PolicyEngine addresses these gaps by
-providing an open-source Python microsimulation framework that spans
-multiple countries under a consistent API. Users can supply their own
-microdata or use built-in datasets, and compute the impact of current
-law or hypothetical policy reforms on any household or a national
-population. The Simulation class supports individual household analysis,
-while population-level aggregate analysis uses representative survey
-datasets with calibrated weights. Because existing proprietary models
-cannot be independently verified, PolicyEngine enables reproducible and
-transparent policy analysis. The framework’s open development on GitHub
-enables external validation, community contributions, and reproducible
-policy analysis across countries.</p>
+providing a fully open-source Python microsimulation framework that
+spans multiple countries under a consistent API. Users can supply their
+own microdata or use built-in datasets, and compute the impact of
+current law or hypothetical policy reforms on any household or a full
+national population. The Simulation class supports individual household
+analysis, while population-level aggregate analysis uses representative
+survey datasets with calibrated weights. The framework’s open
+development on GitHub enables external validation, community
+contributions, and reproducible policy analysis across countries.</p>
 <h1 id="state-of-the-field">State of the Field</h1>
-<p>The primary UK microsimulation models include UKMOD, maintained by
-the Institute for Social and Economic Research (ISER), University of
-Essex, as part of the EUROMOD family <span class="citation"
+<p>In the US, TAXSIM <span class="citation"
+data-cites="taxsim">(Feenberg and Coutts 1993)</span> at the National
+Bureau of Economic Research provides tax calculations, while the Tax
+Policy Center and Congressional Budget Office maintain proprietary
+models. In the UK, the primary microsimulation models include UKMOD,
+maintained by the Centre for Microsimulation and Policy Analysis at the
+Institute for Social and Economic Research (ISER), University of Essex,
+as part of the EUROMOD family <span class="citation"
 data-cites="sutherland2014euromod">(Sutherland and Figari 2013)</span>,
-and proprietary models maintained by HM Treasury and the Institute for
+and models maintained internally by HM Treasury and the Institute for
 Fiscal Studies. OpenFisca <span class="citation"
 data-cites="openfisca">(OpenFisca Contributors 2024)</span> pioneered
 the open-source approach to tax-benefit microsimulation in France.
 PolicyEngine originated from OpenFisca and builds on this foundation
 through the PolicyEngine Core framework <span class="citation"
 data-cites="policyengine_core">(Woodruff et al. 2024)</span>.</p>
-<p>Rather than contributing these features directly to OpenFisca,
-PolicyEngine introduced a separate analyst-facing layer because the
-project required capabilities that cut across countries and sit
-downstream of legislative modeling: harmonized dataset handling, a
-stable reform API, standardized distributional outputs, and integration
-with a public-facing web application. This design lets country model
-packages focus on statutory rules while shared analysis workflows evolve
-independently.</p>
 <p>PolicyEngine differentiates itself in several ways:</p>
 <ul>
 <li><strong>Open-source, multi-country framework</strong>: a single
@@ -429,64 +434,52 @@ income taxes, SNAP, SSI, Social Security, Medicare, Medicaid, EITC, CTC,
 and TANF; the UK model covers over 37 programs spanning income tax,
 National Insurance, Universal Credit, Child Benefit, Council Tax, and
 devolved policies in Scotland and Wales.</li>
-<li><strong>Separated modeling, analysis, and data layers</strong>: the
-project splits reusable engine logic into PolicyEngine Core,
-country-agnostic analysis workflows into PolicyEngine.py, country
-legislation into policyengine-us and policyengine-uk, and enhanced
-survey microdata into companion repositories <span class="citation"
-data-cites="policyengine_core woodruff2024enhanced_cps">(Woodruff et al.
-2024; Woodruff and Ghenis 2024)</span>. This separation allows
-each layer to be versioned and updated independently as legislation,
-methodology, and microdata change.</li>
 <li><strong>Programmatic reform and economic analysis</strong>: users
-can define hypothetical policy reforms as date-bound parameter values,
-compose multiple reforms with the <code>+</code> operator, or implement
-structural changes via simulation modifiers, then evaluate impacts on
-households, poverty, inequality, government budgets, and subnational
-regions. Behavioral response modules model both intensive-margin (hours
-adjustment) and extensive-margin (participation) labor supply responses
-to policy changes.</li>
+can define hypothetical policy reforms as parameter dictionaries with
+date-bound values, compose multiple reforms, or implement structural
+changes — and evaluate their impact on any household or the full
+population. Built-in output classes compute decile impacts, intra-decile
+distributions, poverty rates, inequality metrics (Gini coefficients),
+budgetary impacts, and regional breakdowns (US congressional districts,
+UK parliamentary constituencies). Behavioral response modules model both
+intensive margin (hours adjustment) and extensive margin (participation)
+labor supply responses to policy changes.</li>
 </ul>
 <h1 id="software-design">Software Design</h1>
-<figure>
-<img src="architecture.png" style="width:100.0%"
-alt="PolicyEngine architecture. Three inputs — policies (tax-benefit rules and parameters from country packages), households (survey microdata with calibrated weights), and dynamics (behavioural response elasticities) — feed into the Simulation engine, which produces standardized analytical outputs including decile impacts, poverty rates, inequality metrics, regional breakdowns, and budgetary impacts." />
-<figcaption aria-hidden="true">PolicyEngine architecture. Three inputs — policies
-(tax-benefit rules and parameters from country packages), households
-(survey microdata with calibrated weights), and dynamics (behavioural
-response elasticities) — feed into the Simulation engine, which produces
-standardized analytical outputs including decile impacts, poverty rates,
-inequality metrics, regional breakdowns, and budgetary impacts.</figcaption>
-</figure>
-<p>Figure 1 illustrates the high-level architecture. PolicyEngine is built as a four-layer system. PolicyEngine Core
-extends the OpenFisca engine with reusable simulation abstractions,
-versioned parameters, and dataset interfaces shared across countries
-<span class="citation" data-cites="policyengine_core">(Woodruff et al.
-2024)</span>. PolicyEngine.py adds country-agnostic analyst workflows,
-including baseline-versus-reform comparisons, standardized output types,
-and visualization helpers. The policyengine-us and policyengine-uk
-packages contain statutory logic, variables, and entity structures
-specific to each tax-benefit system. Companion data repositories hold
-enhanced survey microdata and calibration pipelines for the CPS <span class="citation"
-data-cites="woodruff2024enhanced_cps">(Woodruff and Ghenis 2024)</span>
-and Family Resources Survey.</p>
-<p>This split trades some packaging complexity for clearer ownership and
-release independence. Legislative changes in a country package do not
-require duplicating shared output logic; methodological changes to
-distributional analysis do not require modifying statutory formulas; and
-microdata refreshes can be versioned separately from the modeling
-libraries. It also supports different contributor workflows, since legal
-rules, data calibration, and analyst-facing outputs are maintained by
-overlapping but distinct groups.</p>
-<p>At runtime, as shown in Figure 1, a simulation combines a country model version, a
-microdataset, and optional reform or behavioral modifiers.
-PolicyEngine.py then applies a consistent analysis layer across
-countries, producing decile tables, poverty and inequality metrics,
-aggregate program statistics, and regional breakdowns from the resulting
-entity-level outputs. The repository documentation includes runnable
-examples for both household-level and population-level analyses.</p>
-<p>PolicyEngine models static fiscal impacts; it does not model
-macroeconomic feedback effects or general equilibrium responses.</p>
+<p>PolicyEngine is built on the PolicyEngine Core framework, which
+extends the OpenFisca microsimulation engine. The policyengine.py
+package is organized as a country-agnostic layer with the following core
+components:</p>
+<p><strong>Simulation and Dataset</strong> classes provide the primary
+interface. The Simulation class executes tax-benefit models on datasets,
+applying policy reforms and caching results. The Dataset class
+represents microdata containing entity-level data (persons, households,
+tax units) with survey weights and entity relationships.
+Country-specific datasets — the Current Population Survey for the US and
+the Enhanced Family Resources Survey for the UK — are loaded from
+companion data repositories <span class="citation"
+data-cites="woodruff2024enhanced_cps">(Woodruff and Ghenis 2024)</span>.</p>
+<p><strong>Policy and Parameter</strong> classes define the reform
+system. The Policy class bundles parametric reforms that modify
+tax-benefit system parameters. The Parameter class represents system
+settings (tax rates, benefit thresholds, income limits), while
+ParameterValue supports time-bound values, enabling phased policy
+implementations across multiple years.</p>
+<p><strong>Variable</strong> classes encapsulate country-specific logic.
+Each Variable is a computed quantity (income tax, benefit entitlement)
+with entity mappings. Versioned country models store variables,
+parameters, and execution logic. The framework conditionally imports
+country packages, allowing graceful operation when only one country is
+installed.</p>
+<p><strong>Output classes</strong> provide standardized analysis. These
+include Aggregate for sum, mean, and count statistics; DecileImpact and
+IntraDecileImpact for distributional analysis by income decile; Poverty
+and Inequality for welfare metrics; ChangeAggregate for
+baseline-versus-reform comparisons; and region-specific classes such as
+CongressionalDistrictImpact (US) and ConstituencyImpact (UK). All output
+classes produce PolicyEngine-branded Plotly visualizations.</p>
+<p><strong>Region</strong> classes manage geographic scope, enabling
+sub-national analysis for regions within each country.</p>
 <h1 id="research-impact-statement">Research Impact Statement</h1>
 <p>PolicyEngine has demonstrated research impact across government,
 academia, and policy research in both the US and UK.</p>
@@ -537,38 +530,53 @@ South Carolina) presented the Enhanced Current Population Survey
 methodology at the 117th Annual Conference on Taxation of the National
 Tax Association <span class="citation"
 data-cites="ghenis2024nta">(Ghenis and DeBacker 2024)</span>.</p>
-<p><strong>Academic research.</strong> Matt Unrath (University of
-Southern California) is using PolicyEngine in a study of effective
-marginal and average tax rates facing American families, funded by the
-US Department of Health and Human Services through the Institute for
-Research on Poverty <span class="citation"
-data-cites="pe_usc">(Institute for Research on Poverty 2025)</span>. The
-Beeck Center at Georgetown University featured PolicyEngine in research
-on rules-as-code for US public benefits <span class="citation"
-data-cites="beeck2023rac beeck2025ai">(Kennan et al. 2023, 2025)</span>.
+<p><strong>Academic research.</strong> In the US, Matt Unrath
+(University of Southern California) is using PolicyEngine in a study of
+effective marginal and average tax rates facing American families,
+funded by the US Department of Health and Human Services through the
+Institute for Research on Poverty <span class="citation"
+data-cites="pe_usc">(Institute for Research on Poverty 2025)</span>.
+Jason DeBacker (University of South Carolina) has contributed to
+behavioral response modeling in PolicyEngine US with support from Arnold
+Ventures <span class="citation" data-cites="ghenis2024nta">(Ghenis and
+DeBacker 2024)</span>. The Beeck Center for Social Impact and Innovation
+at Georgetown University featured PolicyEngine as a project spotlight in
+their research on rules-as-code for US public benefits programs <span
+class="citation" data-cites="beeck2023rac">(Kennan et al. 2023)</span>,
+and documented two Policy2Code challenge teams building on PolicyEngine
+in their 2025 report on AI-powered rules as code <span class="citation"
+data-cites="beeck2025ai">(Kennan et al. 2025)</span>. In the UK,
 Youngman et al. <span class="citation"
 data-cites="youngman2026carbon">(Youngman et al. 2026)</span> cite
 PolicyEngine UK’s microdata methodology in their agent-based
-macroeconomic model for the UK’s Seventh Carbon Budget at the Institute
-for New Economic Thinking, Oxford.</p>
+macroeconomic model for the UK’s Seventh Carbon Budget, developed at the
+Institute for New Economic Thinking at Oxford in partnership with the
+Department for Energy Security and Net Zero.</p>
 <p><strong>Policy research.</strong> In the US, the Niskanen Center used
 PolicyEngine to estimate the cost and distributional impacts of Child
-Tax Credit reform options <span class="citation"
+Tax Credit reform options, becoming the first external organization to
+leverage PolicyEngine’s enhanced US microdata <span class="citation"
 data-cites="mccabe2024ctc">(McCabe and Sargeant 2024)</span>. DC
 Councilmember Zachary Parker cited PolicyEngine’s analysis when
-introducing the District Child Tax Credit Amendment Act of 2023, the
-first local child tax credit in US history <span class="citation"
-data-cites="pe_dctc">(Council of the District of Columbia 2023)</span>.
-Senator Cory Booker’s office embedded a PolicyEngine-built calculator on
-his official Senate website for the Keep Your Pay Act <span
-class="citation" data-cites="pe_keepyourpay">(Office of Senator Cory
-Booker 2026)</span>. In the UK, the National Institute of Economic and
-Social Research (NIESR) used PolicyEngine in their UK Living Standards
-Review 2025 <span class="citation" data-cites="niesr2025living">(Mosley
-et al. 2025)</span>, and the Institute of Economic Affairs has published
-PolicyEngine-based analyses of employer National Insurance contributions
-and 2025–2026 tax changes <span class="citation"
-data-cites="woodruff2024nic woodruff2025tax">(Woodruff 2024,
+introducing the District Child Tax Credit Amendment Act of 2023, which
+became the first local child tax credit in US history when it passed in
+September 2024 <span class="citation" data-cites="pe_dctc">(Council of
+the District of Columbia 2023)</span>. Senator Cory Booker’s office
+embedded a PolicyEngine-built calculator on his official Senate website
+for constituents to model the impact of the Keep Your Pay Act on their
+household taxes <span class="citation"
+data-cites="pe_keepyourpay">(Office of Senator Cory Booker 2026)</span>.
+In the UK, the National Institute of Economic and Social Research
+(NIESR) used PolicyEngine in their UK Living Standards Review 2025,
+acknowledging “the expertise and generosity of Nikhil Woodruff and Vahid
+Ahmadi in helping us maximise the benefits of using PolicyEngine” <span
+class="citation" data-cites="niesr2025living">(Mosley et al.
+2025)</span>. The Institute of Economic Affairs has published reports
+using PolicyEngine’s microsimulation model to analyze employer National
+Insurance contributions <span class="citation"
+data-cites="woodruff2024nic">(Woodruff 2024)</span> and the
+distributional impact of 2025–2026 tax changes on UK households <span
+class="citation" data-cites="woodruff2025tax">(Woodruff
 2025)</span>.</p>
 <h1 id="acknowledgements">Acknowledgements</h1>
 <p>This work was supported in the US by Arnold Ventures <span
@@ -594,14 +602,14 @@ for their contributions to model descriptions <span class="citation"
 data-cites="sutherland2014euromod">(Sutherland and Figari
 2013)</span>.</p>
 <h1 id="ai-usage-disclosure">AI Usage Disclosure</h1>
-<p>Generative AI tools — Claude Opus 4 by Anthropic <span
-class="citation" data-cites="claude2025">(Anthropic 2025)</span> — were
-used to assist with code refactoring and drafting of this paper. All
-AI-assisted outputs were reviewed, edited, and validated by human
-authors, who made all core design decisions regarding software
-architecture, policy modeling, and parameter implementation. The authors
-remain fully responsible for the accuracy, originality, and correctness
-of all submitted materials.</p>
+<p>Generative AI tools — Claude by Anthropic <span class="citation"
+data-cites="claude2025">(Anthropic 2025)</span> — were used to assist
+with code refactoring and drafting of this paper. All AI-assisted
+outputs were reviewed, edited, and validated by human authors, who made
+all core design decisions regarding software architecture, policy
+modeling, and parameter implementation. The authors remain fully
+responsible for the accuracy, originality, and correctness of all
+submitted materials.</p>
 <h1 class="unnumbered" id="references">References</h1>
 <div id="refs" class="references csl-bib-body hanging-indent"
 role="list">
@@ -730,11 +738,6 @@ OpenFisca Contributors. 2024. <em><span>OpenFisca</span>: Open Rules as
 Code for Tax-Benefit Systems</em>. Released. <a
 href="https://openfisca.org">https://openfisca.org</a>.
 </div>
-<div id="ref-policyengine_py" class="csl-entry" role="listitem">
-PolicyEngine Contributors. 2026. <em><span
-class="nocase">PolicyEngine.py</span></em>. Released. <a
-href="https://github.com/PolicyEngine/policyengine.py">https://github.com/PolicyEngine/policyengine.py</a>.
-</div>
 <div id="ref-sutherland2014euromod" class="csl-entry" role="listitem">
 Sutherland, Holly, and Francesco Figari. 2013.
 <span>“<span>EUROMOD</span>: The <span>European Union</span> Tax-Benefit
@@ -765,11 +768,12 @@ Budget</span></em>. <a
 href="https://arxiv.org/abs/2602.15607">https://arxiv.org/abs/2602.15607</a>.
 </div>
 </div>
+
   </article>
 </div>
 
 <div class="paper-footer">
-  JOSS Paper Preview &mdash; Generated from <code>paper.md</code> &bull; <a href="https://joss.theoj.org">Journal of Open Source Software</a>
+  JOSS Paper Preview &mdash; Generated from <code>paper.md</code> &bull; <a href="https://joss.theoj.org" style="color:var(--blue-600)">Journal of Open Source Software</a>
 </div>
 
 </body>
