@@ -59,36 +59,9 @@ PolicyEngine is built as a four-layer system. PolicyEngine Core provides reusabl
 
 This split trades some packaging complexity for clearer ownership and release independence. Legislative changes in a country package do not require duplicating shared output logic; methodological changes to distributional analysis do not require modifying statutory formulas; and microdata refreshes can be versioned separately from the modeling libraries. It also supports different contributor workflows, since legal rules, data calibration, and analyst-facing outputs are maintained by overlapping but distinct groups.
 
-As shown in Figure 1, at runtime a simulation combines three inputs: policies from a country model version, household microdata, and optional behavioral response parameters. The following example doubles the US federal standard deduction for single filers and runs a full distributional analysis:
+As shown in Figure 1, at runtime a simulation combines three inputs: policies from a country model version, household microdata, and optional behavioral response parameters. The repository documentation and `examples/` directory include runnable household-level and population-level analyses using this architecture.
 
-```python
-import datetime
-from policyengine.core import Parameter, ParameterValue, Policy, Simulation
-from policyengine.tax_benefit_models.us import (
-    economic_impact_analysis, us_latest,
-)
-
-param = Parameter(
-    name="gov.irs.deductions.standard.amount.SINGLE",
-    tax_benefit_model_version=us_latest,
-)
-reform = Policy(
-    name="Double standard deduction",
-    parameter_values=[
-        ParameterValue(
-            parameter=param,
-            start_date=datetime.date(2026, 1, 1),
-            end_date=datetime.date(2026, 12, 31),
-            value=30_950,
-        ),
-    ],
-)
-baseline = Simulation(tax_benefit_model_version=us_latest)
-reformed = Simulation(tax_benefit_model_version=us_latest, policy=reform)
-analysis = economic_impact_analysis(baseline, reformed)
-```
-
-The `analysis` object contains decile impacts, program-by-program statistics, poverty rates, and inequality metrics. PolicyEngine.py then applies a consistent analysis layer across countries, producing these outputs from the resulting entity-level data.
+These examples produce decile impacts, program-by-program statistics, and inequality metrics using the same country-agnostic analysis layer described above.
 
 PolicyEngine does not include an underlying macroeconomic model in its microsimulation analysis and does not capture general equilibrium effects.
 

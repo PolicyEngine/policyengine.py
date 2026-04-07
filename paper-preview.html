@@ -375,41 +375,40 @@ non-technical users to explore policy reforms in both countries.</p>
 the distributional impacts of fiscal policy. Governments, think tanks,
 and researchers rely on such models to estimate how policy reforms
 affect household incomes, poverty rates, and government budgets.
-However, existing models face significant access barriers. TAXSIM
-<span class="citation" data-cites="taxsim">(Feenberg and Coutts
-1993)</span> at NBER computes only tax liabilities and omits the benefit
-side of the ledger entirely. The models maintained by the
-Congressional Budget Office and the Tax Policy Center are fully
-proprietary and unavailable to external researchers. In the UK, UKMOD
-<span class="citation" data-cites="sutherland2014euromod">(Sutherland and
-Figari 2013)</span>, maintained by the University of Essex, requires a
-formal application and institutional affiliation to access, and the
-models maintained by HM Treasury and the Institute for Fiscal Studies
-are similarly proprietary.</p>
-<p>PolicyEngine addresses these gaps by
-providing an open-source Python microsimulation framework that spans
-multiple countries under a consistent API. Users can supply their own
-microdata or use built-in datasets, and compute the impact of current
-law or hypothetical reforms, including parametric changes to existing
-policy parameters and structural modifications to the tax-benefit
-system, on any household or a national
-population. The Simulation class supports individual household analysis,
-while population-level aggregate analysis uses representative survey
-datasets with calibrated weights. The framework’s open development on GitHub
-enables external validation, community contributions, and reproducible
-policy analysis across countries.</p>
+However, existing models face significant access barriers. TAXSIM <span
+class="citation" data-cites="taxsim">(Feenberg and Coutts 1993)</span>
+at NBER computes only tax liabilities and omits the benefit side of the
+ledger entirely. The models maintained by the Congressional Budget
+Office and the Tax Policy Center are fully proprietary and unavailable
+to external researchers. In the UK, UKMOD <span class="citation"
+data-cites="sutherland2014euromod">(Sutherland and Figari 2013)</span>,
+maintained by the University of Essex, requires a formal application and
+institutional affiliation to access, and the models maintained by HM
+Treasury and the Institute for Fiscal Studies are similarly
+proprietary.</p>
+<p>PolicyEngine addresses these gaps by providing an open-source Python
+microsimulation framework that spans multiple countries under a
+consistent API. Users can supply their own microdata or use built-in
+datasets, and compute the impact of current law or hypothetical reforms,
+including parametric changes to existing policy parameters and
+structural modifications to the tax-benefit system, on any household or
+a national population. The Simulation class supports individual
+household analysis, while population-level aggregate analysis uses
+representative survey datasets with calibrated weights. The framework’s
+open development on GitHub enables external validation, community
+contributions, and reproducible policy analysis across countries.</p>
 <h1 id="state-of-the-field">State of the Field</h1>
-<p>Tax-benefit microsimulation, pioneered by Orcutt <span class="citation"
-data-cites="orcutt1957">(1957)</span> and surveyed by Bourguignon and
-Spadaro <span class="citation"
+<p>Tax-benefit microsimulation, pioneered by Orcutt <span
+class="citation" data-cites="orcutt1957">(1957)</span> and surveyed by
+Bourguignon and Spadaro <span class="citation"
 data-cites="bourguignon2006">(2006)</span>, underpins much of modern
 fiscal policy evaluation. In the US, TAXSIM <span class="citation"
 data-cites="taxsim">(Feenberg and Coutts 1993)</span> at the National
 Bureau of Economic Research provides tax calculations, while the
 Congressional Budget Office and Tax Policy Center maintain proprietary
 models. In the UK, the primary microsimulation models include UKMOD,
-maintained by the Institute for Social and Economic Research
-(ISER), University of Essex, as part of the EUROMOD family <span
+maintained by the Institute for Social and Economic Research (ISER),
+University of Essex, as part of the EUROMOD family <span
 class="citation" data-cites="sutherland2014euromod">(Sutherland and
 Figari 2013)</span>, and proprietary models maintained by HM Treasury
 and the Institute for Fiscal Studies. OpenFisca <span class="citation"
@@ -444,38 +443,38 @@ country-agnostic analysis workflows into PolicyEngine.py, country
 legislation into policyengine-us and policyengine-uk, and enhanced
 survey microdata into companion repositories <span class="citation"
 data-cites="policyengine_core woodruff2024enhanced_cps">(Woodruff et al.
-2024; Woodruff and Ghenis 2024)</span>. This separation allows
-each layer to be versioned and updated independently as legislation,
+2024; Woodruff and Ghenis 2024)</span>. This separation allows each
+layer to be versioned and updated independently as legislation,
 methodology, and microdata change.</li>
 <li><strong>Programmatic reform and economic analysis</strong>: users
 can define hypothetical policy reforms as date-bound parameter values,
-compose multiple reforms, or implement
-structural changes via simulation modifiers, then evaluate impacts on
-households, poverty, inequality, government budgets, and subnational
-regions. Behavioral response modules model labor supply responses
-through income and substitution elasticities, as well as capital gains
-tax responses.</li>
+compose multiple reforms, or implement structural changes via simulation
+modifiers, then evaluate impacts on households, poverty, inequality,
+government budgets, and subnational regions. Behavioral response modules
+model labor supply responses through income and substitution
+elasticities, as well as capital gains tax responses.</li>
 </ul>
 <h1 id="software-design">Software Design</h1>
 <p>PolicyEngine is built as a four-layer system. PolicyEngine Core
-provides reusable simulation abstractions,
-versioned parameters, and dataset interfaces shared across countries
-<span class="citation" data-cites="policyengine_core">(Woodruff et al.
-2024)</span>. PolicyEngine.py adds country-agnostic analyst workflows,
-including baseline-versus-reform comparisons, standardized output types,
-and visualization helpers. The policyengine-us and policyengine-uk
-packages contain statutory logic, variables, and entity structures
-specific to each tax-benefit system. Companion data repositories hold
-enhanced survey microdata and calibration pipelines for the CPS <span class="citation"
-data-cites="woodruff2024enhanced_cps">(Woodruff and Ghenis 2024)</span>
-and Family Resources Survey. Figure 1 illustrates this architecture.</p>
+provides reusable simulation abstractions, versioned parameters, and
+dataset interfaces shared across countries <span class="citation"
+data-cites="policyengine_core">(Woodruff et al. 2024)</span>.
+PolicyEngine.py adds country-agnostic analyst workflows, including
+baseline-versus-reform comparisons, standardized output types, and
+visualization helpers. The policyengine-us and policyengine-uk packages
+contain statutory logic, variables, and entity structures specific to
+each tax-benefit system. Companion data repositories hold enhanced
+survey microdata and calibration pipelines for the CPS <span
+class="citation" data-cites="woodruff2024enhanced_cps">(Woodruff and
+Ghenis 2024)</span> and Family Resources Survey. Figure 1 illustrates
+this architecture.</p>
 <figure>
 <img src="architecture.png" style="width:100.0%"
 alt="PolicyEngine architecture. Policies, household microdata, and behavioral response parameters feed into the Simulation engine, producing distributional impacts, fiscal impacts, regional breakdowns, poverty rates, and inequality metrics." />
-<figcaption aria-hidden="true">PolicyEngine architecture. Policies, household microdata,
-and behavioral response parameters feed into the Simulation engine,
-producing distributional impacts, fiscal impacts, regional breakdowns,
-poverty rates, and inequality metrics.</figcaption>
+<figcaption aria-hidden="true">PolicyEngine architecture. Policies,
+household microdata, and behavioral response parameters feed into the
+Simulation engine, producing distributional impacts, fiscal impacts,
+regional breakdowns, poverty rates, and inequality metrics.</figcaption>
 </figure>
 <p>This split trades some packaging complexity for clearer ownership and
 release independence. Legislative changes in a country package do not
@@ -487,55 +486,30 @@ rules, data calibration, and analyst-facing outputs are maintained by
 overlapping but distinct groups.</p>
 <p>As shown in Figure 1, at runtime a simulation combines three inputs:
 policies from a country model version, household microdata, and optional
-behavioral response parameters. The following example doubles the US
-federal standard deduction for single filers and runs a full
-distributional analysis:</p>
-<pre><code class="language-python">import datetime
-from policyengine.core import Parameter, ParameterValue, Policy, Simulation
-from policyengine.tax_benefit_models.us import (
-    economic_impact_analysis, us_latest,
-)
-
-param = Parameter(
-    name="gov.irs.deductions.standard.amount.SINGLE",
-    tax_benefit_model_version=us_latest,
-)
-reform = Policy(
-    name="Double standard deduction",
-    parameter_values=[
-        ParameterValue(
-            parameter=param,
-            start_date=datetime.date(2026, 1, 1),
-            end_date=datetime.date(2026, 12, 31),
-            value=30_950,
-        ),
-    ],
-)
-baseline = Simulation(tax_benefit_model_version=us_latest)
-reformed = Simulation(tax_benefit_model_version=us_latest, policy=reform)
-analysis = economic_impact_analysis(baseline, reformed)</code></pre>
-<p>The <code>analysis</code> object contains decile impacts,
-program-by-program statistics, poverty rates, and inequality metrics.
-PolicyEngine.py then applies a consistent analysis layer across
-countries, producing these outputs from the resulting entity-level
-data.</p>
-<p>PolicyEngine does not include an underlying macroeconomic model in its
-microsimulation analysis and does not capture general equilibrium effects.</p>
+behavioral response parameters. The repository documentation and
+<code>examples/</code> directory include runnable household-level and
+population-level analyses using this architecture.</p>
+<p>These examples produce decile impacts, program-by-program statistics,
+and inequality metrics using the same country-agnostic analysis layer
+described above.</p>
+<p>PolicyEngine does not include an underlying macroeconomic model in
+its microsimulation analysis and does not capture general equilibrium
+effects.</p>
 <h1 id="research-impact-statement">Research Impact Statement</h1>
 <p>PolicyEngine has demonstrated research impact across government,
 academia, and policy research in both the US and the UK.</p>
 <p><strong>Government adoption.</strong> In the UK, co-author Nikhil
-Woodruff served as an Innovation Fellow in 2025–2026 with 10DS, the
-data science team at 10 Downing Street, adapting PolicyEngine for
-government use <span class=”citation” data-cites=”ghenis2026no10”>(HM
-Government 2025)</span>. The 10DS team used PolicyEngine to estimate the
-impacts of policy reforms on living standards, local area incomes, and
-distributional outcomes. HM Treasury has formally documented PolicyEngine
-in the UK Algorithmic Transparency Recording Standard, describing it as
-a model their Personal Tax, Welfare and Pensions team is exploring for
-“advising policymakers on the impact of tax and welfare measures on
-households” <span class=”citation” data-cites=”hmt2024atrs”>(HM Treasury
-2024)</span>.</p>
+Woodruff served as an Innovation Fellow in 2025–2026 with 10DS, the data
+science team at 10 Downing Street, adapting PolicyEngine for government
+use <span class="citation" data-cites="ghenis2026no10">(HM Government
+2025)</span>. The 10DS team used PolicyEngine to estimate the impacts of
+policy reforms on living standards, local area incomes, and
+distributional outcomes. HM Treasury has formally documented
+PolicyEngine in the UK Algorithmic Transparency Recording Standard,
+describing it as a model their Personal Tax, Welfare and Pensions team
+is exploring for “advising policymakers on the impact of tax and welfare
+measures on households” <span class="citation"
+data-cites="hmt2024atrs">(HM Treasury 2024)</span>.</p>
 <p><strong>Congressional and parliamentary citation.</strong> In the US,
 Representatives Morgan McGarvey and Bonnie Watson Coleman cited
 PolicyEngine’s analysis in introducing the Young Adult Tax Credit Act
@@ -555,20 +529,19 @@ of Lords 2026)</span>.</p>
 National Bureau of Economic Research (NBER) signed a formal memorandum
 of understanding for PolicyEngine to develop an open-source TAXSIM
 emulator, a drop-in replacement for TAXSIM-35 powered by PolicyEngine’s
-microsimulation engine with support for Python, R, Stata, SAS, and
-Julia <span class="citation" data-cites="pe_nber_mou">(Feenberg
-2024)</span>. The Federal Reserve Bank of Atlanta independently
-validates PolicyEngine’s model through its Policy Rules Database,
-conducting three-way comparisons between PolicyEngine, TAXSIM, and the
-Fed’s own models <span class="citation"
-data-cites="atlanta_fed_prd">(Federal Reserve Bank of Atlanta
-2021)</span>. Co-author Max Ghenis and Jason DeBacker (University of
-South Carolina) presented the Enhanced Current Population Survey
-methodology at the 117th Annual Conference on Taxation of the National
-Tax Association <span class="citation"
+microsimulation engine with support for Python, R, Stata, SAS, and Julia
+<span class="citation" data-cites="pe_nber_mou">(Feenberg 2024)</span>.
+The Federal Reserve Bank of Atlanta independently validates
+PolicyEngine’s model through its Policy Rules Database, conducting
+three-way comparisons between PolicyEngine, TAXSIM, and the Fed’s own
+models <span class="citation" data-cites="atlanta_fed_prd">(Federal
+Reserve Bank of Atlanta 2021)</span>. Co-author Max Ghenis and Jason
+DeBacker (University of South Carolina) presented the Enhanced Current
+Population Survey methodology at the 117th Annual Conference on Taxation
+of the National Tax Association <span class="citation"
 data-cites="ghenis2024nta">(Ghenis and DeBacker 2024)</span>.</p>
-<p><strong>Academic research.</strong> The Better Government Lab, a joint
-center of the Georgetown McCourt School of Public Policy and the
+<p><strong>Academic research.</strong> The Better Government Lab, a
+joint center of the Georgetown McCourt School of Public Policy and the
 University of Michigan Ford School of Public Policy, collaborated with
 PolicyEngine on benefits eligibility research <span class="citation"
 data-cites="pe_bgl">(Ghenis 2024b)</span>. Matt Unrath (University of
@@ -581,10 +554,10 @@ Beeck Center at Georgetown University featured PolicyEngine in research
 on rules-as-code for US public benefits <span class="citation"
 data-cites="beeck2023rac beeck2025ai">(Kennan et al. 2023, 2025)</span>.
 Youngman et al. <span class="citation"
-data-cites="youngman2026carbon">(2026)</span> cite
-PolicyEngine UK’s microdata methodology in their agent-based
-macroeconomic model for the UK’s Seventh Carbon Budget at the Institute
-for New Economic Thinking, Oxford.</p>
+data-cites="youngman2026carbon">(2026)</span> cite PolicyEngine UK’s
+microdata methodology in their agent-based macroeconomic model for the
+UK’s Seventh Carbon Budget at the Institute for New Economic Thinking,
+Oxford.</p>
 <p><strong>Policy research.</strong> In the US, the Niskanen Center used
 PolicyEngine to estimate the cost and distributional impacts of Child
 Tax Credit reform options <span class="citation"
@@ -626,12 +599,11 @@ the Family Resources Survey.</p>
 <h1 id="ai-usage-disclosure">AI Usage Disclosure</h1>
 <p>Generative AI tools, specifically Claude Opus 4 by Anthropic <span
 class="citation" data-cites="claude2026">(Anthropic 2026)</span>, were
-used to assist with code refactoring. All
-AI-assisted outputs were reviewed, edited, and validated by human
-authors, who made all core design decisions regarding software
-architecture, policy modeling, and parameter implementation. The authors
-remain fully responsible for the accuracy, originality, and correctness
-of all submitted materials.</p>
+used to assist with code refactoring. All AI-assisted outputs were
+reviewed, edited, and validated by human authors, who made all core
+design decisions regarding software architecture, policy modeling, and
+parameter implementation. The authors remain fully responsible for the
+accuracy, originality, and correctness of all submitted materials.</p>
 <h1 class="unnumbered" id="references">References</h1>
 <div id="refs" class="references csl-bib-body hanging-indent"
 role="list">
@@ -644,10 +616,9 @@ Arnold Ventures. 2023. <em>Public Finance Program</em>. <a
 href="https://www.arnoldventures.org/work/public-finance">https://www.arnoldventures.org/work/public-finance</a>.
 </div>
 <div id="ref-bourguignon2006" class="csl-entry" role="listitem">
-Bourguignon, François, and Amedeo Spadaro. 2006.
-<span>"Microsimulation as a Tool for Evaluating Redistribution
-Policies."</span> <em>The Journal of Economic Inequality</em> 4:
-77–106. <a
+Bourguignon, François, and Amedeo Spadaro. 2006. <span>“Microsimulation
+as a Tool for Evaluating Redistribution Policies.”</span> <em>The
+Journal of Economic Inequality</em> 4: 77–106. <a
 href="https://doi.org/10.1007/s10888-005-9012-6">https://doi.org/10.1007/s10888-005-9012-6</a>.
 </div>
 <div id="ref-pe_dctc" class="csl-entry" role="listitem">
@@ -686,12 +657,6 @@ Ghenis, Max, and Jason DeBacker. 2024. <em>Enhanced <span>Current
 Population Survey</span>: Integrating <span>IRS</span> Public Use File
 Data Using Quantile Regression Forests</em>. <a
 href="https://ntanet.org/2024/07/117th-annual-conference-on-taxation-full/">https://ntanet.org/2024/07/117th-annual-conference-on-taxation-full/</a>.
-</div>
-<div id="ref-woodruff2024enhanced_cps" class="csl-entry" role="listitem">
-Woodruff, Nikhil, and Max Ghenis. 2024. <em>Enhancing Survey Microdata
-with Administrative Records: A Novel Approach to Microsimulation Dataset
-Construction</em>. PolicyEngine working paper. <a
-href="https://github.com/PolicyEngine/policyengine-us-data/tree/main/paper">https://github.com/PolicyEngine/policyengine-us-data/tree/main/paper</a>.
 </div>
 <div id="ref-ghenis2026no10" class="csl-entry" role="listitem">
 HM Government. 2025. <em>The <span>No10 Innovation Fellowship</span>
@@ -762,16 +727,15 @@ Office of Senator Cory Booker. 2026. <em>Booker Announces <span>Keep
 Your Pay Act</span></em>. <a
 href="https://www.booker.senate.gov/news/press/booker-announces-keep-your-pay-act">https://www.booker.senate.gov/news/press/booker-announces-keep-your-pay-act</a>.
 </div>
-<div id="ref-orcutt1957" class="csl-entry" role="listitem">
-Orcutt, Guy H. 1957. <span>"A New Type of Socio-Economic
-System."</span> <em>Review of Economics and Statistics</em> 39 (2):
-116–23. <a
-href="https://doi.org/10.2307/1928528">https://doi.org/10.2307/1928528</a>.
-</div>
 <div id="ref-openfisca" class="csl-entry" role="listitem">
 OpenFisca Contributors. 2024. <em><span>OpenFisca</span>: Open Rules as
 Code for Tax-Benefit Systems</em>. Released. <a
 href="https://openfisca.org">https://openfisca.org</a>.
+</div>
+<div id="ref-orcutt1957" class="csl-entry" role="listitem">
+Orcutt, Guy H. 1957. <span>“A New Type of Socio-Economic System.”</span>
+<em>Review of Economics and Statistics</em> 39 (2): 116–23. <a
+href="https://doi.org/10.2307/1928528">https://doi.org/10.2307/1928528</a>.
 </div>
 <div id="ref-policyengine_py" class="csl-entry" role="listitem">
 PolicyEngine Contributors. 2026. <em><span
@@ -794,6 +758,13 @@ href="https://iea.org.uk/publications/raising-employer-nic-in-the-autumn-budget/
 Woodruff, Nikhil. 2025. <em>Impact of Tax Changes 2025–2026</em>.
 Institute of Economic Affairs. <a
 href="https://iea.org.uk/publications/impact-of-tax-changes-2025-2026/">https://iea.org.uk/publications/impact-of-tax-changes-2025-2026/</a>.
+</div>
+<div id="ref-woodruff2024enhanced_cps" class="csl-entry"
+role="listitem">
+Woodruff, Nikhil, and Max Ghenis. 2024. <span>“Enhancing Survey
+Microdata with Administrative Records: A Novel Approach to
+Microsimulation Dataset Construction.”</span> <a
+href="https://github.com/PolicyEngine/policyengine-us-data/tree/main/paper">https://github.com/PolicyEngine/policyengine-us-data/tree/main/paper</a>.
 </div>
 <div id="ref-policyengine_core" class="csl-entry" role="listitem">
 Woodruff, Nikhil, Max Ghenis, and Anthony Volk. 2024.
