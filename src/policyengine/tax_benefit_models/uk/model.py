@@ -108,6 +108,8 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
             # Income and benefits
             "universal_credit",
             "child_benefit",
+            "pension_credit",
+            "income_support",
             "working_tax_credit",
             "child_tax_credit",
         ],

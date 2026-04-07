@@ -202,33 +202,32 @@ def economic_impact_analysis(
 
     # Decile impact
     decile_impacts = calculate_decile_impacts(
-        dataset=baseline_simulation.dataset,
-        tax_benefit_model_version=baseline_simulation.tax_benefit_model_version,
-        baseline_policy=baseline_simulation.policy,
-        reform_policy=reform_simulation.policy,
-        dynamic=baseline_simulation.dynamic,
+        baseline_simulation=baseline_simulation,
+        reform_simulation=reform_simulation,
     )
 
     # Major programmes to analyse
     programmes = {
         # Tax
-        "income_tax": {"entity": "person", "is_tax": True},
-        "national_insurance": {"entity": "person", "is_tax": True},
-        "vat": {"entity": "household", "is_tax": True},
-        "council_tax": {"entity": "household", "is_tax": True},
+        "income_tax": {"is_tax": True},
+        "national_insurance": {"is_tax": True},
+        "vat": {"is_tax": True},
+        "council_tax": {"is_tax": True},
         # Benefits
-        "universal_credit": {"entity": "person", "is_tax": False},
-        "child_benefit": {"entity": "person", "is_tax": False},
-        "pension_credit": {"entity": "person", "is_tax": False},
-        "income_support": {"entity": "person", "is_tax": False},
-        "working_tax_credit": {"entity": "person", "is_tax": False},
-        "child_tax_credit": {"entity": "person", "is_tax": False},
+        "universal_credit": {"is_tax": False},
+        "child_benefit": {"is_tax": False},
+        "pension_credit": {"is_tax": False},
+        "income_support": {"is_tax": False},
+        "working_tax_credit": {"is_tax": False},
+        "child_tax_credit": {"is_tax": False},
     }
 
     programme_statistics = []
 
     for programme_name, programme_info in programmes.items():
-        entity = programme_info["entity"]
+        entity = baseline_simulation.tax_benefit_model_version.get_variable(
+            programme_name
+        ).entity
         is_tax = programme_info["is_tax"]
 
         stats = ProgrammeStatistics(
