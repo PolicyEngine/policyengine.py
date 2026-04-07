@@ -13,7 +13,7 @@ Thanks for contributing to PolicyEngine.py.
 ```bash
 git clone https://github.com/PolicyEngine/policyengine.py.git
 cd policyengine.py
-uv pip install -e .[dev]
+uv pip install -e ".[dev]"
 ```
 
 This installs the package, both country models, and the development tools used in CI.
@@ -32,8 +32,7 @@ make test
 Documentation changes can be checked with:
 
 ```bash
-cd docs
-myst build --html
+make docs
 ```
 
 Tests that download representative datasets require a `HUGGING_FACE_TOKEN`:

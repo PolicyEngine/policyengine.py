@@ -3,10 +3,10 @@
 all: build-package
 
 docs:
-	cd docs && jupyter book start
+	cd docs && npx mystmd build --html
 
 install:
-	uv pip install -e .[dev]
+	uv pip install -e ".[dev]"
 
 format:
 	ruff format .

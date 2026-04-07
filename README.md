@@ -4,6 +4,12 @@ A Python package for tax-benefit microsimulation analysis. Run policy simulation
 
 ## Quick start
 
+Install the UK country model first:
+
+```bash
+pip install "policyengine[uk]"
+```
+
 ```python
 from policyengine.core import Simulation
 from policyengine.outputs.aggregate import Aggregate, AggregateType
@@ -35,6 +41,15 @@ agg.run()
 print(f"Total UC spending: £{agg.result / 1e9:.1f}bn")
 ```
 
+## Smoke test
+
+To verify a fresh install without downloading representative datasets:
+
+```bash
+pip install "policyengine[uk,us]"
+python examples/household_impact_example.py
+```
+
 ## Documentation
 
 **Core concepts:**
@@ -55,11 +70,13 @@ print(f"Total UC spending: £{agg.result / 1e9:.1f}bn")
 pip install policyengine
 ```
 
-This installs both UK and US country models. To install only one:
+This installs the shared analysis layer only. Add country model extras for the
+systems you want to analyze:
 
 ```bash
-pip install policyengine[uk]    # UK model only
-pip install policyengine[us]    # US model only
+pip install "policyengine[uk]"      # shared layer + UK model
+pip install "policyengine[us]"      # shared layer + US model
+pip install "policyengine[uk,us]"   # shared layer + both country models
 ```
 
 ### For development
@@ -67,7 +84,7 @@ pip install policyengine[us]    # US model only
 ```bash
 git clone https://github.com/PolicyEngine/policyengine.py.git
 cd policyengine.py
-uv pip install -e .[dev]        # install with dev dependencies (pytest, ruff, mypy, etc.)
+uv pip install -e ".[dev]"      # install with dev dependencies (pytest, ruff, mypy, etc.)
 ```
 
 ## Development
@@ -76,17 +93,18 @@ uv pip install -e .[dev]        # install with dev dependencies (pytest, ruff, m
 
 | Configuration | Install | Use case |
 |---------------|---------|----------|
-| **Library user** | `pip install policyengine` | Using the package in your own code |
-| **UK only** | `pip install policyengine[uk]` | Only need UK simulations |
-| **US only** | `pip install policyengine[us]` | Only need US simulations |
-| **Developer** | `uv pip install -e .[dev]` | Contributing to the package |
+| **Library user** | `pip install policyengine` | Shared analysis layer only |
+| **UK only** | `pip install "policyengine[uk]"` | Shared layer plus UK simulations |
+| **US only** | `pip install "policyengine[us]"` | Shared layer plus US simulations |
+| **Both countries** | `pip install "policyengine[uk,us]"` | Shared layer plus UK and US simulations |
+| **Developer** | `uv pip install -e ".[dev]"` | Contributing to the package |
 
 ### Common commands
 
 ```bash
 make format           # ruff format
 make test             # pytest with coverage
-make docs             # build Jupyter Book documentation
+make docs             # run the MyST docs build used in CI via npx
 make clean            # remove caches, build artifacts, .h5 files
 ```
 
@@ -124,7 +142,7 @@ PRs trigger the following checks:
 | Tests (Python 3.13) | Required | `make test` |
 | Tests (Python 3.14) | Required | `make test` |
 | Mypy | Informational | `mypy src/policyengine` |
-| Docs build | Required | Jupyter Book build |
+| Docs build | Required | `make docs` |
 
 ### Versioning and releases
 
