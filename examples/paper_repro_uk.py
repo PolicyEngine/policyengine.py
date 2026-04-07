@@ -7,12 +7,12 @@ Run:
     uv run --python 3.14 --extra uk python examples/paper_repro_uk.py
 """
 
-import datetime
+from datetime import date
 
 from policyengine.core import Parameter, ParameterValue, Policy, Simulation
 from policyengine.tax_benefit_models.uk import (
-    ensure_datasets,
     economic_impact_analysis,
+    ensure_datasets,
     uk_latest,
 )
 
@@ -38,8 +38,8 @@ def create_reform(year: int = 2026) -> Policy:
         parameter_values=[
             ParameterValue(
                 parameter=parameter,
-                start_date=datetime.date(year, 1, 1),
-                end_date=datetime.date(year, 12, 31),
+                start_date=date(year, 1, 1),
+                end_date=date(year, 12, 31),
                 value=0,
             )
         ],
