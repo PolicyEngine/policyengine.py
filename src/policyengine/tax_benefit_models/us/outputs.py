@@ -1,18 +1,13 @@
 """US-specific output templates."""
 
-from typing import TYPE_CHECKING
-
 from pydantic import ConfigDict
 
-from policyengine.core import Output
+from policyengine.core import Output, Simulation
 from policyengine.outputs.aggregate import Aggregate, AggregateType
 from policyengine.outputs.change_aggregate import (
     ChangeAggregate,
     ChangeAggregateType,
 )
-
-if TYPE_CHECKING:
-    from policyengine.core.simulation import Simulation
 
 
 class ProgramStatistics(Output):
@@ -20,8 +15,8 @@ class ProgramStatistics(Output):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    baseline_simulation: "Simulation"
-    reform_simulation: "Simulation"
+    baseline_simulation: Simulation
+    reform_simulation: Simulation
     program_name: str
     entity: str
     is_tax: bool = False

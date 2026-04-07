@@ -97,32 +97,48 @@ class DecileImpact(Output):
 
 
 def calculate_decile_impacts(
-    dataset: Dataset,
-    tax_benefit_model_version: TaxBenefitModelVersion,
+    dataset: Dataset | None = None,
+    tax_benefit_model_version: TaxBenefitModelVersion | None = None,
     baseline_policy: Policy | None = None,
     reform_policy: Policy | None = None,
     dynamic: Dynamic | None = None,
     income_variable: str = "equiv_hbai_household_net_income",
     entity: str | None = None,
     quantiles: int = 10,
+    baseline_simulation: Simulation | None = None,
+    reform_simulation: Simulation | None = None,
 ) -> OutputCollection[DecileImpact]:
     """Calculate decile-by-decile impact of a reform.
 
     Returns:
         OutputCollection containing list of DecileImpact objects and DataFrame
     """
-    baseline_simulation = Simulation(
-        dataset=dataset,
-        tax_benefit_model_version=tax_benefit_model_version,
-        policy=baseline_policy,
-        dynamic=dynamic,
-    )
-    reform_simulation = Simulation(
-        dataset=dataset,
-        tax_benefit_model_version=tax_benefit_model_version,
-        policy=reform_policy,
-        dynamic=dynamic,
-    )
+    if (baseline_simulation is None) != (reform_simulation is None):
+        raise ValueError(
+            "baseline_simulation and reform_simulation must be provided together"
+        )
+
+    if baseline_simulation is None:
+        if dataset is None or tax_benefit_model_version is None:
+            raise ValueError(
+                "dataset and tax_benefit_model_version are required when simulations are not provided"
+            )
+
+        baseline_simulation = Simulation(
+            dataset=dataset,
+            tax_benefit_model_version=tax_benefit_model_version,
+            policy=baseline_policy,
+            dynamic=dynamic,
+        )
+        reform_simulation = Simulation(
+            dataset=dataset,
+            tax_benefit_model_version=tax_benefit_model_version,
+            policy=reform_policy,
+            dynamic=dynamic,
+        )
+
+    baseline_simulation.ensure()
+    reform_simulation.ensure()
 
     results = []
     for decile in range(1, quantiles + 1):

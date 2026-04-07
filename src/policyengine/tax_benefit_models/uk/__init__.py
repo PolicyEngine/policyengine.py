@@ -31,6 +31,7 @@ if find_spec("policyengine_uk") is not None:
     UKYearData.model_rebuild()
     PolicyEngineUKDataset.model_rebuild()
     PolicyEngineUKLatest.model_rebuild()
+    ProgrammeStatistics.model_rebuild()
 
     __all__ = [
         "UKYearData",
