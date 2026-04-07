@@ -42,13 +42,18 @@ PolicyEngine addresses these gaps by providing an open-source Python microsimula
 
 Tax-benefit microsimulation, pioneered by Orcutt [-@orcutt1957] and surveyed by Bourguignon and Spadaro [-@bourguignon2006], underpins much of modern fiscal policy evaluation. In the US, TAXSIM [@taxsim] at the National Bureau of Economic Research provides tax calculations, while the Congressional Budget Office and Tax Policy Center maintain proprietary models. In the UK, the primary microsimulation models include UKMOD, maintained by the Institute for Social and Economic Research (ISER), University of Essex, as part of the EUROMOD family [@sutherland2014euromod], and proprietary models maintained by HM Treasury and the Institute for Fiscal Studies. OpenFisca [@openfisca] pioneered the open-source approach to tax-benefit microsimulation in France. PolicyEngine originated from OpenFisca and builds on this foundation through the PolicyEngine Core framework [@policyengine_core].
 
-The country packages already support direct microsimulation analysis, and many one-off weighted calculations can be written against those APIs alone. PolicyEngine.py was introduced for a different need: a reusable analyst-facing layer for workflows that recur across projects and countries. In practice, these include harmonized dataset management, a stable baseline-versus-reform pattern, structured output types for distributional and regional analysis, and interfaces suitable for downstream dashboards and reports. This design lets country model packages focus on statutory rules while shared analysis methods evolve independently.
+The country packages already support direct microsimulation analysis and one-off weighted calculations. PolicyEngine.py was introduced for a different need: a reusable analyst-facing layer for workflows that recur across projects and countries. In practice, these include harmonized dataset management, a stable baseline-versus-reform pattern, structured output types for distributional and regional analysis, and interfaces suitable for downstream dashboards and reports. This design lets country model packages focus on statutory rules while shared analysis methods evolve independently.
 
-PolicyEngine.py differentiates itself in several ways:
+Several practical differences motivate a separate analyst layer:
 
-- **Cross-country analyst workflow**: a single package provides shared `Simulation`, `Policy`, and dataset-management patterns for analogous UK and US analyses, despite differences in the lower-level country-package APIs.
-- **Standardized reform-analysis outputs**: reusable functions and objects such as `economic_impact_analysis()`, `ChangeAggregate`, poverty and inequality metrics, and geographic impact outputs replace repeated project-specific grouping and weighting code.
-- **Separated modeling, analysis, and data layers**: the project splits reusable engine logic into PolicyEngine Core, analyst workflows into PolicyEngine.py, country legislation into policyengine-us and policyengine-uk, and enhanced survey microdata into companion repositories [@policyengine_core; @woodruff2024enhanced_cps]. This separation allows each layer to be versioned and updated independently as legislation, methodology, and microdata change.
+| Dimension | PolicyEngine.py | TAXSIM | UKMOD | OpenFisca |
+|---|---|---|---|---|
+| Open source | Yes | Partial | No | Yes |
+| Main supported workflow | US and UK | US | UK | France, with additional country packages and forks |
+| Tax and benefit analysis | Yes | Tax only | Yes | Yes |
+| Shared analyst-facing reform and output workflow across supported countries | Yes | No | No | Country-specific |
+
+Compared with these tools, PolicyEngine.py's contribution is not a new legislative engine for a single country. It is a shared analysis layer that sits above country models and makes repeated reform-analysis workflows portable across supported countries. The project also separates reusable engine logic into PolicyEngine Core, analyst workflows into PolicyEngine.py, country legislation into policyengine-us and policyengine-uk, and enhanced survey microdata into companion repositories [@policyengine_core; @woodruff2024enhanced_cps]. This separation allows each layer to be versioned and updated independently as legislation, methodology, and microdata change.
 
 # Software Design
 

@@ -6,22 +6,23 @@ A Python package for tax-benefit microsimulation analysis. Run policy simulation
 
 ```python
 from policyengine.core import Simulation
-from policyengine.tax_benefit_models.uk import PolicyEngineUKDataset, uk_latest
 from policyengine.outputs.aggregate import Aggregate, AggregateType
+from policyengine.tax_benefit_models.uk import ensure_datasets, uk_latest
 
-# Load representative microdata
-dataset = PolicyEngineUKDataset(
-    name="FRS 2023-24",
-    filepath="./data/frs_2023_24_year_2026.h5",
-    year=2026,
+# First run downloads representative microdata to ./data; later runs reuse it
+datasets = ensure_datasets(
+    datasets=["hf://policyengine/policyengine-uk-data/enhanced_frs_2023_24.h5"],
+    years=[2026],
+    data_folder="./data",
 )
+dataset = datasets["enhanced_frs_2023_24_2026"]
 
 # Run simulation
 simulation = Simulation(
     dataset=dataset,
     tax_benefit_model_version=uk_latest,
 )
-simulation.run()
+simulation.ensure()
 
 # Calculate total universal credit spending
 agg = Aggregate(
@@ -152,14 +153,14 @@ On merge, the versioning workflow bumps the version, builds the changelog, and c
 Datasets contain microdata at entity level (person, household, tax unit). Load representative data or create custom scenarios:
 
 ```python
-from policyengine.tax_benefit_models.uk import PolicyEngineUKDataset
+from policyengine.tax_benefit_models.uk import ensure_datasets
 
-dataset = PolicyEngineUKDataset(
-    name="Representative data",
-    filepath="./data/frs_2023_24_year_2026.h5",
-    year=2026,
+datasets = ensure_datasets(
+    datasets=["hf://policyengine/policyengine-uk-data/enhanced_frs_2023_24.h5"],
+    years=[2026],
+    data_folder="./data",
 )
-dataset.load()
+dataset = datasets["enhanced_frs_2023_24_2026"]
 ```
 
 ### Simulations
@@ -263,7 +264,7 @@ Key taxes: Federal income tax, payroll tax
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
+See [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md) for development setup and guidelines.
 
 ## License
 
