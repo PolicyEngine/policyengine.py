@@ -332,12 +332,12 @@ body {
     <h1 class="paper-title">PolicyEngine: A Tax-Benefit Microsimulation Framework</h1>
     <div class="authors-grid">
       <span class="author-name">Max Ghenis<sup>1</sup></span>
+      <span class="author-name">Vahid Ahmadi<sup>1</sup> <span class="corr">*</span></span>
       <span class="author-name">Nikhil Woodruff<sup>1</sup></span>
       <span class="author-name">Pavel Makarchuk<sup>1</sup></span>
-      <span class="author-name">Vahid Ahmadi<sup>1</sup> <span class="corr">*</span></span>
     </div>
     <div class="affiliation-line"><sup>1</sup> PolicyEngine</div>
-    <div class="date-line">2 April 2026</div>
+    <div class="date-line">7 April 2026</div>
     <div class="tags-row">
       <span class="tag">Python</span>
       <span class="tag">microsimulation</span>
@@ -385,22 +385,25 @@ non-technical users to explore policy reforms in both countries.</p>
 the distributional impacts of fiscal policy. Governments, think tanks,
 and researchers rely on such models to estimate how policy reforms
 affect household incomes, poverty rates, and government budgets.
-Existing microsimulation models face significant access barriers. TAXSIM
+However, existing models face significant access barriers. TAXSIM
 <span class="citation" data-cites="taxsim">(Feenberg and Coutts
 1993)</span> at NBER computes only tax liabilities and omits the benefit
-side of the ledger entirely. The models maintained by the Congressional
-Budget Office and the Tax Policy Center are fully proprietary and
-unavailable to external researchers. In the UK, UKMOD <span
-class="citation" data-cites="sutherland2014euromod">(Sutherland and
+side of the ledger entirely. The models maintained by the
+Congressional Budget Office and the Tax Policy Center are fully
+proprietary and unavailable to external researchers. In the UK, UKMOD
+<span class="citation" data-cites="sutherland2014euromod">(Sutherland and
 Figari 2013)</span>, maintained by the University of Essex, requires a
 formal application and institutional affiliation to access, and the
 models maintained by HM Treasury and the Institute for Fiscal Studies
-are similarly proprietary. PolicyEngine addresses these gaps by
-providing a fully open-source Python microsimulation framework that
+are similarly proprietary.</p>
+<p>PolicyEngine addresses these gaps by
+providing an open-source Python microsimulation framework that
 spans multiple countries under a consistent API. Users can supply their
 own microdata or use built-in datasets, and compute the impact of
-current law or hypothetical policy reforms on any household or a full
-national population. The Simulation class supports individual household
+current law or hypothetical reforms, including parametric changes to
+existing policy parameters and structural modifications to the tax-benefit
+system, on any household or a national
+population. The Simulation class supports individual household
 analysis, while population-level aggregate analysis uses representative
 survey datasets with calibrated weights. The framework’s open
 development on GitHub enables external validation, community
@@ -437,13 +440,13 @@ devolved policies in Scotland and Wales.</li>
 <li><strong>Programmatic reform and economic analysis</strong>: users
 can define hypothetical policy reforms as parameter dictionaries with
 date-bound values, compose multiple reforms, or implement structural
-changes — and evaluate their impact on any household or the full
+changes, and evaluate their impact on any household or the full
 population. Built-in output classes compute decile impacts, intra-decile
 distributions, poverty rates, inequality metrics (Gini coefficients),
 budgetary impacts, and regional breakdowns (US congressional districts,
-UK parliamentary constituencies). Behavioral response modules model both
-intensive margin (hours adjustment) and extensive margin (participation)
-labor supply responses to policy changes.</li>
+UK parliamentary constituencies). Behavioral response modules model labor supply responses
+through income and substitution elasticities, as well as capital gains
+tax responses.</li>
 </ul>
 <h1 id="software-design">Software Design</h1>
 <p>PolicyEngine is built on the PolicyEngine Core framework, which
@@ -455,8 +458,8 @@ interface. The Simulation class executes tax-benefit models on datasets,
 applying policy reforms and caching results. The Dataset class
 represents microdata containing entity-level data (persons, households,
 tax units) with survey weights and entity relationships.
-Country-specific datasets — the Current Population Survey for the US and
-the Enhanced Family Resources Survey for the UK — are loaded from
+Country-specific datasets, the Current Population Survey for the US and
+the Enhanced Family Resources Survey for the UK, are loaded from
 companion data repositories <span class="citation"
 data-cites="woodruff2024enhanced_cps">(Woodruff and Ghenis 2024)</span>.</p>
 <p><strong>Policy and Parameter</strong> classes define the reform
@@ -482,23 +485,19 @@ classes produce PolicyEngine-branded Plotly visualizations.</p>
 sub-national analysis for regions within each country.</p>
 <h1 id="research-impact-statement">Research Impact Statement</h1>
 <p>PolicyEngine has demonstrated research impact across government,
-academia, and policy research in both the US and UK.</p>
-<p><strong>Government adoption.</strong> In the US, PolicyEngine
-collaborated with the Better Government Lab — a joint center of the
-Georgetown McCourt School of Public Policy and the University of
-Michigan Ford School of Public Policy — on benefits eligibility research
-<span class="citation" data-cites="pe_bgl">(Ghenis 2024b)</span>. In the
-UK, co-author Nikhil Woodruff served as an Innovation Fellow in
-2025–2026 with 10DS — the data science team at 10 Downing Street —
-adapting PolicyEngine for government use <span class="citation"
-data-cites="ghenis2026no10">(HM Government 2025)</span>. The 10DS team
-used PolicyEngine to rapidly estimate the impacts of policy reforms on
-living standards, local area incomes, and distributional outcomes. HM
-Treasury has also formally documented PolicyEngine in the UK Algorithmic
-Transparency Recording Standard, describing it as a model their Personal
-Tax, Welfare and Pensions team is exploring for “advising policymakers
-on the impact of tax and welfare measures on households” <span
-class="citation" data-cites="hmt2024atrs">(HM Treasury 2024)</span>.</p>
+academia, and policy research in both the US and the UK.</p>
+<p><strong>Government adoption.</strong> In the UK, co-author Nikhil
+Woodruff served as an Innovation Fellow in 2025–2026 with 10DS, the
+data science team at 10 Downing Street, adapting PolicyEngine for
+government use <span class=”citation” data-cites=”ghenis2026no10”>(HM
+Government 2025)</span>. The 10DS team used PolicyEngine to estimate the
+impacts of policy reforms on living standards, local area incomes, and
+distributional outcomes. HM Treasury has formally documented PolicyEngine
+in the UK Algorithmic Transparency Recording Standard, describing it as
+a model their Personal Tax, Welfare and Pensions team is exploring for
+“advising policymakers on the impact of tax and welfare measures on
+households” <span class=”citation” data-cites=”hmt2024atrs”>(HM Treasury
+2024)</span>.</p>
 <p><strong>Congressional and parliamentary citation.</strong> In the US,
 Representatives Morgan McGarvey and Bonnie Watson Coleman cited
 PolicyEngine’s analysis in introducing the Young Adult Tax Credit Act
@@ -517,7 +516,7 @@ of Lords 2026)</span>.</p>
 <p><strong>Institutional partnership.</strong> PolicyEngine and the
 National Bureau of Economic Research (NBER) signed a formal memorandum
 of understanding for PolicyEngine to develop an open-source TAXSIM
-emulator — a drop-in replacement for TAXSIM-35 powered by PolicyEngine’s
+emulator, a drop-in replacement for TAXSIM-35 powered by PolicyEngine’s
 microsimulation engine, with support for Python, R, Stata, SAS, and
 Julia <span class="citation" data-cites="pe_nber_mou">(Feenberg
 2024)</span>. The Federal Reserve Bank of Atlanta independently
@@ -530,7 +529,11 @@ South Carolina) presented the Enhanced Current Population Survey
 methodology at the 117th Annual Conference on Taxation of the National
 Tax Association <span class="citation"
 data-cites="ghenis2024nta">(Ghenis and DeBacker 2024)</span>.</p>
-<p><strong>Academic research.</strong> In the US, Matt Unrath
+<p><strong>Academic research.</strong> The Better Government Lab, a joint
+center of the Georgetown McCourt School of Public Policy and the
+University of Michigan Ford School of Public Policy, collaborated with
+PolicyEngine on benefits eligibility research <span class="citation"
+data-cites="pe_bgl">(Ghenis 2024b)</span>. In the US, Matt Unrath
 (University of Southern California) is using PolicyEngine in a study of
 effective marginal and average tax rates facing American families,
 funded by the US Department of Health and Human Services through the
@@ -547,7 +550,7 @@ and documented two Policy2Code challenge teams building on PolicyEngine
 in their 2025 report on AI-powered rules as code <span class="citation"
 data-cites="beeck2025ai">(Kennan et al. 2025)</span>. In the UK,
 Youngman et al. <span class="citation"
-data-cites="youngman2026carbon">(Youngman et al. 2026)</span> cite
+data-cites="youngman2026carbon">(2026)</span> cite
 PolicyEngine UK’s microdata methodology in their agent-based
 macroeconomic model for the UK’s Seventh Carbon Budget, developed at the
 Institute for New Economic Thinking at Oxford in partnership with the
@@ -596,14 +599,10 @@ framework <span class="citation" data-cites="openfisca">(OpenFisca
 Contributors 2024)</span>. We acknowledge the US Census Bureau for
 providing access to the Current Population Survey, and the UK Data
 Service and the Department for Work and Pensions for providing access to
-the Family Resources Survey. We acknowledge the UKMOD team at the
-Institute for Social and Economic Research (ISER), University of Essex,
-for their contributions to model descriptions <span class="citation"
-data-cites="sutherland2014euromod">(Sutherland and Figari
-2013)</span>.</p>
+the Family Resources Survey.</p>
 <h1 id="ai-usage-disclosure">AI Usage Disclosure</h1>
-<p>Generative AI tools — Claude by Anthropic <span class="citation"
-data-cites="claude2026">(Anthropic 2026)</span> — were used to assist
+<p>Generative AI tools, specifically Claude Opus 4 by Anthropic <span class="citation"
+data-cites="claude2026">(Anthropic 2026)</span>, were used to assist
 with code refactoring. All AI-assisted
 outputs were reviewed, edited, and validated by human authors, who made
 all core design decisions regarding software architecture, policy
