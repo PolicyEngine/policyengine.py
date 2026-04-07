@@ -417,57 +417,52 @@ the open-source approach to tax-benefit microsimulation in France.
 PolicyEngine originated from OpenFisca and builds on this foundation
 through the PolicyEngine Core framework <span class="citation"
 data-cites="policyengine_core">(Woodruff et al. 2024)</span>.</p>
-<p>Rather than contributing these features directly to OpenFisca,
-PolicyEngine introduced a separate analyst-facing layer because the
-project required capabilities that cut across countries and sit
-downstream of legislative modeling: harmonized dataset handling, a
-stable reform API, standardized distributional outputs, and integration
-with a public-facing web application. This design lets country model
-packages focus on statutory rules while shared analysis workflows evolve
+<p>The country packages already support direct microsimulation analysis,
+and many one-off weighted calculations can be written against those APIs
+alone. PolicyEngine.py was introduced for a different need: a reusable
+analyst-facing layer for workflows that recur across projects and
+countries. In practice, these include harmonized dataset management, a
+stable baseline-versus-reform pattern, structured output types for
+distributional and regional analysis, and interfaces suitable for
+downstream dashboards and reports. This design lets country model
+packages focus on statutory rules while shared analysis methods evolve
 independently.</p>
-<p>PolicyEngine differentiates itself in several ways:</p>
+<p>PolicyEngine.py differentiates itself in several ways:</p>
 <ul>
-<li><strong>Open-source, multi-country framework</strong>: a single
-Python package supports the US and UK tax-benefit systems under a
-consistent API, with no institutional access or license fees
-required.</li>
-<li><strong>Comprehensive program coverage</strong>: the US model covers
-over 11 programs including federal income tax, payroll taxes, state
-income taxes, SNAP, SSI, Social Security, Medicare, Medicaid, EITC, CTC,
-and TANF; the UK model covers over 37 programs spanning income tax,
-National Insurance, Universal Credit, Child Benefit, Council Tax, and
-devolved policies in Scotland and Wales.</li>
+<li><strong>Cross-country analyst workflow</strong>: a single package
+provides shared <code>Simulation</code>, <code>Policy</code>, and
+dataset-management patterns for analogous UK and US analyses, despite
+differences in the lower-level country-package APIs.</li>
+<li><strong>Standardized reform-analysis outputs</strong>: reusable
+functions and objects such as <code>economic_impact_analysis()</code>,
+<code>ChangeAggregate</code>, poverty and inequality metrics, and
+geographic impact outputs replace repeated project-specific grouping and
+weighting code.</li>
 <li><strong>Separated modeling, analysis, and data layers</strong>: the
-project splits reusable engine logic into PolicyEngine Core,
-country-agnostic analysis workflows into PolicyEngine.py, country
-legislation into policyengine-us and policyengine-uk, and enhanced
-survey microdata into companion repositories <span class="citation"
+project splits reusable engine logic into PolicyEngine Core, analyst
+workflows into PolicyEngine.py, country legislation into policyengine-us
+and policyengine-uk, and enhanced survey microdata into companion
+repositories <span class="citation"
 data-cites="policyengine_core woodruff2024enhanced_cps">(Woodruff et al.
 2024; Woodruff and Ghenis 2024)</span>. This separation allows each
 layer to be versioned and updated independently as legislation,
 methodology, and microdata change.</li>
-<li><strong>Programmatic reform and economic analysis</strong>: users
-can define hypothetical policy reforms as date-bound parameter values,
-compose multiple reforms, or implement structural changes via simulation
-modifiers, then evaluate impacts on households, poverty, inequality,
-government budgets, and subnational regions. Behavioral response modules
-model labor supply responses through income and substitution
-elasticities, as well as capital gains tax responses.</li>
 </ul>
 <h1 id="software-design">Software Design</h1>
 <p>PolicyEngine is built as a four-layer system. PolicyEngine Core
 provides reusable simulation abstractions, versioned parameters, and
 dataset interfaces shared across countries <span class="citation"
-data-cites="policyengine_core">(Woodruff et al. 2024)</span>.
-PolicyEngine.py adds country-agnostic analyst workflows, including
-baseline-versus-reform comparisons, standardized output types, and
-visualization helpers. The policyengine-us and policyengine-uk packages
-contain statutory logic, variables, and entity structures specific to
-each tax-benefit system. Companion data repositories hold enhanced
-survey microdata and calibration pipelines for the CPS <span
-class="citation" data-cites="woodruff2024enhanced_cps">(Woodruff and
-Ghenis 2024)</span> and Family Resources Survey. Figure 1 illustrates
-this architecture.</p>
+data-cites="policyengine_core">(Woodruff et al. 2024)</span>. The
+policyengine-us and policyengine-uk packages contain statutory logic,
+variables, and entity structures specific to each tax-benefit system.
+PolicyEngine.py sits above them as the analysis layer: it defines shared
+simulation orchestration, structured output types, and canonical
+baseline-versus-reform workflows such as
+<code>economic_impact_analysis()</code>. Companion data repositories
+hold enhanced survey microdata and calibration pipelines for the CPS
+<span class="citation" data-cites="woodruff2024enhanced_cps">(Woodruff
+and Ghenis 2024)</span> and Family Resources Survey. Figure 1
+illustrates this architecture.</p>
 <figure>
 <img src="architecture.png" style="width:100.0%"
 alt="PolicyEngine architecture. Policies, household microdata, and behavioral response parameters feed into the Simulation engine, producing distributional impacts, fiscal impacts, regional breakdowns, poverty rates, and inequality metrics." />
@@ -476,22 +471,20 @@ household microdata, and behavioral response parameters feed into the
 Simulation engine, producing distributional impacts, fiscal impacts,
 regional breakdowns, poverty rates, and inequality metrics.</figcaption>
 </figure>
-<p>This split trades some packaging complexity for clearer ownership and
-release independence. Legislative changes in a country package do not
-require duplicating shared output logic; methodological changes to
-distributional analysis do not require modifying statutory formulas; and
-microdata refreshes can be versioned separately from the modeling
-libraries. It also supports different contributor workflows, since legal
-rules, data calibration, and analyst-facing outputs are maintained by
-overlapping but distinct groups.</p>
-<p>As shown in Figure 1, at runtime a simulation combines three inputs:
-policies from a country model version, household microdata, and optional
-behavioral response parameters. The repository documentation and
-<code>examples/</code> directory include runnable household-level and
-population-level analyses using this architecture.</p>
-<p>These examples produce decile impacts, program-by-program statistics,
-and inequality metrics using the same country-agnostic analysis layer
-described above.</p>
+<p>This split reflects a deliberate trade-off. The project could have
+kept analysis code inside each country package or inside downstream
+application repositories, but that would duplicate methodology and make
+cross-country work harder to keep aligned. By extracting repeated
+analyst tasks into PolicyEngine.py, the project centralizes
+distributional methods while leaving legislative implementation in the
+country packages. The cost is added package coordination and a clearer
+interface boundary across repositories.</p>
+<p>As shown in Figure 1, at runtime a simulation combines a country
+model version, household microdata, and optional reform or
+dynamic-response inputs. The same layer then exposes reusable outputs
+for decile changes, program statistics, poverty, inequality, and
+regional impacts, which are consumed by examples, research scripts, and
+the public web application.</p>
 <p>PolicyEngine does not include an underlying macroeconomic model in
 its microsimulation analysis and does not capture general equilibrium
 effects.</p>
@@ -779,8 +772,8 @@ Budget</span></em>. <a
 href="https://arxiv.org/abs/2602.15607">https://arxiv.org/abs/2602.15607</a>.
 </div>
 </div>
+
   </article>
-</div>
 
 <div class="paper-footer">
   JOSS Paper Preview &mdash; Generated from <code>paper.md</code> &bull; <a href="https://joss.theoj.org">Journal of Open Source Software</a>
