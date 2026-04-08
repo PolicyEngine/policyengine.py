@@ -1,18 +1,18 @@
 <!doctype html>
 <html class="no-js" lang="en" data-content_root="../">
-  <head><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script><meta charset="utf-8"/>
-    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <head><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="US parameters" href="../reference/parameters_us.html" /><link rel="prev" title="Simulate outcomes for a large population" href="calculate_single_economy.html" />
-        <link rel="prefetch" href="../_static/logo.png" as="image" />
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="US parameters" href="../reference/parameters_us.html"><link rel="prev" title="Simulate outcomes for a large population" href="calculate_single_economy.html">
+        <link rel="prefetch" href="../_static/logo.png" as="image">
 
-    <!-- Generated with Sphinx 7.4.7 and Furo 2025.07.19 -->
+    <!-- Generated with Sphinx 7.4.7 and Furo 2025.12.19 -->
         <title>Compare outcomes for large population scenarios - Python documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
-    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=25af2a20" />
-    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=13237357" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
-    <link rel="stylesheet" type="text/css" href="../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-thebe.css?v=4fa983c6" />
     <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
@@ -30,14 +30,14 @@
   }
   @media not print {
     body[data-theme="dark"] {
-      --color-code-background: #2b2b2b;
-  --color-code-foreground: #f8f8f2;
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
   
     }
     @media (prefers-color-scheme: dark) {
       body:not([data-theme="light"]) {
-        --color-code-background: #2b2b2b;
-  --color-code-foreground: #f8f8f2;
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
   
       }
     }
@@ -152,14 +152,10 @@
   </symbol>
 </svg>
 
-<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation">
-<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc">
-<label class="overlay sidebar-overlay" for="__navigation">
-  <div class="visually-hidden">Hide navigation sidebar</div>
-</label>
-<label class="overlay toc-overlay" for="__toc">
-  <div class="visually-hidden">Hide table of contents sidebar</div>
-</label>
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
 
 <a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
 
@@ -169,8 +165,7 @@
   <header class="mobile-header">
     <div class="header-left">
       <label class="nav-overlay-icon" for="__navigation">
-        <div class="visually-hidden">Toggle site navigation sidebar</div>
-        <i class="icon"><svg><use href="#svg-menu"></use></svg></i>
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
       </label>
     </div>
     <div class="header-center">
@@ -178,8 +173,7 @@
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
-        <button class="theme-toggle">
-          <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
           <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
           <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
           <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
@@ -187,8 +181,7 @@
         </button>
       </div>
       <label class="toc-overlay-icon toc-header-icon" for="__toc">
-        <div class="visually-hidden">Toggle table of contents sidebar</div>
-        <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
       </label>
     </div>
   </header>
@@ -252,8 +245,7 @@
   </a>
 </div>
 <div class="theme-toggle-container theme-toggle-content">
-            <button class="theme-toggle">
-              <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
               <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
               <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
               <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
@@ -261,8 +253,7 @@
             </button>
           </div>
           <label class="toc-overlay-icon toc-content-icon" for="__toc">
-            <div class="visually-hidden">Toggle table of contents sidebar</div>
-            <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
           </label>
         </div>
         <article role="main" id="furo-main-content">
@@ -289,13 +280,13 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/opt/hostedtoolcache/Python/3.11.13/x64/lib/python3.11/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
   from .autonotebook import tqdm as notebook_tqdm
 </pre></div>
 </div>
-<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>No data provided, using default dataset: gs://policyengine-us-data/cps_2023.h5
-Downloading cps_2023.h5 from bucket policyengine-us-data
-INFO:root:Using Google Cloud Storage for download.
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>No data provided, using default dataset: gs://policyengine-us-data/enhanced_cps_2024.h5
+Using dataset: gs://policyengine-us-data/enhanced_cps_2024.h5
+Downloading enhanced_cps_2024.h5 from bucket policyengine-us-data
 </pre></div>
 </div>
 <div class="output traceback highlight-ipythontb notranslate"><div class="highlight"><pre><span></span><span class="gt">---------------------------------------------------------------------------</span>
@@ -314,126 +305,124 @@ INFO:root:Using Google Cloud Storage for download.
 <span class="g g-Whitespace">     </span><span class="mi">12</span> <span class="p">)</span>
 <span class="g g-Whitespace">     </span><span class="mi">14</span> <span class="n">sim</span><span class="o">.</span><span class="n">calculate_economy_comparison</span><span class="p">()</span>
 
-<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/simulation.py:109,</span> in <span class="ni">Simulation.__init__</span><span class="nt">(self, **options)</span>
-<span class="g g-Whitespace">    </span><span class="mi">105</span> <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
-<span class="g g-Whitespace">    </span><span class="mi">106</span>     <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">Dataset</span>
-<span class="g g-Whitespace">    </span><span class="mi">107</span> <span class="p">):</span>
-<span class="g g-Whitespace">    </span><span class="mi">108</span>     <span class="n">logging</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Loading data&quot;</span><span class="p">)</span>
-<span class="ne">--&gt; </span><span class="mi">109</span>     <span class="bp">self</span><span class="o">.</span><span class="n">_set_data</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
-<span class="g g-Whitespace">    </span><span class="mi">110</span>     <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Data loaded&quot;</span><span class="p">)</span>
-<span class="g g-Whitespace">    </span><span class="mi">111</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialise_simulations</span><span class="p">()</span>
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/simulation.py:181,</span> in <span class="ni">Simulation.__init__</span><span class="nt">(self, **options)</span>
+<span class="g g-Whitespace">    </span><span class="mi">177</span> <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
+<span class="g g-Whitespace">    </span><span class="mi">178</span>     <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">Dataset</span>
+<span class="g g-Whitespace">    </span><span class="mi">179</span> <span class="p">):</span>
+<span class="g g-Whitespace">    </span><span class="mi">180</span>     <span class="n">logging</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Loading data&quot;</span><span class="p">)</span>
+<span class="ne">--&gt; </span><span class="mi">181</span>     <span class="bp">self</span><span class="o">.</span><span class="n">_set_data</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">182</span>     <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Data loaded&quot;</span><span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">183</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialise_simulations</span><span class="p">()</span>
 
-<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/simulation.py:171,</span> in <span class="ni">Simulation._set_data</span><span class="nt">(self, file_address)</span>
-<span class="g g-Whitespace">    </span><span class="mi">166</span>     <span class="n">version</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="g g-Whitespace">    </span><span class="mi">168</span> <span class="k">else</span><span class="p">:</span>
-<span class="g g-Whitespace">    </span><span class="mi">169</span>     <span class="c1"># All official PolicyEngine datasets are stored in GCS;</span>
-<span class="g g-Whitespace">    </span><span class="mi">170</span>     <span class="c1"># load accordingly</span>
-<span class="ne">--&gt; </span><span class="mi">171</span>     <span class="n">filename</span><span class="p">,</span> <span class="n">version</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_set_data_from_gs</span><span class="p">(</span><span class="n">file_address</span><span class="p">)</span>
-<span class="g g-Whitespace">    </span><span class="mi">172</span>     <span class="bp">self</span><span class="o">.</span><span class="n">data_version</span> <span class="o">=</span> <span class="n">version</span>
-<span class="g g-Whitespace">    </span><span class="mi">174</span> <span class="n">time_period</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_set_data_time_period</span><span class="p">(</span><span class="n">file_address</span><span class="p">)</span>
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/simulation.py:227,</span> in <span class="ni">Simulation._set_data</span><span class="nt">(self, file_address)</span>
+<span class="g g-Whitespace">    </span><span class="mi">224</span> <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using dataset: </span><span class="si">{</span><span class="n">file_address</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">226</span> <span class="c1"># Step 2: Acquire the file (download if PE dataset, or use local path)</span>
+<span class="ne">--&gt; </span><span class="mi">227</span> <span class="n">filepath</span><span class="p">,</span> <span class="n">version</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_acquire_dataset_file</span><span class="p">(</span><span class="n">file_address</span><span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">228</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_version</span> <span class="o">=</span> <span class="n">version</span>
+<span class="g g-Whitespace">    </span><span class="mi">230</span> <span class="c1"># Step 3: Load into country-specific format</span>
 
-<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/simulation.py:413,</span> in <span class="ni">Simulation._set_data_from_gs</span><span class="nt">(self, file_address)</span>
-<span class="g g-Whitespace">    </span><span class="mi">409</span> <span class="n">version</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">data_version</span>
-<span class="g g-Whitespace">    </span><span class="mi">411</span> <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Downloading </span><span class="si">{</span><span class="n">filename</span><span class="si">}</span><span class="s2"> from bucket </span><span class="si">{</span><span class="n">bucket</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
-<span class="ne">--&gt; </span><span class="mi">413</span> <span class="n">filepath</span><span class="p">,</span> <span class="n">version</span> <span class="o">=</span> <span class="n">download</span><span class="p">(</span>
-<span class="g g-Whitespace">    </span><span class="mi">414</span>     <span class="n">filepath</span><span class="o">=</span><span class="n">filename</span><span class="p">,</span>
-<span class="g g-Whitespace">    </span><span class="mi">415</span>     <span class="n">gcs_bucket</span><span class="o">=</span><span class="n">bucket</span><span class="p">,</span>
-<span class="g g-Whitespace">    </span><span class="mi">416</span>     <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span>
-<span class="g g-Whitespace">    </span><span class="mi">417</span>     <span class="n">return_version</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="g g-Whitespace">    </span><span class="mi">418</span> <span class="p">)</span>
-<span class="g g-Whitespace">    </span><span class="mi">420</span> <span class="k">return</span> <span class="n">filename</span><span class="p">,</span> <span class="n">version</span>
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/simulation.py:256,</span> in <span class="ni">Simulation._acquire_dataset_file</span><span class="nt">(self, file_address)</span>
+<span class="g g-Whitespace">    </span><span class="mi">251</span><span class="w"> </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="g g-Whitespace">    </span><span class="mi">252</span><span class="sd"> Get the dataset file, downloading from GCS if it&#39;s a GCS path.</span>
+<span class="g g-Whitespace">    </span><span class="mi">253</span><span class="sd"> Returns (filepath, version) where version is None for local files.</span>
+<span class="g g-Whitespace">    </span><span class="mi">254</span><span class="sd"> &quot;&quot;&quot;</span>
+<span class="g g-Whitespace">    </span><span class="mi">255</span> <span class="k">if</span> <span class="n">file_address</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;gs://&quot;</span><span class="p">):</span>
+<span class="ne">--&gt; </span><span class="mi">256</span>     <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_set_data_from_gs</span><span class="p">(</span><span class="n">file_address</span><span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">257</span> <span class="k">else</span><span class="p">:</span>
+<span class="g g-Whitespace">    </span><span class="mi">258</span>     <span class="c1"># Local file - no download needed, no version available</span>
+<span class="g g-Whitespace">    </span><span class="mi">259</span>     <span class="k">return</span> <span class="n">file_address</span><span class="p">,</span> <span class="kc">None</span>
 
-<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/utils/data_download.py:17,</span> in <span class="ni">download</span><span class="nt">(filepath, gcs_bucket, version, return_version)</span>
-<span class="g g-Whitespace">     </span><span class="mi">10</span> <span class="k">def</span><span class="w"> </span><span class="nf">download</span><span class="p">(</span>
-<span class="g g-Whitespace">     </span><span class="mi">11</span>     <span class="n">filepath</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">12</span>     <span class="n">gcs_bucket</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">13</span>     <span class="n">version</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">14</span>     <span class="n">return_version</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">15</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="nb">str</span><span class="p">:</span>
-<span class="g g-Whitespace">     </span><span class="mi">16</span>     <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using Google Cloud Storage for download.&quot;</span><span class="p">)</span>
-<span class="ne">---&gt; </span><span class="mi">17</span>     <span class="n">downloaded_version</span> <span class="o">=</span> <span class="n">download_file_from_gcs</span><span class="p">(</span>
-<span class="g g-Whitespace">     </span><span class="mi">18</span>         <span class="n">bucket_name</span><span class="o">=</span><span class="n">gcs_bucket</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">19</span>         <span class="n">file_name</span><span class="o">=</span><span class="n">filepath</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">20</span>         <span class="n">destination_path</span><span class="o">=</span><span class="n">filepath</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">21</span>         <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">22</span>     <span class="p">)</span>
-<span class="g g-Whitespace">     </span><span class="mi">23</span>     <span class="k">if</span> <span class="n">return_version</span><span class="p">:</span>
-<span class="g g-Whitespace">     </span><span class="mi">24</span>         <span class="k">return</span> <span class="n">filepath</span><span class="p">,</span> <span class="n">downloaded_version</span>
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/simulation.py:658,</span> in <span class="ni">Simulation._set_data_from_gs</span><span class="nt">(self, file_address)</span>
+<span class="g g-Whitespace">    </span><span class="mi">654</span> <span class="n">version</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">data_version</span> <span class="ow">or</span> <span class="n">url_version</span>
+<span class="g g-Whitespace">    </span><span class="mi">656</span> <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Downloading </span><span class="si">{</span><span class="n">gcs_key</span><span class="si">}</span><span class="s2"> from bucket </span><span class="si">{</span><span class="n">bucket</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
+<span class="ne">--&gt; </span><span class="mi">658</span> <span class="n">local_path</span><span class="p">,</span> <span class="n">version</span> <span class="o">=</span> <span class="n">download</span><span class="p">(</span>
+<span class="g g-Whitespace">    </span><span class="mi">659</span>     <span class="n">gcs_key</span><span class="o">=</span><span class="n">gcs_key</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">660</span>     <span class="n">gcs_bucket</span><span class="o">=</span><span class="n">bucket</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">661</span>     <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">662</span>     <span class="n">return_version</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">663</span> <span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">665</span> <span class="k">return</span> <span class="n">local_path</span><span class="p">,</span> <span class="n">version</span>
 
-<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/utils/google_cloud_bucket.py:41,</span> in <span class="ni">download_file_from_gcs</span><span class="nt">(bucket_name, file_name, destination_path, version)</span>
-<span class="g g-Whitespace">     </span><span class="mi">23</span> <span class="k">def</span><span class="w"> </span><span class="nf">download_file_from_gcs</span><span class="p">(</span>
-<span class="g g-Whitespace">     </span><span class="mi">24</span>     <span class="n">bucket_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">25</span>     <span class="n">file_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">26</span>     <span class="n">destination_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">27</span>     <span class="n">version</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">28</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="g g-Whitespace">     </span><span class="mi">29</span><span class="w">     </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="g g-Whitespace">     </span><span class="mi">30</span><span class="sd">     Download a file from Google Cloud Storage to a local path.</span>
-<span class="g g-Whitespace">     </span><span class="mi">31</span><span class="sd"> </span>
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/utils/data_download.py:38,</span> in <span class="ni">download</span><span class="nt">(gcs_key, gcs_bucket, version, return_version)</span>
+<span class="g g-Whitespace">     </span><span class="mi">21</span><span class="w"> </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="g g-Whitespace">     </span><span class="mi">22</span><span class="sd"> Download a file from Google Cloud Storage.</span>
+<span class="g g-Whitespace">     </span><span class="mi">23</span><span class="sd"> </span>
 <span class="sd">   (...)</span>
-<span class="g g-Whitespace">     </span><span class="mi">38</span><span class="sd">         version (str): The version of the file that was downloaded, if available.</span>
-<span class="g g-Whitespace">     </span><span class="mi">39</span><span class="sd">     &quot;&quot;&quot;</span>
-<span class="ne">---&gt; </span><span class="mi">41</span>     <span class="n">version</span> <span class="o">=</span> <span class="n">_get_client</span><span class="p">()</span><span class="o">.</span><span class="n">download</span><span class="p">(</span>
-<span class="g g-Whitespace">     </span><span class="mi">42</span>         <span class="n">bucket_name</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">43</span>         <span class="n">file_name</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">44</span>         <span class="n">Path</span><span class="p">(</span><span class="n">destination_path</span><span class="p">),</span>
-<span class="g g-Whitespace">     </span><span class="mi">45</span>         <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">46</span>         <span class="n">return_version</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="g g-Whitespace">     </span><span class="mi">47</span>     <span class="p">)</span>
-<span class="g g-Whitespace">     </span><span class="mi">48</span>     <span class="k">return</span> <span class="n">version</span>
+<span class="g g-Whitespace">     </span><span class="mi">35</span><span class="sd">     Otherwise: just the local_path string</span>
+<span class="g g-Whitespace">     </span><span class="mi">36</span><span class="sd"> &quot;&quot;&quot;</span>
+<span class="g g-Whitespace">     </span><span class="mi">37</span> <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using Google Cloud Storage for download.&quot;</span><span class="p">)</span>
+<span class="ne">---&gt; </span><span class="mi">38</span> <span class="n">local_path</span><span class="p">,</span> <span class="n">downloaded_version</span> <span class="o">=</span> <span class="n">download_file_from_gcs</span><span class="p">(</span>
+<span class="g g-Whitespace">     </span><span class="mi">39</span>     <span class="n">bucket_name</span><span class="o">=</span><span class="n">gcs_bucket</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">40</span>     <span class="n">gcs_key</span><span class="o">=</span><span class="n">gcs_key</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">41</span>     <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">42</span> <span class="p">)</span>
+<span class="g g-Whitespace">     </span><span class="mi">43</span> <span class="k">if</span> <span class="n">return_version</span><span class="p">:</span>
+<span class="g g-Whitespace">     </span><span class="mi">44</span>     <span class="k">return</span> <span class="n">local_path</span><span class="p">,</span> <span class="n">downloaded_version</span>
 
-<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/utils/google_cloud_bucket.py:14,</span> in <span class="ni">_get_client</span><span class="nt">()</span>
-<span class="g g-Whitespace">     </span><span class="mi">12</span> <span class="k">if</span> <span class="n">_caching_client</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-<span class="g g-Whitespace">     </span><span class="mi">13</span>     <span class="k">return</span> <span class="n">_caching_client</span>
-<span class="ne">---&gt; </span><span class="mi">14</span> <span class="n">_caching_client</span> <span class="o">=</span> <span class="n">CachingGoogleStorageClient</span><span class="p">()</span>
-<span class="g g-Whitespace">     </span><span class="mi">15</span> <span class="k">return</span> <span class="n">_caching_client</span>
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/utils/google_cloud_bucket.py:75,</span> in <span class="ni">download_file_from_gcs</span><span class="nt">(bucket_name, gcs_key, version)</span>
+<span class="g g-Whitespace">     </span><span class="mi">72</span> <span class="n">local_path</span> <span class="o">=</span> <span class="n">DATASETS_DIR</span> <span class="o">/</span> <span class="n">gcs_key</span>
+<span class="g g-Whitespace">     </span><span class="mi">73</span> <span class="n">local_path</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="ne">---&gt; </span><span class="mi">75</span> <span class="n">version</span> <span class="o">=</span> <span class="n">_get_client</span><span class="p">()</span><span class="o">.</span><span class="n">download</span><span class="p">(</span>
+<span class="g g-Whitespace">     </span><span class="mi">76</span>     <span class="n">bucket_name</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">77</span>     <span class="n">gcs_key</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">78</span>     <span class="n">local_path</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">79</span>     <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">80</span>     <span class="n">return_version</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">81</span> <span class="p">)</span>
+<span class="g g-Whitespace">     </span><span class="mi">82</span> <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">local_path</span><span class="p">),</span> <span class="n">version</span>
 
-<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/utils/data/caching_google_storage_client.py:19,</span> in <span class="ni">CachingGoogleStorageClient.__init__</span><span class="nt">(self)</span>
-<span class="g g-Whitespace">     </span><span class="mi">18</span> <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="ne">---&gt; </span><span class="mi">19</span>     <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">SimplifiedGoogleStorageClient</span><span class="p">()</span>
-<span class="g g-Whitespace">     </span><span class="mi">20</span>     <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="o">=</span> <span class="n">diskcache</span><span class="o">.</span><span class="n">Cache</span><span class="p">()</span>
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/utils/google_cloud_bucket.py:31,</span> in <span class="ni">_get_client</span><span class="nt">()</span>
+<span class="g g-Whitespace">     </span><span class="mi">29</span> <span class="k">if</span> <span class="n">_caching_client</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<span class="g g-Whitespace">     </span><span class="mi">30</span>     <span class="k">return</span> <span class="n">_caching_client</span>
+<span class="ne">---&gt; </span><span class="mi">31</span> <span class="n">_caching_client</span> <span class="o">=</span> <span class="n">CachingGoogleStorageClient</span><span class="p">()</span>
+<span class="g g-Whitespace">     </span><span class="mi">32</span> <span class="k">return</span> <span class="n">_caching_client</span>
 
-<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/utils/data/simplified_google_storage_client.py:19,</span> in <span class="ni">SimplifiedGoogleStorageClient.__init__</span><span class="nt">(self)</span>
-<span class="g g-Whitespace">     </span><span class="mi">18</span> <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="ne">---&gt; </span><span class="mi">19</span>     <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">Client</span><span class="p">()</span>
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/utils/data/caching_google_storage_client.py:26,</span> in <span class="ni">CachingGoogleStorageClient.__init__</span><span class="nt">(self)</span>
+<span class="g g-Whitespace">     </span><span class="mi">25</span> <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="ne">---&gt; </span><span class="mi">26</span>     <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">VersionAwareStorageClient</span><span class="p">()</span>
+<span class="g g-Whitespace">     </span><span class="mi">27</span>     <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="o">=</span> <span class="n">diskcache</span><span class="o">.</span><span class="n">Cache</span><span class="p">()</span>
 
-<span class="nn">File /opt/hostedtoolcache/Python/3.11.13/x64/lib/python3.11/site-packages/google/cloud/storage/client.py:247,</span> in <span class="ni">Client.__init__</span><span class="nt">(self, project, credentials, _http, client_info, client_options, use_auth_w_custom_endpoint, extra_headers, api_key)</span>
-<span class="g g-Whitespace">    </span><span class="mi">244</span>             <span class="n">no_project</span> <span class="o">=</span> <span class="kc">True</span>
-<span class="g g-Whitespace">    </span><span class="mi">245</span>             <span class="n">project</span> <span class="o">=</span> <span class="s2">&quot;&lt;none&gt;&quot;</span>
-<span class="ne">--&gt; </span><span class="mi">247</span> <span class="nb">super</span><span class="p">(</span><span class="n">Client</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
-<span class="g g-Whitespace">    </span><span class="mi">248</span>     <span class="n">project</span><span class="o">=</span><span class="n">project</span><span class="p">,</span>
-<span class="g g-Whitespace">    </span><span class="mi">249</span>     <span class="n">credentials</span><span class="o">=</span><span class="n">credentials</span><span class="p">,</span>
-<span class="g g-Whitespace">    </span><span class="mi">250</span>     <span class="n">client_options</span><span class="o">=</span><span class="n">client_options</span><span class="p">,</span>
-<span class="g g-Whitespace">    </span><span class="mi">251</span>     <span class="n">_http</span><span class="o">=</span><span class="n">_http</span><span class="p">,</span>
-<span class="g g-Whitespace">    </span><span class="mi">252</span> <span class="p">)</span>
-<span class="g g-Whitespace">    </span><span class="mi">254</span> <span class="c1"># Validate that the universe domain of the credentials matches the</span>
-<span class="g g-Whitespace">    </span><span class="mi">255</span> <span class="c1"># universe domain of the client.</span>
-<span class="g g-Whitespace">    </span><span class="mi">256</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_credentials</span><span class="o">.</span><span class="n">universe_domain</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">universe_domain</span><span class="p">:</span>
+<span class="nn">File ~/work/policyengine.py/policyengine.py/policyengine/utils/data/version_aware_storage_client.py:34,</span> in <span class="ni">VersionAwareStorageClient.__init__</span><span class="nt">(self)</span>
+<span class="g g-Whitespace">     </span><span class="mi">33</span> <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="ne">---&gt; </span><span class="mi">34</span>     <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">Client</span><span class="p">()</span>
 
-<span class="nn">File /opt/hostedtoolcache/Python/3.11.13/x64/lib/python3.11/site-packages/google/cloud/client/__init__.py:338,</span> in <span class="ni">ClientWithProject.__init__</span><span class="nt">(self, project, credentials, client_options, _http)</span>
-<span class="g g-Whitespace">    </span><span class="mi">337</span> <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">project</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">credentials</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">client_options</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">_http</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-<span class="ne">--&gt; </span><span class="mi">338</span>     <span class="n">_ClientProjectMixin</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">project</span><span class="o">=</span><span class="n">project</span><span class="p">,</span> <span class="n">credentials</span><span class="o">=</span><span class="n">credentials</span><span class="p">)</span>
-<span class="g g-Whitespace">    </span><span class="mi">339</span>     <span class="n">Client</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
-<span class="g g-Whitespace">    </span><span class="mi">340</span>         <span class="bp">self</span><span class="p">,</span> <span class="n">credentials</span><span class="o">=</span><span class="n">credentials</span><span class="p">,</span> <span class="n">client_options</span><span class="o">=</span><span class="n">client_options</span><span class="p">,</span> <span class="n">_http</span><span class="o">=</span><span class="n">_http</span>
-<span class="g g-Whitespace">    </span><span class="mi">341</span>     <span class="p">)</span>
+<span class="nn">File /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/google/cloud/storage/client.py:265,</span> in <span class="ni">Client.__init__</span><span class="nt">(self, project, credentials, _http, client_info, client_options, use_auth_w_custom_endpoint, extra_headers, api_key)</span>
+<span class="g g-Whitespace">    </span><span class="mi">262</span>             <span class="n">no_project</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="g g-Whitespace">    </span><span class="mi">263</span>             <span class="n">project</span> <span class="o">=</span> <span class="s2">&quot;&lt;none&gt;&quot;</span>
+<span class="ne">--&gt; </span><span class="mi">265</span> <span class="nb">super</span><span class="p">(</span><span class="n">Client</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+<span class="g g-Whitespace">    </span><span class="mi">266</span>     <span class="n">project</span><span class="o">=</span><span class="n">project</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">267</span>     <span class="n">credentials</span><span class="o">=</span><span class="n">credentials</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">268</span>     <span class="n">client_options</span><span class="o">=</span><span class="n">client_options</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">269</span>     <span class="n">_http</span><span class="o">=</span><span class="n">_http</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">270</span> <span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">272</span> <span class="c1"># Validate that the universe domain of the credentials matches the</span>
+<span class="g g-Whitespace">    </span><span class="mi">273</span> <span class="c1"># universe domain of the client.</span>
+<span class="g g-Whitespace">    </span><span class="mi">274</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_credentials</span><span class="o">.</span><span class="n">universe_domain</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">universe_domain</span><span class="p">:</span>
 
-<span class="nn">File /opt/hostedtoolcache/Python/3.11.13/x64/lib/python3.11/site-packages/google/cloud/client/__init__.py:286,</span> in <span class="ni">_ClientProjectMixin.__init__</span><span class="nt">(self, project, credentials)</span>
-<span class="g g-Whitespace">    </span><span class="mi">283</span>     <span class="n">project</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">credentials</span><span class="p">,</span> <span class="s2">&quot;project_id&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-<span class="g g-Whitespace">    </span><span class="mi">285</span> <span class="k">if</span> <span class="n">project</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-<span class="ne">--&gt; </span><span class="mi">286</span>     <span class="n">project</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_determine_default</span><span class="p">(</span><span class="n">project</span><span class="p">)</span>
-<span class="g g-Whitespace">    </span><span class="mi">288</span> <span class="k">if</span> <span class="n">project</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-<span class="g g-Whitespace">    </span><span class="mi">289</span>     <span class="k">raise</span> <span class="ne">EnvironmentError</span><span class="p">(</span>
-<span class="g g-Whitespace">    </span><span class="mi">290</span>         <span class="s2">&quot;Project was not passed and could not be &quot;</span>
-<span class="g g-Whitespace">    </span><span class="mi">291</span>         <span class="s2">&quot;determined from the environment.&quot;</span>
-<span class="g g-Whitespace">    </span><span class="mi">292</span>     <span class="p">)</span>
+<span class="nn">File /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/google/cloud/client/__init__.py:339,</span> in <span class="ni">ClientWithProject.__init__</span><span class="nt">(self, project, credentials, client_options, _http)</span>
+<span class="g g-Whitespace">    </span><span class="mi">338</span> <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">project</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">credentials</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">client_options</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">_http</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="ne">--&gt; </span><span class="mi">339</span>     <span class="n">_ClientProjectMixin</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">project</span><span class="o">=</span><span class="n">project</span><span class="p">,</span> <span class="n">credentials</span><span class="o">=</span><span class="n">credentials</span><span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">340</span>     <span class="n">Client</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+<span class="g g-Whitespace">    </span><span class="mi">341</span>         <span class="bp">self</span><span class="p">,</span> <span class="n">credentials</span><span class="o">=</span><span class="n">credentials</span><span class="p">,</span> <span class="n">client_options</span><span class="o">=</span><span class="n">client_options</span><span class="p">,</span> <span class="n">_http</span><span class="o">=</span><span class="n">_http</span>
+<span class="g g-Whitespace">    </span><span class="mi">342</span>     <span class="p">)</span>
 
-<span class="nn">File /opt/hostedtoolcache/Python/3.11.13/x64/lib/python3.11/site-packages/google/cloud/client/__init__.py:305,</span> in <span class="ni">_ClientProjectMixin._determine_default</span><span class="nt">(project)</span>
-<span class="g g-Whitespace">    </span><span class="mi">302</span> <span class="nd">@staticmethod</span>
-<span class="g g-Whitespace">    </span><span class="mi">303</span> <span class="k">def</span><span class="w"> </span><span class="nf">_determine_default</span><span class="p">(</span><span class="n">project</span><span class="p">):</span>
-<span class="g g-Whitespace">    </span><span class="mi">304</span><span class="w">     </span><span class="sd">&quot;&quot;&quot;Helper:  use default project detection.&quot;&quot;&quot;</span>
-<span class="ne">--&gt; </span><span class="mi">305</span>     <span class="k">return</span> <span class="n">_determine_default_project</span><span class="p">(</span><span class="n">project</span><span class="p">)</span>
+<span class="nn">File /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/google/cloud/client/__init__.py:287,</span> in <span class="ni">_ClientProjectMixin.__init__</span><span class="nt">(self, project, credentials)</span>
+<span class="g g-Whitespace">    </span><span class="mi">284</span>     <span class="n">project</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">credentials</span><span class="p">,</span> <span class="s2">&quot;project_id&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">286</span> <span class="k">if</span> <span class="n">project</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<span class="ne">--&gt; </span><span class="mi">287</span>     <span class="n">project</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_determine_default</span><span class="p">(</span><span class="n">project</span><span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">289</span> <span class="k">if</span> <span class="n">project</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<span class="g g-Whitespace">    </span><span class="mi">290</span>     <span class="k">raise</span> <span class="ne">EnvironmentError</span><span class="p">(</span>
+<span class="g g-Whitespace">    </span><span class="mi">291</span>         <span class="s2">&quot;Project was not passed and could not be &quot;</span>
+<span class="g g-Whitespace">    </span><span class="mi">292</span>         <span class="s2">&quot;determined from the environment.&quot;</span>
+<span class="g g-Whitespace">    </span><span class="mi">293</span>     <span class="p">)</span>
 
-<span class="nn">File /opt/hostedtoolcache/Python/3.11.13/x64/lib/python3.11/site-packages/google/cloud/_helpers/__init__.py:152,</span> in <span class="ni">_determine_default_project</span><span class="nt">(project)</span>
+<span class="nn">File /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/google/cloud/client/__init__.py:306,</span> in <span class="ni">_ClientProjectMixin._determine_default</span><span class="nt">(project)</span>
+<span class="g g-Whitespace">    </span><span class="mi">303</span> <span class="nd">@staticmethod</span>
+<span class="g g-Whitespace">    </span><span class="mi">304</span> <span class="k">def</span><span class="w"> </span><span class="nf">_determine_default</span><span class="p">(</span><span class="n">project</span><span class="p">):</span>
+<span class="g g-Whitespace">    </span><span class="mi">305</span><span class="w">     </span><span class="sd">&quot;&quot;&quot;Helper:  use default project detection.&quot;&quot;&quot;</span>
+<span class="ne">--&gt; </span><span class="mi">306</span>     <span class="k">return</span> <span class="n">_determine_default_project</span><span class="p">(</span><span class="n">project</span><span class="p">)</span>
+
+<span class="nn">File /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/google/cloud/_helpers/__init__.py:152,</span> in <span class="ni">_determine_default_project</span><span class="nt">(project)</span>
 <span class="g g-Whitespace">    </span><span class="mi">140</span><span class="w"> </span><span class="sd">&quot;&quot;&quot;Determine default project ID explicitly or implicitly as fall-back.</span>
 <span class="g g-Whitespace">    </span><span class="mi">141</span><span class="sd"> </span>
 <span class="g g-Whitespace">    </span><span class="mi">142</span><span class="sd"> See :func:`google.auth.default` for details on how the default project</span>
@@ -444,15 +433,15 @@ INFO:root:Using Google Cloud Storage for download.
 <span class="ne">--&gt; </span><span class="mi">152</span>     <span class="n">_</span><span class="p">,</span> <span class="n">project</span> <span class="o">=</span> <span class="n">google</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">default</span><span class="p">()</span>
 <span class="g g-Whitespace">    </span><span class="mi">153</span> <span class="k">return</span> <span class="n">project</span>
 
-<span class="nn">File /opt/hostedtoolcache/Python/3.11.13/x64/lib/python3.11/site-packages/google/auth/_default.py:685,</span> in <span class="ni">default</span><span class="nt">(scopes, request, quota_project_id, default_scopes)</span>
-<span class="g g-Whitespace">    </span><span class="mi">677</span>             <span class="n">_LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-<span class="g g-Whitespace">    </span><span class="mi">678</span>                 <span class="s2">&quot;No project ID could be determined. Consider running &quot;</span>
-<span class="g g-Whitespace">    </span><span class="mi">679</span>                 <span class="s2">&quot;`gcloud config set project` or setting the </span><span class="si">%s</span><span class="s2"> &quot;</span>
-<span class="g g-Whitespace">    </span><span class="mi">680</span>                 <span class="s2">&quot;environment variable&quot;</span><span class="p">,</span>
-<span class="g g-Whitespace">    </span><span class="mi">681</span>                 <span class="n">environment_vars</span><span class="o">.</span><span class="n">PROJECT</span><span class="p">,</span>
-<span class="g g-Whitespace">    </span><span class="mi">682</span>             <span class="p">)</span>
-<span class="g g-Whitespace">    </span><span class="mi">683</span>         <span class="k">return</span> <span class="n">credentials</span><span class="p">,</span> <span class="n">effective_project_id</span>
-<span class="ne">--&gt; </span><span class="mi">685</span> <span class="k">raise</span> <span class="n">exceptions</span><span class="o">.</span><span class="n">DefaultCredentialsError</span><span class="p">(</span><span class="n">_CLOUD_SDK_MISSING_CREDENTIALS</span><span class="p">)</span>
+<span class="nn">File /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/google/auth/_default.py:752,</span> in <span class="ni">default</span><span class="nt">(scopes, request, quota_project_id, default_scopes)</span>
+<span class="g g-Whitespace">    </span><span class="mi">744</span>             <span class="n">_LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+<span class="g g-Whitespace">    </span><span class="mi">745</span>                 <span class="s2">&quot;No project ID could be determined. Consider running &quot;</span>
+<span class="g g-Whitespace">    </span><span class="mi">746</span>                 <span class="s2">&quot;`gcloud config set project` or setting the </span><span class="si">%s</span><span class="s2"> &quot;</span>
+<span class="g g-Whitespace">    </span><span class="mi">747</span>                 <span class="s2">&quot;environment variable&quot;</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">748</span>                 <span class="n">environment_vars</span><span class="o">.</span><span class="n">PROJECT</span><span class="p">,</span>
+<span class="g g-Whitespace">    </span><span class="mi">749</span>             <span class="p">)</span>
+<span class="g g-Whitespace">    </span><span class="mi">750</span>         <span class="k">return</span> <span class="n">credentials</span><span class="p">,</span> <span class="n">effective_project_id</span>
+<span class="ne">--&gt; </span><span class="mi">752</span> <span class="k">raise</span> <span class="n">exceptions</span><span class="o">.</span><span class="n">DefaultCredentialsError</span><span class="p">(</span><span class="n">_CLOUD_SDK_MISSING_CREDENTIALS</span><span class="p">)</span>
 
 <span class="ne">DefaultCredentialsError</span>: Your default credentials were not found. To set up Application Default Credentials, see https://cloud.google.com/docs/authentication/external/set-up-adc for more information.
 </pre></div>
@@ -747,7 +736,7 @@ INFO:root:Using Google Cloud Storage for download.
     <script>let toggleHintShow = 'Click to show';</script>
     <script>let toggleHintHide = 'Click to hide';</script>
     <script>let toggleOpenOnPrint = 'true';</script>
-    <script src="../_static/togglebutton.js?v=4a39c7ea"></script>
+    <script src="../_static/togglebutton.js?v=b8b12719"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
