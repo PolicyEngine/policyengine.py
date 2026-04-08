@@ -29,6 +29,7 @@ def test_basic_district_grouping():
             "congressional_district_geoid": [101, 101, 202],
             "household_net_income": [50000.0, 60000.0, 40000.0],
             "household_weight": [1.0, 1.0, 1.0],
+            "household_count_people": [2.0, 2.0, 2.0],
         }
     )
     reform = _make_sim(
@@ -36,6 +37,7 @@ def test_basic_district_grouping():
             "congressional_district_geoid": [101, 101, 202],
             "household_net_income": [52000.0, 62000.0, 42000.0],
             "household_weight": [1.0, 1.0, 1.0],
+            "household_count_people": [2.0, 2.0, 2.0],
         }
     )
 
@@ -52,12 +54,16 @@ def test_basic_district_grouping():
     assert d101["district_number"] == 1
     assert abs(d101["average_household_income_change"] - 2000.0) < 1e-6
     assert d101["population"] == 2.0
+    assert d101["winner_percentage"] == 1.0
+    assert d101["loser_percentage"] == 0.0
+    assert d101["no_change_percentage"] == 0.0
 
     # District 202: baseline = 40000, reform = 42000, change = 2000
     d202 = by_geoid[202]
     assert d202["state_fips"] == 2
     assert d202["district_number"] == 2
     assert abs(d202["average_household_income_change"] - 2000.0) < 1e-6
+    assert d202["winner_percentage"] == 1.0
 
 
 def test_negative_geoid_excluded():
@@ -67,6 +73,7 @@ def test_negative_geoid_excluded():
             "congressional_district_geoid": [-1, 0, 101],
             "household_net_income": [50000.0, 50000.0, 50000.0],
             "household_weight": [1.0, 1.0, 1.0],
+            "household_count_people": [1.0, 1.0, 1.0],
         }
     )
     reform = _make_sim(
@@ -74,6 +81,7 @@ def test_negative_geoid_excluded():
             "congressional_district_geoid": [-1, 0, 101],
             "household_net_income": [55000.0, 55000.0, 55000.0],
             "household_weight": [1.0, 1.0, 1.0],
+            "household_count_people": [1.0, 1.0, 1.0],
         }
     )
 
@@ -90,6 +98,7 @@ def test_zero_weight_district_skipped():
             "congressional_district_geoid": [101, 202],
             "household_net_income": [50000.0, 50000.0],
             "household_weight": [1.0, 0.0],
+            "household_count_people": [1.0, 1.0],
         }
     )
     reform = _make_sim(
@@ -97,6 +106,7 @@ def test_zero_weight_district_skipped():
             "congressional_district_geoid": [101, 202],
             "household_net_income": [55000.0, 55000.0],
             "household_weight": [1.0, 0.0],
+            "household_count_people": [1.0, 1.0],
         }
     )
 
@@ -113,6 +123,7 @@ def test_weighted_average_change():
             "congressional_district_geoid": [101, 101],
             "household_net_income": [40000.0, 80000.0],
             "household_weight": [3.0, 1.0],
+            "household_count_people": [1.0, 1.0],
         }
     )
     reform = _make_sim(
@@ -120,6 +131,7 @@ def test_weighted_average_change():
             "congressional_district_geoid": [101, 101],
             "household_net_income": [42000.0, 82000.0],
             "household_weight": [3.0, 1.0],
+            "household_count_people": [1.0, 1.0],
         }
     )
 
@@ -129,3 +141,58 @@ def test_weighted_average_change():
     # Weighted avg change: (3*2000 + 1*2000) / 4 = 2000
     assert abs(d["average_household_income_change"] - 2000.0) < 1e-6
     assert d["population"] == 4.0
+    assert d["winner_percentage"] == 1.0
+
+
+def test_district_winner_loser_percentages_are_people_weighted():
+    """Winner and loser shares should use household_count_people * weight."""
+    baseline = _make_sim(
+        {
+            "congressional_district_geoid": [101, 101, 101],
+            "household_net_income": [1000.0, 1000.0, 1000.0],
+            "household_weight": [1.0, 1.0, 1.0],
+            "household_count_people": [1.0, 3.0, 2.0],
+        }
+    )
+    reform = _make_sim(
+        {
+            "congressional_district_geoid": [101, 101, 101],
+            "household_net_income": [1100.0, 900.0, 1000.0],
+            "household_weight": [1.0, 1.0, 1.0],
+            "household_count_people": [1.0, 3.0, 2.0],
+        }
+    )
+
+    impact = compute_us_congressional_district_impacts(baseline, reform)
+
+    district = impact.district_results[0]
+    assert district["winner_percentage"] == 1 / 6
+    assert district["loser_percentage"] == 3 / 6
+    assert district["no_change_percentage"] == 2 / 6
+
+
+def test_district_small_changes_use_no_change_threshold():
+    """Changes within +/-0.1% should be counted as no change."""
+    baseline = _make_sim(
+        {
+            "congressional_district_geoid": [101, 101, 101],
+            "household_net_income": [1000.0, 1000.0, 1000.0],
+            "household_weight": [1.0, 1.0, 1.0],
+            "household_count_people": [1.0, 1.0, 1.0],
+        }
+    )
+    reform = _make_sim(
+        {
+            "congressional_district_geoid": [101, 101, 101],
+            "household_net_income": [1001.0, 999.5, 990.0],
+            "household_weight": [1.0, 1.0, 1.0],
+            "household_count_people": [1.0, 1.0, 1.0],
+        }
+    )
+
+    impact = compute_us_congressional_district_impacts(baseline, reform)
+
+    district = impact.district_results[0]
+    assert district["winner_percentage"] == 0.0
+    assert district["loser_percentage"] == 1 / 3
+    assert district["no_change_percentage"] == 2 / 3
