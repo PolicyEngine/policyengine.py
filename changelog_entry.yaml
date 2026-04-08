@@ -3,3 +3,6 @@
     added:
     - Winner, loser, and no-change percentages for `congressional_district_impact`
       in legacy 0.x economy comparisons
+    fixed:
+    - Restored the 0.x versioning and package publishing workflows so legacy
+      maintenance releases can complete again
