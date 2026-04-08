@@ -17,7 +17,7 @@ class CongressionalDistrictImpact(Output):
     Groups households by congressional_district_geoid (integer SSDD format
     where SS = state FIPS, DD = district number) and computes weighted
     average and relative household income changes per district, plus the
-    district-level shares of winners, losers, and unchanged households.
+    district-level shares of people who are winners, losers, or unchanged.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)

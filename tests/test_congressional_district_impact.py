@@ -196,3 +196,28 @@ def test_district_small_changes_use_no_change_threshold():
     assert district["winner_percentage"] == 0.0
     assert district["loser_percentage"] == 1 / 3
     assert district["no_change_percentage"] == 2 / 3
+
+
+def test_district_outcome_percentages_fall_back_to_household_weights():
+    """Missing household_count_people should default to household-weighted shares."""
+    baseline = _make_sim(
+        {
+            "congressional_district_geoid": [101, 101, 101],
+            "household_net_income": [1000.0, 1000.0, 1000.0],
+            "household_weight": [1.0, 2.0, 1.0],
+        }
+    )
+    reform = _make_sim(
+        {
+            "congressional_district_geoid": [101, 101, 101],
+            "household_net_income": [1100.0, 900.0, 1000.0],
+            "household_weight": [1.0, 2.0, 1.0],
+        }
+    )
+
+    impact = compute_us_congressional_district_impacts(baseline, reform)
+
+    district = impact.district_results[0]
+    assert district["winner_percentage"] == 1 / 4
+    assert district["loser_percentage"] == 2 / 4
+    assert district["no_change_percentage"] == 1 / 4
