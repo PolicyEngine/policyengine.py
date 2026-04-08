@@ -185,11 +185,13 @@ class TestUsCongressionalDistrictBreakdown:
         baseline = create_mock_single_economy(
             household_net_income=[50000.0, 60000.0, 70000.0],
             household_weight=[1000.0, 1000.0, 1000.0],
+            household_count_people=[2, 2, 2],
             congressional_district_geoid=[1305, 1305, 1305],
         )
         reform = create_mock_single_economy(
             household_net_income=[51000.0, 61000.0, 71000.0],
             household_weight=[1000.0, 1000.0, 1000.0],
+            household_count_people=[2, 2, 2],
             congressional_district_geoid=[1305, 1305, 1305],
         )
         country_id = "us"
@@ -211,11 +213,13 @@ class TestUsCongressionalDistrictBreakdown:
         baseline = create_mock_single_economy(
             household_net_income=[50000.0, 60000.0, 70000.0],
             household_weight=[1000.0, 1000.0, 1000.0],
+            household_count_people=[2, 2, 2],
             congressional_district_geoid=[1305, 1305, 1305],
         )
         reform = create_mock_single_economy(
             household_net_income=[49000.0, 59000.0, 69000.0],
             household_weight=[1000.0, 1000.0, 1000.0],
+            household_count_people=[2, 2, 2],
             congressional_district_geoid=[1305, 1305, 1305],
         )
         country_id = "us"
@@ -239,11 +243,13 @@ class TestUsCongressionalDistrictBreakdown:
         baseline = create_mock_single_economy(
             household_net_income=[50000.0, 100000.0],
             household_weight=[3000.0, 1000.0],  # First household has 3x weight
+            household_count_people=[2, 2],
             congressional_district_geoid=[1305, 1305],
         )
         reform = create_mock_single_economy(
             household_net_income=[51000.0, 101000.0],
             household_weight=[3000.0, 1000.0],
+            household_count_people=[2, 2],
             congressional_district_geoid=[1305, 1305],
         )
         country_id = "us"
@@ -279,9 +285,69 @@ class TestUsCongressionalDistrictBreakdown:
             assert hasattr(district, "district")
             assert hasattr(district, "average_household_income_change")
             assert hasattr(district, "relative_household_income_change")
+            assert hasattr(district, "winner_percentage")
+            assert hasattr(district, "loser_percentage")
+            assert hasattr(district, "no_change_percentage")
             assert isinstance(district.district, str)
             assert isinstance(district.average_household_income_change, float)
             assert isinstance(district.relative_household_income_change, float)
+            assert isinstance(district.winner_percentage, float)
+            assert isinstance(district.loser_percentage, float)
+            assert isinstance(district.no_change_percentage, float)
+
+    def test__given_mixed_outcomes__then_returns_people_weighted_percentages(
+        self,
+    ):
+        # Given: one winner, one loser, one unchanged household with different
+        # people counts. Outcome shares should be people-weighted.
+        baseline = create_mock_single_economy(
+            household_net_income=[1000.0, 1000.0, 1000.0],
+            household_weight=[1.0, 1.0, 1.0],
+            household_count_people=[1, 2, 3],
+            congressional_district_geoid=[1305, 1305, 1305],
+        )
+        reform = create_mock_single_economy(
+            household_net_income=[1002.0, 999.0, 1000.0],
+            household_weight=[1.0, 1.0, 1.0],
+            household_count_people=[1, 2, 3],
+            congressional_district_geoid=[1305, 1305, 1305],
+        )
+
+        # When
+        result = us_congressional_district_breakdown(baseline, reform, "us")
+
+        # Then
+        district = result.districts[0]
+        assert district.winner_percentage == pytest.approx(1 / 6)
+        assert district.loser_percentage == pytest.approx(2 / 6)
+        assert district.no_change_percentage == pytest.approx(3 / 6)
+
+    def test__given_missing_household_count_people__then_falls_back_to_household_weights(
+        self,
+    ):
+        # Given: people counts are unavailable, so outcome shares should fall
+        # back to household weights.
+        baseline = create_mock_single_economy(
+            household_net_income=[1000.0, 1000.0],
+            household_weight=[3.0, 1.0],
+            household_count_people=None,
+            congressional_district_geoid=[1305, 1305],
+        )
+        reform = create_mock_single_economy(
+            household_net_income=[1002.0, 998.0],
+            household_weight=[3.0, 1.0],
+            household_count_people=None,
+            congressional_district_geoid=[1305, 1305],
+        )
+
+        # When
+        result = us_congressional_district_breakdown(baseline, reform, "us")
+
+        # Then
+        district = result.districts[0]
+        assert district.winner_percentage == pytest.approx(0.75)
+        assert district.loser_percentage == pytest.approx(0.25)
+        assert district.no_change_percentage == pytest.approx(0.0)
 
 
 class TestCongressionalDistrictGeoidExtraction:

@@ -854,6 +854,9 @@ class USCongressionalDistrictImpact(BaseModel):
     district: str  # e.g., "GA-05"
     average_household_income_change: float
     relative_household_income_change: float
+    winner_percentage: float
+    loser_percentage: float
+    no_change_percentage: float
 
 
 class USCongressionalDistrictBreakdownWithValues(BaseModel):
@@ -906,9 +909,22 @@ def us_congressional_district_breakdown(
         district_name = geoid_to_district_name(geoid)
 
         # Extract household data for this district
-        weights = [baseline.household_weight[i] for i in indices]
-        baseline_incomes = [baseline.household_net_income[i] for i in indices]
-        reform_incomes = [reform.household_net_income[i] for i in indices]
+        weights = np.array([baseline.household_weight[i] for i in indices])
+        baseline_incomes = np.array(
+            [baseline.household_net_income[i] for i in indices]
+        )
+        reform_incomes = np.array(
+            [reform.household_net_income[i] for i in indices]
+        )
+        household_count_people = getattr(
+            baseline, "household_count_people", None
+        )
+        if household_count_people is None:
+            people_weights = weights
+        else:
+            people_weights = weights * np.array(
+                [household_count_people[i] for i in indices]
+            )
 
         baseline_income = MicroSeries(baseline_incomes, weights=weights)
         reform_income = MicroSeries(reform_incomes, weights=weights)
@@ -925,6 +941,30 @@ def us_congressional_district_breakdown(
         relative_household_income_change = (
             reform_income.sum() / baseline_income.sum() - 1
         )
+        income_change = (reform_incomes - baseline_incomes) / np.maximum(
+            baseline_incomes, 1.0
+        )
+        total_people = float(np.sum(people_weights))
+
+        if total_people == 0:
+            winner_percentage = 0.0
+            loser_percentage = 0.0
+            no_change_percentage = 1.0
+        else:
+            winner_percentage = float(
+                np.sum(people_weights[income_change > 1e-3]) / total_people
+            )
+            loser_percentage = float(
+                np.sum(people_weights[income_change <= -1e-3]) / total_people
+            )
+            no_change_percentage = float(
+                np.sum(
+                    people_weights[
+                        (income_change > -1e-3) & (income_change <= 1e-3)
+                    ]
+                )
+                / total_people
+            )
 
         districts.append(
             USCongressionalDistrictImpact(
@@ -935,6 +975,9 @@ def us_congressional_district_breakdown(
                 relative_household_income_change=float(
                     relative_household_income_change
                 ),
+                winner_percentage=winner_percentage,
+                loser_percentage=loser_percentage,
+                no_change_percentage=no_change_percentage,
             )
         )
 

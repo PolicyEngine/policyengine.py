@@ -91,6 +91,7 @@ def mock_simulation_with_cliff_vars():
 def create_mock_single_economy(
     household_net_income: list[float],
     household_weight: list[float],
+    household_count_people: list[int] | None = None,
     congressional_district_geoid: list[int] | None = None,
 ):
     """Create a mock SingleEconomy with specified household data.
@@ -98,6 +99,7 @@ def create_mock_single_economy(
     Args:
         household_net_income: List of household net incomes
         household_weight: List of household weights
+        household_count_people: List of people per household or None
         congressional_district_geoid: List of district geoids (SSDD format) or None
 
     Returns:
@@ -106,6 +108,7 @@ def create_mock_single_economy(
     mock_economy = Mock()
     mock_economy.household_net_income = household_net_income
     mock_economy.household_weight = household_weight
+    mock_economy.household_count_people = household_count_people
     mock_economy.congressional_district_geoid = congressional_district_geoid
     return mock_economy
 
@@ -128,6 +131,7 @@ def mock_single_economy_with_ga_districts():
             100000.0,
         ],
         household_weight=[1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0],
+        household_count_people=[2, 2, 2, 2, 2, 2],
         congressional_district_geoid=[1305, 1305, 1305, 1306, 1306, 1306],
     )
 
@@ -163,6 +167,7 @@ def mock_single_economy_with_multi_state_districts():
             1000.0,
             1000.0,
         ],
+        household_count_people=[2, 2, 2, 2, 2, 2, 2, 2],
         congressional_district_geoid=[
             1305,
             1305,
@@ -182,6 +187,7 @@ def mock_single_economy_without_districts():
     return create_mock_single_economy(
         household_net_income=[50000.0, 60000.0, 70000.0],
         household_weight=[1000.0, 1000.0, 1000.0],
+        household_count_people=[2, 2, 2],
         congressional_district_geoid=[0, 0, 0],
     )
 
@@ -192,5 +198,6 @@ def mock_single_economy_with_null_districts():
     return create_mock_single_economy(
         household_net_income=[50000.0, 60000.0, 70000.0],
         household_weight=[1000.0, 1000.0, 1000.0],
+        household_count_people=[2, 2, 2],
         congressional_district_geoid=None,
     )
