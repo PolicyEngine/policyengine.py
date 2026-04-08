@@ -203,3 +203,12 @@
     fixed:
     - Fix intra-decile income change formula that doubled all percentage changes.
   date: 2026-02-24 20:12:20
+- bump: minor
+  changes:
+    added:
+    - Winner, loser, and no-change percentages for `congressional_district_impact`
+      in legacy 0.x economy comparisons
+    fixed:
+    - Restored the 0.x versioning and package publishing workflows so legacy maintenance
+      releases can complete again
+  date: 2026-04-08 19:07:39
