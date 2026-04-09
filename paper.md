@@ -51,10 +51,10 @@ Table 1 summarizes where `policyengine` sits relative to selected tools:
 | Dimension | `policyengine` | TAXSIM | UKMOD | OpenFisca |
 |---|---|---|---|---|
 | Open source | Yes | Partial | Yes | Yes |
-| Country coverage | US and UK | US | UK | France, with additional country packages and forks |
+| Country coverage | US and UK | US | UK and EU member states | France, Tunisia, and other jurisdictions |
 | Tax and benefit analysis | Yes | Tax only | Yes | Yes |
-| Python package (pip install) | Yes | No | No | Yes |
-| Shared reform and output API across countries | Yes | No | No | Country-specific |
+| Python package (pip install) | Yes | No | Yes (connector) | Yes |
+| Shared reform and output API across countries | Yes | No | No | Shared core, country-specific parameters |
 
 The `policyengine` layer leaves reusable engine logic in PolicyEngine Core, country legislation in policyengine-us and policyengine-uk, and enhanced survey microdata in companion repositories [@policyengine_core; @woodruff2024enhanced_cps]. Teams can version and update each layer independently as legislation, methodology, and microdata change.
 
@@ -87,7 +87,7 @@ reform = Policy(
         parameter=param,
         start_date=datetime.date(2026, 1, 1),
         end_date=datetime.date(2026, 12, 31),
-        value=30_950,
+        value=32_200,
     )],
 )
 
@@ -100,7 +100,7 @@ household = USHouseholdInput(
 )
 baseline = calculate_household_impact(household)
 reformed = calculate_household_impact(household, policy=reform)
-# Results for California: baseline net income $40,702, reform $42,484
+# Results for California: baseline net income $40,702, reform $42,634
 ```
 
 A UK reproduction script that runs a population-level analysis is available at `examples/paper_repro_uk.py`.
@@ -109,7 +109,7 @@ The `policyengine` package does not include an underlying macroeconomic model in
 
 # Research Impact Statement
 
-**Government use.** Co-author Nikhil Woodruff served as an Innovation Fellow with the 10DS data science team at 10 Downing Street, adapting PolicyEngine for government policy analysis [@no10fellowship2026]. HM Treasury documented PolicyEngine in the UK Algorithmic Transparency Recording Standard as a model their Personal Tax, Welfare and Pensions team uses [@hmt2024atrs]. The U.S. Congress Joint Economic Committee built an immigration fiscal impact calculator using PolicyEngine's microsimulation model [@jec2026immigration].
+**Government use.** Co-author Nikhil Woodruff served as an Innovation Fellow with the 10DS data science team at 10 Downing Street, adapting PolicyEngine for government policy analysis [@no10fellowship2026]. HM Treasury registered PolicyEngine in the UK Algorithmic Transparency Recording Standard as an algorithmic tool their Personal Tax, Welfare and Pensions team evaluates [@hmt2024atrs]. The U.S. Congress Joint Economic Committee built an immigration fiscal impact calculator using PolicyEngine's microsimulation model [@jec2026immigration].
 
 **Congressional and parliamentary citation.** In the US, members of Congress cited PolicyEngine analyses when introducing the Young Adult Tax Credit Act [@mcgarvey2024yatc], the End Child Poverty Act [@tlaib2024endchildpoverty], and the Keep Your Pay Act [@pe_keepyourpay]. In the UK, Baroness Altmann cited Commons Library research using PolicyEngine during House of Lords debate on the National Insurance Contributions (Employer Pensions Contributions) Bill [@hansard2026nic].
 
