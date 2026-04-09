@@ -372,24 +372,13 @@ non-technical users to explore policy reforms in both countries.</p>
 <p>Tax-benefit microsimulation models are essential tools for evaluating
 the distributional impacts of fiscal policy. Governments, think tanks,
 and researchers rely on such models to estimate how policy reforms
-affect household incomes, poverty rates, and government budgets.
-However, existing models vary widely in scope, access, and reuse. TAXSIM
-<span class="citation" data-cites="taxsim">(Feenberg and Coutts
-1993)</span> at NBER computes only tax liabilities and omits the benefit
-side of the ledger entirely. In the United States, the Congressional
-Budget Office and the Tax Policy Center maintain microsimulation tax
-models <span class="citation"
-data-cites="cbo2018taxmodel tpc2022taxmodel">(Congressional Budget
-Office 2018; Tax Policy Center 2022)</span>. In the UK, UKMOD <span
-class="citation"
-data-cites="sutherland2014euromod ukmod_access">(Sutherland and Figari
-2013; Institute for Social and Economic Research 2020)</span> is freely
-accessible for non-commercial use, but access to its FRS-based input
-data requires UK Data Service eligibility; HM Treasury uses the
-Intra-Governmental Tax and Benefit Microsimulation model (IGOTM) <span
-class="citation" data-cites="hmt2025igotm">(HM Treasury 2025)</span>,
-and the Institute for Fiscal Studies uses TAXBEN <span class="citation"
-data-cites="waters2017taxben">(Waters 2017)</span>.</p>
+affect household incomes, poverty rates, and government budgets. In
+practice, however, analysts often work across fragmented layers:
+statutory rules, representative microdata, reform definitions, and
+distributional outputs are managed in different tools and with different
+interfaces. Reproducing a baseline-versus-reform workflow, or carrying
+the same analysis pattern from one country model to another, therefore
+often requires bespoke scripts and project-specific conventions.</p>
 <p>The <code>policyengine</code> package addresses these gaps by
 providing an open-source analyst layer that works across multiple
 country models under a consistent API. Users can supply their own
@@ -464,7 +453,7 @@ methods evolve independently.</p>
 <td>Open source</td>
 <td>Yes</td>
 <td>Partial</td>
-<td>No</td>
+<td>Yes</td>
 <td>Yes</td>
 </tr>
 <tr>
@@ -480,6 +469,13 @@ methods evolve independently.</p>
 <td>Tax only</td>
 <td>Yes</td>
 <td>Yes</td>
+</tr>
+<tr>
+<td>Distributed as a native Python package</td>
+<td>Yes</td>
+<td>No</td>
+<td>No</td>
+<td>No</td>
 </tr>
 <tr>
 <td>Shared analyst-facing reform and output workflow across supported
@@ -721,11 +717,6 @@ href="https://hansard.parliament.uk/Lords/2026-02-24/debates/A381F7D6-0A3C-48FD-
 Institute for Research on Poverty. 2025. <em>2025–2026 <span>IRP</span>
 Extramural Large Grants</em>. <a
 href="https://www.irp.wisc.edu/2025-2026-irp-extramural-large-grants/">https://www.irp.wisc.edu/2025-2026-irp-extramural-large-grants/</a>.
-</div>
-<div id="ref-ukmod_access" class="csl-entry" role="listitem">
-Institute for Social and Economic Research. 2020. <em>Accessing
-UKMOD</em>. <a
-href="https://www.iser.essex.ac.uk/research/projects/ukmod/accessing-ukmod">https://www.iser.essex.ac.uk/research/projects/ukmod/accessing-ukmod</a>.
 </div>
 <div id="ref-beeck2025ai" class="csl-entry" role="listitem">
 Kennan, Ariel, Alessandra Garcia Guevara, and Jason Goodman. 2025.

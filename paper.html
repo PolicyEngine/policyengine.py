@@ -216,24 +216,13 @@ non-technical users to explore policy reforms in both countries.</p>
 <p>Tax-benefit microsimulation models are essential tools for evaluating
 the distributional impacts of fiscal policy. Governments, think tanks,
 and researchers rely on such models to estimate how policy reforms
-affect household incomes, poverty rates, and government budgets.
-However, existing models vary widely in scope, access, and reuse. TAXSIM
-<span class="citation" data-cites="taxsim">(Feenberg and Coutts
-1993)</span> at NBER computes only tax liabilities and omits the benefit
-side of the ledger entirely. In the United States, the Congressional
-Budget Office and the Tax Policy Center maintain microsimulation tax
-models <span class="citation"
-data-cites="cbo2018taxmodel tpc2022taxmodel">(Congressional Budget
-Office 2018; Tax Policy Center 2022)</span>. In the UK, UKMOD <span
-class="citation"
-data-cites="sutherland2014euromod ukmod_access">(Sutherland and Figari
-2013; Institute for Social and Economic Research 2020)</span> is freely
-accessible for non-commercial use, but access to its FRS-based input
-data requires UK Data Service eligibility; HM Treasury uses the
-Intra-Governmental Tax and Benefit Microsimulation model (IGOTM) <span
-class="citation" data-cites="hmt2025igotm">(HM Treasury 2025)</span>,
-and the Institute for Fiscal Studies uses TAXBEN <span class="citation"
-data-cites="waters2017taxben">(Waters 2017)</span>.</p>
+affect household incomes, poverty rates, and government budgets. In
+practice, however, analysts often work across fragmented layers:
+statutory rules, representative microdata, reform definitions, and
+distributional outputs are managed in different tools and with different
+interfaces. Reproducing a baseline-versus-reform workflow, or carrying
+the same analysis pattern from one country model to another, therefore
+often requires bespoke scripts and project-specific conventions.</p>
 <p>The <code>policyengine</code> package addresses these gaps by
 providing an open-source analyst layer that works across multiple
 country models under a consistent API. Users can supply their own
@@ -261,16 +250,24 @@ Office 2018; Tax Policy Center 2022)</span>. In the UK, the primary
 microsimulation models include UKMOD, maintained by the Institute for
 Social and Economic Research (ISER), University of Essex, as part of the
 EUROMOD family <span class="citation"
-data-cites="sutherland2014euromod">(Sutherland and Figari 2013)</span>,
-HM Treasury’s Intra-Governmental Tax and Benefit Microsimulation model
-(IGOTM) <span class="citation" data-cites="hmt2025igotm">(HM Treasury
-2025)</span>, and TAXBEN, maintained by the Institute for Fiscal Studies
-<span class="citation" data-cites="waters2017taxben">(Waters
-2017)</span>. OpenFisca <span class="citation"
-data-cites="openfisca">(OpenFisca Contributors 2024)</span> pioneered
-the open-source approach to tax-benefit microsimulation in France.
-PolicyEngine originated from OpenFisca and builds on this foundation
-through the PolicyEngine Core framework <span class="citation"
+data-cites="sutherland2014euromod euromod_download_2026">(Sutherland and
+Figari 2013; EUROMOD 2026)</span>, HM Treasury’s Intra-Governmental Tax
+and Benefit Microsimulation model (IGOTM) <span class="citation"
+data-cites="hmt2025igotm">(HM Treasury 2025)</span>, and TAXBEN,
+maintained by the Institute for Fiscal Studies <span class="citation"
+data-cites="waters2017taxben">(Waters 2017)</span>. OpenFisca <span
+class="citation" data-cites="openfisca">(OpenFisca Contributors
+2024)</span> pioneered the open-source approach to tax-benefit
+microsimulation in France. Other open-source efforts include the Policy
+Simulation Library, a collection of policy models and data-preparation
+routines <span class="citation" data-cites="psl2026">(Policy Simulation
+Library 2026)</span>, and The Budget Lab’s public US tax-model
+codebases, including Tax-Simulator and Cost-Recovery-Simulator <span
+class="citation"
+data-cites="budgetlab_taxsim_2024 budgetlab_costrecovery_2025">(The
+Budget Lab at Yale 2024, 2025)</span>. PolicyEngine originated from
+OpenFisca and builds on this foundation through the PolicyEngine Core
+framework <span class="citation"
 data-cites="policyengine_core">(Woodruff et al. 2024)</span>.</p>
 <p>The country packages already support direct microsimulation analysis
 and one-off weighted calculations. The <code>policyengine</code> package
@@ -308,7 +305,7 @@ methods evolve independently.</p>
 <td>Open source</td>
 <td>Yes</td>
 <td>Partial</td>
-<td>No</td>
+<td>Yes</td>
 <td>Yes</td>
 </tr>
 <tr>
@@ -324,6 +321,13 @@ methods evolve independently.</p>
 <td>Tax only</td>
 <td>Yes</td>
 <td>Yes</td>
+</tr>
+<tr>
+<td>Distributed as a native Python package</td>
+<td>Yes</td>
+<td>No</td>
+<td>No</td>
+<td>No</td>
 </tr>
 <tr>
 <td>Shared analyst-facing reform and output workflow across supported
@@ -519,6 +523,10 @@ NatCen Social Research. 2021. <em>Family Resources Survey,
 2019-2020</em>. UK Data Service. <a
 href="https://doi.org/10.5255/UKDA-SN-8802-1">https://doi.org/10.5255/UKDA-SN-8802-1</a>.
 </div>
+<div id="ref-euromod_download_2026" class="csl-entry" role="listitem">
+EUROMOD. 2026. <em>Download</em>. <a
+href="https://euromod-web.jrc.ec.europa.eu/download-euromod">https://euromod-web.jrc.ec.europa.eu/download-euromod</a>.
+</div>
 <div id="ref-atlanta_fed_prd" class="csl-entry" role="listitem">
 Federal Reserve Bank of Atlanta. 2021. <em>Policy Rules Database</em>.
 <a
@@ -565,11 +573,6 @@ href="https://hansard.parliament.uk/Lords/2026-02-24/debates/A381F7D6-0A3C-48FD-
 Institute for Research on Poverty. 2025. <em>2025–2026 <span>IRP</span>
 Extramural Large Grants</em>. <a
 href="https://www.irp.wisc.edu/2025-2026-irp-extramural-large-grants/">https://www.irp.wisc.edu/2025-2026-irp-extramural-large-grants/</a>.
-</div>
-<div id="ref-ukmod_access" class="csl-entry" role="listitem">
-Institute for Social and Economic Research. 2020. <em>Accessing
-UKMOD</em>. <a
-href="https://www.iser.essex.ac.uk/research/projects/ukmod/accessing-ukmod">https://www.iser.essex.ac.uk/research/projects/ukmod/accessing-ukmod</a>.
 </div>
 <div id="ref-beeck2025ai" class="csl-entry" role="listitem">
 Kennan, Ariel, Alessandra Garcia Guevara, and Jason Goodman. 2025.
@@ -630,6 +633,10 @@ Orcutt, Guy H. 1957. <span>“A New Type of Socio-Economic System.”</span>
 <em>Review of Economics and Statistics</em> 39 (2): 116–23. <a
 href="https://doi.org/10.2307/1928528">https://doi.org/10.2307/1928528</a>.
 </div>
+<div id="ref-psl2026" class="csl-entry" role="listitem">
+Policy Simulation Library. 2026. <em>PSL</em>. <a
+href="https://pslmodels.org/">https://pslmodels.org/</a>.
+</div>
 <div id="ref-policyengine_py" class="csl-entry" role="listitem">
 PolicyEngine Contributors. 2026. <em><span
 class="nocase">policyengine</span></em>. Released. <a
@@ -645,6 +652,17 @@ href="https://doi.org/10.34196/ijm.00075">https://doi.org/10.34196/ijm.00075</a>
 <div id="ref-tpc2022taxmodel" class="csl-entry" role="listitem">
 Tax Policy Center. 2022. <em>Brief Description of the Tax Model</em>. <a
 href="https://taxpolicycenter.org/resources/brief-description-tax-model">https://taxpolicycenter.org/resources/brief-description-tax-model</a>.
+</div>
+<div id="ref-budgetlab_taxsim_2024" class="csl-entry" role="listitem">
+The Budget Lab at Yale. 2024. <em>Tax Microsimulation at the Budget
+Lab</em>. <a
+href="https://budgetlab.yale.edu/research/tax-microsimulation-budget-lab">https://budgetlab.yale.edu/research/tax-microsimulation-budget-lab</a>.
+</div>
+<div id="ref-budgetlab_costrecovery_2025" class="csl-entry"
+role="listitem">
+The Budget Lab at Yale. 2025. <em>The Budget Lab’s Model for Tax
+Depreciation</em>. <a
+href="https://budgetlab.yale.edu/research/budget-labs-model-tax-depreciation">https://budgetlab.yale.edu/research/budget-labs-model-tax-depreciation</a>.
 </div>
 <div id="ref-waters2017taxben" class="csl-entry" role="listitem">
 Waters, Tom. 2017. <em>TAXBEN: The IFS Tax and Benefit Microsimulation
