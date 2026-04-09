@@ -5,6 +5,7 @@ title: policyengine
 version: 3.4.0
 date-released: "2026-04-09"
 url: "https://github.com/PolicyEngine/policyengine.py"
+abstract: "An open-source Python package that provides a common analysis layer for tax-benefit microsimulation across the US and the UK."
 license: AGPL-3.0
 authors:
   - family-names: Ghenis

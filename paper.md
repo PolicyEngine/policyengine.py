@@ -40,7 +40,7 @@ The `policyengine` package provides an analyst layer that works across multiple 
 
 # State of the Field
 
-Tax-benefit microsimulation, which Orcutt [-@orcutt1957] pioneered and Bourguignon and Spadaro [-@bourguignon2006] surveyed, underpins much of modern fiscal policy evaluation. In the US, TAXSIM [@taxsim] at the National Bureau of Economic Research provides tax calculations, while the Congressional Budget Office and Tax Policy Center maintain microsimulation tax models [@cbo2018taxmodel; @tpc2022taxmodel]. In the UK, the primary microsimulation models are UKMOD, which the Institute for Social and Economic Research (ISER) at the University of Essex maintains as part of the EUROMOD family [@sutherland2014euromod; @euromod_download_2026]; HM Treasury's Intra-Governmental Tax and Benefit Microsimulation model (IGOTM) [@hmt2025igotm]; and TAXBEN, which the Institute for Fiscal Studies maintains [@waters2017taxben].
+Tax-benefit microsimulation, which Orcutt [-@orcutt1957] pioneered and Bourguignon and Spadaro [-@bourguignon2006] surveyed, underpins much of modern fiscal policy evaluation. In the US, TAXSIM [@taxsim] at the National Bureau of Economic Research provides tax calculations, while the Congressional Budget Office and Tax Policy Center maintain microsimulation tax models [@cbo2018taxmodel; @tpc2022taxmodel]. In the UK, the primary microsimulation models are UKMOD, which the Institute for Social and Economic Research (ISER) at the University of Essex maintains as part of the EUROMOD family [@sutherland2013euromod; @euromod_download_2026]; HM Treasury's Intra-Governmental Tax and Benefit Microsimulation model (IGOTM) [@hmt2025igotm]; and TAXBEN, which the Institute for Fiscal Studies maintains [@waters2017taxben].
 
 OpenFisca [@openfisca] pioneered the open-source approach to tax-benefit microsimulation in France. Other open-source efforts include the Policy Simulation Library, a collection of policy models and data-preparation routines [@psl2026], and The Budget Lab's public US tax-model codebases, including Tax-Simulator and Cost-Recovery-Simulator [@budgetlab_taxsim_2024; @budgetlab_costrecovery_2025]. The PolicyEngine developers originally forked the codebase from OpenFisca and built it on the PolicyEngine Core framework [@policyengine_core].
 
@@ -66,7 +66,7 @@ The PolicyEngine software stack has four layers. PolicyEngine Core provides reus
 
 The `policyengine` package centralizes distributional methods; legislative implementation remains in the country packages. The cost is coordination overhead and the need to maintain a stable interface boundary across repositories.
 
-At runtime, a simulation combines a country model version, household microdata, and optional reform or behavioral-response inputs. The analysis layer then produces reusable outputs for decile changes, program statistics, poverty, inequality, and regional impacts, which examples, research scripts, and the web application use.
+At runtime, a simulation combines a country model version, household microdata, and optional reform or behavioral-response inputs. The `Dynamic` class represents behavioral responses such as labor supply elasticities; the country packages define the relevant parameters, and the simulation pipeline applies them after the static policy reform. The analysis layer then produces reusable outputs for decile changes, program statistics, poverty, inequality, and regional impacts, which examples, research scripts, and the web application use.
 
 The following example computes a household's net income under baseline law and under a reform that doubles the US standard deduction for single filers:
 
@@ -100,7 +100,7 @@ household = USHouseholdInput(
 )
 baseline = calculate_household_impact(household)
 reformed = calculate_household_impact(household, policy=reform)
-# baseline net income: $40,702; reform net income: $42,484
+# Results for California: baseline net income $40,702, reform $42,484
 ```
 
 A UK reproduction script that runs a population-level analysis is available at `examples/paper_repro_uk.py`.
