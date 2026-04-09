@@ -30,66 +30,100 @@ bibliography: paper.bib
 
 # Summary
 
-The `policyengine` Python package [@policyengine_py] is an open-source analysis layer for tax-benefit microsimulation. The package provides a unified interface for running policy simulations, analyzing distributional impacts, and visualizing results across the US and the UK. It delegates country-specific tax-benefit calculations to dedicated country packages (policyengine-us and policyengine-uk) while providing shared abstractions for simulations, datasets, parametric reforms, and output analysis. The framework supports both individual household simulations and population-wide microsimulations using representative survey microdata with calibrated weights. These workflows also power an interactive web application at [policyengine.org](https://policyengine.org) that enables non-technical users to explore policy reforms in both countries.
+The `policyengine` Python package [@policyengine_py] is an open-source analysis layer for tax-benefit microsimulation. It provides a common interface for running policy simulations, analyzing distributional impacts, and visualizing results across the US and the UK. It delegates country-specific tax-benefit calculations to dedicated country packages (policyengine-us and policyengine-uk) while providing shared abstractions for simulations, datasets, parametric reforms, and output analysis. The package supports both individual household simulations and population-wide microsimulations using representative survey microdata with calibrated weights. The package also powers an interactive web application at [policyengine.org](https://policyengine.org) that lets users explore policy reforms in both countries without writing code.
 
 # Statement of Need
 
-Tax-benefit microsimulation models are essential tools for evaluating the distributional impacts of fiscal policy. Governments, think tanks, and researchers rely on such models to estimate how policy reforms affect household incomes, poverty rates, and government budgets. In practice, however, analysts often work across fragmented layers: statutory rules, representative microdata, reform definitions, and distributional outputs are managed in different tools and with different interfaces. Reproducing a baseline-versus-reform workflow, or carrying the same analysis pattern from one country model to another, therefore often requires bespoke scripts and project-specific conventions.
+Tax-benefit microsimulation models are standard tools for evaluating the distributional impacts of fiscal policy. Governments, think tanks, and researchers use them to estimate how policy reforms affect household incomes, poverty rates, and government budgets. In practice, however, analysts often work across separate layers: they manage statutory rules, representative microdata, reform definitions, and distributional outputs in different tools and with different interfaces. Reproducing a baseline-versus-reform workflow, or carrying the same analysis pattern from one country model to another, therefore often requires bespoke scripts and project-specific conventions.
 
-The `policyengine` package provides an analyst layer that works across multiple country models under a consistent API. Users can supply their own microdata or use companion representative datasets, and compute the impact of current law or hypothetical reforms, including parametric changes to existing policy parameters and structural modifications to the tax-benefit system, on any household or a national population. The Simulation class supports individual household analysis, while population-level aggregate analysis uses representative survey datasets with calibrated weights. The framework's open development on GitHub supports external validation, community contributions, and reproducible policy analysis across countries.
+The `policyengine` package provides an analyst layer that works across multiple country models under a consistent API. Users can supply their own microdata or use companion representative datasets. They can then compute the impact of current law or hypothetical reforms — including parametric changes to existing policy parameters and structural modifications to the tax-benefit system — on any household or a national population. The Simulation class supports individual household analysis, while population-level aggregate analysis uses representative survey datasets with calibrated weights. The source code and development history are public on GitHub.
 
 # State of the Field
 
-Tax-benefit microsimulation, pioneered by Orcutt [-@orcutt1957] and surveyed by Bourguignon and Spadaro [-@bourguignon2006], underpins much of modern fiscal policy evaluation. In the US, TAXSIM [@taxsim] at the National Bureau of Economic Research provides tax calculations, while the Congressional Budget Office and Tax Policy Center maintain microsimulation tax models [@cbo2018taxmodel; @tpc2022taxmodel]. In the UK, the primary microsimulation models include UKMOD, maintained by the Institute for Social and Economic Research (ISER), University of Essex, as part of the EUROMOD family [@sutherland2014euromod; @euromod_download_2026], HM Treasury's Intra-Governmental Tax and Benefit Microsimulation model (IGOTM) [@hmt2025igotm], and TAXBEN, maintained by the Institute for Fiscal Studies [@waters2017taxben]. OpenFisca [@openfisca] pioneered the open-source approach to tax-benefit microsimulation in France. Other open-source efforts include the Policy Simulation Library, a collection of policy models and data-preparation routines [@psl2026], and The Budget Lab's public US tax-model codebases, including Tax-Simulator and Cost-Recovery-Simulator [@budgetlab_taxsim_2024; @budgetlab_costrecovery_2025]. PolicyEngine originated from OpenFisca and builds on this foundation through the PolicyEngine Core framework [@policyengine_core].
+Tax-benefit microsimulation, which Orcutt [-@orcutt1957] pioneered and Bourguignon and Spadaro [-@bourguignon2006] surveyed, underpins much of modern fiscal policy evaluation. In the US, TAXSIM [@taxsim] at the National Bureau of Economic Research provides tax calculations, while the Congressional Budget Office and Tax Policy Center maintain microsimulation tax models [@cbo2018taxmodel; @tpc2022taxmodel]. In the UK, the primary microsimulation models are UKMOD, which the Institute for Social and Economic Research (ISER) at the University of Essex maintains as part of the EUROMOD family [@sutherland2014euromod; @euromod_download_2026]; HM Treasury's Intra-Governmental Tax and Benefit Microsimulation model (IGOTM) [@hmt2025igotm]; and TAXBEN, which the Institute for Fiscal Studies maintains [@waters2017taxben].
 
-The country packages already support direct microsimulation analysis and one-off weighted calculations. The `policyengine` package groups a different layer of functionality: harmonized dataset management, a stable baseline-versus-reform pattern, structured output types for distributional and regional analysis, and interfaces suitable for downstream dashboards and reports. Concretely, the package contributes reusable outputs such as `Aggregate`, `ChangeAggregate`, and `IntraDecileImpact`, together with bundled analyses such as `economic_impact_analysis()`. This separation lets country model packages focus on statutory rules while shared analysis methods evolve independently.
+OpenFisca [@openfisca] pioneered the open-source approach to tax-benefit microsimulation in France. Other open-source efforts include the Policy Simulation Library, a collection of policy models and data-preparation routines [@psl2026], and The Budget Lab's public US tax-model codebases, including Tax-Simulator and Cost-Recovery-Simulator [@budgetlab_taxsim_2024; @budgetlab_costrecovery_2025]. The PolicyEngine developers originally forked the codebase from OpenFisca and built it on the PolicyEngine Core framework [@policyengine_core].
+
+The country packages already support direct microsimulation analysis and one-off weighted calculations. The `policyengine` package provides a different layer of functionality: shared dataset management, a stable baseline-versus-reform pattern, structured output types for distributional and regional analysis, and interfaces that downstream dashboards and reports use. Concretely, the package provides reusable outputs such as `Aggregate`, `ChangeAggregate`, and `IntraDecileImpact`, together with bundled analyses such as `economic_impact_analysis()`. This separation lets country model packages focus on statutory rules while shared analysis methods evolve independently.
 
 Table 1 summarizes where `policyengine` sits relative to selected tools:
 
 | Dimension | `policyengine` | TAXSIM | UKMOD | OpenFisca |
 |---|---|---|---|---|
 | Open source | Yes | Partial | Yes | Yes |
-| Main supported workflow | US and UK | US | UK | France, with additional country packages and forks |
+| Country coverage | US and UK | US | UK | France, with additional country packages and forks |
 | Tax and benefit analysis | Yes | Tax only | Yes | Yes |
-| Distributed as a native Python package | Yes | No | No | No |
-| Shared analyst-facing reform and output workflow across supported countries | Yes | No | No | Country-specific |
+| Python package (pip install) | Yes | No | No | No |
+| Shared reform and output API across countries | Yes | No | No | Country-specific |
 
-Within this landscape, `policyengine` serves as a shared analysis layer above country models. It makes repeated reform-analysis workflows portable across supported countries, while leaving reusable engine logic in PolicyEngine Core, country legislation in policyengine-us and policyengine-uk, and enhanced survey microdata in companion repositories [@policyengine_core; @woodruff2024enhanced_cps]. This separation allows each layer to be versioned and updated independently as legislation, methodology, and microdata change.
+The `policyengine` layer leaves reusable engine logic in PolicyEngine Core, country legislation in policyengine-us and policyengine-uk, and enhanced survey microdata in companion repositories [@policyengine_core; @woodruff2024enhanced_cps]. Teams can version and update each layer independently as legislation, methodology, and microdata change.
 
 # Software Design
 
-The broader PolicyEngine software stack is built as a four-layer system. PolicyEngine Core provides reusable simulation abstractions, versioned parameters, and dataset interfaces shared across countries [@policyengine_core]. The policyengine-us and policyengine-uk packages contain statutory logic, variables, and entity structures specific to each tax-benefit system. The `policyengine` package sits above them as the analysis layer: it defines shared simulation orchestration, structured output types, and canonical baseline-versus-reform workflows such as `economic_impact_analysis()`. Companion data repositories hold enhanced survey microdata derived from the CPS [@woodruff2024enhanced_cps] and Family Resources Survey [@frs2020]. Figure 1 illustrates this architecture.
+The PolicyEngine software stack has four layers. PolicyEngine Core provides reusable simulation abstractions, versioned parameters, and dataset interfaces that country packages share [@policyengine_core]. The policyengine-us and policyengine-uk packages contain statutory logic, variables, and entity structures specific to each tax-benefit system. The `policyengine` package sits above them as the analysis layer: it defines shared simulation orchestration, structured output types, and canonical baseline-versus-reform workflows such as `economic_impact_analysis()`. Companion data repositories hold enhanced survey microdata derived from the Current Population Survey (CPS) [@woodruff2024enhanced_cps] and Family Resources Survey [@frs2020]. Figure 1 illustrates this architecture.
 
-![PolicyEngine architecture. Policies, household microdata, and behavioral response parameters feed into the Simulation engine, producing distributional impacts, fiscal impacts, regional breakdowns, poverty rates, and inequality metrics.](architecture.png){width="100%"}
+![PolicyEngine architecture. A microsimulation combines three input concepts — tax-benefit rules and parameters (policies), survey microdata (households), and behavioral responses (dynamics, defined in the country packages) — in the Simulation layer, which produces distributional impacts, fiscal impacts, regional breakdowns, poverty rates, and inequality metrics.](architecture.png){width="100%"}
 
-This split reflects a deliberate trade-off. The project could have kept analysis code inside each country package or inside downstream application repositories, but that would duplicate methodology and make cross-country work harder to keep aligned. By extracting repeated analyst tasks into `policyengine`, the project centralizes distributional methods while leaving legislative implementation in the country packages. The cost is added package coordination and a clearer interface boundary across repositories.
+The `policyengine` package centralizes distributional methods; legislative implementation remains in the country packages. The cost is coordination overhead and the need to maintain a stable interface boundary across repositories.
 
-As shown in Figure 1, at runtime a simulation combines a country model version, household microdata, and optional reform or dynamic-response inputs. The same layer then exposes reusable outputs for decile changes, program statistics, poverty, inequality, and regional impacts, which are consumed by examples, research scripts, and the public web application.
+At runtime, a simulation combines a country model version, household microdata, and optional reform or behavioral-response inputs. The analysis layer then produces reusable outputs for decile changes, program statistics, poverty, inequality, and regional impacts, which examples, research scripts, and the web application use.
+
+The following example computes a household's net income under baseline law and under a reform that doubles the US standard deduction for single filers:
+
+```python
+import datetime
+from policyengine.core import Parameter, ParameterValue, Policy
+from policyengine.tax_benefit_models.us import (
+    USHouseholdInput, calculate_household_impact, us_latest,
+)
+
+param = Parameter(
+    name="gov.irs.deductions.standard.amount.SINGLE",
+    tax_benefit_model_version=us_latest,
+)
+reform = Policy(
+    name="Double standard deduction",
+    parameter_values=[ParameterValue(
+        parameter=param,
+        start_date=datetime.date(2026, 1, 1),
+        end_date=datetime.date(2026, 12, 31),
+        value=30_950,
+    )],
+)
+
+household = USHouseholdInput(
+    people=[{"age": 40, "employment_income": 50_000,
+             "is_tax_unit_head": True}],
+    tax_unit={"filing_status": "SINGLE"},
+    household={"state_code_str": "CA"},
+    year=2026,
+)
+baseline = calculate_household_impact(household)
+reformed = calculate_household_impact(household, policy=reform)
+```
 
 The `policyengine` package does not include an underlying macroeconomic model in its microsimulation analysis and does not capture general equilibrium effects.
 
 # Research Impact Statement
 
-PolicyEngine has demonstrated research impact across government, academia, and policy research in both the US and the UK.
+**Government use.** Co-author Nikhil Woodruff served as an Innovation Fellow with the 10DS data science team at 10 Downing Street, adapting PolicyEngine for government policy analysis [@no10fellowship2026]. HM Treasury documented PolicyEngine in the UK Algorithmic Transparency Recording Standard as a model their Personal Tax, Welfare and Pensions team uses [@hmt2024atrs]. The U.S. Congress Joint Economic Committee built an immigration fiscal impact calculator using PolicyEngine's microsimulation model [@jec2026immigration].
 
-**Government adoption.** HM Treasury has formally documented PolicyEngine in the UK Algorithmic Transparency Recording Standard, describing it as a model their Personal Tax, Welfare and Pensions team is exploring for "advising policymakers on the impact of tax and welfare measures on households" [@hmt2024atrs].
+**Congressional and parliamentary citation.** In the US, members of Congress cited PolicyEngine analyses when introducing the Young Adult Tax Credit Act [@mcgarvey2024yatc], the End Child Poverty Act [@tlaib2024endchildpoverty], and the Keep Your Pay Act [@pe_keepyourpay]. In the UK, Baroness Altmann cited Commons Library research using PolicyEngine during House of Lords debate on the National Insurance Contributions (Employer Pensions Contributions) Bill [@hansard2026nic].
 
-**Congressional and parliamentary citation.** In the US, Representatives Morgan McGarvey and Bonnie Watson Coleman cited PolicyEngine's analysis in introducing the Young Adult Tax Credit Act (H.R.7547), stating that "according to the model at PolicyEngine, 22% of all Americans would see an increase in their household income under this program, and it would lift over 4 million Americans out of poverty" [@mcgarvey2024yatc]. In the UK, Baroness Altmann referenced PolicyEngine and its interactive dashboard during House of Lords Grand Committee debate on the National Insurance Contributions (Employer Pensions Contributions) Bill in February 2026, noting that Commons Library research using PolicyEngine provided "a useful picture of the distributional effects of raising the contribution limit" across income deciles [@hansard2026nic].
+**Institutional use.** Under a memorandum of understanding with the Federal Reserve Bank of Atlanta, PolicyEngine runs three-way comparisons of its calculations against TAXSIM and the Atlanta Fed's Policy Rules Database [@atlanta_fed_prd]. Co-author Max Ghenis and Jason DeBacker (University of South Carolina) presented the Enhanced CPS methodology at the 117th Annual Conference on Taxation of the National Tax Association [@ghenis2024nta].
 
-**Institutional use and validation.** The Federal Reserve Bank of Atlanta independently validates PolicyEngine's model through its Policy Rules Database, conducting three-way comparisons between PolicyEngine, TAXSIM, and the Fed's own models [@atlanta_fed_prd]. Co-author Max Ghenis and Jason DeBacker (University of South Carolina) presented the Enhanced Current Population Survey methodology at the 117th Annual Conference on Taxation of the National Tax Association [@ghenis2024nta].
+**Academic research.** The Better Government Lab (Georgetown McCourt School / University of Michigan Ford School) collaborated with PolicyEngine on benefits eligibility research [@pe_bgl]. Matt Unrath (University of Southern California) uses PolicyEngine in a study of effective marginal and average tax rates facing American families, which the US Department of Health and Human Services funds through the Institute for Research on Poverty [@pe_usc]. The Beeck Center at Georgetown University featured PolicyEngine in research on rules-as-code for US public benefits [@beeck2023rac; @beeck2025ai]. Youngman et al. [-@youngman2026carbon], at the Institute for New Economic Thinking, Oxford, cite PolicyEngine UK's microdata methodology in an agent-based macroeconomic model for the UK's Seventh Carbon Budget.
 
-**Academic research.** The Better Government Lab, a joint center of the Georgetown McCourt School of Public Policy and the University of Michigan Ford School of Public Policy, collaborated with PolicyEngine on benefits eligibility research [@pe_bgl]. Matt Unrath (University of Southern California) is using PolicyEngine in a study of effective marginal and average tax rates facing American families, funded by the US Department of Health and Human Services through the Institute for Research on Poverty [@pe_usc]. The Beeck Center at Georgetown University featured PolicyEngine in research on rules-as-code for US public benefits [@beeck2023rac; @beeck2025ai]. Youngman et al. [-@youngman2026carbon] cite PolicyEngine UK's microdata methodology in their agent-based macroeconomic model for the UK's Seventh Carbon Budget at the Institute for New Economic Thinking, Oxford.
-
-**Policy research.** In the US, the Niskanen Center used PolicyEngine to estimate the cost and distributional impacts of Child Tax Credit reform options [@mccabe2024ctc]. DC Councilmember Zachary Parker cited PolicyEngine's analysis when introducing the District Child Tax Credit Amendment Act of 2023, the first local child tax credit in US history [@pe_dctc]. Senator Cory Booker's office embedded a PolicyEngine-built calculator on his official Senate website for the Keep Your Pay Act [@pe_keepyourpay]. In the UK, the National Institute of Economic and Social Research (NIESR) used PolicyEngine in their UK Living Standards Review 2025 [@niesr2025living], and the Institute of Economic Affairs has published PolicyEngine-based analyses of employer National Insurance contributions and 2025–2026 tax changes [@woodruff2024nic; @woodruff2025tax].
+**Policy research.** In the US, the Niskanen Center used PolicyEngine to estimate the cost and distributional impacts of Child Tax Credit reform options [@mccabe2024ctc]. DC Councilmember Zachary Parker cited PolicyEngine's analysis when introducing the District Child Tax Credit Amendment Act of 2023 [@pe_dctc]. In the UK, the National Institute of Economic and Social Research (NIESR) used PolicyEngine in their UK Living Standards Review 2025 [@niesr2025living], and the Institute of Economic Affairs published PolicyEngine-based analyses of employer National Insurance contributions and 2025–2026 tax changes [@woodruff2024nic; @woodruff2025tax].
 
 # Acknowledgements
 
-This work was supported in the US by Arnold Ventures [@arnold_ventures], NEO Philanthropy [@neo_philanthropy], the Gerald Huff Fund for Humanity, and the National Science Foundation (NSF POSE Phase I, Award 2518372) [@nsf_pose], and in the UK by the Nuffield Foundation since September 2024 [@nuffield2024grant]. These funders had no involvement in the design, development, or content of this software or paper.
+Arnold Ventures [@arnold_ventures], NEO Philanthropy [@neo_philanthropy], the Gerald Huff Fund for Humanity, and the National Science Foundation (NSF POSE Phase I, Award 2518372) [@nsf_pose] funded this work in the US. The Nuffield Foundation has funded the UK work since September 2024 [@nuffield2024grant]. These funders had no involvement in the design, development, or content of this software or paper.
 
-We acknowledge contributions from all PolicyEngine contributors, and thank the OpenFisca community for the foundational microsimulation framework [@openfisca]. We acknowledge the US Census Bureau for providing access to the Current Population Survey, and the UK Data Service and the Department for Work and Pensions for providing access to the Family Resources Survey.
+We thank all PolicyEngine contributors and the OpenFisca community for the microsimulation framework from which PolicyEngine was forked [@openfisca]. We acknowledge the US Census Bureau for providing access to the Current Population Survey, and the UK Data Service and the Department for Work and Pensions for providing access to the Family Resources Survey.
 
 # AI Usage Disclosure
 
-Generative AI tools, specifically Claude Opus 4 by Anthropic [@claude2026], were used to assist with code refactoring. All AI-assisted outputs were reviewed, edited, and validated by human authors, who made all core design decisions regarding software architecture, policy modeling, and parameter implementation. The authors remain fully responsible for the accuracy, originality, and correctness of all submitted materials.
+The authors used generative AI tools, specifically Claude Opus 4 by Anthropic [@claude2026], to assist with code refactoring. Human authors reviewed, edited, and validated all AI-assisted outputs and made all design decisions regarding software architecture, policy modeling, and parameter implementation. The authors remain fully responsible for the accuracy, originality, and correctness of all submitted materials.
 
 # References
