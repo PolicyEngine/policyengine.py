@@ -53,14 +53,14 @@ Table 1 summarizes where `policyengine` sits relative to selected tools:
 | Open source | Yes | Partial | Yes | Yes |
 | Country coverage | US and UK | US | UK | France, with additional country packages and forks |
 | Tax and benefit analysis | Yes | Tax only | Yes | Yes |
-| Python package (pip install) | Yes | No | No | No |
+| Python package (pip install) | Yes | No | No | Yes |
 | Shared reform and output API across countries | Yes | No | No | Country-specific |
 
 The `policyengine` layer leaves reusable engine logic in PolicyEngine Core, country legislation in policyengine-us and policyengine-uk, and enhanced survey microdata in companion repositories [@policyengine_core; @woodruff2024enhanced_cps]. Teams can version and update each layer independently as legislation, methodology, and microdata change.
 
 # Software Design
 
-The PolicyEngine software stack has four layers. PolicyEngine Core provides reusable simulation abstractions, versioned parameters, and dataset interfaces that country packages share [@policyengine_core]. The policyengine-us and policyengine-uk packages contain statutory logic, variables, and entity structures specific to each tax-benefit system. The `policyengine` package sits above them as the analysis layer: it defines shared simulation orchestration, structured output types, and canonical baseline-versus-reform workflows such as `economic_impact_analysis()`. Companion data repositories hold enhanced survey microdata derived from the Current Population Survey (CPS) [@woodruff2024enhanced_cps] and Family Resources Survey [@frs2020]. Figure 1 illustrates this architecture.
+The PolicyEngine software stack has four layers. PolicyEngine Core provides reusable simulation abstractions, versioned parameters, and dataset interfaces that country packages share [@policyengine_core]. The policyengine-us and policyengine-uk packages contain statutory logic, variables, and entity structures specific to each tax-benefit system. The `policyengine` package sits above them as the analysis layer: it defines shared simulation orchestration, structured output types, and canonical baseline-versus-reform workflows such as `economic_impact_analysis()`. Companion data repositories hold enhanced survey microdata derived from the Current Population Survey (CPS) [@woodruff2024enhanced_cps] and Family Resources Survey [@frs2020]. Figure 1 illustrates the runtime workflow: inputs flow into the Simulation layer, which produces the structured outputs.
 
 ![PolicyEngine architecture. A microsimulation combines three input concepts — tax-benefit rules and parameters (policies), survey microdata (households), and behavioral responses (dynamics, defined in the country packages) — in the Simulation layer, which produces distributional impacts, fiscal impacts, regional breakdowns, poverty rates, and inequality metrics.](architecture.png){width="100%"}
 
