@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: policyengine
+version: 3.4.0
+date-released: "2026-04-09"
+url: "https://github.com/PolicyEngine/policyengine.py"
+license: AGPL-3.0
+authors:
+  - family-names: Ghenis
+    given-names: Max
+    orcid: "https://orcid.org/0000-0002-1335-8277"
+    affiliation: PolicyEngine
+  - family-names: Ahmadi
+    given-names: Vahid
+    orcid: "https://orcid.org/0009-0004-1093-6272"
+    affiliation: PolicyEngine
+  - family-names: Woodruff
+    given-names: Nikhil
+    orcid: "https://orcid.org/0009-0009-5004-4910"
+    affiliation: PolicyEngine
+  - family-names: Makarchuk
+    given-names: Pavel
+    orcid: "https://orcid.org/0009-0003-4869-7409"
+    affiliation: PolicyEngine
+keywords:
+  - microsimulation
+  - tax
+  - benefit
+  - public policy
+  - Python
+repository-code: "https://github.com/PolicyEngine/policyengine.py"

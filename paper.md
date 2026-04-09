@@ -100,7 +100,10 @@ household = USHouseholdInput(
 )
 baseline = calculate_household_impact(household)
 reformed = calculate_household_impact(household, policy=reform)
+# baseline net income: $40,702; reform net income: $42,484
 ```
+
+A UK reproduction script that runs a population-level analysis is available at `examples/paper_repro_uk.py`.
 
 The `policyengine` package does not include an underlying macroeconomic model in its microsimulation analysis and does not capture general equilibrium effects.
 
