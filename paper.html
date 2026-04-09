@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <meta name="dcterms.date" content="2026-04-07" />
+  <meta name="dcterms.date" content="2026-04-09" />
   <title>policyengine: An Analyst Layer for Tax-Benefit Microsimulation</title>
   <style>
     /* Default styles provided by pandoc.
@@ -195,7 +195,7 @@
 <header id="title-block-header">
 <h1 class="title">policyengine: An Analyst Layer for Tax-Benefit
 Microsimulation</h1>
-<p class="date">7 April 2026</p>
+<p class="date">9 April 2026</p>
 </header>
 <h1 id="summary">Summary</h1>
 <p>The <code>policyengine</code> Python package <span class="citation"
@@ -223,18 +223,17 @@ distributional outputs are managed in different tools and with different
 interfaces. Reproducing a baseline-versus-reform workflow, or carrying
 the same analysis pattern from one country model to another, therefore
 often requires bespoke scripts and project-specific conventions.</p>
-<p>The <code>policyengine</code> package addresses these gaps by
-providing an open-source analyst layer that works across multiple
-country models under a consistent API. Users can supply their own
-microdata or use companion representative datasets, and compute the
-impact of current law or hypothetical reforms, including parametric
-changes to existing policy parameters and structural modifications to
-the tax-benefit system, on any household or a national population. The
-Simulation class supports individual household analysis, while
-population-level aggregate analysis uses representative survey datasets
-with calibrated weights. The framework’s open development on GitHub
-enables external validation, community contributions, and reproducible
-policy analysis across countries.</p>
+<p>The <code>policyengine</code> package provides an analyst layer that
+works across multiple country models under a consistent API. Users can
+supply their own microdata or use companion representative datasets, and
+compute the impact of current law or hypothetical reforms, including
+parametric changes to existing policy parameters and structural
+modifications to the tax-benefit system, on any household or a national
+population. The Simulation class supports individual household analysis,
+while population-level aggregate analysis uses representative survey
+datasets with calibrated weights. The framework’s open development on
+GitHub supports external validation, community contributions, and
+reproducible policy analysis across countries.</p>
 <h1 id="state-of-the-field">State of the Field</h1>
 <p>Tax-benefit microsimulation, pioneered by Orcutt <span
 class="citation" data-cites="orcutt1957">(1957)</span> and surveyed by
@@ -271,18 +270,18 @@ framework <span class="citation"
 data-cites="policyengine_core">(Woodruff et al. 2024)</span>.</p>
 <p>The country packages already support direct microsimulation analysis
 and one-off weighted calculations. The <code>policyengine</code> package
-was introduced for a different need: a reusable analyst-facing layer for
-workflows that recur across projects and countries. In practice, these
-include harmonized dataset management, a stable baseline-versus-reform
-pattern, structured output types for distributional and regional
-analysis, and interfaces suitable for downstream dashboards and reports.
-Concretely, the package contributes reusable outputs such as
-<code>Aggregate</code>, <code>ChangeAggregate</code>, and
-<code>IntraDecileImpact</code>, together with bundled reform analyses
-such as <code>economic_impact_analysis()</code>. This design lets
-country model packages focus on statutory rules while shared analysis
-methods evolve independently.</p>
-<p>Several practical differences motivate a separate analyst layer:</p>
+groups a different layer of functionality: harmonized dataset
+management, a stable baseline-versus-reform pattern, structured output
+types for distributional and regional analysis, and interfaces suitable
+for downstream dashboards and reports. Concretely, the package
+contributes reusable outputs such as <code>Aggregate</code>,
+<code>ChangeAggregate</code>, and <code>IntraDecileImpact</code>,
+together with bundled analyses such as
+<code>economic_impact_analysis()</code>. This separation lets country
+model packages focus on statutory rules while shared analysis methods
+evolve independently.</p>
+<p>Table 1 summarizes where <code>policyengine</code> sits relative to
+selected tools:</p>
 <table>
 <colgroup>
 <col style="width: 20%" />
@@ -339,14 +338,12 @@ countries</td>
 </tr>
 </tbody>
 </table>
-<p>Compared with these tools, <code>policyengine</code>’s contribution
-is not a new legislative engine for a single country. It is a shared
-analysis layer that sits above country models and makes repeated
-reform-analysis workflows portable across supported countries. The
-project also separates reusable engine logic into PolicyEngine Core,
-analyst workflows into <code>policyengine</code>, country legislation
-into policyengine-us and policyengine-uk, and enhanced survey microdata
-into companion repositories <span class="citation"
+<p>Within this landscape, <code>policyengine</code> serves as a shared
+analysis layer above country models. It makes repeated reform-analysis
+workflows portable across supported countries, while leaving reusable
+engine logic in PolicyEngine Core, country legislation in
+policyengine-us and policyengine-uk, and enhanced survey microdata in
+companion repositories <span class="citation"
 data-cites="policyengine_core woodruff2024enhanced_cps">(Woodruff et al.
 2024; Woodruff and Ghenis 2024)</span>. This separation allows each
 layer to be versioned and updated independently as legislation,
