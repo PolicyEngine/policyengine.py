@@ -45,6 +45,7 @@ print(f"Total UC spending: £{agg.result / 1e9:.1f}bn")
 - `examples/income_distribution_us.py`: Analyse benefit distribution by decile
 - `examples/employment_income_variation_uk.py`: Model employment income phase-outs
 - `examples/policy_change_uk.py`: Analyse policy reform impacts
+- `examples/paper_repro_uk.py`: Reproduce the UK reform analysis used in the JOSS paper draft
 
 ## Installation
 
@@ -135,6 +136,16 @@ echo "Description of change" > changelog.d/my-change.added
 ```
 
 On merge, the versioning workflow bumps the version, builds the changelog, and creates a GitHub Release.
+
+## Paper reproduction
+
+Use the pinned interpreter and the UK extra to run the checked-in paper repro:
+
+```bash
+uv run --python 3.14 --extra uk python examples/paper_repro_uk.py
+```
+
+On first run this will create `./data/enhanced_frs_2023_24_year_2026.h5`.
 
 ## Features
 
