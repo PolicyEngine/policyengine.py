@@ -1,3 +1,10 @@
+## [3.4.0] - 2026-04-08
+
+### Added
+
+- Add winner, loser, and no-change percentages to the congressional district impact output.
+
+
 ## [3.3.0] - 2026-03-20
 
 ### Added

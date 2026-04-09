@@ -16,7 +16,8 @@ class CongressionalDistrictImpact(Output):
 
     Groups households by congressional_district_geoid (integer SSDD format
     where SS = state FIPS, DD = district number) and computes weighted
-    average and relative household income changes per district.
+    average and relative household income changes per district, plus the
+    district-level shares of people who are winners, losers, or unchanged.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -36,6 +37,11 @@ class CongressionalDistrictImpact(Output):
         baseline_income = baseline_hh["household_net_income"].values
         reform_income = reform_hh["household_net_income"].values
         weights = baseline_hh["household_weight"].values
+        household_count_people = (
+            baseline_hh["household_count_people"].values
+            if "household_count_people" in baseline_hh.columns
+            else np.ones_like(weights)
+        )
 
         # Only include valid geoids (positive integers)
         unique_geoids = np.unique(geoids[geoids > 0])
@@ -50,6 +56,7 @@ class CongressionalDistrictImpact(Output):
 
             b_inc = baseline_income[mask]
             r_inc = reform_income[mask]
+            people_weights = household_count_people[mask] * w
 
             weighted_baseline = float((b_inc * w).sum())
             weighted_reform = float((r_inc * w).sum())
@@ -60,6 +67,27 @@ class CongressionalDistrictImpact(Output):
                 if weighted_baseline != 0
                 else 0.0
             )
+            capped_baseline = np.maximum(b_inc, 1.0)
+            income_change = (r_inc - b_inc) / capped_baseline
+            people_total = float(people_weights.sum())
+
+            if people_total == 0:
+                winner_percentage = 0.0
+                loser_percentage = 0.0
+                no_change_percentage = 1.0
+            else:
+                winner_percentage = float(
+                    people_weights[income_change > 1e-3].sum() / people_total
+                )
+                loser_percentage = float(
+                    people_weights[income_change <= -1e-3].sum() / people_total
+                )
+                no_change_percentage = float(
+                    people_weights[
+                        (income_change > -1e-3) & (income_change <= 1e-3)
+                    ].sum()
+                    / people_total
+                )
 
             geoid_int = int(geoid)
             state_fips = geoid_int // 100
@@ -72,6 +100,9 @@ class CongressionalDistrictImpact(Output):
                     "district_number": district_number,
                     "average_household_income_change": float(avg_change),
                     "relative_household_income_change": float(rel_change),
+                    "winner_percentage": winner_percentage,
+                    "loser_percentage": loser_percentage,
+                    "no_change_percentage": no_change_percentage,
                     "population": total_weight,
                 }
             )

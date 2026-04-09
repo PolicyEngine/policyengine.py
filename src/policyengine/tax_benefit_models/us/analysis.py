@@ -218,11 +218,8 @@ def economic_impact_analysis(
 
     # Decile impact (using household_net_income for US)
     decile_impacts = calculate_decile_impacts(
-        dataset=baseline_simulation.dataset,
-        tax_benefit_model_version=baseline_simulation.tax_benefit_model_version,
-        baseline_policy=baseline_simulation.policy,
-        reform_policy=reform_simulation.policy,
-        dynamic=baseline_simulation.dynamic,
+        baseline_simulation=baseline_simulation,
+        reform_simulation=reform_simulation,
         income_variable="household_net_income",
     )
 

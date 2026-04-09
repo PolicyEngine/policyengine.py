@@ -6,7 +6,12 @@ import numpy as np
 import pandas as pd
 from microdf import MicroDataFrame
 
-from policyengine.outputs.decile_impact import DecileImpact
+from policyengine.core import Simulation, TaxBenefitModel, TaxBenefitModelVersion
+from policyengine.core.variable import Variable
+from policyengine.outputs.decile_impact import (
+    DecileImpact,
+    calculate_decile_impacts,
+)
 from policyengine.outputs.intra_decile_impact import (
     compute_intra_decile_impacts,
 )
@@ -18,6 +23,21 @@ def _make_variable_mock(name: str, entity: str) -> MagicMock:
     var.name = name
     var.entity = entity
     return var
+
+
+def _make_version(variable_name: str, entity: str) -> TaxBenefitModelVersion:
+    """Create a minimal TaxBenefitModelVersion with one variable."""
+    model = TaxBenefitModel(id="test-model")
+    version = TaxBenefitModelVersion(model=model, version="test-version")
+    variable = Variable(
+        id=f"test-model-{variable_name}",
+        name=variable_name,
+        tax_benefit_model_version=version,
+        entity=entity,
+    )
+    version.variables = [variable]
+    version.variables_by_name = {variable_name: variable}
+    return version
 
 
 def _make_sim(household_data: dict, variables: list | None = None) -> MagicMock:
@@ -269,3 +289,113 @@ def test_decile_impact_qcut_default():
     assert di.baseline_mean is not None
     assert di.absolute_change is not None
     assert abs(di.absolute_change - 1000.0) < 1e-6
+
+
+def test_calculate_decile_impacts_uses_supplied_simulations(monkeypatch):
+    """calculate_decile_impacts can reuse simulations that already have outputs."""
+    version = _make_version("household_net_income", "household")
+    baseline = Simulation.model_construct(
+        tax_benefit_model_version=version,
+        output_dataset=MagicMock(
+            data=MagicMock(
+                household=MicroDataFrame(
+                    pd.DataFrame(
+                        {
+                            "household_net_income": [
+                                40000.0,
+                                60000.0,
+                                80000.0,
+                                100000.0,
+                            ],
+                            "household_weight": [1.0, 1.0, 1.0, 1.0],
+                        }
+                    ),
+                    weights="household_weight",
+                )
+            )
+        ),
+    )
+    reform = Simulation.model_construct(
+        tax_benefit_model_version=version,
+        output_dataset=MagicMock(
+            data=MagicMock(
+                household=MicroDataFrame(
+                    pd.DataFrame(
+                        {
+                            "household_net_income": [
+                                41000.0,
+                                61000.0,
+                                81000.0,
+                                101000.0,
+                            ],
+                            "household_weight": [1.0, 1.0, 1.0, 1.0],
+                        }
+                    ),
+                    weights="household_weight",
+                )
+            )
+        ),
+    )
+    ensure_calls = []
+
+    def fake_ensure(self):
+        ensure_calls.append(self.id)
+
+    monkeypatch.setattr(
+        "policyengine.outputs.decile_impact.Simulation.ensure",
+        fake_ensure,
+    )
+
+    results = calculate_decile_impacts(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable="household_net_income",
+        entity="household",
+        quantiles=2,
+    )
+
+    assert len(ensure_calls) == 2
+    assert len(results.outputs) == 2
+    assert all(
+        abs(result.absolute_change - 1000.0) < 1e-6 for result in results.outputs
+    )
+
+
+def test_calculate_decile_impacts_ensures_constructed_simulations(
+    uk_test_dataset, monkeypatch
+):
+    """calculate_decile_impacts populates outputs when constructing simulations internally."""
+    household_df = pd.DataFrame(uk_test_dataset.data.household)
+    household_df["equiv_hbai_household_net_income"] = [
+        10000.0,
+        20000.0,
+        30000.0,
+    ]
+    uk_test_dataset.data.household = MicroDataFrame(
+        household_df,
+        weights="household_weight",
+    )
+
+    ensure_calls = []
+
+    def fake_ensure(self):
+        ensure_calls.append(self.id)
+        self.output_dataset = uk_test_dataset
+
+    monkeypatch.setattr(
+        "policyengine.outputs.decile_impact.Simulation.ensure",
+        fake_ensure,
+    )
+
+    results = calculate_decile_impacts(
+        dataset=uk_test_dataset,
+        tax_benefit_model_version=_make_version(
+            "equiv_hbai_household_net_income",
+            "household",
+        ),
+        quantiles=3,
+    )
+
+    assert len(ensure_calls) == 2
+    assert len(results.outputs) == 3
+    assert all(abs(result.absolute_change) < 1e-9 for result in results.outputs)
