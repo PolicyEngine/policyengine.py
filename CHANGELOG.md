@@ -1,3 +1,10 @@
+## [3.4.1] - 2026-04-09
+
+### Fixed
+
+- Fixed the UK paper reproduction workflow so the checked-in example runs on Python 3.14 and the associated analysis helpers handle that path cleanly.
+
+
 ## [3.4.0] - 2026-04-08
 
 ### Added
