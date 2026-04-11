@@ -145,6 +145,7 @@ class TaxBenefitModelVersion(BaseModel):
             else None,
             "default_dataset_uri": self.default_dataset_uri,
         }
+
     def __repr__(self) -> str:
         # Give the id and version, and the number of variables, parameters, parameter nodes, parameter values
         return f"<TaxBenefitModelVersion id={self.id} variables={len(self.variables)} parameters={len(self.parameters)} parameter_nodes={len(self.parameter_nodes)} parameter_values={len(self.parameter_values)}>"

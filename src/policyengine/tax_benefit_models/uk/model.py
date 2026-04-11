@@ -59,6 +59,7 @@ def _get_uk_package_metadata():
         upload_time = None
     return pkg_version, upload_time
 
+
 class PolicyEngineUKLatest(TaxBenefitModelVersion):
     model: TaxBenefitModel = uk_model
     version: str = None
