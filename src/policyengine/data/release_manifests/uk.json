@@ -1,14 +1,14 @@
 {
   "country_id": "uk",
-  "policyengine_version": "3.4.0",
+  "policyengine_version": "3.4.1",
   "model_package": {
     "name": "policyengine-uk",
-    "version": "2.74.0"
+    "version": "2.78.0"
   },
   "data_package": {
     "name": "policyengine-uk-data",
-    "version": "1.40.4",
-    "repo_id": "policyengine/policyengine-uk-data"
+    "version": "1.40.3",
+    "repo_id": "policyengine/policyengine-uk-data-private"
   },
   "default_dataset": "enhanced_frs_2023_24",
   "datasets": {
