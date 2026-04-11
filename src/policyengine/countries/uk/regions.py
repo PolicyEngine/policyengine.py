@@ -15,6 +15,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from policyengine.core.region import Region, RegionRegistry
+from policyengine.core.release_manifest import resolve_region_dataset_path
 from policyengine.core.scoping_strategy import (
     RowFilterStrategy,
     WeightReplacementStrategy,
@@ -127,7 +128,7 @@ def build_uk_region_registry(
             code="uk",
             label="United Kingdom",
             region_type="national",
-            dataset_path=f"{UK_DATA_BUCKET}/enhanced_frs_2023_24.h5",
+            dataset_path=resolve_region_dataset_path("uk", "national"),
         )
     )
 

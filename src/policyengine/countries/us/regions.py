@@ -8,6 +8,7 @@ in the data/ subdirectory:
 """
 
 from policyengine.core.region import Region, RegionRegistry
+from policyengine.core.release_manifest import resolve_region_dataset_path
 from policyengine.core.scoping_strategy import RowFilterStrategy
 
 from .data import AT_LARGE_STATES, DISTRICT_COUNTS, US_PLACES, US_STATES
@@ -40,7 +41,7 @@ def build_us_region_registry() -> RegionRegistry:
             code="us",
             label="United States",
             region_type="national",
-            dataset_path=f"{US_DATA_BUCKET}/enhanced_cps_2024.h5",
+            dataset_path=resolve_region_dataset_path("us", "national"),
         )
     )
 
@@ -52,7 +53,11 @@ def build_us_region_registry() -> RegionRegistry:
                 label=name,
                 region_type="state",
                 parent_code="us",
-                dataset_path=f"{US_DATA_BUCKET}/states/{abbrev}.h5",
+                dataset_path=resolve_region_dataset_path(
+                    "us",
+                    "state",
+                    state_code=abbrev,
+                ),
                 state_code=abbrev,
                 state_name=name,
             )
@@ -76,7 +81,11 @@ def build_us_region_registry() -> RegionRegistry:
                     label=label,
                     region_type="congressional_district",
                     parent_code=f"state/{state_abbrev.lower()}",
-                    dataset_path=f"{US_DATA_BUCKET}/districts/{district_code}.h5",
+                    dataset_path=resolve_region_dataset_path(
+                        "us",
+                        "congressional_district",
+                        district_code=district_code,
+                    ),
                     state_code=state_abbrev,
                     state_name=state_name,
                 )

@@ -94,3 +94,15 @@ class Simulation(BaseModel):
     def load(self):
         """Load the simulation's output dataset."""
         self.tax_benefit_model_version.load(self)
+
+    @property
+    def release_bundle(self) -> dict[str, str | None]:
+        bundle = (
+            self.tax_benefit_model_version.release_bundle
+            if self.tax_benefit_model_version is not None
+            else {}
+        )
+        return {
+            **bundle,
+            "dataset_filepath": self.dataset.filepath if self.dataset is not None else None,
+        }

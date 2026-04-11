@@ -15,6 +15,7 @@ from policyengine.core import (
     TaxBenefitModelVersion,
     Variable,
 )
+from policyengine.core.release_manifest import get_release_manifest
 from policyengine.utils.entity_utils import (
     build_entity_relationships,
     filter_dataset_by_household_variable,
@@ -57,7 +58,6 @@ def _get_uk_package_metadata():
         _logger.warning("Could not fetch PyPI metadata for policyengine-uk: %s", exc)
         upload_time = None
     return pkg_version, upload_time
-
 
 class PolicyEngineUKLatest(TaxBenefitModelVersion):
     model: TaxBenefitModel = uk_model
@@ -143,14 +143,25 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
     }
 
     def __init__(self, **kwargs: dict):
-        # Lazy-load package metadata if not provided
+        manifest = get_release_manifest("uk")
         if "version" not in kwargs or kwargs.get("version") is None:
             pkg_version, upload_time = _get_uk_package_metadata()
             kwargs["version"] = pkg_version
             if upload_time is not None:
                 kwargs["created_at"] = datetime.datetime.fromisoformat(upload_time)
 
+        if kwargs["version"] != manifest.model_package.version:
+            raise RuntimeError(
+                "Installed policyengine-uk version does not match the bundled "
+                f"policyengine.py release manifest: {kwargs['version']} != "
+                f"{manifest.model_package.version}."
+            )
+
         super().__init__(**kwargs)
+        self.release_manifest = manifest
+        self.model_package = manifest.model_package
+        self.data_package = manifest.data_package
+        self.default_dataset_uri = manifest.default_dataset_uri
         from policyengine_core.enums import Enum
         from policyengine_uk.system import system
 

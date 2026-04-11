@@ -14,6 +14,7 @@ from policyengine.core import (
     TaxBenefitModelVersion,
     Variable,
 )
+from policyengine.core.release_manifest import get_release_manifest
 from policyengine.utils.entity_utils import (
     build_entity_relationships,
     filter_dataset_by_household_variable,
@@ -48,7 +49,6 @@ us_model = PolicyEngineUS()
 def _get_us_package_metadata():
     """Get PolicyEngine US package version and upload time (lazy-loaded)."""
     pkg_version = version("policyengine-us")
-    # Get published time from PyPI
     response = requests.get("https://pypi.org/pypi/policyengine-us/json")
     data = response.json()
     upload_time = data["releases"][pkg_version][0]["upload_time_iso_8601"]
@@ -125,13 +125,24 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
     }
 
     def __init__(self, **kwargs: dict):
-        # Lazy-load package metadata if not provided
+        manifest = get_release_manifest("us")
         if "version" not in kwargs or kwargs.get("version") is None:
             pkg_version, upload_time = _get_us_package_metadata()
             kwargs["version"] = pkg_version
             kwargs["created_at"] = datetime.datetime.fromisoformat(upload_time)
 
+        if kwargs["version"] != manifest.model_package.version:
+            raise RuntimeError(
+                "Installed policyengine-us version does not match the bundled "
+                f"policyengine.py release manifest: {kwargs['version']} != "
+                f"{manifest.model_package.version}."
+            )
+
         super().__init__(**kwargs)
+        self.release_manifest = manifest
+        self.model_package = manifest.model_package
+        self.data_package = manifest.data_package
+        self.default_dataset_uri = manifest.default_dataset_uri
         from policyengine_core.enums import Enum
         from policyengine_us.system import system
 
