@@ -23,9 +23,7 @@ class TaxBenefitModelVersion(BaseModel):
     model: TaxBenefitModel
     version: str
     description: str | None = None
-    created_at: datetime | None = Field(
-        default_factory=lambda: datetime.now(UTC)
-    )
+    created_at: datetime | None = Field(default_factory=lambda: datetime.now(UTC))
 
     variables: list["Variable"] = Field(default_factory=list)
     parameters: list["Parameter"] = Field(default_factory=list)
@@ -196,14 +194,10 @@ class TaxBenefitModelVersion(BaseModel):
                 else None
             ),
             "compatibility_basis": (
-                certification.compatibility_basis
-                if certification is not None
-                else None
+                certification.compatibility_basis if certification is not None else None
             ),
             "certified_by": (
-                certification.certified_by
-                if certification is not None
-                else None
+                certification.certified_by if certification is not None else None
             ),
         }
 

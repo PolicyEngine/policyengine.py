@@ -42,7 +42,9 @@ class TestReleaseManifests:
         assert manifest.data_package.version == "1.73.0"
         assert manifest.data_package.repo_id == "policyengine/policyengine-us-data"
         assert manifest.certified_data_artifact is not None
-        assert manifest.certified_data_artifact.build_id == "policyengine-us-data-1.73.0"
+        assert (
+            manifest.certified_data_artifact.build_id == "policyengine-us-data-1.73.0"
+        )
         assert manifest.certified_data_artifact.dataset == "enhanced_cps_2024"
         assert manifest.certification is not None
         assert manifest.certification.data_build_id == "policyengine-us-data-1.73.0"
@@ -60,9 +62,13 @@ class TestReleaseManifests:
         assert manifest.model_package.version == "2.74.0"
         assert manifest.data_package.name == "policyengine-uk-data"
         assert manifest.data_package.version == "1.40.4"
-        assert manifest.data_package.repo_id == "policyengine/policyengine-uk-data-private"
+        assert (
+            manifest.data_package.repo_id == "policyengine/policyengine-uk-data-private"
+        )
         assert manifest.certified_data_artifact is not None
-        assert manifest.certified_data_artifact.build_id == "policyengine-uk-data-1.40.4"
+        assert (
+            manifest.certified_data_artifact.build_id == "policyengine-uk-data-1.40.4"
+        )
         assert manifest.certified_data_artifact.dataset == "enhanced_frs_2023_24"
         assert manifest.certification is not None
         assert manifest.certification.data_build_id == "policyengine-uk-data-1.40.4"
@@ -117,7 +123,7 @@ class TestReleaseManifests:
                     "version": "1.602.0",
                     "git_sha": "deadbeef",
                     "data_build_fingerprint": "sha256:fingerprint",
-                }
+                },
             },
             "compatible_model_packages": [
                 {"name": "policyengine-us", "specifier": "==1.602.0"}
@@ -170,7 +176,7 @@ class TestReleaseManifests:
                     "version": "1.601.0",
                     "git_sha": "deadbeef",
                     "data_build_fingerprint": "sha256:match",
-                }
+                },
             },
             "compatible_model_packages": [],
             "default_datasets": {"national": "enhanced_cps_2024"},
@@ -207,7 +213,7 @@ class TestReleaseManifests:
                     "version": "1.601.0",
                     "git_sha": "deadbeef",
                     "data_build_fingerprint": "sha256:build",
-                }
+                },
             },
             "compatible_model_packages": [],
             "default_datasets": {"national": "enhanced_cps_2024"},
@@ -250,7 +256,9 @@ class TestReleaseManifests:
         assert bundle["compatibility_basis"] == "exact_build_model_version"
         assert bundle["certified_by"] == "policyengine.py bundled manifest"
 
-    def test__given_runtime_certification__then_release_bundle_prefers_runtime_value(self):
+    def test__given_runtime_certification__then_release_bundle_prefers_runtime_value(
+        self,
+    ):
         manifest = get_release_manifest("us")
         model_version = TaxBenefitModelVersion(
             model=TaxBenefitModel(id="us"),
