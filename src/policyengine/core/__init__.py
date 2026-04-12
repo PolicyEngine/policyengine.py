@@ -12,11 +12,17 @@ from .policy import Policy as Policy
 from .region import Region as Region
 from .region import RegionRegistry as RegionRegistry
 from .region import RegionType as RegionType
+from .release_manifest import CertifiedDataArtifact as CertifiedDataArtifact
 from .release_manifest import CountryReleaseManifest as CountryReleaseManifest
+from .release_manifest import DataBuildInfo as DataBuildInfo
+from .release_manifest import DataCertification as DataCertification
 from .release_manifest import DataPackageVersion as DataPackageVersion
 from .release_manifest import DataReleaseArtifact as DataReleaseArtifact
 from .release_manifest import DataReleaseManifest as DataReleaseManifest
 from .release_manifest import PackageVersion as PackageVersion
+from .release_manifest import (
+    certify_data_release_compatibility as certify_data_release_compatibility,
+)
 from .release_manifest import get_data_release_manifest as get_data_release_manifest
 from .release_manifest import get_release_manifest as get_release_manifest
 from .scoping_strategy import RegionScopingStrategy as RegionScopingStrategy

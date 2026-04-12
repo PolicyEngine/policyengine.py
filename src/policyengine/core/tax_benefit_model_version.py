@@ -1,10 +1,10 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from .release_manifest import CountryReleaseManifest, PackageVersion
+from .release_manifest import CountryReleaseManifest, DataCertification, PackageVersion
 from .tax_benefit_model import TaxBenefitModel
 
 if TYPE_CHECKING:
@@ -23,7 +23,9 @@ class TaxBenefitModelVersion(BaseModel):
     model: TaxBenefitModel
     version: str
     description: str | None = None
-    created_at: datetime | None = Field(default_factory=datetime.utcnow)
+    created_at: datetime | None = Field(
+        default_factory=lambda: datetime.now(UTC)
+    )
 
     variables: list["Variable"] = Field(default_factory=list)
     parameters: list["Parameter"] = Field(default_factory=list)
@@ -40,6 +42,7 @@ class TaxBenefitModelVersion(BaseModel):
     model_package: PackageVersion | None = Field(default=None)
     data_package: PackageVersion | None = Field(default=None)
     default_dataset_uri: str | None = Field(default=None)
+    data_certification: DataCertification | None = Field(default=None)
 
     @property
     def parameter_values(self) -> list["ParameterValue"]:
@@ -126,7 +129,21 @@ class TaxBenefitModelVersion(BaseModel):
 
     @property
     def release_bundle(self) -> dict[str, str | None]:
+        manifest_certification = (
+            self.release_manifest.certification
+            if self.release_manifest is not None
+            else None
+        )
+        certification = self.data_certification or manifest_certification
+        certified_data_artifact = (
+            self.release_manifest.certified_data_artifact
+            if self.release_manifest is not None
+            else None
+        )
         return {
+            "bundle_id": self.release_manifest.bundle_id
+            if self.release_manifest is not None
+            else None,
             "country_id": self.release_manifest.country_id
             if self.release_manifest is not None
             else None,
@@ -136,14 +153,58 @@ class TaxBenefitModelVersion(BaseModel):
             "model_package": self.model_package.name
             if self.model_package is not None
             else None,
-            "model_version": self.version,
+            "model_version": self.model_package.version
+            if self.model_package is not None
+            else None,
             "data_package": self.data_package.name
             if self.data_package is not None
             else None,
             "data_version": self.data_package.version
             if self.data_package is not None
             else None,
+            "default_dataset": self.release_manifest.default_dataset
+            if self.release_manifest is not None
+            else None,
             "default_dataset_uri": self.default_dataset_uri,
+            "certified_data_build_id": (
+                certification.data_build_id
+                if certification is not None
+                else (
+                    certified_data_artifact.build_id
+                    if certified_data_artifact is not None
+                    else None
+                )
+            ),
+            "certified_data_artifact_sha256": (
+                certified_data_artifact.sha256
+                if certified_data_artifact is not None
+                else None
+            ),
+            "data_build_model_version": (
+                certification.built_with_model_version
+                if certification is not None
+                else None
+            ),
+            "data_build_model_git_sha": (
+                certification.built_with_model_git_sha
+                if certification is not None
+                else None
+            ),
+            "data_build_fingerprint": (
+                certification.data_build_fingerprint
+                if certification is not None
+                else None
+            ),
+            "compatibility_basis": (
+                certification.compatibility_basis
+                if certification is not None
+                else None
+            ),
+            "certified_by": (
+                certification.certified_by
+                if certification is not None
+                else None
+            ),
         }
 
     def __repr__(self) -> str:

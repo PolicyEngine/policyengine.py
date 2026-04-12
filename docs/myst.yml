@@ -17,6 +17,7 @@ project:
     - file: country-models-us.md
     - file: examples.md
     - file: visualisation.md
+    - file: release-bundles.md
     - file: dev.md
 
 site:

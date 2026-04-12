@@ -1,10 +1,9 @@
 import datetime
-from importlib.metadata import version
+from importlib import metadata
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pandas as pd
-import requests
 from microdf import MicroDataFrame
 
 from policyengine.core import (
@@ -14,7 +13,10 @@ from policyengine.core import (
     TaxBenefitModelVersion,
     Variable,
 )
-from policyengine.core.release_manifest import get_release_manifest
+from policyengine.core.release_manifest import (
+    certify_data_release_compatibility,
+    get_release_manifest,
+)
 from policyengine.utils.entity_utils import (
     build_entity_relationships,
     filter_dataset_by_household_variable,
@@ -44,15 +46,6 @@ class PolicyEngineUS(TaxBenefitModel):
 
 
 us_model = PolicyEngineUS()
-
-
-def _get_us_package_metadata():
-    """Get PolicyEngine US package version and upload time (lazy-loaded)."""
-    pkg_version = version("policyengine-us")
-    response = requests.get("https://pypi.org/pypi/policyengine-us/json")
-    data = response.json()
-    upload_time = data["releases"][pkg_version][0]["upload_time_iso_8601"]
-    return pkg_version, upload_time
 
 
 class PolicyEngineUSLatest(TaxBenefitModelVersion):
@@ -127,22 +120,33 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
     def __init__(self, **kwargs: dict):
         manifest = get_release_manifest("us")
         if "version" not in kwargs or kwargs.get("version") is None:
-            pkg_version, upload_time = _get_us_package_metadata()
-            kwargs["version"] = pkg_version
-            kwargs["created_at"] = datetime.datetime.fromisoformat(upload_time)
+            kwargs["version"] = manifest.model_package.version
 
-        if kwargs["version"] != manifest.model_package.version:
-            raise RuntimeError(
-                "Installed policyengine-us version does not match the bundled "
-                f"policyengine.py release manifest: {kwargs['version']} != "
-                f"{manifest.model_package.version}."
+        installed_model_version = metadata.version("policyengine-us")
+        if installed_model_version != manifest.model_package.version:
+            raise ValueError(
+                "Installed policyengine-us version does not match the "
+                f"bundled policyengine.py manifest. Expected "
+                f"{manifest.model_package.version}, got {installed_model_version}."
             )
+
+        from policyengine_us.build_metadata import get_data_build_metadata
+
+        model_build_metadata = get_data_build_metadata()
+        data_certification = certify_data_release_compatibility(
+            "us",
+            runtime_model_version=installed_model_version,
+            runtime_data_build_fingerprint=model_build_metadata.get(
+                "data_build_fingerprint"
+            ),
+        )
 
         super().__init__(**kwargs)
         self.release_manifest = manifest
         self.model_package = manifest.model_package
         self.data_package = manifest.data_package
         self.default_dataset_uri = manifest.default_dataset_uri
+        self.data_certification = data_certification
         from policyengine_core.enums import Enum
         from policyengine_us.system import system
 

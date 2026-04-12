@@ -1,14 +1,32 @@
 {
+  "schema_version": 1,
+  "bundle_id": "us-3.4.0",
   "country_id": "us",
-  "policyengine_version": "3.4.1",
+  "policyengine_version": "3.4.0",
   "model_package": {
     "name": "policyengine-us",
     "version": "1.602.0"
   },
   "data_package": {
     "name": "policyengine-us-data",
-    "version": "1.77.0",
+    "version": "1.73.0",
     "repo_id": "policyengine/policyengine-us-data"
+  },
+  "certified_data_artifact": {
+    "data_package": {
+      "name": "policyengine-us-data",
+      "version": "1.73.0"
+    },
+    "build_id": "policyengine-us-data-1.73.0",
+    "dataset": "enhanced_cps_2024",
+    "uri": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.73.0"
+  },
+  "certification": {
+    "compatibility_basis": "exact_build_model_version",
+    "data_build_id": "policyengine-us-data-1.73.0",
+    "built_with_model_version": "1.602.0",
+    "certified_for_model_version": "1.602.0",
+    "certified_by": "policyengine.py bundled manifest"
   },
   "default_dataset": "enhanced_cps_2024",
   "datasets": {

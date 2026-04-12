@@ -25,6 +25,17 @@ class CompatibleModelPackage(BaseModel):
     specifier: str
 
 
+class BuiltWithModelPackage(PackageVersion):
+    git_sha: str | None = None
+    data_build_fingerprint: str | None = None
+
+
+class DataBuildInfo(BaseModel):
+    build_id: str | None = None
+    built_at: str | None = None
+    built_with_model_package: BuiltWithModelPackage | None = None
+
+
 class ArtifactPathReference(BaseModel):
     path: str
 
@@ -60,10 +71,32 @@ class DataReleaseManifest(BaseModel):
         default_factory=list
     )
     default_datasets: dict[str, str] = Field(default_factory=dict)
+    build: DataBuildInfo | None = None
     artifacts: dict[str, DataReleaseArtifact] = Field(default_factory=dict)
 
 
+class DataCertification(BaseModel):
+    compatibility_basis: str
+    certified_for_model_version: str
+    data_build_id: str | None = None
+    built_with_model_version: str | None = None
+    built_with_model_git_sha: str | None = None
+    data_build_fingerprint: str | None = None
+    certified_by: str | None = None
+
+
+class CertifiedDataArtifact(BaseModel):
+    data_package: PackageVersion | None = None
+    dataset: str
+    uri: str
+    sha256: str | None = None
+    build_id: str | None = None
+
+
 class CountryReleaseManifest(BaseModel):
+    schema_version: int = 1
+    bundle_id: str | None = None
+    published_at: str | None = None
     country_id: str
     policyengine_version: str
     model_package: PackageVersion
@@ -71,9 +104,16 @@ class CountryReleaseManifest(BaseModel):
     default_dataset: str
     datasets: dict[str, ArtifactPathReference] = Field(default_factory=dict)
     region_datasets: dict[str, ArtifactPathTemplate] = Field(default_factory=dict)
+    certified_data_artifact: CertifiedDataArtifact | None = None
+    certification: DataCertification | None = None
 
     @property
     def default_dataset_uri(self) -> str:
+        if (
+            self.certified_data_artifact is not None
+            and self.certified_data_artifact.dataset == self.default_dataset
+        ):
+            return self.certified_data_artifact.uri
         return resolve_dataset_reference(self.country_id, self.default_dataset)
 
 
@@ -122,6 +162,107 @@ def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
         )
     response.raise_for_status()
     return DataReleaseManifest.model_validate_json(response.text)
+
+
+def _specifier_matches(version: str, specifier: str) -> bool:
+    if specifier.startswith("=="):
+        return version == specifier[2:]
+    return False
+
+
+def certify_data_release_compatibility(
+    country_id: str,
+    runtime_model_version: str,
+    runtime_data_build_fingerprint: str | None = None,
+) -> DataCertification:
+    country_manifest = get_release_manifest(country_id)
+    data_release_manifest = get_data_release_manifest(country_id)
+    built_with_model = (
+        data_release_manifest.build.built_with_model_package
+        if data_release_manifest.build is not None
+        else None
+    )
+
+    if (
+        built_with_model is not None
+        and built_with_model.name != country_manifest.model_package.name
+    ):
+        raise ValueError(
+            "Data release manifest was built with a different model package: "
+            f"expected {country_manifest.model_package.name}, "
+            f"got {built_with_model.name}."
+        )
+
+    if (
+        built_with_model is not None
+        and built_with_model.version == runtime_model_version
+    ):
+        return DataCertification(
+            compatibility_basis="exact_build_model_version",
+            certified_for_model_version=runtime_model_version,
+            data_build_id=(
+                data_release_manifest.build.build_id
+                if data_release_manifest.build is not None
+                else None
+            ),
+            built_with_model_version=built_with_model.version,
+            built_with_model_git_sha=built_with_model.git_sha,
+            data_build_fingerprint=built_with_model.data_build_fingerprint,
+        )
+
+    if (
+        built_with_model is not None
+        and built_with_model.data_build_fingerprint is not None
+        and runtime_data_build_fingerprint is not None
+        and built_with_model.data_build_fingerprint == runtime_data_build_fingerprint
+    ):
+        return DataCertification(
+            compatibility_basis="matching_data_build_fingerprint",
+            certified_for_model_version=runtime_model_version,
+            data_build_id=(
+                data_release_manifest.build.build_id
+                if data_release_manifest.build is not None
+                else None
+            ),
+            built_with_model_version=built_with_model.version,
+            built_with_model_git_sha=built_with_model.git_sha,
+            data_build_fingerprint=built_with_model.data_build_fingerprint,
+        )
+
+    for compatible_model_package in data_release_manifest.compatible_model_packages:
+        if compatible_model_package.name != country_manifest.model_package.name:
+            continue
+        if _specifier_matches(
+            version=runtime_model_version,
+            specifier=compatible_model_package.specifier,
+        ):
+            return DataCertification(
+                compatibility_basis="legacy_compatible_model_package",
+                certified_for_model_version=runtime_model_version,
+                data_build_id=(
+                    data_release_manifest.build.build_id
+                    if data_release_manifest.build is not None
+                    else None
+                ),
+                built_with_model_version=(
+                    built_with_model.version
+                    if built_with_model is not None
+                    else None
+                ),
+                built_with_model_git_sha=(
+                    built_with_model.git_sha if built_with_model is not None else None
+                ),
+                data_build_fingerprint=(
+                    built_with_model.data_build_fingerprint
+                    if built_with_model is not None
+                    else None
+                ),
+            )
+
+    raise ValueError(
+        "Data release manifest is not certified for the runtime model version "
+        f"{runtime_model_version} in country '{country_id}'."
+    )
 
 
 def resolve_dataset_reference(country_id: str, dataset: str) -> str:
