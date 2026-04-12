@@ -14,9 +14,9 @@ from policyengine.core import (
     Variable,
 )
 from policyengine.core.release_manifest import (
-    certify_data_release_compatibility,
     get_release_manifest,
     get_runtime_model_build_metadata,
+    resolve_runtime_data_certification,
 )
 from policyengine.utils.entity_utils import (
     build_entity_relationships,
@@ -140,12 +140,13 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
             )
 
         model_build_metadata = get_runtime_model_build_metadata("policyengine-uk")
-        data_certification = certify_data_release_compatibility(
+        data_certification = resolve_runtime_data_certification(
             "uk",
             runtime_model_version=installed_model_version,
             runtime_data_build_fingerprint=model_build_metadata.get(
                 "data_build_fingerprint"
             ),
+            bundled_certification=manifest.certification,
         )
 
         super().__init__(**kwargs)

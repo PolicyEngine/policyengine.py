@@ -10,6 +10,10 @@ from pydantic import BaseModel, Field
 HF_REQUEST_TIMEOUT_SECONDS = 30
 
 
+class DataReleaseManifestUnavailable(ValueError):
+    pass
+
+
 class PackageVersion(BaseModel):
     name: str
     version: str
@@ -179,9 +183,14 @@ def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
         timeout=HF_REQUEST_TIMEOUT_SECONDS,
     )
     if response.status_code in (401, 403):
-        raise ValueError(
+        raise DataReleaseManifestUnavailable(
             "Could not fetch the data release manifest from Hugging Face. "
             "If this country uses a private data repo, set HUGGING_FACE_TOKEN."
+        )
+    if response.status_code == 404:
+        raise DataReleaseManifestUnavailable(
+            "Could not find the data release manifest on Hugging Face for "
+            f"{data_package.repo_id}@{data_package.version}."
         )
     response.raise_for_status()
     return DataReleaseManifest.model_validate_json(response.text)
@@ -284,6 +293,37 @@ def certify_data_release_compatibility(
         "Data release manifest is not certified for the runtime model version "
         f"{runtime_model_version} in country '{country_id}'."
     )
+
+
+def resolve_runtime_data_certification(
+    country_id: str,
+    runtime_model_version: str,
+    runtime_data_build_fingerprint: str | None = None,
+    bundled_certification: DataCertification | None = None,
+) -> DataCertification:
+    try:
+        return certify_data_release_compatibility(
+            country_id=country_id,
+            runtime_model_version=runtime_model_version,
+            runtime_data_build_fingerprint=runtime_data_build_fingerprint,
+        )
+    except DataReleaseManifestUnavailable:
+        if (
+            bundled_certification is not None
+            and bundled_certification.certified_for_model_version
+            == runtime_model_version
+        ):
+            bundled_fingerprint = bundled_certification.data_build_fingerprint
+            if (
+                bundled_certification.compatibility_basis
+                == "matching_data_build_fingerprint"
+                and bundled_fingerprint is not None
+                and runtime_data_build_fingerprint is not None
+                and bundled_fingerprint != runtime_data_build_fingerprint
+            ):
+                raise
+            return bundled_certification
+        raise
 
 
 def resolve_dataset_reference(country_id: str, dataset: str) -> str:

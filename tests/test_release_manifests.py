@@ -4,12 +4,14 @@ import json
 from unittest.mock import MagicMock, patch
 
 from policyengine.core.release_manifest import (
+    DataReleaseManifestUnavailable,
     certify_data_release_compatibility,
     dataset_logical_name,
     get_data_release_manifest,
     get_release_manifest,
     get_runtime_model_build_metadata,
     resolve_dataset_reference,
+    resolve_runtime_data_certification,
 )
 from policyengine.core.tax_benefit_model import TaxBenefitModel
 from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
@@ -282,6 +284,46 @@ class TestReleaseManifests:
                 assert "not certified" in str(error)
             else:
                 raise AssertionError("Expected certification to fail")
+
+    def test__given_missing_release_manifest__then_runtime_uses_bundled_certification(
+        self,
+    ):
+        bundled_certification = get_release_manifest("uk").certification
+        assert bundled_certification is not None
+
+        with patch(
+            "policyengine.core.release_manifest.get_data_release_manifest",
+            side_effect=DataReleaseManifestUnavailable("missing"),
+        ):
+            certification = resolve_runtime_data_certification(
+                "uk",
+                runtime_model_version="2.74.0",
+                bundled_certification=bundled_certification,
+            )
+
+        assert certification.compatibility_basis == "exact_build_model_version"
+        assert certification.certified_for_model_version == "2.74.0"
+
+    def test__given_missing_release_manifest_and_wrong_runtime__then_runtime_fails(
+        self,
+    ):
+        bundled_certification = get_release_manifest("uk").certification
+        assert bundled_certification is not None
+
+        with patch(
+            "policyengine.core.release_manifest.get_data_release_manifest",
+            side_effect=DataReleaseManifestUnavailable("missing"),
+        ):
+            try:
+                resolve_runtime_data_certification(
+                    "uk",
+                    runtime_model_version="2.75.0",
+                    bundled_certification=bundled_certification,
+                )
+            except DataReleaseManifestUnavailable:
+                pass
+            else:
+                raise AssertionError("Expected runtime certification fallback to fail")
 
     def test__given_manifest_certification__then_release_bundle_exposes_it(self):
         manifest = get_release_manifest("uk")
