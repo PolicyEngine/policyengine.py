@@ -186,6 +186,26 @@ class TestReleaseManifests:
             "data_build_fingerprint": None,
         }
 
+    def test__given_broken_package_import__then_runtime_metadata_falls_back(self):
+        with (
+            patch(
+                "policyengine.core.release_manifest.metadata.version",
+                return_value="1.602.0",
+            ),
+            patch(
+                "policyengine.core.release_manifest.import_module",
+                side_effect=ValueError("broken package init"),
+            ),
+        ):
+            build_metadata = get_runtime_model_build_metadata("policyengine-us")
+
+        assert build_metadata == {
+            "name": "policyengine-us",
+            "version": "1.602.0",
+            "git_sha": None,
+            "data_build_fingerprint": None,
+        }
+
     def test__given_build_metadata_module__then_runtime_metadata_uses_it(self):
         module = MagicMock()
         module.get_data_build_metadata.return_value = {

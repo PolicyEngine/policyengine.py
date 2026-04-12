@@ -132,7 +132,7 @@ def get_runtime_model_build_metadata(package_name: str) -> dict[str, str | None]
 
     try:
         build_metadata_module = import_module(f"{module_name}.build_metadata")
-    except ModuleNotFoundError:
+    except Exception:
         return {
             "name": package_name,
             "version": installed_version,

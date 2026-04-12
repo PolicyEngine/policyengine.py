@@ -29,12 +29,12 @@ class TestUKModel:
         assert uk_latest.release_manifest is not None
         assert uk_latest.release_manifest.country_id == "uk"
         assert uk_latest.model_package.name == "policyengine-uk"
-        assert uk_latest.model_package.version == "2.78.0"
+        assert uk_latest.model_package.version == "2.74.0"
         assert uk_latest.data_package.name == "policyengine-uk-data"
-        assert uk_latest.data_package.version == "1.40.3"
+        assert uk_latest.data_package.version == "1.40.4"
         assert (
             uk_latest.default_dataset_uri
-            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3"
+            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.4"
         )
 
     def test_has_hundreds_of_parameters(self):
@@ -115,10 +115,10 @@ class TestUSModel:
         assert us_latest.model_package.name == "policyengine-us"
         assert us_latest.model_package.version == "1.602.0"
         assert us_latest.data_package.name == "policyengine-us-data"
-        assert us_latest.data_package.version == "1.77.0"
+        assert us_latest.data_package.version == "1.73.0"
         assert (
             us_latest.default_dataset_uri
-            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.73.0"
         )
 
     def test_has_hundreds_of_parameters(self):
