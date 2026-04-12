@@ -1,3 +1,10 @@
+## [3.4.2] - 2026-04-12
+
+### Changed
+
+- Align the bundled UK release manifest with the pinned `policyengine-uk` package version and updated data package revisions.
+
+
 ## [3.4.1] - 2026-04-09
 
 ### Fixed
