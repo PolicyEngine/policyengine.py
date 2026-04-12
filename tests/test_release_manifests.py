@@ -8,6 +8,7 @@ from policyengine.core.release_manifest import (
     dataset_logical_name,
     get_data_release_manifest,
     get_release_manifest,
+    get_runtime_model_build_metadata,
     resolve_dataset_reference,
 )
 from policyengine.core.tax_benefit_model import TaxBenefitModel
@@ -160,6 +161,53 @@ class TestReleaseManifests:
             == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.73.0"
         )
         assert mock_get.call_count == 1
+
+    def test__given_missing_build_metadata_module__then_runtime_metadata_falls_back(
+        self,
+    ):
+        with (
+            patch(
+                "policyengine.core.release_manifest.metadata.version",
+                return_value="2.74.0",
+            ),
+            patch(
+                "policyengine.core.release_manifest.import_module",
+                side_effect=ModuleNotFoundError,
+            ),
+        ):
+            build_metadata = get_runtime_model_build_metadata("policyengine-uk")
+
+        assert build_metadata == {
+            "name": "policyengine-uk",
+            "version": "2.74.0",
+            "git_sha": None,
+            "data_build_fingerprint": None,
+        }
+
+    def test__given_build_metadata_module__then_runtime_metadata_uses_it(self):
+        module = MagicMock()
+        module.get_data_build_metadata.return_value = {
+            "name": "policyengine-us",
+            "version": "1.602.0",
+            "git_sha": "deadbeef",
+            "data_build_fingerprint": "sha256:build",
+        }
+
+        with (
+            patch(
+                "policyengine.core.release_manifest.metadata.version",
+                return_value="1.602.0",
+            ),
+            patch(
+                "policyengine.core.release_manifest.import_module",
+                return_value=module,
+            ),
+        ):
+            build_metadata = get_runtime_model_build_metadata("policyengine-us")
+
+        assert build_metadata["version"] == "1.602.0"
+        assert build_metadata["git_sha"] == "deadbeef"
+        assert build_metadata["data_build_fingerprint"] == "sha256:build"
 
     def test__given_matching_fingerprint__then_certification_allows_reuse(self):
         get_data_release_manifest.cache_clear()

@@ -1,5 +1,6 @@
 import os
 from functools import lru_cache
+from importlib import import_module, metadata
 from importlib.resources import files
 from pathlib import Path
 
@@ -119,6 +120,28 @@ class CountryReleaseManifest(BaseModel):
 
 def build_hf_uri(repo_id: str, path_in_repo: str, revision: str) -> str:
     return f"hf://{repo_id}/{path_in_repo}@{revision}"
+
+
+def get_runtime_model_build_metadata(package_name: str) -> dict[str, str | None]:
+    installed_version = metadata.version(package_name)
+    module_name = package_name.replace("-", "_")
+
+    try:
+        build_metadata_module = import_module(f"{module_name}.build_metadata")
+    except ModuleNotFoundError:
+        return {
+            "name": package_name,
+            "version": installed_version,
+            "git_sha": None,
+            "data_build_fingerprint": None,
+        }
+
+    build_metadata = build_metadata_module.get_data_build_metadata()
+    build_metadata.setdefault("name", package_name)
+    build_metadata.setdefault("version", installed_version)
+    build_metadata.setdefault("git_sha", None)
+    build_metadata.setdefault("data_build_fingerprint", None)
+    return build_metadata
 
 
 @lru_cache
