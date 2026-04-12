@@ -1,0 +1,27 @@
+{
+  "country_id": "uk",
+  "policyengine_version": "3.4.1",
+  "model_package": {
+    "name": "policyengine-uk",
+    "version": "2.78.0"
+  },
+  "data_package": {
+    "name": "policyengine-uk-data",
+    "version": "1.40.3",
+    "repo_id": "policyengine/policyengine-uk-data-private"
+  },
+  "default_dataset": "enhanced_frs_2023_24",
+  "datasets": {
+    "frs_2023_24": {
+      "path": "frs_2023_24.h5"
+    },
+    "enhanced_frs_2023_24": {
+      "path": "enhanced_frs_2023_24.h5"
+    }
+  },
+  "region_datasets": {
+    "national": {
+      "path_template": "enhanced_frs_2023_24.h5"
+    }
+  }
+}

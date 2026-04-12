@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from .release_manifest import CountryReleaseManifest, PackageVersion
 from .tax_benefit_model import TaxBenefitModel
 
 if TYPE_CHECKING:
@@ -32,6 +33,13 @@ class TaxBenefitModelVersion(BaseModel):
     region_registry: "RegionRegistry | None" = Field(
         default=None, description="Registry of supported geographic regions"
     )
+    release_manifest: CountryReleaseManifest | None = Field(
+        default=None,
+        exclude=True,
+    )
+    model_package: PackageVersion | None = Field(default=None)
+    data_package: PackageVersion | None = Field(default=None)
+    default_dataset_uri: str | None = Field(default=None)
 
     @property
     def parameter_values(self) -> list["ParameterValue"]:
@@ -115,6 +123,28 @@ class TaxBenefitModelVersion(BaseModel):
         if self.region_registry is None:
             return None
         return self.region_registry.get(code)
+
+    @property
+    def release_bundle(self) -> dict[str, str | None]:
+        return {
+            "country_id": self.release_manifest.country_id
+            if self.release_manifest is not None
+            else None,
+            "policyengine_version": self.release_manifest.policyengine_version
+            if self.release_manifest is not None
+            else None,
+            "model_package": self.model_package.name
+            if self.model_package is not None
+            else None,
+            "model_version": self.version,
+            "data_package": self.data_package.name
+            if self.data_package is not None
+            else None,
+            "data_version": self.data_package.version
+            if self.data_package is not None
+            else None,
+            "default_dataset_uri": self.default_dataset_uri,
+        }
 
     def __repr__(self) -> str:
         # Give the id and version, and the number of variables, parameters, parameter nodes, parameter values

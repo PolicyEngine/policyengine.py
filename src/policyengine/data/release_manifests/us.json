@@ -1,0 +1,30 @@
+{
+  "country_id": "us",
+  "policyengine_version": "3.4.1",
+  "model_package": {
+    "name": "policyengine-us",
+    "version": "1.602.0"
+  },
+  "data_package": {
+    "name": "policyengine-us-data",
+    "version": "1.77.0",
+    "repo_id": "policyengine/policyengine-us-data"
+  },
+  "default_dataset": "enhanced_cps_2024",
+  "datasets": {
+    "enhanced_cps_2024": {
+      "path": "enhanced_cps_2024.h5"
+    }
+  },
+  "region_datasets": {
+    "national": {
+      "path_template": "enhanced_cps_2024.h5"
+    },
+    "state": {
+      "path_template": "states/{state_code}.h5"
+    },
+    "congressional_district": {
+      "path_template": "districts/{district_code}.h5"
+    }
+  }
+}

@@ -24,6 +24,19 @@ class TestUKModel:
         assert england is not None
         assert england.label == "England"
 
+    def test_has_release_manifest_metadata(self):
+        """UK model should expose its bundled release manifest metadata."""
+        assert uk_latest.release_manifest is not None
+        assert uk_latest.release_manifest.country_id == "uk"
+        assert uk_latest.model_package.name == "policyengine-uk"
+        assert uk_latest.model_package.version == "2.78.0"
+        assert uk_latest.data_package.name == "policyengine-uk-data"
+        assert uk_latest.data_package.version == "1.40.3"
+        assert (
+            uk_latest.default_dataset_uri
+            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3"
+        )
+
     def test_has_hundreds_of_parameters(self):
         """UK model should have hundreds of parameters."""
         assert len(uk_latest.parameters) >= 100
@@ -94,6 +107,19 @@ class TestUSModel:
         ca = us_latest.get_region("state/ca")
         assert ca is not None
         assert ca.label == "California"
+
+    def test_has_release_manifest_metadata(self):
+        """US model should expose its bundled release manifest metadata."""
+        assert us_latest.release_manifest is not None
+        assert us_latest.release_manifest.country_id == "us"
+        assert us_latest.model_package.name == "policyengine-us"
+        assert us_latest.model_package.version == "1.602.0"
+        assert us_latest.data_package.name == "policyengine-us-data"
+        assert us_latest.data_package.version == "1.77.0"
+        assert (
+            us_latest.default_dataset_uri
+            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+        )
 
     def test_has_hundreds_of_parameters(self):
         """US model should have hundreds of parameters."""
