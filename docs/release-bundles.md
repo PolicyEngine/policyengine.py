@@ -186,6 +186,55 @@ Notes:
 - apps and APIs should surface this bundle, not only country package versions
 - a bundle may reuse a previously staged data artifact if compatibility is explicitly certified
 
+## TRACE export
+
+The internal build manifest and certified runtime bundle remain the operational source of
+truth.
+
+TRACE sits on top of those manifests as a standards-based export layer.
+
+### What gets exported
+
+Country `*-data` repos should emit a `trace.tro.jsonld` file for each published data
+release. That TRO should cover:
+
+- the release manifest itself
+- each published artifact hash listed in the release manifest
+- the build-time model provenance recorded in the release manifest
+
+`policyengine.py` should emit a separate certified-bundle TRO. That TRO should cover:
+
+- the bundled country release manifest shipped in `policyengine.py`
+- the country data release manifest resolved for the certified data package version
+- the certified dataset artifact hash
+- the certification basis used to allow runtime reuse
+
+### What TRACE does not replace
+
+TRACE is not the source of truth for compatibility policy.
+
+In particular, TRACE does not decide:
+
+- whether a new model version can safely reuse an existing data artifact
+- how `data_build_fingerprint` is computed
+- which staged artifact becomes a supported runtime default
+
+Those decisions still belong to the country data build manifest and the
+`policyengine.py` certified runtime bundle.
+
+### Why we still want it
+
+TRACE adds three things our internal manifests do not provide by themselves:
+
+- a standard declaration format for provenance exchange
+- a composition fingerprint over the exact artifacts in scope
+- a better external surface for papers, audits, and reproducibility reviews
+
+That is why the recommended design is:
+
+- internal manifests for build/certification control
+- generated TRACE TROs for standards-based export
+
 ## Compatibility rule
 
 The architecture should avoid forcing a new data build for every harmless country model release.
