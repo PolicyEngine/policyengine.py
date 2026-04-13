@@ -1,3 +1,10 @@
+## [3.4.3] - 2026-04-13
+
+### Fixed
+
+- Fix the release versioning workflow so it bumps from the highest known released version instead of regressing to a stale version from `pyproject.toml`.
+
+
 ## [3.4.1] - 2026-04-13
 
 ### Changed
