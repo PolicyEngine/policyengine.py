@@ -1,3 +1,10 @@
+## [3.4.1] - 2026-04-13
+
+### Changed
+
+- Add certified bundle metadata that records runtime model pins alongside build-time data artifact provenance and compatibility fingerprints.
+
+
 ## [3.4.2] - 2026-04-12
 
 ### Changed
