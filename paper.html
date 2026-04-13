@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <meta name="dcterms.date" content="2026-04-09" />
+  <meta name="dcterms.date" content="2026-04-13" />
   <title>policyengine: An Analyst Layer for Tax-Benefit Microsimulation</title>
   <style>
     /* Default styles provided by pandoc.
@@ -195,7 +195,7 @@
 <header id="title-block-header">
 <h1 class="title">policyengine: An Analyst Layer for Tax-Benefit
 Microsimulation</h1>
-<p class="date">9 April 2026</p>
+<p class="date">13 April 2026</p>
 </header>
 <h1 id="summary">Summary</h1>
 <p>The <code>policyengine</code> Python package <span class="citation"
@@ -204,7 +204,7 @@ an open-source analysis layer for tax-benefit microsimulation. The
 package provides a unified interface for running policy simulations,
 analyzing distributional impacts, and visualizing results across the US
 and the UK. It delegates country-specific tax-benefit calculations to
-dedicated country packages (policyengine-us and policyengine-uk) while
+dedicated country packages (<code>policyengine-us</code> and <code>policyengine-uk</code>) while
 providing shared abstractions for simulations, datasets, parametric
 reforms, and output analysis. The framework supports both individual
 household simulations and population-wide microsimulations using
@@ -342,7 +342,7 @@ countries</td>
 analysis layer above country models. It makes repeated reform-analysis
 workflows portable across supported countries, while leaving reusable
 engine logic in PolicyEngine Core, country legislation in
-policyengine-us and policyengine-uk, and enhanced survey microdata in
+<code>policyengine-us</code> and <code>policyengine-uk</code>, and enhanced survey microdata in
 companion repositories <span class="citation"
 data-cites="policyengine_core woodruff2024enhanced_cps">(Woodruff et al.
 2024; Woodruff and Ghenis 2024)</span>. This separation allows each
@@ -353,7 +353,7 @@ methodology, and microdata change.</p>
 system. PolicyEngine Core provides reusable simulation abstractions,
 versioned parameters, and dataset interfaces shared across countries
 <span class="citation" data-cites="policyengine_core">(Woodruff et al.
-2024)</span>. The policyengine-us and policyengine-uk packages contain
+2024)</span>. The <code>policyengine-us</code> and <code>policyengine-uk</code> packages contain
 statutory logic, variables, and entity structures specific to each
 tax-benefit system. The <code>policyengine</code> package sits above
 them as the analysis layer: it defines shared simulation orchestration,
