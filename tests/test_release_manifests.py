@@ -4,6 +4,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 from policyengine.core.release_manifest import (
+    DataReleaseManifest,
     DataReleaseManifestUnavailable,
     certify_data_release_compatibility,
     dataset_logical_name,
@@ -15,6 +16,11 @@ from policyengine.core.release_manifest import (
 )
 from policyengine.core.tax_benefit_model import TaxBenefitModel
 from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
+from policyengine.core.trace_tro import (
+    build_trace_tro_from_release_bundle,
+    compute_trace_composition_fingerprint,
+    serialize_trace_tro,
+)
 
 
 def _response_with_json(payload: dict) -> MagicMock:
@@ -396,3 +402,182 @@ class TestReleaseManifests:
         assert bundle["data_build_fingerprint"] == "sha256:match"
         assert bundle["compatibility_basis"] == "matching_data_build_fingerprint"
         assert bundle["certified_by"] == "runtime certification"
+
+    def test__given_same_hashes_in_different_orders__then_trace_fingerprint_matches(
+        self,
+    ):
+        hashes = ["ccc", "aaa", "bbb"]
+
+        assert compute_trace_composition_fingerprint(hashes) == (
+            compute_trace_composition_fingerprint(reversed(hashes))
+        )
+
+    def test__given_release_bundle_and_data_manifest__then_trace_tro_tracks_bundle(
+        self,
+    ):
+        country_manifest = get_release_manifest("us")
+        data_release_manifest = DataReleaseManifest.model_validate(
+            {
+                "schema_version": 1,
+                "data_package": {
+                    "name": "policyengine-us-data",
+                    "version": "1.73.0",
+                },
+                "build": {
+                    "build_id": "policyengine-us-data-1.73.0",
+                    "built_at": "2026-04-10T12:00:00Z",
+                    "built_with_model_package": {
+                        "name": "policyengine-us",
+                        "version": "1.602.0",
+                        "git_sha": "deadbeef",
+                        "data_build_fingerprint": "sha256:build",
+                    },
+                },
+                "compatible_model_packages": [],
+                "default_datasets": {"national": "enhanced_cps_2024"},
+                "artifacts": {
+                    "enhanced_cps_2024": {
+                        "kind": "microdata",
+                        "path": "enhanced_cps_2024.h5",
+                        "repo_id": "policyengine/policyengine-us-data",
+                        "revision": "1.73.0",
+                        "sha256": "sha256-dataset",
+                        "size_bytes": 123,
+                    }
+                },
+            }
+        )
+
+        tro = build_trace_tro_from_release_bundle(
+            country_manifest,
+            data_release_manifest,
+        )
+
+        graph = tro["@graph"][0]
+        artifacts = graph["trov:hasComposition"]["trov:hasArtifact"]
+        locations = graph["trov:hasArrangement"][0]["trov:hasArtifactLocation"]
+
+        assert len(artifacts) == 3
+        assert len(locations) == 3
+        assert (
+            graph["schema:description"]
+            == "TRACE TRO for certified runtime bundle us-3.4.0 covering the bundled country release manifest, the country data release manifest, and the certified dataset artifact. Certified for runtime model version 1.602.0 via exact_build_model_version. Built with policyengine-us 1.602.0."
+        )
+        assert locations[0]["trov:path"] == "data/release_manifests/us.json"
+        assert (
+            locations[1]["trov:path"]
+            == "https://huggingface.co/policyengine/policyengine-us-data/resolve/1.73.0/release_manifest.json"
+        )
+        assert (
+            locations[2]["trov:path"]
+            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.73.0"
+        )
+        assert graph["trov:hasComposition"]["trov:hasFingerprint"]["trov:hash"][
+            "trov:hashValue"
+        ] == compute_trace_composition_fingerprint(
+            [artifact["trov:hash"]["trov:hashValue"] for artifact in artifacts]
+        )
+
+    def test__given_runtime_certification__then_trace_tro_uses_it(self):
+        manifest = get_release_manifest("us")
+        data_release_manifest = DataReleaseManifest.model_validate(
+            {
+                "schema_version": 1,
+                "data_package": {
+                    "name": "policyengine-us-data",
+                    "version": "1.73.0",
+                },
+                "build": {
+                    "build_id": "policyengine-us-data-1.73.0",
+                    "built_at": "2026-04-10T12:00:00Z",
+                    "built_with_model_package": {
+                        "name": "policyengine-us",
+                        "version": "1.602.0",
+                        "git_sha": "deadbeef",
+                        "data_build_fingerprint": "sha256:match",
+                    },
+                },
+                "compatible_model_packages": [],
+                "default_datasets": {"national": "enhanced_cps_2024"},
+                "artifacts": {
+                    "enhanced_cps_2024": {
+                        "kind": "microdata",
+                        "path": "enhanced_cps_2024.h5",
+                        "repo_id": "policyengine/policyengine-us-data",
+                        "revision": "1.73.0",
+                        "sha256": "sha256-dataset",
+                        "size_bytes": 123,
+                    }
+                },
+            }
+        )
+        model_version = TaxBenefitModelVersion(
+            model=TaxBenefitModel(id="us"),
+            version=manifest.model_package.version,
+            release_manifest=manifest,
+            model_package=manifest.model_package,
+            data_package=manifest.data_package,
+            default_dataset_uri=manifest.default_dataset_uri,
+            data_certification={
+                "compatibility_basis": "matching_data_build_fingerprint",
+                "certified_for_model_version": "1.603.0",
+                "data_build_id": "policyengine-us-data-1.73.0",
+                "built_with_model_version": "1.602.0",
+                "built_with_model_git_sha": "deadbeef",
+                "data_build_fingerprint": "sha256:match",
+                "certified_by": "runtime certification",
+            },
+        )
+
+        with patch(
+            "policyengine.core.tax_benefit_model_version.get_data_release_manifest",
+            return_value=data_release_manifest,
+        ):
+            tro = model_version.trace_tro
+
+        description = tro["@graph"][0]["schema:description"]
+
+        assert "Certified for runtime model version 1.603.0" in description
+        assert "via matching_data_build_fingerprint." in description
+        assert "Data-build fingerprint: sha256:match." in description
+
+    def test__given_trace_tro__then_serialization_is_deterministic(self):
+        country_manifest = get_release_manifest("uk")
+        data_release_manifest = DataReleaseManifest.model_validate(
+            {
+                "schema_version": 1,
+                "data_package": {
+                    "name": "policyengine-uk-data",
+                    "version": "1.40.4",
+                },
+                "build": {
+                    "build_id": "policyengine-uk-data-1.40.4",
+                    "built_at": "2026-04-10T12:00:00Z",
+                    "built_with_model_package": {
+                        "name": "policyengine-uk",
+                        "version": "2.74.0",
+                        "git_sha": "deadbeef",
+                        "data_build_fingerprint": "sha256:build",
+                    },
+                },
+                "compatible_model_packages": [],
+                "default_datasets": {"national": "enhanced_frs_2023_24"},
+                "artifacts": {
+                    "enhanced_frs_2023_24": {
+                        "kind": "microdata",
+                        "path": "enhanced_frs_2023_24.h5",
+                        "repo_id": "policyengine/policyengine-uk-data-private",
+                        "revision": "1.40.4",
+                        "sha256": "sha256-dataset",
+                        "size_bytes": 123,
+                    }
+                },
+            }
+        )
+
+        tro = build_trace_tro_from_release_bundle(
+            country_manifest,
+            data_release_manifest,
+        )
+
+        assert serialize_trace_tro(tro) == serialize_trace_tro(tro)
