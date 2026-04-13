@@ -1,3 +1,10 @@
+## [3.4.4] - 2026-04-13
+
+### Changed
+
+- Add TRACE TRO export helpers for certified runtime bundles and expose them through `policyengine.core`.
+
+
 ## [3.4.3] - 2026-04-13
 
 ### Fixed
