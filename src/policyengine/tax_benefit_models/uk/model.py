@@ -1,11 +1,9 @@
 import datetime
-import logging
-from importlib.metadata import version
+from importlib import metadata
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pandas as pd
-import requests
 from microdf import MicroDataFrame
 
 from policyengine.core import (
@@ -15,7 +13,11 @@ from policyengine.core import (
     TaxBenefitModelVersion,
     Variable,
 )
-from policyengine.core.release_manifest import get_release_manifest
+from policyengine.core.release_manifest import (
+    get_release_manifest,
+    get_runtime_model_build_metadata,
+    resolve_runtime_data_certification,
+)
 from policyengine.utils.entity_utils import (
     build_entity_relationships,
     filter_dataset_by_household_variable,
@@ -39,25 +41,6 @@ class PolicyEngineUK(TaxBenefitModel):
 
 
 uk_model = PolicyEngineUK()
-
-_logger = logging.getLogger(__name__)
-
-
-def _get_uk_package_metadata():
-    """Get PolicyEngine UK package version and upload time (lazy-loaded)."""
-    pkg_version = version("policyengine-uk")
-    try:
-        response = requests.get(
-            "https://pypi.org/pypi/policyengine-uk/json",
-            timeout=10,
-        )
-        response.raise_for_status()
-        data = response.json()
-        upload_time = data["releases"][pkg_version][0]["upload_time_iso_8601"]
-    except (requests.RequestException, KeyError, IndexError) as exc:
-        _logger.warning("Could not fetch PyPI metadata for policyengine-uk: %s", exc)
-        upload_time = None
-    return pkg_version, upload_time
 
 
 class PolicyEngineUKLatest(TaxBenefitModelVersion):
@@ -146,23 +129,32 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
     def __init__(self, **kwargs: dict):
         manifest = get_release_manifest("uk")
         if "version" not in kwargs or kwargs.get("version") is None:
-            pkg_version, upload_time = _get_uk_package_metadata()
-            kwargs["version"] = pkg_version
-            if upload_time is not None:
-                kwargs["created_at"] = datetime.datetime.fromisoformat(upload_time)
+            kwargs["version"] = manifest.model_package.version
 
-        if kwargs["version"] != manifest.model_package.version:
-            raise RuntimeError(
-                "Installed policyengine-uk version does not match the bundled "
-                f"policyengine.py release manifest: {kwargs['version']} != "
-                f"{manifest.model_package.version}."
+        installed_model_version = metadata.version("policyengine-uk")
+        if installed_model_version != manifest.model_package.version:
+            raise ValueError(
+                "Installed policyengine-uk version does not match the "
+                f"bundled policyengine.py manifest. Expected "
+                f"{manifest.model_package.version}, got {installed_model_version}."
             )
+
+        model_build_metadata = get_runtime_model_build_metadata("policyengine-uk")
+        data_certification = resolve_runtime_data_certification(
+            "uk",
+            runtime_model_version=installed_model_version,
+            runtime_data_build_fingerprint=model_build_metadata.get(
+                "data_build_fingerprint"
+            ),
+            bundled_certification=manifest.certification,
+        )
 
         super().__init__(**kwargs)
         self.release_manifest = manifest
         self.model_package = manifest.model_package
         self.data_package = manifest.data_package
         self.default_dataset_uri = manifest.default_dataset_uri
+        self.data_certification = data_certification
         from policyengine_core.enums import Enum
         from policyengine_uk.system import system
 

@@ -12,17 +12,18 @@
 ```bash
 git clone https://github.com/PolicyEngine/policyengine.py.git
 cd policyengine.py
-uv pip install -e .[dev]
+uv pip install -e ".[dev]"
 ```
 
-This installs both UK and US country models plus dev dependencies (pytest, ruff, mypy, towncrier).
+This installs the shared analysis layer, both country model extras, and the dev
+dependencies used in CI (pytest, ruff, mypy, towncrier).
 
 ## Common commands
 
 ```bash
 make format           # ruff format
 make test             # pytest with coverage
-make docs             # build documentation site
+make docs             # run the MyST docs build used in CI via npx
 make clean            # remove caches, build artifacts, .h5 files
 ```
 
@@ -60,7 +61,7 @@ PRs trigger the following checks:
 | Tests (Python 3.13) | Required | `make test` |
 | Tests (Python 3.14) | Required | `make test` |
 | Mypy | Informational | `mypy src/policyengine` |
-| Docs build | Required | MyST build |
+| Docs build | Required | `make docs` |
 
 ## Versioning and releases
 
@@ -72,6 +73,8 @@ echo "Description of change" > changelog.d/my-change.added
 ```
 
 On merge, the versioning workflow bumps the version, builds the changelog, and creates a GitHub Release.
+
+For the target release-bundle architecture, see [Release bundles](release-bundles.md). That document defines the split between country `*-data` build manifests and `policyengine.py` certified runtime bundles.
 
 ## Architecture
 
