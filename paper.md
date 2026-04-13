@@ -30,7 +30,7 @@ bibliography: paper.bib
 
 # Summary
 
-The `policyengine` Python package [@policyengine_py] is an open-source analysis layer for tax-benefit microsimulation. It provides a common interface for running policy simulations and analyzing distributional impacts across the US and UK. It delegates country-specific tax-benefit calculations to dedicated country packages (`policyengine-us` and `policyengine-uk`) while providing shared abstractions for simulations, datasets, parametric reforms, and output analysis. Recent releases also provide version-pinned reproducibility by certifying compatible combinations of country models, microdata, and dataset artifacts. The package also powers an interactive web application at [policyengine.org](https://policyengine.org).
+The `policyengine` Python package [@policyengine_py] is an open-source analysis layer for tax-benefit microsimulation. It provides a common interface for running policy simulations and analyzing distributional impacts across the US and UK. It delegates country-specific tax-benefit calculations to dedicated country packages (`policyengine-us` and `policyengine-uk`) while providing shared abstractions for simulations, datasets, parametric reforms, and output analysis. Recent releases also treat the top-level `policyengine` version as a reproducibility boundary: country data repositories publish immutable dataset artifacts with build-time provenance, and `policyengine` certifies runtime bundles that pin the country-model version, microdata-package version, dataset artifact, and compatibility record. These internal records can also be exported as TRACE-compliant Transparent Research Object declarations, giving a standards-based provenance layer for external sharing and audit. The package also powers an interactive web application at [policyengine.org](https://policyengine.org).
 
 # Statement of Need
 
@@ -56,7 +56,7 @@ Table 1: Comparison of policyengine with selected tax-benefit microsimulation to
 | Python package (pip install) | Yes | No | Yes (connector) | Yes |
 | Shared reform and output API across countries | Yes | No | No | Shared core, country-specific parameters |
 
-Teams can update each layer independently, while `policyengine` certifies the combinations exposed to users.
+Each layer can evolve separately, while `policyengine` certifies the combinations exposed to users.
 
 # Software Design
 
@@ -64,7 +64,7 @@ The PolicyEngine software stack has four layers. PolicyEngine Core provides reus
 
 ![Figure 1: PolicyEngine runtime architecture. Inputs (rules, microdata, and behavioral responses) flow through the Simulation layer to produce structured outputs.](architecture.png){width="100%"}
 
-For reproducibility, the top-level package now acts as a certification boundary across these layers. Country data repositories build immutable microdata artifacts and publish release manifests with checksums and the country-model version used during data construction. Bundled country manifests in `policyengine` then certify the runtime bundle: the runtime country-model version, the microdata-package release, the dataset artifact, and the compatibility basis linking that runtime model to the build-time data provenance. Analysts can request a dataset such as `enhanced_frs_2023_24`, while the runtime resolves it to a specific versioned artifact and records both runtime and build-time provenance.
+For reproducibility, the top-level package now acts as a certification boundary across these layers. Country data repositories build immutable microdata artifacts and publish release manifests with checksums and the country-model version used during data construction. Bundled country manifests in `policyengine` then certify the runtime bundle: the runtime country-model version, the microdata-package release, the dataset artifact, and the compatibility basis linking that runtime model to the build-time data provenance. Analysts can request a dataset such as `enhanced_frs_2023_24`, while the runtime resolves it to a specific versioned artifact and records both runtime and build-time provenance. The same certification record can be emitted as a TRACE Transparent Research Object declaration, so the internal bundle and data manifests remain the operational source of truth while a standardized signed provenance document is available for external exchange.
 
 At runtime, a simulation combines a country model version, household microdata, and optional reform or behavioral-response inputs. The simulation pipeline also supports behavioral responses such as labor supply elasticities, which the country packages define and apply after the static policy reform. The analysis layer then produces reusable outputs for decile changes, program statistics, poverty, inequality, and regional impacts. Because the runtime exposes the resolved certified bundle and compatibility basis, results can be traced to a specific `policyengine` release, runtime country-model release, microdata release, versioned dataset artifact, and build-time country-model version.
 
