@@ -48,7 +48,9 @@ The country packages already support direct microsimulation analysis and one-off
 
 Table 1 summarizes where `policyengine` sits relative to selected tools:
 
-| Dimension | `policyengine` | TAXSIM | UKMOD | OpenFisca |
+Table 1: Comparison of policyengine with selected tax-benefit microsimulation tools.
+
+| Dimension | policyengine | TAXSIM | UKMOD | OpenFisca |
 |---|---|---|---|---|
 | Open source | Yes | Partial | Yes | Yes |
 | Country coverage | US and UK | US | UK and EU member states | France, Tunisia, and other jurisdictions |
@@ -60,13 +62,11 @@ The `policyengine` layer leaves reusable engine logic in PolicyEngine Core, coun
 
 # Software Design
 
-The PolicyEngine software stack has four layers. PolicyEngine Core provides reusable simulation abstractions, versioned parameters, and dataset interfaces that country packages share [@policyengine_core]. The `policyengine-us` and `policyengine-uk` packages contain statutory logic, variables, and entity structures specific to each tax-benefit system. The `policyengine` package sits above them as the analysis layer: it defines shared simulation orchestration, structured output types, and canonical baseline-versus-reform workflows such as `economic_impact_analysis()`. Companion data repositories hold enhanced survey microdata derived from the Current Population Survey (CPS) [@woodruff2024enhanced_cps] and Family Resources Survey [@frs2020]. Figure 1 illustrates the runtime workflow: inputs flow into the Simulation layer, which produces the structured outputs.
+The PolicyEngine software stack has four layers. PolicyEngine Core provides reusable simulation abstractions, versioned parameters, and dataset interfaces that country packages share [@policyengine_core]. The `policyengine-us` and `policyengine-uk` packages contain statutory logic, variables, and entity structures specific to each tax-benefit system. The `policyengine` package sits above them as the analysis layer: it defines shared simulation orchestration, structured output types, and canonical baseline-versus-reform workflows such as `economic_impact_analysis()`. Companion data repositories hold enhanced survey microdata derived from the Current Population Survey (CPS) [@woodruff2024enhanced_cps] and Family Resources Survey [@frs2020]. Figure 1 illustrates the runtime workflow: inputs flow into the Simulation layer, which produces the structured outputs. The package does not include a macroeconomic model and does not capture general equilibrium effects.
 
-For reproducibility, the top-level package now acts as a certification boundary across these layers. Country data repositories build immutable microdata artifacts and publish release manifests with checksums and the country-model version used during data construction. Bundled country manifests in `policyengine` then certify the runtime bundle: the runtime country-model version, the microdata-package release, the dataset artifact, and the compatibility basis linking that runtime model to the build-time data provenance. Analysts can request a dataset such as `enhanced_frs_2023_24`, while the runtime resolves it to a specific versioned artifact and records both runtime and build-time provenance.
+![Figure 1: PolicyEngine architecture. A microsimulation combines three input concepts (tax-benefit rules and parameters, survey microdata, and behavioral responses) in the Simulation layer, which produces distributional impacts, fiscal impacts, regional breakdowns, poverty rates, and inequality metrics.](architecture.png){width="100%"}
 
-![PolicyEngine architecture. A microsimulation combines three input concepts (tax-benefit rules and parameters, survey microdata, and behavioral responses) in the Simulation layer, which produces distributional impacts, fiscal impacts, regional breakdowns, poverty rates, and inequality metrics.](architecture.png){width="100%"}
-
-The `policyengine` package centralizes distributional methods; legislative implementation remains in the country packages.
+For reproducibility, the top-level package now acts as a certification boundary across these layers. Country data repositories build immutable microdata artifacts and publish release manifests with checksums and the country-model version used during data construction. Bundled country manifests in `policyengine` then certify the runtime bundle: the runtime country-model version, the microdata-package release, the dataset artifact, and the compatibility basis linking that runtime model to the build-time data provenance. Analysts can request a dataset such as `enhanced_frs_2023_24`, while the runtime resolves it to a specific versioned artifact and records both runtime and build-time provenance. The `policyengine` package centralizes distributional methods; legislative implementation remains in the country packages.
 
 At runtime, a simulation combines a country model version, household microdata, and optional reform or behavioral-response inputs. The `Dynamic` class represents behavioral responses such as labor supply elasticities; the country packages define the relevant parameters, and the simulation pipeline applies them after the static policy reform. The analysis layer then produces reusable outputs for decile changes, program statistics, poverty, inequality, and regional impacts. Because the runtime exposes the resolved certified bundle and compatibility basis, results can be traced to a specific `policyengine` release, runtime country-model release, microdata release, versioned dataset artifact, and build-time country-model version.
 
@@ -107,7 +107,6 @@ reformed = calculate_household_impact(household, policy=reform)
 
 A UK reproduction script that runs a population-level analysis is available at `examples/paper_repro_uk.py`.
 
-The `policyengine` package does not include an underlying macroeconomic model in its microsimulation analysis and does not capture general equilibrium effects.
 
 # Research Impact Statement
 
