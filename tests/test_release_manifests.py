@@ -403,7 +403,9 @@ class TestReleaseManifests:
         assert bundle["compatibility_basis"] == "matching_data_build_fingerprint"
         assert bundle["certified_by"] == "runtime certification"
 
-    def test__given_same_hashes_in_different_orders__then_trace_fingerprint_matches(self):
+    def test__given_same_hashes_in_different_orders__then_trace_fingerprint_matches(
+        self,
+    ):
         hashes = ["ccc", "aaa", "bbb"]
 
         assert compute_trace_composition_fingerprint(hashes) == (
@@ -470,16 +472,10 @@ class TestReleaseManifests:
             locations[2]["trov:path"]
             == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.73.0"
         )
-        assert (
-            graph["trov:hasComposition"]["trov:hasFingerprint"]["trov:hash"][
-                "trov:hashValue"
-            ]
-            == compute_trace_composition_fingerprint(
-                [
-                    artifact["trov:hash"]["trov:hashValue"]
-                    for artifact in artifacts
-                ]
-            )
+        assert graph["trov:hasComposition"]["trov:hasFingerprint"]["trov:hash"][
+            "trov:hashValue"
+        ] == compute_trace_composition_fingerprint(
+            [artifact["trov:hash"]["trov:hashValue"] for artifact in artifacts]
         )
 
     def test__given_runtime_certification__then_trace_tro_uses_it(self):

@@ -59,7 +59,9 @@ def build_trace_tro_from_release_bundle(
 ) -> dict:
     certified_artifact = country_manifest.certified_data_artifact
     if certified_artifact is None:
-        raise ValueError("Country release manifest does not define a certified artifact.")
+        raise ValueError(
+            "Country release manifest does not define a certified artifact."
+        )
 
     dataset_artifact = data_release_manifest.artifacts.get(certified_artifact.dataset)
     if dataset_artifact is None:
@@ -177,8 +179,7 @@ def build_trace_tro_from_release_bundle(
                 "trov:vocabularyVersion": TRACE_TROV_VERSION,
                 "schema:creator": country_manifest.policyengine_version,
                 "schema:name": (
-                    f"policyengine {country_manifest.country_id} "
-                    f"certified bundle TRO"
+                    f"policyengine {country_manifest.country_id} certified bundle TRO"
                 ),
                 "schema:description": (
                     f"TRACE TRO for certified runtime bundle "
