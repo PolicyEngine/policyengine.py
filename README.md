@@ -105,7 +105,8 @@ uv pip install -e ".[dev]"      # install with dev dependencies (pytest, ruff, m
 ```bash
 make format           # ruff format
 make test             # pytest with coverage
-make docs             # run the MyST docs build used in CI via npx
+make docs             # build static MyST/Jupyter Book 2 HTML docs
+make docs-serve       # preview the docs locally
 make clean            # remove caches, build artifacts, .h5 files
 ```
 

@@ -1,3 +1,38 @@
+## [3.4.4] - 2026-04-13
+
+### Changed
+
+- Add TRACE TRO export helpers for certified runtime bundles and expose them through `policyengine.core`.
+
+
+## [3.4.3] - 2026-04-13
+
+### Fixed
+
+- Fix the release versioning workflow so it bumps from the highest known released version instead of regressing to a stale version from `pyproject.toml`.
+
+
+## [3.4.1] - 2026-04-13
+
+### Changed
+
+- Add certified bundle metadata that records runtime model pins alongside build-time data artifact provenance and compatibility fingerprints.
+
+
+## [3.4.2] - 2026-04-12
+
+### Changed
+
+- Align the bundled UK release manifest with the pinned `policyengine-uk` package version and updated data package revisions.
+
+
+## [3.4.1] - 2026-04-09
+
+### Fixed
+
+- Fixed the UK paper reproduction workflow so the checked-in example runs on Python 3.14 and the associated analysis helpers handle that path cleanly.
+
+
 ## [3.4.0] - 2026-04-08
 
 ### Added

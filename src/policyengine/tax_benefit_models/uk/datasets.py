@@ -5,6 +5,10 @@ from microdf import MicroDataFrame
 from pydantic import ConfigDict
 
 from policyengine.core import Dataset, YearData
+from policyengine.core.release_manifest import (
+    dataset_logical_name,
+    resolve_dataset_reference,
+)
 
 
 class UKYearData(YearData):
@@ -96,17 +100,19 @@ class PolicyEngineUKDataset(Dataset):
 
 def create_datasets(
     datasets: list[str] = [
-        "hf://policyengine/policyengine-uk-data/frs_2023_24.h5",
-        "hf://policyengine/policyengine-uk-data/enhanced_frs_2023_24.h5",
+        "frs_2023_24",
+        "enhanced_frs_2023_24",
     ],
     years: list[int] = [2026, 2027, 2028, 2029, 2030],
     data_folder: str = "./data",
 ) -> dict[str, PolicyEngineUKDataset]:
     result = {}
     for dataset in datasets:
+        resolved_dataset = resolve_dataset_reference("uk", dataset)
+        dataset_stem = dataset_logical_name(resolved_dataset)
         from policyengine_uk import Microsimulation
 
-        sim = Microsimulation(dataset=dataset)
+        sim = Microsimulation(dataset=resolved_dataset)
         for year in years:
             year_dataset = sim.dataset[year]
 
@@ -154,10 +160,10 @@ def create_datasets(
             )
 
             uk_dataset = PolicyEngineUKDataset(
-                id=f"{Path(dataset).stem}_year_{year}",
-                name=f"{Path(dataset).stem}-year-{year}",
-                description=f"UK Dataset for year {year} based on {Path(dataset).stem}",
-                filepath=f"{data_folder}/{Path(dataset).stem}_year_{year}.h5",
+                id=f"{dataset_stem}_year_{year}",
+                name=f"{dataset_stem}-year-{year}",
+                description=f"UK Dataset for year {year} based on {dataset_stem}",
+                filepath=f"{data_folder}/{dataset_stem}_year_{year}.h5",
                 year=int(year),
                 data=UKYearData(
                     person=MicroDataFrame(person_df, weights="person_weight"),
@@ -167,7 +173,7 @@ def create_datasets(
             )
             uk_dataset.save()
 
-            dataset_key = f"{Path(dataset).stem}_{year}"
+            dataset_key = f"{dataset_stem}_{year}"
             result[dataset_key] = uk_dataset
 
     return result
@@ -175,25 +181,27 @@ def create_datasets(
 
 def load_datasets(
     datasets: list[str] = [
-        "hf://policyengine/policyengine-uk-data/frs_2023_24.h5",
-        "hf://policyengine/policyengine-uk-data/enhanced_frs_2023_24.h5",
+        "frs_2023_24",
+        "enhanced_frs_2023_24",
     ],
     years: list[int] = [2026, 2027, 2028, 2029, 2030],
     data_folder: str = "./data",
 ) -> dict[str, PolicyEngineUKDataset]:
     result = {}
     for dataset in datasets:
+        resolved_dataset = resolve_dataset_reference("uk", dataset)
+        dataset_stem = dataset_logical_name(resolved_dataset)
         for year in years:
-            filepath = f"{data_folder}/{Path(dataset).stem}_year_{year}.h5"
+            filepath = f"{data_folder}/{dataset_stem}_year_{year}.h5"
             uk_dataset = PolicyEngineUKDataset(
-                name=f"{Path(dataset).stem}-year-{year}",
-                description=f"UK Dataset for year {year} based on {Path(dataset).stem}",
+                name=f"{dataset_stem}-year-{year}",
+                description=f"UK Dataset for year {year} based on {dataset_stem}",
                 filepath=filepath,
                 year=int(year),
             )
             uk_dataset.load()
 
-            dataset_key = f"{Path(dataset).stem}_{year}"
+            dataset_key = f"{dataset_stem}_{year}"
             result[dataset_key] = uk_dataset
 
     return result
@@ -201,8 +209,8 @@ def load_datasets(
 
 def ensure_datasets(
     datasets: list[str] = [
-        "hf://policyengine/policyengine-uk-data/frs_2023_24.h5",
-        "hf://policyengine/policyengine-uk-data/enhanced_frs_2023_24.h5",
+        "frs_2023_24",
+        "enhanced_frs_2023_24",
     ],
     years: list[int] = [2026, 2027, 2028, 2029, 2030],
     data_folder: str = "./data",
@@ -220,8 +228,10 @@ def ensure_datasets(
     # Check if all dataset files exist
     all_exist = True
     for dataset in datasets:
+        resolved_dataset = resolve_dataset_reference("uk", dataset)
+        dataset_stem = dataset_logical_name(resolved_dataset)
         for year in years:
-            filepath = Path(f"{data_folder}/{Path(dataset).stem}_year_{year}.h5")
+            filepath = Path(f"{data_folder}/{dataset_stem}_year_{year}.h5")
             if not filepath.exists():
                 all_exist = False
                 break

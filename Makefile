@@ -1,9 +1,15 @@
-.PHONY: docs
+.PHONY: docs docs-serve
+
+MYSTMD_VERSION ?= 1.8.3
+MYST_CMD = npx --yes mystmd@$(MYSTMD_VERSION)
 
 all: build-package
 
 docs:
-	cd docs && npx mystmd build --html
+	cd docs && $(MYST_CMD) build --html
+
+docs-serve:
+	cd docs && $(MYST_CMD) start
 
 install:
 	uv pip install -e ".[dev]"

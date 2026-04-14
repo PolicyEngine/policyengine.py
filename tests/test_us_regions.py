@@ -2,7 +2,6 @@
 
 from policyengine.countries.us.data import DISTRICT_COUNTS, US_STATES
 from policyengine.countries.us.regions import (
-    US_DATA_BUCKET,
     us_region_registry,
 )
 
@@ -104,7 +103,10 @@ class TestUSRegionRegistry:
         assert national.code == "us"
         assert national.label == "United States"
         assert national.region_type == "national"
-        assert national.dataset_path == f"{US_DATA_BUCKET}/enhanced_cps_2024.h5"
+        assert (
+            national.dataset_path
+            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.73.0"
+        )
 
     def test__given_us_registry__then_has_51_states(self):
         """Given: US region registry
@@ -130,7 +132,10 @@ class TestUSRegionRegistry:
         assert ca.label == "California"
         assert ca.region_type == "state"
         assert ca.parent_code == "us"
-        assert ca.dataset_path == f"{US_DATA_BUCKET}/states/CA.h5"
+        assert (
+            ca.dataset_path
+            == "hf://policyengine/policyengine-us-data/states/CA.h5@1.73.0"
+        )
         assert ca.state_code == "CA"
         assert ca.state_name == "California"
         assert not ca.requires_filter
@@ -160,7 +165,10 @@ class TestUSRegionRegistry:
         assert "1st" in ca01.label.lower() or "1 " in ca01.label
         assert ca01.region_type == "congressional_district"
         assert ca01.parent_code == "state/ca"
-        assert ca01.dataset_path == f"{US_DATA_BUCKET}/districts/CA-01.h5"
+        assert (
+            ca01.dataset_path
+            == "hf://policyengine/policyengine-us-data/districts/CA-01.h5@1.73.0"
+        )
         assert ca01.state_code == "CA"
         assert not ca01.requires_filter
 

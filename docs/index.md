@@ -16,4 +16,5 @@ We do this by:
 - [US tax-benefit model](country-models-us.md): Entities, parameters, reform examples
 - [Examples](examples.md): Complete working scripts
 - [Visualisation](visualisation.md): Publication-ready charts with Plotly
+- [Release bundles](release-bundles.md): Reproducible model-plus-data certification and provenance
 - [Development](dev.md): Setup, testing, CI, architecture

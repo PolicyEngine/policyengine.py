@@ -81,10 +81,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 18.x
-      - name: Install MyST
-        run: npm install -g mystmd
       - name: Build HTML Assets
-        run: cd docs && myst build --html
+        run: make docs
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -108,6 +106,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+      - name: Fetch tags
+        run: git fetch --tags --force
       - name: Setup Python
         uses: actions/setup-python@v5
         with:

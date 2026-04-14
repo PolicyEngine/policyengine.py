@@ -23,7 +23,8 @@ dependencies used in CI (pytest, ruff, mypy, towncrier).
 ```bash
 make format           # ruff format
 make test             # pytest with coverage
-make docs             # run the MyST docs build used in CI via npx
+make docs             # build static MyST/Jupyter Book 2 HTML docs
+make docs-serve       # preview the docs locally
 make clean            # remove caches, build artifacts, .h5 files
 ```
 
@@ -73,6 +74,8 @@ echo "Description of change" > changelog.d/my-change.added
 ```
 
 On merge, the versioning workflow bumps the version, builds the changelog, and creates a GitHub Release.
+
+For the target release-bundle architecture, see [Release bundles](release-bundles.md). That document defines the split between country `*-data` build manifests and `policyengine.py` certified runtime bundles.
 
 ## Architecture
 
