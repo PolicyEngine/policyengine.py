@@ -12,7 +12,7 @@ Provides two concrete strategies for scoping datasets to sub-national regions:
 import logging
 from abc import abstractmethod
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 import h5py
 import numpy as np
@@ -69,7 +69,7 @@ class RowFilterStrategy(RegionScopingStrategy):
 
     strategy_type: Literal["row_filter"] = "row_filter"
     variable_name: str
-    variable_value: str
+    variable_value: Any
 
     def apply(
         self,

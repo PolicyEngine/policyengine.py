@@ -138,7 +138,7 @@ for d in analysis.decile_impacts.outputs:
 
 Per-programme totals, changes, and winner/loser counts.
 
-**US programs analysed:** `income_tax`, `payroll_tax`, `state_income_tax`, `snap`, `tanf`, `ssi`, `social_security`, `medicare`, `medicaid`, `eitc`, `ctc`
+**US programs analysed:** `income_tax`, `employee_payroll_tax`, `state_income_tax`, `snap`, `tanf`, `ssi`, `social_security`, `medicare_cost`, `medicaid`, `eitc`, `ctc`
 
 **UK programmes analysed:** `income_tax`, `national_insurance`, `vat`, `council_tax`, `universal_credit`, `child_benefit`, `pension_credit`, `income_support`, `working_tax_credit`, `child_tax_credit`
 
