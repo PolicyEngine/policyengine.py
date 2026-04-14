@@ -227,7 +227,7 @@ def economic_impact_analysis(
     programs = {
         # Federal taxes
         "income_tax": {"entity": "tax_unit", "is_tax": True},
-        "employee_payroll_tax": {"entity": "person", "is_tax": True},
+        "employee_payroll_tax": {"entity": "tax_unit", "is_tax": True},
         # State and local taxes
         "state_income_tax": {"entity": "tax_unit", "is_tax": True},
         # Benefits
@@ -235,7 +235,7 @@ def economic_impact_analysis(
         "tanf": {"entity": "spm_unit", "is_tax": False},
         "ssi": {"entity": "person", "is_tax": False},
         "social_security": {"entity": "person", "is_tax": False},
-        "medicare": {"entity": "person", "is_tax": False},
+        "medicare_cost": {"entity": "person", "is_tax": False},
         "medicaid": {"entity": "person", "is_tax": False},
         "eitc": {"entity": "tax_unit", "is_tax": False},
         "ctc": {"entity": "tax_unit", "is_tax": False},

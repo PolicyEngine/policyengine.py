@@ -26,7 +26,7 @@ Individual people with demographic and income characteristics.
 - `social_security`: Annual Social Security benefits
 - `ssi`: Annual Supplemental Security Income
 - `medicaid`: Annual Medicaid value
-- `medicare`: Annual Medicare value
+- `medicare_cost`: Annual Medicare value
 - `unemployment_compensation`: Annual unemployment benefits
 
 ### Tax unit

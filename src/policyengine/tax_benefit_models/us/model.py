@@ -75,6 +75,7 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
             # Benefits
             "ssi",
             "social_security",
+            "medicare_cost",
             "medicaid",
             "unemployment_compensation",
         ],
@@ -101,6 +102,7 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
             "tax_unit_weight",
             "income_tax",
             "employee_payroll_tax",
+            "state_income_tax",
             "household_state_income_tax",
             "eitc",
             "ctc",
