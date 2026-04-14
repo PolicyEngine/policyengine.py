@@ -227,7 +227,7 @@ def economic_impact_analysis(
     programs = {
         # Federal taxes
         "income_tax": {"entity": "tax_unit", "is_tax": True},
-        "payroll_tax": {"entity": "person", "is_tax": True},
+        "employee_payroll_tax": {"entity": "person", "is_tax": True},
         # State and local taxes
         "state_income_tax": {"entity": "tax_unit", "is_tax": True},
         # Benefits
