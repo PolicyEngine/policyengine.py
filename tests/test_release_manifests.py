@@ -272,16 +272,19 @@ class TestReleaseManifests:
     ):
         get_data_release_manifest.cache_clear()
 
-        with patch(
-            "policyengine.core.release_manifest.get_data_release_manifest",
-            side_effect=DataReleaseManifestUnavailableError("private repo"),
-        ), patch(
-            "policyengine.core.release_manifest.get_release_manifest",
-            return_value=MagicMock(
-                certification=DataCertification(
-                    compatibility_basis="matching_data_build_fingerprint",
-                    certified_for_model_version="1.602.0",
-                    data_build_fingerprint="sha256:expected",
+        with (
+            patch(
+                "policyengine.core.release_manifest.get_data_release_manifest",
+                side_effect=DataReleaseManifestUnavailableError("private repo"),
+            ),
+            patch(
+                "policyengine.core.release_manifest.get_release_manifest",
+                return_value=MagicMock(
+                    certification=DataCertification(
+                        compatibility_basis="matching_data_build_fingerprint",
+                        certified_for_model_version="1.602.0",
+                        data_build_fingerprint="sha256:expected",
+                    ),
                 ),
             ),
         ):
