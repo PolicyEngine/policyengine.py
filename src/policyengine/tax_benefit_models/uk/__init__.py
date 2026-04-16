@@ -21,6 +21,7 @@ if find_spec("policyengine_uk") is not None:
     from .model import (
         PolicyEngineUK,
         PolicyEngineUKLatest,
+        managed_microsimulation,
         uk_latest,
         uk_model,
     )
@@ -41,6 +42,7 @@ if find_spec("policyengine_uk") is not None:
         "ensure_datasets",
         "PolicyEngineUK",
         "PolicyEngineUKLatest",
+        "managed_microsimulation",
         "uk_model",
         "uk_latest",
         "economic_impact_analysis",

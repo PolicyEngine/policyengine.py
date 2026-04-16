@@ -4,14 +4,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from .release_manifest import (
-    CountryReleaseManifest,
-    DataCertification,
-    PackageVersion,
-    get_data_release_manifest,
-)
+from .release_manifest import CountryReleaseManifest, DataCertification, PackageVersion
 from .tax_benefit_model import TaxBenefitModel
-from .trace_tro import build_trace_tro_from_release_bundle
 
 if TYPE_CHECKING:
     from .parameter import Parameter
@@ -206,22 +200,6 @@ class TaxBenefitModelVersion(BaseModel):
                 certification.certified_by if certification is not None else None
             ),
         }
-
-    @property
-    def trace_tro(self) -> dict:
-        if self.release_manifest is None:
-            raise ValueError(
-                "TRACE TRO export requires a bundled country release manifest."
-            )
-
-        data_release_manifest = get_data_release_manifest(
-            self.release_manifest.country_id
-        )
-        return build_trace_tro_from_release_bundle(
-            self.release_manifest,
-            data_release_manifest,
-            certification=self.data_certification,
-        )
 
     def __repr__(self) -> str:
         # Give the id and version, and the number of variables, parameters, parameter nodes, parameter values

@@ -14,9 +14,11 @@ from policyengine.core import (
     Variable,
 )
 from policyengine.core.release_manifest import (
+    certify_data_release_compatibility,
+    dataset_logical_name,
     get_release_manifest,
-    get_runtime_model_build_metadata,
-    resolve_runtime_data_certification,
+    resolve_local_managed_dataset_source,
+    resolve_managed_dataset_reference,
 )
 from policyengine.utils.entity_utils import (
     build_entity_relationships,
@@ -41,6 +43,17 @@ class PolicyEngineUK(TaxBenefitModel):
 
 
 uk_model = PolicyEngineUK()
+
+
+def _get_runtime_data_build_metadata() -> dict[str, str | None]:
+    try:
+        from policyengine_uk.build_metadata import get_data_build_metadata
+    except ModuleNotFoundError as exc:
+        if exc.name != "policyengine_uk.build_metadata":
+            raise
+        return {}
+
+    return get_data_build_metadata() or {}
 
 
 class PolicyEngineUKLatest(TaxBenefitModelVersion):
@@ -139,14 +152,13 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
                 f"{manifest.model_package.version}, got {installed_model_version}."
             )
 
-        model_build_metadata = get_runtime_model_build_metadata("policyengine-uk")
-        data_certification = resolve_runtime_data_certification(
+        model_build_metadata = _get_runtime_data_build_metadata()
+        data_certification = certify_data_release_compatibility(
             "uk",
             runtime_model_version=installed_model_version,
             runtime_data_build_fingerprint=model_build_metadata.get(
                 "data_build_fingerprint"
             ),
-            bundled_certification=manifest.certification,
         )
 
         super().__init__(**kwargs)
@@ -414,6 +426,65 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
             simulation.updated_at = datetime.datetime.fromtimestamp(
                 os.path.getmtime(filepath)
             )
+
+
+def _managed_release_bundle(
+    dataset_uri: str,
+    dataset_source: str | None = None,
+) -> dict[str, str | None]:
+    bundle = dict(uk_latest.release_bundle)
+    bundle["runtime_dataset"] = dataset_logical_name(dataset_uri)
+    bundle["runtime_dataset_uri"] = dataset_uri
+    if dataset_source and dataset_source != dataset_uri:
+        bundle["runtime_dataset_source"] = dataset_source
+    bundle["managed_by"] = "policyengine.py"
+    return bundle
+
+
+def managed_microsimulation(
+    *,
+    dataset: str | None = None,
+    allow_unmanaged: bool = False,
+    **kwargs,
+):
+    """Construct a country-package Microsimulation pinned to this bundle.
+
+    By default this enforces the dataset selection from the bundled
+    `policyengine.py` release manifest. Arbitrary dataset URIs require
+    `allow_unmanaged=True`.
+    """
+
+    from policyengine_uk import Microsimulation
+
+    if "dataset" in kwargs:
+        raise ValueError(
+            "Pass `dataset=` directly to managed_microsimulation, not through "
+            "**kwargs, so policyengine.py can enforce the release bundle."
+        )
+
+    dataset_uri = resolve_managed_dataset_reference(
+        "uk",
+        dataset,
+        allow_unmanaged=allow_unmanaged,
+    )
+    dataset_source = resolve_local_managed_dataset_source("uk", dataset_uri)
+    runtime_dataset = dataset_source
+    if isinstance(dataset_source, str) and "hf://" not in dataset_source:
+        from policyengine_uk.data.dataset_schema import (
+            UKMultiYearDataset,
+            UKSingleYearDataset,
+        )
+
+        if UKMultiYearDataset.validate_file_path(dataset_source, False):
+            runtime_dataset = UKMultiYearDataset(dataset_source)
+        elif UKSingleYearDataset.validate_file_path(dataset_source, False):
+            runtime_dataset = UKSingleYearDataset(dataset_source)
+    microsim = Microsimulation(dataset=runtime_dataset, **kwargs)
+    microsim.policyengine_bundle = _managed_release_bundle(
+        dataset_uri,
+        dataset_source,
+    )
+    return microsim
 
 
 uk_latest = PolicyEngineUKLatest()

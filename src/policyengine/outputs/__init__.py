@@ -20,6 +20,7 @@ from policyengine.outputs.inequality import (
     UK_INEQUALITY_INCOME_VARIABLE,
     US_INEQUALITY_INCOME_VARIABLE,
     Inequality,
+    USInequalityPreset,
     calculate_uk_inequality,
     calculate_us_inequality,
 )
@@ -76,6 +77,7 @@ __all__ = [
     "GENDER_GROUPS",
     "RACE_GROUPS",
     "Inequality",
+    "USInequalityPreset",
     "UK_INEQUALITY_INCOME_VARIABLE",
     "US_INEQUALITY_INCOME_VARIABLE",
     "calculate_uk_inequality",

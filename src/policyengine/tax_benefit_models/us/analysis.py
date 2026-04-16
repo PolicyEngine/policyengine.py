@@ -16,6 +16,7 @@ from policyengine.outputs.decile_impact import (
 )
 from policyengine.outputs.inequality import (
     Inequality,
+    USInequalityPreset,
     calculate_us_inequality,
 )
 from policyengine.outputs.poverty import (
@@ -200,8 +201,14 @@ class PolicyReformAnalysis(BaseModel):
 def economic_impact_analysis(
     baseline_simulation: Simulation,
     reform_simulation: Simulation,
+    inequality_preset: USInequalityPreset | str = USInequalityPreset.STANDARD,
 ) -> PolicyReformAnalysis:
     """Perform comprehensive analysis of a policy reform.
+
+    Args:
+        baseline_simulation: Baseline simulation
+        reform_simulation: Reform simulation
+        inequality_preset: Optional preset for the inequality outputs
 
     Returns:
         PolicyReformAnalysis containing decile impacts and program statistics
@@ -287,8 +294,12 @@ def economic_impact_analysis(
     reform_poverty = calculate_us_poverty_rates(reform_simulation)
 
     # Calculate inequality for both simulations
-    baseline_inequality = calculate_us_inequality(baseline_simulation)
-    reform_inequality = calculate_us_inequality(reform_simulation)
+    baseline_inequality = calculate_us_inequality(
+        baseline_simulation, preset=inequality_preset
+    )
+    reform_inequality = calculate_us_inequality(
+        reform_simulation, preset=inequality_preset
+    )
 
     return PolicyReformAnalysis(
         decile_impacts=decile_impacts,
