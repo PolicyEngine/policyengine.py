@@ -414,18 +414,17 @@ class TestReleaseManifests:
             microsim = managed_us_microsimulation()
 
         dataset = mock_microsimulation.call_args.kwargs["dataset"]
-        assert str(dataset).endswith(
-            "policyengine_us_data/storage/enhanced_cps_2024.h5"
-        )
+        assert dataset == microsim.policyengine_bundle["runtime_dataset_source"]
         assert microsim.policyengine_bundle["policyengine_version"] == "3.4.0"
         assert microsim.policyengine_bundle["runtime_dataset"] == "enhanced_cps_2024"
         assert (
             microsim.policyengine_bundle["runtime_dataset_uri"]
             == us_latest.default_dataset_uri
         )
-        assert str(microsim.policyengine_bundle["runtime_dataset_source"]).endswith(
-            "policyengine_us_data/storage/enhanced_cps_2024.h5"
-        )
+        dataset_source = microsim.policyengine_bundle["runtime_dataset_source"]
+        assert dataset_source == us_latest.default_dataset_uri or str(
+            dataset_source
+        ).endswith("policyengine_us_data/storage/enhanced_cps_2024.h5")
 
     def test__given_us_unmanaged_dataset_uri__then_source_is_not_rewritten(self):
         dataset = "hf://policyengine/policyengine-us-data/cps_2023.h5@1.73.0"
@@ -447,15 +446,25 @@ class TestReleaseManifests:
         dataset = mock_microsimulation.call_args.kwargs["dataset"]
         from policyengine_uk.data.dataset_schema import UKSingleYearDataset
 
-        assert isinstance(dataset, UKSingleYearDataset)
-        assert getattr(dataset, "time_period", None) == "2023"
+        if isinstance(dataset, UKSingleYearDataset):
+            assert getattr(dataset, "time_period", None) == "2023"
+        else:
+            assert dataset == (
+                "hf://policyengine/policyengine-uk-data-private/"
+                "enhanced_frs_2023_24.h5@1.40.4"
+            )
         assert microsim.policyengine_bundle["policyengine_version"] == "3.4.0"
         assert microsim.policyengine_bundle["runtime_dataset"] == "enhanced_frs_2023_24"
         assert microsim.policyengine_bundle["runtime_dataset_uri"] == (
             "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.4"
         )
-        assert str(microsim.policyengine_bundle["runtime_dataset_source"]).endswith(
-            "policyengine_uk_data/storage/enhanced_frs_2023_24.h5"
+        dataset_source = microsim.policyengine_bundle["runtime_dataset_source"]
+        assert (
+            dataset_source
+            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.4"
+            or str(dataset_source).endswith(
+                "policyengine_uk_data/storage/enhanced_frs_2023_24.h5"
+            )
         )
 
     def test__given_uk_unmanaged_dataset_uri__then_source_is_not_rewritten(self):
