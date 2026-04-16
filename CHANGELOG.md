@@ -1,3 +1,10 @@
+## [3.4.5] - 2026-04-16
+
+### Changed
+
+- Added managed release-bundle runtime enforcement for bundled US and UK microsimulations, including manifest-backed dataset pinning and runtime bundle metadata.
+
+
 ## [3.4.4] - 2026-04-13
 
 ### Changed
