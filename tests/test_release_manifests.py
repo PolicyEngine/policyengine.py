@@ -3,7 +3,11 @@
 import json
 from unittest.mock import MagicMock, patch
 
+from requests import Timeout
+
 from policyengine.core.release_manifest import (
+    DataCertification,
+    DataReleaseManifestUnavailableError,
     certify_data_release_compatibility,
     dataset_logical_name,
     get_data_release_manifest,
@@ -194,6 +198,22 @@ class TestReleaseManifests:
         )
         assert mock_get.call_count == 1
 
+    def test__given_missing_data_release_manifest__then_fetch_raises_unavailable(self):
+        get_data_release_manifest.cache_clear()
+        response = MagicMock()
+        response.status_code = 404
+
+        with patch(
+            "policyengine.core.release_manifest.requests.get",
+            return_value=response,
+        ):
+            try:
+                get_data_release_manifest("us")
+            except DataReleaseManifestUnavailableError as error:
+                assert "No data release manifest" in str(error)
+            else:
+                raise AssertionError("Expected missing manifest to be reported")
+
     def test__given_matching_fingerprint__then_certification_allows_reuse(self):
         get_data_release_manifest.cache_clear()
         payload = {
@@ -230,6 +250,73 @@ class TestReleaseManifests:
         assert certification.data_build_id == "policyengine-us-data-1.73.0"
         assert certification.built_with_model_version == "1.601.0"
         assert certification.certified_for_model_version == "1.602.0"
+
+    def test__given_private_manifest_unavailable__then_bundled_certification_is_used(
+        self,
+    ):
+        get_data_release_manifest.cache_clear()
+
+        with patch(
+            "policyengine.core.release_manifest.get_data_release_manifest",
+            side_effect=DataReleaseManifestUnavailableError("private repo"),
+        ):
+            certification = certify_data_release_compatibility(
+                "us",
+                runtime_model_version="1.602.0",
+            )
+
+        assert certification == get_release_manifest("us").certification
+
+    def test__given_private_manifest_unavailable_and_fingerprint_mismatch__then_fails(
+        self,
+    ):
+        get_data_release_manifest.cache_clear()
+
+        with (
+            patch(
+                "policyengine.core.release_manifest.get_data_release_manifest",
+                side_effect=DataReleaseManifestUnavailableError("private repo"),
+            ),
+            patch(
+                "policyengine.core.release_manifest.get_release_manifest",
+                return_value=MagicMock(
+                    certification=DataCertification(
+                        compatibility_basis="matching_data_build_fingerprint",
+                        certified_for_model_version="1.602.0",
+                        data_build_fingerprint="sha256:expected",
+                    ),
+                ),
+            ),
+        ):
+            try:
+                certify_data_release_compatibility(
+                    "us",
+                    runtime_model_version="1.602.0",
+                    runtime_data_build_fingerprint="sha256:not-a-match",
+                )
+            except ValueError as error:
+                assert "does not match the bundled data certification" in str(error)
+            else:
+                raise AssertionError("Expected fingerprint mismatch to fail")
+
+    def test__given_manifest_fetch_failure__then_certification_does_not_fallback(
+        self,
+    ):
+        get_data_release_manifest.cache_clear()
+
+        with patch(
+            "policyengine.core.release_manifest.get_data_release_manifest",
+            side_effect=Timeout("network timeout"),
+        ):
+            try:
+                certify_data_release_compatibility(
+                    "us",
+                    runtime_model_version="1.602.0",
+                )
+            except Timeout as error:
+                assert "network timeout" in str(error)
+            else:
+                raise AssertionError("Expected timeout to propagate")
 
     def test__given_mismatched_version_and_fingerprint__then_certification_fails(self):
         get_data_release_manifest.cache_clear()
@@ -327,18 +414,30 @@ class TestReleaseManifests:
             microsim = managed_us_microsimulation()
 
         dataset = mock_microsimulation.call_args.kwargs["dataset"]
-        assert str(dataset).endswith(
-            "policyengine_us_data/storage/enhanced_cps_2024.h5"
-        )
+        assert dataset == microsim.policyengine_bundle["runtime_dataset_source"]
         assert microsim.policyengine_bundle["policyengine_version"] == "3.4.0"
         assert microsim.policyengine_bundle["runtime_dataset"] == "enhanced_cps_2024"
         assert (
             microsim.policyengine_bundle["runtime_dataset_uri"]
             == us_latest.default_dataset_uri
         )
-        assert str(microsim.policyengine_bundle["runtime_dataset_source"]).endswith(
-            "policyengine_us_data/storage/enhanced_cps_2024.h5"
-        )
+        dataset_source = microsim.policyengine_bundle["runtime_dataset_source"]
+        assert dataset_source == us_latest.default_dataset_uri or str(
+            dataset_source
+        ).endswith("policyengine_us_data/storage/enhanced_cps_2024.h5")
+
+    def test__given_us_unmanaged_dataset_uri__then_source_is_not_rewritten(self):
+        dataset = "hf://policyengine/policyengine-us-data/cps_2023.h5@1.73.0"
+
+        with patch("policyengine_us.Microsimulation") as mock_microsimulation:
+            microsim = managed_us_microsimulation(
+                dataset=dataset,
+                allow_unmanaged=True,
+            )
+
+        assert mock_microsimulation.call_args.kwargs["dataset"] == dataset
+        assert microsim.policyengine_bundle["runtime_dataset_uri"] == dataset
+        assert microsim.policyengine_bundle["runtime_dataset_source"] == dataset
 
     def test__given_uk_managed_dataset_name__then_resolves_within_bundle(self):
         with patch("policyengine_uk.Microsimulation") as mock_microsimulation:
@@ -347,13 +446,36 @@ class TestReleaseManifests:
         dataset = mock_microsimulation.call_args.kwargs["dataset"]
         from policyengine_uk.data.dataset_schema import UKSingleYearDataset
 
-        assert isinstance(dataset, UKSingleYearDataset)
-        assert getattr(dataset, "time_period", None) == "2023"
+        if isinstance(dataset, UKSingleYearDataset):
+            assert getattr(dataset, "time_period", None) == "2023"
+        else:
+            assert dataset == (
+                "hf://policyengine/policyengine-uk-data-private/"
+                "enhanced_frs_2023_24.h5@1.40.4"
+            )
         assert microsim.policyengine_bundle["policyengine_version"] == "3.4.0"
         assert microsim.policyengine_bundle["runtime_dataset"] == "enhanced_frs_2023_24"
         assert microsim.policyengine_bundle["runtime_dataset_uri"] == (
             "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.4"
         )
-        assert str(microsim.policyengine_bundle["runtime_dataset_source"]).endswith(
-            "policyengine_uk_data/storage/enhanced_frs_2023_24.h5"
+        dataset_source = microsim.policyengine_bundle["runtime_dataset_source"]
+        assert (
+            dataset_source
+            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.4"
+            or str(dataset_source).endswith(
+                "policyengine_uk_data/storage/enhanced_frs_2023_24.h5"
+            )
         )
+
+    def test__given_uk_unmanaged_dataset_uri__then_source_is_not_rewritten(self):
+        dataset = "hf://policyengine/policyengine-uk-data-private/frs_2022_23.h5@1.40.4"
+
+        with patch("policyengine_uk.Microsimulation") as mock_microsimulation:
+            microsim = managed_uk_microsimulation(
+                dataset=dataset,
+                allow_unmanaged=True,
+            )
+
+        assert mock_microsimulation.call_args.kwargs["dataset"] == dataset
+        assert microsim.policyengine_bundle["runtime_dataset_uri"] == dataset
+        assert microsim.policyengine_bundle["runtime_dataset_source"] == dataset

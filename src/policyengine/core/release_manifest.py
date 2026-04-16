@@ -14,6 +14,10 @@ LOCAL_DATA_REPO_HINTS = {
 }
 
 
+class DataReleaseManifestUnavailableError(ValueError):
+    """Raised when a data release manifest cannot be fetched or is absent."""
+
+
 class PackageVersion(BaseModel):
     name: str
     version: str
@@ -161,9 +165,13 @@ def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
         timeout=HF_REQUEST_TIMEOUT_SECONDS,
     )
     if response.status_code in (401, 403):
-        raise ValueError(
+        raise DataReleaseManifestUnavailableError(
             "Could not fetch the data release manifest from Hugging Face. "
             "If this country uses a private data repo, set HUGGING_FACE_TOKEN."
+        )
+    if response.status_code == 404:
+        raise DataReleaseManifestUnavailableError(
+            "No data release manifest was published for this data package."
         )
     response.raise_for_status()
     return DataReleaseManifest.model_validate_json(response.text)
@@ -183,13 +191,23 @@ def certify_data_release_compatibility(
     country_manifest = get_release_manifest(country_id)
     try:
         data_release_manifest = get_data_release_manifest(country_id)
-    except Exception as exc:
+    except DataReleaseManifestUnavailableError as exc:
         bundled_certification = country_manifest.certification
         if (
             bundled_certification is not None
             and bundled_certification.certified_for_model_version
             == runtime_model_version
         ):
+            if (
+                runtime_data_build_fingerprint is not None
+                and bundled_certification.data_build_fingerprint is not None
+                and runtime_data_build_fingerprint
+                != bundled_certification.data_build_fingerprint
+            ):
+                raise ValueError(
+                    "Runtime data build fingerprint does not match the bundled "
+                    "data certification."
+                )
             return bundled_certification
         raise exc
     built_with_model = (
@@ -339,7 +357,12 @@ def resolve_managed_dataset_reference(
     return resolve_dataset_reference(country_id, dataset)
 
 
-def resolve_local_managed_dataset_source(country_id: str, dataset_uri: str) -> str:
+def resolve_local_managed_dataset_source(
+    country_id: str,
+    dataset_uri: str,
+    *,
+    allow_local_mirror: bool = True,
+) -> str:
     """Resolve a local mirror of a managed dataset when available.
 
     This preserves the bundled dataset URI for provenance while allowing local
@@ -347,7 +370,7 @@ def resolve_local_managed_dataset_source(country_id: str, dataset_uri: str) -> s
     exact certified artifact from disk rather than re-downloading it.
     """
 
-    if not dataset_uri.startswith("hf://"):
+    if not allow_local_mirror or not dataset_uri.startswith("hf://"):
         return dataset_uri
 
     local_hint = LOCAL_DATA_REPO_HINTS.get(country_id)
