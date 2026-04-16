@@ -435,7 +435,7 @@ def _managed_release_bundle(
     bundle = dict(uk_latest.release_bundle)
     bundle["runtime_dataset"] = dataset_logical_name(dataset_uri)
     bundle["runtime_dataset_uri"] = dataset_uri
-    if dataset_source and dataset_source != dataset_uri:
+    if dataset_source:
         bundle["runtime_dataset_source"] = dataset_source
     bundle["managed_by"] = "policyengine.py"
     return bundle
@@ -467,7 +467,13 @@ def managed_microsimulation(
         dataset,
         allow_unmanaged=allow_unmanaged,
     )
-    dataset_source = resolve_local_managed_dataset_source("uk", dataset_uri)
+    dataset_source = resolve_local_managed_dataset_source(
+        "uk",
+        dataset_uri,
+        allow_local_mirror=not (
+            allow_unmanaged and dataset is not None and "://" in dataset
+        ),
+    )
     runtime_dataset = dataset_source
     if isinstance(dataset_source, str) and "hf://" not in dataset_source:
         from policyengine_uk.data.dataset_schema import (
