@@ -3,7 +3,10 @@
 import json
 from unittest.mock import MagicMock, patch
 
+from requests import Timeout
+
 from policyengine.core.release_manifest import (
+    DataReleaseManifestUnavailableError,
     certify_data_release_compatibility,
     dataset_logical_name,
     get_data_release_manifest,
@@ -194,6 +197,22 @@ class TestReleaseManifests:
         )
         assert mock_get.call_count == 1
 
+    def test__given_missing_data_release_manifest__then_fetch_raises_unavailable(self):
+        get_data_release_manifest.cache_clear()
+        response = MagicMock()
+        response.status_code = 404
+
+        with patch(
+            "policyengine.core.release_manifest.requests.get",
+            return_value=response,
+        ):
+            try:
+                get_data_release_manifest("us")
+            except DataReleaseManifestUnavailableError as error:
+                assert "No data release manifest" in str(error)
+            else:
+                raise AssertionError("Expected missing manifest to be reported")
+
     def test__given_matching_fingerprint__then_certification_allows_reuse(self):
         get_data_release_manifest.cache_clear()
         payload = {
@@ -230,6 +249,41 @@ class TestReleaseManifests:
         assert certification.data_build_id == "policyengine-us-data-1.73.0"
         assert certification.built_with_model_version == "1.601.0"
         assert certification.certified_for_model_version == "1.602.0"
+
+    def test__given_private_manifest_unavailable__then_bundled_certification_is_used(
+        self,
+    ):
+        get_data_release_manifest.cache_clear()
+
+        with patch(
+            "policyengine.core.release_manifest.get_data_release_manifest",
+            side_effect=DataReleaseManifestUnavailableError("private repo"),
+        ):
+            certification = certify_data_release_compatibility(
+                "us",
+                runtime_model_version="1.602.0",
+            )
+
+        assert certification == get_release_manifest("us").certification
+
+    def test__given_manifest_fetch_failure__then_certification_does_not_fallback(
+        self,
+    ):
+        get_data_release_manifest.cache_clear()
+
+        with patch(
+            "policyengine.core.release_manifest.get_data_release_manifest",
+            side_effect=Timeout("network timeout"),
+        ):
+            try:
+                certify_data_release_compatibility(
+                    "us",
+                    runtime_model_version="1.602.0",
+                )
+            except Timeout as error:
+                assert "network timeout" in str(error)
+            else:
+                raise AssertionError("Expected timeout to propagate")
 
     def test__given_mismatched_version_and_fingerprint__then_certification_fails(self):
         get_data_release_manifest.cache_clear()
@@ -340,6 +394,19 @@ class TestReleaseManifests:
             "policyengine_us_data/storage/enhanced_cps_2024.h5"
         )
 
+    def test__given_us_unmanaged_dataset_uri__then_source_is_not_rewritten(self):
+        dataset = "hf://policyengine/policyengine-us-data/cps_2023.h5@1.73.0"
+
+        with patch("policyengine_us.Microsimulation") as mock_microsimulation:
+            microsim = managed_us_microsimulation(
+                dataset=dataset,
+                allow_unmanaged=True,
+            )
+
+        assert mock_microsimulation.call_args.kwargs["dataset"] == dataset
+        assert microsim.policyengine_bundle["runtime_dataset_uri"] == dataset
+        assert microsim.policyengine_bundle["runtime_dataset_source"] == dataset
+
     def test__given_uk_managed_dataset_name__then_resolves_within_bundle(self):
         with patch("policyengine_uk.Microsimulation") as mock_microsimulation:
             microsim = managed_uk_microsimulation(dataset="enhanced_frs_2023_24")
@@ -357,3 +424,16 @@ class TestReleaseManifests:
         assert str(microsim.policyengine_bundle["runtime_dataset_source"]).endswith(
             "policyengine_uk_data/storage/enhanced_frs_2023_24.h5"
         )
+
+    def test__given_uk_unmanaged_dataset_uri__then_source_is_not_rewritten(self):
+        dataset = "hf://policyengine/policyengine-uk-data-private/frs_2022_23.h5@1.40.4"
+
+        with patch("policyengine_uk.Microsimulation") as mock_microsimulation:
+            microsim = managed_uk_microsimulation(
+                dataset=dataset,
+                allow_unmanaged=True,
+            )
+
+        assert mock_microsimulation.call_args.kwargs["dataset"] == dataset
+        assert microsim.policyengine_bundle["runtime_dataset_uri"] == dataset
+        assert microsim.policyengine_bundle["runtime_dataset_source"] == dataset
