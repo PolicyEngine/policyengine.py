@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from requests import Timeout
 
 from policyengine.core.release_manifest import (
+    DataCertification,
     DataReleaseManifestUnavailableError,
     certify_data_release_compatibility,
     dataset_logical_name,
@@ -265,6 +266,35 @@ class TestReleaseManifests:
             )
 
         assert certification == get_release_manifest("us").certification
+
+    def test__given_private_manifest_unavailable_and_fingerprint_mismatch__then_fails(
+        self,
+    ):
+        get_data_release_manifest.cache_clear()
+
+        with patch(
+            "policyengine.core.release_manifest.get_data_release_manifest",
+            side_effect=DataReleaseManifestUnavailableError("private repo"),
+        ), patch(
+            "policyengine.core.release_manifest.get_release_manifest",
+            return_value=MagicMock(
+                certification=DataCertification(
+                    compatibility_basis="matching_data_build_fingerprint",
+                    certified_for_model_version="1.602.0",
+                    data_build_fingerprint="sha256:expected",
+                ),
+            ),
+        ):
+            try:
+                certify_data_release_compatibility(
+                    "us",
+                    runtime_model_version="1.602.0",
+                    runtime_data_build_fingerprint="sha256:not-a-match",
+                )
+            except ValueError as error:
+                assert "does not match the bundled data certification" in str(error)
+            else:
+                raise AssertionError("Expected fingerprint mismatch to fail")
 
     def test__given_manifest_fetch_failure__then_certification_does_not_fallback(
         self,

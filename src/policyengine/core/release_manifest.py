@@ -198,6 +198,16 @@ def certify_data_release_compatibility(
             and bundled_certification.certified_for_model_version
             == runtime_model_version
         ):
+            if (
+                runtime_data_build_fingerprint is not None
+                and bundled_certification.data_build_fingerprint is not None
+                and runtime_data_build_fingerprint
+                != bundled_certification.data_build_fingerprint
+            ):
+                raise ValueError(
+                    "Runtime data build fingerprint does not match the bundled "
+                    "data certification."
+                )
             return bundled_certification
         raise exc
     built_with_model = (
