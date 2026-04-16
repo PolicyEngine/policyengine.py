@@ -17,8 +17,8 @@ from policyengine.core.release_manifest import (
     certify_data_release_compatibility,
     dataset_logical_name,
     get_release_manifest,
-    resolve_managed_dataset_reference,
     resolve_local_managed_dataset_source,
+    resolve_managed_dataset_reference,
 )
 from policyengine.utils.entity_utils import (
     build_entity_relationships,

@@ -8,15 +8,14 @@ from policyengine.core.release_manifest import (
     dataset_logical_name,
     get_data_release_manifest,
     get_release_manifest,
-    resolve_managed_dataset_reference,
     resolve_dataset_reference,
+    resolve_managed_dataset_reference,
 )
 from policyengine.core.tax_benefit_model import TaxBenefitModel
 from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
 from policyengine.tax_benefit_models.uk import (
     managed_microsimulation as managed_uk_microsimulation,
 )
-from policyengine.tax_benefit_models.uk import uk_latest
 from policyengine.tax_benefit_models.us import (
     managed_microsimulation as managed_us_microsimulation,
 )
