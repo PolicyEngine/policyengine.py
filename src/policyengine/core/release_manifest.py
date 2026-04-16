@@ -260,9 +260,7 @@ def certify_data_release_compatibility(
                     else None
                 ),
                 built_with_model_version=(
-                    built_with_model.version
-                    if built_with_model is not None
-                    else None
+                    built_with_model.version if built_with_model is not None else None
                 ),
                 built_with_model_git_sha=(
                     built_with_model.git_sha if built_with_model is not None else None
