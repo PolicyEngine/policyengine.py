@@ -104,7 +104,5 @@ class Simulation(BaseModel):
         )
         return {
             **bundle,
-            "dataset_filepath": self.dataset.filepath
-            if self.dataset is not None
-            else None,
+            "dataset_filepath": self.dataset.filepath if self.dataset is not None else None,
         }

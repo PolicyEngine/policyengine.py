@@ -1,6 +1,6 @@
 import os
 from functools import lru_cache
-from importlib import import_module, metadata
+from importlib import import_module
 from importlib.resources import files
 from pathlib import Path
 
@@ -8,10 +8,10 @@ import requests
 from pydantic import BaseModel, Field
 
 HF_REQUEST_TIMEOUT_SECONDS = 30
-
-
-class DataReleaseManifestUnavailable(ValueError):
-    pass
+LOCAL_DATA_REPO_HINTS = {
+    "us": ("policyengine_us", "policyengine-us-data", "policyengine_us_data"),
+    "uk": ("policyengine_uk", "policyengine-uk-data", "policyengine_uk_data"),
+}
 
 
 class PackageVersion(BaseModel):
@@ -126,28 +126,6 @@ def build_hf_uri(repo_id: str, path_in_repo: str, revision: str) -> str:
     return f"hf://{repo_id}/{path_in_repo}@{revision}"
 
 
-def get_runtime_model_build_metadata(package_name: str) -> dict[str, str | None]:
-    installed_version = metadata.version(package_name)
-    module_name = package_name.replace("-", "_")
-
-    try:
-        build_metadata_module = import_module(f"{module_name}.build_metadata")
-    except Exception:
-        return {
-            "name": package_name,
-            "version": installed_version,
-            "git_sha": None,
-            "data_build_fingerprint": None,
-        }
-
-    build_metadata = build_metadata_module.get_data_build_metadata()
-    build_metadata.setdefault("name", package_name)
-    build_metadata.setdefault("version", installed_version)
-    build_metadata.setdefault("git_sha", None)
-    build_metadata.setdefault("data_build_fingerprint", None)
-    return build_metadata
-
-
 @lru_cache
 def get_release_manifest(country_id: str) -> CountryReleaseManifest:
     manifest_path = files("policyengine").joinpath(
@@ -183,14 +161,9 @@ def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
         timeout=HF_REQUEST_TIMEOUT_SECONDS,
     )
     if response.status_code in (401, 403):
-        raise DataReleaseManifestUnavailable(
+        raise ValueError(
             "Could not fetch the data release manifest from Hugging Face. "
             "If this country uses a private data repo, set HUGGING_FACE_TOKEN."
-        )
-    if response.status_code == 404:
-        raise DataReleaseManifestUnavailable(
-            "Could not find the data release manifest on Hugging Face for "
-            f"{data_package.repo_id}@{data_package.version}."
         )
     response.raise_for_status()
     return DataReleaseManifest.model_validate_json(response.text)
@@ -208,7 +181,17 @@ def certify_data_release_compatibility(
     runtime_data_build_fingerprint: str | None = None,
 ) -> DataCertification:
     country_manifest = get_release_manifest(country_id)
-    data_release_manifest = get_data_release_manifest(country_id)
+    try:
+        data_release_manifest = get_data_release_manifest(country_id)
+    except Exception as exc:
+        bundled_certification = country_manifest.certification
+        if (
+            bundled_certification is not None
+            and bundled_certification.certified_for_model_version
+            == runtime_model_version
+        ):
+            return bundled_certification
+        raise exc
     built_with_model = (
         data_release_manifest.build.built_with_model_package
         if data_release_manifest.build is not None
@@ -277,7 +260,9 @@ def certify_data_release_compatibility(
                     else None
                 ),
                 built_with_model_version=(
-                    built_with_model.version if built_with_model is not None else None
+                    built_with_model.version
+                    if built_with_model is not None
+                    else None
                 ),
                 built_with_model_git_sha=(
                     built_with_model.git_sha if built_with_model is not None else None
@@ -293,37 +278,6 @@ def certify_data_release_compatibility(
         "Data release manifest is not certified for the runtime model version "
         f"{runtime_model_version} in country '{country_id}'."
     )
-
-
-def resolve_runtime_data_certification(
-    country_id: str,
-    runtime_model_version: str,
-    runtime_data_build_fingerprint: str | None = None,
-    bundled_certification: DataCertification | None = None,
-) -> DataCertification:
-    try:
-        return certify_data_release_compatibility(
-            country_id=country_id,
-            runtime_model_version=runtime_model_version,
-            runtime_data_build_fingerprint=runtime_data_build_fingerprint,
-        )
-    except DataReleaseManifestUnavailable:
-        if (
-            bundled_certification is not None
-            and bundled_certification.certified_for_model_version
-            == runtime_model_version
-        ):
-            bundled_fingerprint = bundled_certification.data_build_fingerprint
-            if (
-                bundled_certification.compatibility_basis
-                == "matching_data_build_fingerprint"
-                and bundled_fingerprint is not None
-                and runtime_data_build_fingerprint is not None
-                and bundled_fingerprint != runtime_data_build_fingerprint
-            ):
-                raise
-            return bundled_certification
-        raise
 
 
 def resolve_dataset_reference(country_id: str, dataset: str) -> str:
@@ -348,6 +302,82 @@ def resolve_dataset_reference(country_id: str, dataset: str) -> str:
         )
 
     return artifact.uri
+
+
+def resolve_managed_dataset_reference(
+    country_id: str,
+    dataset: str | None = None,
+    *,
+    allow_unmanaged: bool = False,
+) -> str:
+    """Resolve a dataset reference under policyengine.py bundle enforcement.
+
+    Managed mode pins dataset selection to the bundled `policyengine.py`
+    release manifest. Callers can:
+
+    - omit `dataset` to use the certified default dataset for the bundle
+    - pass a logical dataset name present in the bundled/data-release manifests
+
+    Direct URLs or raw Hugging Face references are treated as unmanaged unless
+    `allow_unmanaged=True` is set explicitly.
+    """
+
+    manifest = get_release_manifest(country_id)
+    if dataset is None:
+        return manifest.default_dataset_uri
+
+    if "://" in dataset:
+        if dataset == manifest.default_dataset_uri:
+            return dataset
+        if allow_unmanaged:
+            return dataset
+        raise ValueError(
+            "Explicit dataset URIs bypass the policyengine.py release bundle. "
+            "Pass a manifest dataset name or omit `dataset` to use the certified "
+            "default dataset. Set `allow_unmanaged=True` only if you intend to "
+            "bypass bundle enforcement."
+        )
+
+    return resolve_dataset_reference(country_id, dataset)
+
+
+def resolve_local_managed_dataset_source(country_id: str, dataset_uri: str) -> str:
+    """Resolve a local mirror of a managed dataset when available.
+
+    This preserves the bundled dataset URI for provenance while allowing local
+    development environments with sibling data-repo checkouts to load the
+    exact certified artifact from disk rather than re-downloading it.
+    """
+
+    if not dataset_uri.startswith("hf://"):
+        return dataset_uri
+
+    local_hint = LOCAL_DATA_REPO_HINTS.get(country_id)
+    if local_hint is None:
+        return dataset_uri
+
+    path_without_revision = dataset_uri[5:].rsplit("@", 1)[0]
+    parts = path_without_revision.split("/", 2)
+    if len(parts) != 3:
+        return dataset_uri
+    _, _, path_in_repo = parts
+
+    model_module_name, data_repo_name, data_package_name = local_hint
+    try:
+        model_module = import_module(model_module_name)
+    except ImportError:
+        return dataset_uri
+
+    repo_root = Path(model_module.__file__).resolve().parents[1]
+    local_path = (
+        repo_root.with_name(data_repo_name)
+        / data_package_name
+        / "storage"
+        / path_in_repo
+    )
+    if local_path.exists():
+        return str(local_path)
+    return dataset_uri
 
 
 def dataset_logical_name(dataset: str) -> str:

@@ -25,6 +25,9 @@ from .release_manifest import (
 )
 from .release_manifest import get_data_release_manifest as get_data_release_manifest
 from .release_manifest import get_release_manifest as get_release_manifest
+from .release_manifest import (
+    resolve_managed_dataset_reference as resolve_managed_dataset_reference,
+)
 from .scoping_strategy import RegionScopingStrategy as RegionScopingStrategy
 from .scoping_strategy import RowFilterStrategy as RowFilterStrategy
 from .scoping_strategy import ScopingStrategy as ScopingStrategy
@@ -36,13 +39,6 @@ from .tax_benefit_model import TaxBenefitModel as TaxBenefitModel
 from .tax_benefit_model_version import (
     TaxBenefitModelVersion as TaxBenefitModelVersion,
 )
-from .trace_tro import (
-    build_trace_tro_from_release_bundle as build_trace_tro_from_release_bundle,
-)
-from .trace_tro import (
-    compute_trace_composition_fingerprint as compute_trace_composition_fingerprint,
-)
-from .trace_tro import serialize_trace_tro as serialize_trace_tro
 from .variable import Variable as Variable
 
 # Rebuild models to resolve forward references

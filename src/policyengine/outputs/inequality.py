@@ -1,5 +1,6 @@
 """Inequality analysis output types."""
 
+from enum import StrEnum
 from typing import Any
 
 import numpy as np
@@ -7,6 +8,13 @@ import pandas as pd
 from pydantic import ConfigDict
 
 from policyengine.core import Output, Simulation
+
+
+class USInequalityPreset(StrEnum):
+    """Preset configurations for US inequality analysis."""
+
+    STANDARD = "standard"
+    CBO_COMPARABLE = "cbo_comparable"
 
 
 def _gini(values: np.ndarray, weights: np.ndarray) -> float:
@@ -48,6 +56,23 @@ def _gini(values: np.ndarray, weights: np.ndarray) -> float:
     return float(1 - 2 * area)
 
 
+def _series_for_entity(
+    simulation: Simulation, variable_name: str, target_entity: str, data: pd.DataFrame
+) -> pd.Series:
+    """Return a variable series aligned to the requested entity."""
+    variable = simulation.tax_benefit_model_version.get_variable(variable_name)
+
+    if variable.entity != target_entity:
+        mapped = simulation.output_dataset.data.map_to_entity(
+            variable.entity,
+            target_entity,
+            columns=[variable_name],
+        )
+        return mapped[variable_name]
+
+    return data[variable_name]
+
+
 class Inequality(Output):
     """Single inequality measure result - represents one database row.
 
@@ -61,6 +86,9 @@ class Inequality(Output):
     simulation: Simulation
     income_variable: str
     entity: str = "household"
+    weight_multiplier_variable: str | None = None
+    equivalization_variable: str | None = None
+    equivalization_power: float = 0.0
 
     # Optional demographic filters
     filter_variable: str | None = None
@@ -76,48 +104,35 @@ class Inequality(Output):
 
     def run(self):
         """Calculate inequality metrics."""
-        # Get income variable info
-        income_var_obj = self.simulation.tax_benefit_model_version.get_variable(
-            self.income_variable
-        )
-
         # Get target entity data
         target_entity = self.entity
         data = getattr(self.simulation.output_dataset.data, target_entity)
 
-        # Map income variable to target entity if needed
-        if income_var_obj.entity != target_entity:
-            mapped = self.simulation.output_dataset.data.map_to_entity(
-                income_var_obj.entity,
-                target_entity,
-                columns=[self.income_variable],
-            )
-            income_series = mapped[self.income_variable]
-        else:
-            income_series = data[self.income_variable]
+        income_series = _series_for_entity(
+            self.simulation, self.income_variable, target_entity, data
+        )
 
         # Get weights
         weight_col = f"{target_entity}_weight"
         if weight_col in data.columns:
             weights = data[weight_col]
         else:
-            weights = pd.Series(np.ones(len(income_series)))
+            weights = pd.Series(np.ones(len(income_series)), index=income_series.index)
+
+        if self.weight_multiplier_variable is not None:
+            weight_multiplier = _series_for_entity(
+                self.simulation,
+                self.weight_multiplier_variable,
+                target_entity,
+                data,
+            )
+            weights = weights * weight_multiplier
 
         # Apply demographic filter if specified
         if self.filter_variable is not None:
-            filter_var_obj = self.simulation.tax_benefit_model_version.get_variable(
-                self.filter_variable
+            filter_series = _series_for_entity(
+                self.simulation, self.filter_variable, target_entity, data
             )
-
-            if filter_var_obj.entity != target_entity:
-                filter_mapped = self.simulation.output_dataset.data.map_to_entity(
-                    filter_var_obj.entity,
-                    target_entity,
-                    columns=[self.filter_variable],
-                )
-                filter_series = filter_mapped[self.filter_variable]
-            else:
-                filter_series = data[self.filter_variable]
 
             # Build filter mask
             mask = filter_series.notna()
@@ -132,14 +147,35 @@ class Inequality(Output):
             income_series = income_series[mask]
             weights = weights[mask]
 
-        # Convert to numpy arrays
-        values = np.array(income_series)
-        weights_arr = np.array(weights)
+        equivalization_arr = None
+        if self.equivalization_variable is not None and self.equivalization_power != 0:
+            equivalization_series = _series_for_entity(
+                self.simulation,
+                self.equivalization_variable,
+                target_entity,
+                data,
+            )
+            if self.filter_variable is not None:
+                equivalization_series = equivalization_series[mask]
+            equivalization_arr = pd.to_numeric(
+                equivalization_series, errors="coerce"
+            ).to_numpy(dtype=float)
 
-        # Remove NaN values
+        # Convert to numpy arrays
+        values = pd.to_numeric(income_series, errors="coerce").to_numpy(dtype=float)
+        weights_arr = pd.to_numeric(weights, errors="coerce").to_numpy(dtype=float)
+
+        # Remove invalid values
         valid_mask = ~np.isnan(values) & ~np.isnan(weights_arr)
+        if equivalization_arr is not None:
+            valid_mask &= ~np.isnan(equivalization_arr) & (equivalization_arr > 0)
+
         values = values[valid_mask]
         weights_arr = weights_arr[valid_mask]
+        if equivalization_arr is not None:
+            values = values / np.power(
+                equivalization_arr[valid_mask], self.equivalization_power
+            )
 
         # Calculate Gini coefficient
         self.gini = _gini(values, weights_arr)
@@ -233,6 +269,7 @@ def calculate_uk_inequality(
 def calculate_us_inequality(
     simulation: Simulation,
     income_variable: str = US_INEQUALITY_INCOME_VARIABLE,
+    preset: USInequalityPreset | str = USInequalityPreset.STANDARD,
     filter_variable: str | None = None,
     filter_variable_eq: Any | None = None,
     filter_variable_leq: Any | None = None,
@@ -243,6 +280,7 @@ def calculate_us_inequality(
     Args:
         simulation: The simulation to analyse
         income_variable: Income variable to use (default: household_net_income)
+        preset: Optional preset for weighting/equivalization
         filter_variable: Optional variable to filter by
         filter_variable_eq: Filter for exact match
         filter_variable_leq: Filter for less than or equal
@@ -251,10 +289,21 @@ def calculate_us_inequality(
     Returns:
         Inequality object with Gini and income share metrics
     """
+    preset = USInequalityPreset(preset)
+    inequality_kwargs = {}
+
+    if preset == USInequalityPreset.CBO_COMPARABLE:
+        inequality_kwargs = {
+            "weight_multiplier_variable": "household_count_people",
+            "equivalization_variable": "household_count_people",
+            "equivalization_power": 0.5,
+        }
+
     inequality = Inequality(
         simulation=simulation,
         income_variable=income_variable,
         entity="household",
+        **inequality_kwargs,
         filter_variable=filter_variable,
         filter_variable_eq=filter_variable_eq,
         filter_variable_leq=filter_variable_leq,

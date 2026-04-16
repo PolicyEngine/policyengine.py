@@ -2,9 +2,11 @@
 
 import os
 import tempfile
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
+import pytest
 from microdf import MicroDataFrame
 
 from policyengine.core import Simulation
@@ -12,13 +14,33 @@ from policyengine.outputs.inequality import (
     UK_INEQUALITY_INCOME_VARIABLE,
     US_INEQUALITY_INCOME_VARIABLE,
     Inequality,
+    USInequalityPreset,
     _gini,
+    calculate_us_inequality,
 )
 from policyengine.tax_benefit_models.uk import (
     PolicyEngineUKDataset,
     UKYearData,
     uk_latest,
 )
+
+
+class _FakeOutputData(SimpleNamespace):
+    def map_to_entity(self, source_entity, target_entity, columns):
+        raise AssertionError("Unexpected map_to_entity() call in household-level test")
+
+
+class _FakeTaxBenefitModelVersion:
+    def get_variable(self, name):
+        return SimpleNamespace(entity="household", name=name)
+
+
+def _make_household_simulation(household_df: pd.DataFrame) -> Simulation:
+    output_dataset = SimpleNamespace(data=_FakeOutputData(household=household_df))
+    return Simulation.model_construct(
+        output_dataset=output_dataset,
+        tax_benefit_model_version=_FakeTaxBenefitModelVersion(),
+    )
 
 
 def test_gini_perfect_equality():
@@ -218,6 +240,79 @@ def test_inequality_variable_defaults():
     """Test default income variables for UK and US."""
     assert UK_INEQUALITY_INCOME_VARIABLE == "equiv_hbai_household_net_income"
     assert US_INEQUALITY_INCOME_VARIABLE == "household_net_income"
+
+
+def test_inequality_supports_weight_multiplier_and_equivalization():
+    """Test custom person-weighting and square-root equivalization."""
+    simulation = _make_household_simulation(
+        pd.DataFrame(
+            {
+                "household_weight": [2.0, 1.0],
+                "household_net_income": [60_000.0, 120_000.0],
+                "household_count_people": [1.0, 4.0],
+            }
+        )
+    )
+
+    inequality = Inequality(
+        simulation=simulation,
+        income_variable="household_net_income",
+        entity="household",
+        weight_multiplier_variable="household_count_people",
+        equivalization_variable="household_count_people",
+        equivalization_power=0.5,
+    )
+    inequality.run()
+
+    adjusted_values = np.array([60_000.0, 60_000.0])
+    adjusted_weights = np.array([2.0, 4.0])
+
+    assert inequality.gini == pytest.approx(_gini(adjusted_values, adjusted_weights))
+
+
+def test_calculate_us_inequality_cbo_comparable_preset_is_optional():
+    """Test the optional US preset without changing default behaviour."""
+    simulation = _make_household_simulation(
+        pd.DataFrame(
+            {
+                "household_weight": [1.0, 1.0],
+                "household_market_income": [50_000.0, 100_000.0],
+                "household_net_income": [40_000.0, 80_000.0],
+                "household_count_people": [1.0, 4.0],
+            }
+        )
+    )
+
+    standard = calculate_us_inequality(
+        simulation, income_variable="household_market_income"
+    )
+    cbo_comparable = calculate_us_inequality(
+        simulation,
+        income_variable="household_market_income",
+        preset=USInequalityPreset.CBO_COMPARABLE,
+    )
+
+    assert standard.gini == pytest.approx(
+        _gini(np.array([50_000.0, 100_000.0]), np.array([1.0, 1.0]))
+    )
+    assert cbo_comparable.gini == pytest.approx(0.0)
+    assert cbo_comparable.gini < standard.gini
+
+
+def test_calculate_us_inequality_rejects_unknown_preset():
+    """Test validation of preset names."""
+    simulation = _make_household_simulation(
+        pd.DataFrame(
+            {
+                "household_weight": [1.0],
+                "household_net_income": [10_000.0],
+                "household_count_people": [1.0],
+            }
+        )
+    )
+
+    with pytest.raises(ValueError, match="not_a_preset"):
+        calculate_us_inequality(simulation, preset="not_a_preset")
 
 
 def test_inequality_weighted():
