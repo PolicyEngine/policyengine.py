@@ -11,8 +11,12 @@ authors = [
     {name = "PolicyEngine", email = "hello@policyengine.org"},
 ]
 license = {file = "LICENSE"}
-requires-python = ">=3.13"
+requires-python = ">=3.9"
 classifiers = [
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
 ]
@@ -73,7 +77,7 @@ filterwarnings = [
 
 [tool.ruff]
 line-length = 88
-target-version = "py313"
+target-version = "py39"
 extend-exclude = ["*.ipynb"]
 
 [tool.ruff.lint]
@@ -84,7 +88,16 @@ select = [
   "W",  # pycodestyle warnings
   "UP", # pyupgrade
 ]
-ignore = ["E501"]  # Ignore line length errors
+ignore = [
+  "E501",  # Ignore line length errors
+  # The following pyupgrade rules would require Python 3.10+, but we
+  # support 3.9+. Re-enable these once the 3.9 floor is dropped.
+  "UP006",  # prefer `list` over `List` — OK on 3.9 at runtime, but for
+            # pydantic models we use typing.List for consistency
+  "UP007",  # prefer `X | Y` over `Union[X, Y]` — needs 3.10+
+  "UP035",  # `typing.List` is deprecated — same as UP006
+  "UP045",  # prefer `X | None` over `Optional[X]` — needs 3.10+
+]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -93,7 +106,7 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true

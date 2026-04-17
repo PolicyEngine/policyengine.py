@@ -1,5 +1,6 @@
 import warnings
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 from microdf import MicroDataFrame
@@ -40,7 +41,7 @@ class USYearData(YearData):
 class PolicyEngineUSDataset(Dataset):
     """US dataset with multi-year entity-level data."""
 
-    data: USYearData | None = None
+    data: Optional[USYearData] = None
 
     def model_post_init(self, __context) -> None:
         """Called after Pydantic initialization."""

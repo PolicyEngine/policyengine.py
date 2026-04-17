@@ -5,7 +5,7 @@ Each constituency has a row in the weight matrix (shape: 650 x N_households)
 that reweights all households to represent that constituency's demographics.
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import h5py
 import numpy as np
@@ -35,7 +35,7 @@ class ConstituencyImpact(Output):
     year: str = "2025"
 
     # Results populated by run()
-    constituency_results: list[dict] | None = None
+    constituency_results: Optional[list[dict]] = None
 
     def run(self) -> None:
         """Load weight matrix and compute per-constituency metrics."""

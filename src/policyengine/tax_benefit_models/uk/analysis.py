@@ -2,7 +2,7 @@
 
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import pandas as pd
 from microdf import MicroDataFrame
@@ -65,7 +65,7 @@ class UKHouseholdInput(BaseModel):
 
 def calculate_household_impact(
     household_input: UKHouseholdInput,
-    policy: Policy | None = None,
+    policy: Optional[Policy] = None,
 ) -> UKHouseholdOutput:
     """Calculate tax and benefit impacts for a single UK household."""
     n_people = len(household_input.people)

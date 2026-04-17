@@ -1,7 +1,7 @@
 import datetime
 from importlib import metadata
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import pandas as pd
 from microdf import MicroDataFrame
@@ -51,7 +51,7 @@ class PolicyEngineUS(TaxBenefitModel):
 us_model = PolicyEngineUS()
 
 
-def _get_runtime_data_build_metadata() -> dict[str, str | None]:
+def _get_runtime_data_build_metadata() -> dict[str, Optional[str]]:
     try:
         from policyengine_us.build_metadata import get_data_build_metadata
     except ModuleNotFoundError as exc:
@@ -595,8 +595,8 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
 
 def _managed_release_bundle(
     dataset_uri: str,
-    dataset_source: str | None = None,
-) -> dict[str, str | None]:
+    dataset_source: Optional[str] = None,
+) -> dict[str, Optional[str]]:
     bundle = dict(us_latest.release_bundle)
     bundle["runtime_dataset"] = dataset_logical_name(dataset_uri)
     bundle["runtime_dataset_uri"] = dataset_uri
@@ -608,7 +608,7 @@ def _managed_release_bundle(
 
 def managed_microsimulation(
     *,
-    dataset: str | None = None,
+    dataset: Optional[str] = None,
     allow_unmanaged: bool = False,
     **kwargs,
 ):

@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from pydantic import BaseModel
 
@@ -8,4 +8,4 @@ if TYPE_CHECKING:
 
 class TaxBenefitModel(BaseModel):
     id: str
-    description: str | None = None
+    description: Optional[str] = None

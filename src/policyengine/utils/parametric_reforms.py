@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Union
 
 from policyengine_core.periods import period
 
@@ -13,8 +13,8 @@ if TYPE_CHECKING:
 
 
 def reform_dict_from_parameter_values(
-    parameter_values: list[ParameterValue] | None,
-) -> dict | None:
+    parameter_values: Optional[list[ParameterValue]],
+) -> Optional[dict]:
     """
     Convert a list of ParameterValue objects to a reform dict format.
 
@@ -83,8 +83,8 @@ def simulation_modifier_from_parameter_values(
 
 
 def build_reform_dict(
-    policy_or_dynamic: Policy | Dynamic | None,
-) -> dict | None:
+    policy_or_dynamic: Optional[Union[Policy, Dynamic]],
+) -> Optional[dict]:
     """Extract a reform dict from a Policy or Dynamic object.
 
     If the object has parameter_values, converts them to reform dict format.
@@ -103,7 +103,9 @@ def build_reform_dict(
     return None
 
 
-def merge_reform_dicts(base: dict | None, override: dict | None) -> dict | None:
+def merge_reform_dicts(
+    base: Optional[dict], override: Optional[dict]
+) -> Optional[dict]:
     """Merge two reform dicts, with override values taking precedence.
 
     Either or both dicts can be None. When both have entries for the same

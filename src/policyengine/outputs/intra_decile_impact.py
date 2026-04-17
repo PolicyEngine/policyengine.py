@@ -15,6 +15,8 @@ Proportions are people-weighted (using household_count_people *
 household_weight) so they reflect the share of people, not households.
 """
 
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 from pydantic import ConfigDict
@@ -41,17 +43,17 @@ class IntraDecileImpact(Output):
     baseline_simulation: Simulation
     reform_simulation: Simulation
     income_variable: str = "household_net_income"
-    decile_variable: str | None = None  # If set, use pre-computed grouping
+    decile_variable: Optional[str] = None  # If set, use pre-computed grouping
     entity: str = "household"
     decile: int  # 1-10 for individual deciles
     quantiles: int = 10
 
     # Results populated by run()
-    lose_more_than_5pct: float | None = None
-    lose_less_than_5pct: float | None = None
-    no_change: float | None = None
-    gain_less_than_5pct: float | None = None
-    gain_more_than_5pct: float | None = None
+    lose_more_than_5pct: Optional[float] = None
+    lose_less_than_5pct: Optional[float] = None
+    no_change: Optional[float] = None
+    gain_less_than_5pct: Optional[float] = None
+    gain_more_than_5pct: Optional[float] = None
 
     def run(self):
         """Calculate intra-decile proportions for this specific decile."""
@@ -117,7 +119,7 @@ def compute_intra_decile_impacts(
     baseline_simulation: Simulation,
     reform_simulation: Simulation,
     income_variable: str = "household_net_income",
-    decile_variable: str | None = None,
+    decile_variable: Optional[str] = None,
     entity: str = "household",
     quantiles: int = 10,
 ) -> OutputCollection[IntraDecileImpact]:

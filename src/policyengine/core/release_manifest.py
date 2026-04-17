@@ -3,6 +3,7 @@ from functools import lru_cache
 from importlib import import_module
 from importlib.resources import files
 from pathlib import Path
+from typing import Optional
 
 import requests
 from pydantic import BaseModel, Field
@@ -35,14 +36,14 @@ class CompatibleModelPackage(BaseModel):
 
 
 class BuiltWithModelPackage(PackageVersion):
-    git_sha: str | None = None
-    data_build_fingerprint: str | None = None
+    git_sha: Optional[str] = None
+    data_build_fingerprint: Optional[str] = None
 
 
 class DataBuildInfo(BaseModel):
-    build_id: str | None = None
-    built_at: str | None = None
-    built_with_model_package: BuiltWithModelPackage | None = None
+    build_id: Optional[str] = None
+    built_at: Optional[str] = None
+    built_with_model_package: Optional[BuiltWithModelPackage] = None
 
 
 class ArtifactPathReference(BaseModel):
@@ -61,8 +62,8 @@ class DataReleaseArtifact(BaseModel):
     path: str
     repo_id: str
     revision: str
-    sha256: str | None = None
-    size_bytes: int | None = None
+    sha256: Optional[str] = None
+    size_bytes: Optional[int] = None
 
     @property
     def uri(self) -> str:
@@ -80,32 +81,32 @@ class DataReleaseManifest(BaseModel):
         default_factory=list
     )
     default_datasets: dict[str, str] = Field(default_factory=dict)
-    build: DataBuildInfo | None = None
+    build: Optional[DataBuildInfo] = None
     artifacts: dict[str, DataReleaseArtifact] = Field(default_factory=dict)
 
 
 class DataCertification(BaseModel):
     compatibility_basis: str
     certified_for_model_version: str
-    data_build_id: str | None = None
-    built_with_model_version: str | None = None
-    built_with_model_git_sha: str | None = None
-    data_build_fingerprint: str | None = None
-    certified_by: str | None = None
+    data_build_id: Optional[str] = None
+    built_with_model_version: Optional[str] = None
+    built_with_model_git_sha: Optional[str] = None
+    data_build_fingerprint: Optional[str] = None
+    certified_by: Optional[str] = None
 
 
 class CertifiedDataArtifact(BaseModel):
-    data_package: PackageVersion | None = None
+    data_package: Optional[PackageVersion] = None
     dataset: str
     uri: str
-    sha256: str | None = None
-    build_id: str | None = None
+    sha256: Optional[str] = None
+    build_id: Optional[str] = None
 
 
 class CountryReleaseManifest(BaseModel):
     schema_version: int = 1
-    bundle_id: str | None = None
-    published_at: str | None = None
+    bundle_id: Optional[str] = None
+    published_at: Optional[str] = None
     country_id: str
     policyengine_version: str
     model_package: PackageVersion
@@ -113,8 +114,8 @@ class CountryReleaseManifest(BaseModel):
     default_dataset: str
     datasets: dict[str, ArtifactPathReference] = Field(default_factory=dict)
     region_datasets: dict[str, ArtifactPathTemplate] = Field(default_factory=dict)
-    certified_data_artifact: CertifiedDataArtifact | None = None
-    certification: DataCertification | None = None
+    certified_data_artifact: Optional[CertifiedDataArtifact] = None
+    certification: Optional[DataCertification] = None
 
     @property
     def default_dataset_uri(self) -> str:
@@ -186,7 +187,7 @@ def _specifier_matches(version: str, specifier: str) -> bool:
 def certify_data_release_compatibility(
     country_id: str,
     runtime_model_version: str,
-    runtime_data_build_fingerprint: str | None = None,
+    runtime_data_build_fingerprint: Optional[str] = None,
 ) -> DataCertification:
     country_manifest = get_release_manifest(country_id)
     try:
@@ -322,7 +323,7 @@ def resolve_dataset_reference(country_id: str, dataset: str) -> str:
 
 def resolve_managed_dataset_reference(
     country_id: str,
-    dataset: str | None = None,
+    dataset: Optional[str] = None,
     *,
     allow_unmanaged: bool = False,
 ) -> str:
@@ -414,7 +415,7 @@ def resolve_region_dataset_path(
     country_id: str,
     region_type: str,
     **kwargs: str,
-) -> str | None:
+) -> Optional[str]:
     manifest = get_release_manifest(country_id)
     template = manifest.region_datasets.get(region_type)
     if template is None:

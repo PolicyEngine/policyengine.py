@@ -12,7 +12,7 @@ Provides two concrete strategies for scoping datasets to sub-national regions:
 import logging
 from abc import abstractmethod
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Optional, Union
 
 import h5py
 import numpy as np
@@ -201,7 +201,7 @@ class WeightReplacementStrategy(RegionScopingStrategy):
         )
 
     @staticmethod
-    def _find_household_id_column(df: pd.DataFrame, entity_name: str) -> str | None:
+    def _find_household_id_column(df: pd.DataFrame, entity_name: str) -> Optional[str]:
         """Find the column linking an entity to its household."""
         candidates = [
             "person_household_id",
@@ -219,6 +219,6 @@ class WeightReplacementStrategy(RegionScopingStrategy):
 
 
 ScopingStrategy = Annotated[
-    RowFilterStrategy | WeightReplacementStrategy,
+    Union[RowFilterStrategy, WeightReplacementStrategy],
     Discriminator("strategy_type"),
 ]

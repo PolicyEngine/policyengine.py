@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Iterable, Mapping
+from typing import Optional
 
 from .release_manifest import (
     CountryReleaseManifest,
@@ -28,7 +29,7 @@ def _hash_object(value: str) -> dict[str, str]:
     }
 
 
-def _artifact_mime_type(path_or_uri: str) -> str | None:
+def _artifact_mime_type(path_or_uri: str) -> Optional[str]:
     suffix = path_or_uri.rsplit(".", 1)[-1].lower() if "." in path_or_uri else ""
     return {
         "h5": "application/x-hdf5",
@@ -53,9 +54,9 @@ def build_trace_tro_from_release_bundle(
     country_manifest: CountryReleaseManifest,
     data_release_manifest: DataReleaseManifest,
     *,
-    certification: DataCertification | None = None,
-    bundle_manifest_path: str | None = None,
-    data_release_manifest_path: str | None = None,
+    certification: Optional[DataCertification] = None,
+    bundle_manifest_path: Optional[str] = None,
+    data_release_manifest_path: Optional[str] = None,
 ) -> dict:
     certified_artifact = country_manifest.certified_data_artifact
     if certified_artifact is None:

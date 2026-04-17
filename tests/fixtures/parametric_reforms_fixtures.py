@@ -1,6 +1,7 @@
 """Fixtures for parametric reforms tests."""
 
 from datetime import date
+from typing import Optional
 from unittest.mock import MagicMock
 
 import pytest
@@ -23,7 +24,7 @@ def create_parameter_value(
     parameter: Parameter,
     value: float,
     start_date: date,
-    end_date: date | None = None,
+    end_date: Optional[date] = None,
 ) -> ParameterValue:
     """Create a ParameterValue for testing."""
     return ParameterValue(

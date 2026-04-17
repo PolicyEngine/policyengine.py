@@ -1,5 +1,7 @@
 """US-specific output templates."""
 
+from typing import Optional
+
 from pydantic import ConfigDict
 
 from policyengine.core import Output, Simulation
@@ -22,13 +24,13 @@ class ProgramStatistics(Output):
     is_tax: bool = False
 
     # Results populated by run()
-    baseline_total: float | None = None
-    reform_total: float | None = None
-    change: float | None = None
-    baseline_count: float | None = None
-    reform_count: float | None = None
-    winners: float | None = None
-    losers: float | None = None
+    baseline_total: Optional[float] = None
+    reform_total: Optional[float] = None
+    change: Optional[float] = None
+    baseline_count: Optional[float] = None
+    reform_count: Optional[float] = None
+    winners: Optional[float] = None
+    losers: Optional[float] = None
 
     def run(self):
         """Calculate statistics for this program."""

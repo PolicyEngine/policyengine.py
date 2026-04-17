@@ -1,6 +1,6 @@
 """Congressional district impact output class for US policy reforms."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 from pydantic import ConfigDict
@@ -26,7 +26,7 @@ class CongressionalDistrictImpact(Output):
     reform_simulation: "Simulation"
 
     # Results populated by run()
-    district_results: list[dict] | None = None
+    district_results: Optional[list[dict]] = None
 
     def run(self) -> None:
         """Group households by geoid and compute per-district metrics."""

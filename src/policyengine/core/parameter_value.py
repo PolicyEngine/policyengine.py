@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Union
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 class ParameterValue(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
-    parameter: "Parameter | None" = None
-    value: float | int | str | bool | list | None = None
+    parameter: "Optional[Parameter]" = None
+    value: Optional[Union[float, int, str, bool, list]] = None
     start_date: datetime
-    end_date: datetime | None = None
+    end_date: Optional[datetime] = None

@@ -1,5 +1,6 @@
 """Unit tests for IntraDecileImpact and DecileImpact with decile_variable."""
 
+from typing import Optional
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -40,7 +41,7 @@ def _make_version(variable_name: str, entity: str) -> TaxBenefitModelVersion:
     return version
 
 
-def _make_sim(household_data: dict, variables: list | None = None) -> MagicMock:
+def _make_sim(household_data: dict, variables: Optional[list] = None) -> MagicMock:
     """Create a mock Simulation with household-level data."""
     hh_df = MicroDataFrame(
         pd.DataFrame(household_data),
