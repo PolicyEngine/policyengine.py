@@ -1,4 +1,5 @@
 import datetime
+import warnings
 from importlib import metadata
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
@@ -146,10 +147,16 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
 
         installed_model_version = metadata.version("policyengine-uk")
         if installed_model_version != manifest.model_package.version:
-            raise ValueError(
-                "Installed policyengine-uk version does not match the "
-                f"bundled policyengine.py manifest. Expected "
-                f"{manifest.model_package.version}, got {installed_model_version}."
+            warnings.warn(
+                "Installed policyengine-uk version "
+                f"({installed_model_version}) does not match the bundled "
+                "policyengine.py manifest "
+                f"({manifest.model_package.version}). Calculations will "
+                "run against the installed version, but dataset "
+                "compatibility is not guaranteed. To silence this "
+                "warning, install the version pinned by the manifest.",
+                UserWarning,
+                stacklevel=2,
             )
 
         model_build_metadata = _get_runtime_data_build_metadata()
