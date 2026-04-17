@@ -151,7 +151,7 @@ def calculate_uk_poverty_rates(
         poverty = Poverty(
             simulation=simulation,
             poverty_variable=poverty_variable,
-            poverty_type=str(poverty_type),
+            poverty_type=poverty_type.value,
             entity="person",
             filter_variable=filter_variable,
             filter_variable_eq=filter_variable_eq,
@@ -207,7 +207,7 @@ def calculate_us_poverty_rates(
         poverty = Poverty(
             simulation=simulation,
             poverty_variable=poverty_variable,
-            poverty_type=str(poverty_type),
+            poverty_type=poverty_type.value,
             entity="person",
             filter_variable=filter_variable,
             filter_variable_eq=filter_variable_eq,
