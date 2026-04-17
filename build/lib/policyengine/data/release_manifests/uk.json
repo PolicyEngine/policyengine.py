@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "bundle_id": "uk-3.4.0",
+  "country_id": "uk",
+  "policyengine_version": "3.4.0",
+  "model_package": {
+    "name": "policyengine-uk",
+    "version": "2.74.0"
+  },
+  "data_package": {
+    "name": "policyengine-uk-data",
+    "version": "1.40.4",
+    "repo_id": "policyengine/policyengine-uk-data-private"
+  },
+  "certified_data_artifact": {
+    "data_package": {
+      "name": "policyengine-uk-data",
+      "version": "1.40.4"
+    },
+    "build_id": "policyengine-uk-data-1.40.4",
+    "dataset": "enhanced_frs_2023_24",
+    "uri": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.4"
+  },
+  "certification": {
+    "compatibility_basis": "exact_build_model_version",
+    "data_build_id": "policyengine-uk-data-1.40.4",
+    "built_with_model_version": "2.74.0",
+    "certified_for_model_version": "2.74.0",
+    "certified_by": "policyengine.py bundled manifest"
+  },
+  "default_dataset": "enhanced_frs_2023_24",
+  "datasets": {
+    "frs_2023_24": {
+      "path": "frs_2023_24.h5"
+    },
+    "enhanced_frs_2023_24": {
+      "path": "enhanced_frs_2023_24.h5"
+    }
+  },
+  "region_datasets": {
+    "national": {
+      "path_template": "enhanced_frs_2023_24.h5"
+    }
+  }
+}
