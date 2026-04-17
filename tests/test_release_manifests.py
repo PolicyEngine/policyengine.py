@@ -45,9 +45,9 @@ class TestReleaseManifests:
         manifest = get_release_manifest("us")
 
         assert manifest.schema_version == 1
-        assert manifest.bundle_id == "us-3.4.6"
+        assert manifest.bundle_id == "us-3.4.0"
         assert manifest.country_id == "us"
-        assert manifest.policyengine_version == "3.4.6"
+        assert manifest.policyengine_version == "3.4.0"
         assert manifest.model_package.name == "policyengine-us"
         assert manifest.model_package.version == "1.647.0"
         assert manifest.data_package.name == "policyengine-us-data"
@@ -67,9 +67,9 @@ class TestReleaseManifests:
         manifest = get_release_manifest("uk")
 
         assert manifest.schema_version == 1
-        assert manifest.bundle_id == "uk-3.4.6"
+        assert manifest.bundle_id == "uk-3.4.0"
         assert manifest.country_id == "uk"
-        assert manifest.policyengine_version == "3.4.6"
+        assert manifest.policyengine_version == "3.4.0"
         assert manifest.model_package.name == "policyengine-uk"
         assert manifest.model_package.version == "2.88.0"
         assert manifest.data_package.name == "policyengine-uk-data"

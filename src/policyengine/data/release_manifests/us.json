@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "bundle_id": "us-3.4.6",
+  "bundle_id": "us-3.4.0",
   "country_id": "us",
-  "policyengine_version": "3.4.6",
+  "policyengine_version": "3.4.0",
   "model_package": {
     "name": "policyengine-us",
     "version": "1.647.0"
