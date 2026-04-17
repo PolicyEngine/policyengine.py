@@ -2,7 +2,7 @@
 
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, Union
 
 import pandas as pd
 from microdf import MicroDataFrame
@@ -54,7 +54,7 @@ class USHouseholdInput(BaseModel):
 
 def calculate_household_impact(
     household_input: USHouseholdInput,
-    policy: Policy | None = None,
+    policy: Optional[Policy] = None,
 ) -> USHouseholdOutput:
     """Calculate tax and benefit impacts for a single US household."""
     n_people = len(household_input.people)
@@ -201,7 +201,7 @@ class PolicyReformAnalysis(BaseModel):
 def economic_impact_analysis(
     baseline_simulation: Simulation,
     reform_simulation: Simulation,
-    inequality_preset: USInequalityPreset | str = USInequalityPreset.STANDARD,
+    inequality_preset: Union[USInequalityPreset, str] = USInequalityPreset.STANDARD,
 ) -> PolicyReformAnalysis:
     """Perform comprehensive analysis of a policy reform.
 

@@ -1,7 +1,7 @@
 """Fixtures for parameter_labels utility tests."""
 
 from enum import Enum
-from typing import Any
+from typing import Any, Optional
 from unittest.mock import MagicMock
 
 
@@ -24,7 +24,7 @@ class MockStateCode(Enum):
 
 def create_mock_parameter(
     name: str,
-    label: str | None = None,
+    label: Optional[str] = None,
     parent: Any = None,
 ) -> MagicMock:
     """Create a mock CoreParameter object."""
@@ -37,9 +37,9 @@ def create_mock_parameter(
 
 def create_mock_parent_node(
     name: str,
-    label: str | None = None,
-    breakdown: list[str] | None = None,
-    breakdown_labels: list[str] | None = None,
+    label: Optional[str] = None,
+    breakdown: Optional[list[str]] = None,
+    breakdown_labels: Optional[list[str]] = None,
     parent: Any = None,
 ) -> MagicMock:
     """Create a mock parent ParameterNode with optional breakdown metadata."""
@@ -58,8 +58,8 @@ def create_mock_parent_node(
 
 def create_mock_scale(
     name: str,
-    label: str | None = None,
-    scale_type: str | None = None,
+    label: Optional[str] = None,
+    scale_type: Optional[str] = None,
 ) -> MagicMock:
     """Create a mock ParameterScale object."""
     scale = MagicMock()
@@ -74,7 +74,7 @@ def create_mock_scale(
 
 def create_mock_variable(
     name: str,
-    possible_values: type[Enum] | None = None,
+    possible_values: Optional[type[Enum]] = None,
 ) -> MagicMock:
     """Create a mock Variable object with optional enum values."""
     var = MagicMock()
@@ -87,8 +87,8 @@ def create_mock_variable(
 
 
 def create_mock_system(
-    variables: dict[str, MagicMock] | None = None,
-    scales: list[MagicMock] | None = None,
+    variables: Optional[dict[str, MagicMock]] = None,
+    scales: Optional[list[MagicMock]] = None,
 ) -> MagicMock:
     """Create a mock tax-benefit system."""
     system = MagicMock()

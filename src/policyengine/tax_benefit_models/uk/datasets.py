@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 from microdf import MicroDataFrame
@@ -33,7 +34,7 @@ class UKYearData(YearData):
 class PolicyEngineUKDataset(Dataset):
     """UK dataset with multi-year entity-level data."""
 
-    data: UKYearData | None = None
+    data: Optional[UKYearData] = None
 
     def model_post_init(self, __context):
         """Called after Pydantic initialization."""

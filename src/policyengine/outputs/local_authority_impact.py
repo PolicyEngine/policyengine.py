@@ -5,7 +5,7 @@ Each local authority has a row in the weight matrix (shape: 360 x N_households)
 that reweights all households to represent that local authority's demographics.
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import h5py
 import numpy as np
@@ -35,7 +35,7 @@ class LocalAuthorityImpact(Output):
     year: str = "2025"
 
     # Results populated by run()
-    local_authority_results: list[dict] | None = None
+    local_authority_results: Optional[list[dict]] = None
 
     def run(self) -> None:
         """Load weight matrix and compute per-local-authority metrics."""

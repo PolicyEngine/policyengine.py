@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
@@ -8,13 +8,13 @@ from .tax_benefit_model_version import TaxBenefitModelVersion
 class Variable(BaseModel):
     id: str
     name: str
-    label: str | None = None
+    label: Optional[str] = None
     tax_benefit_model_version: TaxBenefitModelVersion
     entity: str
-    description: str | None = None
+    description: Optional[str] = None
     data_type: type = None
-    possible_values: list[Any] | None = None
+    possible_values: Optional[list[Any]] = None
     default_value: Any = None
-    value_type: type | None = None
-    adds: list[str] | None = None
-    subtracts: list[str] | None = None
+    value_type: Optional[type] = None
+    adds: Optional[list[str]] = None
+    subtracts: Optional[list[str]] = None

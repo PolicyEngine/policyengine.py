@@ -1,7 +1,7 @@
 """Poverty analysis output types."""
 
-from enum import StrEnum
-from typing import Any
+from enum import Enum
+from typing import Any, Optional
 
 import pandas as pd
 from pydantic import ConfigDict
@@ -9,7 +9,7 @@ from pydantic import ConfigDict
 from policyengine.core import Output, OutputCollection, Simulation
 
 
-class UKPovertyType(StrEnum):
+class UKPovertyType(str, Enum):
     """UK poverty measure types."""
 
     ABSOLUTE_BHC = "absolute_bhc"
@@ -18,7 +18,7 @@ class UKPovertyType(StrEnum):
     RELATIVE_AHC = "relative_ahc"
 
 
-class USPovertyType(StrEnum):
+class USPovertyType(str, Enum):
     """US poverty measure types."""
 
     SPM = "spm"
@@ -51,22 +51,22 @@ class Poverty(Output):
 
     simulation: Simulation
     poverty_variable: str
-    poverty_type: str | None = None
+    poverty_type: Optional[str] = None
     entity: str = "person"
 
     # Optional demographic filters
-    filter_variable: str | None = None
-    filter_variable_eq: Any | None = None
-    filter_variable_leq: Any | None = None
-    filter_variable_geq: Any | None = None
+    filter_variable: Optional[str] = None
+    filter_variable_eq: Optional[Any] = None
+    filter_variable_leq: Optional[Any] = None
+    filter_variable_geq: Optional[Any] = None
 
     # Convenience group label (set by by_age/by_gender/by_race wrappers)
-    filter_group: str | None = None
+    filter_group: Optional[str] = None
 
     # Results populated by run()
-    headcount: float | None = None
-    total_population: float | None = None
-    rate: float | None = None
+    headcount: Optional[float] = None
+    total_population: Optional[float] = None
+    rate: Optional[float] = None
 
     def run(self):
         """Calculate poverty headcount and rate."""
@@ -128,10 +128,10 @@ class Poverty(Output):
 
 def calculate_uk_poverty_rates(
     simulation: Simulation,
-    filter_variable: str | None = None,
-    filter_variable_eq: Any | None = None,
-    filter_variable_leq: Any | None = None,
-    filter_variable_geq: Any | None = None,
+    filter_variable: Optional[str] = None,
+    filter_variable_eq: Optional[Any] = None,
+    filter_variable_leq: Optional[Any] = None,
+    filter_variable_geq: Optional[Any] = None,
 ) -> OutputCollection[Poverty]:
     """Calculate all UK poverty rates for a simulation.
 
@@ -151,7 +151,7 @@ def calculate_uk_poverty_rates(
         poverty = Poverty(
             simulation=simulation,
             poverty_variable=poverty_variable,
-            poverty_type=str(poverty_type),
+            poverty_type=poverty_type.value,
             entity="person",
             filter_variable=filter_variable,
             filter_variable_eq=filter_variable_eq,
@@ -184,10 +184,10 @@ def calculate_uk_poverty_rates(
 
 def calculate_us_poverty_rates(
     simulation: Simulation,
-    filter_variable: str | None = None,
-    filter_variable_eq: Any | None = None,
-    filter_variable_leq: Any | None = None,
-    filter_variable_geq: Any | None = None,
+    filter_variable: Optional[str] = None,
+    filter_variable_eq: Optional[Any] = None,
+    filter_variable_leq: Optional[Any] = None,
+    filter_variable_geq: Optional[Any] = None,
 ) -> OutputCollection[Poverty]:
     """Calculate all US poverty rates for a simulation.
 
@@ -207,7 +207,7 @@ def calculate_us_poverty_rates(
         poverty = Poverty(
             simulation=simulation,
             poverty_variable=poverty_variable,
-            poverty_type=str(poverty_type),
+            poverty_type=poverty_type.value,
             entity="person",
             filter_variable=filter_variable,
             filter_variable_eq=filter_variable_eq,

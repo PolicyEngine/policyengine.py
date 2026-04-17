@@ -1,7 +1,7 @@
 """Inequality analysis output types."""
 
-from enum import StrEnum
-from typing import Any
+from enum import Enum
+from typing import Any, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -10,7 +10,7 @@ from pydantic import ConfigDict
 from policyengine.core import Output, Simulation
 
 
-class USInequalityPreset(StrEnum):
+class USInequalityPreset(str, Enum):
     """Preset configurations for US inequality analysis."""
 
     STANDARD = "standard"
@@ -86,21 +86,21 @@ class Inequality(Output):
     simulation: Simulation
     income_variable: str
     entity: str = "household"
-    weight_multiplier_variable: str | None = None
-    equivalization_variable: str | None = None
+    weight_multiplier_variable: Optional[str] = None
+    equivalization_variable: Optional[str] = None
     equivalization_power: float = 0.0
 
     # Optional demographic filters
-    filter_variable: str | None = None
-    filter_variable_eq: Any | None = None
-    filter_variable_leq: Any | None = None
-    filter_variable_geq: Any | None = None
+    filter_variable: Optional[str] = None
+    filter_variable_eq: Optional[Any] = None
+    filter_variable_leq: Optional[Any] = None
+    filter_variable_geq: Optional[Any] = None
 
     # Results populated by run()
-    gini: float | None = None
-    top_10_share: float | None = None
-    top_1_share: float | None = None
-    bottom_50_share: float | None = None
+    gini: Optional[float] = None
+    top_10_share: Optional[float] = None
+    top_1_share: Optional[float] = None
+    bottom_50_share: Optional[float] = None
 
     def run(self):
         """Calculate inequality metrics."""
@@ -235,10 +235,10 @@ US_INEQUALITY_INCOME_VARIABLE = "household_net_income"
 def calculate_uk_inequality(
     simulation: Simulation,
     income_variable: str = UK_INEQUALITY_INCOME_VARIABLE,
-    filter_variable: str | None = None,
-    filter_variable_eq: Any | None = None,
-    filter_variable_leq: Any | None = None,
-    filter_variable_geq: Any | None = None,
+    filter_variable: Optional[str] = None,
+    filter_variable_eq: Optional[Any] = None,
+    filter_variable_leq: Optional[Any] = None,
+    filter_variable_geq: Optional[Any] = None,
 ) -> Inequality:
     """Calculate inequality metrics for a UK simulation.
 
@@ -269,11 +269,11 @@ def calculate_uk_inequality(
 def calculate_us_inequality(
     simulation: Simulation,
     income_variable: str = US_INEQUALITY_INCOME_VARIABLE,
-    preset: USInequalityPreset | str = USInequalityPreset.STANDARD,
-    filter_variable: str | None = None,
-    filter_variable_eq: Any | None = None,
-    filter_variable_leq: Any | None = None,
-    filter_variable_geq: Any | None = None,
+    preset: Union[USInequalityPreset, str] = USInequalityPreset.STANDARD,
+    filter_variable: Optional[str] = None,
+    filter_variable_eq: Optional[Any] = None,
+    filter_variable_leq: Optional[Any] = None,
+    filter_variable_geq: Optional[Any] = None,
 ) -> Inequality:
     """Calculate inequality metrics for a US simulation.
 

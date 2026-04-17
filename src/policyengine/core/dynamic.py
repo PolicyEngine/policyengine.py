@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from datetime import datetime
+from typing import Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -10,9 +11,9 @@ from .parameter_value import ParameterValue
 class Dynamic(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
-    description: str | None = None
+    description: Optional[str] = None
     parameter_values: list[ParameterValue] = []
-    simulation_modifier: Callable | None = None
+    simulation_modifier: Optional[Callable] = None
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 

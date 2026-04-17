@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from typing import Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, model_validator
@@ -21,22 +22,22 @@ class Simulation(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 
-    policy: Policy | None = None
-    dynamic: Dynamic | None = None
+    policy: Optional[Policy] = None
+    dynamic: Optional[Dynamic] = None
     dataset: Dataset = None
 
     # Scoping strategy (preferred over legacy filter fields)
-    scoping_strategy: ScopingStrategy | None = Field(
+    scoping_strategy: Optional[ScopingStrategy] = Field(
         default=None,
         description="Strategy for scoping dataset to a sub-national region",
     )
 
     # Legacy regional filtering parameters (kept for backward compatibility)
-    filter_field: str | None = Field(
+    filter_field: Optional[str] = Field(
         default=None,
         description="Household-level variable to filter dataset by (e.g., 'place_fips', 'country')",
     )
-    filter_value: str | None = Field(
+    filter_value: Optional[str] = Field(
         default=None,
         description="Value to match when filtering (e.g., '44000', 'ENGLAND')",
     )
@@ -61,7 +62,7 @@ class Simulation(BaseModel):
             )
         return self
 
-    output_dataset: Dataset | None = None
+    output_dataset: Optional[Dataset] = None
 
     def run(self):
         self.tax_benefit_model_version.run(self)
@@ -96,7 +97,7 @@ class Simulation(BaseModel):
         self.tax_benefit_model_version.load(self)
 
     @property
-    def release_bundle(self) -> dict[str, str | None]:
+    def release_bundle(self) -> dict[str, Optional[str]]:
         bundle = (
             self.tax_benefit_model_version.release_bundle
             if self.tax_benefit_model_version is not None

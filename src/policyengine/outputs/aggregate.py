@@ -1,10 +1,10 @@
-from enum import StrEnum
-from typing import Any
+from enum import Enum
+from typing import Any, Optional
 
 from policyengine.core import Output, Simulation
 
 
-class AggregateType(StrEnum):
+class AggregateType(str, Enum):
     SUM = "sum"
     MEAN = "mean"
     COUNT = "count"
@@ -14,23 +14,25 @@ class Aggregate(Output):
     simulation: Simulation
     variable: str
     aggregate_type: AggregateType
-    entity: str | None = None
+    entity: Optional[str] = None
 
-    filter_variable: str | None = None
-    filter_variable_eq: Any | None = None
-    filter_variable_leq: Any | None = None
-    filter_variable_geq: Any | None = None
+    filter_variable: Optional[str] = None
+    filter_variable_eq: Optional[Any] = None
+    filter_variable_leq: Optional[Any] = None
+    filter_variable_geq: Optional[Any] = None
     filter_variable_describes_quantiles: bool = False
 
     # Convenient quantile specification (alternative to describes_quantiles)
-    quantile: int | None = (
+    quantile: Optional[int] = (
         None  # Number of quantiles (e.g., 10 for deciles, 5 for quintiles)
     )
-    quantile_eq: int | None = None  # Exact quantile (e.g., 3 for 3rd decile)
-    quantile_leq: int | None = None  # Maximum quantile (e.g., 5 for bottom 5 deciles)
-    quantile_geq: int | None = None  # Minimum quantile (e.g., 9 for top 2 deciles)
+    quantile_eq: Optional[int] = None  # Exact quantile (e.g., 3 for 3rd decile)
+    quantile_leq: Optional[int] = (
+        None  # Maximum quantile (e.g., 5 for bottom 5 deciles)
+    )
+    quantile_geq: Optional[int] = None  # Minimum quantile (e.g., 9 for top 2 deciles)
 
-    result: Any | None = None
+    result: Optional[Any] = None
 
     def run(self):
         # Convert quantile specification to describes_quantiles format
