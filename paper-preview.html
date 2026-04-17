@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>policyengine: An Analyst Layer for Tax-Benefit Microsimulation</title>
+  <title>policyengine: A Microsimulation Tool for Tax-Benefit Policy Analysis</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400&display=swap');
 
@@ -356,15 +356,15 @@
 <div class="paper-header">
   <div class="header-inner">
     <div class="paper-label">JOSS Paper Preview</div>
-    <h1 class="paper-title">policyengine: An Analyst Layer for Tax-Benefit Microsimulation</h1>
+    <h1 class="paper-title">policyengine: A Microsimulation Tool for Tax-Benefit Policy Analysis</h1>
     <div class="authors-grid">
-      <span class="author-name">Max Ghenis<sup>1</sup> <a class="orcid-link" href="https://orcid.org/0000-0002-1335-8277" title="ORCID">&#9679;</a></span>
       <span class="author-name">Vahid Ahmadi<sup>1</sup> <span class="corr">*</span> <a class="orcid-link" href="https://orcid.org/0009-0004-1093-6272" title="ORCID">&#9679;</a></span>
+      <span class="author-name">Max Ghenis<sup>1</sup> <a class="orcid-link" href="https://orcid.org/0000-0002-1335-8277" title="ORCID">&#9679;</a></span>
       <span class="author-name">Nikhil Woodruff<sup>1</sup> <a class="orcid-link" href="https://orcid.org/0009-0009-5004-4910" title="ORCID">&#9679;</a></span>
       <span class="author-name">Pavel Makarchuk<sup>1</sup> <a class="orcid-link" href="https://orcid.org/0009-0003-4869-7409" title="ORCID">&#9679;</a></span>
     </div>
     <div class="affiliation-line"><sup>1</sup> PolicyEngine, Washington, DC, United States</div>
-    <div class="date-line">16 April 2026</div>
+    <div class="date-line">17 April 2026</div>
     <div class="tags-row">
       <span class="tag">Python</span>
       <span class="tag">microsimulation</span>
@@ -394,18 +394,104 @@
 
   <article class="paper-body">
 <h1 id="summary">Summary</h1>
-<p>The <code>policyengine</code> Python package <span class="citation" data-cites="policyengine_py">(PolicyEngine Contributors 2026)</span> is open-source software for analyzing how tax and benefit policies affect household incomes and government budgets in the US and UK. It gives analysts a common workflow for running simulations on representative microdata or custom households and for comparing current law with proposed reforms. Country-specific rules live in dedicated packages (<code>policyengine-us</code> and <code>policyengine-uk</code>), while <code>policyengine</code> provides shared tools for datasets, reforms, outputs, and reproducible release bundles. The package also powers the interactive web application at <a href="https://policyengine.org">policyengine.org</a>.</p>
-
+<p>The <code>policyengine</code> Python package <span class="citation"
+data-cites="policyengine_py">(PolicyEngine Contributors 2026)</span> is
+open-source software for analyzing how tax and benefit policies affect
+household incomes and government budgets in the US and UK. It gives
+analysts a common workflow for running simulations on representative
+microdata or custom households and for comparing current law with
+proposed reforms. Country-specific rules live in dedicated packages
+(<code>policyengine-us</code> and <code>policyengine-uk</code>), while
+<code>policyengine</code> provides shared tools for datasets, reforms,
+outputs, and reproducible release bundles. The package also powers the
+interactive web application at <a
+href="https://policyengine.org">policyengine.org</a>.</p>
 <h1 id="statement-of-need">Statement of Need</h1>
-<p>Tax-benefit microsimulation models are standard tools for evaluating the distributional impacts of fiscal policy. Governments, think tanks, and researchers use them to estimate how policy reforms affect household incomes, poverty rates, and government budgets. In practice, however, analysts often work across separate layers: statutory rules, representative microdata, reform definitions, and distributional outputs live in different tools and interfaces. Reproducing a baseline-versus-reform workflow, or carrying the same analysis pattern from one country model to another, therefore often requires bespoke scripts and project-specific conventions. Historical replication is especially difficult when policy rules, the analysis layer, and representative microdata are versioned independently and the analyst must reconstruct which combination produced a published estimate.</p>
-<p>The <code>policyengine</code> package provides an analyst layer that works across multiple country models under a consistent API. Users can supply their own microdata or use companion representative datasets, then compute the impact of current law or hypothetical reforms, including parametric changes to existing policy parameters and structural modifications to the tax-benefit system, on any household or a national population. The Simulation class supports individual household analysis, while population-level aggregate analysis uses representative survey datasets with calibrated weights. Version-pinned releases reduce the bookkeeping needed for replication.</p>
-
+<p>Tax-benefit microsimulation models are standard tools for evaluating
+the distributional impacts of fiscal policy. Governments, think tanks,
+and researchers use them to estimate how policy reforms affect household
+incomes, poverty rates, and government budgets. In practice, however,
+analysts work across separate components: statutory rules,
+representative microdata, reform definitions, and distributional outputs
+live in different tools and interfaces. Reproducing a
+baseline-versus-reform workflow, or carrying the same analysis pattern
+from one country model to another, therefore often requires bespoke
+scripts and project-specific conventions. Historical replication is
+especially difficult when policy rules, analysis tooling, and
+representative microdata are versioned independently and the analyst
+must reconstruct which combination produced a published estimate.</p>
+<p>The <code>policyengine</code> package provides a consistent Python
+API for tax-benefit analysis across multiple country models. Users can
+supply their own microdata or use companion representative datasets,
+then compute the impact of current law or hypothetical reforms,
+including parametric changes to existing policy parameters and
+structural modifications to the tax-benefit system, on any household or
+a national population. The <code>calculate_household_impact</code>
+function computes results for a single household, while the
+<code>Simulation</code> class runs population-level analysis on
+representative survey datasets with calibrated weights. Optional
+behavioral-response assumptions, such as labor supply elasticities, are
+applied after the static reform. Version-pinned releases reduce the
+bookkeeping needed for replication.</p>
 <h1 id="state-of-the-field">State of the Field</h1>
-<p>Tax-benefit microsimulation, which Orcutt <span class="citation" data-cites="orcutt1957">(1957)</span> pioneered and Bourguignon and Spadaro <span class="citation" data-cites="bourguignon2006">(2006)</span> surveyed, underpins much of modern fiscal policy evaluation. In the US, TAXSIM <span class="citation" data-cites="taxsim">(Feenberg and Coutts 1993)</span> at the National Bureau of Economic Research provides tax calculations, while the Congressional Budget Office and Tax Policy Center maintain microsimulation tax models <span class="citation" data-cites="cbo2018taxmodel tpc2022taxmodel">(Congressional Budget Office 2018; Tax Policy Center 2022)</span>. In the UK, the primary microsimulation models are UKMOD, which the Institute for Social and Economic Research (ISER) at the University of Essex maintains as part of the EUROMOD family <span class="citation" data-cites="sutherland2013euromod euromod_download_2026">(Sutherland and Figari 2013; EUROMOD 2026)</span>; HM Treasury's Intra-Governmental Tax and Benefit Microsimulation model (IGOTM) <span class="citation" data-cites="hmt2025igotm">(HM Treasury 2025)</span>; and TAXBEN, which the Institute for Fiscal Studies maintains <span class="citation" data-cites="waters2017taxben">(Waters 2017)</span>.</p>
-<p>OpenFisca <span class="citation" data-cites="openfisca">(OpenFisca Contributors 2024)</span> pioneered the open-source approach to tax-benefit microsimulation in France. Other open-source efforts include the Policy Simulation Library, a collection of policy models and data-preparation routines <span class="citation" data-cites="psl2026">(Policy Simulation Library 2026)</span>, and The Budget Lab's public US tax-model codebases, including Tax-Simulator and Cost-Recovery-Simulator <span class="citation" data-cites="budgetlab_taxsim_2024 budgetlab_costrecovery_2025">(The Budget Lab at Yale 2024, 2025)</span>. The PolicyEngine developers originally forked the codebase from OpenFisca and built it on the PolicyEngine Core framework <span class="citation" data-cites="policyengine_core">(Woodruff et al. 2024)</span>.</p>
-<p>The <code>policyengine</code> package adds shared dataset management, a stable baseline-versus-reform pattern, structured output types for distributional and regional analysis, and interfaces for downstream dashboards and reports. Concretely, the package provides reusable outputs such as <code>Aggregate</code>, <code>ChangeAggregate</code>, and <code>IntraDecileImpact</code>, together with bundled analyses such as <code>economic_impact_analysis()</code>. This separation lets country model packages focus on statutory rules while shared analysis methods evolve independently.</p>
-<p><strong>Table 1:</strong> Comparison of policyengine with selected tax-benefit microsimulation tools.</p>
+<p>Microsimulation, which Orcutt <span class="citation"
+data-cites="orcutt1957">(1957)</span> pioneered and Bourguignon and
+Spadaro <span class="citation"
+data-cites="bourguignon2006">(2006)</span> surveyed for redistribution
+analysis, underpins much of modern fiscal policy evaluation. In the US,
+TAXSIM <span class="citation" data-cites="taxsim">(Feenberg and Coutts
+1993)</span> at the National Bureau of Economic Research provides tax
+calculations, while the Congressional Budget Office and Tax Policy
+Center maintain microsimulation tax models <span class="citation"
+data-cites="cbo2018taxmodel tpc2022taxmodel">(Congressional Budget
+Office 2018; Tax Policy Center 2022)</span>. In the UK, the primary
+microsimulation models are UKMOD, which the Institute for Social and
+Economic Research (ISER) at the University of Essex maintains as part of
+the EUROMOD family <span class="citation"
+data-cites="sutherland2013euromod euromod_download_2026">(Sutherland and
+Figari 2013; EUROMOD 2026)</span>; HM Treasury’s Intra-Governmental Tax
+and Benefit Microsimulation model (IGOTM) <span class="citation"
+data-cites="hmt2025igotm">(HM Treasury 2025)</span>; and TAXBEN, which
+the Institute for Fiscal Studies maintains <span class="citation"
+data-cites="waters2017taxben">(Waters 2017)</span>.</p>
+<p>OpenFisca <span class="citation" data-cites="openfisca">(OpenFisca
+Contributors 2024)</span> initiated the open-source approach to
+tax-benefit microsimulation in France. Other open-source efforts include
+the Policy Simulation Library, a collection of policy models and
+data-preparation routines <span class="citation"
+data-cites="psl2026">(Policy Simulation Library 2026)</span>, and The
+Budget Lab’s public US tax-model codebases, including Tax-Simulator and
+Cost-Recovery-Simulator <span class="citation"
+data-cites="budgetlab_taxsim_2024 budgetlab_costrecovery_2025">(The
+Budget Lab at Yale 2024, 2025)</span>. The PolicyEngine developers
+originally forked the codebase from OpenFisca and built it on the
+<code>policyengine-core</code> framework <span class="citation"
+data-cites="policyengine_core">(Woodruff et al. 2024)</span>.</p>
+<p>Existing tools serve complementary needs — country-specific
+microsimulation (TAXSIM, TAXBEN, IGOTM) or simulation infrastructure
+without a shared cross-country analyst API
+(<code>policyengine-core</code>, OpenFisca) — leaving a gap in the
+open-source ecosystem. The <code>policyengine</code> package fills this
+gap by adding shared dataset management, a stable baseline-versus-reform
+pattern, structured output types for distributional and regional
+analysis, and interfaces for downstream dashboards and reports.
+Concretely, the package provides reusable outputs such as
+<code>Aggregate</code>, <code>ChangeAggregate</code>, and
+<code>IntraDecileImpact</code>, together with bundled analyses such as
+<code>economic_impact_analysis()</code>. This separation lets
+country-model packages focus on statutory rules while shared analysis
+methods evolve independently.</p>
+<p>Table 1: Comparison of policyengine with selected tax-benefit
+microsimulation tools. Entries refer to capabilities documented for
+external users at the time of submission.</p>
 <table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
 <thead>
 <tr>
 <th>Dimension</th>
@@ -427,8 +513,8 @@
 <td>Country coverage</td>
 <td>US and UK</td>
 <td>US</td>
-<td>UK and EU member states</td>
-<td>France, Tunisia, and other jurisdictions</td>
+<td>UK</td>
+<td>US, UK, and ~10 other jurisdictions</td>
 </tr>
 <tr>
 <td>Tax and benefit analysis</td>
@@ -438,10 +524,10 @@
 <td>Yes</td>
 </tr>
 <tr>
-<td>Python package (pip install)</td>
+<td>Python-native implementation</td>
 <td>Yes</td>
 <td>No</td>
-<td>Yes (connector)</td>
+<td>No</td>
 <td>Yes</td>
 </tr>
 <tr>
@@ -453,186 +539,371 @@
 </tr>
 </tbody>
 </table>
-<p>Teams can update each layer independently, while <code>policyengine</code> certifies the combinations exposed to users.</p>
-
 <h1 id="software-design">Software Design</h1>
-<p>The PolicyEngine software stack has four layers. PolicyEngine Core provides reusable simulation abstractions, versioned parameters, and dataset interfaces that country packages share <span class="citation" data-cites="policyengine_core">(Woodruff et al. 2024)</span>. The <code>policyengine-us</code> and <code>policyengine-uk</code> packages contain statutory logic, variables, and entity structures specific to each tax-benefit system. The <code>policyengine</code> package sits above them as the analysis layer: it defines shared simulation orchestration, structured output types, and canonical baseline-versus-reform workflows such as <code>economic_impact_analysis()</code>. Companion data repositories hold enhanced survey microdata derived from the Current Population Survey (CPS) <span class="citation" data-cites="woodruff2024enhanced_cps">(Woodruff and Ghenis 2024)</span> and Family Resources Survey <span class="citation" data-cites="frs2020">(Department for Work and Pensions et al. 2021)</span>. Figure 1 illustrates the runtime workflow: inputs flow into the Simulation layer, which produces the structured outputs. The package does not include a macroeconomic model and does not capture general equilibrium effects.</p>
+<p>The PolicyEngine software stack has four components.
+<code>policyengine-core</code> provides reusable simulation
+abstractions, versioned parameters, and dataset interfaces that country
+packages share <span class="citation"
+data-cites="policyengine_core">(Woodruff et al. 2024)</span>. The
+<code>policyengine-us</code> and <code>policyengine-uk</code> packages
+contain statutory logic, variables, and entity structures specific to
+each tax-benefit system. The <code>policyengine</code> package is the
+analyst-facing component: it defines shared simulation orchestration,
+structured output types, and canonical baseline-versus-reform workflows
+such as <code>economic_impact_analysis()</code>. Companion data
+repositories hold enhanced survey microdata derived from the Current
+Population Survey (CPS) <span class="citation"
+data-cites="woodruff2024enhanced_cps">(Woodruff and Ghenis 2024)</span>
+and Family Resources Survey <span class="citation"
+data-cites="frs2020">(Department for Work and Pensions et al.
+2021)</span>. The package does not include a macroeconomic model and
+does not capture general equilibrium effects.</p>
+<p>This architecture reflects two deliberate trade-offs. Keeping country
+statutory rules in separate packages, rather than bundling them into a
+monolithic tool, lets each country model release independently; the cost
+is that <code>policyengine</code> must track and certify compatible
+combinations. Modeling reforms statically, with optional post-hoc
+behavioral responses, gives fast and deterministic baselines at the
+expense of general equilibrium effects, which are better suited to
+dedicated macroeconomic models.</p>
 <figure>
 <img src="architecture.png" style="width:100.0%"
-alt="PolicyEngine runtime architecture. Inputs (rules, microdata, and behavioral responses) flow through the Simulation layer to produce structured outputs." />
-<figcaption>Figure 1: PolicyEngine runtime architecture. Inputs (rules, microdata, and behavioral responses) flow through the Simulation layer to produce structured outputs.</figcaption>
+alt="Figure 1: PolicyEngine runtime architecture. Inputs (rules, microdata, and behavioral responses) flow through the simulation pipeline to produce structured outputs." />
+<figcaption aria-hidden="true">Figure 1: PolicyEngine runtime
+architecture. Inputs (rules, microdata, and behavioral responses) flow
+through the simulation pipeline to produce structured
+outputs.</figcaption>
 </figure>
-<p>For reproducibility, the top-level package now acts as a certification boundary across these layers. Country data repositories build immutable microdata artifacts and publish release manifests with checksums and the country-model version used during data construction. Bundled country manifests in <code>policyengine</code> then certify the runtime bundle: the runtime country-model version, the microdata-package release, the dataset artifact, and the compatibility basis linking that runtime model to the build-time data provenance. Analysts can request a dataset such as <code>enhanced_frs_2023_24</code>, while the runtime resolves it to a specific versioned artifact and records both runtime and build-time provenance.</p>
-<p>At runtime, a simulation combines a country model version, household microdata, and optional reform or behavioral-response inputs. The simulation pipeline also supports behavioral responses such as labor supply elasticities, which the country packages define and apply after the static policy reform. The analysis layer then produces reusable outputs for decile changes, program statistics, poverty, inequality, and regional impacts. Because the runtime exposes the resolved certified bundle and compatibility basis, results can be traced to a specific <code>policyengine</code> release, runtime country-model release, microdata release, versioned dataset artifact, and build-time country-model version.</p>
-<p>The following basic household API example computes a household's net income under baseline law and under a reform that doubles the US standard deduction for single filers:</p>
-<pre><code>import datetime
-from policyengine.core import Parameter, ParameterValue, Policy
-from policyengine.tax_benefit_models.us import (
-    USHouseholdInput, calculate_household_impact, us_latest,
-)
-
-param = Parameter(
-    name="gov.irs.deductions.standard.amount.SINGLE",
-    tax_benefit_model_version=us_latest,
-)
-reform = Policy(
-    name="Double standard deduction",
-    parameter_values=[ParameterValue(
-        parameter=param,
-        start_date=datetime.date(2026, 1, 1),
-        end_date=datetime.date(2026, 12, 31),
-        value=32_200,
-    )],
-)
-
-household = USHouseholdInput(
-    people=[{"age": 40, "employment_income": 50_000,
-             "is_tax_unit_head": True}],
-    tax_unit={"filing_status": "SINGLE"},
-    household={"state_code_str": "CA"},
-    year=2026,
-)
-baseline = calculate_household_impact(household)
-reformed = calculate_household_impact(household, policy=reform)
-# Results for California: baseline net income $40,702, reform $42,634</code></pre>
-<p>A UK reproduction script that runs a population-level analysis is available at <code>examples/paper_repro_uk.py</code>.</p>
-
+<p>For reproducibility, the top-level package acts as a certification
+boundary across these components. Country data repositories build
+immutable microdata artifacts and publish release manifests with
+checksums and the country-model version used during data construction.
+Bundled country manifests in <code>policyengine</code> then certify the
+runtime bundle: the runtime country-model version, the microdata-package
+release, the dataset artifact, and the compatibility basis linking that
+runtime model to the build-time data provenance. Analysts can request a
+dataset such as <code>enhanced_frs_2023_24</code>, while the runtime
+resolves it to a specific versioned artifact and records both runtime
+and build-time provenance. The same certification record can be emitted
+as a TRACE Transparent Research Object declaration <span
+class="citation" data-cites="trace_trov">(TRACE Project 2024)</span>, so
+the internal bundle and data manifests remain the operational source of
+truth while a standardized signed provenance document is available for
+external exchange.</p>
+<p>At runtime, a simulation combines a country-model version, household
+microdata, and an optional reform; country packages can also apply
+behavioral responses, such as labor supply elasticities, after the
+static policy reform. The <code>policyengine</code> package then
+produces reusable outputs for decile changes, program statistics,
+poverty, inequality, and regional impacts. Because the runtime exposes
+the resolved certified bundle and compatibility basis, results can be
+traced to a specific <code>policyengine</code> release, runtime
+country-model release, microdata release, versioned dataset artifact,
+and build-time country-model version.</p>
+<p>The following household-level example computes a household’s net
+income under baseline law and under a reform that doubles the US
+single-filer standard deduction (to $32,200 for 2026):</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> datetime</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> policyengine.core <span class="im">import</span> Parameter, ParameterValue, Policy</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> policyengine.tax_benefit_models.us <span class="im">import</span> (</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    USHouseholdInput, calculate_household_impact, us_latest,</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>param <span class="op">=</span> Parameter(</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    name<span class="op">=</span><span class="st">&quot;gov.irs.deductions.standard.amount.SINGLE&quot;</span>,</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    tax_benefit_model_version<span class="op">=</span>us_latest,</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>reform <span class="op">=</span> Policy(</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    name<span class="op">=</span><span class="st">&quot;Double standard deduction&quot;</span>,</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    parameter_values<span class="op">=</span>[ParameterValue(</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>        parameter<span class="op">=</span>param,</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>        start_date<span class="op">=</span>datetime.date(<span class="dv">2026</span>, <span class="dv">1</span>, <span class="dv">1</span>),</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>        end_date<span class="op">=</span>datetime.date(<span class="dv">2026</span>, <span class="dv">12</span>, <span class="dv">31</span>),</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>        value<span class="op">=</span><span class="dv">32_200</span>,</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    )],</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>household <span class="op">=</span> USHouseholdInput(</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    people<span class="op">=</span>[{<span class="st">&quot;age&quot;</span>: <span class="dv">40</span>, <span class="st">&quot;employment_income&quot;</span>: <span class="dv">50_000</span>,</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>             <span class="st">&quot;is_tax_unit_head&quot;</span>: <span class="va">True</span>}],</span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    tax_unit<span class="op">=</span>{<span class="st">&quot;filing_status&quot;</span>: <span class="st">&quot;SINGLE&quot;</span>},</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    household<span class="op">=</span>{<span class="st">&quot;state_code_str&quot;</span>: <span class="st">&quot;CA&quot;</span>},</span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    year<span class="op">=</span><span class="dv">2026</span>,</span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>baseline <span class="op">=</span> calculate_household_impact(household)</span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>reformed <span class="op">=</span> calculate_household_impact(household, policy<span class="op">=</span>reform)</span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a><span class="co"># The reform increases this household&#39;s net income relative to baseline.</span></span></code></pre></div>
+<p>The <code>us_latest</code> sentinel resolves to the bundled
+<code>policyengine-us</code> version installed alongside
+<code>policyengine</code>, so results are stable for a given pinned
+environment. This paper describes <code>policyengine</code> version
+3.4.4 <span class="citation" data-cites="policyengine_py">(PolicyEngine
+Contributors 2026)</span>, and the checked-in UK reproduction script
+<code>examples/paper_repro_uk.py</code> documents an executable
+population-level workflow using a pinned interpreter
+(<code>uv run --python 3.14 --extra uk python examples/paper_repro_uk.py</code>).</p>
 <h1 id="research-impact-statement">Research Impact Statement</h1>
-<p><strong>Government and legislative use.</strong> Co-author Nikhil Woodruff served as an Innovation Fellow with the 10DS data science team at 10 Downing Street, adapting PolicyEngine for government policy analysis <span class="citation" data-cites="no10fellowship2026">(Woodruff 2026)</span>. HM Treasury registered PolicyEngine in the UK Algorithmic Transparency Recording Standard as a tool their Personal Tax, Welfare and Pensions team evaluates <span class="citation" data-cites="hmt2024atrs">(HM Treasury 2024)</span>, and the U.S. Congress Joint Economic Committee built an immigration fiscal impact calculator on top of PolicyEngine's microsimulation model <span class="citation" data-cites="jec2026immigration">(Joint Economic Committee 2026)</span>. In the US, members of Congress cited PolicyEngine analyses when introducing the Young Adult Tax Credit Act, the End Child Poverty Act, and the Keep Your Pay Act <span class="citation" data-cites="mcgarvey2024yatc tlaib2023endchildpoverty pe_keepyourpay">(Office of Representative Morgan McGarvey 2024; Office of Representative Rashida Tlaib 2023; Office of Senator Cory Booker 2026)</span>. In the UK, Baroness Altmann cited Commons Library research using PolicyEngine during House of Lords debate on employer pension contributions <span class="citation" data-cites="hansard2026nic">(House of Lords 2026)</span>.</p>
-<p><strong>Institutional and academic use.</strong> Under a memorandum of understanding with the Federal Reserve Bank of Atlanta, PolicyEngine runs three-way comparisons against TAXSIM and the Atlanta Fed's Policy Rules Database <span class="citation" data-cites="atlanta_fed_prd">(Federal Reserve Bank of Atlanta 2021)</span>. Co-author Max Ghenis and Jason DeBacker presented the Enhanced CPS methodology at the 117th Annual Conference on Taxation of the National Tax Association <span class="citation" data-cites="ghenis2024nta">(Ghenis and DeBacker 2024)</span>. PolicyEngine has also been used or discussed in work by the Better Government Lab, the Beeck Center at Georgetown University, Matt Unrath at the University of Southern California, and Youngman et al. at the Institute for New Economic Thinking, Oxford <span class="citation" data-cites="pe_bgl beeck2023rac beeck2025ai pe_usc youngman2026carbon">(Ghenis 2024b; Kennan et al. 2023, 2025; Institute for Research on Poverty 2025; Youngman et al. 2026)</span>.</p>
-<p><strong>Policy research use.</strong> In the US, the Niskanen Center used PolicyEngine to estimate the cost and distributional impacts of Child Tax Credit reform options, and DC Councilmember Zachary Parker cited PolicyEngine's analysis when introducing the District Child Tax Credit Amendment Act of 2023 <span class="citation" data-cites="mccabe2024ctc pe_dctc">(McCabe and Sargeant 2024; Council of the District of Columbia 2023)</span>. In the UK, the National Institute of Economic and Social Research used PolicyEngine in their UK Living Standards Review 2025, and the Institute of Economic Affairs published PolicyEngine-based analyses of employer National Insurance contributions and 2025&ndash;2026 tax changes <span class="citation" data-cites="niesr2025living woodruff2024nic woodruff2025tax">(Mosley et al. 2025; Woodruff 2024, 2025)</span>.</p>
-
+<p>PolicyEngine has seen use in government, policy, and research
+settings. In the UK, HM Treasury registered PolicyEngine in the
+Algorithmic Transparency Recording Standard as a tool under evaluation
+by its Personal Tax, Welfare and Pensions team <span class="citation"
+data-cites="hmt2024atrs">(HM Treasury 2024)</span>, and co-author Nikhil
+Woodruff adapted PolicyEngine during an Innovation Fellowship with the
+data science team at 10 Downing Street <span class="citation"
+data-cites="no10fellowship2026">(Woodruff 2026)</span>. In the US, the
+Joint Economic Committee built an immigration fiscal impact calculator
+on top of PolicyEngine’s microsimulation model <span class="citation"
+data-cites="jec2026immigration">(Joint Economic Committee, U.S. Congress
+2026)</span>.</p>
+<p>The package has also been used in external policy analysis and
+validation exercises. Under a memorandum of understanding with the
+Federal Reserve Bank of Atlanta, PolicyEngine runs three-way comparisons
+against TAXSIM and the Atlanta Fed’s Policy Rules Database <span
+class="citation" data-cites="atlanta_fed_prd">(Federal Reserve Bank of
+Atlanta 2021)</span>. Organizations including the Niskanen Center and
+the National Institute of Economic and Social Research have used
+PolicyEngine in published distributional analyses <span class="citation"
+data-cites="mccabe2024ctc niesr2025living">(McCabe and Sargeant 2024;
+Mosley et al. 2025)</span>, and co-author Max Ghenis and Jason DeBacker
+presented related methodology work on the Enhanced CPS at the 117th
+Annual Conference on Taxation of the National Tax Association <span
+class="citation" data-cites="ghenis2024nta">(Ghenis and DeBacker
+2024)</span>. Additional examples of public-facing use include research
+collaborations and published analyses with the Better Government Lab,
+the Beeck Center at Georgetown University, the Institute of Economic
+Affairs, and Matt Unrath at the University of Southern California <span
+class="citation"
+data-cites="pe_bgl beeck2023rac beeck2025ai woodruff2024nic woodruff2025tax pe_usc">(Ghenis
+2024b; Kennan et al. 2023, 2025; Woodruff 2024, 2025; Institute for
+Research on Poverty 2025)</span>.</p>
 <h1 id="acknowledgements">Acknowledgements</h1>
-<p>Arnold Ventures <span class="citation" data-cites="arnold_ventures">(Arnold Ventures 2023)</span>, NEO Philanthropy <span class="citation" data-cites="neo_philanthropy">(Ghenis 2024a)</span>, the Gerald Huff Fund for Humanity, and the National Science Foundation (NSF POSE Phase I, Award 2518372) <span class="citation" data-cites="nsf_pose">(National Science Foundation 2025)</span> funded this work in the US. The Nuffield Foundation has funded the UK work since September 2024 <span class="citation" data-cites="nuffield2024grant">(Nuffield Foundation 2024)</span>. These funders had no involvement in the design, development, or content of this software or paper. All authors are employed by PolicyEngine and may benefit reputationally from the software's adoption; this relationship is disclosed here as a potential conflict of interest.</p>
-<p>We thank all PolicyEngine contributors and the OpenFisca community for the microsimulation framework from which PolicyEngine was forked <span class="citation" data-cites="openfisca">(OpenFisca Contributors 2024)</span>. We acknowledge the US Census Bureau for providing access to the Current Population Survey, and the UK Data Service and the Department for Work and Pensions for providing access to the Family Resources Survey.</p>
-
+<p>Arnold Ventures <span class="citation"
+data-cites="arnold_ventures">(Arnold Ventures 2023)</span>, NEO
+Philanthropy <span class="citation"
+data-cites="neo_philanthropy">(Ghenis 2024a)</span>, the Gerald Huff
+Fund for Humanity, and the National Science Foundation (NSF POSE Phase
+I, Award 2518372) <span class="citation" data-cites="nsf_pose">(National
+Science Foundation 2025)</span> funded this work in the US. The Nuffield
+Foundation has funded the UK work since September 2024 <span
+class="citation" data-cites="nuffield2024grant">(Nuffield Foundation
+2024)</span>. These funders had no involvement in the design,
+development, or content of this software or paper. All authors are
+employed by PolicyEngine and may benefit reputationally from the
+software’s adoption; this relationship is disclosed here as a potential
+conflict of interest.</p>
+<p>We thank all PolicyEngine contributors and the OpenFisca community
+for the microsimulation framework from which PolicyEngine was forked
+<span class="citation" data-cites="openfisca">(OpenFisca Contributors
+2024)</span>. We acknowledge the US Census Bureau for providing access
+to the Current Population Survey, and the UK Data Service and the
+Department for Work and Pensions for providing access to the Family
+Resources Survey.</p>
 <h1 id="ai-usage-disclosure">AI Usage Disclosure</h1>
-<p>The authors used generative AI tools, specifically Claude Opus 4 by Anthropic <span class="citation" data-cites="claude2026">(Anthropic 2026)</span>, to assist with code refactoring. Human authors reviewed, edited, and validated all AI-assisted outputs and made all design decisions regarding software architecture, policy modeling, and parameter implementation. The authors remain fully responsible for the accuracy, originality, and correctness of all submitted materials.</p>
-
+<p>The authors used generative AI tools, specifically Claude Opus 4 by
+Anthropic <span class="citation" data-cites="claude2026">(Anthropic
+2026)</span>, to assist with code refactoring. Human authors reviewed,
+edited, and validated all AI-assisted outputs and made all design
+decisions regarding software architecture, policy modeling, and
+parameter implementation. The authors remain fully responsible for the
+accuracy, originality, and correctness of all submitted materials.</p>
 <h1 class="unnumbered" id="references">References</h1>
-<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="refs" class="references csl-bib-body hanging-indent"
+role="list">
 <div id="ref-claude2026" class="csl-entry" role="listitem">
-Anthropic. 2026. <em>Claude</em>. Released. <a href="https://www.anthropic.com/claude">https://www.anthropic.com/claude</a>.
+Anthropic. 2026. <em><span>Claude</span></em>. Released. <a
+href="https://www.anthropic.com/claude">https://www.anthropic.com/claude</a>.
 </div>
 <div id="ref-arnold_ventures" class="csl-entry" role="listitem">
-Arnold Ventures. 2023. <em>Public Finance Program</em>. <a href="https://www.arnoldventures.org/work/public-finance">https://www.arnoldventures.org/work/public-finance</a>.
+Arnold Ventures. 2023. <em>Public Finance Program</em>. <a
+href="https://www.arnoldventures.org/work/public-finance">https://www.arnoldventures.org/work/public-finance</a>.
 </div>
 <div id="ref-bourguignon2006" class="csl-entry" role="listitem">
-Bourguignon, Fran&ccedil;ois, and Amedeo Spadaro. 2006. &ldquo;Microsimulation as a Tool for Evaluating Redistribution Policies.&rdquo; <em>The Journal of Economic Inequality</em> 4: 77&ndash;106. <a href="https://doi.org/10.1007/s10888-005-9012-6">https://doi.org/10.1007/s10888-005-9012-6</a>.
+Bourguignon, François, and Amedeo Spadaro. 2006. <span>“Microsimulation
+as a Tool for Evaluating Redistribution Policies.”</span> <em>The
+Journal of Economic Inequality</em> 4: 77–106. <a
+href="https://doi.org/10.1007/s10888-005-9012-6">https://doi.org/10.1007/s10888-005-9012-6</a>.
 </div>
 <div id="ref-cbo2018taxmodel" class="csl-entry" role="listitem">
-Congressional Budget Office. 2018. <em>An Overview of <span>CBO</span>&rsquo;s Microsimulation Tax Model</em>. <a href="https://www.cbo.gov/system/files/2018-06/54096-taxmodel.pdf">https://www.cbo.gov/system/files/2018-06/54096-taxmodel.pdf</a>.
-</div>
-<div id="ref-pe_dctc" class="csl-entry" role="listitem">
-Council of the District of Columbia. 2023. <em><span>District Child Tax Credit Amendment Act</span> of 2023</em>. <a href="https://lims.dccouncil.gov/Legislation/B25-0190">https://lims.dccouncil.gov/Legislation/B25-0190</a>.
+Congressional Budget Office. 2018. <em>An Overview of <span>CBO</span>’s
+Microsimulation Tax Model</em>. <a
+href="https://www.cbo.gov/system/files/2018-06/54096-taxmodel.pdf">https://www.cbo.gov/system/files/2018-06/54096-taxmodel.pdf</a>.
 </div>
 <div id="ref-frs2020" class="csl-entry" role="listitem">
-Department for Work and Pensions, Office for National Statistics, and NatCen Social Research. 2021. <em>Family Resources Survey, 2019-2020</em>. UK Data Service. <a href="https://doi.org/10.5255/UKDA-SN-8802-1">https://doi.org/10.5255/UKDA-SN-8802-1</a>.
+Department for Work and Pensions, Office for National Statistics, and
+NatCen Social Research. 2021. <em>Family Resources Survey,
+2019-2020</em>. UK Data Service. <a
+href="https://doi.org/10.5255/UKDA-SN-8802-1">https://doi.org/10.5255/UKDA-SN-8802-1</a>.
 </div>
 <div id="ref-euromod_download_2026" class="csl-entry" role="listitem">
-EUROMOD. 2026. <em>Download</em>. <a href="https://euromod-web.jrc.ec.europa.eu/download-euromod">https://euromod-web.jrc.ec.europa.eu/download-euromod</a>.
+EUROMOD. 2026. <em>Download</em>. <a
+href="https://euromod-web.jrc.ec.europa.eu/download-euromod">https://euromod-web.jrc.ec.europa.eu/download-euromod</a>.
 </div>
 <div id="ref-atlanta_fed_prd" class="csl-entry" role="listitem">
-Federal Reserve Bank of Atlanta. 2021. <em>Policy Rules Database</em>. <a href="https://github.com/Research-Division/policy-rules-database">https://github.com/Research-Division/policy-rules-database</a>.
+Federal Reserve Bank of Atlanta. 2021. <em>Policy Rules Database</em>.
+<a
+href="https://github.com/Research-Division/policy-rules-database">https://github.com/Research-Division/policy-rules-database</a>.
 </div>
 <div id="ref-taxsim" class="csl-entry" role="listitem">
-Feenberg, Daniel R., and Elisabeth Coutts. 1993. &ldquo;<span>TAXSIM</span>: A Tool for Calculating Federal and State Income Tax Liabilities.&rdquo; <em>National Tax Journal</em> 46 (3): 271&ndash;80.
+Feenberg, Daniel R., and Elisabeth Coutts. 1993.
+<span>“<span>TAXSIM</span>: A Tool for Calculating Federal and State
+Income Tax Liabilities.”</span> <em>National Tax Journal</em> 46 (3):
+271–80. <a
+href="https://doi.org/10.2307/3325474">https://doi.org/10.2307/3325474</a>.
 </div>
 <div id="ref-neo_philanthropy" class="csl-entry" role="listitem">
-Ghenis, Max. 2024a. &ldquo;<span>NEO Philanthropy</span> Awards $200,000 Grant to <span>PolicyEngine</span>.&rdquo; <a href="https://policyengine.org/us/research/neo-philanthropy">https://policyengine.org/us/research/neo-philanthropy</a>.
+Ghenis, Max. 2024a. <span>“<span>NEO Philanthropy</span> Awards $200,000
+Grant to <span>PolicyEngine</span>.”</span> <a
+href="https://policyengine.org/us/research/neo-philanthropy">https://policyengine.org/us/research/neo-philanthropy</a>.
 </div>
 <div id="ref-pe_bgl" class="csl-entry" role="listitem">
-Ghenis, Max. 2024b. &ldquo;<span>PolicyEngine</span> and <span>Better Government Lab</span> Collaboration.&rdquo; <a href="https://www.policyengine.org/us/research/policyengine-better-government-lab-collaboration">https://www.policyengine.org/us/research/policyengine-better-government-lab-collaboration</a>.
+Ghenis, Max. 2024b. <span>“<span>PolicyEngine</span> and <span>Better
+Government Lab</span> Collaboration.”</span> <a
+href="https://www.policyengine.org/us/research/policyengine-better-government-lab-collaboration">https://www.policyengine.org/us/research/policyengine-better-government-lab-collaboration</a>.
 </div>
 <div id="ref-ghenis2024nta" class="csl-entry" role="listitem">
-Ghenis, Max, and Jason DeBacker. 2024. <em>Enhanced <span>Current Population Survey</span>: Integrating <span>IRS</span> Public Use File Data Using Quantile Regression Forests</em>. <a href="https://ntanet.org/2024/07/117th-annual-conference-on-taxation-full/">https://ntanet.org/2024/07/117th-annual-conference-on-taxation-full/</a>.
+Ghenis, Max, and Jason DeBacker. 2024. <em>Enhanced <span>Current
+Population Survey</span>: Integrating <span>IRS</span> Public Use File
+Data Using Quantile Regression Forests</em>. <a
+href="https://ntanet.org/2024/07/117th-annual-conference-on-taxation-full/">https://ntanet.org/2024/07/117th-annual-conference-on-taxation-full/</a>.
 </div>
 <div id="ref-hmt2024atrs" class="csl-entry" role="listitem">
-HM Treasury. 2024. <em><span>HMT</span>: <span>PolicyEngine UK</span> &ndash; Algorithmic Transparency Recording Standard</em>. <a href="https://www.gov.uk/algorithmic-transparency-records/hmt-modelling-policy-engine">https://www.gov.uk/algorithmic-transparency-records/hmt-modelling-policy-engine</a>.
+HM Treasury. 2024. <em><span>HMT</span>: <span>PolicyEngine UK</span> –
+Algorithmic Transparency Recording Standard</em>. <a
+href="https://www.gov.uk/algorithmic-transparency-records/hmt-modelling-policy-engine">https://www.gov.uk/algorithmic-transparency-records/hmt-modelling-policy-engine</a>.
 </div>
 <div id="ref-hmt2025igotm" class="csl-entry" role="listitem">
-HM Treasury. 2025. <em>Impact on Households: Distributional Analysis to Accompany Spring Statement 2025</em>. <a href="https://www.gov.uk/government/publications/supporting-documents-for-spring-statement-2025/impact-on-households-distributional-analysis-to-accompany-spring-statement-2025">https://www.gov.uk/government/publications/supporting-documents-for-spring-statement-2025/impact-on-households-distributional-analysis-to-accompany-spring-statement-2025</a>.
-</div>
-<div id="ref-hansard2026nic" class="csl-entry" role="listitem">
-House of Lords. 2026. <em>National Insurance Contributions (Employer Pensions Contributions) Bill &ndash; Grand Committee</em>. <a href="https://hansard.parliament.uk/Lords/2026-02-24/debates/A381F7D6-0A3C-48FD-8D9E-67751E25877A/NationalInsuranceContributions(EmployerPensionsContributions)Bill">https://hansard.parliament.uk/Lords/2026-02-24/debates/A381F7D6-0A3C-48FD-8D9E-67751E25877A/NationalInsuranceContributions(EmployerPensionsContributions)Bill</a>.
+HM Treasury. 2025. <em>Impact on Households: Distributional Analysis to
+Accompany Spring Statement 2025</em>. <a
+href="https://www.gov.uk/government/publications/supporting-documents-for-spring-statement-2025/impact-on-households-distributional-analysis-to-accompany-spring-statement-2025">https://www.gov.uk/government/publications/supporting-documents-for-spring-statement-2025/impact-on-households-distributional-analysis-to-accompany-spring-statement-2025</a>.
 </div>
 <div id="ref-pe_usc" class="csl-entry" role="listitem">
-Institute for Research on Poverty. 2025. <em>2025&ndash;2026 <span>IRP</span> Extramural Large Grants</em>. <a href="https://www.irp.wisc.edu/2025-2026-irp-extramural-large-grants/">https://www.irp.wisc.edu/2025-2026-irp-extramural-large-grants/</a>.
+Institute for Research on Poverty. 2025. <em>2025–2026 <span>IRP</span>
+Extramural Large Grants</em>. <a
+href="https://www.irp.wisc.edu/2025-2026-irp-extramural-large-grants/">https://www.irp.wisc.edu/2025-2026-irp-extramural-large-grants/</a>.
 </div>
 <div id="ref-jec2026immigration" class="csl-entry" role="listitem">
-Joint Economic Committee, U.S. Congress. 2026. <em>Immigration Fiscal Impact Calculator</em>. <a href="https://www.jec.senate.gov/public/index.cfm/republicans/2026/3/immigration-fiscal-impact-calculator">https://www.jec.senate.gov/public/index.cfm/republicans/2026/3/immigration-fiscal-impact-calculator</a>.
+Joint Economic Committee, U.S. Congress. 2026. <em>Immigration Fiscal
+Impact Calculator</em>. <a
+href="https://www.jec.senate.gov/public/index.cfm/republicans/2026/3/immigration-fiscal-impact-calculator">https://www.jec.senate.gov/public/index.cfm/republicans/2026/3/immigration-fiscal-impact-calculator</a>.
 </div>
 <div id="ref-beeck2025ai" class="csl-entry" role="listitem">
-Kennan, Ariel, Alessandra Garcia Guevara, and Jason Goodman. 2025. <em><span>AI</span>-Powered Rules as Code: Experiments with Public Benefits Policy</em>. Beeck Center for Social Impact and Innovation, Georgetown University. <a href="https://beeckcenter.georgetown.edu/report/ai-powered-rules-as-code-experiments-with-public-benefits-policy/">https://beeckcenter.georgetown.edu/report/ai-powered-rules-as-code-experiments-with-public-benefits-policy/</a>.
+Kennan, Ariel, Alessandra Garcia Guevara, and Jason Goodman. 2025.
+<em><span>AI</span>-Powered Rules as Code: Experiments with Public
+Benefits Policy</em>. Beeck Center for Social Impact; Innovation,
+Georgetown University. <a
+href="https://beeckcenter.georgetown.edu/report/ai-powered-rules-as-code-experiments-with-public-benefits-policy/">https://beeckcenter.georgetown.edu/report/ai-powered-rules-as-code-experiments-with-public-benefits-policy/</a>.
 </div>
 <div id="ref-beeck2023rac" class="csl-entry" role="listitem">
-Kennan, Ariel, Lisa Singh, Bianca Dammholz, Keya Sengupta, and Jason Yi. 2023. <em>Exploring Rules Communication: Moving Beyond Static Documents to Standardized Code for <span>U.S.</span> Public Benefits Programs</em>. Beeck Center for Social Impact and Innovation, Georgetown University. <a href="https://beeckcenter.georgetown.edu/report/exploring-rules-communication-moving-beyond-static-documents-to-standardized-code-for-u-s-public-benefits-programs/">https://beeckcenter.georgetown.edu/report/exploring-rules-communication-moving-beyond-static-documents-to-standardized-code-for-u-s-public-benefits-programs/</a>.
+Kennan, Ariel, Lisa Singh, Bianca Dammholz, Keya Sengupta, and Jason Yi.
+2023. <em>Exploring Rules Communication: Moving Beyond Static Documents
+to Standardized Code for <span>U.S.</span> Public Benefits
+Programs</em>. Beeck Center for Social Impact; Innovation, Georgetown
+University. <a
+href="https://beeckcenter.georgetown.edu/report/exploring-rules-communication-moving-beyond-static-documents-to-standardized-code-for-u-s-public-benefits-programs/">https://beeckcenter.georgetown.edu/report/exploring-rules-communication-moving-beyond-static-documents-to-standardized-code-for-u-s-public-benefits-programs/</a>.
 </div>
 <div id="ref-mccabe2024ctc" class="csl-entry" role="listitem">
-McCabe, Joshua, and Leah Sargeant. 2024. <em>Building a Stronger Foundation for <span>American</span> Families: Options for <span>Child Tax Credit</span> Reform</em>. Niskanen Center. <a href="https://www.niskanencenter.org/building-a-stronger-foundation-for-american-families-options-for-child-tax-credit-reform/">https://www.niskanencenter.org/building-a-stronger-foundation-for-american-families-options-for-child-tax-credit-reform/</a>.
+McCabe, Joshua, and Leah Sargeant. 2024. <em>Building a Stronger
+Foundation for <span>American</span> Families: Options for <span>Child
+Tax Credit</span> Reform</em>. Niskanen Center. <a
+href="https://www.niskanencenter.org/building-a-stronger-foundation-for-american-families-options-for-child-tax-credit-reform/">https://www.niskanencenter.org/building-a-stronger-foundation-for-american-families-options-for-child-tax-credit-reform/</a>.
 </div>
 <div id="ref-niesr2025living" class="csl-entry" role="listitem">
-Mosley, Max, Ryan Wattam, and Carol Vincent. 2025. <em><span>UK</span> Living Standards Review 2025</em>. National Institute of Economic and Social Research. <a href="https://niesr.ac.uk/publications/uk-living-standards-review-2025">https://niesr.ac.uk/publications/uk-living-standards-review-2025</a>.
+Mosley, Max, Ryan Wattam, and Carol Vincent. 2025. <em><span>UK</span>
+Living Standards Review 2025</em>. National Institute of Economic;
+Social Research. <a
+href="https://niesr.ac.uk/publications/uk-living-standards-review-2025">https://niesr.ac.uk/publications/uk-living-standards-review-2025</a>.
 </div>
 <div id="ref-nsf_pose" class="csl-entry" role="listitem">
-National Science Foundation. 2025. <em><span>POSE</span>: Phase <span>I</span>: <span>PolicyEngine</span> &ndash; Advancing Public Policy Analysis</em>. <a href="https://www.nsf.gov/awardsearch/showAward.jsp?AWD_ID=2518372">https://www.nsf.gov/awardsearch/showAward.jsp?AWD_ID=2518372</a>.
+National Science Foundation. 2025. <em><span>POSE</span>: Phase
+<span>I</span>: <span>PolicyEngine</span> – Advancing Public Policy
+Analysis</em>. <a
+href="https://www.nsf.gov/awardsearch/showAward.jsp?AWD_ID=2518372">https://www.nsf.gov/awardsearch/showAward.jsp?AWD_ID=2518372</a>.
 </div>
 <div id="ref-nuffield2024grant" class="csl-entry" role="listitem">
-Nuffield Foundation. 2024. <em>Enhancing, Localising and Democratising Tax-Benefit Policy Analysis</em>. <a href="https://www.nuffieldfoundation.org/project/enhancing-localising-and-democratising-tax-benefit-policy-analysis">https://www.nuffieldfoundation.org/project/enhancing-localising-and-democratising-tax-benefit-policy-analysis</a>.
-</div>
-<div id="ref-mcgarvey2024yatc" class="csl-entry" role="listitem">
-Office of Representative Morgan McGarvey. 2024. <em>Congressman <span>Morgan McGarvey</span> Introduces <span>Young Adult Tax Credit Act</span></em>. <a href="https://mcgarvey.house.gov/media/press-releases/congressman-morgan-mcgarvey-introduces-young-adult-tax-credit-act">https://mcgarvey.house.gov/media/press-releases/congressman-morgan-mcgarvey-introduces-young-adult-tax-credit-act</a>.
-</div>
-<div id="ref-tlaib2023endchildpoverty" class="csl-entry" role="listitem">
-Office of Representative Rashida Tlaib. 2023. <em>Tlaib Re-Introduces the <span>End Child Poverty Act</span> to Cut Child Poverty by Nearly Two-Thirds</em>. <a href="https://tlaib.house.gov/posts/tlaib-re-introduces-the-end-child-poverty-act-to-cut-child-poverty-by-nearly-two-thirds">https://tlaib.house.gov/posts/tlaib-re-introduces-the-end-child-poverty-act-to-cut-child-poverty-by-nearly-two-thirds</a>.
-</div>
-<div id="ref-pe_keepyourpay" class="csl-entry" role="listitem">
-Office of Senator Cory Booker. 2026. <em>Booker Announces <span>Keep Your Pay Act</span></em>. <a href="https://www.booker.senate.gov/news/press/booker-announces-keep-your-pay-act">https://www.booker.senate.gov/news/press/booker-announces-keep-your-pay-act</a>.
+Nuffield Foundation. 2024. <em>Enhancing, Localising and Democratising
+Tax-Benefit Policy Analysis</em>. <a
+href="https://www.nuffieldfoundation.org/project/enhancing-localising-and-democratising-tax-benefit-policy-analysis">https://www.nuffieldfoundation.org/project/enhancing-localising-and-democratising-tax-benefit-policy-analysis</a>.
 </div>
 <div id="ref-openfisca" class="csl-entry" role="listitem">
-OpenFisca Contributors. 2024. <em><span>OpenFisca</span>: Open Rules as Code for Tax-Benefit Systems</em>. Released. <a href="https://openfisca.org">https://openfisca.org</a>.
+OpenFisca Contributors. 2024. <em><span>OpenFisca</span>: Open Rules as
+Code for Tax-Benefit Systems</em>. Released. <a
+href="https://openfisca.org">https://openfisca.org</a>.
 </div>
 <div id="ref-orcutt1957" class="csl-entry" role="listitem">
-Orcutt, Guy H. 1957. &ldquo;A New Type of Socio-Economic System.&rdquo; <em>Review of Economics and Statistics</em> 39 (2): 116&ndash;23. <a href="https://doi.org/10.2307/1928528">https://doi.org/10.2307/1928528</a>.
+Orcutt, Guy H. 1957. <span>“A New Type of Socio-Economic System.”</span>
+<em>Review of Economics and Statistics</em> 39 (2): 116–23. <a
+href="https://doi.org/10.2307/1928528">https://doi.org/10.2307/1928528</a>.
 </div>
 <div id="ref-psl2026" class="csl-entry" role="listitem">
-Policy Simulation Library. 2026. <em>PSL</em>. <a href="https://pslmodels.org/">https://pslmodels.org/</a>.
+Policy Simulation Library. 2026. <em><span>Policy Simulation
+Library</span> (<span>PSL</span>)</em>. <a
+href="https://pslmodels.org/">https://pslmodels.org/</a>.
 </div>
 <div id="ref-policyengine_py" class="csl-entry" role="listitem">
-PolicyEngine Contributors. 2026. <em><span class="nocase">policyengine</span></em>. Released. <a href="https://github.com/PolicyEngine/policyengine.py">https://github.com/PolicyEngine/policyengine.py</a>.
+PolicyEngine Contributors. 2026. <em><span
+class="nocase">policyengine</span></em>. V. 3.4.4. Released. <a
+href="https://github.com/PolicyEngine/policyengine.py">https://github.com/PolicyEngine/policyengine.py</a>.
 </div>
-<div id="ref-sutherland2014euromod" class="csl-entry" role="listitem">
-Sutherland, Holly, and Francesco Figari. 2013. &ldquo;<span>EUROMOD</span>: The <span>European Union</span> Tax-Benefit Microsimulation Model.&rdquo; <em>International Journal of Microsimulation</em> 6 (1): 4&ndash;26. <a href="https://doi.org/10.34196/ijm.00075">https://doi.org/10.34196/ijm.00075</a>.
+<div id="ref-sutherland2013euromod" class="csl-entry" role="listitem">
+Sutherland, Holly, and Francesco Figari. 2013.
+<span>“<span>EUROMOD</span>: The <span>European Union</span> Tax-Benefit
+Microsimulation Model.”</span> <em>International Journal of
+Microsimulation</em> 6 (1): 4–26. <a
+href="https://doi.org/10.34196/ijm.00075">https://doi.org/10.34196/ijm.00075</a>.
 </div>
 <div id="ref-tpc2022taxmodel" class="csl-entry" role="listitem">
-Tax Policy Center. 2022. <em>Brief Description of the Tax Model</em>. <a href="https://taxpolicycenter.org/resources/brief-description-tax-model">https://taxpolicycenter.org/resources/brief-description-tax-model</a>.
+Tax Policy Center. 2022. <em>Brief Description of the Tax Model</em>. <a
+href="https://taxpolicycenter.org/resources/brief-description-tax-model">https://taxpolicycenter.org/resources/brief-description-tax-model</a>.
 </div>
 <div id="ref-budgetlab_taxsim_2024" class="csl-entry" role="listitem">
-The Budget Lab at Yale. 2024. <em>Tax Microsimulation at the Budget Lab</em>. <a href="https://budgetlab.yale.edu/research/tax-microsimulation-budget-lab">https://budgetlab.yale.edu/research/tax-microsimulation-budget-lab</a>.
+The Budget Lab at Yale. 2024. <em>Tax Microsimulation at the Budget
+Lab</em>. <a
+href="https://budgetlab.yale.edu/research/tax-microsimulation-budget-lab">https://budgetlab.yale.edu/research/tax-microsimulation-budget-lab</a>.
 </div>
-<div id="ref-budgetlab_costrecovery_2025" class="csl-entry" role="listitem">
-The Budget Lab at Yale. 2025. <em>The Budget Lab&rsquo;s Model for Tax Depreciation</em>. <a href="https://budgetlab.yale.edu/research/budget-labs-model-tax-depreciation">https://budgetlab.yale.edu/research/budget-labs-model-tax-depreciation</a>.
+<div id="ref-budgetlab_costrecovery_2025" class="csl-entry"
+role="listitem">
+The Budget Lab at Yale. 2025. <em>The Budget Lab’s Model for Tax
+Depreciation</em>. <a
+href="https://budgetlab.yale.edu/research/budget-labs-model-tax-depreciation">https://budgetlab.yale.edu/research/budget-labs-model-tax-depreciation</a>.
+</div>
+<div id="ref-trace_trov" class="csl-entry" role="listitem">
+TRACE Project. 2024. <em><span>TRACE Transparent Research Object
+Vocabulary (TROV)</span></em>. <a
+href="https://w3id.org/trace/trov/">https://w3id.org/trace/trov/</a>.
 </div>
 <div id="ref-waters2017taxben" class="csl-entry" role="listitem">
-Waters, Tom. 2017. <em>TAXBEN: The IFS Tax and Benefit Microsimulation Model</em>. The IFS. <a href="https://ifs.org.uk/publications/taxben-ifs-tax-and-benefit-microsimulation-model">https://ifs.org.uk/publications/taxben-ifs-tax-and-benefit-microsimulation-model</a>.
+Waters, Tom. 2017. <em>TAXBEN: The IFS Tax and Benefit Microsimulation
+Model</em>. The IFS. <a
+href="https://ifs.org.uk/publications/taxben-ifs-tax-and-benefit-microsimulation-model">https://ifs.org.uk/publications/taxben-ifs-tax-and-benefit-microsimulation-model</a>.
 </div>
 <div id="ref-woodruff2024nic" class="csl-entry" role="listitem">
-Woodruff, Nikhil. 2024. <em>Raising Employer <span>NIC</span> in the <span>Autumn Budget</span></em>. Institute of Economic Affairs. <a href="https://iea.org.uk/publications/raising-employer-nic-in-the-autumn-budget/">https://iea.org.uk/publications/raising-employer-nic-in-the-autumn-budget/</a>.
+Woodruff, Nikhil. 2024. <em>Raising Employer <span>NIC</span> in the
+<span>Autumn Budget</span></em>. Institute of Economic Affairs. <a
+href="https://iea.org.uk/publications/raising-employer-nic-in-the-autumn-budget/">https://iea.org.uk/publications/raising-employer-nic-in-the-autumn-budget/</a>.
 </div>
 <div id="ref-woodruff2025tax" class="csl-entry" role="listitem">
-Woodruff, Nikhil. 2025. <em>Impact of Tax Changes 2025&ndash;2026</em>. Institute of Economic Affairs. <a href="https://iea.org.uk/publications/impact-of-tax-changes-2025-2026/">https://iea.org.uk/publications/impact-of-tax-changes-2025-2026/</a>.
+Woodruff, Nikhil. 2025. <em>Impact of Tax Changes 2025–2026</em>.
+Institute of Economic Affairs. <a
+href="https://iea.org.uk/publications/impact-of-tax-changes-2025-2026/">https://iea.org.uk/publications/impact-of-tax-changes-2025-2026/</a>.
 </div>
 <div id="ref-no10fellowship2026" class="csl-entry" role="listitem">
-Woodruff, Nikhil. 2026. <em>Informing Policy Using Micro-Simulations</em>. No10 Innovation Fellowship. <a href="https://policyengine.org/ca/research/policyengine-10-downing-street">https://policyengine.org/ca/research/policyengine-10-downing-street</a>.
+Woodruff, Nikhil. 2026. <em>Informing Policy Using
+Micro-Simulations</em>. <a
+href="https://policyengine.org/ca/research/policyengine-10-downing-street">https://policyengine.org/ca/research/policyengine-10-downing-street</a>.
 </div>
-<div id="ref-woodruff2024enhanced_cps" class="csl-entry" role="listitem">
-Woodruff, Nikhil, and Max Ghenis. 2024. &ldquo;Enhancing Survey Microdata with Administrative Records: A Novel Approach to Microsimulation Dataset Construction.&rdquo; <a href="https://github.com/PolicyEngine/policyengine-us-data/tree/main/paper">https://github.com/PolicyEngine/policyengine-us-data/tree/main/paper</a>.
+<div id="ref-woodruff2024enhanced_cps" class="csl-entry"
+role="listitem">
+Woodruff, Nikhil, and Max Ghenis. 2024. <span>“Enhancing Survey
+Microdata with Administrative Records: A Novel Approach to
+Microsimulation Dataset Construction.”</span> <a
+href="https://github.com/PolicyEngine/policyengine-us-data/tree/main/paper">https://github.com/PolicyEngine/policyengine-us-data/tree/main/paper</a>.
 </div>
 <div id="ref-policyengine_core" class="csl-entry" role="listitem">
-Woodruff, Nikhil, Max Ghenis, and Anthony Volk. 2024. <em><span>PolicyEngine Core</span>: A Microsimulation Framework</em>. Released. <a href="https://github.com/PolicyEngine/policyengine-core">https://github.com/PolicyEngine/policyengine-core</a>.
-</div>
-<div id="ref-youngman2026carbon" class="csl-entry" role="listitem">
-Youngman, Tom, Tim Lennox, M. Lopes Alves, et al. 2026. <em>Agent-Based Macroeconomics for the <span>UK</span>&rsquo;s <span>Seventh Carbon Budget</span></em>. <a href="https://arxiv.org/abs/2602.15607">https://arxiv.org/abs/2602.15607</a>.
+Woodruff, Nikhil, Max Ghenis, and Anthony Volk. 2024.
+<em><span>PolicyEngine Core</span>: A Microsimulation Framework</em>.
+Released. <a
+href="https://github.com/PolicyEngine/policyengine-core">https://github.com/PolicyEngine/policyengine-core</a>.
 </div>
 </div>
 </article>
