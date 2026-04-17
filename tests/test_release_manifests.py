@@ -45,11 +45,11 @@ class TestReleaseManifests:
         manifest = get_release_manifest("us")
 
         assert manifest.schema_version == 1
-        assert manifest.bundle_id == "us-3.4.0"
+        assert manifest.bundle_id == "us-3.4.6"
         assert manifest.country_id == "us"
-        assert manifest.policyengine_version == "3.4.0"
+        assert manifest.policyengine_version == "3.4.6"
         assert manifest.model_package.name == "policyengine-us"
-        assert manifest.model_package.version == "1.602.0"
+        assert manifest.model_package.version == "1.647.0"
         assert manifest.data_package.name == "policyengine-us-data"
         assert manifest.data_package.version == "1.73.0"
         assert manifest.data_package.repo_id == "policyengine/policyengine-us-data"
@@ -60,18 +60,18 @@ class TestReleaseManifests:
         assert manifest.certified_data_artifact.dataset == "enhanced_cps_2024"
         assert manifest.certification is not None
         assert manifest.certification.data_build_id == "policyengine-us-data-1.73.0"
-        assert manifest.certification.built_with_model_version == "1.602.0"
-        assert manifest.certification.certified_for_model_version == "1.602.0"
+        assert manifest.certification.built_with_model_version == "1.647.0"
+        assert manifest.certification.certified_for_model_version == "1.647.0"
 
     def test__given_uk_manifest__then_has_pinned_model_and_data_packages(self):
         manifest = get_release_manifest("uk")
 
         assert manifest.schema_version == 1
-        assert manifest.bundle_id == "uk-3.4.0"
+        assert manifest.bundle_id == "uk-3.4.6"
         assert manifest.country_id == "uk"
-        assert manifest.policyengine_version == "3.4.0"
+        assert manifest.policyengine_version == "3.4.6"
         assert manifest.model_package.name == "policyengine-uk"
-        assert manifest.model_package.version == "2.74.0"
+        assert manifest.model_package.version == "2.88.0"
         assert manifest.data_package.name == "policyengine-uk-data"
         assert manifest.data_package.version == "1.40.4"
         assert (
@@ -84,8 +84,8 @@ class TestReleaseManifests:
         assert manifest.certified_data_artifact.dataset == "enhanced_frs_2023_24"
         assert manifest.certification is not None
         assert manifest.certification.data_build_id == "policyengine-uk-data-1.40.4"
-        assert manifest.certification.built_with_model_version == "2.74.0"
-        assert manifest.certification.certified_for_model_version == "2.74.0"
+        assert manifest.certification.built_with_model_version == "2.88.0"
+        assert manifest.certification.certified_for_model_version == "2.88.0"
 
     def test__given_us_dataset_name__then_resolves_to_versioned_hf_url(self):
         resolved = resolve_dataset_reference("us", "enhanced_cps_2024")

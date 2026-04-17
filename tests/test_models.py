@@ -29,7 +29,7 @@ class TestUKModel:
         assert uk_latest.release_manifest is not None
         assert uk_latest.release_manifest.country_id == "uk"
         assert uk_latest.model_package.name == "policyengine-uk"
-        assert uk_latest.model_package.version == "2.74.0"
+        assert uk_latest.model_package.version == "2.88.0"
         assert uk_latest.data_package.name == "policyengine-uk-data"
         assert uk_latest.data_package.version == "1.40.4"
         assert (
@@ -113,7 +113,7 @@ class TestUSModel:
         assert us_latest.release_manifest is not None
         assert us_latest.release_manifest.country_id == "us"
         assert us_latest.model_package.name == "policyengine-us"
-        assert us_latest.model_package.version == "1.602.0"
+        assert us_latest.model_package.version == "1.647.0"
         assert us_latest.data_package.name == "policyengine-us-data"
         assert us_latest.data_package.version == "1.73.0"
         assert (
