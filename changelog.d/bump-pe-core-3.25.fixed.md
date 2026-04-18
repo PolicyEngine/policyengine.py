@@ -1,0 +1,1 @@
+Bump `policyengine_core` minimum to `>=3.25.0`. Includes the `set_input` preservation fix from PolicyEngine/policyengine-core#475 that restores UK household-impact calculations after `apply_reform` (#1628). All 11 `tests/test_household_impact.py` cases pass on the new pin.
