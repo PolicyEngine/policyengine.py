@@ -9,7 +9,7 @@ than at build time when resolve-posts tries to render templates.
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, Union
 
 from pydantic import BaseModel, model_validator
 
@@ -19,13 +19,13 @@ class ResultsMetadata(BaseModel):
 
     title: str
     repo: str
-    slug: str | None = None
-    commit: str | None = None
-    generated_at: str | None = None
-    policyengine_version: str | None = None
-    dataset: str | None = None
-    country_id: str | None = None
-    year: int | None = None
+    slug: Optional[str] = None
+    commit: Optional[str] = None
+    generated_at: Optional[str] = None
+    policyengine_version: Optional[str] = None
+    dataset: Optional[str] = None
+    country_id: Optional[str] = None
+    year: Optional[int] = None
 
 
 class ValueEntry(BaseModel):
@@ -107,7 +107,7 @@ class ResultsJson(BaseModel):
     tables: dict[str, TableEntry] = {}
     charts: dict[str, ChartEntry] = {}
 
-    def write(self, path: str | Path) -> None:
+    def write(self, path: Union[str, Path]) -> None:
         """Write validated results.json to disk."""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
