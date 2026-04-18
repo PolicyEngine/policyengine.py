@@ -52,8 +52,7 @@ class TableEntry(BaseModel):
         for i, row in enumerate(self.rows):
             if len(row) != n_cols:
                 raise ValueError(
-                    f"Row {i} has {len(row)} columns but headers "
-                    f"has {n_cols}"
+                    f"Row {i} has {len(row)} columns but headers has {n_cols}"
                 )
         return self
 

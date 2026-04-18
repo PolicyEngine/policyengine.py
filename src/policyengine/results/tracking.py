@@ -56,9 +56,7 @@ def tracked_value(
     frame = inspect.stack()[_stack_offset]
     line = frame.lineno
 
-    source_url = (
-        f"https://github.com/{repo}/blob/{branch}/{filename}#L{line}"
-    )
+    source_url = f"https://github.com/{repo}/blob/{branch}/{filename}#L{line}"
 
     return {
         "value": value,
