@@ -403,8 +403,21 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
                 if target_col in id_columns:
                     data["person"][target_col] = person_input_df[col].values
 
-        # Then calculate non-ID, non-weight variables from simulation
-        for entity, variables in self.entity_variables.items():
+        # Then calculate non-ID, non-weight variables from simulation,
+        # merging the model version's default entity_variables with any
+        # extra variables requested on the Simulation.
+        combined: dict[str, list[str]] = {
+            entity: list(variables)
+            for entity, variables in self.entity_variables.items()
+        }
+        for entity, extras in (simulation.extra_variables or {}).items():
+            combined.setdefault(entity, [])
+            for var in extras:
+                if var not in combined[entity]:
+                    combined[entity].append(var)
+        for entity, variables in combined.items():
+            if entity not in data:
+                data[entity] = pd.DataFrame()
             for var in variables:
                 if var not in id_columns and var not in weight_columns:
                     data[entity][var] = microsim.calculate(

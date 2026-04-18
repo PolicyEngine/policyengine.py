@@ -200,3 +200,52 @@ class TestUSHouseholdImpact:
         json_dict = household.model_dump()
         assert isinstance(json_dict, dict)
         assert "people" in json_dict
+
+
+class TestExtraVariables:
+    """Callers can request variables beyond the bundled entity_variables."""
+
+    def test__given_extra_tax_unit_variable__then_output_includes_it(self):
+        # adjusted_gross_income is not in us_latest.entity_variables["tax_unit"]
+        # by default; this is the class of variables benchmark suites need.
+        assert "adjusted_gross_income" not in us_latest.entity_variables["tax_unit"]
+
+        household = USHouseholdInput(
+            people=[
+                {
+                    "age": 35,
+                    "employment_income": 60000,
+                    "is_tax_unit_head": True,
+                }
+            ],
+            year=2026,
+        )
+        result = calculate_us_household_impact(
+            household,
+            extra_variables={"tax_unit": ["adjusted_gross_income"]},
+        )
+
+        assert "adjusted_gross_income" in result.tax_unit[0]
+        assert result.tax_unit[0]["adjusted_gross_income"] > 0
+
+    def test__given_extra_household_variable__then_output_includes_it(self):
+        household = USHouseholdInput(
+            people=[{"age": 35, "employment_income": 60000}],
+            year=2026,
+        )
+        result = calculate_us_household_impact(
+            household,
+            extra_variables={"household": ["household_market_income"]},
+        )
+
+        assert "household_market_income" in result.household
+
+    def test__given_no_extra__then_output_matches_default(self):
+        household = USHouseholdInput(
+            people=[{"age": 35, "employment_income": 60000}],
+            year=2026,
+        )
+        default = calculate_us_household_impact(household)
+        extra = calculate_us_household_impact(household, extra_variables={})
+
+        assert set(default.tax_unit[0].keys()) == set(extra.tax_unit[0].keys())

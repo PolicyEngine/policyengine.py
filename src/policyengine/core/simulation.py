@@ -44,6 +44,15 @@ class Simulation(BaseModel):
 
     tax_benefit_model_version: TaxBenefitModelVersion = None
 
+    extra_variables: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description=(
+            "Additional variables to calculate beyond the model version's "
+            "default entity_variables, keyed by entity name. Use when a "
+            "caller needs variables that are not in the bundled default set."
+        ),
+    )
+
     @model_validator(mode="after")
     def _auto_construct_strategy(self) -> "Simulation":
         """Auto-construct a RowFilterStrategy from legacy filter fields.

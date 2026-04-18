@@ -55,8 +55,15 @@ class USHouseholdInput(BaseModel):
 def calculate_household_impact(
     household_input: USHouseholdInput,
     policy: Optional[Policy] = None,
+    extra_variables: Optional[dict[str, list[str]]] = None,
 ) -> USHouseholdOutput:
-    """Calculate tax and benefit impacts for a single US household."""
+    """Calculate tax and benefit impacts for a single US household.
+
+    ``extra_variables`` is a mapping from entity name (``person``,
+    ``tax_unit``, ``household``, etc.) to additional variable names to
+    compute beyond ``us_latest.entity_variables``. Useful for benchmark
+    suites that need variables outside the bundled default set.
+    """
     n_people = len(household_input.people)
 
     # Build person data with defaults
@@ -148,6 +155,7 @@ def calculate_household_impact(
         dataset=dataset,
         tax_benefit_model_version=us_latest,
         policy=policy,
+        extra_variables=extra_variables or {},
     )
     simulation.run()
 
@@ -161,13 +169,22 @@ def calculate_household_impact(
         except (ValueError, TypeError):
             return str(value)
 
+    extras = extra_variables or {}
+
+    def variables_for(entity_name: str) -> list[str]:
+        default = list(us_latest.entity_variables.get(entity_name, []))
+        for var in extras.get(entity_name, []):
+            if var not in default:
+                default.append(var)
+        return default
+
     def extract_entity_outputs(
         entity_name: str, entity_data, n_rows: int
     ) -> list[dict[str, Any]]:
         outputs = []
         for i in range(n_rows):
             row_dict = {}
-            for var in us_latest.entity_variables[entity_name]:
+            for var in variables_for(entity_name):
                 row_dict[var] = safe_convert(entity_data[var].iloc[i])
             outputs.append(row_dict)
         return outputs
@@ -182,7 +199,7 @@ def calculate_household_impact(
         tax_unit=extract_entity_outputs("tax_unit", output_data.tax_unit, 1),
         household={
             var: safe_convert(output_data.household[var].iloc[0])
-            for var in us_latest.entity_variables["household"]
+            for var in variables_for("household")
         },
     )
 

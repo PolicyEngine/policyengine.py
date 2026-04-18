@@ -376,7 +376,18 @@ class PolicyEngineUKLatest(TaxBenefitModelVersion):
             "household": pd.DataFrame(),
         }
 
-        for entity, variables in self.entity_variables.items():
+        combined: dict[str, list[str]] = {
+            entity: list(variables)
+            for entity, variables in self.entity_variables.items()
+        }
+        for entity, extras in (simulation.extra_variables or {}).items():
+            combined.setdefault(entity, [])
+            for var in extras:
+                if var not in combined[entity]:
+                    combined[entity].append(var)
+        for entity, variables in combined.items():
+            if entity not in data:
+                data[entity] = pd.DataFrame()
             for var in variables:
                 data[entity][var] = microsim.calculate(
                     var, period=simulation.dataset.year, map_to=entity
