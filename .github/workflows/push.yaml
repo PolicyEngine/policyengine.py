@@ -118,7 +118,7 @@ jobs:
       - name: Preview changelog update
         run: ".github/get-changelog-diff.sh"
       - name: Install package for TRO regeneration
-        run: pip install -e .
+        run: pip install -e . h5py
       - name: Regenerate bundled TRACE TROs
         env:
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
