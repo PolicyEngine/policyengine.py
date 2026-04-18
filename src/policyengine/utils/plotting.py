@@ -2,7 +2,9 @@
 
 Requires plotly, which is installed via the ``[plotting]`` extra
 (``pip install policyengine[plotting]``). Importing from this module
-fails with a clear error when plotly is absent.
+fails with a clear error when plotly is absent. Brand tokens
+(``COLORS``, font constants) live in :mod:`policyengine.utils.design`
+so they can be imported without plotly.
 """
 
 from typing import TYPE_CHECKING, Optional
@@ -18,26 +20,22 @@ except ImportError as exc:  # pragma: no cover
 if TYPE_CHECKING:
     import plotly.graph_objects as go  # noqa: F401
 
-# PolicyEngine brand colours
-COLORS = {
-    "primary": "#319795",  # Teal
-    "primary_light": "#E6FFFA",
-    "primary_dark": "#1D4044",
-    "success": "#22C55E",  # Green (positive changes)
-    "warning": "#FEC601",  # Yellow (cautions)
-    "error": "#EF4444",  # Red (negative changes)
-    "info": "#1890FF",  # Blue (neutral info)
-    "gray_light": "#F2F4F7",
-    "gray": "#667085",
-    "gray_dark": "#101828",
-    "blue_secondary": "#026AA2",
-}
+from .design import (
+    COLORS,
+    FONT_FAMILY,
+    FONT_SIZE_DEFAULT,
+    FONT_SIZE_LABEL,
+    FONT_SIZE_TITLE,
+)
 
-# Typography
-FONT_FAMILY = "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-FONT_SIZE_LABEL = 12
-FONT_SIZE_DEFAULT = 14
-FONT_SIZE_TITLE = 16
+__all__ = [
+    "COLORS",
+    "FONT_FAMILY",
+    "FONT_SIZE_DEFAULT",
+    "FONT_SIZE_LABEL",
+    "FONT_SIZE_TITLE",
+    "format_fig",
+]
 
 
 def format_fig(
