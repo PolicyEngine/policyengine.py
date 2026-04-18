@@ -170,18 +170,20 @@ def _make_location(location_id: str, artifact_id: str, location: str) -> dict[st
     }
 
 
+_COMPOSITION_ID = "composition/1"
+_ARRANGEMENT_ID = "arrangement/1"
+
+
 def _assemble_composition_and_arrangement(
     artifact_specs: list[dict[str, Any]],
     *,
-    composition_id: str = "composition/1",
-    arrangement_id: str = "arrangement/1",
     arrangement_comment: Optional[str] = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     artifacts: list[dict[str, Any]] = []
     locations: list[dict[str, Any]] = []
     hashes: list[str] = []
     for spec in artifact_specs:
-        artifact_id = f"{composition_id}/artifact/{spec['id']}"
+        artifact_id = f"{_COMPOSITION_ID}/artifact/{spec['id']}"
         hashes.append(spec["hash"])
         artifacts.append(
             _make_artifact(
@@ -193,24 +195,24 @@ def _assemble_composition_and_arrangement(
         )
         locations.append(
             _make_location(
-                f"{arrangement_id}/location/{spec['id']}",
+                f"{_ARRANGEMENT_ID}/location/{spec['id']}",
                 artifact_id,
                 spec["location"],
             )
         )
 
     composition = {
-        "@id": composition_id,
+        "@id": _COMPOSITION_ID,
         "@type": "trov:ArtifactComposition",
         "trov:hasFingerprint": {
-            "@id": f"{composition_id}/fingerprint",
+            "@id": f"{_COMPOSITION_ID}/fingerprint",
             "@type": "trov:CompositionFingerprint",
             "trov:sha256": compute_trace_composition_fingerprint(hashes),
         },
         "trov:hasArtifact": artifacts,
     }
     arrangement: dict[str, Any] = {
-        "@id": arrangement_id,
+        "@id": _ARRANGEMENT_ID,
         "@type": "trov:ArtifactArrangement",
         "trov:hasArtifactLocation": locations,
     }
@@ -230,7 +232,6 @@ def _policyengine_trs(comment: str) -> dict[str, Any]:
 
 def _assemble_tro_node(
     *,
-    tro_id: str = "tro",
     tro_name: str,
     tro_description: str,
     created_at: Optional[str],
@@ -240,9 +241,10 @@ def _assemble_tro_node(
     composition: Mapping[str, Any],
     arrangement: Mapping[str, Any],
     performance: Mapping[str, Any],
+    self_url: Optional[str] = None,
 ) -> dict[str, Any]:
     node: dict[str, Any] = {
-        "@id": tro_id,
+        "@id": "tro",
         "@type": "trov:TransparentResearchObject",
         "schema:name": tro_name,
         "schema:description": tro_description,
@@ -259,6 +261,8 @@ def _assemble_tro_node(
     }
     if created_at is not None:
         node["schema:dateCreated"] = created_at
+    if self_url is not None:
+        node["pe:selfUrl"] = self_url
     return node
 
 
@@ -272,7 +276,7 @@ def build_trace_tro_from_release_bundle(
     model_wheel_sha256: Optional[str] = None,
     model_wheel_url: Optional[str] = None,
     fetch_pypi: Any = fetch_pypi_wheel_metadata,
-    emission_context: Optional[Mapping[str, str]] = None,
+    self_url: Optional[str] = None,
 ) -> dict:
     """Build a TRACE TRO for a certified runtime bundle.
 
@@ -280,6 +284,17 @@ def build_trace_tro_from_release_bundle(
     certified dataset, and (when resolvable) the country model wheel.
     Certification metadata is encoded as structured ``pe:*`` fields on
     the :class:`trov:TransparentResearchPerformance` node.
+
+    ``self_url`` is recorded on the TRO node as ``pe:selfUrl`` so a
+    verifier who has only the bundle bytes can still discover the
+    canonical location this TRO was published at.
+
+    .. note::
+       ``pe:compatibilityBasis`` covers the model and data layers only.
+       The Python interpreter version, OS, and transitive dependency
+       lockfile are not yet pinned in the TRO composition — reviewers
+       who require bit-exact reproducibility of the runtime stack need
+       to consult the wheel's own metadata and should flag the gap.
     """
     certified_artifact = country_manifest.certified_data_artifact
     if certified_artifact is None:
@@ -394,11 +409,7 @@ def build_trace_tro_from_release_bundle(
             else country_manifest.published_at
         ),
         ended_at=country_manifest.published_at,
-        emission_context=(
-            dict(emission_context)
-            if emission_context is not None
-            else _emission_context()
-        ),
+        emission_context=_emission_context(),
     )
 
     tro_node = _assemble_tro_node(
@@ -425,6 +436,7 @@ def build_trace_tro_from_release_bundle(
         composition=composition,
         arrangement=arrangement,
         performance=performance,
+        self_url=self_url,
     )
 
     return {"@context": TRACE_CONTEXT, "@graph": [tro_node]}
@@ -485,11 +497,21 @@ def serialize_trace_tro(tro: Mapping) -> bytes:
 
 
 def extract_bundle_tro_reference(tro: Mapping) -> dict[str, Any]:
-    """Extract a compact reference to a bundle TRO for use as a simulation input."""
+    """Extract a compact reference to a bundle TRO for use as a simulation input.
+
+    Locates the ``trov:TransparentResearchObject`` node explicitly rather
+    than trusting ``@graph[0]`` so future TROs that embed additional
+    nodes (TRS, TSA) do not break reference extraction.
+    """
     graph = tro.get("@graph") or []
-    if not graph:
-        raise ValueError("TRO has an empty graph.")
-    node = graph[0]
+    node = next(
+        (n for n in graph if n.get("@type") == "trov:TransparentResearchObject"),
+        None,
+    )
+    if node is None:
+        raise ValueError(
+            "TRO graph does not contain a trov:TransparentResearchObject node."
+        )
     composition = node.get("trov:hasComposition") or {}
     fingerprint = (
         composition.get("trov:hasFingerprint", {}).get("trov:sha256")
@@ -498,12 +520,14 @@ def extract_bundle_tro_reference(tro: Mapping) -> dict[str, Any]:
     )
     if fingerprint is None:
         raise ValueError("TRO is missing a composition fingerprint.")
+    self_url = node.get("pe:selfUrl")
     return {
         "fingerprint": fingerprint,
         "name": node.get("schema:name"),
         "policyengine_version": (
             node.get("trov:createdWith", {}).get("schema:softwareVersion")
         ),
+        "self_url": self_url,
     }
 
 
@@ -520,7 +544,6 @@ def build_simulation_trace_tro(
     reform_location: Optional[str] = None,
     bundle_tro_location: Optional[str] = None,
     bundle_tro_url: Optional[str] = None,
-    emission_context: Optional[Mapping[str, str]] = None,
 ) -> dict:
     """Build a per-simulation TRO chaining a bundle TRO to a results payload.
 
@@ -590,9 +613,7 @@ def build_simulation_trace_tro(
         performance["trov:startedAtTime"] = started_at or created_at
     if created_at is not None:
         performance["trov:endedAtTime"] = created_at
-    performance.update(
-        dict(emission_context) if emission_context is not None else _emission_context()
-    )
+    performance.update(_emission_context())
 
     tro_node = _assemble_tro_node(
         tro_name=f"policyengine simulation TRO ({simulation_slug})",

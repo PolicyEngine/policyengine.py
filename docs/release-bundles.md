@@ -266,7 +266,9 @@ and confirm it matches the `bundle_tro` artifact hash in the simulation
 TRO's composition. Without this anchor, the bundle reference is only as
 trustworthy as whoever produced the JSON.
 
-#### Validating a TRO
+#### Validating a received TRO
+
+Structural validation:
 
 ```
 policyengine trace-tro-validate path/to/tro.jsonld
@@ -278,6 +280,39 @@ checks structural fields, canonical hex-encoded sha256s, the required
 well-known local paths `results.json`, `reform.json`,
 `bundle.trace.tro.jsonld`). The same schema is exercised in the test
 suite against generated TROs.
+
+Content validation (the verifier workflow a replication reviewer
+should run):
+
+```python
+import hashlib, json, requests
+from policyengine.core.trace_tro import canonical_json_bytes
+
+sim_tro = json.load(open("results.trace.tro.jsonld"))
+perf = sim_tro["@graph"][0]["trov:hasPerformance"]
+
+# 1. Fetch the bundle TRO from its pinned URL and recompute its hash.
+bundle_bytes = requests.get(perf["pe:bundleTroUrl"]).content
+bundle_hash = hashlib.sha256(canonical_json_bytes(json.loads(bundle_bytes))).hexdigest()
+
+# 2. Compare against the hash recorded in the simulation TRO's composition.
+recorded = next(
+    a["trov:sha256"]
+    for a in sim_tro["@graph"][0]["trov:hasComposition"]["trov:hasArtifact"]
+    if a["@id"].endswith("bundle_tro")
+)
+assert bundle_hash == recorded, "bundle_tro_url content does not match sim TRO"
+
+# 3. Confirm the fingerprint recorded on the performance matches the
+#    fingerprint inside the fetched bundle.
+bundle = json.loads(bundle_bytes)
+bundle_fp = bundle["@graph"][0]["trov:hasComposition"]["trov:hasFingerprint"]["trov:sha256"]
+assert perf["pe:bundleFingerprint"] == bundle_fp
+```
+
+A sim TRO with a swapped `bundle_tro` dict but a truthful
+`pe:bundleTroUrl` will fail step 2; a sim TRO with both swapped will
+fail step 3.
 
 #### Known limitations
 

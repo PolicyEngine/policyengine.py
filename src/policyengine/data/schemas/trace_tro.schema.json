@@ -72,7 +72,7 @@
         },
         "trov:hasLocation": {
           "type": "string",
-          "pattern": "^(https://|data/|reform\\.json$|results\\.json$|bundle\\.trace\\.tro\\.jsonld)"
+          "pattern": "^(https://[^\\s]+$|data/release_manifests/[a-z]{2,3}\\.json$|reform\\.json$|results\\.json$|bundle\\.trace\\.tro\\.jsonld(#[a-f0-9]{64})?$)"
         }
       }
     },

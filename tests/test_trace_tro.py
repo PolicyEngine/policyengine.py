@@ -309,6 +309,66 @@ class TestBundleTRO:
         )
         assert first == second
 
+    def test__given_fixed_ci_env__then_tro_bytes_match_across_builds(self, monkeypatch):
+        # Two builds inside the same CI run must produce identical bytes,
+        # including the pe:ciRunUrl / pe:ciGitSha attestation fields.
+        monkeypatch.setenv("GITHUB_ACTIONS", "true")
+        monkeypatch.setenv("GITHUB_SERVER_URL", "https://github.com")
+        monkeypatch.setenv("GITHUB_REPOSITORY", "PolicyEngine/policyengine.py")
+        monkeypatch.setenv("GITHUB_RUN_ID", "999")
+        monkeypatch.setenv("GITHUB_SHA", "cafef00d")
+        first = serialize_trace_tro(
+            build_trace_tro_from_release_bundle(
+                get_release_manifest("us"),
+                _us_data_release_manifest(),
+                fetch_pypi=_fake_fetch_pypi,
+            )
+        )
+        get_release_manifest.cache_clear()
+        second = serialize_trace_tro(
+            build_trace_tro_from_release_bundle(
+                get_release_manifest("us"),
+                _us_data_release_manifest(),
+                fetch_pypi=_fake_fetch_pypi,
+            )
+        )
+        assert first == second
+
+    def test__given_self_url__then_tro_records_it(self):
+        self_url = (
+            "https://raw.githubusercontent.com/PolicyEngine/policyengine.py/"
+            "v3.4.5/src/policyengine/data/release_manifests/us.trace.tro.jsonld"
+        )
+        tro = build_trace_tro_from_release_bundle(
+            get_release_manifest("us"),
+            _us_data_release_manifest(),
+            fetch_pypi=_fake_fetch_pypi,
+            self_url=self_url,
+        )
+        assert tro["@graph"][0]["pe:selfUrl"] == self_url
+
+    def test__given_graph_with_multiple_nodes__then_extract_finds_tro(self):
+        tro = build_trace_tro_from_release_bundle(
+            get_release_manifest("us"),
+            _us_data_release_manifest(),
+            fetch_pypi=_fake_fetch_pypi,
+        )
+        # Inject a decoy node ahead of the TRO in the graph.
+        decoy_tro = {
+            "@context": tro["@context"],
+            "@graph": [
+                {"@id": "decoy", "@type": "schema:Thing"},
+                tro["@graph"][0],
+            ],
+        }
+        reference = extract_bundle_tro_reference(decoy_tro)
+        assert (
+            reference["fingerprint"]
+            == tro["@graph"][0]["trov:hasComposition"]["trov:hasFingerprint"][
+                "trov:sha256"
+            ]
+        )
+
     def test__given_hashes_in_any_order__then_fingerprint_matches(self):
         hashes = ["c" * 64, "a" * 64, "b" * 64]
         assert compute_trace_composition_fingerprint(
@@ -532,10 +592,15 @@ class TestSimulationTRO:
     def test__given_write_helper__then_results_and_tro_files_are_sidebyside(
         self, tmp_path, us_bundle_tro
     ):
+        bundle_url = (
+            "https://raw.githubusercontent.com/PolicyEngine/policyengine.py/"
+            "v3.4.5/src/policyengine/data/release_manifests/us.trace.tro.jsonld"
+        )
         written = write_results_with_trace_tro(
             self._results(),
             tmp_path / "results.json",
             bundle_tro=us_bundle_tro,
+            bundle_tro_url=bundle_url,
             reform_payload={"salt_cap": 0},
         )
 
@@ -544,6 +609,22 @@ class TestSimulationTRO:
         assert written["tro"].name == "results.trace.tro.jsonld"
         tro_payload = json.loads(written["tro"].read_text())
         assert tro_payload["@graph"][0]["schema:creator"] == POLICYENGINE_ORGANIZATION
+        assert (
+            tro_payload["@graph"][0]["trov:hasPerformance"]["pe:bundleTroUrl"]
+            == bundle_url
+        )
+
+    def test__given_write_helper_without_url__then_raises(
+        self, tmp_path, us_bundle_tro
+    ):
+        import pytest
+
+        with pytest.raises(TypeError):
+            write_results_with_trace_tro(
+                self._results(),
+                tmp_path / "results.json",
+                bundle_tro=us_bundle_tro,
+            )
 
 
 class TestCLI:
