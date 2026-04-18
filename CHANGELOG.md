@@ -1,3 +1,55 @@
+## [3.6.0] - 2026-04-18
+
+### Added
+
+- `certify_data_release_compatibility` now accepts full PEP 440 version
+  specifiers (`>=1.637.0,<2.0.0`, `~=1.637`, etc.) in a data release
+  manifest's `compatible_model_packages`, not only `==X.Y.Z`. This lets
+  the US data package declare a range of compatible `policyengine-us`
+  versions when the `data_build_fingerprint` is known to be stable
+  across them, avoiding the need to regenerate the dataset for every
+  model patch release. Adds `packaging>=23.0` as a direct dependency.
+- TRACE TRO hardening: bundle TROs now hash the country model wheel (read from
+  `PackageVersion.sha256` when present, otherwise fetched from PyPI), use HTTPS
+  artifact locations, carry structured `pe:*` certification fields and GitHub
+  Actions attestation metadata, and are validated in CI against a shipped JSON
+  Schema. Adds a `policyengine trace-tro` CLI, per-simulation TROs through
+  `policyengine.results.build_results_trace_tro` / `write_results_with_trace_tro`,
+  and restores the `TaxBenefitModelVersion.trace_tro` property and
+  `policyengine.core` re-exports that were dropped in #276.
+
+### Changed
+
+- TRACE TRO emission now conforms to the public TROv 2023/05 vocabulary:
+  switched namespace to `https://w3id.org/trace/2023/05/trov#`, flattened
+  `trov:hash` nodes to the native `trov:sha256` property, renamed
+  `trov:path`→`trov:hasLocation` and the inverse pointer on ArtifactLocation
+  to `trov:hasArtifact`, corrected `TrustedResearchSystem`→`TransparentResearchSystem`
+  and `TrustedResearchPerformance`→`TransparentResearchPerformance`, and replaced
+  the locally-invented `ArrangementBinding` chain with
+  `trov:accessedArrangement` as used by the published trov-demos. Every TRO
+  now carries `pe:emittedIn` (`"local"` or `"github-actions"`) so a verifier
+  can distinguish a CI-emitted TRO from a laptop rebuild. Per-simulation TROs
+  accept a `bundle_tro_url` that is recorded as `pe:bundleTroUrl`, letting a
+  verifier independently fetch and re-hash the bundle to detect a forged
+  reference. The composition fingerprint now joins hashes with `\n` to
+  prevent hex-length concatenation collisions. Adds `policyengine
+  trace-tro-validate` CLI, removes the broken `--offline` flag, wires
+  `scripts/generate_trace_tros.py` into the `Versioning` CI job so bundled
+  TROs ship with every release, inlines the real model wheel sha256 on
+  `us.json`/`uk.json`, and cleans up the dead `DataReleaseArtifact.https_uri`
+  / `_data_release_manifest_url` helpers.
+- Bump the bundled US release manifest to `policyengine-us==1.653.3` (from
+  1.647.0) to unblock downstream projects that want to pin the latest
+  working model version through `policyengine.py`. The dataset stays at
+  `policyengine-us-data==1.73.0` (the latest US data release tagged on
+  Hugging Face); certification is now
+  `matching_data_build_fingerprint` with `built_with_model_version`
+  recording the 1.647.0 that actually produced the data. Both bundled
+  manifests (`us.json`, `uk.json`) update `policyengine_version` and
+  `bundle_id` to 3.5.0 to match the current package version.
+
+
 ## [3.5.0] - 2026-04-18
 
 ### Added
