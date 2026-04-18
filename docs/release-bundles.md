@@ -195,19 +195,67 @@ TRACE sits on top of those manifests as a standards-based export layer.
 
 ### What gets exported
 
-Country `*-data` repos should emit a `trace.tro.jsonld` file for each published data
-release. That TRO should cover:
-
-- the release manifest itself
-- each published artifact hash listed in the release manifest
-- the build-time model provenance recorded in the release manifest
-
-`policyengine.py` should emit a separate certified-bundle TRO. That TRO should cover:
+`policyengine.py` emits a certified-bundle TRO for each supported country. The
+composition pins four artifacts by sha256:
 
 - the bundled country release manifest shipped in `policyengine.py`
 - the country data release manifest resolved for the certified data package version
-- the certified dataset artifact hash
-- the certification basis used to allow runtime reuse
+- the certified dataset artifact
+- the country model wheel published to PyPI (hash read from the bundled manifest
+  when present, otherwise fetched from the PyPI JSON API at emit time)
+
+Every artifact location in the TRO is a dereferenceable HTTPS URI or a path
+relative to the shipped wheel. Certification metadata is carried as structured
+`pe:*` fields on the `trov:TrustedResearchPerformance` node so downstream
+tooling can read `pe:certifiedForModelVersion`, `pe:compatibilityBasis`,
+`pe:builtWithModelVersion`, `pe:dataBuildFingerprint`, and `pe:dataBuildId`
+without parsing prose. When emitted under GitHub Actions, the TRO also carries
+`pe:ciRunUrl` and `pe:ciGitSha` attestation.
+
+Country `*-data` repos should also emit a matching `trace.tro.jsonld` per
+data release covering the release manifest and every staged artifact hash.
+That is a country-data concern and lives in those repos.
+
+#### Emitting a TRO
+
+From Python:
+
+```python
+from policyengine.core.release_manifest import get_data_release_manifest, get_release_manifest
+from policyengine.core.trace_tro import build_trace_tro_from_release_bundle, serialize_trace_tro
+
+country = get_release_manifest("us")
+tro = build_trace_tro_from_release_bundle(country, get_data_release_manifest("us"))
+Path("us.trace.tro.jsonld").write_bytes(serialize_trace_tro(tro))
+```
+
+From the CLI:
+
+```
+policyengine trace-tro us --out us.trace.tro.jsonld
+```
+
+Per-simulation TROs chain a bundle TRO to a reform plus a `results.json`
+payload. Use `policyengine.results.write_results_with_trace_tro` to emit the
+pair alongside each published result.
+
+#### Schema validation
+
+Generated TROs are validated against
+`policyengine/data/schemas/trace_tro.schema.json` in CI. Regressions to the
+shape — including mis-typed `schema:creator`, missing composition fingerprints,
+or non-HTTPS artifact locations — fail the test suite before reaching a
+release.
+
+#### Known limitations
+
+- `schema:creator` and all `schema:*` references use schema.org vocabulary;
+  we do not (yet) validate against schema.org's own SHACL shapes.
+- TROs are emitted unsigned. A signed attestation (sigstore or in-toto)
+  is a future addition that will bind TROs to a trusted-system key.
+- The model wheel is hashed by PyPI's published sha256. If a wheel is
+  yanked and re-uploaded under the same version, the hash will change and
+  the TRO becomes invalid — which is the correct behaviour.
 
 ### What TRACE does not replace
 

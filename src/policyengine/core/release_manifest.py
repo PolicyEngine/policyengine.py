@@ -9,6 +9,7 @@ import requests
 from pydantic import BaseModel, Field
 
 HF_REQUEST_TIMEOUT_SECONDS = 30
+PYPI_REQUEST_TIMEOUT_SECONDS = 30
 LOCAL_DATA_REPO_HINTS = {
     "us": ("policyengine_us", "policyengine-us-data", "policyengine_us_data"),
     "uk": ("policyengine_uk", "policyengine-uk-data", "policyengine_uk_data"),
@@ -22,6 +23,8 @@ class DataReleaseManifestUnavailableError(ValueError):
 class PackageVersion(BaseModel):
     name: str
     version: str
+    sha256: Optional[str] = None
+    wheel_url: Optional[str] = None
 
 
 class DataPackageVersion(PackageVersion):
@@ -68,6 +71,14 @@ class DataReleaseArtifact(BaseModel):
     @property
     def uri(self) -> str:
         return build_hf_uri(
+            repo_id=self.repo_id,
+            path_in_repo=self.path,
+            revision=self.revision,
+        )
+
+    @property
+    def https_uri(self) -> str:
+        return https_dataset_uri(
             repo_id=self.repo_id,
             path_in_repo=self.path,
             revision=self.revision,
@@ -129,6 +140,51 @@ class CountryReleaseManifest(BaseModel):
 
 def build_hf_uri(repo_id: str, path_in_repo: str, revision: str) -> str:
     return f"hf://{repo_id}/{path_in_repo}@{revision}"
+
+
+def https_dataset_uri(repo_id: str, path_in_repo: str, revision: str) -> str:
+    """Return a dereferenceable HTTPS URI for a Hugging Face dataset artifact."""
+    return f"https://huggingface.co/{repo_id}/resolve/{revision}/{path_in_repo}"
+
+
+def https_release_manifest_uri(data_package: "DataPackageVersion") -> str:
+    """Return a dereferenceable HTTPS URI for a data release manifest."""
+    return (
+        f"https://huggingface.co/{data_package.repo_id}/resolve/"
+        f"{data_package.version}/{data_package.release_manifest_path}"
+    )
+
+
+@lru_cache
+def fetch_pypi_wheel_metadata(name: str, version: str) -> dict[str, Optional[str]]:
+    """Fetch wheel sha256 and URL from PyPI for a package version.
+
+    Returns a dict with ``sha256`` and ``url`` keys. Missing keys are
+    returned as ``None`` rather than raising, so TRO construction can
+    degrade gracefully when PyPI is unreachable or the package lacks
+    a wheel distribution.
+    """
+    response = requests.get(
+        f"https://pypi.org/pypi/{name}/{version}/json",
+        timeout=PYPI_REQUEST_TIMEOUT_SECONDS,
+    )
+    if response.status_code != 200:
+        return {"sha256": None, "url": None}
+    payload = response.json()
+    urls = payload.get("urls") or []
+    for entry in urls:
+        if entry.get("packagetype") == "bdist_wheel":
+            return {
+                "sha256": entry.get("digests", {}).get("sha256"),
+                "url": entry.get("url"),
+            }
+    if urls:
+        entry = urls[0]
+        return {
+            "sha256": entry.get("digests", {}).get("sha256"),
+            "url": entry.get("url"),
+        }
+    return {"sha256": None, "url": None}
 
 
 @lru_cache

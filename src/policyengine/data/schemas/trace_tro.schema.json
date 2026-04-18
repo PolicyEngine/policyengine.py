@@ -1,0 +1,210 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://policyengine.org/schemas/trace_tro/0.1.json",
+  "title": "PolicyEngine TRACE TRO",
+  "description": "JSON Schema for PolicyEngine's TRACE Transparent Research Object (TROv v0.1) emission. Catches structural regressions in bundle and per-simulation TROs.",
+  "type": "object",
+  "required": ["@context", "@graph"],
+  "properties": {
+    "@context": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["trov", "schema"],
+        "properties": {
+          "trov": {
+            "type": "string",
+            "const": "https://w3id.org/trace/trov/0.1#"
+          },
+          "schema": {
+            "type": "string",
+            "const": "https://schema.org/"
+          },
+          "pe": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "@graph": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/troNode"
+      }
+    }
+  },
+  "$defs": {
+    "hash": {
+      "type": "object",
+      "required": ["trov:hashAlgorithm", "trov:hashValue"],
+      "properties": {
+        "trov:hashAlgorithm": { "type": "string" },
+        "trov:hashValue": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "organization": {
+      "type": "object",
+      "required": ["@type", "schema:name"],
+      "properties": {
+        "@type": { "const": "schema:Organization" },
+        "schema:name": { "type": "string", "minLength": 1 },
+        "schema:url": { "type": "string", "format": "uri" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "required": ["@id", "@type", "trov:hash"],
+      "properties": {
+        "@id": { "type": "string" },
+        "@type": { "const": "trov:ResearchArtifact" },
+        "schema:name": { "type": "string" },
+        "trov:hash": { "$ref": "#/$defs/hash" },
+        "trov:mimeType": { "type": "string" }
+      }
+    },
+    "artifactLocation": {
+      "type": "object",
+      "required": ["@id", "@type", "trov:artifact", "trov:path"],
+      "properties": {
+        "@id": { "type": "string" },
+        "@type": { "const": "trov:ArtifactLocation" },
+        "trov:artifact": {
+          "type": "object",
+          "required": ["@id"],
+          "properties": { "@id": { "type": "string" } }
+        },
+        "trov:path": { "type": "string", "minLength": 1 }
+      }
+    },
+    "troNode": {
+      "type": "object",
+      "required": [
+        "@id",
+        "@type",
+        "trov:vocabularyVersion",
+        "schema:creator",
+        "schema:name",
+        "trov:hasComposition",
+        "trov:hasArrangement",
+        "trov:hasPerformance"
+      ],
+      "properties": {
+        "@id": { "type": "string" },
+        "@type": {
+          "type": "array",
+          "minItems": 2,
+          "contains": { "const": "trov:TransparentResearchObject" }
+        },
+        "trov:vocabularyVersion": { "type": "string", "const": "0.1" },
+        "schema:creator": { "$ref": "#/$defs/organization" },
+        "schema:name": { "type": "string", "minLength": 1 },
+        "schema:description": { "type": "string" },
+        "schema:dateCreated": { "type": "string" },
+        "trov:wasAssembledBy": {
+          "type": "object",
+          "required": ["@id", "@type", "schema:name"],
+          "properties": {
+            "@id": { "type": "string" },
+            "@type": {
+              "type": "array",
+              "contains": { "const": "trov:TrustedResearchSystem" }
+            }
+          }
+        },
+        "trov:createdWith": {
+          "type": "object",
+          "required": ["@type", "schema:name"],
+          "properties": {
+            "@type": { "const": "schema:SoftwareApplication" },
+            "schema:name": { "type": "string" },
+            "schema:softwareVersion": {
+              "oneOf": [
+                { "type": "string" },
+                { "type": "null" }
+              ]
+            }
+          }
+        },
+        "trov:hasComposition": {
+          "type": "object",
+          "required": ["@id", "@type", "trov:hasFingerprint", "trov:hasArtifact"],
+          "properties": {
+            "@id": { "type": "string" },
+            "@type": { "const": "trov:ArtifactComposition" },
+            "trov:hasFingerprint": {
+              "type": "object",
+              "required": ["@id", "@type", "trov:hash"],
+              "properties": {
+                "@id": { "type": "string" },
+                "@type": { "const": "trov:CompositionFingerprint" },
+                "trov:hash": { "$ref": "#/$defs/hash" }
+              }
+            },
+            "trov:hasArtifact": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/artifact" }
+            }
+          }
+        },
+        "trov:hasArrangement": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["@id", "@type", "trov:hasArtifactLocation"],
+            "properties": {
+              "@id": { "type": "string" },
+              "@type": { "const": "trov:ArtifactArrangement" },
+              "trov:hasArtifactLocation": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "$ref": "#/$defs/artifactLocation" }
+              }
+            }
+          }
+        },
+        "trov:hasPerformance": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "@id",
+              "@type",
+              "trov:wasConductedBy",
+              "trov:contributedToArrangement"
+            ],
+            "properties": {
+              "@id": { "type": "string" },
+              "@type": { "const": "trov:TrustedResearchPerformance" },
+              "trov:wasConductedBy": {
+                "type": "object",
+                "required": ["@id"],
+                "properties": { "@id": { "type": "string" } }
+              },
+              "trov:contributedToArrangement": {
+                "type": "object",
+                "required": ["@id", "@type", "trov:arrangement"],
+                "properties": {
+                  "@id": { "type": "string" },
+                  "@type": { "const": "trov:ArrangementBinding" },
+                  "trov:arrangement": {
+                    "type": "object",
+                    "required": ["@id"],
+                    "properties": { "@id": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
