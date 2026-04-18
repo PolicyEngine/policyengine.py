@@ -409,7 +409,6 @@ def build_trace_tro_from_release_bundle(
             else country_manifest.published_at
         ),
         ended_at=country_manifest.published_at,
-        emission_context=_emission_context(),
     )
 
     tro_node = _assemble_tro_node(
@@ -449,7 +448,6 @@ def _build_bundle_performance(
     certification: Optional[DataCertification],
     started_at: Optional[str],
     ended_at: Optional[str],
-    emission_context: Mapping[str, str],
 ) -> dict[str, Any]:
     performance: dict[str, Any] = {
         "@id": "trp/1",
@@ -487,7 +485,7 @@ def _build_bundle_performance(
             performance["pe:dataBuildId"] = certification.data_build_id
         if certification.certified_by is not None:
             performance["pe:certifiedBy"] = certification.certified_by
-    performance.update(emission_context)
+    performance.update(_emission_context())
     return performance
 
 

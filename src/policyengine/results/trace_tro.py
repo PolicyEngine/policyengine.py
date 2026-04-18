@@ -83,7 +83,6 @@ def write_results_with_trace_tro(
         reform_payload=reform_payload,
         reform_name=reform_name,
         results_location=results_path.name,
-        bundle_tro_location=bundle_tro_url,
         bundle_tro_url=bundle_tro_url,
     )
     tro_path = results_path.with_suffix(tro_suffix)
