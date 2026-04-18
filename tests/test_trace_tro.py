@@ -42,7 +42,7 @@ from policyengine.results import (
 FAKE_WHEEL_SHA = "a" * 64
 FAKE_WHEEL_URL = (
     "https://files.pythonhosted.org/packages/ab/cd/"
-    "policyengine_us-1.647.0-py3-none-any.whl"
+    "policyengine_us-1.637.0-py3-none-any.whl"
 )
 
 
@@ -66,7 +66,7 @@ def _us_data_release_manifest(
                 "built_at": "2026-04-10T12:00:00Z",
                 "built_with_model_package": {
                     "name": "policyengine-us",
-                    "version": "1.647.0",
+                    "version": "1.637.0",
                     "git_sha": "deadbeef",
                     "data_build_fingerprint": data_build_fingerprint,
                 },
