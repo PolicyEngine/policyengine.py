@@ -13,6 +13,7 @@ if find_spec("policyengine_uk") is not None:
         ensure_datasets,
         general_policy_reform_analysis,
         load_datasets,
+        managed_microsimulation,
         uk_latest,
         uk_model,
     )
@@ -25,6 +26,7 @@ if find_spec("policyengine_uk") is not None:
         "ensure_datasets",
         "PolicyEngineUK",
         "PolicyEngineUKLatest",
+        "managed_microsimulation",
         "uk_model",
         "uk_latest",
         "general_policy_reform_analysis",

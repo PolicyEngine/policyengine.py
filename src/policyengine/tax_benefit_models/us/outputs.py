@@ -1,18 +1,15 @@
 """US-specific output templates."""
 
-from typing import TYPE_CHECKING
+from typing import Optional
 
 from pydantic import ConfigDict
 
-from policyengine.core import Output
+from policyengine.core import Output, Simulation
 from policyengine.outputs.aggregate import Aggregate, AggregateType
 from policyengine.outputs.change_aggregate import (
     ChangeAggregate,
     ChangeAggregateType,
 )
-
-if TYPE_CHECKING:
-    from policyengine.core.simulation import Simulation
 
 
 class ProgramStatistics(Output):
@@ -20,20 +17,20 @@ class ProgramStatistics(Output):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    baseline_simulation: "Simulation"
-    reform_simulation: "Simulation"
+    baseline_simulation: Simulation
+    reform_simulation: Simulation
     program_name: str
     entity: str
     is_tax: bool = False
 
     # Results populated by run()
-    baseline_total: float | None = None
-    reform_total: float | None = None
-    change: float | None = None
-    baseline_count: float | None = None
-    reform_count: float | None = None
-    winners: float | None = None
-    losers: float | None = None
+    baseline_total: Optional[float] = None
+    reform_total: Optional[float] = None
+    change: Optional[float] = None
+    baseline_count: Optional[float] = None
+    reform_count: Optional[float] = None
+    winners: Optional[float] = None
+    losers: Optional[float] = None
 
     def run(self):
         """Calculate statistics for this program."""

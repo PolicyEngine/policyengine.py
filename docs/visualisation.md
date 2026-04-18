@@ -69,4 +69,4 @@ COLORS = {
 
 ## Complete example
 
-See `examples/employment_income_variation.py` for a full demonstration of using `format_fig()` in an analysis workflow.
+See [UK employment income variation](examples.md#uk-employment-income-variation) for a full demonstration of using `format_fig()` in an analysis workflow.

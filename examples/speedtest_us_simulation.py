@@ -48,9 +48,7 @@ def create_subset_dataset(
         else "marital_unit_id"
     )
     family_id_col = (
-        "person_family_id"
-        if "person_family_id" in person_df.columns
-        else "family_id"
+        "person_family_id" if "person_family_id" in person_df.columns else "family_id"
     )
     spm_unit_id_col = (
         "person_spm_unit_id"
@@ -69,9 +67,7 @@ def create_subset_dataset(
     ].copy()
 
     # Get IDs of group entities that have members in sampled households
-    sampled_marital_unit_ids = set(
-        sampled_person[marital_unit_id_col].unique()
-    )
+    sampled_marital_unit_ids = set(sampled_person[marital_unit_id_col].unique())
     sampled_family_ids = set(sampled_person[family_id_col].unique())
     sampled_spm_unit_ids = set(sampled_person[spm_unit_id_col].unique())
     sampled_tax_unit_ids = set(sampled_person[tax_unit_id_col].unique())
@@ -80,9 +76,7 @@ def create_subset_dataset(
     sampled_marital_unit = marital_unit_df[
         marital_unit_df["marital_unit_id"].isin(sampled_marital_unit_ids)
     ].copy()
-    sampled_family = family_df[
-        family_df["family_id"].isin(sampled_family_ids)
-    ].copy()
+    sampled_family = family_df[family_df["family_id"].isin(sampled_family_ids)].copy()
     sampled_spm_unit = spm_unit_df[
         spm_unit_df["spm_unit_id"].isin(sampled_spm_unit_ids)
     ].copy()
@@ -92,24 +86,19 @@ def create_subset_dataset(
 
     # Create ID mappings to reindex to contiguous integers starting from 0
     household_id_map = {
-        old_id: new_id
-        for new_id, old_id in enumerate(sorted(sampled_household_ids))
+        old_id: new_id for new_id, old_id in enumerate(sorted(sampled_household_ids))
     }
     marital_unit_id_map = {
-        old_id: new_id
-        for new_id, old_id in enumerate(sorted(sampled_marital_unit_ids))
+        old_id: new_id for new_id, old_id in enumerate(sorted(sampled_marital_unit_ids))
     }
     family_id_map = {
-        old_id: new_id
-        for new_id, old_id in enumerate(sorted(sampled_family_ids))
+        old_id: new_id for new_id, old_id in enumerate(sorted(sampled_family_ids))
     }
     spm_unit_id_map = {
-        old_id: new_id
-        for new_id, old_id in enumerate(sorted(sampled_spm_unit_ids))
+        old_id: new_id for new_id, old_id in enumerate(sorted(sampled_spm_unit_ids))
     }
     tax_unit_id_map = {
-        old_id: new_id
-        for new_id, old_id in enumerate(sorted(sampled_tax_unit_ids))
+        old_id: new_id for new_id, old_id in enumerate(sorted(sampled_tax_unit_ids))
     }
     person_id_map = {
         old_id: new_id
@@ -117,23 +106,19 @@ def create_subset_dataset(
     }
 
     # Reindex all entity IDs in household table
-    sampled_households["household_id"] = sampled_households[
-        "household_id"
-    ].map(household_id_map)
+    sampled_households["household_id"] = sampled_households["household_id"].map(
+        household_id_map
+    )
 
     # Reindex all entity IDs in person table
-    sampled_person["person_id"] = sampled_person["person_id"].map(
-        person_id_map
-    )
+    sampled_person["person_id"] = sampled_person["person_id"].map(person_id_map)
     sampled_person[household_id_col] = sampled_person[household_id_col].map(
         household_id_map
     )
-    sampled_person[marital_unit_id_col] = sampled_person[
-        marital_unit_id_col
-    ].map(marital_unit_id_map)
-    sampled_person[family_id_col] = sampled_person[family_id_col].map(
-        family_id_map
+    sampled_person[marital_unit_id_col] = sampled_person[marital_unit_id_col].map(
+        marital_unit_id_map
     )
+    sampled_person[family_id_col] = sampled_person[family_id_col].map(family_id_map)
     sampled_person[spm_unit_id_col] = sampled_person[spm_unit_id_col].map(
         spm_unit_id_map
     )
@@ -145,9 +130,7 @@ def create_subset_dataset(
     sampled_marital_unit["marital_unit_id"] = sampled_marital_unit[
         "marital_unit_id"
     ].map(marital_unit_id_map)
-    sampled_family["family_id"] = sampled_family["family_id"].map(
-        family_id_map
-    )
+    sampled_family["family_id"] = sampled_family["family_id"].map(family_id_map)
     sampled_spm_unit["spm_unit_id"] = sampled_spm_unit["spm_unit_id"].map(
         spm_unit_id_map
     )
@@ -156,18 +139,14 @@ def create_subset_dataset(
     )
 
     # Sort by ID to ensure proper ordering
-    sampled_households = sampled_households.sort_values(
-        "household_id"
-    ).reset_index(drop=True)
-    sampled_person = sampled_person.sort_values("person_id").reset_index(
+    sampled_households = sampled_households.sort_values("household_id").reset_index(
         drop=True
     )
+    sampled_person = sampled_person.sort_values("person_id").reset_index(drop=True)
     sampled_marital_unit = sampled_marital_unit.sort_values(
         "marital_unit_id"
     ).reset_index(drop=True)
-    sampled_family = sampled_family.sort_values("family_id").reset_index(
-        drop=True
-    )
+    sampled_family = sampled_family.sort_values("family_id").reset_index(drop=True)
     sampled_spm_unit = sampled_spm_unit.sort_values("spm_unit_id").reset_index(
         drop=True
     )
@@ -183,19 +162,13 @@ def create_subset_dataset(
         year=original_dataset.year,
         data=USYearData(
             person=MicroDataFrame(sampled_person, weights="person_weight"),
-            household=MicroDataFrame(
-                sampled_households, weights="household_weight"
-            ),
+            household=MicroDataFrame(sampled_households, weights="household_weight"),
             marital_unit=MicroDataFrame(
                 sampled_marital_unit, weights="marital_unit_weight"
             ),
             family=MicroDataFrame(sampled_family, weights="family_weight"),
-            spm_unit=MicroDataFrame(
-                sampled_spm_unit, weights="spm_unit_weight"
-            ),
-            tax_unit=MicroDataFrame(
-                sampled_tax_unit, weights="tax_unit_weight"
-            ),
+            spm_unit=MicroDataFrame(sampled_spm_unit, weights="spm_unit_weight"),
+            tax_unit=MicroDataFrame(sampled_tax_unit, weights="tax_unit_weight"),
         ),
     )
 
@@ -218,9 +191,7 @@ def speedtest_simulation(dataset: PolicyEngineUSDataset) -> float:
 
 def main():
     print("Loading full enhanced CPS dataset...")
-    dataset_path = (
-        Path(__file__).parent / "data" / "enhanced_cps_2024_year_2024.h5"
-    )
+    dataset_path = Path(__file__).parent / "data" / "enhanced_cps_2024_year_2024.h5"
 
     if not dataset_path.exists():
         raise FileNotFoundError(

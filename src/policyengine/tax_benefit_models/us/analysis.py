@@ -2,7 +2,7 @@
 
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, Union
 
 import pandas as pd
 from microdf import MicroDataFrame
@@ -16,6 +16,7 @@ from policyengine.outputs.decile_impact import (
 )
 from policyengine.outputs.inequality import (
     Inequality,
+    USInequalityPreset,
     calculate_us_inequality,
 )
 from policyengine.outputs.poverty import (
@@ -53,7 +54,7 @@ class USHouseholdInput(BaseModel):
 
 def calculate_household_impact(
     household_input: USHouseholdInput,
-    policy: Policy | None = None,
+    policy: Optional[Policy] = None,
 ) -> USHouseholdOutput:
     """Calculate tax and benefit impacts for a single US household."""
     n_people = len(household_input.people)
@@ -72,9 +73,7 @@ def calculate_household_impact(
     for i, person in enumerate(household_input.people):
         for key, value in person.items():
             if key not in person_data:
-                person_data[key] = [
-                    0.0
-                ] * n_people  # Default to 0 for numeric fields
+                person_data[key] = [0.0] * n_people  # Default to 0 for numeric fields
             person_data[key][i] = value
 
     # Build entity data with defaults
@@ -114,24 +113,16 @@ def calculate_household_impact(
         tax_unit_data[key] = [value]
 
     # Create MicroDataFrames
-    person_df = MicroDataFrame(
-        pd.DataFrame(person_data), weights="person_weight"
-    )
+    person_df = MicroDataFrame(pd.DataFrame(person_data), weights="person_weight")
     household_df = MicroDataFrame(
         pd.DataFrame(household_data), weights="household_weight"
     )
     marital_unit_df = MicroDataFrame(
         pd.DataFrame(marital_unit_data), weights="marital_unit_weight"
     )
-    family_df = MicroDataFrame(
-        pd.DataFrame(family_data), weights="family_weight"
-    )
-    spm_unit_df = MicroDataFrame(
-        pd.DataFrame(spm_unit_data), weights="spm_unit_weight"
-    )
-    tax_unit_df = MicroDataFrame(
-        pd.DataFrame(tax_unit_data), weights="tax_unit_weight"
-    )
+    family_df = MicroDataFrame(pd.DataFrame(family_data), weights="family_weight")
+    spm_unit_df = MicroDataFrame(pd.DataFrame(spm_unit_data), weights="spm_unit_weight")
+    tax_unit_df = MicroDataFrame(pd.DataFrame(tax_unit_data), weights="tax_unit_weight")
 
     # Create temporary dataset
     tmpdir = tempfile.mkdtemp()
@@ -210,8 +201,14 @@ class PolicyReformAnalysis(BaseModel):
 def economic_impact_analysis(
     baseline_simulation: Simulation,
     reform_simulation: Simulation,
+    inequality_preset: Union[USInequalityPreset, str] = USInequalityPreset.STANDARD,
 ) -> PolicyReformAnalysis:
     """Perform comprehensive analysis of a policy reform.
+
+    Args:
+        baseline_simulation: Baseline simulation
+        reform_simulation: Reform simulation
+        inequality_preset: Optional preset for the inequality outputs
 
     Returns:
         PolicyReformAnalysis containing decile impacts and program statistics
@@ -228,11 +225,8 @@ def economic_impact_analysis(
 
     # Decile impact (using household_net_income for US)
     decile_impacts = calculate_decile_impacts(
-        dataset=baseline_simulation.dataset,
-        tax_benefit_model_version=baseline_simulation.tax_benefit_model_version,
-        baseline_policy=baseline_simulation.policy,
-        reform_policy=reform_simulation.policy,
-        dynamic=baseline_simulation.dynamic,
+        baseline_simulation=baseline_simulation,
+        reform_simulation=reform_simulation,
         income_variable="household_net_income",
     )
 
@@ -300,8 +294,12 @@ def economic_impact_analysis(
     reform_poverty = calculate_us_poverty_rates(reform_simulation)
 
     # Calculate inequality for both simulations
-    baseline_inequality = calculate_us_inequality(baseline_simulation)
-    reform_inequality = calculate_us_inequality(reform_simulation)
+    baseline_inequality = calculate_us_inequality(
+        baseline_simulation, preset=inequality_preset
+    )
+    reform_inequality = calculate_us_inequality(
+        reform_simulation, preset=inequality_preset
+    )
 
     return PolicyReformAnalysis(
         decile_impacts=decile_impacts,

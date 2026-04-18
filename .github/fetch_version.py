@@ -1,8 +1,8 @@
 def fetch_version():
     try:
-        import importlib
+        from importlib.metadata import version
 
-        return importlib.import_module("policyengine").__version__
+        return version("policyengine")
     except Exception as e:
         print(f"Error fetching version: {e}")
         return None

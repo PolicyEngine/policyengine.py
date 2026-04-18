@@ -1,3 +1,5 @@
+from typing import Optional
+
 import pandas as pd
 from pydantic import ConfigDict
 
@@ -16,18 +18,19 @@ class DecileImpact(Output):
     baseline_simulation: Simulation
     reform_simulation: Simulation
     income_variable: str = "equiv_hbai_household_net_income"
-    entity: str | None = None
+    decile_variable: Optional[str] = None  # If set, use pre-computed grouping variable
+    entity: Optional[str] = None
     decile: int
     quantiles: int = 10
 
     # Results populated by run()
-    baseline_mean: float | None = None
-    reform_mean: float | None = None
-    absolute_change: float | None = None
-    relative_change: float | None = None
-    count_better_off: float | None = None
-    count_worse_off: float | None = None
-    count_no_change: float | None = None
+    baseline_mean: Optional[float] = None
+    reform_mean: Optional[float] = None
+    absolute_change: Optional[float] = None
+    relative_change: Optional[float] = None
+    count_better_off: Optional[float] = None
+    count_worse_off: Optional[float] = None
+    count_no_change: Optional[float] = None
 
     def run(self):
         """Calculate impact for this specific decile."""
@@ -45,9 +48,7 @@ class DecileImpact(Output):
         baseline_data = getattr(
             self.baseline_simulation.output_dataset.data, target_entity
         )
-        reform_data = getattr(
-            self.reform_simulation.output_dataset.data, target_entity
-        )
+        reform_data = getattr(self.reform_simulation.output_dataset.data, target_entity)
 
         # Map income variable to target entity if needed
         if var_obj.entity != target_entity:
@@ -58,26 +59,27 @@ class DecileImpact(Output):
             )
             baseline_income = baseline_mapped[self.income_variable]
 
-            reform_mapped = (
-                self.reform_simulation.output_dataset.data.map_to_entity(
-                    var_obj.entity, target_entity
-                )
+            reform_mapped = self.reform_simulation.output_dataset.data.map_to_entity(
+                var_obj.entity, target_entity
             )
             reform_income = reform_mapped[self.income_variable]
         else:
             baseline_income = baseline_data[self.income_variable]
             reform_income = reform_data[self.income_variable]
 
-        # Calculate deciles based on baseline income
-        decile_series = (
-            pd.qcut(
-                baseline_income,
-                self.quantiles,
-                labels=False,
-                duplicates="drop",
+        # Calculate deciles: use pre-computed variable or qcut
+        if self.decile_variable:
+            decile_series = baseline_data[self.decile_variable]
+        else:
+            decile_series = (
+                pd.qcut(
+                    baseline_income,
+                    self.quantiles,
+                    labels=False,
+                    duplicates="drop",
+                )
+                + 1
             )
-            + 1
-        )
 
         # Calculate changes
         absolute_change = reform_income - baseline_income
@@ -97,32 +99,48 @@ class DecileImpact(Output):
 
 
 def calculate_decile_impacts(
-    dataset: Dataset,
-    tax_benefit_model_version: TaxBenefitModelVersion,
-    baseline_policy: Policy | None = None,
-    reform_policy: Policy | None = None,
-    dynamic: Dynamic | None = None,
+    dataset: Optional[Dataset] = None,
+    tax_benefit_model_version: Optional[TaxBenefitModelVersion] = None,
+    baseline_policy: Optional[Policy] = None,
+    reform_policy: Optional[Policy] = None,
+    dynamic: Optional[Dynamic] = None,
     income_variable: str = "equiv_hbai_household_net_income",
-    entity: str | None = None,
+    entity: Optional[str] = None,
     quantiles: int = 10,
+    baseline_simulation: Optional[Simulation] = None,
+    reform_simulation: Optional[Simulation] = None,
 ) -> OutputCollection[DecileImpact]:
     """Calculate decile-by-decile impact of a reform.
 
     Returns:
         OutputCollection containing list of DecileImpact objects and DataFrame
     """
-    baseline_simulation = Simulation(
-        dataset=dataset,
-        tax_benefit_model_version=tax_benefit_model_version,
-        policy=baseline_policy,
-        dynamic=dynamic,
-    )
-    reform_simulation = Simulation(
-        dataset=dataset,
-        tax_benefit_model_version=tax_benefit_model_version,
-        policy=reform_policy,
-        dynamic=dynamic,
-    )
+    if (baseline_simulation is None) != (reform_simulation is None):
+        raise ValueError(
+            "baseline_simulation and reform_simulation must be provided together"
+        )
+
+    if baseline_simulation is None:
+        if dataset is None or tax_benefit_model_version is None:
+            raise ValueError(
+                "dataset and tax_benefit_model_version are required when simulations are not provided"
+            )
+
+        baseline_simulation = Simulation(
+            dataset=dataset,
+            tax_benefit_model_version=tax_benefit_model_version,
+            policy=baseline_policy,
+            dynamic=dynamic,
+        )
+        reform_simulation = Simulation(
+            dataset=dataset,
+            tax_benefit_model_version=tax_benefit_model_version,
+            policy=reform_policy,
+            dynamic=dynamic,
+        )
+
+    baseline_simulation.ensure()
+    reform_simulation.ensure()
 
     results = []
     for decile in range(1, quantiles + 1):

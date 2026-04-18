@@ -431,11 +431,10 @@ When creating custom datasets, validate:
 
 ## Examples
 
-See working examples in the `examples/` directory:
-
-- `income_distribution_us.py`: Analyse benefit distribution by income decile
-- `employment_income_variation_us.py`: Vary employment income, analyse phase-outs
-- `speedtest_us_simulation.py`: Performance benchmarking
+- [US income distribution](examples.md#us-income-distribution): Analyse benefit distribution by income decile
+- [US employment income variation](examples.md#us-employment-income-variation): Vary employment income, analyse phase-outs
+- [US budgetary impact](examples.md#us-budgetary-impact): Full baseline-vs-reform comparison
+- [Simulation performance](examples.md#simulation-performance): Performance benchmarking
 
 ## References
 

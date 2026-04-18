@@ -127,24 +127,16 @@ def create_dataset_with_varied_employment_income(
     }
 
     # Create MicroDataFrames
-    person_df = MicroDataFrame(
-        pd.DataFrame(person_data), weights="person_weight"
-    )
+    person_df = MicroDataFrame(pd.DataFrame(person_data), weights="person_weight")
     household_df = MicroDataFrame(
         pd.DataFrame(household_data), weights="household_weight"
     )
     marital_unit_df = MicroDataFrame(
         pd.DataFrame(marital_unit_data), weights="marital_unit_weight"
     )
-    family_df = MicroDataFrame(
-        pd.DataFrame(family_data), weights="family_weight"
-    )
-    spm_unit_df = MicroDataFrame(
-        pd.DataFrame(spm_unit_data), weights="spm_unit_weight"
-    )
-    tax_unit_df = MicroDataFrame(
-        pd.DataFrame(tax_unit_data), weights="tax_unit_weight"
-    )
+    family_df = MicroDataFrame(pd.DataFrame(family_data), weights="family_weight")
+    spm_unit_df = MicroDataFrame(pd.DataFrame(spm_unit_data), weights="spm_unit_weight")
+    tax_unit_df = MicroDataFrame(pd.DataFrame(tax_unit_data), weights="tax_unit_weight")
 
     # Create temporary file
     tmpdir = tempfile.mkdtemp()
@@ -227,9 +219,7 @@ def visualise_results(results: dict) -> None:
     # Calculate net employment income (employment income minus tax)
     net_employment = [
         emp - tax
-        for emp, tax in zip(
-            results["employment_income_hh"], results["household_tax"]
-        )
+        for emp, tax in zip(results["employment_income_hh"], results["household_tax"])
     ]
 
     # Stack benefits and income components using PolicyEngine colors
@@ -287,17 +277,11 @@ def main():
     simulation = run_simulation(dataset)
 
     print("Extracting results using aggregate filters...")
-    results = extract_results_by_employment_income(
-        simulation, employment_incomes
-    )
+    results = extract_results_by_employment_income(simulation, employment_incomes)
 
     print("\nSample results:")
     for emp_inc in [0, 50000, 100000, 200000]:
-        idx = (
-            employment_incomes.index(emp_inc)
-            if emp_inc in employment_incomes
-            else -1
-        )
+        idx = employment_incomes.index(emp_inc) if emp_inc in employment_incomes else -1
         if idx >= 0:
             print(
                 f"  Employment income ${emp_inc:,}: household net income ${results['household_net_income'][idx]:,.0f}"

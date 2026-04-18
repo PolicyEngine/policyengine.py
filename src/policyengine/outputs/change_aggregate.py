@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any
+from typing import Any, Optional
 
 from policyengine.core import Output, Simulation
 
@@ -15,38 +15,36 @@ class ChangeAggregate(Output):
     reform_simulation: Simulation
     variable: str
     aggregate_type: ChangeAggregateType
-    entity: str | None = None
+    entity: Optional[str] = None
 
     # Filter by absolute change
-    change_geq: float | None = None  # Change >= value (e.g., gain >= 500)
-    change_leq: float | None = None  # Change <= value (e.g., loss <= -500)
-    change_eq: float | None = None  # Change == value
+    change_geq: Optional[float] = None  # Change >= value (e.g., gain >= 500)
+    change_leq: Optional[float] = None  # Change <= value (e.g., loss <= -500)
+    change_eq: Optional[float] = None  # Change == value
 
     # Filter by relative change (as decimal, e.g., 0.05 = 5%)
-    relative_change_geq: float | None = None  # Relative change >= value
-    relative_change_leq: float | None = None  # Relative change <= value
-    relative_change_eq: float | None = None  # Relative change == value
+    relative_change_geq: Optional[float] = None  # Relative change >= value
+    relative_change_leq: Optional[float] = None  # Relative change <= value
+    relative_change_eq: Optional[float] = None  # Relative change == value
 
     # Filter by another variable (e.g., only count people with age >= 30)
-    filter_variable: str | None = None
-    filter_variable_eq: Any | None = None
-    filter_variable_leq: Any | None = None
-    filter_variable_geq: Any | None = None
+    filter_variable: Optional[str] = None
+    filter_variable_eq: Optional[Any] = None
+    filter_variable_leq: Optional[Any] = None
+    filter_variable_geq: Optional[Any] = None
     filter_variable_describes_quantiles: bool = False
 
     # Convenient quantile specification (alternative to describes_quantiles)
-    quantile: int | None = (
+    quantile: Optional[int] = (
         None  # Number of quantiles (e.g., 10 for deciles, 5 for quintiles)
     )
-    quantile_eq: int | None = None  # Exact quantile (e.g., 3 for 3rd decile)
-    quantile_leq: int | None = (
+    quantile_eq: Optional[int] = None  # Exact quantile (e.g., 3 for 3rd decile)
+    quantile_leq: Optional[int] = (
         None  # Maximum quantile (e.g., 5 for bottom 5 deciles)
     )
-    quantile_geq: int | None = (
-        None  # Minimum quantile (e.g., 9 for top 2 deciles)
-    )
+    quantile_geq: Optional[int] = None  # Minimum quantile (e.g., 9 for top 2 deciles)
 
-    result: Any | None = None
+    result: Optional[Any] = None
 
     def run(self):
         # Convert quantile specification to describes_quantiles format
@@ -54,16 +52,12 @@ class ChangeAggregate(Output):
             self.filter_variable_describes_quantiles = True
             if self.quantile_eq is not None:
                 # For a specific quantile, filter between (quantile-1)/n and quantile/n
-                self.filter_variable_geq = (
-                    self.quantile_eq - 1
-                ) / self.quantile
+                self.filter_variable_geq = (self.quantile_eq - 1) / self.quantile
                 self.filter_variable_leq = self.quantile_eq / self.quantile
             elif self.quantile_leq is not None:
                 self.filter_variable_leq = self.quantile_leq / self.quantile
             elif self.quantile_geq is not None:
-                self.filter_variable_geq = (
-                    self.quantile_geq - 1
-                ) / self.quantile
+                self.filter_variable_geq = (self.quantile_geq - 1) / self.quantile
 
         # Get variable object
         var_obj = next(
@@ -77,9 +71,7 @@ class ChangeAggregate(Output):
         baseline_data = getattr(
             self.baseline_simulation.output_dataset.data, target_entity
         )
-        reform_data = getattr(
-            self.reform_simulation.output_dataset.data, target_entity
-        )
+        reform_data = getattr(self.reform_simulation.output_dataset.data, target_entity)
 
         # Map variable to target entity if needed
         if var_obj.entity != target_entity:
@@ -90,10 +82,8 @@ class ChangeAggregate(Output):
             )
             baseline_series = baseline_mapped[self.variable]
 
-            reform_mapped = (
-                self.reform_simulation.output_dataset.data.map_to_entity(
-                    var_obj.entity, target_entity
-                )
+            reform_mapped = self.reform_simulation.output_dataset.data.map_to_entity(
+                var_obj.entity, target_entity
             )
             reform_series = reform_mapped[self.variable]
         else:
@@ -155,14 +145,10 @@ class ChangeAggregate(Output):
                     threshold = filter_series.quantile(self.filter_variable_eq)
                     mask &= filter_series <= threshold
                 if self.filter_variable_leq is not None:
-                    threshold = filter_series.quantile(
-                        self.filter_variable_leq
-                    )
+                    threshold = filter_series.quantile(self.filter_variable_leq)
                     mask &= filter_series <= threshold
                 if self.filter_variable_geq is not None:
-                    threshold = filter_series.quantile(
-                        self.filter_variable_geq
-                    )
+                    threshold = filter_series.quantile(self.filter_variable_geq)
                     mask &= filter_series >= threshold
             else:
                 if self.filter_variable_eq is not None:

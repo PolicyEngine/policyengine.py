@@ -1,9 +1,15 @@
-.PHONY: docs
+.PHONY: docs docs-serve
+
+MYSTMD_VERSION ?= 1.8.3
+MYST_CMD = npx --yes mystmd@$(MYSTMD_VERSION)
 
 all: build-package
 
 docs:
-	cd docs && jupyter book start
+	cd docs && $(MYST_CMD) build --html
+
+docs-serve:
+	cd docs && $(MYST_CMD) start
 
 install:
 	uv pip install -e .[dev]
@@ -21,14 +27,10 @@ clean:
 	find . -not -path "./.venv/*" -type f -name "*.h5" -delete
 
 changelog:
-	build-changelog changelog.yaml --output changelog.yaml --update-last-date --start-from 1.0.0 --append-file changelog_entry.yaml
-	build-changelog changelog.yaml --org PolicyEngine --repo policyengine.py --output CHANGELOG.md --template .github/changelog_template.md
-	bump-version changelog.yaml pyproject.toml
-	rm changelog_entry.yaml || true
-	touch changelog_entry.yaml
-
+	python .github/bump_version.py
+	towncrier build --yes --version $$(python -c "import re; print(re.search(r'version = \"(.+?)\"', open('pyproject.toml').read()).group(1))")
 build-package:
 	python -m build
 
 test:
-	pytest tests
+	pytest tests --cov=policyengine --cov-report=term-missing

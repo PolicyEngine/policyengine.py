@@ -1,9 +1,104 @@
+## [3.4.5] - 2026-04-16
+
+### Changed
+
+- Added managed release-bundle runtime enforcement for bundled US and UK microsimulations, including manifest-backed dataset pinning and runtime bundle metadata.
+
+
+## [3.4.4] - 2026-04-13
+
+### Changed
+
+- Add TRACE TRO export helpers for certified runtime bundles and expose them through `policyengine.core`.
+
+
+## [3.4.3] - 2026-04-13
+
+### Fixed
+
+- Fix the release versioning workflow so it bumps from the highest known released version instead of regressing to a stale version from `pyproject.toml`.
+
+
+## [3.4.1] - 2026-04-13
+
+### Changed
+
+- Add certified bundle metadata that records runtime model pins alongside build-time data artifact provenance and compatibility fingerprints.
+
+
+## [3.4.2] - 2026-04-12
+
+### Changed
+
+- Align the bundled UK release manifest with the pinned `policyengine-uk` package version and updated data package revisions.
+
+
+## [3.4.1] - 2026-04-09
+
+### Fixed
+
+- Fixed the UK paper reproduction workflow so the checked-in example runs on Python 3.14 and the associated analysis helpers handle that path cleanly.
+
+
+## [3.4.0] - 2026-04-08
+
+### Added
+
+- Add winner, loser, and no-change percentages to the congressional district impact output.
+
+
+## [3.3.0] - 2026-03-20
+
+### Added
+
+- Added documentation for economic impact analysis, advanced outputs (DecileImpact, Poverty, Inequality, IntraDecileImpact), regions and scoping strategies, simulation lifecycle (ensure vs run), Dynamic class, data loading, and simulation modifiers. Added US budgetary impact example script. Fixed PR docs CI to use MyST matching production.
+
+
+## [3.2.4] - 2026-03-17
+
+### Changed
+
+- Skip redundant Lint and Test in Phase 2 of push workflow since code is identical to Phase 1
+
+
+## [3.2.3] - 2026-03-17
+
+### Fixed
+
+- Use GitHub App token in push workflow Versioning job to enable auto-triggering of Phase 2 (Publish)
+
+
+## [3.2.2] - 2026-03-17
+
+### Changed
+
+- Consolidate CI/CD workflows into a unified push workflow with two-phase sentinel pattern, enforce changelog fragments on PRs
+
+### Fixed
+
+- Use GITHUB_TOKEN instead of missing POLICYENGINE_GITHUB PAT in push workflow
+
+
+## [3.2.1] - 2026-03-10
+
+### Changed
+
+- Migrated from changelog_entry.yaml to towncrier fragments to eliminate merge conflicts.
+- Switched code formatter from black to ruff format.
+
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [3.2.0] - 2026-02-24 17:31:22
+
+### Added
+
+- Python 3.14 support
 
 ## [3.1.16] - 2026-01-25 14:20:29
 
@@ -293,6 +388,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.2.0]: https://github.com/PolicyEngine/policyengine.py/compare/3.1.16...3.2.0
 [3.1.16]: https://github.com/PolicyEngine/policyengine.py/compare/3.1.15...3.1.16
 [3.1.15]: https://github.com/PolicyEngine/policyengine.py/compare/3.1.14...3.1.15
 [3.1.14]: https://github.com/PolicyEngine/policyengine.py/compare/3.1.13...3.1.14

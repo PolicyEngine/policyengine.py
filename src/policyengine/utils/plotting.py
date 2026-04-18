@@ -1,5 +1,7 @@
 """Plotting utilities for PolicyEngine visualisations."""
 
+from typing import Optional
+
 import plotly.graph_objects as go
 
 # PolicyEngine brand colours
@@ -18,9 +20,7 @@ COLORS = {
 }
 
 # Typography
-FONT_FAMILY = (
-    "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-)
+FONT_FAMILY = "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
 FONT_SIZE_LABEL = 12
 FONT_SIZE_DEFAULT = 14
 FONT_SIZE_TITLE = 16
@@ -28,12 +28,12 @@ FONT_SIZE_TITLE = 16
 
 def format_fig(
     fig: go.Figure,
-    title: str | None = None,
-    xaxis_title: str | None = None,
-    yaxis_title: str | None = None,
+    title: Optional[str] = None,
+    xaxis_title: Optional[str] = None,
+    yaxis_title: Optional[str] = None,
     show_legend: bool = True,
-    height: int | None = None,
-    width: int | None = None,
+    height: Optional[int] = None,
+    width: Optional[int] = None,
 ) -> go.Figure:
     """Apply PolicyEngine visual style to a plotly figure.
 

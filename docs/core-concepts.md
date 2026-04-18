@@ -117,6 +117,40 @@ dataset = PolicyEngineUKDataset(
 )
 ```
 
+## Data loading
+
+Before running simulations, you need representative microdata. The package provides three functions for managing datasets:
+
+- **`ensure_datasets()`**: Load from disk if available, otherwise download and compute (recommended)
+- **`create_datasets()`**: Always download from HuggingFace and compute from scratch
+- **`load_datasets()`**: Load previously saved HDF5 files from disk
+
+```python
+from policyengine.tax_benefit_models.us import ensure_datasets
+
+# First run: downloads from HuggingFace, computes variables, saves to ./data/
+# Subsequent runs: loads from disk instantly
+datasets = ensure_datasets(
+    datasets=["hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"],
+    years=[2026],
+    data_folder="./data",
+)
+dataset = datasets["enhanced_cps_2024_2026"]
+```
+
+```python
+from policyengine.tax_benefit_models.uk import ensure_datasets
+
+datasets = ensure_datasets(
+    datasets=["hf://policyengine/policyengine-uk-data/enhanced_frs_2023_24.h5"],
+    years=[2026],
+    data_folder="./data",
+)
+dataset = datasets["enhanced_frs_2023_24_2026"]
+```
+
+All datasets are stored as HDF5 files on disk. No database server is required.
+
 ## Simulations
 
 Simulations apply tax-benefit models to datasets, calculating all variables for the specified year.
@@ -140,6 +174,25 @@ output_household = simulation.output_dataset.data.household
 # Check calculated variables
 print(output_household[["household_id", "household_net_income", "household_tax"]])
 ```
+
+### Simulation lifecycle: `run()` vs `ensure()`
+
+The `Simulation` class provides two methods for computing results:
+
+| Method | Behaviour |
+|---|---|
+| `simulation.run()` | Always recomputes from scratch. No caching. |
+| `simulation.ensure()` | Checks in-memory LRU cache, then tries loading from disk, then falls back to `run()` + `save()`. |
+
+```python
+# One-off computation (no caching)
+simulation.run()
+
+# Cache-or-compute (preferred for production use)
+simulation.ensure()
+```
+
+`ensure()` uses a module-level LRU cache (max 100 simulations) and saves output datasets as HDF5 files alongside the input dataset. On repeated calls, it returns cached results instantly. For baseline-vs-reform comparisons, `economic_impact_analysis()` calls `ensure()` internally, so you rarely need to call it yourself.
 
 ### Accessing calculated variables
 
@@ -210,6 +263,56 @@ reform = Simulation(
 )
 reform.run()
 ```
+
+### Combining policies
+
+Policies can be combined using the `+` operator:
+
+```python
+combined = policy_a + policy_b
+# Concatenates parameter_values and chains simulation_modifiers
+```
+
+### Simulation modifiers
+
+For reforms that cannot be expressed as parameter value changes, `Policy` accepts a `simulation_modifier` callable that directly manipulates the underlying `policyengine_core` simulation:
+
+```python
+def my_modifier(sim):
+    """Custom reform logic applied to the core simulation object."""
+    p = sim.tax_benefit_system.parameters
+    # Modify parameters programmatically
+    return sim
+
+policy = Policy(
+    name="Custom reform",
+    simulation_modifier=my_modifier,
+)
+```
+
+Note: the UK model supports `simulation_modifier`. The US model currently only uses the `parameter_values` path.
+
+## Dynamic behavioural responses
+
+The `Dynamic` class is structurally identical to `Policy` and represents behavioural responses to policy changes (e.g., labour supply elasticities). It is applied after the policy in the simulation pipeline.
+
+```python
+from policyengine.core.dynamic import Dynamic
+
+dynamic = Dynamic(
+    name="Labour supply response",
+    parameter_values=[...],  # Same format as Policy
+)
+
+simulation = Simulation(
+    dataset=dataset,
+    tax_benefit_model_version=uk_latest,
+    policy=policy,
+    dynamic=dynamic,
+)
+```
+
+Dynamic responses can also be combined using the `+` operator and support `simulation_modifier` callables.
 
 ## Outputs
 
@@ -480,7 +583,7 @@ COLORS = {
 
 ### 1. Analyse employment income variation
 
-See `examples/employment_income_variation_uk.py` for a complete example of:
+See [UK employment income variation](examples.md#uk-employment-income-variation) for a complete example of:
 - Creating custom datasets with varied parameters
 - Running single simulations
 - Extracting results with filters
@@ -488,7 +591,7 @@ See `examples/employment_income_variation_uk.py` for a complete example of:
 
 ### 2. Policy reform analysis
 
-See `examples/policy_change_uk.py` for:
+See [UK policy reform analysis](examples.md#uk-policy-reform-analysis) for:
 - Applying parametric reforms
 - Comparing baseline and reform
 - Analysing winners/losers by decile
@@ -496,7 +599,7 @@ See `examples/policy_change_uk.py` for:
 
 ### 3. Distributional analysis
 
-See `examples/income_distribution_us.py` for:
+See [US income distribution](examples.md#us-income-distribution) for:
 - Loading representative microdata
 - Calculating statistics by income decile
 - Mapping variables across entity levels
@@ -549,8 +652,11 @@ See `examples/income_distribution_us.py` for:
 
 ## Next steps
 
-- See `examples/` for complete working examples
-- Review country-specific documentation:
+- [Economic impact analysis](economic-impact-analysis.md): Full baseline-vs-reform comparison workflow
+- [Advanced outputs](advanced-outputs.md): DecileImpact, Poverty, Inequality, IntraDecileImpact
+- [Regions and scoping](regions-and-scoping.md): Sub-national analysis (states, constituencies, districts)
+- Country-specific documentation:
   - [UK tax-benefit model](country-models-uk.md)
   - [US tax-benefit model](country-models-us.md)
-- Explore the API reference for detailed class documentation
+- [Visualisation](visualisation.md): Publication-ready charts
+- [Examples](examples.md): Complete working scripts

@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, PrivateAttr
@@ -15,17 +15,15 @@ class Parameter(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
-    label: str | None = None
-    description: str | None = None
-    data_type: type | None = None
+    label: Optional[str] = None
+    description: Optional[str] = None
+    data_type: Optional[type] = None
     tax_benefit_model_version: TaxBenefitModelVersion
-    unit: str | None = None
+    unit: Optional[str] = None
 
     # Lazy loading: store core param ref, build values on demand
     _core_param: Any = PrivateAttr(default=None)
-    _parameter_values: list["ParameterValue"] | None = PrivateAttr(
-        default=None
-    )
+    _parameter_values: Optional[list["ParameterValue"]] = PrivateAttr(default=None)
 
     def __init__(self, _core_param: Any = None, **data):
         super().__init__(**data)
@@ -48,9 +46,7 @@ class Parameter(BaseModel):
                         next_instant = None
                     pv = ParameterValue(
                         parameter=self,
-                        start_date=parse_safe_date(
-                            param_at_instant.instant_str
-                        ),
+                        start_date=parse_safe_date(param_at_instant.instant_str),
                         end_date=parse_safe_date(next_instant.instant_str)
                         if next_instant
                         else None,

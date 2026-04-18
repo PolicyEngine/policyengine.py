@@ -21,6 +21,7 @@ if find_spec("policyengine_us") is not None:
     from .model import (
         PolicyEngineUS,
         PolicyEngineUSLatest,
+        managed_microsimulation,
         us_latest,
         us_model,
     )
@@ -31,6 +32,7 @@ if find_spec("policyengine_us") is not None:
     USYearData.model_rebuild()
     PolicyEngineUSDataset.model_rebuild()
     PolicyEngineUSLatest.model_rebuild()
+    ProgramStatistics.model_rebuild()
 
     __all__ = [
         "USYearData",
@@ -40,6 +42,7 @@ if find_spec("policyengine_us") is not None:
         "ensure_datasets",
         "PolicyEngineUS",
         "PolicyEngineUSLatest",
+        "managed_microsimulation",
         "us_model",
         "us_latest",
         "economic_impact_analysis",

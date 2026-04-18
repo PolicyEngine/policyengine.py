@@ -22,7 +22,12 @@ def parse_safe_date(date_string: str) -> datetime:
         return date_obj
     except ValueError as e:
         # Try to handle invalid day values (e.g., 2021-06-31)
-        if "day is out of range for month" in str(e):
+        # Python <3.14: "day is out of range for month"
+        # Python 3.14+: "day N must be in range 1..M for month ..."
+        error_msg = str(e)
+        if "day is out of range for month" in error_msg or (
+            "must be in range" in error_msg and "for month" in error_msg
+        ):
             parts = date_string.split("-")
             if len(parts) == 3:
                 year = int(parts[0])
@@ -35,6 +40,4 @@ def parse_safe_date(date_string: str) -> datetime:
                 if date_obj.year < 1:
                     return date_obj.replace(year=1)
                 return date_obj
-        raise ValueError(
-            f"Invalid date format: {date_string}. Expected YYYY-MM-DD"
-        )
+        raise ValueError(f"Invalid date format: {date_string}. Expected YYYY-MM-DD")

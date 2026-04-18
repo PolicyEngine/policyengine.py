@@ -1,11 +1,16 @@
 import warnings
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 from microdf import MicroDataFrame
 from pydantic import ConfigDict
 
 from policyengine.core import Dataset, YearData
+from policyengine.core.release_manifest import (
+    dataset_logical_name,
+    resolve_dataset_reference,
+)
 
 
 class USYearData(YearData):
@@ -36,7 +41,7 @@ class USYearData(YearData):
 class PolicyEngineUSDataset(Dataset):
     """US dataset with multi-year entity-level data."""
 
-    data: USYearData | None = None
+    data: Optional[USYearData] = None
 
     def model_post_init(self, __context) -> None:
         """Called after Pydantic initialization."""
@@ -70,21 +75,13 @@ class PolicyEngineUSDataset(Dataset):
         filepath = self.filepath
         with pd.HDFStore(filepath, mode="r") as store:
             self.data = USYearData(
-                person=MicroDataFrame(
-                    store["person"], weights="person_weight"
-                ),
+                person=MicroDataFrame(store["person"], weights="person_weight"),
                 marital_unit=MicroDataFrame(
                     store["marital_unit"], weights="marital_unit_weight"
                 ),
-                family=MicroDataFrame(
-                    store["family"], weights="family_weight"
-                ),
-                spm_unit=MicroDataFrame(
-                    store["spm_unit"], weights="spm_unit_weight"
-                ),
-                tax_unit=MicroDataFrame(
-                    store["tax_unit"], weights="tax_unit_weight"
-                ),
+                family=MicroDataFrame(store["family"], weights="family_weight"),
+                spm_unit=MicroDataFrame(store["spm_unit"], weights="spm_unit_weight"),
+                tax_unit=MicroDataFrame(store["tax_unit"], weights="tax_unit_weight"),
                 household=MicroDataFrame(
                     store["household"], weights="household_weight"
                 ),
@@ -105,15 +102,15 @@ class PolicyEngineUSDataset(Dataset):
 
 def create_datasets(
     datasets: list[str] = [
-        "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5",
+        "enhanced_cps_2024",
     ],
     years: list[int] = [2024, 2025, 2026, 2027, 2028],
     data_folder: str = "./data",
 ) -> dict[str, PolicyEngineUSDataset]:
-    """Create PolicyEngineUSDataset instances from HuggingFace dataset paths.
+    """Create PolicyEngineUSDataset instances from logical dataset names or URLs.
 
     Args:
-        datasets: List of HuggingFace dataset paths (e.g., "hf://policyengine/policyengine-us-data/cps_2024.h5")
+        datasets: List of logical dataset names or HuggingFace dataset URLs
         years: List of years to extract data for
         data_folder: Directory to save the dataset files
 
@@ -124,7 +121,9 @@ def create_datasets(
 
     result = {}
     for dataset in datasets:
-        sim = Microsimulation(dataset=dataset)
+        resolved_dataset = resolve_dataset_reference("us", dataset)
+        dataset_stem = dataset_logical_name(resolved_dataset)
+        sim = Microsimulation(dataset=resolved_dataset)
 
         for year in years:
             # Get all input variables from the simulation
@@ -241,9 +240,7 @@ def create_datasets(
                             how="left",
                         )
                         entity_df = entity_df.rename(
-                            columns={
-                                "household_weight": f"{entity_name}_weight"
-                            }
+                            columns={"household_weight": f"{entity_name}_weight"}
                         )
                         entity_df = entity_df.drop(
                             columns=[
@@ -265,31 +262,25 @@ def create_datasets(
                         tax_unit_df = entity_df
 
             us_dataset = PolicyEngineUSDataset(
-                id=f"{Path(dataset).stem}_year_{year}",
-                name=f"{Path(dataset).stem}-year-{year}",
-                description=f"US Dataset for year {year} based on {Path(dataset).stem}",
-                filepath=f"{data_folder}/{Path(dataset).stem}_year_{year}.h5",
+                id=f"{dataset_stem}_year_{year}",
+                name=f"{dataset_stem}-year-{year}",
+                description=f"US Dataset for year {year} based on {dataset_stem}",
+                filepath=f"{data_folder}/{dataset_stem}_year_{year}.h5",
                 year=int(year),
                 data=USYearData(
                     person=MicroDataFrame(person_df, weights="person_weight"),
-                    household=MicroDataFrame(
-                        household_df, weights="household_weight"
-                    ),
+                    household=MicroDataFrame(household_df, weights="household_weight"),
                     marital_unit=MicroDataFrame(
                         marital_unit_df, weights="marital_unit_weight"
                     ),
                     family=MicroDataFrame(family_df, weights="family_weight"),
-                    spm_unit=MicroDataFrame(
-                        spm_unit_df, weights="spm_unit_weight"
-                    ),
-                    tax_unit=MicroDataFrame(
-                        tax_unit_df, weights="tax_unit_weight"
-                    ),
+                    spm_unit=MicroDataFrame(spm_unit_df, weights="spm_unit_weight"),
+                    tax_unit=MicroDataFrame(tax_unit_df, weights="tax_unit_weight"),
                 ),
             )
             us_dataset.save()
 
-            dataset_key = f"{Path(dataset).stem}_{year}"
+            dataset_key = f"{dataset_stem}_{year}"
             result[dataset_key] = us_dataset
 
     return result
@@ -297,7 +288,7 @@ def create_datasets(
 
 def load_datasets(
     datasets: list[str] = [
-        "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5",
+        "enhanced_cps_2024",
     ],
     years: list[int] = [2024, 2025, 2026, 2027, 2028],
     data_folder: str = "./data",
@@ -314,17 +305,19 @@ def load_datasets(
     """
     result = {}
     for dataset in datasets:
+        resolved_dataset = resolve_dataset_reference("us", dataset)
+        dataset_stem = dataset_logical_name(resolved_dataset)
         for year in years:
-            filepath = f"{data_folder}/{Path(dataset).stem}_year_{year}.h5"
+            filepath = f"{data_folder}/{dataset_stem}_year_{year}.h5"
             us_dataset = PolicyEngineUSDataset(
-                name=f"{Path(dataset).stem}-year-{year}",
-                description=f"US Dataset for year {year} based on {Path(dataset).stem}",
+                name=f"{dataset_stem}-year-{year}",
+                description=f"US Dataset for year {year} based on {dataset_stem}",
                 filepath=filepath,
                 year=year,
             )
             us_dataset.load()
 
-            dataset_key = f"{Path(dataset).stem}_{year}"
+            dataset_key = f"{dataset_stem}_{year}"
             result[dataset_key] = us_dataset
 
     return result
@@ -332,7 +325,7 @@ def load_datasets(
 
 def ensure_datasets(
     datasets: list[str] = [
-        "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5",
+        "enhanced_cps_2024",
     ],
     years: list[int] = [2024, 2025, 2026, 2027, 2028],
     data_folder: str = "./data",
@@ -350,10 +343,10 @@ def ensure_datasets(
     # Check if all dataset files exist
     all_exist = True
     for dataset in datasets:
+        resolved_dataset = resolve_dataset_reference("us", dataset)
+        dataset_stem = dataset_logical_name(resolved_dataset)
         for year in years:
-            filepath = Path(
-                f"{data_folder}/{Path(dataset).stem}_year_{year}.h5"
-            )
+            filepath = Path(f"{data_folder}/{dataset_stem}_year_{year}.h5")
             if not filepath.exists():
                 all_exist = False
                 break
@@ -361,10 +354,6 @@ def ensure_datasets(
             break
 
     if all_exist:
-        return load_datasets(
-            datasets=datasets, years=years, data_folder=data_folder
-        )
+        return load_datasets(datasets=datasets, years=years, data_folder=data_folder)
     else:
-        return create_datasets(
-            datasets=datasets, years=years, data_folder=data_folder
-        )
+        return create_datasets(datasets=datasets, years=years, data_folder=data_folder)

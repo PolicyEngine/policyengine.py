@@ -1,5 +1,6 @@
 import logging
 from collections import OrderedDict
+from typing import Generic, Optional, TypeVar
 
 import psutil
 
@@ -8,15 +9,17 @@ logger = logging.getLogger(__name__)
 _MEMORY_THRESHOLDS_GB = [8, 16, 32]
 _warned_thresholds: set[int] = set()
 
+T = TypeVar("T")
 
-class LRUCache[T]:
+
+class LRUCache(Generic[T]):
     """Least-recently-used cache with configurable size limit and memory monitoring."""
 
     def __init__(self, max_size: int = 100):
         self._max_size = max_size
         self._cache: OrderedDict[str, T] = OrderedDict()
 
-    def get(self, key: str) -> T | None:
+    def get(self, key: str) -> Optional[T]:
         """Get item from cache, marking it as recently used."""
         if key not in self._cache:
             return None
