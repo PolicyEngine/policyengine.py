@@ -76,14 +76,6 @@ class DataReleaseArtifact(BaseModel):
             revision=self.revision,
         )
 
-    @property
-    def https_uri(self) -> str:
-        return https_dataset_uri(
-            repo_id=self.repo_id,
-            path_in_repo=self.path,
-            revision=self.revision,
-        )
-
 
 class DataReleaseManifest(BaseModel):
     schema_version: int
@@ -198,18 +190,9 @@ def get_release_manifest(country_id: str) -> CountryReleaseManifest:
     return CountryReleaseManifest.model_validate_json(manifest_path.read_text())
 
 
-def _data_release_manifest_url(data_package: DataPackageVersion) -> str:
-    return (
-        "https://huggingface.co/"
-        f"{data_package.repo_id}/resolve/{data_package.version}/"
-        f"{data_package.release_manifest_path}"
-    )
-
-
 @lru_cache
 def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
     country_manifest = get_release_manifest(country_id)
-    data_package = country_manifest.data_package
 
     headers = {}
     token = os.environ.get("HUGGING_FACE_TOKEN")
@@ -217,7 +200,7 @@ def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
         headers["Authorization"] = f"Bearer {token}"
 
     response = requests.get(
-        _data_release_manifest_url(data_package),
+        https_release_manifest_uri(country_manifest.data_package),
         headers=headers,
         timeout=HF_REQUEST_TIMEOUT_SECONDS,
     )

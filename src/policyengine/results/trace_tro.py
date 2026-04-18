@@ -33,23 +33,16 @@ def build_results_trace_tro(
     results_location: Optional[str] = None,
     reform_location: Optional[str] = None,
     bundle_tro_location: Optional[str] = None,
+    bundle_tro_url: Optional[str] = None,
 ) -> dict:
     """Build a per-simulation TRO for a ``ResultsJson`` instance.
 
-    Args:
-        results: The validated results payload.
-        bundle_tro: A bundle-level TRACE TRO (see
-            :func:`policyengine.core.trace_tro.build_trace_tro_from_release_bundle`).
-        reform_payload: Optional reform JSON to include as a hashed artifact.
-        reform_name: Optional display name for the reform.
-        simulation_id: Optional identifier used in the TRO's ``schema:name``.
-        results_location: Optional URI or path for the ``results.json`` file.
-        reform_location: Optional URI or path for the reform JSON.
-        bundle_tro_location: Optional URI or path for the bundle TRO.
-
-    Returns:
-        The TRO as a ``dict``. Serialize with
-        :func:`policyengine.core.trace_tro.serialize_trace_tro`.
+    ``bundle_tro_url`` should point to a canonical, immutable location
+    for the bundle TRO (e.g. a GitHub release raw URL). It is recorded
+    on the performance node under ``pe:bundleTroUrl`` so a verifier can
+    fetch that URL, recompute its sha256, and confirm it matches the
+    bundle artifact hash in this TRO's composition. Without this
+    anchor, the bundle reference is only as trustworthy as the caller.
     """
     slug = simulation_id or (results.metadata.slug or results.metadata.title)
     return build_simulation_trace_tro(
@@ -62,6 +55,7 @@ def build_results_trace_tro(
         results_location=results_location,
         reform_location=reform_location,
         bundle_tro_location=bundle_tro_location,
+        bundle_tro_url=bundle_tro_url,
     )
 
 
@@ -74,12 +68,13 @@ def write_results_with_trace_tro(
     reform_name: Optional[str] = None,
     tro_suffix: str = ".trace.tro.jsonld",
     bundle_tro_path: Optional[Union[str, Path]] = None,
+    bundle_tro_url: Optional[str] = None,
 ) -> dict[str, Path]:
     """Write ``results.json`` and a sibling per-simulation TRACE TRO.
 
-    The TRO is written next to the results file with the given suffix
-    appended to the results filename stem. Returns a dict with ``results``
-    and ``tro`` paths.
+    The TRO is written next to the results file with the given suffix.
+    When ``bundle_tro_url`` is provided, it is recorded in the TRO so a
+    verifier can independently fetch that URL and check its hash.
     """
     results_path = Path(results_path)
     results.write(results_path)
@@ -97,6 +92,7 @@ def write_results_with_trace_tro(
         reform_name=reform_name,
         results_location=results_path.name,
         bundle_tro_location=bundle_tro_location,
+        bundle_tro_url=bundle_tro_url,
     )
     tro_path = results_path.with_suffix(tro_suffix)
     tro_path.write_bytes(serialize_trace_tro(tro))

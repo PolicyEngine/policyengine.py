@@ -1,14 +1,19 @@
 """TRACE Transparent Research Object (TRO) export.
 
-Emits TROv v0.1 JSON-LD for a PolicyEngine certified runtime bundle. The
-TRO is the standards-based provenance surface on top of the internal
-release manifests; it pins the model wheel, bundle manifest, data release
-manifest, and certified dataset artifact together by sha256 and exposes
-certification metadata in machine-readable fields so downstream tooling
-does not have to parse prose.
+Emits JSON-LD that conforms to the TRACE TROv vocabulary
+(https://w3id.org/trace/2023/05/trov#) for a PolicyEngine certified
+runtime bundle or a PolicyEngine simulation result. The bundle TRO pins
+the country model wheel, the country data release manifest, the
+certified dataset, and the bundle manifest itself by sha256. The
+per-simulation TRO chains a bundle TRO to a reform and a results.json
+payload so a published result has an immutable composition fingerprint.
 
-See https://w3id.org/trace/trov/0.1 for the vocabulary and
-docs/release-bundles.md for how the bundle layer is composed.
+PolicyEngine-specific certification metadata lives under the ``pe:``
+namespace and does not pollute the TROv vocabulary, so generated TROs
+can still be validated against TROv SHACL shapes when tooling is
+available.
+
+See docs/release-bundles.md for how the bundle layer is composed.
 """
 
 from __future__ import annotations
@@ -28,14 +33,14 @@ from .release_manifest import (
     https_release_manifest_uri,
 )
 
-TRACE_TROV_VERSION = "0.1"
+TRACE_TROV_NAMESPACE = "https://w3id.org/trace/2023/05/trov#"
 POLICYENGINE_TRACE_NAMESPACE = "https://policyengine.org/trace/0.1#"
 
 TRACE_CONTEXT: list[dict[str, str]] = [
     {
         "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
         "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
-        "trov": "https://w3id.org/trace/trov/0.1#",
+        "trov": TRACE_TROV_NAMESPACE,
         "schema": "https://schema.org/",
         "pe": POLICYENGINE_TRACE_NAMESPACE,
     }
@@ -56,13 +61,6 @@ _MIME_TYPES = {
 }
 
 
-def _hash_object(value: str) -> dict[str, str]:
-    return {
-        "trov:hashAlgorithm": "sha256",
-        "trov:hashValue": value,
-    }
-
-
 def _artifact_mime_type(path_or_uri: str) -> Optional[str]:
     lowered = path_or_uri.lower()
     if lowered.endswith(".tar.gz"):
@@ -71,46 +69,69 @@ def _artifact_mime_type(path_or_uri: str) -> Optional[str]:
     return _MIME_TYPES.get(suffix)
 
 
-def _canonical_json_bytes(value: Mapping) -> bytes:
+def canonical_json_bytes(value: Mapping) -> bytes:
+    """Canonical JSON serialization used for every content hash in the TRO.
+
+    Documented publicly because any third-party verifier needs to
+    reproduce these bytes exactly to recompute the artifact hashes that
+    the composition fingerprint binds together.
+    """
     return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
 
 def compute_trace_composition_fingerprint(
     artifact_hashes: Iterable[str],
 ) -> str:
-    """Fingerprint a composition by the sorted set of its artifact hashes."""
+    """Fingerprint a composition by the sorted set of its artifact hashes.
+
+    Joins hashes with ``\\n`` so concatenation is unambiguous regardless
+    of hash length.
+    """
+    sorted_hashes = sorted(artifact_hashes)
     digest = hashlib.sha256()
-    digest.update("".join(sorted(artifact_hashes)).encode("utf-8"))
+    digest.update("\n".join(sorted_hashes).encode("utf-8"))
     return digest.hexdigest()
 
 
-def _ci_attestation() -> dict[str, str]:
-    """Return GitHub Actions attestation metadata if available."""
-    attestation: dict[str, str] = {}
-    if os.environ.get("GITHUB_ACTIONS") != "true":
-        return attestation
-    server = os.environ.get("GITHUB_SERVER_URL")
-    repo = os.environ.get("GITHUB_REPOSITORY")
-    run_id = os.environ.get("GITHUB_RUN_ID")
-    if server and repo and run_id:
-        attestation["pe:ciRunUrl"] = f"{server}/{repo}/actions/runs/{run_id}"
-    sha = os.environ.get("GITHUB_SHA")
-    if sha:
-        attestation["pe:ciGitSha"] = sha
-    ref = os.environ.get("GITHUB_REF")
-    if ref:
-        attestation["pe:ciGitRef"] = ref
-    return attestation
+def _emission_context() -> dict[str, str]:
+    """Attestation metadata about where and how the TRO was emitted.
+
+    Always includes ``pe:emittedIn`` so a verifier can distinguish a CI
+    build from a laptop build without inferring from the absence of
+    optional fields.
+    """
+    context: dict[str, str] = {}
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        context["pe:emittedIn"] = "github-actions"
+        server = os.environ.get("GITHUB_SERVER_URL")
+        repo = os.environ.get("GITHUB_REPOSITORY")
+        run_id = os.environ.get("GITHUB_RUN_ID")
+        if server and repo and run_id:
+            context["pe:ciRunUrl"] = f"{server}/{repo}/actions/runs/{run_id}"
+        sha = os.environ.get("GITHUB_SHA")
+        if sha:
+            context["pe:ciGitSha"] = sha
+        ref = os.environ.get("GITHUB_REF")
+        if ref:
+            context["pe:ciGitRef"] = ref
+    else:
+        context["pe:emittedIn"] = "local"
+    return context
 
 
-def _resolve_model_wheel_hash(
+def _resolve_model_wheel(
     country_manifest: CountryReleaseManifest,
     *,
     model_wheel_sha256: Optional[str],
     model_wheel_url: Optional[str],
     fetch_pypi: Any,
 ) -> tuple[Optional[str], Optional[str]]:
-    """Return (sha256, https_url) for the model wheel, fetching from PyPI if missing."""
+    """Return ``(sha256, https_url)`` for the model wheel.
+
+    Uses the bundled manifest when both are present; otherwise queries
+    the PyPI JSON API. Network failures degrade to ``(None, None)`` so
+    the wheel artifact is omitted rather than breaking emission.
+    """
     sha = model_wheel_sha256 or country_manifest.model_package.sha256
     url = model_wheel_url or country_manifest.model_package.wheel_url
     if sha is not None and url is not None:
@@ -125,6 +146,122 @@ def _resolve_model_wheel_hash(
     return sha or metadata.get("sha256"), url or metadata.get("url")
 
 
+def _make_artifact(
+    artifact_id: str, sha256: str, mime_type: Optional[str], name: Optional[str]
+) -> dict[str, Any]:
+    artifact: dict[str, Any] = {
+        "@id": artifact_id,
+        "@type": "trov:ResearchArtifact",
+        "trov:sha256": sha256,
+    }
+    if mime_type is not None:
+        artifact["trov:mimeType"] = mime_type
+    if name is not None:
+        artifact["schema:name"] = name
+    return artifact
+
+
+def _make_location(location_id: str, artifact_id: str, location: str) -> dict[str, Any]:
+    return {
+        "@id": location_id,
+        "@type": "trov:ArtifactLocation",
+        "trov:hasArtifact": {"@id": artifact_id},
+        "trov:hasLocation": location,
+    }
+
+
+def _assemble_composition_and_arrangement(
+    artifact_specs: list[dict[str, Any]],
+    *,
+    composition_id: str = "composition/1",
+    arrangement_id: str = "arrangement/1",
+    arrangement_comment: Optional[str] = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    artifacts: list[dict[str, Any]] = []
+    locations: list[dict[str, Any]] = []
+    hashes: list[str] = []
+    for spec in artifact_specs:
+        artifact_id = f"{composition_id}/artifact/{spec['id']}"
+        hashes.append(spec["hash"])
+        artifacts.append(
+            _make_artifact(
+                artifact_id,
+                spec["hash"],
+                spec.get("mime_type"),
+                spec.get("name"),
+            )
+        )
+        locations.append(
+            _make_location(
+                f"{arrangement_id}/location/{spec['id']}",
+                artifact_id,
+                spec["location"],
+            )
+        )
+
+    composition = {
+        "@id": composition_id,
+        "@type": "trov:ArtifactComposition",
+        "trov:hasFingerprint": {
+            "@id": f"{composition_id}/fingerprint",
+            "@type": "trov:CompositionFingerprint",
+            "trov:sha256": compute_trace_composition_fingerprint(hashes),
+        },
+        "trov:hasArtifact": artifacts,
+    }
+    arrangement: dict[str, Any] = {
+        "@id": arrangement_id,
+        "@type": "trov:ArtifactArrangement",
+        "trov:hasArtifactLocation": locations,
+    }
+    if arrangement_comment is not None:
+        arrangement["rdfs:comment"] = arrangement_comment
+    return composition, arrangement
+
+
+def _policyengine_trs(comment: str) -> dict[str, Any]:
+    return {
+        "@id": "trs",
+        "@type": "trov:TransparentResearchSystem",
+        "schema:name": "PolicyEngine release pipeline",
+        "rdfs:comment": comment,
+    }
+
+
+def _assemble_tro_node(
+    *,
+    tro_id: str = "tro",
+    tro_name: str,
+    tro_description: str,
+    created_at: Optional[str],
+    creator: Mapping[str, str],
+    software_version: Optional[str],
+    trs_comment: str,
+    composition: Mapping[str, Any],
+    arrangement: Mapping[str, Any],
+    performance: Mapping[str, Any],
+) -> dict[str, Any]:
+    node: dict[str, Any] = {
+        "@id": tro_id,
+        "@type": "trov:TransparentResearchObject",
+        "schema:name": tro_name,
+        "schema:description": tro_description,
+        "schema:creator": dict(creator),
+        "trov:wasAssembledBy": _policyengine_trs(trs_comment),
+        "trov:createdWith": {
+            "@type": "schema:SoftwareApplication",
+            "schema:name": "policyengine",
+            "schema:softwareVersion": software_version,
+        },
+        "trov:hasComposition": dict(composition),
+        "trov:hasArrangement": [dict(arrangement)],
+        "trov:hasPerformance": dict(performance),
+    }
+    if created_at is not None:
+        node["schema:dateCreated"] = created_at
+    return node
+
+
 def build_trace_tro_from_release_bundle(
     country_manifest: CountryReleaseManifest,
     data_release_manifest: DataReleaseManifest,
@@ -135,17 +272,14 @@ def build_trace_tro_from_release_bundle(
     model_wheel_sha256: Optional[str] = None,
     model_wheel_url: Optional[str] = None,
     fetch_pypi: Any = fetch_pypi_wheel_metadata,
-    ci_attestation: Optional[Mapping[str, str]] = None,
+    emission_context: Optional[Mapping[str, str]] = None,
 ) -> dict:
     """Build a TRACE TRO for a certified runtime bundle.
 
     Artifacts in the composition: bundle manifest, data release manifest,
-    certified dataset, and the country model wheel. The wheel hash is read
-    from the bundled manifest when available and fetched from PyPI otherwise.
-
-    Certification metadata is encoded as structured ``pe:*`` fields on the
-    :class:`trov:TrustedResearchPerformance` node so downstream tools can
-    read it without parsing the description.
+    certified dataset, and (when resolvable) the country model wheel.
+    Certification metadata is encoded as structured ``pe:*`` fields on
+    the :class:`trov:TransparentResearchPerformance` node.
     """
     certified_artifact = country_manifest.certified_data_artifact
     if certified_artifact is None:
@@ -159,13 +293,13 @@ def build_trace_tro_from_release_bundle(
             "Data release manifest does not include the certified dataset "
             f"'{certified_artifact.dataset}'."
         )
-    if dataset_artifact.sha256 is None:
+    dataset_sha256 = certified_artifact.sha256 or dataset_artifact.sha256
+    if dataset_sha256 is None:
         raise ValueError(
-            "Data release manifest does not include a SHA256 for the certified dataset "
-            f"'{certified_artifact.dataset}'."
+            "Neither the country release manifest nor the data release manifest "
+            f"provides a SHA256 for dataset '{certified_artifact.dataset}'."
         )
 
-    effective_certification = certification or country_manifest.certification
     bundle_manifest_location = (
         bundle_manifest_path
         or f"data/release_manifests/{country_manifest.country_id}.json"
@@ -179,16 +313,14 @@ def build_trace_tro_from_release_bundle(
         revision=dataset_artifact.revision,
     )
 
-    bundle_manifest_payload = country_manifest.model_dump(mode="json")
-    data_release_payload = data_release_manifest.model_dump(mode="json")
     bundle_manifest_hash = hashlib.sha256(
-        _canonical_json_bytes(bundle_manifest_payload)
+        canonical_json_bytes(country_manifest.model_dump(mode="json"))
     ).hexdigest()
     data_release_manifest_hash = hashlib.sha256(
-        _canonical_json_bytes(data_release_payload)
+        canonical_json_bytes(data_release_manifest.model_dump(mode="json"))
     ).hexdigest()
 
-    model_wheel_sha, model_wheel_https = _resolve_model_wheel_hash(
+    model_wheel_sha, model_wheel_https = _resolve_model_wheel(
         country_manifest,
         model_wheel_sha256=model_wheel_sha256,
         model_wheel_url=model_wheel_url,
@@ -213,13 +345,12 @@ def build_trace_tro_from_release_bundle(
         },
         {
             "id": "dataset",
-            "hash": dataset_artifact.sha256,
+            "hash": dataset_sha256,
             "location": dataset_location,
             "mime_type": _artifact_mime_type(dataset_artifact.path),
             "name": certified_artifact.dataset,
         },
     ]
-
     if model_wheel_sha is not None:
         artifact_specs.append(
             {
@@ -235,207 +366,135 @@ def build_trace_tro_from_release_bundle(
             }
         )
 
-    composition_artifacts: list[dict[str, Any]] = []
-    arrangement_locations: list[dict[str, Any]] = []
-    artifact_hashes: list[str] = []
-
-    for index, artifact in enumerate(artifact_specs):
-        artifact_id = f"composition/1/artifact/{artifact['id']}"
-        artifact_hashes.append(artifact["hash"])
-        artifact_entry: dict[str, Any] = {
-            "@id": artifact_id,
-            "@type": "trov:ResearchArtifact",
-            "schema:name": artifact["name"],
-            "trov:hash": _hash_object(artifact["hash"]),
-        }
-        if artifact["mime_type"] is not None:
-            artifact_entry["trov:mimeType"] = artifact["mime_type"]
-        composition_artifacts.append(artifact_entry)
-        arrangement_locations.append(
-            {
-                "@id": f"arrangement/0/location/{artifact['id']}",
-                "@type": "trov:ArtifactLocation",
-                "trov:artifact": {"@id": artifact_id},
-                "trov:path": artifact["location"],
-            }
-        )
-
-    certification_fields: dict[str, Any] = {}
-    certification_description_parts: list[str] = []
-    if effective_certification is not None:
-        certification_fields["pe:certifiedForModelVersion"] = (
-            effective_certification.certified_for_model_version
-        )
-        certification_fields["pe:compatibilityBasis"] = (
-            effective_certification.compatibility_basis
-        )
-        certification_description_parts.append(
-            f"Certified for runtime model version "
-            f"{effective_certification.certified_for_model_version} via "
-            f"{effective_certification.compatibility_basis}."
-        )
-        if effective_certification.built_with_model_version is not None:
-            certification_fields["pe:builtWithModelVersion"] = (
-                effective_certification.built_with_model_version
-            )
-            certification_description_parts.append(
-                f"Built with {country_manifest.model_package.name} "
-                f"{effective_certification.built_with_model_version}."
-            )
-        if effective_certification.built_with_model_git_sha is not None:
-            certification_fields["pe:builtWithModelGitSha"] = (
-                effective_certification.built_with_model_git_sha
-            )
-        if effective_certification.data_build_fingerprint is not None:
-            certification_fields["pe:dataBuildFingerprint"] = (
-                effective_certification.data_build_fingerprint
-            )
-            certification_description_parts.append(
-                f"Data-build fingerprint: "
-                f"{effective_certification.data_build_fingerprint}."
-            )
-        if effective_certification.data_build_id is not None:
-            certification_fields["pe:dataBuildId"] = (
-                effective_certification.data_build_id
-            )
-        if effective_certification.certified_by is not None:
-            certification_fields["pe:certifiedBy"] = (
-                effective_certification.certified_by
-            )
-
-    attestation_fields = (
-        dict(ci_attestation) if ci_attestation is not None else _ci_attestation()
+    composition, arrangement = _assemble_composition_and_arrangement(
+        artifact_specs,
+        arrangement_comment=(
+            f"Certified arrangement for bundle "
+            f"{country_manifest.bundle_id or country_manifest.country_id}."
+        ),
     )
 
-    created_at = country_manifest.published_at or (
-        data_release_manifest.build.built_at
-        if data_release_manifest.build is not None
-        else None
-    )
-    started_at = (
-        data_release_manifest.build.built_at
-        if data_release_manifest.build is not None
-        else created_at
-    )
-    build_id = (
-        (
+    effective_certification = certification or country_manifest.certification
+    performance = _build_bundle_performance(
+        country_manifest,
+        certified_data_build_id=(
             effective_certification.data_build_id
             if effective_certification is not None
             else None
         )
         or certified_artifact.build_id
         or (
-            f"{country_manifest.data_package.name}-{country_manifest.data_package.version}"
-        )
-    )
-
-    certification_description = (
-        " " + " ".join(certification_description_parts)
-        if certification_description_parts
-        else ""
-    )
-
-    tro_node: dict[str, Any] = {
-        "@id": "tro",
-        "@type": ["trov:TransparentResearchObject", "schema:CreativeWork"],
-        "trov:vocabularyVersion": TRACE_TROV_VERSION,
-        "schema:creator": POLICYENGINE_ORGANIZATION,
-        "schema:name": (
-            f"policyengine {country_manifest.country_id} certified bundle TRO"
+            f"{country_manifest.data_package.name}-"
+            f"{country_manifest.data_package.version}"
         ),
-        "schema:description": (
+        certification=effective_certification,
+        started_at=(
+            data_release_manifest.build.built_at
+            if data_release_manifest.build is not None
+            else country_manifest.published_at
+        ),
+        ended_at=country_manifest.published_at,
+        emission_context=(
+            dict(emission_context)
+            if emission_context is not None
+            else _emission_context()
+        ),
+    )
+
+    tro_node = _assemble_tro_node(
+        tro_name=f"policyengine {country_manifest.country_id} certified bundle TRO",
+        tro_description=(
             f"TRACE TRO for certified runtime bundle "
             f"{country_manifest.bundle_id or country_manifest.country_id} "
-            f"covering the bundled country release manifest, the country data "
-            f"release manifest, the certified dataset artifact, and the model "
-            f"wheel." + certification_description
+            f"covering the bundle manifest, the country data release "
+            f"manifest, the certified dataset artifact, and the country "
+            f"model wheel."
         ),
-        "trov:wasAssembledBy": {
-            "@id": "trs",
-            "@type": ["trov:TrustedResearchSystem", "schema:Organization"],
-            "schema:name": "PolicyEngine certified release bundle pipeline",
-            "schema:description": (
-                "PolicyEngine certification workflow for runtime bundles that "
-                "pin a country model version, a country data release, and a "
-                "specific dataset artifact."
-            ),
-        },
-        "trov:createdWith": {
-            "@type": "schema:SoftwareApplication",
-            "schema:name": "policyengine",
-            "schema:softwareVersion": country_manifest.policyengine_version,
-        },
-        "trov:hasComposition": {
-            "@id": "composition/1",
-            "@type": "trov:ArtifactComposition",
-            "trov:hasFingerprint": {
-                "@id": "fingerprint",
-                "@type": "trov:CompositionFingerprint",
-                "trov:hash": _hash_object(
-                    compute_trace_composition_fingerprint(artifact_hashes)
-                ),
-            },
-            "trov:hasArtifact": composition_artifacts,
-        },
-        "trov:hasArrangement": [
-            {
-                "@id": "arrangement/0",
-                "@type": "trov:ArtifactArrangement",
-                "rdfs:comment": (
-                    f"Certified arrangement for bundle "
-                    f"{country_manifest.bundle_id or country_manifest.country_id}."
-                ),
-                "trov:hasArtifactLocation": arrangement_locations,
-            }
-        ],
-        "trov:hasPerformance": [
-            {
-                "@id": "trp/0",
-                "@type": "trov:TrustedResearchPerformance",
-                "rdfs:comment": (
-                    f"Certification of build {build_id} for "
-                    f"{country_manifest.model_package.name} "
-                    f"{country_manifest.model_package.version}."
-                ),
-                "trov:wasConductedBy": {"@id": "trs"},
-                "trov:startedAtTime": started_at,
-                "trov:endedAtTime": created_at,
-                "trov:contributedToArrangement": {
-                    "@id": "trp/0/binding/0",
-                    "@type": "trov:ArrangementBinding",
-                    "trov:arrangement": {"@id": "arrangement/0"},
-                },
-                **certification_fields,
-                **attestation_fields,
-            }
-        ],
-    }
-    if created_at is not None:
-        tro_node["schema:dateCreated"] = created_at
+        created_at=country_manifest.published_at
+        or (
+            data_release_manifest.build.built_at
+            if data_release_manifest.build is not None
+            else None
+        ),
+        creator=POLICYENGINE_ORGANIZATION,
+        software_version=country_manifest.policyengine_version,
+        trs_comment=(
+            "PolicyEngine certification workflow that pins a country model "
+            "version, a country data release, and a specific dataset artifact."
+        ),
+        composition=composition,
+        arrangement=arrangement,
+        performance=performance,
+    )
 
     return {"@context": TRACE_CONTEXT, "@graph": [tro_node]}
 
 
+def _build_bundle_performance(
+    country_manifest: CountryReleaseManifest,
+    *,
+    certified_data_build_id: str,
+    certification: Optional[DataCertification],
+    started_at: Optional[str],
+    ended_at: Optional[str],
+    emission_context: Mapping[str, str],
+) -> dict[str, Any]:
+    performance: dict[str, Any] = {
+        "@id": "trp/1",
+        "@type": "trov:TransparentResearchPerformance",
+        "rdfs:comment": (
+            f"Certification of build {certified_data_build_id} for "
+            f"{country_manifest.model_package.name} "
+            f"{country_manifest.model_package.version}."
+        ),
+        "trov:wasConductedBy": {"@id": "trs"},
+        "trov:accessedArrangement": {"@id": "arrangement/1"},
+    }
+    if started_at is not None:
+        performance["trov:startedAtTime"] = started_at
+    if ended_at is not None:
+        performance["trov:endedAtTime"] = ended_at
+    if certification is not None:
+        performance["pe:certifiedForModelVersion"] = (
+            certification.certified_for_model_version
+        )
+        performance["pe:compatibilityBasis"] = certification.compatibility_basis
+        if certification.built_with_model_version is not None:
+            performance["pe:builtWithModelVersion"] = (
+                certification.built_with_model_version
+            )
+        if certification.built_with_model_git_sha is not None:
+            performance["pe:builtWithModelGitSha"] = (
+                certification.built_with_model_git_sha
+            )
+        if certification.data_build_fingerprint is not None:
+            performance["pe:dataBuildFingerprint"] = (
+                certification.data_build_fingerprint
+            )
+        if certification.data_build_id is not None:
+            performance["pe:dataBuildId"] = certification.data_build_id
+        if certification.certified_by is not None:
+            performance["pe:certifiedBy"] = certification.certified_by
+    performance.update(emission_context)
+    return performance
+
+
 def serialize_trace_tro(tro: Mapping) -> bytes:
-    """Serialize a TRO to canonical JSON bytes (sorted keys, trailing newline)."""
-    return (json.dumps(tro, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    """Serialize a TRO with the same canonical JSON used for hashing."""
+    return canonical_json_bytes(tro)
 
 
 def extract_bundle_tro_reference(tro: Mapping) -> dict[str, Any]:
-    """Extract a compact reference to a bundle TRO for inclusion in other TROs.
-
-    Returns a dict with the composition fingerprint and the bundle TRO's
-    name, suitable for use as an input reference in a per-simulation TRO.
-    """
+    """Extract a compact reference to a bundle TRO for use as a simulation input."""
     graph = tro.get("@graph") or []
     if not graph:
         raise ValueError("TRO has an empty graph.")
     node = graph[0]
+    composition = node.get("trov:hasComposition") or {}
     fingerprint = (
-        node.get("trov:hasComposition", {})
-        .get("trov:hasFingerprint", {})
-        .get("trov:hash", {})
-        .get("trov:hashValue")
+        composition.get("trov:hasFingerprint", {}).get("trov:sha256")
+        if isinstance(composition, Mapping)
+        else None
     )
     if fingerprint is None:
         raise ValueError("TRO is missing a composition fingerprint.")
@@ -460,34 +519,35 @@ def build_simulation_trace_tro(
     results_location: Optional[str] = None,
     reform_location: Optional[str] = None,
     bundle_tro_location: Optional[str] = None,
-    ci_attestation: Optional[Mapping[str, str]] = None,
+    bundle_tro_url: Optional[str] = None,
+    emission_context: Optional[Mapping[str, str]] = None,
 ) -> dict:
     """Build a per-simulation TRO chaining a bundle TRO to a results payload.
 
-    The simulation TRO's composition includes: the bundle TRO itself (as a
-    single hashed artifact), the reform JSON (if provided), and the
-    results.json payload. This is the TRO academics cite alongside a
-    published result.
+    The simulation TRO composition pins: the bundle TRO itself, the
+    reform JSON (if provided), and the ``results.json`` payload. The
+    ``bundle_tro_url`` field is recorded on the performance node under
+    ``pe:bundleTroUrl`` so a verifier can cross-check the bundle TRO
+    hash against bytes fetched from a canonical location rather than
+    trusting the caller's dict.
     """
     bundle_reference = extract_bundle_tro_reference(bundle_tro)
-    bundle_bytes = _canonical_json_bytes(bundle_tro)
-    bundle_hash = hashlib.sha256(bundle_bytes).hexdigest()
-    results_bytes = _canonical_json_bytes(results_payload)
-    results_hash = hashlib.sha256(results_bytes).hexdigest()
+    bundle_hash = hashlib.sha256(canonical_json_bytes(bundle_tro)).hexdigest()
+    results_hash = hashlib.sha256(canonical_json_bytes(results_payload)).hexdigest()
 
     artifact_specs: list[dict[str, Any]] = [
         {
             "id": "bundle_tro",
             "hash": bundle_hash,
             "location": bundle_tro_location
+            or bundle_tro_url
             or f"bundle.trace.tro.jsonld#{bundle_reference['fingerprint']}",
             "mime_type": "application/ld+json",
             "name": bundle_reference.get("name") or "policyengine bundle TRO",
         }
     ]
     if reform_payload is not None:
-        reform_bytes = _canonical_json_bytes(reform_payload)
-        reform_hash = hashlib.sha256(reform_bytes).hexdigest()
+        reform_hash = hashlib.sha256(canonical_json_bytes(reform_payload)).hexdigest()
         artifact_specs.append(
             {
                 "id": "reform",
@@ -507,102 +567,50 @@ def build_simulation_trace_tro(
         }
     )
 
-    composition_artifacts: list[dict[str, Any]] = []
-    arrangement_locations: list[dict[str, Any]] = []
-    artifact_hashes: list[str] = []
-    for artifact in artifact_specs:
-        artifact_id = f"composition/1/artifact/{artifact['id']}"
-        artifact_hashes.append(artifact["hash"])
-        composition_artifacts.append(
-            {
-                "@id": artifact_id,
-                "@type": "trov:ResearchArtifact",
-                "schema:name": artifact["name"],
-                "trov:hash": _hash_object(artifact["hash"]),
-                "trov:mimeType": artifact["mime_type"],
-            }
-        )
-        arrangement_locations.append(
-            {
-                "@id": f"arrangement/0/location/{artifact['id']}",
-                "@type": "trov:ArtifactLocation",
-                "trov:artifact": {"@id": artifact_id},
-                "trov:path": artifact["location"],
-            }
-        )
-
-    attestation_fields = (
-        dict(ci_attestation) if ci_attestation is not None else _ci_attestation()
-    )
     simulation_slug = simulation_id or "simulation"
+    composition, arrangement = _assemble_composition_and_arrangement(
+        artifact_specs,
+        arrangement_comment=f"Simulation arrangement for {simulation_slug}.",
+    )
 
-    tro_node: dict[str, Any] = {
-        "@id": "tro",
-        "@type": ["trov:TransparentResearchObject", "schema:CreativeWork"],
-        "trov:vocabularyVersion": TRACE_TROV_VERSION,
-        "schema:creator": POLICYENGINE_ORGANIZATION,
-        "schema:name": f"policyengine simulation TRO ({simulation_slug})",
-        "schema:description": (
-            "TRACE TRO for a PolicyEngine simulation result. Composition pins "
-            "the certified runtime bundle TRO, the reform specification "
-            "(where applicable), and the results.json payload."
+    performance: dict[str, Any] = {
+        "@id": "trp/1",
+        "@type": "trov:TransparentResearchPerformance",
+        "rdfs:comment": (
+            f"PolicyEngine simulation bound to bundle fingerprint "
+            f"{bundle_reference['fingerprint']}."
         ),
-        "trov:createdWith": {
-            "@type": "schema:SoftwareApplication",
-            "schema:name": "policyengine",
-            "schema:softwareVersion": bundle_reference.get("policyengine_version"),
-        },
-        "trov:wasAssembledBy": {
-            "@id": "trs",
-            "@type": ["trov:TrustedResearchSystem", "schema:Organization"],
-            "schema:name": "PolicyEngine simulation pipeline",
-            "schema:description": (
-                "PolicyEngine simulation that consumes a certified runtime "
-                "bundle and produces a results.json payload."
-            ),
-        },
-        "trov:hasComposition": {
-            "@id": "composition/1",
-            "@type": "trov:ArtifactComposition",
-            "trov:hasFingerprint": {
-                "@id": "fingerprint",
-                "@type": "trov:CompositionFingerprint",
-                "trov:hash": _hash_object(
-                    compute_trace_composition_fingerprint(artifact_hashes)
-                ),
-            },
-            "trov:hasArtifact": composition_artifacts,
-        },
-        "trov:hasArrangement": [
-            {
-                "@id": "arrangement/0",
-                "@type": "trov:ArtifactArrangement",
-                "rdfs:comment": f"Simulation arrangement for {simulation_slug}.",
-                "trov:hasArtifactLocation": arrangement_locations,
-            }
-        ],
-        "trov:hasPerformance": [
-            {
-                "@id": "trp/0",
-                "@type": "trov:TrustedResearchPerformance",
-                "rdfs:comment": (
-                    f"PolicyEngine simulation bound to bundle fingerprint "
-                    f"{bundle_reference['fingerprint']}."
-                ),
-                "trov:wasConductedBy": {"@id": "trs"},
-                "trov:startedAtTime": started_at or created_at,
-                "trov:endedAtTime": created_at,
-                "trov:contributedToArrangement": {
-                    "@id": "trp/0/binding/0",
-                    "@type": "trov:ArrangementBinding",
-                    "trov:arrangement": {"@id": "arrangement/0"},
-                },
-                "pe:bundleFingerprint": bundle_reference["fingerprint"],
-                **attestation_fields,
-            }
-        ],
+        "trov:wasConductedBy": {"@id": "trs"},
+        "trov:accessedArrangement": {"@id": "arrangement/1"},
+        "pe:bundleFingerprint": bundle_reference["fingerprint"],
     }
+    if bundle_tro_url is not None:
+        performance["pe:bundleTroUrl"] = bundle_tro_url
+    if started_at is not None or created_at is not None:
+        performance["trov:startedAtTime"] = started_at or created_at
     if created_at is not None:
-        tro_node["schema:dateCreated"] = created_at
+        performance["trov:endedAtTime"] = created_at
+    performance.update(
+        dict(emission_context) if emission_context is not None else _emission_context()
+    )
+
+    tro_node = _assemble_tro_node(
+        tro_name=f"policyengine simulation TRO ({simulation_slug})",
+        tro_description=(
+            "TRACE TRO for a PolicyEngine simulation result. Composition "
+            "pins the certified runtime bundle TRO, the reform "
+            "specification (where applicable), and the results.json payload."
+        ),
+        created_at=created_at,
+        creator=POLICYENGINE_ORGANIZATION,
+        software_version=bundle_reference.get("policyengine_version"),
+        trs_comment=(
+            "PolicyEngine simulation that consumes a certified runtime "
+            "bundle and produces a results.json payload."
+        ),
+        composition=composition,
+        arrangement=arrangement,
+        performance=performance,
+    )
 
     return {"@context": TRACE_CONTEXT, "@graph": [tro_node]}

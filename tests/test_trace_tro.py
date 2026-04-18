@@ -2,7 +2,7 @@
 
 Covers bundle-level TROs (``policyengine.core.trace_tro``) and per-simulation
 TROs (``policyengine.results.trace_tro``), plus the ``policyengine trace-tro``
-CLI and JSON-Schema conformance.
+CLI, determinism guarantees, and JSON-Schema conformance against TROv 2023/05.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from policyengine.core.tax_benefit_model import TaxBenefitModel
 from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
 from policyengine.core.trace_tro import (
     POLICYENGINE_ORGANIZATION,
-    TRACE_TROV_VERSION,
+    TRACE_TROV_NAMESPACE,
     build_trace_tro_from_release_bundle,
     compute_trace_composition_fingerprint,
     extract_bundle_tro_reference,
@@ -95,6 +95,16 @@ def tro_schema() -> dict:
     return json.loads(schema_path.read_text())
 
 
+@pytest.fixture
+def us_bundle_tro(monkeypatch):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    return build_trace_tro_from_release_bundle(
+        get_release_manifest("us"),
+        _us_data_release_manifest(),
+        fetch_pypi=_fake_fetch_pypi,
+    )
+
+
 @pytest.fixture(autouse=True)
 def clear_manifest_caches():
     yield
@@ -105,41 +115,66 @@ def clear_manifest_caches():
 class TestBundleTRO:
     """Bundle-level TRACE TRO emission."""
 
-    def test__given_us_bundle__then_schema_creator_is_policyengine_organization(
-        self,
+    def test__given_context__then_uses_public_trov_namespace(self, us_bundle_tro):
+        context = us_bundle_tro["@context"][0]
+        assert context["trov"] == TRACE_TROV_NAMESPACE
+        assert context["trov"] == "https://w3id.org/trace/2023/05/trov#"
+
+    def test__given_root_type__then_is_single_transparent_research_object(
+        self, us_bundle_tro
     ):
-        country_manifest = get_release_manifest("us")
+        node = us_bundle_tro["@graph"][0]
+        assert node["@type"] == "trov:TransparentResearchObject"
 
-        tro = build_trace_tro_from_release_bundle(
-            country_manifest,
-            _us_data_release_manifest(),
-            fetch_pypi=_fake_fetch_pypi,
-        )
+    def test__given_trs__then_is_transparent_research_system(self, us_bundle_tro):
+        trs = us_bundle_tro["@graph"][0]["trov:wasAssembledBy"]
+        assert trs["@type"] == "trov:TransparentResearchSystem"
 
-        assert tro["@graph"][0]["schema:creator"] == POLICYENGINE_ORGANIZATION
+    def test__given_performance__then_is_transparent_research_performance(
+        self, us_bundle_tro
+    ):
+        performance = us_bundle_tro["@graph"][0]["trov:hasPerformance"]
+        assert performance["@type"] == "trov:TransparentResearchPerformance"
+        assert performance["trov:accessedArrangement"]["@id"] == "arrangement/1"
 
-    def test__given_us_bundle__then_model_wheel_is_hashed_as_artifact(self):
-        country_manifest = get_release_manifest("us")
+    def test__given_artifacts__then_use_flat_trov_sha256(self, us_bundle_tro):
+        artifacts = us_bundle_tro["@graph"][0]["trov:hasComposition"][
+            "trov:hasArtifact"
+        ]
+        for artifact in artifacts:
+            assert "trov:sha256" in artifact
+            assert "trov:hash" not in artifact
+            assert len(artifact["trov:sha256"]) == 64
 
-        tro = build_trace_tro_from_release_bundle(
-            country_manifest,
-            _us_data_release_manifest(),
-            fetch_pypi=_fake_fetch_pypi,
-        )
-
-        artifacts = tro["@graph"][0]["trov:hasComposition"]["trov:hasArtifact"]
-        wheel_artifacts = [a for a in artifacts if a["@id"].endswith("model_wheel")]
-        assert len(wheel_artifacts) == 1
-        assert wheel_artifacts[0]["trov:hash"]["trov:hashValue"] == FAKE_WHEEL_SHA
-        locations = tro["@graph"][0]["trov:hasArrangement"][0][
+    def test__given_locations__then_use_has_location_and_has_artifact(
+        self, us_bundle_tro
+    ):
+        locations = us_bundle_tro["@graph"][0]["trov:hasArrangement"][0][
             "trov:hasArtifactLocation"
         ]
-        wheel_location = next(
-            location
-            for location in locations
-            if location["@id"].endswith("model_wheel")
-        )
-        assert wheel_location["trov:path"] == FAKE_WHEEL_URL
+        for location in locations:
+            assert "trov:hasLocation" in location
+            assert "trov:path" not in location
+            assert "trov:hasArtifact" in location
+            assert "trov:artifact" not in location
+
+    def test__given_creator__then_is_policyengine_organization(self, us_bundle_tro):
+        assert us_bundle_tro["@graph"][0]["schema:creator"] == POLICYENGINE_ORGANIZATION
+
+    def test__given_us_bundle__then_model_wheel_hash_is_included(self, us_bundle_tro):
+        country_manifest = get_release_manifest("us")
+        artifacts = us_bundle_tro["@graph"][0]["trov:hasComposition"][
+            "trov:hasArtifact"
+        ]
+        wheels = [a for a in artifacts if a["@id"].endswith("model_wheel")]
+        assert len(wheels) == 1
+        # us.json pins the wheel sha directly so PyPI is not consulted.
+        assert wheels[0]["trov:sha256"] == country_manifest.model_package.sha256
+        locations = us_bundle_tro["@graph"][0]["trov:hasArrangement"][0][
+            "trov:hasArtifactLocation"
+        ]
+        wheel_loc = next(loc for loc in locations if loc["@id"].endswith("model_wheel"))
+        assert wheel_loc["trov:hasLocation"] == country_manifest.model_package.wheel_url
 
     def test__given_manifest_sha__then_pypi_not_fetched(self):
         country_manifest = get_release_manifest("us")
@@ -154,8 +189,8 @@ class TestBundleTRO:
         )
 
         artifacts = tro["@graph"][0]["trov:hasComposition"]["trov:hasArtifact"]
-        wheel_artifacts = [a for a in artifacts if a["@id"].endswith("model_wheel")]
-        assert wheel_artifacts[0]["trov:hash"]["trov:hashValue"] == "b" * 64
+        wheels = [a for a in artifacts if a["@id"].endswith("model_wheel")]
+        assert wheels[0]["trov:sha256"] == "b" * 64
         fetch_pypi.assert_not_called()
 
     def test__given_pypi_unreachable__then_wheel_artifact_is_skipped(self):
@@ -178,35 +213,37 @@ class TestBundleTRO:
         ]
         assert not any(aid.endswith("model_wheel") for aid in artifact_ids)
 
-    def test__given_artifact_locations__then_all_paths_are_https_or_local(self):
+    def test__given_manifest_dataset_sha__then_data_release_sha_not_required(self):
         country_manifest = get_release_manifest("us")
+        country_manifest.certified_data_artifact.sha256 = "d" * 64
+        data_release_manifest = _us_data_release_manifest(sha256=None)
 
         tro = build_trace_tro_from_release_bundle(
             country_manifest,
-            _us_data_release_manifest(),
+            data_release_manifest,
             fetch_pypi=_fake_fetch_pypi,
         )
 
-        locations = tro["@graph"][0]["trov:hasArrangement"][0][
+        artifacts = tro["@graph"][0]["trov:hasComposition"]["trov:hasArtifact"]
+        dataset = next(a for a in artifacts if a["@id"].endswith("dataset"))
+        assert dataset["trov:sha256"] == "d" * 64
+
+    def test__given_artifact_locations__then_all_paths_are_https_or_local(
+        self, us_bundle_tro
+    ):
+        locations = us_bundle_tro["@graph"][0]["trov:hasArrangement"][0][
             "trov:hasArtifactLocation"
         ]
-        paths = [location["trov:path"] for location in locations]
-        # Bundle manifest is a local wheel-internal path; everything else must
-        # be dereferenceable HTTPS so a reproducibility reviewer can fetch it.
+        paths = [location["trov:hasLocation"] for location in locations]
         assert paths[0].startswith("data/release_manifests/")
         for path in paths[1:]:
             assert path.startswith("https://"), path
 
-    def test__given_certification__then_fields_are_machine_readable(self):
+    def test__given_certification__then_fields_are_machine_readable(
+        self, us_bundle_tro
+    ):
         country_manifest = get_release_manifest("us")
-
-        tro = build_trace_tro_from_release_bundle(
-            country_manifest,
-            _us_data_release_manifest(),
-            fetch_pypi=_fake_fetch_pypi,
-        )
-
-        performance = tro["@graph"][0]["trov:hasPerformance"][0]
+        performance = us_bundle_tro["@graph"][0]["trov:hasPerformance"]
         assert (
             performance["pe:certifiedForModelVersion"]
             == country_manifest.certification.certified_for_model_version
@@ -224,10 +261,7 @@ class TestBundleTRO:
             == country_manifest.certification.data_build_id
         )
 
-    def test__given_github_actions_env__then_ci_attestation_is_included(
-        self, monkeypatch
-    ):
-        country_manifest = get_release_manifest("us")
+    def test__given_github_actions_env__then_emitted_in_is_ci(self, monkeypatch):
         monkeypatch.setenv("GITHUB_ACTIONS", "true")
         monkeypatch.setenv("GITHUB_SERVER_URL", "https://github.com")
         monkeypatch.setenv("GITHUB_REPOSITORY", "PolicyEngine/policyengine.py")
@@ -235,82 +269,132 @@ class TestBundleTRO:
         monkeypatch.setenv("GITHUB_SHA", "abc123")
 
         tro = build_trace_tro_from_release_bundle(
-            country_manifest,
+            get_release_manifest("us"),
             _us_data_release_manifest(),
             fetch_pypi=_fake_fetch_pypi,
         )
 
-        performance = tro["@graph"][0]["trov:hasPerformance"][0]
+        performance = tro["@graph"][0]["trov:hasPerformance"]
+        assert performance["pe:emittedIn"] == "github-actions"
         assert (
             performance["pe:ciRunUrl"]
             == "https://github.com/PolicyEngine/policyengine.py/actions/runs/12345"
         )
         assert performance["pe:ciGitSha"] == "abc123"
 
-    def test__given_non_ci_env__then_no_attestation_fields(self, monkeypatch):
-        country_manifest = get_release_manifest("us")
-        monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-
-        tro = build_trace_tro_from_release_bundle(
-            country_manifest,
-            _us_data_release_manifest(),
-            fetch_pypi=_fake_fetch_pypi,
-        )
-
-        performance = tro["@graph"][0]["trov:hasPerformance"][0]
+    def test__given_no_ci_env__then_emitted_in_is_local(
+        self, monkeypatch, us_bundle_tro
+    ):
+        performance = us_bundle_tro["@graph"][0]["trov:hasPerformance"]
+        assert performance["pe:emittedIn"] == "local"
         assert "pe:ciRunUrl" not in performance
         assert "pe:ciGitSha" not in performance
 
-    def test__given_same_inputs__then_built_tros_serialize_identically(self):
-        country_manifest = get_release_manifest("us")
-        data = _us_data_release_manifest()
-
+    def test__given_fresh_manifest_instances__then_tro_bytes_match(self, monkeypatch):
+        monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
         first = serialize_trace_tro(
             build_trace_tro_from_release_bundle(
-                country_manifest,
-                data,
+                get_release_manifest("us"),
+                _us_data_release_manifest(),
                 fetch_pypi=_fake_fetch_pypi,
-                ci_attestation={},
             )
         )
+        get_release_manifest.cache_clear()
         second = serialize_trace_tro(
             build_trace_tro_from_release_bundle(
-                country_manifest,
-                data,
+                get_release_manifest("us"),
+                _us_data_release_manifest(),
                 fetch_pypi=_fake_fetch_pypi,
-                ci_attestation={},
             )
         )
         assert first == second
 
-    def test__given_hashes_in_any_order__then_composition_fingerprint_matches(
-        self,
-    ):
-        hashes = ["ccc", "aaa", "bbb"]
+    def test__given_hashes_in_any_order__then_fingerprint_matches(self):
+        hashes = ["c" * 64, "a" * 64, "b" * 64]
         assert compute_trace_composition_fingerprint(
             hashes
         ) == compute_trace_composition_fingerprint(reversed(hashes))
 
-    def test__given_generated_tro__then_validates_against_json_schema(self, tro_schema):
-        country_manifest = get_release_manifest("us")
+    def test__given_hex_length_ambiguity__then_separator_prevents_collision(self):
+        assert compute_trace_composition_fingerprint(
+            ["ab", "cdef"]
+        ) != compute_trace_composition_fingerprint(["abcd", "ef"])
 
-        tro = build_trace_tro_from_release_bundle(
-            country_manifest,
-            _us_data_release_manifest(),
-            fetch_pypi=_fake_fetch_pypi,
-        )
-
-        errors = list(Draft202012Validator(tro_schema).iter_errors(tro))
+    def test__given_generated_tro__then_validates_against_json_schema(
+        self, tro_schema, us_bundle_tro
+    ):
+        errors = list(Draft202012Validator(tro_schema).iter_errors(us_bundle_tro))
         assert errors == [], [error.message for error in errors]
 
-    def test__given_vocabulary_version_constant__then_matches_context_namespace(
-        self,
-    ):
-        assert TRACE_TROV_VERSION == "0.1"
+    def test__given_non_https_location__then_schema_rejects(self, tro_schema):
+        # Schema must catch the "non-HTTPS artifact locations" claim in the docs.
+        bad = {
+            "@context": [
+                {
+                    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+                    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+                    "trov": TRACE_TROV_NAMESPACE,
+                    "schema": "https://schema.org/",
+                    "pe": "https://policyengine.org/trace/0.1#",
+                }
+            ],
+            "@graph": [
+                {
+                    "@id": "tro",
+                    "@type": "trov:TransparentResearchObject",
+                    "schema:name": "bad",
+                    "schema:creator": POLICYENGINE_ORGANIZATION,
+                    "trov:wasAssembledBy": {
+                        "@id": "trs",
+                        "@type": "trov:TransparentResearchSystem",
+                        "schema:name": "x",
+                    },
+                    "trov:hasComposition": {
+                        "@id": "composition/1",
+                        "@type": "trov:ArtifactComposition",
+                        "trov:hasFingerprint": {
+                            "@id": "fp",
+                            "@type": "trov:CompositionFingerprint",
+                            "trov:sha256": "a" * 64,
+                        },
+                        "trov:hasArtifact": [
+                            {
+                                "@id": "composition/1/artifact/1",
+                                "@type": "trov:ResearchArtifact",
+                                "trov:sha256": "a" * 64,
+                            }
+                        ],
+                    },
+                    "trov:hasArrangement": [
+                        {
+                            "@id": "arrangement/1",
+                            "@type": "trov:ArtifactArrangement",
+                            "trov:hasArtifactLocation": [
+                                {
+                                    "@id": "arrangement/1/location/1",
+                                    "@type": "trov:ArtifactLocation",
+                                    "trov:hasArtifact": {
+                                        "@id": "composition/1/artifact/1"
+                                    },
+                                    "trov:hasLocation": "file:///tmp/leak.h5",
+                                }
+                            ],
+                        }
+                    ],
+                    "trov:hasPerformance": {
+                        "@id": "trp/1",
+                        "@type": "trov:TransparentResearchPerformance",
+                        "trov:wasConductedBy": {"@id": "trs"},
+                        "trov:accessedArrangement": {"@id": "arrangement/1"},
+                        "pe:emittedIn": "local",
+                    },
+                }
+            ],
+        }
+        errors = list(Draft202012Validator(tro_schema).iter_errors(bad))
+        assert errors, "schema must reject file:// locations"
 
-    def test__given_model_version_attribute__then_trace_tro_property_works(
-        self,
-    ):
+    def test__given_trace_tro_property__then_emits_valid_tro(self):
         manifest = get_release_manifest("us")
         data_release_manifest = _us_data_release_manifest()
         model_version = TaxBenefitModelVersion(
@@ -339,14 +423,6 @@ class TestBundleTRO:
 class TestSimulationTRO:
     """Per-simulation TROs chained from a bundle TRO."""
 
-    def _bundle_tro(self):
-        country_manifest = get_release_manifest("us")
-        return build_trace_tro_from_release_bundle(
-            country_manifest,
-            _us_data_release_manifest(),
-            fetch_pypi=_fake_fetch_pypi,
-        )
-
     def _results(self, **overrides):
         return ResultsJson(
             metadata=ResultsMetadata(
@@ -365,13 +441,12 @@ class TestSimulationTRO:
             },
         )
 
-    def test__given_bundle_and_results__then_simulation_tro_pins_both(self):
-        bundle_tro = self._bundle_tro()
-        results = self._results()
-
+    def test__given_bundle_and_results__then_simulation_tro_pins_both(
+        self, us_bundle_tro
+    ):
         tro = build_results_trace_tro(
-            results,
-            bundle_tro=bundle_tro,
+            self._results(),
+            bundle_tro=us_bundle_tro,
             reform_payload={"salt_cap": 0},
             reform_name="SALT cap repeal",
         )
@@ -385,27 +460,27 @@ class TestSimulationTRO:
             "composition/1/artifact/reform",
             "composition/1/artifact/results",
         }
-        performance = tro["@graph"][0]["trov:hasPerformance"][0]
+        performance = tro["@graph"][0]["trov:hasPerformance"]
         assert (
             performance["pe:bundleFingerprint"]
-            == extract_bundle_tro_reference(bundle_tro)["fingerprint"]
+            == extract_bundle_tro_reference(us_bundle_tro)["fingerprint"]
         )
 
     def test__given_simulation_tro__then_validates_against_json_schema(
-        self, tro_schema
+        self, tro_schema, us_bundle_tro
     ):
         tro = build_results_trace_tro(
             self._results(),
-            bundle_tro=self._bundle_tro(),
+            bundle_tro=us_bundle_tro,
             reform_payload={"salt_cap": 0},
         )
-
         errors = list(Draft202012Validator(tro_schema).iter_errors(tro))
         assert errors == [], [error.message for error in errors]
 
-    def test__given_no_reform__then_only_bundle_and_results_are_pinned(self):
-        tro = build_results_trace_tro(self._results(), bundle_tro=self._bundle_tro())
-
+    def test__given_no_reform__then_only_bundle_and_results_are_pinned(
+        self, us_bundle_tro
+    ):
+        tro = build_results_trace_tro(self._results(), bundle_tro=us_bundle_tro)
         artifact_ids = {
             a["@id"]
             for a in tro["@graph"][0]["trov:hasComposition"]["trov:hasArtifact"]
@@ -415,13 +490,52 @@ class TestSimulationTRO:
             "composition/1/artifact/results",
         }
 
+    def test__given_bundle_tro_url__then_performance_records_it(self, us_bundle_tro):
+        tro = build_results_trace_tro(
+            self._results(),
+            bundle_tro=us_bundle_tro,
+            bundle_tro_url="https://raw.githubusercontent.com/PolicyEngine/policyengine.py/v3.4.5/src/policyengine/data/release_manifests/us.trace.tro.jsonld",
+        )
+
+        performance = tro["@graph"][0]["trov:hasPerformance"]
+        assert performance["pe:bundleTroUrl"].startswith(
+            "https://raw.githubusercontent.com/PolicyEngine/policyengine.py/"
+        )
+        locations = tro["@graph"][0]["trov:hasArrangement"][0][
+            "trov:hasArtifactLocation"
+        ]
+        bundle_location = next(
+            loc for loc in locations if loc["@id"].endswith("bundle_tro")
+        )
+        assert bundle_location["trov:hasLocation"].startswith("https://")
+
+    def test__given_forged_bundle_tro__then_hash_changes_in_sim_tro(
+        self, us_bundle_tro
+    ):
+        # If the caller swaps the bundle TRO, the artifact hash in the sim TRO
+        # changes, so a verifier that re-fetches from pe:bundleTroUrl will
+        # detect the swap.
+        original = build_results_trace_tro(self._results(), bundle_tro=us_bundle_tro)
+        forged_bundle = json.loads(json.dumps(us_bundle_tro))
+        forged_bundle["@graph"][0]["schema:description"] = "forged"
+        forged = build_results_trace_tro(self._results(), bundle_tro=forged_bundle)
+
+        def bundle_hash(tro):
+            return next(
+                a["trov:sha256"]
+                for a in tro["@graph"][0]["trov:hasComposition"]["trov:hasArtifact"]
+                if a["@id"].endswith("bundle_tro")
+            )
+
+        assert bundle_hash(original) != bundle_hash(forged)
+
     def test__given_write_helper__then_results_and_tro_files_are_sidebyside(
-        self, tmp_path
+        self, tmp_path, us_bundle_tro
     ):
         written = write_results_with_trace_tro(
             self._results(),
             tmp_path / "results.json",
-            bundle_tro=self._bundle_tro(),
+            bundle_tro=us_bundle_tro,
             reform_payload={"salt_cap": 0},
         )
 
@@ -435,7 +549,10 @@ class TestSimulationTRO:
 class TestCLI:
     """``policyengine`` CLI entry point."""
 
-    def test__given_trace_tro_stdout__then_writes_canonical_json(self, capsysbinary):
+    def test__given_trace_tro_stdout__then_writes_canonical_json(
+        self, capsysbinary, monkeypatch
+    ):
+        monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
         data_release_manifest = _us_data_release_manifest()
 
         with patch(
@@ -449,12 +566,12 @@ class TestCLI:
                 exit_code = cli_main(["trace-tro", "us"])
 
         assert exit_code == 0
-        stdout = capsysbinary.readouterr().out
-        payload = json.loads(stdout)
+        payload = json.loads(capsysbinary.readouterr().out)
         assert payload["@graph"][0]["schema:creator"] == POLICYENGINE_ORGANIZATION
-        assert payload["@graph"][0]["trov:vocabularyVersion"] == TRACE_TROV_VERSION
+        assert payload["@graph"][0]["trov:hasPerformance"]["pe:emittedIn"] == "local"
 
-    def test__given_out_path__then_writes_to_file(self, tmp_path):
+    def test__given_out_path__then_writes_to_file(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
         out = tmp_path / "nested" / "us.trace.tro.jsonld"
         data_release_manifest = _us_data_release_manifest()
 
@@ -471,12 +588,32 @@ class TestCLI:
         assert exit_code == 0
         assert out.exists()
         payload = json.loads(out.read_text())
-        assert payload["@graph"][0]["trov:vocabularyVersion"] == "0.1"
+        assert payload["@graph"][0]["@type"] == "trov:TransparentResearchObject"
 
     def test__given_release_manifest_command__then_prints_bundle(self, capsys):
         exit_code = cli_main(["release-manifest", "us"])
 
         assert exit_code == 0
-        stdout = capsys.readouterr().out
-        payload = json.loads(stdout)
+        payload = json.loads(capsys.readouterr().out)
         assert payload["country_id"] == "us"
+
+    def test__given_validate_command__then_accepts_valid_tro(
+        self, tmp_path, us_bundle_tro
+    ):
+        tro_path = tmp_path / "us.trace.tro.jsonld"
+        tro_path.write_bytes(serialize_trace_tro(us_bundle_tro))
+
+        exit_code = cli_main(["trace-tro-validate", str(tro_path)])
+
+        assert exit_code == 0
+
+    def test__given_validate_command__then_rejects_invalid_tro(self, tmp_path, capsys):
+        bad = {"@context": [{"trov": "wrong"}], "@graph": []}
+        tro_path = tmp_path / "bad.jsonld"
+        tro_path.write_text(json.dumps(bad))
+
+        exit_code = cli_main(["trace-tro-validate", str(tro_path)])
+
+        assert exit_code == 1
+        err = capsys.readouterr().err
+        assert "invalid" in err.lower() or "error" in err.lower()

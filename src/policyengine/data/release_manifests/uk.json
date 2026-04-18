@@ -5,7 +5,9 @@
   "policyengine_version": "3.4.0",
   "model_package": {
     "name": "policyengine-uk",
-    "version": "2.88.0"
+    "version": "2.88.0",
+    "sha256": "46a3ba443b43ec810c5efaccd4645edb63c8dc90ef5acf9b0cdf5ace86b9334d",
+    "wheel_url": "https://files.pythonhosted.org/packages/23/7e/8a2a42eac1da63730a865964aa17e7fd4420ce4db4c80001c1b5ca6011e8/policyengine_uk-2.88.0-py3-none-any.whl"
   },
   "data_package": {
     "name": "policyengine-uk-data",

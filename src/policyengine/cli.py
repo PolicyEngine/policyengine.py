@@ -1,9 +1,12 @@
 """Command-line entry point for policyengine.
 
-Exposes a ``trace-tro`` subcommand that emits a TRACE TRO for a
-certified country bundle. The TRO is the standards-based provenance
-surface on top of the release manifests: see
-:mod:`policyengine.core.trace_tro` and ``docs/release-bundles.md``.
+Subcommands:
+
+- ``trace-tro <country>`` emit a TRACE TRO for a certified bundle
+- ``trace-tro-validate <path>`` validate a TRO against the shipped schema
+- ``release-manifest <country>`` print the bundled country manifest
+
+See :mod:`policyengine.core.trace_tro` and ``docs/release-bundles.md``.
 """
 
 from __future__ import annotations
@@ -11,11 +14,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from importlib.resources import files
 from pathlib import Path
 from typing import Optional, Sequence
 
 from policyengine.core.release_manifest import (
-    DataReleaseManifestUnavailableError,
     get_data_release_manifest,
     get_release_manifest,
 )
@@ -44,38 +47,29 @@ def _parser() -> argparse.ArgumentParser:
         default=None,
         help="Write the TRO to this path. Defaults to stdout.",
     )
-    tro.add_argument(
-        "--offline",
-        action="store_true",
-        help=(
-            "Skip fetching the data release manifest over HTTPS. Requires "
-            "the bundled manifest to include a data release manifest for "
-            "the pinned data package version."
-        ),
+
+    validate = subparsers.add_parser(
+        "trace-tro-validate",
+        help="Validate a TRO file against the shipped JSON Schema.",
     )
+    validate.add_argument("path", type=Path, help="Path to a .trace.tro.jsonld file.")
 
     bundle = subparsers.add_parser(
         "release-manifest",
-        help="Print the bundled country release manifest as JSON.",
+        help=(
+            "Print the bundled country release manifest as JSON. Use this to "
+            "inspect the pinned model/data versions shipped with this "
+            "policyengine release."
+        ),
     )
     bundle.add_argument("country", help="Country id (e.g. us, uk).")
 
     return parser
 
 
-def _emit_bundle_tro(country_id: str, out: Optional[Path], *, offline: bool) -> int:
+def _emit_bundle_tro(country_id: str, out: Optional[Path]) -> int:
     country_manifest = get_release_manifest(country_id)
-    try:
-        data_release_manifest = get_data_release_manifest(country_id)
-    except DataReleaseManifestUnavailableError as exc:
-        if offline:
-            print(
-                f"error: data release manifest for '{country_id}' is not "
-                "available in offline mode.",
-                file=sys.stderr,
-            )
-            return 2
-        raise exc
+    data_release_manifest = get_data_release_manifest(country_id)
     tro = build_trace_tro_from_release_bundle(
         country_manifest,
         data_release_manifest,
@@ -90,6 +84,31 @@ def _emit_bundle_tro(country_id: str, out: Optional[Path], *, offline: bool) -> 
     return 0
 
 
+def _validate_tro(path: Path) -> int:
+    try:
+        from jsonschema import Draft202012Validator
+    except ImportError:
+        print(
+            "error: jsonschema is required for trace-tro-validate. "
+            "Install with: pip install jsonschema",
+            file=sys.stderr,
+        )
+        return 1
+    schema_path = Path(
+        str(files("policyengine").joinpath("data", "schemas", "trace_tro.schema.json"))
+    )
+    schema = json.loads(schema_path.read_text())
+    payload = json.loads(path.read_text())
+    errors = list(Draft202012Validator(schema).iter_errors(payload))
+    if errors:
+        print(f"error: {path} is invalid against the TRO schema:", file=sys.stderr)
+        for error in errors:
+            print(f"  - {error.message}", file=sys.stderr)
+        return 1
+    print(f"ok: {path}")
+    return 0
+
+
 def _emit_release_manifest(country_id: str) -> int:
     manifest = get_release_manifest(country_id)
     print(json.dumps(manifest.model_dump(mode="json"), indent=2, sort_keys=True))
@@ -99,7 +118,9 @@ def _emit_release_manifest(country_id: str) -> int:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = _parser().parse_args(argv)
     if args.command == "trace-tro":
-        return _emit_bundle_tro(args.country, args.out, offline=args.offline)
+        return _emit_bundle_tro(args.country, args.out)
+    if args.command == "trace-tro-validate":
+        return _validate_tro(args.path)
     if args.command == "release-manifest":
         return _emit_release_manifest(args.country)
     return 1

@@ -204,19 +204,22 @@ composition pins four artifacts by sha256:
 - the country model wheel published to PyPI (hash read from the bundled manifest
   when present, otherwise fetched from the PyPI JSON API at emit time)
 
-Every artifact location in the TRO is a dereferenceable HTTPS URI or a path
-relative to the shipped wheel. Certification metadata is carried as structured
-`pe:*` fields on the `trov:TrustedResearchPerformance` node so downstream
-tooling can read `pe:certifiedForModelVersion`, `pe:compatibilityBasis`,
+TROs use the public TROv vocabulary at
+`https://w3id.org/trace/2023/05/trov#`. Every artifact location in the TRO
+is a dereferenceable HTTPS URI or a local path relative to the shipped
+wheel. Certification metadata is carried as structured `pe:*` fields on
+the `trov:TransparentResearchPerformance` node so downstream tooling can
+read `pe:certifiedForModelVersion`, `pe:compatibilityBasis`,
 `pe:builtWithModelVersion`, `pe:dataBuildFingerprint`, and `pe:dataBuildId`
-without parsing prose. When emitted under GitHub Actions, the TRO also carries
-`pe:ciRunUrl` and `pe:ciGitSha` attestation.
+without parsing prose. Every TRO also carries `pe:emittedIn` set to
+`"github-actions"` or `"local"`; CI-emitted TROs additionally carry
+`pe:ciRunUrl` and `pe:ciGitSha`.
 
 Country `*-data` repos should also emit a matching `trace.tro.jsonld` per
 data release covering the release manifest and every staged artifact hash.
 That is a country-data concern and lives in those repos.
 
-#### Emitting a TRO
+#### Emitting a bundle TRO
 
 From Python:
 
@@ -235,27 +238,61 @@ From the CLI:
 policyengine trace-tro us --out us.trace.tro.jsonld
 ```
 
-Per-simulation TROs chain a bundle TRO to a reform plus a `results.json`
-payload. Use `policyengine.results.write_results_with_trace_tro` to emit the
-pair alongside each published result.
+At release time, `scripts/generate_trace_tros.py` regenerates the bundled
+`data/release_manifests/{country}.trace.tro.jsonld` files, and the
+`Versioning` CI job commits them alongside the changelog so every published
+wheel ships with the matching TRO.
 
-#### Schema validation
+#### Emitting a per-simulation TRO
 
-Generated TROs are validated against
-`policyengine/data/schemas/trace_tro.schema.json` in CI. Regressions to the
-shape — including mis-typed `schema:creator`, missing composition fingerprints,
-or non-HTTPS artifact locations — fail the test suite before reaching a
-release.
+```python
+from policyengine.results import write_results_with_trace_tro
+
+write_results_with_trace_tro(
+    results,                                # ResultsJson instance
+    "results.json",                         # where to write results
+    bundle_tro=bundle_tro,                  # loaded from the shipped bundle
+    reform_payload={"salt_cap": 0},
+    bundle_tro_url=(
+        "https://raw.githubusercontent.com/PolicyEngine/policyengine.py/"
+        "v3.4.5/src/policyengine/data/release_manifests/us.trace.tro.jsonld"
+    ),
+)
+```
+
+The `bundle_tro_url` is recorded on the performance node as
+`pe:bundleTroUrl`. A verifier can fetch that URL, recompute its sha256,
+and confirm it matches the `bundle_tro` artifact hash in the simulation
+TRO's composition. Without this anchor, the bundle reference is only as
+trustworthy as whoever produced the JSON.
+
+#### Validating a TRO
+
+```
+policyengine trace-tro-validate path/to/tro.jsonld
+```
+
+The shipped schema at `policyengine/data/schemas/trace_tro.schema.json`
+checks structural fields, canonical hex-encoded sha256s, the required
+`pe:emittedIn`, and that `trov:hasLocation` uses HTTPS (or the
+well-known local paths `results.json`, `reform.json`,
+`bundle.trace.tro.jsonld`). The same schema is exercised in the test
+suite against generated TROs.
 
 #### Known limitations
 
-- `schema:creator` and all `schema:*` references use schema.org vocabulary;
-  we do not (yet) validate against schema.org's own SHACL shapes.
 - TROs are emitted unsigned. A signed attestation (sigstore or in-toto)
   is a future addition that will bind TROs to a trusted-system key.
+- The bundle composition does not yet pin a transitive lockfile
+  (`uv.lock`/`poetry.lock`), a Python interpreter version, or an OS. AEA
+  reviewers may demand these; the schema is extensible.
 - The model wheel is hashed by PyPI's published sha256. If a wheel is
-  yanked and re-uploaded under the same version, the hash will change and
-  the TRO becomes invalid — which is the correct behaviour.
+  yanked and re-uploaded under the same version, the hash will change
+  and the TRO becomes invalid — which is the correct behaviour.
+- Country data packages whose data release manifest is private require
+  `HUGGING_FACE_TOKEN` at emit time. The regeneration script skips
+  countries whose data release manifest is unreachable so a partial run
+  does not block other countries.
 
 ### What TRACE does not replace
 

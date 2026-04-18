@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://policyengine.org/schemas/trace_tro/0.1.json",
   "title": "PolicyEngine TRACE TRO",
-  "description": "JSON Schema for PolicyEngine's TRACE Transparent Research Object (TROv v0.1) emission. Catches structural regressions in bundle and per-simulation TROs.",
+  "description": "JSON Schema for PolicyEngine's TRACE Transparent Research Object emission, using the TROv 2023/05 vocabulary with a PolicyEngine extension namespace.",
   "type": "object",
   "required": ["@context", "@graph"],
   "properties": {
@@ -11,18 +11,19 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["trov", "schema"],
+        "required": ["trov", "schema", "pe"],
         "properties": {
           "trov": {
             "type": "string",
-            "const": "https://w3id.org/trace/trov/0.1#"
+            "const": "https://w3id.org/trace/2023/05/trov#"
           },
           "schema": {
             "type": "string",
             "const": "https://schema.org/"
           },
           "pe": {
-            "type": "string"
+            "type": "string",
+            "const": "https://policyengine.org/trace/0.1#"
           }
         }
       }
@@ -30,22 +31,13 @@
     "@graph": {
       "type": "array",
       "minItems": 1,
-      "items": {
-        "$ref": "#/$defs/troNode"
-      }
+      "items": { "$ref": "#/$defs/troNode" }
     }
   },
   "$defs": {
-    "hash": {
-      "type": "object",
-      "required": ["trov:hashAlgorithm", "trov:hashValue"],
-      "properties": {
-        "trov:hashAlgorithm": { "type": "string" },
-        "trov:hashValue": {
-          "type": "string",
-          "pattern": "^[a-f0-9]{64}$"
-        }
-      }
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
     },
     "organization": {
       "type": "object",
@@ -58,27 +50,30 @@
     },
     "artifact": {
       "type": "object",
-      "required": ["@id", "@type", "trov:hash"],
+      "required": ["@id", "@type", "trov:sha256"],
       "properties": {
         "@id": { "type": "string" },
         "@type": { "const": "trov:ResearchArtifact" },
         "schema:name": { "type": "string" },
-        "trov:hash": { "$ref": "#/$defs/hash" },
+        "trov:sha256": { "$ref": "#/$defs/sha256" },
         "trov:mimeType": { "type": "string" }
       }
     },
     "artifactLocation": {
       "type": "object",
-      "required": ["@id", "@type", "trov:artifact", "trov:path"],
+      "required": ["@id", "@type", "trov:hasArtifact", "trov:hasLocation"],
       "properties": {
         "@id": { "type": "string" },
         "@type": { "const": "trov:ArtifactLocation" },
-        "trov:artifact": {
+        "trov:hasArtifact": {
           "type": "object",
           "required": ["@id"],
           "properties": { "@id": { "type": "string" } }
         },
-        "trov:path": { "type": "string", "minLength": 1 }
+        "trov:hasLocation": {
+          "type": "string",
+          "pattern": "^(https://|data/|reform\\.json$|results\\.json$|bundle\\.trace\\.tro\\.jsonld)"
+        }
       }
     },
     "troNode": {
@@ -86,21 +81,16 @@
       "required": [
         "@id",
         "@type",
-        "trov:vocabularyVersion",
-        "schema:creator",
         "schema:name",
+        "schema:creator",
+        "trov:wasAssembledBy",
         "trov:hasComposition",
         "trov:hasArrangement",
         "trov:hasPerformance"
       ],
       "properties": {
         "@id": { "type": "string" },
-        "@type": {
-          "type": "array",
-          "minItems": 2,
-          "contains": { "const": "trov:TransparentResearchObject" }
-        },
-        "trov:vocabularyVersion": { "type": "string", "const": "0.1" },
+        "@type": { "const": "trov:TransparentResearchObject" },
         "schema:creator": { "$ref": "#/$defs/organization" },
         "schema:name": { "type": "string", "minLength": 1 },
         "schema:description": { "type": "string" },
@@ -110,10 +100,9 @@
           "required": ["@id", "@type", "schema:name"],
           "properties": {
             "@id": { "type": "string" },
-            "@type": {
-              "type": "array",
-              "contains": { "const": "trov:TrustedResearchSystem" }
-            }
+            "@type": { "const": "trov:TransparentResearchSystem" },
+            "schema:name": { "type": "string" },
+            "rdfs:comment": { "type": "string" }
           }
         },
         "trov:createdWith": {
@@ -123,10 +112,7 @@
             "@type": { "const": "schema:SoftwareApplication" },
             "schema:name": { "type": "string" },
             "schema:softwareVersion": {
-              "oneOf": [
-                { "type": "string" },
-                { "type": "null" }
-              ]
+              "oneOf": [{ "type": "string" }, { "type": "null" }]
             }
           }
         },
@@ -138,11 +124,11 @@
             "@type": { "const": "trov:ArtifactComposition" },
             "trov:hasFingerprint": {
               "type": "object",
-              "required": ["@id", "@type", "trov:hash"],
+              "required": ["@id", "@type", "trov:sha256"],
               "properties": {
                 "@id": { "type": "string" },
                 "@type": { "const": "trov:CompositionFingerprint" },
-                "trov:hash": { "$ref": "#/$defs/hash" }
+                "trov:sha256": { "$ref": "#/$defs/sha256" }
               }
             },
             "trov:hasArtifact": {
@@ -161,6 +147,7 @@
             "properties": {
               "@id": { "type": "string" },
               "@type": { "const": "trov:ArtifactArrangement" },
+              "rdfs:comment": { "type": "string" },
               "trov:hasArtifactLocation": {
                 "type": "array",
                 "minItems": 1,
@@ -170,37 +157,24 @@
           }
         },
         "trov:hasPerformance": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "required": [
-              "@id",
-              "@type",
-              "trov:wasConductedBy",
-              "trov:contributedToArrangement"
-            ],
-            "properties": {
-              "@id": { "type": "string" },
-              "@type": { "const": "trov:TrustedResearchPerformance" },
-              "trov:wasConductedBy": {
-                "type": "object",
-                "required": ["@id"],
-                "properties": { "@id": { "type": "string" } }
-              },
-              "trov:contributedToArrangement": {
-                "type": "object",
-                "required": ["@id", "@type", "trov:arrangement"],
-                "properties": {
-                  "@id": { "type": "string" },
-                  "@type": { "const": "trov:ArrangementBinding" },
-                  "trov:arrangement": {
-                    "type": "object",
-                    "required": ["@id"],
-                    "properties": { "@id": { "type": "string" } }
-                  }
-                }
-              }
+          "type": "object",
+          "required": ["@id", "@type", "trov:wasConductedBy", "trov:accessedArrangement", "pe:emittedIn"],
+          "properties": {
+            "@id": { "type": "string" },
+            "@type": { "const": "trov:TransparentResearchPerformance" },
+            "trov:wasConductedBy": {
+              "type": "object",
+              "required": ["@id"],
+              "properties": { "@id": { "type": "string" } }
+            },
+            "trov:accessedArrangement": {
+              "type": "object",
+              "required": ["@id"],
+              "properties": { "@id": { "type": "string" } }
+            },
+            "pe:emittedIn": {
+              "type": "string",
+              "enum": ["local", "github-actions"]
             }
           }
         }
