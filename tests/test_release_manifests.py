@@ -214,6 +214,46 @@ class TestReleaseManifests:
             else:
                 raise AssertionError("Expected missing manifest to be reported")
 
+    def test__given_range_specifier__then_certification_accepts_compatible_version(
+        self,
+    ):
+        get_data_release_manifest.cache_clear()
+        payload = {
+            "schema_version": 1,
+            "data_package": {
+                "name": "policyengine-us-data",
+                "version": "1.73.0",
+            },
+            "build": {
+                "build_id": "policyengine-us-data-1.73.0",
+                "built_with_model_package": {
+                    "name": "policyengine-us",
+                    "version": "1.637.0",
+                    "data_build_fingerprint": "sha256:stable",
+                },
+            },
+            "compatible_model_packages": [
+                {
+                    "name": "policyengine-us",
+                    "specifier": ">=1.637.0,<2.0.0",
+                }
+            ],
+            "default_datasets": {"national": "enhanced_cps_2024"},
+            "artifacts": {},
+        }
+
+        with patch(
+            "policyengine.core.release_manifest.requests.get",
+            return_value=_response_with_json(payload),
+        ):
+            certification = certify_data_release_compatibility(
+                "us",
+                runtime_model_version="1.653.3",
+            )
+
+        assert certification.compatibility_basis == "legacy_compatible_model_package"
+        assert certification.certified_for_model_version == "1.653.3"
+
     def test__given_matching_fingerprint__then_certification_allows_reuse(self):
         get_data_release_manifest.cache_clear()
         payload = {

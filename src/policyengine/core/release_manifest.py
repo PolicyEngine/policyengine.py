@@ -218,9 +218,14 @@ def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
 
 
 def _specifier_matches(version: str, specifier: str) -> bool:
-    if specifier.startswith("=="):
-        return version == specifier[2:]
-    return False
+    """Match a PEP 440 version specifier (``==``, ``>=``, ``<``, ``,``-joined)."""
+    from packaging.specifiers import InvalidSpecifier, SpecifierSet
+    from packaging.version import InvalidVersion, Version
+
+    try:
+        return Version(version) in SpecifierSet(specifier)
+    except (InvalidSpecifier, InvalidVersion):
+        return False
 
 
 def certify_data_release_compatibility(

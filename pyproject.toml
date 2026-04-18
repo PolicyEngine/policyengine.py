@@ -27,6 +27,7 @@ dependencies = [
     "plotly>=5.0.0",
     "requests>=2.31.0",
     "psutil>=5.9.0",
+    "packaging>=23.0",
 ]
 
 [project.scripts]
