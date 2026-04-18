@@ -1,3 +1,20 @@
+## [3.5.0] - 2026-04-18
+
+### Added
+
+- Support Python 3.9–3.12 (in addition to 3.13–3.14). PEP 604 `X | Y` annotations (evaluated at runtime by pydantic) are rewritten as `Optional[X]` / `Union[X, Y]`; `StrEnum` (3.11+) is replaced with `class Foo(str, Enum)`; PEP 695 generic class syntax in `core/cache.py` and `core/output.py` is rewritten using `typing.TypeVar` + `typing.Generic`. Ruff and mypy target versions dropped to py39. Requires `policyengine-us==1.602.0+` and `policyengine-uk==2.74.0+` from the `[us]`/`[uk]`/`[dev]` extras to also support 3.9/3.10.
+
+### Changed
+
+- Point CONTRIBUTING.md at the shared PolicyEngine contribution guide (https://github.com/PolicyEngine/.github) and trim the per-repo file to commands, repo-specific conventions, and anti-patterns. Removes the stale `changelog_entry.yaml` / `make changelog` instructions.
+- Change the installed-vs-manifest country-model version check from a hard `ValueError` to a `UserWarning`. Calculations now run against whatever country-model version is installed; downstream code that cares about exact pinning can still inspect `model.release_manifest`. This stops routine country-model patch bumps from breaking `UKTaxBenefitModel`/`USTaxBenefitModel` instantiation in callers that pin `policyengine` but resolve `policyengine-uk`/`policyengine-us` via `>=`.
+
+### Fixed
+
+- Bump pinned country-model versions in `[us]`, `[uk]`, and `[dev]` extras, and the corresponding bundled release manifests, to versions that support Python 3.9, include the breakdown-range fixes required by the stricter validator in policyengine-core 3.24.0+, and ship with policyengine-core>=3.24.1. Previously `policyengine-us==1.602.0` and `policyengine-uk==2.74.0` were stale pins that no longer installed cleanly under modern core. Data-package pins (`policyengine-us-data==1.73.0`, `policyengine-uk-data==1.40.4`) are unchanged — the bumped model versions read the same dataset artefacts as before.
+- Bump `policyengine_core` minimum to `>=3.25.0`. Includes the `set_input` preservation fix from PolicyEngine/policyengine-core#475 that restores UK household-impact calculations after `apply_reform` (#1628). All 11 `tests/test_household_impact.py` cases pass on the new pin.
+
+
 ## [3.4.5] - 2026-04-16
 
 ### Changed
