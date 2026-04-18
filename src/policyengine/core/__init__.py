@@ -39,6 +39,19 @@ from .tax_benefit_model import TaxBenefitModel as TaxBenefitModel
 from .tax_benefit_model_version import (
     TaxBenefitModelVersion as TaxBenefitModelVersion,
 )
+from .trace_tro import (
+    build_simulation_trace_tro as build_simulation_trace_tro,
+)
+from .trace_tro import (
+    build_trace_tro_from_release_bundle as build_trace_tro_from_release_bundle,
+)
+from .trace_tro import (
+    compute_trace_composition_fingerprint as compute_trace_composition_fingerprint,
+)
+from .trace_tro import (
+    extract_bundle_tro_reference as extract_bundle_tro_reference,
+)
+from .trace_tro import serialize_trace_tro as serialize_trace_tro
 from .variable import Variable as Variable
 
 # Rebuild models to resolve forward references

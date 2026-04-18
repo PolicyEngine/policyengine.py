@@ -9,6 +9,7 @@ import requests
 from pydantic import BaseModel, Field
 
 HF_REQUEST_TIMEOUT_SECONDS = 30
+PYPI_REQUEST_TIMEOUT_SECONDS = 30
 LOCAL_DATA_REPO_HINTS = {
     "us": ("policyengine_us", "policyengine-us-data", "policyengine_us_data"),
     "uk": ("policyengine_uk", "policyengine-uk-data", "policyengine_uk_data"),
@@ -22,6 +23,8 @@ class DataReleaseManifestUnavailableError(ValueError):
 class PackageVersion(BaseModel):
     name: str
     version: str
+    sha256: Optional[str] = None
+    wheel_url: Optional[str] = None
 
 
 class DataPackageVersion(PackageVersion):
@@ -131,6 +134,51 @@ def build_hf_uri(repo_id: str, path_in_repo: str, revision: str) -> str:
     return f"hf://{repo_id}/{path_in_repo}@{revision}"
 
 
+def https_dataset_uri(repo_id: str, path_in_repo: str, revision: str) -> str:
+    """Return a dereferenceable HTTPS URI for a Hugging Face dataset artifact."""
+    return f"https://huggingface.co/{repo_id}/resolve/{revision}/{path_in_repo}"
+
+
+def https_release_manifest_uri(data_package: "DataPackageVersion") -> str:
+    """Return a dereferenceable HTTPS URI for a data release manifest."""
+    return (
+        f"https://huggingface.co/{data_package.repo_id}/resolve/"
+        f"{data_package.version}/{data_package.release_manifest_path}"
+    )
+
+
+@lru_cache
+def fetch_pypi_wheel_metadata(name: str, version: str) -> dict[str, Optional[str]]:
+    """Fetch wheel sha256 and URL from PyPI for a package version.
+
+    Returns a dict with ``sha256`` and ``url`` keys. Missing keys are
+    returned as ``None`` rather than raising, so TRO construction can
+    degrade gracefully when PyPI is unreachable or the package lacks
+    a wheel distribution.
+    """
+    response = requests.get(
+        f"https://pypi.org/pypi/{name}/{version}/json",
+        timeout=PYPI_REQUEST_TIMEOUT_SECONDS,
+    )
+    if response.status_code != 200:
+        return {"sha256": None, "url": None}
+    payload = response.json()
+    urls = payload.get("urls") or []
+    for entry in urls:
+        if entry.get("packagetype") == "bdist_wheel":
+            return {
+                "sha256": entry.get("digests", {}).get("sha256"),
+                "url": entry.get("url"),
+            }
+    if urls:
+        entry = urls[0]
+        return {
+            "sha256": entry.get("digests", {}).get("sha256"),
+            "url": entry.get("url"),
+        }
+    return {"sha256": None, "url": None}
+
+
 @lru_cache
 def get_release_manifest(country_id: str) -> CountryReleaseManifest:
     manifest_path = files("policyengine").joinpath(
@@ -142,18 +190,9 @@ def get_release_manifest(country_id: str) -> CountryReleaseManifest:
     return CountryReleaseManifest.model_validate_json(manifest_path.read_text())
 
 
-def _data_release_manifest_url(data_package: DataPackageVersion) -> str:
-    return (
-        "https://huggingface.co/"
-        f"{data_package.repo_id}/resolve/{data_package.version}/"
-        f"{data_package.release_manifest_path}"
-    )
-
-
 @lru_cache
 def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
     country_manifest = get_release_manifest(country_id)
-    data_package = country_manifest.data_package
 
     headers = {}
     token = os.environ.get("HUGGING_FACE_TOKEN")
@@ -161,7 +200,7 @@ def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
         headers["Authorization"] = f"Bearer {token}"
 
     response = requests.get(
-        _data_release_manifest_url(data_package),
+        https_release_manifest_uri(country_manifest.data_package),
         headers=headers,
         timeout=HF_REQUEST_TIMEOUT_SECONDS,
     )
