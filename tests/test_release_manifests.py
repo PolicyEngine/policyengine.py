@@ -262,7 +262,7 @@ class TestReleaseManifests:
         ):
             certification = certify_data_release_compatibility(
                 "us",
-                runtime_model_version="1.602.0",
+                runtime_model_version="1.647.0",
             )
 
         assert certification == get_release_manifest("us").certification
@@ -372,7 +372,7 @@ class TestReleaseManifests:
         assert bundle["default_dataset"] == "enhanced_frs_2023_24"
         assert bundle["default_dataset_uri"] == manifest.default_dataset_uri
         assert bundle["certified_data_build_id"] == "policyengine-uk-data-1.40.4"
-        assert bundle["data_build_model_version"] == "2.74.0"
+        assert bundle["data_build_model_version"] == "2.88.0"
         assert bundle["compatibility_basis"] == "exact_build_model_version"
         assert bundle["certified_by"] == "policyengine.py bundled manifest"
 
