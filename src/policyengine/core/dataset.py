@@ -6,7 +6,6 @@ import pandas as pd
 from microdf import MicroDataFrame
 from pydantic import BaseModel, ConfigDict, Field
 
-from .dataset_version import DatasetVersion
 from .tax_benefit_model import TaxBenefitModel
 
 
@@ -85,7 +84,6 @@ class Dataset(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
     description: str
-    dataset_version: Optional[DatasetVersion] = None
     filepath: str
     is_output_dataset: bool = False
     tax_benefit_model: Optional[TaxBenefitModel] = None

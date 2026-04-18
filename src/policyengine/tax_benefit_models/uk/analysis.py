@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 import pandas as pd
 from microdf import MicroDataFrame
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field
 
 from policyengine.core import OutputCollection, Simulation
 from policyengine.core.policy import Policy
@@ -26,24 +26,6 @@ from policyengine.outputs.poverty import (
 from .datasets import PolicyEngineUKDataset, UKYearData
 from .model import uk_latest
 from .outputs import ProgrammeStatistics
-
-
-def _create_entity_output_model(entity: str, variables: list[str]) -> type[BaseModel]:
-    """Create a dynamic Pydantic model for entity output variables."""
-    fields = {var: (float, ...) for var in variables}
-    return create_model(f"{entity.title()}Output", **fields)
-
-
-# Create output models dynamically from uk_latest.entity_variables
-PersonOutput = _create_entity_output_model(
-    "person", uk_latest.entity_variables["person"]
-)
-BenunitOutput = _create_entity_output_model(
-    "benunit", uk_latest.entity_variables["benunit"]
-)
-HouseholdEntityOutput = _create_entity_output_model(
-    "household", uk_latest.entity_variables["household"]
-)
 
 
 class UKHouseholdOutput(BaseModel):

@@ -1,8 +1,22 @@
-"""Plotting utilities for PolicyEngine visualisations."""
+"""Plotting utilities for PolicyEngine visualisations.
 
-from typing import Optional
+Requires plotly, which is installed via the ``[plotting]`` extra
+(``pip install policyengine[plotting]``). Importing from this module
+fails with a clear error when plotly is absent.
+"""
 
-import plotly.graph_objects as go
+from typing import TYPE_CHECKING, Optional
+
+try:
+    import plotly.graph_objects as go
+except ImportError as exc:  # pragma: no cover
+    raise ImportError(
+        "policyengine.utils.plotting requires plotly. "
+        "Install with: pip install policyengine[plotting]"
+    ) from exc
+
+if TYPE_CHECKING:
+    import plotly.graph_objects as go  # noqa: F401
 
 # PolicyEngine brand colours
 COLORS = {
