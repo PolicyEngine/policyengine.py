@@ -1,4 +1,4 @@
-"""Regression: ``UKTaxBenefitModel`` / ``USTaxBenefitModel`` must not
+"""Regression: ``PolicyEngineUKLatest`` / ``PolicyEngineUSLatest`` must not
 raise on manifest-vs-installed version drift.
 
 Previously both models raised ``ValueError`` on any version mismatch
@@ -19,8 +19,8 @@ import warnings
 from unittest.mock import patch
 
 from policyengine.core.release_manifest import get_release_manifest
-from policyengine.tax_benefit_models.uk import UKTaxBenefitModel
-from policyengine.tax_benefit_models.us import USTaxBenefitModel
+from policyengine.tax_benefit_models.uk.model import PolicyEngineUKLatest
+from policyengine.tax_benefit_models.us.model import PolicyEngineUSLatest
 
 
 def _pick_mismatched_version(manifest_version: str) -> str:
@@ -40,7 +40,7 @@ def test__given_uk_version_drift__then_warns_instead_of_raising():
     ):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            UKTaxBenefitModel()
+            PolicyEngineUKLatest()
 
     messages = [str(w.message) for w in caught if issubclass(w.category, UserWarning)]
     assert any("policyengine-uk" in m and mismatched_version in m for m in messages), (
@@ -58,7 +58,7 @@ def test__given_us_version_drift__then_warns_instead_of_raising():
     ):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            USTaxBenefitModel()
+            PolicyEngineUSLatest()
 
     messages = [str(w.message) for w in caught if issubclass(w.category, UserWarning)]
     assert any("policyengine-us" in m and mismatched_version in m for m in messages), (
