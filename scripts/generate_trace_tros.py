@@ -9,13 +9,13 @@ manifest (and ``HUGGING_FACE_TOKEN`` for private country data).
 If a country previously had a TRO on disk and the new run cannot
 regenerate it (e.g. a missing secret or an unreachable HF endpoint),
 the script exits non-zero so the release workflow blocks rather than
-silently shipping a stale/missing TRO.
+silently shipping a stale/missing TRO. If no bundled release manifests
+are found at all, the script exits 0 with a notice (nothing to do).
 """
 
 from __future__ import annotations
 
 import sys
-from importlib.resources import files
 from pathlib import Path
 
 from policyengine.core.release_manifest import (
@@ -28,14 +28,19 @@ from policyengine.core.trace_tro import (
     serialize_trace_tro,
 )
 
+MANIFEST_DIR = (
+    Path(__file__).resolve().parent.parent
+    / "src"
+    / "policyengine"
+    / "data"
+    / "release_manifests"
+)
+
 
 def regenerate_all() -> tuple[list[Path], list[tuple[str, Path, str]]]:
-    manifest_root = Path(
-        str(files("policyengine").joinpath("data", "release_manifests"))
-    )
     written: list[Path] = []
     regressions: list[tuple[str, Path, str]] = []
-    for manifest_path in sorted(manifest_root.glob("*.json")):
+    for manifest_path in sorted(MANIFEST_DIR.glob("*.json")):
         country_id = manifest_path.stem
         tro_path = manifest_path.with_suffix(".trace.tro.jsonld")
         country_manifest = get_release_manifest(country_id)
@@ -61,6 +66,9 @@ def regenerate_all() -> tuple[list[Path], list[tuple[str, Path, str]]]:
 
 
 def main() -> int:
+    if not MANIFEST_DIR.is_dir():
+        print(f"no manifest dir at {MANIFEST_DIR}", file=sys.stderr)
+        return 1
     written, regressions = regenerate_all()
     for path in written:
         print(f"wrote {path}")
@@ -73,8 +81,7 @@ def main() -> int:
     if regressions:
         return 1
     if not written:
-        print("no release manifests found", file=sys.stderr)
-        return 1
+        print("no countries could be regenerated (all skipped)", file=sys.stderr)
     return 0
 
 
