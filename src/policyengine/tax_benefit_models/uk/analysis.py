@@ -10,6 +10,7 @@ import pandas as pd
 from pydantic import BaseModel
 
 from policyengine.core import OutputCollection, Simulation
+from policyengine.outputs import ProgramStatistics
 from policyengine.outputs.decile_impact import (
     DecileImpact,
     calculate_decile_impacts,
@@ -23,14 +24,12 @@ from policyengine.outputs.poverty import (
     calculate_uk_poverty_rates,
 )
 
-from .outputs import ProgrammeStatistics
-
 
 class PolicyReformAnalysis(BaseModel):
     """Complete policy reform analysis result."""
 
     decile_impacts: OutputCollection[DecileImpact]
-    programme_statistics: OutputCollection[ProgrammeStatistics]
+    program_statistics: OutputCollection[ProgramStatistics]
     baseline_poverty: OutputCollection[Poverty]
     reform_poverty: OutputCollection[Poverty]
     baseline_inequality: Inequality
@@ -57,7 +56,7 @@ def economic_impact_analysis(
         reform_simulation=reform_simulation,
     )
 
-    programmes = {
+    programs = {
         "income_tax": {"is_tax": True},
         "national_insurance": {"is_tax": True},
         "vat": {"is_tax": True},
@@ -70,27 +69,27 @@ def economic_impact_analysis(
         "child_tax_credit": {"is_tax": False},
     }
 
-    programme_statistics = []
-    for programme_name, programme_info in programmes.items():
+    program_statistics = []
+    for program_name, program_info in programs.items():
         entity = baseline_simulation.tax_benefit_model_version.get_variable(
-            programme_name
+            program_name
         ).entity
-        stats = ProgrammeStatistics(
+        stats = ProgramStatistics(
             baseline_simulation=baseline_simulation,
             reform_simulation=reform_simulation,
-            programme_name=programme_name,
+            program_name=program_name,
             entity=entity,
-            is_tax=programme_info["is_tax"],
+            is_tax=program_info["is_tax"],
         )
         stats.run()
-        programme_statistics.append(stats)
+        program_statistics.append(stats)
 
-    programme_df = pd.DataFrame(
+    program_df = pd.DataFrame(
         [
             {
                 "baseline_simulation_id": p.baseline_simulation.id,
                 "reform_simulation_id": p.reform_simulation.id,
-                "programme_name": p.programme_name,
+                "program_name": p.program_name,
                 "entity": p.entity,
                 "is_tax": p.is_tax,
                 "baseline_total": p.baseline_total,
@@ -101,11 +100,11 @@ def economic_impact_analysis(
                 "winners": p.winners,
                 "losers": p.losers,
             }
-            for p in programme_statistics
+            for p in program_statistics
         ]
     )
-    programme_collection = OutputCollection(
-        outputs=programme_statistics, dataframe=programme_df
+    program_collection = OutputCollection(
+        outputs=program_statistics, dataframe=program_df
     )
 
     baseline_poverty = calculate_uk_poverty_rates(baseline_simulation)
@@ -115,7 +114,7 @@ def economic_impact_analysis(
 
     return PolicyReformAnalysis(
         decile_impacts=decile_impacts,
-        programme_statistics=programme_collection,
+        program_statistics=program_collection,
         baseline_poverty=baseline_poverty,
         reform_poverty=reform_poverty,
         baseline_inequality=baseline_inequality,

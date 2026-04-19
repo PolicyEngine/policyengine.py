@@ -15,6 +15,7 @@ from importlib.util import find_spec
 
 if find_spec("policyengine_uk") is not None:
     from policyengine.core import Dataset
+    from policyengine.outputs import ProgramStatistics
 
     from .analysis import economic_impact_analysis
     from .datasets import (
@@ -31,7 +32,6 @@ if find_spec("policyengine_uk") is not None:
         managed_microsimulation,
         uk_latest,
     )
-    from .outputs import ProgrammeStatistics
 
     model = uk_latest
     """The pinned UK ``TaxBenefitModelVersion`` for this policyengine release."""
@@ -40,7 +40,7 @@ if find_spec("policyengine_uk") is not None:
     UKYearData.model_rebuild()
     PolicyEngineUKDataset.model_rebuild()
     PolicyEngineUKLatest.model_rebuild()
-    ProgrammeStatistics.model_rebuild()
+    ProgramStatistics.model_rebuild()
 
     __all__ = [
         "UKYearData",
@@ -55,7 +55,7 @@ if find_spec("policyengine_uk") is not None:
         "uk_latest",
         "calculate_household",
         "economic_impact_analysis",
-        "ProgrammeStatistics",
+        "ProgramStatistics",
     ]
 else:
     __all__ = []
