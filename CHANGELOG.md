@@ -1,3 +1,28 @@
+## [3.7.0] - 2026-04-19
+
+### Removed
+
+- Pre-launch cleanup — remove dead code and drop `plotly` from the core dependency set:
+
+  - Delete `policyengine.tax_benefit_models.us` and `policyengine.tax_benefit_models.uk` module shims. Python resolves the package directory first, so the `.py` shims were always shadowed; worse, both attempted to re-export `general_policy_reform_analysis` which is not defined anywhere, making `from policyengine.tax_benefit_models.us import general_policy_reform_analysis` raise `ImportError` at runtime.
+  - Delete `_create_entity_output_model` plus the `PersonOutput` / `BenunitOutput` / `HouseholdEntityOutput` factory products in `policyengine.tax_benefit_models.uk.analysis` — built via `pydantic.create_model` but never referenced anywhere in the codebase.
+  - Delete `policyengine.core.DatasetVersion` (only consumer was an `Optional` field on `Dataset` that was never set, and the `policyengine.core` re-export).
+  - Move `plotly>=5.0.0` from the base install to a new `policyengine[plotting]` extra. Only `policyengine.utils.plotting` uses it, and that module is itself only used by the `examples/` scripts. The package now imports cleanly without `plotly`.
+- **BREAKING (v4):** Remove the legacy `filter_field` / `filter_value`
+  fields from `Simulation` and `Region`, the `_auto_construct_strategy`
+  model validator that rewrote them into a `RowFilterStrategy`, and the
+  `_filter_dataset_by_household_variable` methods they fed on both
+  country models. All scoping now flows through `scoping_strategy:
+  Optional[ScopingStrategy]`. `Region.requires_filter` becomes a derived
+  property (`True` iff `scoping_strategy is not None`). The sub-national
+  region factories (`countries/us/regions.py`, `countries/uk/regions.py`)
+  construct `scoping_strategy=RowFilterStrategy(...)` /
+  `WeightReplacementStrategy(...)` directly. Callers that previously
+  passed `filter_field="place_fips", filter_value="44000"` now pass
+  `scoping_strategy=RowFilterStrategy(variable_name="place_fips",
+  variable_value="44000")`.
+
+
 ## [3.6.0] - 2026-04-18
 
 ### Added
