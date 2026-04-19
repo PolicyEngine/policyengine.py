@@ -225,11 +225,11 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
         person_data = pd.DataFrame(dataset.data.person)
         return build_entity_relationships(person_data, self.group_entities)
 
-    def save(self, simulation: "Simulation") -> None:
+    def save(self, simulation: Simulation) -> None:
         """Persist the simulation's output dataset to its bundled filepath."""
         simulation.output_dataset.save()
 
-    def load(self, simulation: "Simulation") -> None:
+    def load(self, simulation: Simulation) -> None:
         """Rehydrate the simulation's output dataset from disk.
 
         Loads timestamps from filesystem metadata when the file exists so

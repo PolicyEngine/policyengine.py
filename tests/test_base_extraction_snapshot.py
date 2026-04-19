@@ -72,9 +72,7 @@ def _check_snapshot(name: str, data: dict) -> None:
         elif key not in rounded:
             diffs.append(f"  removed key: {key}={expected[key]!r}")
         elif expected[key] != rounded[key]:
-            diffs.append(
-                f"  {key}: expected {expected[key]!r}, got {rounded[key]!r}"
-            )
+            diffs.append(f"  {key}: expected {expected[key]!r}, got {rounded[key]!r}")
     assert not diffs, f"Snapshot {name} drift:\n" + "\n".join(diffs[:40])
 
 
