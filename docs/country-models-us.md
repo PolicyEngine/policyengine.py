@@ -2,6 +2,39 @@
 
 The US tax-benefit model implements the United States federal tax and benefit system using PolicyEngine US as the underlying calculation engine.
 
+## Quick start
+
+```python
+import policyengine as pe
+
+# Single adult earning $60k (SINGLE filer, default state)
+result = pe.us.calculate_household(
+    people=[{"age": 35, "employment_income": 60_000}],
+    tax_unit={"filing_status": "SINGLE"},
+    year=2026,
+)
+print(result.tax_unit.income_tax, result.household.household_net_income)
+
+# With a reform
+result = pe.us.calculate_household(
+    people=[{"age": 35, "employment_income": 60_000}],
+    tax_unit={"filing_status": "SINGLE"},
+    year=2026,
+    reform={"gov.irs.credits.ctc.amount.adult_dependent": 1000},
+)
+
+# Request extra variables not in the default result
+result = pe.us.calculate_household(
+    people=[{"age": 35, "employment_income": 60_000}],
+    tax_unit={"filing_status": "SINGLE"},
+    year=2026,
+    extra_variables=["adjusted_gross_income", "taxable_income"],
+)
+```
+
+For population-level analysis and reform analysis, see
+[Economic impact analysis](economic-impact-analysis.md).
+
 ## Entity structure
 
 The US model uses a more complex entity hierarchy:
@@ -183,11 +216,11 @@ dataset = PolicyEngineUSDataset(
 
 ```python
 from policyengine.core import Simulation
-from policyengine.tax_benefit_models.us import us_latest
+import policyengine as pe
 
 simulation = Simulation(
     dataset=dataset,
-    tax_benefit_model_version=us_latest,
+    tax_benefit_model_version=pe.us.model,
 )
 simulation.run()
 
@@ -247,7 +280,7 @@ import datetime
 
 parameter = Parameter(
     name="gov.irs.income.standard_deduction.single",
-    tax_benefit_model_version=us_latest,
+    tax_benefit_model_version=pe.us.model,
     description="Standard deduction (single)",
     data_type=float,
 )
@@ -271,7 +304,7 @@ policy = Policy(
 ```python
 parameter = Parameter(
     name="gov.irs.credits.ctc.amount.base",
-    tax_benefit_model_version=us_latest,
+    tax_benefit_model_version=pe.us.model,
     description="Base CTC amount",
     data_type=float,
 )
@@ -295,7 +328,7 @@ policy = Policy(
 ```python
 parameter = Parameter(
     name="gov.irs.credits.ctc.refundable.amount.max",
-    tax_benefit_model_version=us_latest,
+    tax_benefit_model_version=pe.us.model,
     description="Maximum refundable CTC",
     data_type=float,
 )
