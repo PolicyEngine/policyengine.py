@@ -5,7 +5,7 @@ dataset artifact together. A simulation TRO chains that bundle to a
 specific reform + ``results.json`` payload so a published result can
 be cited with an immutable composition fingerprint.
 
-See :mod:`policyengine.core.trace_tro` for the bundle-level layer.
+See :mod:`policyengine.provenance.trace` for the bundle-level layer.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Optional, Union
 
-from policyengine.core.trace_tro import (
+from policyengine.provenance.trace import (
     build_simulation_trace_tro,
     serialize_trace_tro,
 )

@@ -224,8 +224,8 @@ That is a country-data concern and lives in those repos.
 From Python:
 
 ```python
-from policyengine.core.release_manifest import get_data_release_manifest, get_release_manifest
-from policyengine.core.trace_tro import build_trace_tro_from_release_bundle, serialize_trace_tro
+from policyengine.provenance.manifest import get_data_release_manifest, get_release_manifest
+from policyengine.provenance.trace import build_trace_tro_from_release_bundle, serialize_trace_tro
 
 country = get_release_manifest("us")
 tro = build_trace_tro_from_release_bundle(country, get_data_release_manifest("us"))
@@ -286,7 +286,7 @@ should run):
 
 ```python
 import hashlib, json, requests
-from policyengine.core.trace_tro import canonical_json_bytes
+from policyengine.provenance.trace import canonical_json_bytes
 
 sim_tro = json.load(open("results.trace.tro.jsonld"))
 perf = sim_tro["@graph"][0]["trov:hasPerformance"]

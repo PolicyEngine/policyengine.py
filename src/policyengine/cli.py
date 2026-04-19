@@ -6,7 +6,7 @@ Subcommands:
 - ``trace-tro-validate <path>`` validate a TRO against the shipped schema
 - ``release-manifest <country>`` print the bundled country manifest
 
-See :mod:`policyengine.core.trace_tro` and ``docs/release-bundles.md``.
+See :mod:`policyengine.provenance.trace` and ``docs/release-bundles.md``.
 """
 
 from __future__ import annotations
@@ -18,11 +18,11 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Optional, Sequence
 
-from policyengine.core.release_manifest import (
+from policyengine.provenance.manifest import (
     get_data_release_manifest,
     get_release_manifest,
 )
-from policyengine.core.trace_tro import (
+from policyengine.provenance.trace import (
     build_trace_tro_from_release_bundle,
     serialize_trace_tro,
 )

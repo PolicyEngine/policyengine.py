@@ -5,7 +5,9 @@ from unittest.mock import MagicMock, patch
 
 from requests import Timeout
 
-from policyengine.core.release_manifest import (
+from policyengine.core.tax_benefit_model import TaxBenefitModel
+from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
+from policyengine.provenance.manifest import (
     DataCertification,
     DataReleaseManifestUnavailableError,
     certify_data_release_compatibility,
@@ -15,8 +17,6 @@ from policyengine.core.release_manifest import (
     resolve_dataset_reference,
     resolve_managed_dataset_reference,
 )
-from policyengine.core.tax_benefit_model import TaxBenefitModel
-from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
 from policyengine.tax_benefit_models.uk import (
     managed_microsimulation as managed_uk_microsimulation,
 )
@@ -179,7 +179,7 @@ class TestReleaseManifests:
         }
 
         with patch(
-            "policyengine.core.release_manifest.requests.get",
+            "policyengine.provenance.manifest.requests.get",
             return_value=_response_with_json(payload),
         ) as mock_get:
             manifest = get_data_release_manifest("us")
@@ -204,7 +204,7 @@ class TestReleaseManifests:
         response.status_code = 404
 
         with patch(
-            "policyengine.core.release_manifest.requests.get",
+            "policyengine.provenance.manifest.requests.get",
             return_value=response,
         ):
             try:
@@ -243,7 +243,7 @@ class TestReleaseManifests:
         }
 
         with patch(
-            "policyengine.core.release_manifest.requests.get",
+            "policyengine.provenance.manifest.requests.get",
             return_value=_response_with_json(payload),
         ):
             certification = certify_data_release_compatibility(
@@ -277,7 +277,7 @@ class TestReleaseManifests:
         }
 
         with patch(
-            "policyengine.core.release_manifest.requests.get",
+            "policyengine.provenance.manifest.requests.get",
             return_value=_response_with_json(payload),
         ):
             certification = certify_data_release_compatibility(
@@ -297,7 +297,7 @@ class TestReleaseManifests:
         get_data_release_manifest.cache_clear()
 
         with patch(
-            "policyengine.core.release_manifest.get_data_release_manifest",
+            "policyengine.provenance.manifest.get_data_release_manifest",
             side_effect=DataReleaseManifestUnavailableError("private repo"),
         ):
             certification = certify_data_release_compatibility(
@@ -314,11 +314,11 @@ class TestReleaseManifests:
 
         with (
             patch(
-                "policyengine.core.release_manifest.get_data_release_manifest",
+                "policyengine.provenance.manifest.get_data_release_manifest",
                 side_effect=DataReleaseManifestUnavailableError("private repo"),
             ),
             patch(
-                "policyengine.core.release_manifest.get_release_manifest",
+                "policyengine.provenance.manifest.get_release_manifest",
                 return_value=MagicMock(
                     certification=DataCertification(
                         compatibility_basis="matching_data_build_fingerprint",
@@ -345,7 +345,7 @@ class TestReleaseManifests:
         get_data_release_manifest.cache_clear()
 
         with patch(
-            "policyengine.core.release_manifest.get_data_release_manifest",
+            "policyengine.provenance.manifest.get_data_release_manifest",
             side_effect=Timeout("network timeout"),
         ):
             try:
@@ -381,7 +381,7 @@ class TestReleaseManifests:
         }
 
         with patch(
-            "policyengine.core.release_manifest.requests.get",
+            "policyengine.provenance.manifest.requests.get",
             return_value=_response_with_json(payload),
         ):
             try:

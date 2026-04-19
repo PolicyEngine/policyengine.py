@@ -14,7 +14,7 @@ from policyengine.core import (
     TaxBenefitModelVersion,
     Variable,
 )
-from policyengine.core.release_manifest import (
+from policyengine.provenance.manifest import (
     certify_data_release_compatibility,
     dataset_logical_name,
     get_release_manifest,
