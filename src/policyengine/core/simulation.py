@@ -33,9 +33,7 @@ class Simulation(BaseModel):
     )
     dynamic: Optional[Union[Dynamic, dict[str, Any]]] = Field(
         default=None,
-        description=(
-            "Behavioural-response overlay. Same dict shape as ``policy``."
-        ),
+        description=("Behavioural-response overlay. Same dict shape as ``policy``."),
     )
     dataset: Dataset = None
 
