@@ -272,80 +272,42 @@ print(output.household[["household_net_income", "household_benefits", "household
 
 ## Common policy reforms
 
+All reform examples use the same flat ``{parameter.path: value}`` dict
+the household calculator accepts. ``Simulation`` compiles it into a
+``Policy`` at construction; scalar values default to
+``{dataset.year}-01-01``. Indexed-breakdown parameters (age groups,
+filing statuses) end in ``[N].amount``.
+
 ### Increasing standard deduction
 
 ```python
-from policyengine.core import Policy, Parameter, ParameterValue
-import datetime
-
-parameter = Parameter(
-    name="gov.irs.income.standard_deduction.single",
-    tax_benefit_model_version=pe.us.model,
-    description="Standard deduction (single)",
-    data_type=float,
-)
-
-policy = Policy(
-    name="Increase standard deduction to $20,000",
-    description="Raises single standard deduction from $14,600 to $20,000",
-    parameter_values=[
-        ParameterValue(
-            parameter=parameter,
-            start_date=datetime.date(2024, 1, 1),
-            end_date=datetime.date(2024, 12, 31),
-            value=20000,
-        )
-    ],
-)
+policy = {"gov.irs.income.standard_deduction.single": 20_000}
 ```
 
 ### Expanding Child Tax Credit
 
 ```python
-parameter = Parameter(
-    name="gov.irs.credits.ctc.amount.base",
-    tax_benefit_model_version=pe.us.model,
-    description="Base CTC amount",
-    data_type=float,
-)
-
-policy = Policy(
-    name="Increase CTC to $3,000",
-    description="Expands CTC from $2,000 to $3,000 per child",
-    parameter_values=[
-        ParameterValue(
-            parameter=parameter,
-            start_date=datetime.date(2024, 1, 1),
-            end_date=datetime.date(2024, 12, 31),
-            value=3000,
-        )
-    ],
-)
+policy = {"gov.irs.credits.ctc.amount.base[0].amount": 3_000}
 ```
 
 ### Making CTC fully refundable
 
 ```python
-parameter = Parameter(
-    name="gov.irs.credits.ctc.refundable.amount.max",
-    tax_benefit_model_version=pe.us.model,
-    description="Maximum refundable CTC",
-    data_type=float,
-)
-
-policy = Policy(
-    name="Fully refundable CTC",
-    description="Makes entire $2,000 CTC refundable",
-    parameter_values=[
-        ParameterValue(
-            parameter=parameter,
-            start_date=datetime.date(2024, 1, 1),
-            end_date=datetime.date(2024, 12, 31),
-            value=2000,  # Match base amount
-        )
-    ],
-)
+policy = {"gov.irs.credits.ctc.refundable.amount.max": 2_000}
 ```
+
+### Time-varying reform
+
+```python
+policy = {
+    "gov.irs.credits.ctc.amount.base[0].amount": {
+        "2026-07-01": 2_500,
+        "2027-01-01": 3_000,
+    },
+}
+```
+
+Plug any of the above into ``Simulation(policy=policy, ...)``.
 
 ## State variations
 

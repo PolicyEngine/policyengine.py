@@ -21,7 +21,7 @@ print(uk.household.hbai_household_net_income)    # net income
 us = pe.us.calculate_household(
     people=[{"age": 35, "employment_income": 60_000}],
     tax_unit={"filing_status": "SINGLE"},
-    household={"state_code_str": "CA"},
+    household={"state_code": "CA"},
     year=2026,
     reform={"gov.irs.credits.ctc.amount.adult_dependent": 1000},
 )

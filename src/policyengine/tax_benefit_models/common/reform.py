@@ -13,8 +13,17 @@ Accepted shapes for the agent-facing API:
     # Multiple parameters.
     reform = {
         "gov.irs.deductions.salt.cap": 0,
-        "gov.irs.credits.ctc.amount": 2500,
+        "gov.irs.credits.ctc.amount.base[0].amount": 2500,
     }
+
+**Indexed parameters.** Many PolicyEngine parameters are *breakdown*
+entries keyed by a bracket index (age group, filing status, etc.).
+Their paths end with ``[N].amount`` / ``[N].threshold``. For example
+the CTC base amount in 2026 is
+``gov.irs.credits.ctc.amount.base[0].amount`` (not ``...base``);
+the top-bracket SS wage base is ``gov.ssa.payroll.cap``. If a reform
+dict uses the bracket-head path instead of ``[0].amount`` the
+``ValueError`` will list the close match.
 
 The compiled form is ``{param_path: {period: value}}`` — exactly what
 ``policyengine_us.Simulation(reform=...)`` /
@@ -124,6 +133,23 @@ def _reform_dict_to_parameter_values(
     return parameter_values
 
 
+def _compile_reform_to(
+    cls,
+    default_name: str,
+    reform: Optional[Mapping[str, Any]],
+    *,
+    year: Optional[int],
+    model_version: TaxBenefitModelVersion,
+    name: Optional[str] = None,
+):
+    parameter_values = _reform_dict_to_parameter_values(
+        reform or {}, year=year, model_version=model_version
+    )
+    if not parameter_values:
+        return None
+    return cls(name=name or default_name, parameter_values=parameter_values)
+
+
 def compile_reform_to_policy(
     reform: Optional[Mapping[str, Any]],
     *,
@@ -134,21 +160,21 @@ def compile_reform_to_policy(
     """Compile a flat reform dict into a fully-assembled ``Policy``.
 
     Accepts the same ``{param.path: value}`` /
-    ``{param.path: {date: value}}`` shape as
-    :func:`compile_reform`, but returns a ready-to-use ``Policy`` with
-    :class:`~policyengine.core.parameter_value.ParameterValue` objects
-    instead of a raw dict. This lets ``Simulation(policy={"..."}: ...)``
-    work without the caller building ``Parameter`` / ``ParameterValue``
-    by hand.
+    ``{param.path: {date: value}}`` shape as :func:`compile_reform`,
+    but returns a ready-to-use ``Policy`` with ``ParameterValue``
+    objects so ``Simulation(policy={...})`` works without hand-building
+    ``Parameter`` / ``ParameterValue``.
     """
     from policyengine.core.policy import Policy
 
-    parameter_values = _reform_dict_to_parameter_values(
-        reform or {}, year=year, model_version=model_version
+    return _compile_reform_to(
+        Policy,
+        "Reform",
+        reform,
+        year=year,
+        model_version=model_version,
+        name=name,
     )
-    if not parameter_values:
-        return None
-    return Policy(name=name or "Reform", parameter_values=parameter_values)
 
 
 def compile_reform_to_dynamic(
@@ -158,16 +184,14 @@ def compile_reform_to_dynamic(
     model_version: TaxBenefitModelVersion,
     name: Optional[str] = None,
 ) -> Optional[Dynamic]:
-    """Compile a flat reform dict into a ready-to-use ``Dynamic``.
-
-    See :func:`compile_reform_to_policy` — this is the ``Dynamic``
-    counterpart for behavioural responses.
-    """
+    """``Dynamic`` counterpart of :func:`compile_reform_to_policy`."""
     from policyengine.core.dynamic import Dynamic
 
-    parameter_values = _reform_dict_to_parameter_values(
-        reform or {}, year=year, model_version=model_version
+    return _compile_reform_to(
+        Dynamic,
+        "Dynamic response",
+        reform,
+        year=year,
+        model_version=model_version,
+        name=name,
     )
-    if not parameter_values:
-        return None
-    return Dynamic(name=name or "Dynamic response", parameter_values=parameter_values)

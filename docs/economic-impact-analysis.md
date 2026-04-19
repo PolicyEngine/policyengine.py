@@ -18,9 +18,8 @@ There are two approaches to comparing simulations:
 ### US example
 
 ```python
-import datetime
 import policyengine as pe
-from policyengine.core import Parameter, ParameterValue, Policy, Simulation
+from policyengine.core import Simulation
 
 # 1. Load data
 datasets = pe.us.ensure_datasets(
@@ -30,39 +29,25 @@ datasets = pe.us.ensure_datasets(
 )
 dataset = datasets["enhanced_cps_2024_2026"]
 
-# 2. Define reform
-param = Parameter(
-    name="gov.irs.deductions.standard.amount.SINGLE",
-    tax_benefit_model_version=pe.us.model,
-)
-reform = Policy(
-    name="Double standard deduction (single)",
-    parameter_values=[
-        ParameterValue(
-            parameter=param,
-            start_date=datetime.date(2026, 1, 1),
-            end_date=datetime.date(2026, 12, 31),
-            value=30_950,
-        ),
-    ],
-)
-
-# 3. Create simulations (no need to call .run() — ensure() is called internally)
+# 2. Build baseline and reform simulations.
+#    The reform dict is the same shape `pe.us.calculate_household(reform=...)` accepts —
+#    Simulation compiles it into a Policy automatically.
 baseline_sim = Simulation(dataset=dataset, tax_benefit_model_version=pe.us.model)
 reform_sim = Simulation(
-    dataset=dataset, tax_benefit_model_version=pe.us.model, policy=reform
+    dataset=dataset,
+    tax_benefit_model_version=pe.us.model,
+    policy={"gov.irs.credits.ctc.amount.base[0].amount": 3_000},
 )
 
-# 4. Run full analysis
+# 3. Run full analysis (ensure() is called internally)
 analysis = pe.us.economic_impact_analysis(baseline_sim, reform_sim)
 ```
 
 ### UK example
 
 ```python
-import datetime
 import policyengine as pe
-from policyengine.core import Parameter, ParameterValue, Policy, Simulation
+from policyengine.core import Simulation
 
 datasets = pe.uk.ensure_datasets(
     datasets=["hf://policyengine/policyengine-uk-data/enhanced_frs_2023_24.h5"],
@@ -71,29 +56,17 @@ datasets = pe.uk.ensure_datasets(
 )
 dataset = datasets["enhanced_frs_2023_24_2026"]
 
-param = Parameter(
-    name="gov.hmrc.income_tax.allowances.personal_allowance.amount",
-    tax_benefit_model_version=pe.uk.model,
-)
-reform = Policy(
-    name="Zero personal allowance",
-    parameter_values=[
-        ParameterValue(
-            parameter=param,
-            start_date=datetime.date(2026, 1, 1),
-            end_date=datetime.date(2026, 12, 31),
-            value=0,
-        ),
-    ],
-)
-
 baseline_sim = Simulation(dataset=dataset, tax_benefit_model_version=pe.uk.model)
 reform_sim = Simulation(
-    dataset=dataset, tax_benefit_model_version=pe.uk.model, policy=reform
+    dataset=dataset,
+    tax_benefit_model_version=pe.uk.model,
+    policy={"gov.hmrc.income_tax.allowances.personal_allowance.amount": 0},
 )
 
 analysis = pe.uk.economic_impact_analysis(baseline_sim, reform_sim)
 ```
+
+> If you need the full `Policy` / `ParameterValue` construction (e.g., a reform with a custom ``simulation_modifier`` callable), you can still pass an object; see `policyengine.core.policy` for details.
 
 ## What `economic_impact_analysis()` computes
 

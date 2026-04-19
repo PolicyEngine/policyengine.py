@@ -5,7 +5,7 @@ calculators across a representative set of cases. The intent is to make the
 base-class extraction (PR F) fail loudly if any country-specific behaviour
 drifts during the refactor.
 
-Snapshots live in ``tests/fixtures/base_extraction_snapshots/``. To refresh
+Snapshots live in ``tests/fixtures/household_calculator_snapshots/``. To refresh
 them, run with ``PE_UPDATE_SNAPSHOTS=1`` set. Do **not** refresh them as part
 of a refactor meant to be behaviour-preserving.
 """
@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-SNAPSHOT_DIR = Path(__file__).parent / "fixtures" / "base_extraction_snapshots"
+SNAPSHOT_DIR = Path(__file__).parent / "fixtures" / "household_calculator_snapshots"
 UPDATE = os.environ.get("PE_UPDATE_SNAPSHOTS") == "1"
 
 

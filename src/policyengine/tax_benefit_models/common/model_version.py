@@ -182,7 +182,7 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     try:
                         param = get_parameter(system.parameters, value)
                         setattr(variable, attr, list(param("2025-01-01")))
-                    except (ValueError, Exception):
+                    except Exception:
                         setattr(variable, attr, None)
                 else:
                     setattr(variable, attr, value)
