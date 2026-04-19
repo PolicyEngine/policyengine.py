@@ -18,6 +18,45 @@ _cache: LRUCache["Simulation"] = LRUCache(max_size=100)
 
 
 class Simulation(BaseModel):
+    """Population microsimulation over a certified dataset.
+
+    Canonical call shape:
+
+    .. code-block:: python
+
+        import policyengine as pe
+        from policyengine.core import Simulation
+
+        datasets = pe.us.ensure_datasets(
+            datasets=["hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"],
+            years=[2026], data_folder="./data",
+        )
+        dataset = datasets["enhanced_cps_2024_2026"]
+
+        # Baseline
+        baseline = Simulation(dataset=dataset, tax_benefit_model_version=pe.us.model)
+
+        # Reform — same flat dict shape as pe.us.calculate_household(reform=...).
+        # Parameter path indexing uses "[0].amount" for scale/breakdown entries.
+        reform = Simulation(
+            dataset=dataset,
+            tax_benefit_model_version=pe.us.model,
+            policy={"gov.irs.credits.ctc.amount.base[0].amount": 3_000},
+        )
+
+        baseline.ensure()
+        reform.ensure()
+
+    The ``policy`` / ``dynamic`` kwargs accept either a ``Policy`` /
+    ``Dynamic`` object or a flat ``{"param.path": value}`` /
+    ``{"param.path": {date: value}}`` dict that is compiled against
+    ``tax_benefit_model_version`` at construction time (unknown paths
+    raise with close-match suggestions). Scalar values default to
+    ``{dataset.year}-01-01`` as their effective date.
+
+    See ``policyengine.core.scoping_strategy`` for sub-national scoping.
+    """
+
     id: str = Field(default_factory=lambda: str(uuid4()))
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
@@ -59,40 +98,35 @@ class Simulation(BaseModel):
     def _compile_dict_reforms(self) -> "Simulation":
         """Coerce dict ``policy`` / ``dynamic`` inputs into proper objects.
 
-        We can't do this in a ``field_validator`` because compiling a
-        reform requires the ``tax_benefit_model_version`` (for parameter
-        path validation) and the ``dataset.year`` (for the scalar
-        effective-date default). By the time ``model_validator(mode="after")``
-        fires, both are already on ``self``.
+        Runs at ``mode="after"`` because compiling needs both
+        ``tax_benefit_model_version`` (for path validation) and
+        ``dataset.year`` (for effective-date defaulting) — both on ``self``.
         """
         from policyengine.tax_benefit_models.common.reform import (
             compile_reform_to_dynamic,
             compile_reform_to_policy,
         )
 
-        if isinstance(self.policy, dict):
+        year = getattr(self.dataset, "year", None)
+        for field, compiler in (
+            ("policy", compile_reform_to_policy),
+            ("dynamic", compile_reform_to_dynamic),
+        ):
+            value = getattr(self, field)
+            if not isinstance(value, dict):
+                continue
             if self.tax_benefit_model_version is None:
                 raise ValueError(
-                    "Cannot compile a dict policy without "
-                    "tax_benefit_model_version; pass model_version or a Policy."
+                    f"Cannot compile a dict {field} without "
+                    "tax_benefit_model_version; pass model_version or a "
+                    f"{field.capitalize()}."
                 )
-            year = getattr(self.dataset, "year", None)
-            self.policy = compile_reform_to_policy(
-                self.policy,
-                year=year,
-                model_version=self.tax_benefit_model_version,
-            )
-        if isinstance(self.dynamic, dict):
-            if self.tax_benefit_model_version is None:
-                raise ValueError(
-                    "Cannot compile a dict dynamic without "
-                    "tax_benefit_model_version; pass model_version or a Dynamic."
-                )
-            year = getattr(self.dataset, "year", None)
-            self.dynamic = compile_reform_to_dynamic(
-                self.dynamic,
-                year=year,
-                model_version=self.tax_benefit_model_version,
+            setattr(
+                self,
+                field,
+                compiler(
+                    value, year=year, model_version=self.tax_benefit_model_version
+                ),
             )
         return self
 

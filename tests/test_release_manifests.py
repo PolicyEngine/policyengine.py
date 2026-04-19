@@ -45,9 +45,9 @@ class TestReleaseManifests:
         manifest = get_release_manifest("us")
 
         assert manifest.schema_version == 1
-        assert manifest.bundle_id == "us-3.5.0"
+        assert manifest.bundle_id == "us-4.0.0"
         assert manifest.country_id == "us"
-        assert manifest.policyengine_version == "3.5.0"
+        assert manifest.policyengine_version == "4.0.0"
         assert manifest.model_package.name == "policyengine-us"
         assert manifest.model_package.version == "1.653.3"
         assert manifest.data_package.name == "policyengine-us-data"
@@ -67,9 +67,9 @@ class TestReleaseManifests:
         manifest = get_release_manifest("uk")
 
         assert manifest.schema_version == 1
-        assert manifest.bundle_id == "uk-3.5.0"
+        assert manifest.bundle_id == "uk-4.0.0"
         assert manifest.country_id == "uk"
-        assert manifest.policyengine_version == "3.5.0"
+        assert manifest.policyengine_version == "4.0.0"
         assert manifest.model_package.name == "policyengine-uk"
         assert manifest.model_package.version == "2.88.0"
         assert manifest.data_package.name == "policyengine-uk-data"
@@ -408,7 +408,7 @@ class TestReleaseManifests:
 
         bundle = model_version.release_bundle
 
-        assert bundle["bundle_id"] == "uk-3.5.0"
+        assert bundle["bundle_id"] == "uk-4.0.0"
         assert bundle["default_dataset"] == "enhanced_frs_2023_24"
         assert bundle["default_dataset_uri"] == manifest.default_dataset_uri
         assert bundle["certified_data_build_id"] == "policyengine-uk-data-1.40.4"
@@ -455,7 +455,7 @@ class TestReleaseManifests:
 
         dataset = mock_microsimulation.call_args.kwargs["dataset"]
         assert dataset == microsim.policyengine_bundle["runtime_dataset_source"]
-        assert microsim.policyengine_bundle["policyengine_version"] == "3.5.0"
+        assert microsim.policyengine_bundle["policyengine_version"] == "4.0.0"
         assert microsim.policyengine_bundle["runtime_dataset"] == "enhanced_cps_2024"
         assert (
             microsim.policyengine_bundle["runtime_dataset_uri"]
@@ -493,7 +493,7 @@ class TestReleaseManifests:
                 "hf://policyengine/policyengine-uk-data-private/"
                 "enhanced_frs_2023_24.h5@1.40.4"
             )
-        assert microsim.policyengine_bundle["policyengine_version"] == "3.5.0"
+        assert microsim.policyengine_bundle["policyengine_version"] == "4.0.0"
         assert microsim.policyengine_bundle["runtime_dataset"] == "enhanced_frs_2023_24"
         assert microsim.policyengine_bundle["runtime_dataset_uri"] == (
             "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.4"

@@ -76,8 +76,8 @@ simulation = Simulation(
     dataset=dataset,
     tax_benefit_model_version=pe.us.model,
     scoping_strategy=RowFilterStrategy(
-        variable_name="state_code",
-        variable_value="CA",
+        variable_name="state_fips",
+        variable_value=6,  # California FIPS code
     ),
 )
 simulation.run()
@@ -209,8 +209,8 @@ baseline_sim = Simulation(
     dataset=dataset,
     tax_benefit_model_version=pe.us.model,
     scoping_strategy=RowFilterStrategy(
-        variable_name="state_code",
-        variable_value="CA",
+        variable_name="state_fips",
+        variable_value=6,  # California FIPS code
     ),
 )
 reform_sim = Simulation(
@@ -218,8 +218,8 @@ reform_sim = Simulation(
     tax_benefit_model_version=pe.us.model,
     policy=reform,
     scoping_strategy=RowFilterStrategy(
-        variable_name="state_code",
-        variable_value="CA",
+        variable_name="state_fips",
+        variable_value=6,  # California FIPS code
     ),
 )
 

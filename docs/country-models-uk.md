@@ -233,81 +233,31 @@ print(output.household[["household_net_income", "household_benefits", "household
 
 ## Common policy reforms
 
+All reform examples use the same flat ``{parameter.path: value}`` dict
+the household calculator accepts. ``Simulation`` compiles it into a
+``Policy`` at construction; scalar values default to
+``{dataset.year}-01-01``.
+
 ### Increasing personal allowance
 
 ```python
-from policyengine.core import Policy, Parameter, ParameterValue
-import datetime
-
-parameter = Parameter(
-    name="gov.hmrc.income_tax.allowances.personal_allowance.amount",
-    tax_benefit_model_version=pe.uk.model,
-    description="Personal allowance",
-    data_type=float,
-)
-
-policy = Policy(
-    name="Increase personal allowance to £15,000",
-    description="Raises personal allowance from £12,570 to £15,000",
-    parameter_values=[
-        ParameterValue(
-            parameter=parameter,
-            start_date=datetime.date(2026, 1, 1),
-            end_date=datetime.date(2026, 12, 31),
-            value=15000,
-        )
-    ],
-)
+policy = {"gov.hmrc.income_tax.allowances.personal_allowance.amount": 15_000}
 ```
 
 ### Adjusting UC taper rate
 
 ```python
-parameter = Parameter(
-    name="gov.dwp.universal_credit.means_test.reduction_rate",
-    tax_benefit_model_version=pe.uk.model,
-    description="UC taper rate",
-    data_type=float,
-)
-
-policy = Policy(
-    name="Reduce UC taper to 50%",
-    description="Lowers taper rate from 55% to 50%",
-    parameter_values=[
-        ParameterValue(
-            parameter=parameter,
-            start_date=datetime.date(2026, 1, 1),
-            end_date=datetime.date(2026, 12, 31),
-            value=0.50,  # 50%
-        )
-    ],
-)
+policy = {"gov.dwp.universal_credit.means_test.reduction_rate": 0.50}
 ```
 
-### Abolishing two-child limit
+### Abolishing the two-child limit
 
 ```python
-# Set subsequent child element equal to first child
-parameter = Parameter(
-    name="gov.dwp.universal_credit.elements.child.subsequent_child",
-    tax_benefit_model_version=pe.uk.model,
-    description="UC subsequent child element",
-    data_type=float,
-)
-
-policy = Policy(
-    name="Abolish two-child limit",
-    description="Sets subsequent child element equal to first child",
-    parameter_values=[
-        ParameterValue(
-            parameter=parameter,
-            start_date=datetime.date(2026, 1, 1),
-            end_date=datetime.date(2026, 12, 31),
-            value=333.33,  # Match first child rate
-        )
-    ],
-)
+# Set the subsequent-child element equal to the first-child rate.
+policy = {"gov.dwp.universal_credit.elements.child.subsequent_child": 333.33}
 ```
+
+Plug any of the above into ``Simulation(policy=policy, ...)``.
 
 ## Regional variations
 

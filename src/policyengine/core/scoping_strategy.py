@@ -68,7 +68,7 @@ class RowFilterStrategy(RegionScopingStrategy):
 
     strategy_type: Literal["row_filter"] = "row_filter"
     variable_name: str
-    variable_value: str
+    variable_value: Union[str, int, float]
 
     def apply(
         self,

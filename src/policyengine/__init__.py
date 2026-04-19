@@ -30,6 +30,7 @@ Each country module exposes ``calculate_household``, ``model``
 
 from importlib.util import find_spec
 
+from policyengine import outputs as outputs
 from policyengine.core import Simulation as Simulation
 
 if find_spec("policyengine_us") is not None:
@@ -42,4 +43,4 @@ if find_spec("policyengine_uk") is not None:
 else:  # pragma: no cover
     uk = None  # type: ignore[assignment]
 
-__all__ = ["Simulation", "uk", "us"]
+__all__ = ["Simulation", "outputs", "uk", "us"]

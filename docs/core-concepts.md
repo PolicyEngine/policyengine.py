@@ -29,7 +29,7 @@ us = pe.us.calculate_household(
         {"age": 5},
     ],
     tax_unit={"filing_status": "JOINT"},
-    household={"state_code_str": "TX"},
+    household={"state_code": "TX"},
     year=2026,
 )
 print(us.tax_unit.income_tax, us.tax_unit.eitc, us.tax_unit.ctc)
@@ -270,55 +270,67 @@ benunit_data = output.benunit[["benunit_id", "universal_credit", "child_benefit"
 
 Policies modify tax-benefit system parameters through parametric reforms.
 
-### Creating a policy
+### Reform as a dict
+
+The canonical form — same shape ``pe.{uk,us}.calculate_household(reform=...)``
+accepts — is a flat ``{parameter.path: value}`` / ``{parameter.path: {date: value}}``
+dict. ``Simulation`` compiles it to a ``Policy`` at construction:
 
 ```python
-from policyengine.core import Policy, Parameter, ParameterValue
-import datetime
+import policyengine as pe
+from policyengine.core import Simulation
 
-# Define parameter to modify
-parameter = Parameter(
-    name="gov.hmrc.income_tax.allowances.personal_allowance.amount",
-    tax_benefit_model_version=pe.uk.model,
-    description="Personal allowance for income tax",
-    data_type=float,
-)
-# Shortcut: when using `calculate_household`, reforms may be passed as a dict
-# and compiled internally. This low-level construction is only needed when
-# you are building a Simulation manually.
-
-# Set new value
-parameter_value = ParameterValue(
-    parameter=parameter,
-    start_date=datetime.date(2026, 1, 1),
-    end_date=datetime.date(2026, 12, 31),
-    value=15000,  # Increase from ~£12,570 to £15,000
-)
-
-policy = Policy(
-    name="Increased personal allowance",
-    description="Raises personal allowance to £15,000",
-    parameter_values=[parameter_value],
-)
-```
-
-### Running a reform simulation
-
-```python
-# Baseline simulation
-baseline = Simulation(
-    dataset=dataset,
-    tax_benefit_model_version=pe.uk.model,
-)
-baseline.run()
-
-# Reform simulation
+baseline = Simulation(dataset=dataset, tax_benefit_model_version=pe.uk.model)
 reform = Simulation(
     dataset=dataset,
     tax_benefit_model_version=pe.uk.model,
-    policy=policy,
+    # Personal allowance raised from ~£12,570 to £15,000.
+    policy={"gov.hmrc.income_tax.allowances.personal_allowance.amount": 15_000},
 )
+baseline.run()
 reform.run()
+```
+
+Scalar values default their effective date to ``{dataset.year}-01-01``.
+For time-varying reforms pass a nested ``{date: value}`` mapping:
+
+```python
+policy = {
+    "gov.hmrc.income_tax.allowances.personal_allowance.amount": {
+        "2026-01-01": 13_000,
+        "2027-01-01": 15_000,
+    }
+}
+```
+
+Unknown paths raise ``ValueError`` with a close-match suggestion.
+
+### Reform as a Policy object (escape hatch)
+
+For reforms that can't be expressed as parameter-value changes (e.g.,
+custom ``simulation_modifier`` callables), build a ``Policy`` directly:
+
+```python
+from policyengine.core import Parameter, ParameterValue, Policy
+import datetime
+
+policy = Policy(
+    name="Increased personal allowance",
+    parameter_values=[
+        ParameterValue(
+            parameter=Parameter(
+                name="gov.hmrc.income_tax.allowances.personal_allowance.amount",
+                tax_benefit_model_version=pe.uk.model,
+                data_type=float,
+            ),
+            start_date=datetime.date(2026, 1, 1),
+            end_date=datetime.date(2026, 12, 31),
+            value=15_000,
+        ),
+    ],
+)
+
+Simulation(dataset=dataset, tax_benefit_model_version=pe.uk.model, policy=policy)
 ```
 
 ### Combining policies
