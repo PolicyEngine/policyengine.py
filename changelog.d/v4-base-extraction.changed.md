@@ -1,0 +1,1 @@
+Extracted shared `MicrosimulationModelVersion` base class in `policyengine.tax_benefit_models.common`. Country subclasses now declare class-level metadata (`country_code`, `package_name`, `group_entities`) and implement a handful of thin hooks; `run()` stays per-country. Byte-level snapshot tests verify zero output drift.
