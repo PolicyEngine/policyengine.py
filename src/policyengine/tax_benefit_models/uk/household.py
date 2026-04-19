@@ -4,11 +4,17 @@
 
     import policyengine as pe
 
+    # Lone parent + one child, £30k wages.
     result = pe.uk.calculate_household(
-        people=[{"age": 30, "employment_income": 50000}],
+        people=[
+            {"age": 32, "employment_income": 30000},
+            {"age": 6},
+        ],
+        benunit={"would_claim_child_benefit": True},
         year=2026,
     )
     print(result.person[0].income_tax)
+    print(result.benunit.child_benefit)
     print(result.household.hbai_household_net_income)
 """
 
@@ -75,6 +81,29 @@ def _build_situation(
     }
 
 
+_ALLOWED_KWARGS = frozenset(
+    {"people", "benunit", "household", "year", "reform", "extra_variables"}
+)
+
+
+def _raise_unexpected_kwargs(unexpected: Mapping[str, Any]) -> None:
+    from difflib import get_close_matches
+
+    lines = ["calculate_household received unsupported keyword arguments:"]
+    for name in unexpected:
+        suggestions = get_close_matches(name, _ALLOWED_KWARGS, n=1, cutoff=0.5)
+        hint = f" (did you mean '{suggestions[0]}'?)" if suggestions else ""
+        if name in {"tax_unit", "marital_unit", "family", "spm_unit"}:
+            hint = (
+                f" — `{name}` is US-only; the UK groups persons into a single `benunit`"
+            )
+        lines.append(f"  - '{name}'{hint}")
+    lines.append(
+        "Valid kwargs: people, benunit, household, year, reform, extra_variables."
+    )
+    raise TypeError("\n".join(lines))
+
+
 def calculate_household(
     *,
     people: list[Mapping[str, Any]],
@@ -83,21 +112,33 @@ def calculate_household(
     year: int = 2026,
     reform: Optional[Mapping[str, Any]] = None,
     extra_variables: Optional[list[str]] = None,
+    **unexpected: Any,
 ) -> HouseholdResult:
     """Compute tax and benefit variables for a single UK household.
 
     Args:
         people: One dict per person (keys are UK variable names).
+            Must be non-empty.
         benunit, household: Optional per-entity overrides.
         year: Calendar year. Defaults to 2026.
-        reform: Optional reform dict; see
-            :func:`policyengine.tax_benefit_models.common.compile_reform`.
+        reform: Optional reform dict. Scalar values default to
+            ``{year}-01-01``; invalid parameter paths raise with a
+            close-match suggestion.
         extra_variables: Flat list of extra UK variables to compute;
             the library dispatches each to its entity.
 
     Returns:
         :class:`HouseholdResult` with dot-accessible entity results.
+
+    Raises:
+        ValueError: on unknown or mis-placed variable names, or
+            unknown reform parameter paths.
+        TypeError: on US-only kwargs (``tax_unit``, etc.) or other
+            unsupported keyword arguments.
     """
+    if unexpected:
+        _raise_unexpected_kwargs(unexpected)
+
     from policyengine_uk import Simulation
 
     people = list(people)
@@ -118,7 +159,7 @@ def calculate_household(
         names=extra_variables or [],
     )
     output_columns = _default_output_columns(extra_by_entity)
-    reform_dict = compile_reform(reform)
+    reform_dict = compile_reform(reform, year=year, model_version=uk_latest)
 
     simulation = Simulation(
         situation=_build_situation(
