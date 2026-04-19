@@ -1,9 +1,15 @@
 """Strict validation for household-calculation inputs.
 
-Surfaces typos (``employment_incme``) that would otherwise silently
-default to zero. Error messages include paste-able fixes — a close
-variable-name match via :mod:`difflib` plus a hint to use
-``extra_variables`` when the name is valid but outside the default set.
+Catches the three typo classes that otherwise silently propagate wrong
+numbers to published results:
+
+1. Unknown variable name entirely (``employment_incme``).
+2. Valid variable placed on the wrong entity (``filing_status`` passed
+   to ``people`` instead of ``tax_unit``).
+3. Empty ``people`` list (policyengine_us will IndexError deep in
+   simulation).
+
+All errors include paste-able fixes.
 """
 
 from __future__ import annotations
@@ -43,36 +49,65 @@ def validate_household_input(
     model_version: TaxBenefitModelVersion,
     entities: Mapping[str, Iterable[Mapping[str, object]]],
 ) -> None:
-    """Raise ``ValueError`` if any entity dict contains an unknown variable.
+    """Raise ``ValueError`` on unknown or mis-placed entity variables.
 
-    ``entities`` maps entity name → iterable of entity dicts. Each dict
-    is checked against ``model_version.variables_by_name``; unknown
-    keys are reported with a close-match suggestion.
+    ``entities`` maps entity name → iterable of entity dicts. Each key
+    is checked against ``model_version.variables_by_name``:
+
+    - If the key is unknown, the error includes a difflib close-match
+      suggestion.
+    - If the key is a known variable but defined on a different entity,
+      the error names the correct entity and shows the kwarg swap.
     """
-    valid = set(model_version.variables_by_name)
-    problems: list[tuple[str, str]] = []
+    if "person" in entities and not list(entities["person"]):
+        raise ValueError(
+            "people must be a non-empty list. At minimum pass people=[{'age': <int>}]."
+        )
+
+    variables_by_name = model_version.variables_by_name
+    valid_names = set(variables_by_name)
+    unknown: list[tuple[str, str]] = []
+    misplaced: list[tuple[str, str, str]] = []
+
     for entity_name, records in entities.items():
         for record in records:
             for key in record:
                 if key in _STRUCTURAL_KEYS:
                     continue
-                if key not in valid:
-                    problems.append((entity_name, key))
+                variable = variables_by_name.get(key)
+                if variable is None:
+                    unknown.append((entity_name, key))
+                elif variable.entity != entity_name:
+                    misplaced.append((entity_name, key, variable.entity))
 
-    if not problems:
+    if not unknown and not misplaced:
         return
 
-    lines = [
-        "Household input contains variable names not defined on "
-        f"{model_version.model.id} {model_version.version}:",
-    ]
-    for entity_name, key in problems:
-        suggestions = get_close_matches(key, valid, n=1, cutoff=0.7)
-        suggestion = f" (did you mean '{suggestions[0]}'?)" if suggestions else ""
-        lines.append(f"  - {entity_name}: '{key}'{suggestion}")
-    first_bad = problems[0][1]
-    lines.append(
-        f"If '{first_bad}' is a real variable outside the default output "
-        f"columns, pass it via extra_variables=['{first_bad}'] instead."
-    )
+    lines: list[str] = []
+    if unknown:
+        lines.append(
+            f"Unknown variable names on {model_version.model.id} "
+            f"{model_version.version}:"
+        )
+        for entity_name, key in unknown:
+            suggestions = get_close_matches(key, valid_names, n=1, cutoff=0.7)
+            hint = f" (did you mean '{suggestions[0]}'?)" if suggestions else ""
+            lines.append(f"  - {entity_name}: '{key}'{hint}")
+        if not misplaced:
+            first_bad = unknown[0][1]
+            lines.append(
+                f"If '{first_bad}' is a real variable outside the default "
+                f"output columns, pass it via extra_variables=['{first_bad}']."
+            )
+    if misplaced:
+        if lines:
+            lines.append("")
+        lines.append("Variables passed on the wrong entity:")
+        for wrong_entity, key, correct_entity in misplaced:
+            lines.append(
+                f"  - '{key}' was given on {wrong_entity}; it belongs on "
+                f"{correct_entity}. Move it: pass "
+                f"{correct_entity}={{'{key}': <value>}}."
+            )
+
     raise ValueError("\n".join(lines))
