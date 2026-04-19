@@ -128,6 +128,19 @@ class TestHouseholdInputValidation:
                 year=2026,
             )
 
+    def test__variable_on_wrong_entity__then_raises_with_entity_swap_hint(self):
+        # filing_status is a tax_unit variable; passing on person should
+        # point the caller at the correct entity kwarg.
+        with pytest.raises(ValueError, match="belongs on tax_unit"):
+            pe.us.calculate_household(
+                people=[{"age": 35, "filing_status": "SINGLE"}],
+                year=2026,
+            )
+
+    def test__empty_people__then_raises(self):
+        with pytest.raises(ValueError, match="people must be a non-empty"):
+            pe.us.calculate_household(people=[], year=2026)
+
     def test__unknown_extra_variable__then_raises(self):
         with pytest.raises(ValueError, match="not defined"):
             pe.us.calculate_household(
@@ -143,6 +156,28 @@ class TestHouseholdInputValidation:
         )
         with pytest.raises(AttributeError, match="extra_variables"):
             _ = result.tax_unit.not_a_default_column
+
+    def test__unknown_reform_path__then_raises_with_close_match(self):
+        with pytest.raises(ValueError, match="not defined"):
+            pe.us.calculate_household(
+                people=[{"age": 35, "is_tax_unit_head": True}],
+                year=2026,
+                reform={"gov.irs.not_a_real_parameter": 0},
+            )
+
+    def test__us_kwarg_on_uk__then_raises_with_uk_hint(self):
+        with pytest.raises(TypeError, match="US-only"):
+            pe.uk.calculate_household(
+                people=[{"age": 30}],
+                tax_unit={"filing_status": "SINGLE"},
+            )
+
+    def test__uk_kwarg_on_us__then_raises_with_us_hint(self):
+        with pytest.raises(TypeError, match="UK-only"):
+            pe.us.calculate_household(
+                people=[{"age": 30, "is_tax_unit_head": True}],
+                benunit={"foo": 1},
+            )
 
 
 class TestHouseholdResultSerialisation:
