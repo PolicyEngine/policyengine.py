@@ -2,6 +2,44 @@
 
 The UK tax-benefit model implements the United Kingdom's tax and benefit system using PolicyEngine UK as the underlying calculation engine.
 
+## Quick start
+
+```python
+import policyengine as pe
+
+# Single adult earning £50k
+result = pe.uk.calculate_household(
+    people=[{"age": 35, "employment_income": 50_000}],
+    year=2026,
+)
+print(result.person[0].income_tax, result.household.hbai_household_net_income)
+
+# Family renting, with benefit claims explicitly on
+result = pe.uk.calculate_household(
+    people=[
+        {"age": 35, "employment_income": 30_000},
+        {"age": 33},
+        {"age": 8},
+        {"age": 5},
+    ],
+    benunit={"would_claim_uc": True, "would_claim_child_benefit": True},
+    household={"rent": 12_000, "region": "NORTH_WEST"},
+    year=2026,
+)
+
+# Apply a reform
+result = pe.uk.calculate_household(
+    people=[{"age": 35, "employment_income": 50_000}],
+    year=2026,
+    reform={
+        "gov.hmrc.income_tax.allowances.personal_allowance.amount": 15_000,
+    },
+)
+```
+
+For population-level analysis and reform analysis, see
+[Economic impact analysis](economic-impact-analysis.md).
+
 ## Entity structure
 
 The UK model uses three entity levels:
@@ -149,11 +187,11 @@ dataset = PolicyEngineUKDataset(
 
 ```python
 from policyengine.core import Simulation
-from policyengine.tax_benefit_models.uk import uk_latest
+import policyengine as pe
 
 simulation = Simulation(
     dataset=dataset,
-    tax_benefit_model_version=uk_latest,
+    tax_benefit_model_version=pe.uk.model,
 )
 simulation.run()
 
@@ -203,7 +241,7 @@ import datetime
 
 parameter = Parameter(
     name="gov.hmrc.income_tax.allowances.personal_allowance.amount",
-    tax_benefit_model_version=uk_latest,
+    tax_benefit_model_version=pe.uk.model,
     description="Personal allowance",
     data_type=float,
 )
@@ -227,7 +265,7 @@ policy = Policy(
 ```python
 parameter = Parameter(
     name="gov.dwp.universal_credit.means_test.reduction_rate",
-    tax_benefit_model_version=uk_latest,
+    tax_benefit_model_version=pe.uk.model,
     description="UC taper rate",
     data_type=float,
 )
@@ -252,7 +290,7 @@ policy = Policy(
 # Set subsequent child element equal to first child
 parameter = Parameter(
     name="gov.dwp.universal_credit.elements.child.subsequent_child",
-    tax_benefit_model_version=uk_latest,
+    tax_benefit_model_version=pe.uk.model,
     description="UC subsequent child element",
     data_type=float,
 )
