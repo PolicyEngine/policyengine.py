@@ -12,6 +12,7 @@ import pandas as pd
 from pydantic import BaseModel
 
 from policyengine.core import OutputCollection, Simulation
+from policyengine.outputs import ProgramStatistics
 from policyengine.outputs.decile_impact import (
     DecileImpact,
     calculate_decile_impacts,
@@ -25,8 +26,6 @@ from policyengine.outputs.poverty import (
     Poverty,
     calculate_us_poverty_rates,
 )
-
-from .outputs import ProgramStatistics
 
 
 class PolicyReformAnalysis(BaseModel):

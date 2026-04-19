@@ -49,6 +49,7 @@ from policyengine.outputs.poverty import (
     calculate_us_poverty_by_race,
     calculate_us_poverty_rates,
 )
+from policyengine.outputs.program_statistics import ProgramStatistics
 
 __all__ = [
     "Output",
@@ -59,6 +60,7 @@ __all__ = [
     "ChangeAggregateType",
     "DecileImpact",
     "calculate_decile_impacts",
+    "ProgramStatistics",
     "IntraDecileImpact",
     "compute_intra_decile_impacts",
     "Poverty",

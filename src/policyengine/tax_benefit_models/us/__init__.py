@@ -28,6 +28,7 @@ from importlib.util import find_spec
 
 if find_spec("policyengine_us") is not None:
     from policyengine.core import Dataset
+    from policyengine.outputs import ProgramStatistics
 
     from .analysis import economic_impact_analysis
     from .datasets import (
@@ -44,7 +45,6 @@ if find_spec("policyengine_us") is not None:
         managed_microsimulation,
         us_latest,
     )
-    from .outputs import ProgramStatistics
 
     model = us_latest
     """The pinned US ``TaxBenefitModelVersion`` for this policyengine release."""
