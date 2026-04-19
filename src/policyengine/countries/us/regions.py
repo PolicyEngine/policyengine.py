@@ -8,8 +8,8 @@ in the data/ subdirectory:
 """
 
 from policyengine.core.region import Region, RegionRegistry
-from policyengine.core.release_manifest import resolve_region_dataset_path
 from policyengine.core.scoping_strategy import RowFilterStrategy
+from policyengine.provenance.manifest import resolve_region_dataset_path
 
 from .data import AT_LARGE_STATES, DISTRICT_COUNTS, US_PLACES, US_STATES
 

@@ -4,14 +4,15 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from .release_manifest import (
+from policyengine.provenance.manifest import (
     CountryReleaseManifest,
     DataCertification,
     PackageVersion,
     get_data_release_manifest,
 )
+from policyengine.provenance.trace import build_trace_tro_from_release_bundle
+
 from .tax_benefit_model import TaxBenefitModel
-from .trace_tro import build_trace_tro_from_release_bundle
 
 if TYPE_CHECKING:
     from .parameter import Parameter

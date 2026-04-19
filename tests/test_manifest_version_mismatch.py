@@ -26,7 +26,7 @@ from __future__ import annotations
 import warnings
 from unittest.mock import patch
 
-from policyengine.core.release_manifest import get_release_manifest
+from policyengine.provenance.manifest import get_release_manifest
 
 
 def _pick_mismatched_version(manifest_version: str) -> str:

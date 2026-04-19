@@ -7,7 +7,7 @@ from microdf import MicroDataFrame
 from pydantic import ConfigDict
 
 from policyengine.core import Dataset, YearData
-from policyengine.core.release_manifest import (
+from policyengine.provenance.manifest import (
     dataset_logical_name,
     resolve_dataset_reference,
 )
