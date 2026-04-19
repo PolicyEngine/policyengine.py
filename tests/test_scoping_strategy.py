@@ -265,38 +265,16 @@ class TestSimulationScopingStrategy:
         assert sim.scoping_strategy is not None
         assert isinstance(sim.scoping_strategy, RowFilterStrategy)
 
-    def test__given_legacy_filter_fields__then_auto_constructs_row_filter(
-        self,
-    ):
-        sim = Simulation(
-            filter_field="place_fips",
-            filter_value="44000",
-        )
-        assert sim.scoping_strategy is not None
-        assert isinstance(sim.scoping_strategy, RowFilterStrategy)
-        assert sim.scoping_strategy.variable_name == "place_fips"
-        assert sim.scoping_strategy.variable_value == "44000"
-
-    def test__given_explicit_strategy_and_legacy_fields__then_explicit_wins(
-        self,
-    ):
-        explicit = WeightReplacementStrategy(
+    def test__given_weight_replacement__then_simulation_stores_it(self):
+        strategy = WeightReplacementStrategy(
             weight_matrix_bucket="bucket",
             weight_matrix_key="key.h5",
             lookup_csv_bucket="bucket",
             lookup_csv_key="lookup.csv",
             region_code="E14001234",
         )
-        sim = Simulation(
-            scoping_strategy=explicit,
-            filter_field="household_weight",
-            filter_value="E14001234",
-        )
+        sim = Simulation(scoping_strategy=strategy)
         assert isinstance(sim.scoping_strategy, WeightReplacementStrategy)
-
-    def test__given_only_filter_field_no_value__then_no_auto_construct(self):
-        sim = Simulation(filter_field="place_fips")
-        assert sim.scoping_strategy is None
 
 
 # Fixtures for scoping strategy tests

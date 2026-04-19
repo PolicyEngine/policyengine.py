@@ -3,13 +3,13 @@ from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 from .cache import LRUCache
 from .dataset import Dataset
 from .dynamic import Dynamic
 from .policy import Policy
-from .scoping_strategy import RowFilterStrategy, ScopingStrategy
+from .scoping_strategy import ScopingStrategy
 from .tax_benefit_model_version import TaxBenefitModelVersion
 
 logger = logging.getLogger(__name__)
@@ -26,41 +26,21 @@ class Simulation(BaseModel):
     dynamic: Optional[Dynamic] = None
     dataset: Dataset = None
 
-    # Scoping strategy (preferred over legacy filter fields)
     scoping_strategy: Optional[ScopingStrategy] = Field(
         default=None,
         description="Strategy for scoping dataset to a sub-national region",
     )
 
-    # Legacy regional filtering parameters (kept for backward compatibility)
-    filter_field: Optional[str] = Field(
-        default=None,
-        description="Household-level variable to filter dataset by (e.g., 'place_fips', 'country')",
-    )
-    filter_value: Optional[str] = Field(
-        default=None,
-        description="Value to match when filtering (e.g., '44000', 'ENGLAND')",
+    extra_variables: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description=(
+            "Additional variables to calculate beyond the model version's "
+            "default entity_variables, keyed by entity name. Use when a "
+            "caller needs variables that are not in the bundled default set."
+        ),
     )
 
     tax_benefit_model_version: TaxBenefitModelVersion = None
-
-    @model_validator(mode="after")
-    def _auto_construct_strategy(self) -> "Simulation":
-        """Auto-construct a RowFilterStrategy from legacy filter fields.
-
-        If filter_field and filter_value are set but scoping_strategy is not,
-        create a RowFilterStrategy for backward compatibility.
-        """
-        if (
-            self.scoping_strategy is None
-            and self.filter_field is not None
-            and self.filter_value is not None
-        ):
-            self.scoping_strategy = RowFilterStrategy(
-                variable_name=self.filter_field,
-                variable_value=self.filter_value,
-            )
-        return self
 
     output_dataset: Optional[Dataset] = None
 

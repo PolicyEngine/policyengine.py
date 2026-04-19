@@ -3,7 +3,8 @@
 This module provides the Region and RegionRegistry classes for defining
 geographic regions that a tax-benefit model supports. Regions can have:
 1. A dedicated dataset (e.g., US states, congressional districts)
-2. Filter from a parent region's dataset (e.g., US places/cities, UK countries)
+2. A scoping strategy that derives the region from a parent dataset
+   (row filter or weight replacement)
 """
 
 from typing import Literal, Optional, Union
@@ -22,8 +23,9 @@ class Region(BaseModel):
     """Geographic region for tax-benefit simulations.
 
     Regions can either have:
-    1. A dedicated dataset (dataset_path is set, requires_filter is False)
-    2. Filter from a parent region's dataset (requires_filter is True)
+    1. A dedicated dataset (``dataset_path`` is set).
+    2. A scoping strategy that derives the region from a parent dataset
+       (``scoping_strategy`` is set).
 
     The unique identifier is the code field, which uses a prefixed format:
     - National: "us", "uk"
@@ -57,25 +59,16 @@ class Region(BaseModel):
         description="GCS path to dedicated dataset (e.g., 'gs://policyengine-us-data/states/CA.h5')",
     )
 
-    # Scoping strategy (preferred over legacy filter fields)
+    # Scoping strategy for regions that derive from a parent dataset
     scoping_strategy: Optional[ScopingStrategy] = Field(
         default=None,
         description="Strategy for scoping dataset to this region (row filtering or weight replacement)",
     )
 
-    # Legacy filtering configuration (kept for backward compatibility)
-    requires_filter: bool = Field(
-        default=False,
-        description="True if this region filters from a parent dataset rather than having its own",
-    )
-    filter_field: Optional[str] = Field(
-        default=None,
-        description="Dataset field to filter on (e.g., 'place_fips', 'country')",
-    )
-    filter_value: Optional[str] = Field(
-        default=None,
-        description="Value to match when filtering (defaults to code suffix if not set)",
-    )
+    @property
+    def requires_filter(self) -> bool:
+        """Whether this region needs a parent dataset + a scoping strategy."""
+        return self.scoping_strategy is not None
 
     # Metadata (primarily for US congressional districts)
     state_code: Optional[str] = Field(
@@ -180,24 +173,12 @@ class RegionRegistry(BaseModel):
         return [r for r in self.regions if r.parent_code == parent_code]
 
     def get_dataset_regions(self) -> list[Region]:
-        """Get all regions that have dedicated datasets.
-
-        Returns:
-            List of regions with dataset_path set and requires_filter False
-        """
-        return [
-            r
-            for r in self.regions
-            if r.dataset_path is not None and not r.requires_filter
-        ]
+        """Get all regions that have a dedicated dataset on disk."""
+        return [r for r in self.regions if r.dataset_path is not None]
 
     def get_filter_regions(self) -> list[Region]:
-        """Get all regions that require filtering from parent datasets.
-
-        Returns:
-            List of regions with requires_filter True
-        """
-        return [r for r in self.regions if r.requires_filter]
+        """Get all regions that derive from a parent dataset via a scoping strategy."""
+        return [r for r in self.regions if r.scoping_strategy is not None]
 
     def __len__(self) -> int:
         """Return the number of regions in the registry."""

@@ -97,8 +97,8 @@ class TestUKRegionRegistry:
         assert england.region_type == "country"
         assert england.parent_code == "uk"
         assert england.requires_filter
-        assert england.filter_field == "country"
-        assert england.filter_value == "ENGLAND"
+        assert england.scoping_strategy.variable_name == "country"
+        assert england.scoping_strategy.variable_value == "ENGLAND"
         assert england.dataset_path is None
 
     def test__given_country_regions__then_have_row_filter_strategy(self):
@@ -126,7 +126,7 @@ class TestUKRegionRegistry:
         assert scotland is not None
         assert scotland.label == "Scotland"
         assert scotland.requires_filter
-        assert scotland.filter_value == "SCOTLAND"
+        assert scotland.scoping_strategy.variable_value == "SCOTLAND"
 
     def test__given_wales_region__then_filters_from_national(self):
         """Given: Wales country region
@@ -140,7 +140,7 @@ class TestUKRegionRegistry:
         assert wales is not None
         assert wales.label == "Wales"
         assert wales.requires_filter
-        assert wales.filter_value == "WALES"
+        assert wales.scoping_strategy.variable_value == "WALES"
 
     def test__given_northern_ireland_region__then_filters_from_national(self):
         """Given: Northern Ireland country region
@@ -154,7 +154,7 @@ class TestUKRegionRegistry:
         assert ni is not None
         assert ni.label == "Northern Ireland"
         assert ni.requires_filter
-        assert ni.filter_value == "NORTHERN_IRELAND"
+        assert ni.scoping_strategy.variable_value == "NORTHERN_IRELAND"
 
     def test__given_uk_national__then_children_are_countries(self):
         """Given: UK national region

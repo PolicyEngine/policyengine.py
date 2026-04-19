@@ -140,9 +140,6 @@ def build_uk_region_registry(
                 label=name,
                 region_type="country",
                 parent_code="uk",
-                requires_filter=True,
-                filter_field="country",
-                filter_value=code.upper(),
                 scoping_strategy=RowFilterStrategy(
                     variable_name="country",
                     variable_value=code.upper(),
@@ -161,9 +158,6 @@ def build_uk_region_registry(
                     label=const["name"],
                     region_type="constituency",
                     parent_code="uk",
-                    requires_filter=True,
-                    filter_field="household_weight",
-                    filter_value=const["code"],
                     scoping_strategy=WeightReplacementStrategy(
                         weight_matrix_bucket="policyengine-uk-data-private",
                         weight_matrix_key="parliamentary_constituency_weights.h5",
@@ -185,9 +179,6 @@ def build_uk_region_registry(
                     label=la["name"],
                     region_type="local_authority",
                     parent_code="uk",
-                    requires_filter=True,
-                    filter_field="household_weight",
-                    filter_value=la["code"],
                     scoping_strategy=WeightReplacementStrategy(
                         weight_matrix_bucket="policyengine-uk-data-private",
                         weight_matrix_key="local_authority_weights.h5",
