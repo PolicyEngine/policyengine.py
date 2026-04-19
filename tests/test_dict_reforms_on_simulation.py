@@ -16,7 +16,8 @@ pytest.importorskip("policyengine_us")
 
 import policyengine as pe
 from policyengine.core import Dynamic, Policy, Simulation
-from tests.fixtures.filtering_fixtures import us_test_dataset  # noqa: F401
+
+# ``us_test_dataset`` is registered globally via ``tests/conftest.py``.
 
 
 @pytest.fixture
@@ -27,7 +28,9 @@ def tiny_dataset(us_test_dataset):
 
 
 class TestDictPolicyCoercion:
-    def test__dict_policy__then_compiled_to_policy_with_parameter_values(self, tiny_dataset):
+    def test__dict_policy__then_compiled_to_policy_with_parameter_values(
+        self, tiny_dataset
+    ):
         sim = Simulation(
             dataset=tiny_dataset,
             tax_benefit_model_version=pe.us.model,
@@ -43,7 +46,9 @@ class TestDictPolicyCoercion:
         assert pv.start_date.year == 2026
         assert pv.start_date.month == 1
 
-    def test__dict_policy_with_effective_date__then_start_date_matches(self, tiny_dataset):
+    def test__dict_policy_with_effective_date__then_start_date_matches(
+        self, tiny_dataset
+    ):
         sim = Simulation(
             dataset=tiny_dataset,
             tax_benefit_model_version=pe.us.model,

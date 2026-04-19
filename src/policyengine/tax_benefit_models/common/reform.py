@@ -89,7 +89,7 @@ def _reform_dict_to_parameter_values(
     reform: Mapping[str, Any],
     *,
     year: Optional[int],
-    model_version: "TaxBenefitModelVersion",
+    model_version: TaxBenefitModelVersion,
 ) -> list:
     """Compile a flat reform dict into a list of ``ParameterValue`` objects.
 
@@ -116,9 +116,7 @@ def _reform_dict_to_parameter_values(
                         tax_benefit_model_version=model_version,
                         data_type=data_type,
                     ),
-                    start_date=datetime.datetime.strptime(
-                        effective_date, "%Y-%m-%d"
-                    ),
+                    start_date=datetime.datetime.strptime(effective_date, "%Y-%m-%d"),
                     end_date=None,
                     value=value,
                 )
@@ -130,9 +128,9 @@ def compile_reform_to_policy(
     reform: Optional[Mapping[str, Any]],
     *,
     year: Optional[int],
-    model_version: "TaxBenefitModelVersion",
+    model_version: TaxBenefitModelVersion,
     name: Optional[str] = None,
-) -> "Optional[Policy]":
+) -> Optional[Policy]:
     """Compile a flat reform dict into a fully-assembled ``Policy``.
 
     Accepts the same ``{param.path: value}`` /
@@ -157,9 +155,9 @@ def compile_reform_to_dynamic(
     reform: Optional[Mapping[str, Any]],
     *,
     year: Optional[int],
-    model_version: "TaxBenefitModelVersion",
+    model_version: TaxBenefitModelVersion,
     name: Optional[str] = None,
-) -> "Optional[Dynamic]":
+) -> Optional[Dynamic]:
     """Compile a flat reform dict into a ready-to-use ``Dynamic``.
 
     See :func:`compile_reform_to_policy` — this is the ``Dynamic``
@@ -172,6 +170,4 @@ def compile_reform_to_dynamic(
     )
     if not parameter_values:
         return None
-    return Dynamic(
-        name=name or "Dynamic response", parameter_values=parameter_values
-    )
+    return Dynamic(name=name or "Dynamic response", parameter_values=parameter_values)
