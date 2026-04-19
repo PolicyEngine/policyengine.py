@@ -15,11 +15,11 @@ import logging
 from typing import TYPE_CHECKING
 
 from policyengine.core.region import Region, RegionRegistry
-from policyengine.core.release_manifest import resolve_region_dataset_path
 from policyengine.core.scoping_strategy import (
     RowFilterStrategy,
     WeightReplacementStrategy,
 )
+from policyengine.provenance.manifest import resolve_region_dataset_path
 
 if TYPE_CHECKING:
     pass

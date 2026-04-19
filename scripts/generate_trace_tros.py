@@ -18,12 +18,12 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from policyengine.core.release_manifest import (
+from policyengine.provenance.manifest import (
     DataReleaseManifestUnavailableError,
     get_data_release_manifest,
     get_release_manifest,
 )
-from policyengine.core.trace_tro import (
+from policyengine.provenance.trace import (
     build_trace_tro_from_release_bundle,
     serialize_trace_tro,
 )

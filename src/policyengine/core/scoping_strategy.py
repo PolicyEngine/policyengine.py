@@ -14,7 +14,6 @@ from abc import abstractmethod
 from pathlib import Path
 from typing import Annotated, Literal, Optional, Union
 
-import h5py
 import numpy as np
 import pandas as pd
 from microdf import MicroDataFrame
@@ -127,7 +126,11 @@ class WeightReplacementStrategy(RegionScopingStrategy):
 
         region_id = self._find_region_index(lookup_df, self.region_code)
 
-        # Download weight matrix and extract weights for this region
+        # Download weight matrix and extract weights for this region.
+        # h5py is only needed here, so import lazily to keep
+        # `from policyengine.core import ...` light.
+        import h5py
+
         weights_path = download_gcs_file(
             bucket=self.weight_matrix_bucket,
             file_path=self.weight_matrix_key,
