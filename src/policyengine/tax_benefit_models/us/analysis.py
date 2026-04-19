@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Union
 
 import pandas as pd
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, computed_field
 
 from policyengine.core import OutputCollection, Simulation
 from policyengine.outputs import (
@@ -21,10 +21,15 @@ from policyengine.outputs import (
     configure_cliff_impact_variables,
     configure_labor_supply_response_variables,
 )
+from policyengine.outputs.change_aggregate import (
+    ChangeAggregate,
+    ChangeAggregateType,
+)
 from policyengine.outputs.decile_impact import (
     DecileImpact,
     calculate_decile_impacts,
 )
+from policyengine.outputs.extra_variables import add_extra_variables
 from policyengine.outputs.inequality import (
     Inequality,
     USInequalityPreset,
@@ -56,11 +61,151 @@ US_PROGRAMS: dict[str, dict] = {
 }
 
 
+class BudgetaryImpact(BaseModel):
+    """Federal/state/unattributed partition of a US reform's budgetary impact.
+
+    Sign convention: positive means the government is better off (more tax
+    revenue or lower benefit spending); negative means revenue lost or
+    spending incurred.
+
+    ``total`` is measured directly from the reform-minus-baseline change in
+    ``household_tax`` minus the change in ``household_benefits``, so it covers
+    every tax and benefit the model computes. ``federal`` and ``state`` hold
+    only the pieces that are cleanly attributable to a level of government
+    today; ``unattributed`` is the residual (``total - federal - state``) that
+    carries everything not yet split. ``total`` is a computed field, so
+    ``federal + state + unattributed`` always equals it by construction. See
+    :func:`calculate_budgetary_impact` for the exact variables behind each
+    share.
+    """
+
+    federal: float = Field(
+        ...,
+        description="Federal budgetary impact, USD (positive = government gain).",
+    )
+    state: float = Field(
+        ...,
+        description="State budgetary impact, USD (positive = government gain).",
+    )
+    unattributed: float = Field(
+        ...,
+        description=(
+            "Budgetary impact not yet attributed to a level of government, "
+            "USD. Residual of total minus federal minus state."
+        ),
+    )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def total(self) -> float:
+        """Total budgetary impact, USD: federal + state + unattributed."""
+        return self.federal + self.state + self.unattributed
+
+
+def _sum_change(
+    baseline_simulation: Simulation,
+    reform_simulation: Simulation,
+    variable: str,
+) -> float:
+    """Reform minus baseline total for a variable."""
+    agg = ChangeAggregate(
+        baseline_simulation=baseline_simulation,
+        reform_simulation=reform_simulation,
+        variable=variable,
+        aggregate_type=ChangeAggregateType.SUM,
+    )
+    agg.run()
+    return float(agg.result)
+
+
+# Budgetary-impact variables that are not in the default US output
+# (household_tax, household_benefits, and the three tax variables are). They
+# must be materialized before the reform simulations run.
+_BUDGETARY_IMPACT_EXTRA_VARIABLES: dict[str, list[str]] = {
+    "person": ["federal_benefit_cost", "state_benefit_cost"],
+}
+
+
+def configure_budgetary_impact_variables(
+    baseline_simulation: Simulation,
+    reform_simulation: Simulation,
+) -> None:
+    """Materialize the budgetary-impact aggregates in the reform outputs.
+
+    ``federal_benefit_cost`` / ``state_benefit_cost`` are not in the default US
+    output, so they are added as extra output variables before the simulations
+    run. Call this before :meth:`Simulation.ensure` so the aggregates are
+    present when :func:`calculate_budgetary_impact` reads them;
+    :func:`economic_impact_analysis` does this automatically.
+    """
+    add_extra_variables(baseline_simulation, _BUDGETARY_IMPACT_EXTRA_VARIABLES)
+    add_extra_variables(reform_simulation, _BUDGETARY_IMPACT_EXTRA_VARIABLES)
+
+
+def calculate_budgetary_impact(
+    baseline_simulation: Simulation,
+    reform_simulation: Simulation,
+) -> BudgetaryImpact:
+    """Partition a US reform's budgetary impact into federal, state, and
+    unattributed shares.
+
+    All figures are reform-minus-baseline weighted totals. Sign convention:
+    positive means the government is better off (more tax revenue or lower
+    benefit spending).
+
+    ``total`` is measured directly from the model's household aggregates::
+
+        total = Δhousehold_tax - Δhousehold_benefits
+
+    so it captures *every* tax and benefit the model computes, regardless of
+    whether the affected program can be attributed to a level of government.
+
+    ``federal`` and ``state`` attribute only the cleanly-assignable pieces::
+
+        federal = Δincome_tax + Δemployee_payroll_tax - Δfederal_benefit_cost
+        state   = Δstate_income_tax                   - Δstate_benefit_cost
+
+    where ``federal_benefit_cost`` / ``state_benefit_cost`` are the
+    policyengine-us aggregates that split shared-funding programs (Medicaid
+    FMAP, CHIP eFMAP) into their federal and state portions.
+
+    ``unattributed`` is the residual, ``total - federal - state``. It carries
+    everything not yet split by level of government — 100%-federal programs
+    such as SSI and SNAP, 100%-state supplements, and any tax outside the
+    three tax variables above — until finer attribution exists. Because
+    ``total`` is measured from ``household_tax`` / ``household_benefits``
+    rather than summed from the attributed pieces, a reform to an
+    unattributed program (for example SSI) surfaces in ``total`` and
+    ``unattributed`` instead of silently reading as zero.
+
+    ``federal_benefit_cost`` / ``state_benefit_cost`` are not in the default US
+    output; :func:`economic_impact_analysis` calls
+    :func:`configure_budgetary_impact_variables` to materialize them before the
+    simulations run. Callers using this helper directly must do the same.
+    """
+    total = _sum_change(
+        baseline_simulation, reform_simulation, "household_tax"
+    ) - _sum_change(baseline_simulation, reform_simulation, "household_benefits")
+
+    federal = (
+        _sum_change(baseline_simulation, reform_simulation, "income_tax")
+        + _sum_change(baseline_simulation, reform_simulation, "employee_payroll_tax")
+        - _sum_change(baseline_simulation, reform_simulation, "federal_benefit_cost")
+    )
+    state = _sum_change(
+        baseline_simulation, reform_simulation, "state_income_tax"
+    ) - _sum_change(baseline_simulation, reform_simulation, "state_benefit_cost")
+
+    unattributed = total - federal - state
+    return BudgetaryImpact(federal=federal, state=state, unattributed=unattributed)
+
+
 class PolicyReformAnalysis(BaseModel):
     """Complete policy reform analysis result."""
 
     decile_impacts: OutputCollection[DecileImpact]
     program_statistics: OutputCollection[ProgramStatistics]
+    budgetary_impact: BudgetaryImpact
     baseline_poverty: OutputCollection[Poverty]
     reform_poverty: OutputCollection[Poverty]
     baseline_inequality: Inequality
@@ -158,6 +303,7 @@ def economic_impact_analysis(
     )
     if include_cliff_impacts:
         configure_cliff_impact_variables(baseline_simulation, reform_simulation)
+    configure_budgetary_impact_variables(baseline_simulation, reform_simulation)
     _validate_program_statistics_config(baseline_simulation, reform_simulation)
 
     baseline_simulation.ensure()
@@ -231,9 +377,14 @@ def economic_impact_analysis(
         else None
     )
 
+    budgetary_impact = calculate_budgetary_impact(
+        baseline_simulation, reform_simulation
+    )
+
     return PolicyReformAnalysis(
         decile_impacts=decile_impacts,
         program_statistics=program_collection,
+        budgetary_impact=budgetary_impact,
         baseline_poverty=baseline_poverty,
         reform_poverty=reform_poverty,
         baseline_inequality=baseline_inequality,

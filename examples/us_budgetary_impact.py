@@ -117,6 +117,13 @@ def main():
     print("\nRunning full economic impact analysis...")
     analysis = economic_impact_analysis(baseline_sim, reform_sim)
 
+    print("\n=== Budgetary Impact (Federal / State / Unattributed) ===")
+    b = analysis.budgetary_impact
+    print(f"  Federal:      ${b.federal / 1e9:+8.1f}B")
+    print(f"  State:        ${b.state / 1e9:+8.1f}B")
+    print(f"  Unattributed: ${b.unattributed / 1e9:+8.1f}B")
+    print(f"  Total:        ${b.total / 1e9:+8.1f}B")
+
     print("\n=== Program-by-Program Impact ===")
     for prog in analysis.program_statistics.outputs:
         print(
