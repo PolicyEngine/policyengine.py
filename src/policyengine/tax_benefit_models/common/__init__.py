@@ -10,5 +10,7 @@ from .model_version import (
     MicrosimulationModelVersion as MicrosimulationModelVersion,
 )
 from .reform import compile_reform as compile_reform
+from .reform import compile_reform_to_dynamic as compile_reform_to_dynamic
+from .reform import compile_reform_to_policy as compile_reform_to_policy
 from .result import EntityResult as EntityResult
 from .result import HouseholdResult as HouseholdResult
