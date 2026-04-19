@@ -10,6 +10,10 @@ from pydantic import BaseModel, Field
 
 from policyengine.core import OutputCollection, Simulation
 from policyengine.core.policy import Policy
+from policyengine.outputs.change_aggregate import (
+    ChangeAggregate,
+    ChangeAggregateType,
+)
 from policyengine.outputs.decile_impact import (
     DecileImpact,
     calculate_decile_impacts,
@@ -187,11 +191,80 @@ def calculate_household_impact(
     )
 
 
+class BudgetaryImpact(BaseModel):
+    """Federal/state partition of a reform's budgetary impact.
+
+    Sign convention: a negative value is revenue the government loses
+    (or spending it incurs). Symmetric to the change in `income_tax`:
+    reform tax revenue minus baseline tax revenue, with benefit spending
+    subtracted.
+    """
+
+    federal: float = Field(..., description="Federal budgetary impact, USD.")
+    state: float = Field(..., description="State budgetary impact, USD.")
+    total: float = Field(..., description="Total budgetary impact, USD.")
+
+
+def _sum_change(
+    baseline_simulation: Simulation,
+    reform_simulation: Simulation,
+    variable: str,
+) -> float:
+    """Reform minus baseline total for a variable."""
+    agg = ChangeAggregate(
+        baseline_simulation=baseline_simulation,
+        reform_simulation=reform_simulation,
+        variable=variable,
+        aggregate_type=ChangeAggregateType.SUM,
+    )
+    agg.run()
+    return float(agg.result)
+
+
+def calculate_budgetary_impact(
+    baseline_simulation: Simulation,
+    reform_simulation: Simulation,
+) -> BudgetaryImpact:
+    """Partition a reform's budgetary impact into federal and state shares.
+
+    Federal share = change in federal tax revenue (income_tax + payroll_tax)
+    minus change in federal benefit spending (`federal_benefit_cost`, which
+    sums the federal portion of shared-funding benefit programs — currently
+    Medicaid and CHIP).
+
+    State share = change in state tax revenue (state_income_tax) minus
+    change in state benefit spending (`state_benefit_cost`).
+
+    Programs that are 100% federal (SNAP benefits pre-FY2028, SSI, LIHEAP,
+    WIC, Section 8, school meals) and 100% state (state supplements via
+    `household_state_benefits`) are not yet folded in; this partitions only
+    the shared-funding programs exposed through
+    `federal_benefit_cost` / `state_benefit_cost` in policyengine-us.
+    """
+    federal_tax_change = _sum_change(
+        baseline_simulation, reform_simulation, "income_tax"
+    ) + _sum_change(baseline_simulation, reform_simulation, "payroll_tax")
+    state_tax_change = _sum_change(
+        baseline_simulation, reform_simulation, "state_income_tax"
+    )
+    federal_benefit_change = _sum_change(
+        baseline_simulation, reform_simulation, "federal_benefit_cost"
+    )
+    state_benefit_change = _sum_change(
+        baseline_simulation, reform_simulation, "state_benefit_cost"
+    )
+
+    federal = federal_tax_change - federal_benefit_change
+    state = state_tax_change - state_benefit_change
+    return BudgetaryImpact(federal=federal, state=state, total=federal + state)
+
+
 class PolicyReformAnalysis(BaseModel):
     """Complete policy reform analysis result."""
 
     decile_impacts: OutputCollection[DecileImpact]
     program_statistics: OutputCollection[ProgramStatistics]
+    budgetary_impact: BudgetaryImpact
     baseline_poverty: OutputCollection[Poverty]
     reform_poverty: OutputCollection[Poverty]
     baseline_inequality: Inequality
@@ -301,9 +374,14 @@ def economic_impact_analysis(
         reform_simulation, preset=inequality_preset
     )
 
+    budgetary_impact = calculate_budgetary_impact(
+        baseline_simulation, reform_simulation
+    )
+
     return PolicyReformAnalysis(
         decile_impacts=decile_impacts,
         program_statistics=program_collection,
+        budgetary_impact=budgetary_impact,
         baseline_poverty=baseline_poverty,
         reform_poverty=reform_poverty,
         baseline_inequality=baseline_inequality,

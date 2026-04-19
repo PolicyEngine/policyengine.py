@@ -6,8 +6,10 @@ if find_spec("policyengine_us") is not None:
     from policyengine.core import Dataset
 
     from .analysis import (
+        BudgetaryImpact,
         USHouseholdInput,
         USHouseholdOutput,
+        calculate_budgetary_impact,
         calculate_household_impact,
         economic_impact_analysis,
     )
@@ -46,6 +48,8 @@ if find_spec("policyengine_us") is not None:
         "us_model",
         "us_latest",
         "economic_impact_analysis",
+        "calculate_budgetary_impact",
+        "BudgetaryImpact",
         "calculate_household_impact",
         "USHouseholdInput",
         "USHouseholdOutput",
