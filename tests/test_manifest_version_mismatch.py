@@ -34,6 +34,9 @@ def _pick_mismatched_version(manifest_version: str) -> str:
     return manifest_version + ".drift"
 
 
+BASE_PATH = "policyengine.tax_benefit_models.common.model_version"
+
+
 def _run_init_version_check_branch(
     module_path: str,
     class_name: str,
@@ -41,39 +44,35 @@ def _run_init_version_check_branch(
 ) -> list[warnings.WarningMessage]:
     """Exercise only the manifest-vs-installed version check in ``__init__``.
 
-    Patches ``metadata.version`` to return ``installed_version``, and
-    stubs everything the ``__init__`` calls after the version check so
-    we don't hit the network or do heavy work. Returns the list of
-    warnings emitted during the check.
+    The version-check logic lives on the shared
+    ``MicrosimulationModelVersion`` base; we patch names on that module
+    (not on the per-country ``model`` module) and stub everything the
+    ``__init__`` calls after the version check so we don't hit the
+    network or do heavy work.
     """
-    with patch(f"{module_path}.metadata.version", return_value=installed_version):
+    with patch(f"{BASE_PATH}.metadata.version", return_value=installed_version):
         with patch(
-            f"{module_path}.certify_data_release_compatibility",
+            f"{BASE_PATH}.certify_data_release_compatibility",
             return_value=None,
         ):
+            # Prevent super().__init__ from actually running the
+            # parameter-loading pipeline — we only care that the
+            # version branch in __init__ emits a warning, not raises.
             with patch(
-                f"{module_path}._get_runtime_data_build_metadata",
-                return_value={},
+                f"{BASE_PATH}.TaxBenefitModelVersion.__init__",
+                return_value=None,
             ):
-                # Prevent super().__init__ from actually running the
-                # parameter-loading pipeline — we only care that the
-                # version branch in our override emits a warning, not
-                # an exception.
-                with patch(
-                    f"{module_path}.TaxBenefitModelVersion.__init__",
-                    return_value=None,
-                ):
-                    # Import late so the patches above apply to the
-                    # module-level names used by __init__.
-                    import importlib
+                import importlib
 
-                    module = importlib.import_module(module_path)
-                    cls = getattr(module, class_name)
+                module = importlib.import_module(module_path)
+                cls = getattr(module, class_name)
+                # Stub the country-specific runtime-metadata hook so
+                # the version-check path doesn't import the country pkg.
+                with patch.object(
+                    cls, "_get_runtime_data_build_metadata", return_value={}
+                ):
                     with warnings.catch_warnings(record=True) as caught:
                         warnings.simplefilter("always")
-                        # The class is a TaxBenefitModelVersion subclass
-                        # that normally takes kwargs for the parameter
-                        # tree. We're not exercising the parameter tree.
                         try:
                             cls()
                         except Exception:
