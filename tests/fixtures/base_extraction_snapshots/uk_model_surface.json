@@ -1,0 +1,11 @@
+{
+  "country_id": "uk",
+  "data_package_name": "policyengine-uk-data",
+  "has_employment_income": true,
+  "has_income_tax": true,
+  "has_region_registry": true,
+  "model_package_name": "policyengine-uk",
+  "num_parameters_bucketed_100s": 20,
+  "num_variables_bucketed_100s": 8,
+  "region_registry_country": "uk"
+}
