@@ -28,11 +28,14 @@ suggestion; pass ``model_version`` to enable the check.
 
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
 from difflib import get_close_matches
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
+    from policyengine.core.dynamic import Dynamic
+    from policyengine.core.policy import Policy
     from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
 
 
@@ -80,3 +83,95 @@ def compile_reform(
         else:
             compiled[parameter_path] = {default_date: spec}
     return compiled
+
+
+def _reform_dict_to_parameter_values(
+    reform: Mapping[str, Any],
+    *,
+    year: Optional[int],
+    model_version: "TaxBenefitModelVersion",
+) -> list:
+    """Compile a flat reform dict into a list of ``ParameterValue`` objects.
+
+    Uses :func:`compile_reform` for path validation and effective-date
+    defaulting, then materialises each ``{path: {date: value}}`` pair
+    as an open-ended ``ParameterValue`` bound to a
+    ``Parameter(name=path, tax_benefit_model_version=model_version)``.
+    """
+    from policyengine.core.parameter import Parameter
+    from policyengine.core.parameter_value import ParameterValue
+
+    compiled = compile_reform(reform, year=year, model_version=model_version)
+    if compiled is None:
+        return []
+
+    parameter_values: list[ParameterValue] = []
+    for path, date_to_value in compiled.items():
+        for effective_date, value in date_to_value.items():
+            data_type = type(value) if isinstance(value, (int, float, bool)) else float
+            parameter_values.append(
+                ParameterValue(
+                    parameter=Parameter(
+                        name=path,
+                        tax_benefit_model_version=model_version,
+                        data_type=data_type,
+                    ),
+                    start_date=datetime.datetime.strptime(
+                        effective_date, "%Y-%m-%d"
+                    ),
+                    end_date=None,
+                    value=value,
+                )
+            )
+    return parameter_values
+
+
+def compile_reform_to_policy(
+    reform: Optional[Mapping[str, Any]],
+    *,
+    year: Optional[int],
+    model_version: "TaxBenefitModelVersion",
+    name: Optional[str] = None,
+) -> "Optional[Policy]":
+    """Compile a flat reform dict into a fully-assembled ``Policy``.
+
+    Accepts the same ``{param.path: value}`` /
+    ``{param.path: {date: value}}`` shape as
+    :func:`compile_reform`, but returns a ready-to-use ``Policy`` with
+    :class:`~policyengine.core.parameter_value.ParameterValue` objects
+    instead of a raw dict. This lets ``Simulation(policy={"..."}: ...)``
+    work without the caller building ``Parameter`` / ``ParameterValue``
+    by hand.
+    """
+    from policyengine.core.policy import Policy
+
+    parameter_values = _reform_dict_to_parameter_values(
+        reform or {}, year=year, model_version=model_version
+    )
+    if not parameter_values:
+        return None
+    return Policy(name=name or "Reform", parameter_values=parameter_values)
+
+
+def compile_reform_to_dynamic(
+    reform: Optional[Mapping[str, Any]],
+    *,
+    year: Optional[int],
+    model_version: "TaxBenefitModelVersion",
+    name: Optional[str] = None,
+) -> "Optional[Dynamic]":
+    """Compile a flat reform dict into a ready-to-use ``Dynamic``.
+
+    See :func:`compile_reform_to_policy` — this is the ``Dynamic``
+    counterpart for behavioural responses.
+    """
+    from policyengine.core.dynamic import Dynamic
+
+    parameter_values = _reform_dict_to_parameter_values(
+        reform or {}, year=year, model_version=model_version
+    )
+    if not parameter_values:
+        return None
+    return Dynamic(
+        name=name or "Dynamic response", parameter_values=parameter_values
+    )
