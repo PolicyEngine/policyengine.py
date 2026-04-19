@@ -1,4 +1,4 @@
-"""US-specific output templates."""
+"""Shared `ProgramStatistics` for reform-impact tables (US + UK)."""
 
 from typing import Optional
 
