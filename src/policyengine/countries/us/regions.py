@@ -101,9 +101,6 @@ def build_us_region_registry() -> RegionRegistry:
                 label=place["name"],
                 region_type="place",
                 parent_code=f"state/{state_abbrev.lower()}",
-                requires_filter=True,
-                filter_field="place_fips",
-                filter_value=fips,
                 state_code=state_abbrev,
                 state_name=place["state_name"],
                 scoping_strategy=RowFilterStrategy(

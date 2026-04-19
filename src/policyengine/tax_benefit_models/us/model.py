@@ -21,10 +21,7 @@ from policyengine.core.release_manifest import (
     resolve_local_managed_dataset_source,
     resolve_managed_dataset_reference,
 )
-from policyengine.utils.entity_utils import (
-    build_entity_relationships,
-    filter_dataset_by_household_variable,
-)
+from policyengine.utils.entity_utils import build_entity_relationships
 from policyengine.utils.parameter_labels import (
     build_scale_lookup,
     generate_label_for_parameter,
@@ -273,36 +270,6 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
         person_data = pd.DataFrame(dataset.data.person)
         return build_entity_relationships(person_data, US_GROUP_ENTITIES)
 
-    def _filter_dataset_by_household_variable(
-        self,
-        dataset: PolicyEngineUSDataset,
-        variable_name: str,
-        variable_value: str,
-    ) -> PolicyEngineUSDataset:
-        """Filter a dataset to only include households where a variable matches."""
-        filtered = filter_dataset_by_household_variable(
-            entity_data=dataset.data.entity_data,
-            group_entities=US_GROUP_ENTITIES,
-            variable_name=variable_name,
-            variable_value=variable_value,
-        )
-        return PolicyEngineUSDataset(
-            id=dataset.id + f"_filtered_{variable_name}_{variable_value}",
-            name=dataset.name,
-            description=f"{dataset.description} (filtered: {variable_name}={variable_value})",
-            filepath=dataset.filepath,
-            year=dataset.year,
-            is_output_dataset=dataset.is_output_dataset,
-            data=USYearData(
-                person=filtered["person"],
-                marital_unit=filtered["marital_unit"],
-                family=filtered["family"],
-                spm_unit=filtered["spm_unit"],
-                tax_unit=filtered["tax_unit"],
-                household=filtered["household"],
-            ),
-        )
-
     def run(self, simulation: "Simulation") -> "Simulation":
         from policyengine_us import Microsimulation
         from policyengine_us.system import system
@@ -339,10 +306,6 @@ class PolicyEngineUSLatest(TaxBenefitModelVersion):
                     tax_unit=scoped_data["tax_unit"],
                     household=scoped_data["household"],
                 ),
-            )
-        elif simulation.filter_field and simulation.filter_value:
-            dataset = self._filter_dataset_by_household_variable(
-                dataset, simulation.filter_field, simulation.filter_value
             )
 
         # Build reform dict from policy and dynamic parameter values.
