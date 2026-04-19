@@ -50,9 +50,9 @@ Same approach as the UK version, varying employment income from $0 to $200k and 
 :language: python
 ```
 
-## Household impact calculation
+## Household calculation
 
-Using `calculate_household_impact()` to compute taxes and benefits for individual custom households (both UK and US).
+Using `pe.uk.calculate_household()` and `pe.us.calculate_household()` to compute taxes and benefits for individual custom households with flat keyword arguments and dot-access result objects.
 
 ```{literalinclude} ../examples/household_impact_example.py
 :language: python

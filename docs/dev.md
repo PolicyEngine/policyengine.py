@@ -83,12 +83,15 @@ For the target release-bundle architecture, see [Release bundles](release-bundle
 
 ```
 src/policyengine/
+├── __init__.py            # Public surface: `pe.uk`, `pe.us`, `pe.Simulation`
 ├── core/                  # Domain models (Simulation, Dataset, Policy, etc.)
 ├── tax_benefit_models/
-│   ├── uk/                # UK model, datasets, analysis, outputs
-│   └── us/                # US model, datasets, analysis, outputs
+│   ├── common/            # MicrosimulationModelVersion base, result types, reform compiler
+│   ├── uk/                # UK model, datasets, household calculator, reform analysis
+│   └── us/                # US model, datasets, household calculator, reform analysis
 ├── outputs/               # Output templates (Aggregate, Poverty, etc.)
-├── countries/             # Geographic region registries
+├── provenance/            # Release manifests + TRACE TRO export
+├── countries/             # Geographic region registries (scoping, constituencies, districts)
 └── utils/                 # Helpers (reforms, entity mapping, plotting)
 ```
 
@@ -98,7 +101,7 @@ src/policyengine/
 
 **HDF5 for storage**: Datasets and simulation outputs are stored as HDF5 files. No database server is required. The `MicroDataFrame` from the `microdf` package wraps pandas DataFrames with weight-aware `.sum()`, `.mean()`, `.count()`.
 
-**Country-specific model classes**: `PolicyEngineUSLatest` and `PolicyEngineUKLatest` each implement `run()`, `save()`, and `load()`. The US model passes reforms as a dict at `Microsimulation(reform=...)` construction time. The UK model supports both parametric reforms and `simulation_modifier` callables applied post-construction.
+**Country-specific model classes**: `PolicyEngineUSLatest` and `PolicyEngineUKLatest` inherit from a shared `MicrosimulationModelVersion` base (variable/parameter loading, manifest certification, `save`/`load`). Each subclass only implements `run()` and a handful of country hooks (`_load_system`, `_load_region_registry`, `_dataset_class`, `_get_runtime_data_build_metadata`). The US `run` applies reforms as a dict at `Microsimulation(reform=...)` construction time; the UK `run` wraps inputs as `UKSingleYearDataset` and applies reforms via a modifier after construction.
 
 **LRU cache + file caching**: `Simulation.ensure()` checks an in-process LRU cache (max 100 entries), then tries loading from disk, then falls back to `run()` + `save()`.
 

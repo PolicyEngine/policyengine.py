@@ -19,15 +19,11 @@ There are two approaches to comparing simulations:
 
 ```python
 import datetime
+import policyengine as pe
 from policyengine.core import Parameter, ParameterValue, Policy, Simulation
-from policyengine.tax_benefit_models.us import (
-    economic_impact_analysis,
-    ensure_datasets,
-    us_latest,
-)
 
 # 1. Load data
-datasets = ensure_datasets(
+datasets = pe.us.ensure_datasets(
     datasets=["hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"],
     years=[2026],
     data_folder="./data",
@@ -37,7 +33,7 @@ dataset = datasets["enhanced_cps_2024_2026"]
 # 2. Define reform
 param = Parameter(
     name="gov.irs.deductions.standard.amount.SINGLE",
-    tax_benefit_model_version=us_latest,
+    tax_benefit_model_version=pe.us.model,
 )
 reform = Policy(
     name="Double standard deduction (single)",
@@ -52,32 +48,23 @@ reform = Policy(
 )
 
 # 3. Create simulations (no need to call .run() — ensure() is called internally)
-baseline_sim = Simulation(
-    dataset=dataset,
-    tax_benefit_model_version=us_latest,
-)
+baseline_sim = Simulation(dataset=dataset, tax_benefit_model_version=pe.us.model)
 reform_sim = Simulation(
-    dataset=dataset,
-    tax_benefit_model_version=us_latest,
-    policy=reform,
+    dataset=dataset, tax_benefit_model_version=pe.us.model, policy=reform
 )
 
 # 4. Run full analysis
-analysis = economic_impact_analysis(baseline_sim, reform_sim)
+analysis = pe.us.economic_impact_analysis(baseline_sim, reform_sim)
 ```
 
 ### UK example
 
 ```python
 import datetime
+import policyengine as pe
 from policyengine.core import Parameter, ParameterValue, Policy, Simulation
-from policyengine.tax_benefit_models.uk import (
-    economic_impact_analysis,
-    ensure_datasets,
-    uk_latest,
-)
 
-datasets = ensure_datasets(
+datasets = pe.uk.ensure_datasets(
     datasets=["hf://policyengine/policyengine-uk-data/enhanced_frs_2023_24.h5"],
     years=[2026],
     data_folder="./data",
@@ -86,7 +73,7 @@ dataset = datasets["enhanced_frs_2023_24_2026"]
 
 param = Parameter(
     name="gov.hmrc.income_tax.allowances.personal_allowance.amount",
-    tax_benefit_model_version=uk_latest,
+    tax_benefit_model_version=pe.uk.model,
 )
 reform = Policy(
     name="Zero personal allowance",
@@ -100,17 +87,12 @@ reform = Policy(
     ],
 )
 
-baseline_sim = Simulation(
-    dataset=dataset,
-    tax_benefit_model_version=uk_latest,
-)
+baseline_sim = Simulation(dataset=dataset, tax_benefit_model_version=pe.uk.model)
 reform_sim = Simulation(
-    dataset=dataset,
-    tax_benefit_model_version=uk_latest,
-    policy=reform,
+    dataset=dataset, tax_benefit_model_version=pe.uk.model, policy=reform
 )
 
-analysis = economic_impact_analysis(baseline_sim, reform_sim)
+analysis = pe.uk.economic_impact_analysis(baseline_sim, reform_sim)
 ```
 
 ## What `economic_impact_analysis()` computes
