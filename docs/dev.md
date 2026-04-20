@@ -23,7 +23,7 @@ dependencies used in CI (pytest, ruff, mypy, towncrier).
 ```bash
 make format           # ruff format
 make test             # pytest with coverage
-make docs             # build static MyST/Jupyter Book 2 HTML docs
+make docs             # build static Quarto HTML docs
 make docs-serve       # preview the docs locally
 make clean            # remove caches, build artifacts, .h5 files
 ```
