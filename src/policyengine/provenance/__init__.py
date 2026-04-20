@@ -87,3 +87,6 @@ from .trace import (
 from .trace import (
     serialize_trace_tro as serialize_trace_tro,
 )
+from .bundle import refresh_release_bundle as refresh_release_bundle
+from .bundle import regenerate_trace_tro as regenerate_trace_tro
+from .bundle import RefreshResult as RefreshResult
