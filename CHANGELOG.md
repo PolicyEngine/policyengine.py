@@ -1,3 +1,10 @@
+## [4.2.0] - 2026-04-20
+
+### Added
+
+- Added ``policyengine.graph`` — a static-analysis-based variable dependency graph for PolicyEngine source trees. ``extract_from_path(path)`` walks a directory of Variable subclasses, parses formula-method bodies for ``entity("<var>", period)`` and ``add(entity, period, [list])`` references, and returns a ``VariableGraph``. Queries include ``deps(var)`` (direct dependencies), ``impact(var)`` (transitive downstream), and ``path(src, dst)`` (shortest dependency chain). No runtime dependency on country models — indexes ``policyengine-us`` (4,577 variables) in under a second.
+
+
 ## [4.1.1] - 2026-04-20
 
 ### Fixed
