@@ -44,32 +44,35 @@ def _us_fixture_dataset(tmp_path, year: int = 2025):
     )
 
     person = MicroDataFrame(
-        pd.DataFrame({
-            "person_id": [1, 2, 3, 4, 5, 6],
-            "household_id": [1, 1, 1, 2, 2, 2],
-            "tax_unit_id": [1, 1, 1, 2, 2, 2],
-            "spm_unit_id": [1, 1, 1, 2, 2, 2],
-            "family_id": [1, 1, 1, 2, 2, 2],
-            "marital_unit_id": [1, 2, 3, 4, 5, 6],
-            "person_weight": [1_000.0] * 6,
-            "age": [32, 5, 8, 30, 3, 6],
-            "employment_income": [3_000, 0, 0, 2_000, 0, 0],
-        }),
+        pd.DataFrame(
+            {
+                "person_id": [1, 2, 3, 4, 5, 6],
+                "household_id": [1, 1, 1, 2, 2, 2],
+                "tax_unit_id": [1, 1, 1, 2, 2, 2],
+                "spm_unit_id": [1, 1, 1, 2, 2, 2],
+                "family_id": [1, 1, 1, 2, 2, 2],
+                "marital_unit_id": [1, 2, 3, 4, 5, 6],
+                "person_weight": [1_000.0] * 6,
+                "age": [32, 5, 8, 30, 3, 6],
+                "employment_income": [3_000, 0, 0, 2_000, 0, 0],
+            }
+        ),
         weights="person_weight",
     )
     household = MicroDataFrame(
-        pd.DataFrame({
-            "household_id": [1, 2],
-            "state_code": ["CA", "TX"],
-            "household_weight": [1_000.0, 1_000.0],
-        }),
+        pd.DataFrame(
+            {
+                "household_id": [1, 2],
+                "state_code": ["CA", "TX"],
+                "household_weight": [1_000.0, 1_000.0],
+            }
+        ),
         weights="household_weight",
     )
+
     def _simple(col: str, rows: int, weight: str) -> MicroDataFrame:
         return MicroDataFrame(
-            pd.DataFrame(
-                {col: list(range(1, rows + 1)), weight: [1_000.0] * rows}
-            ),
+            pd.DataFrame({col: list(range(1, rows + 1)), weight: [1_000.0] * rows}),
             weights=weight,
         )
 
@@ -222,9 +225,7 @@ def test__gov_contrib_gate_runs_cleanly(tmp_path, reform, label) -> None:
 # --- 3. Invariant: population built from microsim's own system --------
 
 
-def test__population_built_against_reform_applied_system(
-    tmp_path, monkeypatch
-) -> None:
+def test__population_built_against_reform_applied_system(tmp_path, monkeypatch) -> None:
     """The fix's actual contract: ``_build_simulation_from_dataset``
     must pass the ``TaxBenefitSystem`` that has the structural reform
     applied — i.e. ``microsim.tax_benefit_system``, not some other copy.
@@ -270,8 +271,7 @@ def test__population_built_against_reform_applied_system(
     sim.run()
 
     assert "system" in captured, (
-        "_build_simulation_from_dataset was never called — test setup "
-        "is broken"
+        "_build_simulation_from_dataset was never called — test setup is broken"
     )
     # The load-bearing contract: the helper got the per-sim system.
     assert captured["system"] is captured["microsim_system"], (
@@ -281,8 +281,7 @@ def test__population_built_against_reform_applied_system(
     )
     # And that system has the structural reform variable registered.
     assert (
-        captured["system"].get_variable("ctc_minimum_refundable_amount")
-        is not None
+        captured["system"].get_variable("ctc_minimum_refundable_amount") is not None
     ), (
         "Structural reform variable missing from the captured system — "
         "reform was not applied before population build"
@@ -307,9 +306,7 @@ def test__reform_parameter_change_is_reflected_in_output(tmp_path) -> None:
     from policyengine.core import Simulation
 
     dataset = _us_fixture_dataset(tmp_path)
-    baseline = Simulation(
-        dataset=dataset, tax_benefit_model_version=pe.us.model
-    )
+    baseline = Simulation(dataset=dataset, tax_benefit_model_version=pe.us.model)
     # Raise base CTC amount AND change EITC phase-in rate — different
     # program families, both at low incomes where the fixture's 2-kid
     # tax units are squarely in the phase-in region.
@@ -337,5 +334,3 @@ def test__reform_parameter_change_is_reflected_in_output(tmp_path) -> None:
         f"regression): baseline EITC {baseline_eitc} vs reformed EITC "
         f"{reform_eitc}"
     )
-
-

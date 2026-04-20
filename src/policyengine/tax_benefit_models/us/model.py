@@ -136,7 +136,6 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
     # --- run -------------------------------------------------------------
     def run(self, simulation: "Simulation") -> "Simulation":
         from policyengine_us import Microsimulation
-        from policyengine_us.system import system
 
         from policyengine.utils.parametric_reforms import (
             build_reform_dict,
