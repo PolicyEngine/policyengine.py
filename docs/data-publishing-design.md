@@ -1,369 +1,344 @@
 ---
-title: Microdata publishing (design sketch)
+title: Storage substrate for microdata artifacts (design sketch)
 ---
 
-# Microdata publishing — design sketch
+# Storage substrate for microdata artifacts — design sketch
 
-> **Status:** design sketch, not yet accepted. Written to capture the
-> shape of a "from scratch" approach to publishing PolicyEngine
-> microdata. [Release bundles](release-bundles.md) remains the
-> authoritative doc for what ships today.
->
-> **Honest framing.** The concrete pains motivating this sketch (HF
-> model-vs-dataset repo confusion; "is our data out of date?"
-> requiring manual inspection) are **not on the critical path for
-> this architecture**. They're fixable with (a) a one-time HF
-> repo-type migration or a small refactor of the HF URL resolver,
-> and (b) a ~50-line CI job diffing the bundled manifest's model
-> sha256 against the current model wheel. The sketch below is a
-> genuinely cleaner architecture, but adopting it is an answer to
-> "where do we want to be in a year?", not "how do we fix the
-> immediate 310 bug?" Readers should choose whether the cleaner
-> shape is worth the cost *independently* of the motivating pains.
+> **Status.** Design sketch, not accepted. Two independent reviews
+> (general-purpose stress test + codex review) reshaped scope.
+> [Release bundles](release-bundles.md) remains the authoritative
+> doc for the user-facing certification + citation surface, and
+> this sketch **does not** propose replacing that surface.
 
-Today's stack layers PyPI (country models), PyPI _and_ Hugging Face
-(country data), the `policyengine-{us,uk}-data` GitHub repos (build
-code), and `policyengine.py` release manifests (sha256 pins) on top
-of each other. Refreshing any link in that chain — "bump us-data to
-1.78.2" — touches six files across three repos and mixes **identity**
-("what dataset is this?") with **distribution** ("where do I download
-it?") and **discovery** ("what's the current recommended version?").
+## Scope (read this first)
 
-This doc sketches what we'd build if we started over, with four
-goals:
+Codex's review caught an important conflation in an earlier draft:
+there are two separable systems in play, and the earlier sketch
+quietly merged them.
 
-1. **Replicability**: a reviewer two years from now can reconstruct
-   the exact microdata a paper used from the results file alone.
-2. **Content-addressed identity**: changing the build produces a new
-   ID; old IDs remain resolvable forever. Retagging is impossible.
-3. **Cheap schema introspection**: an agent learns the column set
-   without downloading a 100 MB file.
-4. **Trivial release refresh**: bumping the recommended dataset is
-   one object-store write, not a six-file coordinated edit.
-
-## Three concepts, cleanly separated
-
-| Concept | Today | Proposed |
+| System | Concern | Authoritative home |
 |---|---|---|
-| **Identity** (what is this?) | HF tag `1.73.0` (mutable), PyPI `1.73.0` (immutable), sha256 inside `policyengine.py` manifest | `build_id` = sha256 of inputs, stored in the filename |
-| **Distribution** (where do I get it?) | HF model-repo `resolve/{tag}/{path}`, PyPI wheel URL, sometimes GitHub Releases | Plain object-store path: `s3://policyengine-data/{country}/{build_id}.parquet` |
-| **Discovery** (what's current?) | Implicit in `policyengine.py`'s bundled manifest; must cut a new `.py` release to change | `channels/{country}/{name}.json` pointing at a `build_id`; one PUT to update |
+| **Certified release bundle** | What `policyengine.py 4.x` users get when they cite a paper | [release-bundles.md](release-bundles.md) — unchanged |
+| **Storage substrate** | Where the artifact bytes actually live, how they're fetched, how stale caches invalidate | This doc |
 
-## Layer 1 — Content-addressed artifact store
+The earlier draft described a single unified system and pitched it
+as "replace PyPI + HF + GitHub + release manifests." That was
+overreach. Release bundles are a **scientific citation surface**
+(with certification, staged promotion, compatibility rules, and
+formal replicability guarantees that a reviewer 5 years from now
+can audit). A storage substrate is an operational concern
+underneath. Conflating them means the certification story weakens
+when it should strengthen, and a separate certification layer
+reappears on top within 2 years (codex: 60–85% probability).
 
-A flat object-store bucket with **immutable, content-addressed** objects.
+**This doc is scoped to the storage layer only.** Release bundles
+continue to own certification, citation, promotion, and the
+reproducibility guarantee. The storage substrate is a cleaner
+cache/mirror/distribution primitive *beneath* release bundles.
+
+## Motivating pains (and what's actually on the critical path)
+
+Two concrete frictions pushed this sketch forward:
+
+1. **HF model-vs-dataset repo confusion** (hit in #310): the refresh
+   helper assumed `huggingface.co/datasets/...` paths; the actual
+   microdata lives at `huggingface.co/...` (model-type repo).
+2. **"Is our data out of date?"** is a manual audit today because
+   no automated job compares the current country-model sha256
+   against what the certified artifact was built with.
+
+**Neither requires the sketch below.** A one-time HF repo-type
+migration (or a smarter URL resolver, already done in
+`bundle._hf_dataset_sha256`) fixes #1. A ~50-line CI job diffing the
+bundled release manifest's `certified_for_model_version` against
+`importlib.metadata.version("policyengine-us")` fixes #2. Both are
+~days of work, not weeks.
+
+The value proposition below is architectural, not bug-fix.
+
+## What the storage substrate would provide
+
+Four concrete properties the current HF + PyPI + GitHub Releases
+pairing does not:
+
+1. **Cheap schema introspection.** A 2 KB sidecar manifest per
+   artifact records the column set, dtypes, entity mapping, weight
+   column, and row counts — so agents and tooling can learn the
+   shape of a dataset without streaming 100 MB.
+2. **Content-addressed cache keys.** Local caches keyed on the
+   artifact's output-byte sha256 (not a mutable HF tag) can't go
+   stale after a retag. `pe.us.ensure_datasets(...)` always returns
+   the bytes the release bundle pinned, or nothing.
+3. **Operational channels.** Small JSON pointers at
+   `channels/{country}/{name}.json` let CI dashboards and bleeding-
+   edge developers subscribe to updates without cutting a new
+   `policyengine.py` release. **These are operational aliases, not
+   a scientific citation surface** — release bundles remain the
+   thing papers cite.
+4. **Simpler refresh mechanics.** `refresh_release_bundle(country,
+   ...)` becomes "fetch channel → read manifest → write the
+   certified release manifest" with no sha256 juggling.
+
+Notably absent from that list compared to earlier drafts: **no
+claim of org-independent build identity**, **no claim of
+retagging-impossible certification**, **no claim of replacing the
+release bundle**. Those were overreach.
+
+## Identity: output-hash, not input-hash
+
+The earlier draft framed the primary identifier as
+`build_id = sha256(inputs)` — "two orgs rebuilding from the same
+recipe get the same ID without exchanging files." Codex's review is
+correct that this is weaker than it sounded:
+
+- `data_vintage: "cps_asec_2024"` is a **label**, not a raw-bytes
+  hash. Two orgs honestly using "CPS ASEC 2024" can have different
+  source bytes. The current [release-bundles.md](release-bundles.md)
+  schema already records raw-input hashes — a regression from that
+  would be real.
+- `built_at` / `built_by` fields in the manifest break bitwise
+  identity across org rebuilds even when the payload is identical.
+- Genuine bit-level determinism across orgs (libc, CPU microcode,
+  torch seeds, dict iteration, pandas groupby order) is a
+  multi-month project, not a v1 flag.
+
+The revised proposal: the primary identifier is
+**`artifact_sha256` = sha256 of the output bytes**. Input digest is
+recorded *in* the manifest as a derived queryable field
+(`inputs.composite_digest`), not the primary key. That matches how
+OCI/Nix work in the parts that actually deliver: content-addressed
+at the *output*, with provenance recorded alongside.
+
+Storage layout becomes:
 
 ```
 s3://policyengine-data/
-  us/
-    {build_id}/
-      enhanced_cps_2024.parquet     # the microdata (100 MB)
-      manifest.json                 # 2 KB — schema, inputs, digests
-      results.json                  # optional: validation aggregates
-  uk/
-    {build_id}/
-      enhanced_frs_2023_24.parquet
-      manifest.json
+  {country}/
+    {artifact_sha256_prefix}/{artifact_sha256}.parquet
+    {artifact_sha256_prefix}/{artifact_sha256}.manifest.json
   channels/
-    us/
-      latest.json                   # { "build_id": "…" }
-      stable.json
-      lts-2025q2.json
-    uk/
-      …
+    {country}/
+      latest.json         # { "artifact_sha256": "…" }
+      next.json           # staging; feeds into release-bundles promotion
 ```
 
-`build_id` is the **sha256 of the inputs**, not the output — so two
-different orgs rebuilding from the same recipe get the same hash
-without ever exchanging files. Inputs include:
+The `channels/` tree intentionally drops `stable` and `lts-*` —
+those carry semantics ("what should researchers treat as
+authoritative?") that belong to the release bundle, not the storage
+substrate. At the storage layer we only need "operationally newest"
+(`latest`) and "nominated-for-certification" (`next`).
 
-- data vintage identifier (e.g. CPS ASEC 2024)
-- country model package (name + version + wheel sha256)
-- calibration script (git sha of `policyengine-us-data`)
-- explicit parameter overrides (if any)
-- random seed
-- Python interpreter + transitive lockfile digest (for bit-level
-  reproducibility; optional for v1)
+## Channel semantics (deliberately narrow)
 
-`manifest.json` carries the full input list plus a schema block:
+| Channel | Purpose | Updated by |
+|---|---|---|
+| `latest` | Output of the most recent successful CI build. May be broken, uncalibrated, experimental. | CI on every `policyengine-{country}-data` main-branch merge |
+| `next` | Staging artifact that has passed validation and is nominated for the next release bundle. | Manual promotion from `latest` after review |
 
-```json
-{
-  "schema_version": 2,
-  "country": "us",
-  "build_id": "sha256:…",
-  "inputs": {
-    "data_vintage": "cps_asec_2024",
-    "model_package": {"name": "policyengine-us", "version": "1.653.3", "sha256": "…"},
-    "calibration_sha": "2141ee45…",
-    "parameter_overrides": {},
-    "seed": 42,
-    "python": "3.12.8",
-    "lockfile_digest": "sha256:…"
-  },
-  "outputs": {
-    "enhanced_cps_2024": {
-      "path": "enhanced_cps_2024.parquet",
-      "sha256": "4e92b340c3ea…",
-      "size_bytes": 111427742,
-      "rows": {"person": 192817, "household": 41314, "tax_unit": …},
-      "weight_column": "household_weight",
-      "schema": [{"name": "age", "dtype": "int32", "entity": "person"}, …]
-    }
-  },
-  "built_at": "2026-04-10T12:00:00Z",
-  "built_by": "ci@policyengine-us-data#7f64..."
-}
+"Certified" / "stable" stay on the release-bundle side. This
+avoids the codex failure mode where "stable" silently means four
+different things to four different audiences.
+
+## The release-bundle boundary (what doesn't change)
+
+[release-bundles.md](release-bundles.md) remains authoritative:
+
+- The certification process (who signs off, what validations, what
+  compatibility checks) — unchanged.
+- `src/policyengine/data/release_manifests/{country}.json` remains
+  the shipped record of what a given `policyengine.py` release
+  guarantees.
+- The staged `provisional → certified → retired` lifecycle —
+  unchanged.
+- `*.trace.tro.jsonld` sidecars — unchanged (shorter to build
+  because inputs are already in the storage manifest, but the
+  emitted TRO has the same shape and `trov:` / `pe:` fields).
+- The replicability guarantee wording — unchanged.
+
+The storage substrate is an *implementation detail* that the
+certification process pulls from. When a release bundle is
+certified, it promotes an artifact from `channels/next` to a
+concrete `artifact_sha256` pin in the country release manifest.
+After that, the release manifest is what papers cite; the storage
+channel is just the cache.
+
+## Consumer resolver (what `pe.py` changes)
+
+Minimal. The existing `pe.us.ensure_datasets` takes a URI today:
+
+```python
+pe.us.ensure_datasets(
+    datasets=["hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"],
+    years=[2026],
+)
 ```
 
-Consequences:
+Under the substrate, the URI scheme gains a new prefix:
 
-- **Schema lookup is cheap.** Listing `channels/us/stable.json` +
-  fetching one 2 KB `manifest.json` is enough to learn the column
-  set, dtypes, and entity mapping. No 100 MB download.
-- **Retagging is impossible.** `build_id` is a content hash; a
-  "version 1.73.0 gets silently rebuilt" situation can't occur.
-- **Mirrors are trivial.** Any org can serve the same bytes from
-  their own CDN or S3; the `build_id` verifies.
+```python
+# The release manifest pins a specific artifact:
+pe.us.ensure_datasets(
+    datasets=["pe-data://us/enhanced_cps_2024@sha256:4e92b340…"],
+    years=[2026],
+)
 
-## Layer 2 — Release channels
-
-Channels are **tiny JSON pointers** that name a `build_id`:
-
-```json
-# s3://policyengine-data/channels/us/stable.json
-{
-  "channel": "stable",
-  "country": "us",
-  "build_id": "sha256:4e92b340c3ea…",
-  "published_at": "2026-04-20T14:30:00Z",
-  "channel_history_sha": "…"
-}
+# A developer asking for operational newest:
+pe.us.ensure_datasets(
+    datasets=["pe-data://us/enhanced_cps_2024@latest"],  # resolves via channel
+    years=[2026],
+)
 ```
 
-Channels we'd likely run:
+The HF scheme stays supported indefinitely for backward compat —
+the substrate is additive. Local cache keyed on `artifact_sha256`.
 
-- `latest` — bleeding edge; updated on every us-data merge to main
-- `stable` — human-promoted after validation; consumer default
-- `lts-{quarter}` — pinned for long-running analyses
-
-Updating a channel = one S3 PUT. No code change, no PyPI release, no
-`.py` release. The `pe.py` bundled manifest points at a channel (not
-a specific `build_id`) for the default consumer path; analyses that
-need reproducibility pin a specific `build_id`.
-
-## Layer 3 — Builder CLI
-
-One command in `policyengine-us-data` (and matching in `-uk-data`):
-
-```bash
-policyengine-data build \
-    --country us \
-    --vintage cps_asec_2024 \
-    --model policyengine-us==1.653.3 \
-    --calibration enhanced \
-    --output-bucket s3://policyengine-data/us/
-```
-
-The builder:
-1. Resolves inputs, computes `build_id` = sha256(canonical inputs).
-2. Checks if `s3://policyengine-data/us/{build_id}/` already exists.
-   If so, idempotent: exits 0 without rebuilding.
-3. Otherwise runs the pipeline deterministically (fixed seed, fixed
-   model version, fixed interpreter).
-4. Writes `{build_id}/enhanced_cps_2024.parquet` + `manifest.json`
-   atomically.
-5. Optionally promotes to a channel (`--promote latest`).
-
-Deterministic output + content-addressed storage means repeated
-runs of identical inputs never collide or duplicate.
-
-## Layer 4 — Consumer resolver in `policyengine.py`
-
-The bundled consumer manifest points at a **channel**, not a
-`build_id`:
-
-```json
-# src/policyengine/data/release_manifests/us.json (proposed v2)
-{
-  "schema_version": 2,
-  "country": "us",
-  "model_package": {"name": "policyengine-us", "version": "1.653.3", "sha256": "…"},
-  "data_channel": "stable",
-  "data_channel_url": "https://data.policyengine.org/channels/us/stable.json"
-}
-```
-
-The `pe.us.ensure_datasets(channel="stable")` resolver:
-1. Fetches `channels/us/stable.json` → `build_id`.
-2. Fetches `{build_id}/manifest.json` → artifact list + sha256s.
-3. Downloads artifacts, verifying sha256 against the manifest.
-4. Caches locally keyed by `build_id` (not channel, so cache is
-   content-addressed too).
-
-`ensure_datasets(build_id="sha256:…")` pins explicitly for
-reproducibility-critical analyses.
-
-## What this replaces
-
-| Current mechanism | Replaced by |
-|---|---|
-| HF model-repo tags (`policyengine/policyengine-us-data`) | Content-addressed object storage |
-| PyPI `policyengine-us-data` (for version string only) | `build_id` is the identifier |
-| Manual sha256 juggling in `policyengine.py` release manifest | Channel JSON → manifest chain |
-| `scripts/refresh_release_bundle.py` | Simplified to "fetch channel, validate, commit" |
-| "Is the model too new for this data?" (manual reasoning) | CI diffs current model digest against `inputs.model_package.sha256` on the active channel |
-
-## What stays the same
-
-- **Country data repos still own construction.** `policyengine-us-data`
-  still calls the country model, still does calibration, still
-  gates private source data. The boundary from
-  [release-bundles.md](release-bundles.md) stays intact.
-- **TRACE TRO sidecars still ship with `policyengine.py`.** The
-  `{country}.trace.tro.jsonld` derivation gets shorter (everything
-  comes from the channel manifest), but the output is the same
-  JSON-LD with the same `trov:` / `pe:` vocabulary.
-- **UK privacy boundary** is preserved. The object-store bucket can
-  be gated (read-only to authenticated org members) without changing
-  the channel/manifest surface; consumer code sees the same
-  404-with-auth-required shape as today.
-
-## Migration cost
-
-Rough estimate (1 engineer + an agent):
-
-- **Week 1**: ship the channel/manifest spec; stand up the bucket;
-  port one US build through the new pipeline end-to-end.
-- **Week 2**: migrate `pe.us.ensure_datasets` to the new resolver;
-  ship a fallback to the legacy HF path for 2-3 releases; port the
-  TRACE TRO generator.
-- **Week 3**: UK. Then retire the legacy HF path.
-
-## Why I'd bother
-
-Three questions that are hard today become one-liners:
-
-1. **"What exactly was the baseline data used for policy 94589?"**
-   Read the results file → `build_id` → manifest → rebuild if you
-   want. No `git blame` on `policyengine.py`'s release manifest
-   history.
-2. **"Is our current data out of date?"**
-   CI job diffs `inputs.model_package.sha256` on the active channel
-   against the current model wheel; posts a PR comment or opens a
-   rebuild PR automatically.
-3. **"Can I reproduce a 2024 paper's numbers on current data?"**
-   `pe.us.ensure_datasets(build_id="sha256:…")`. Always. Even if
-   us-data the repo is renamed, deprecated, or moved.
-
-## What it doesn't solve
-
-- **Model drift still requires rebuilds** — only the mechanism
-  improves. `policyengine-us 1.653.3` and `policyengine-us 1.700.0`
-  will still produce different enhanced CPS files.
-- **Calibration is still an open research problem**, independent of
-  storage.
-- **Cost**. Object-store + egress bandwidth is small money but not
-  zero.
-
-## Unresolved risks
-
-These are the non-trivial places the sketch punts. Before accepting
-this design we'd want explicit answers.
+## Unresolved risks (carried forward from prior reviews)
 
 ### UK Data Service audit trail
 
-Today HF logs who pulls a private-gated tag via auth token. Under the
-sketch, auth happens at the bucket but identity resolves through
-two hops (channel JSON → manifest + payload), and object-store
-access logs record GETs against opaque `build_id` paths, not "user
-X downloaded UK enhanced FRS derived from FRS 2023-24". Any audit
-response needs a join between bucket logs and manifests, offline.
-**Decision needed**: state the audit story explicitly (probably: gate
-the *manifest* fetch, not just the payload, so the resolver hit is
-auditable; maintain a per-country access log keyed on manifest
-content).
+Today HF logs who pulls a private-gated tag via auth token. Under
+the sketch, auth happens at the bucket but identity resolves
+through two hops (channel JSON → manifest + payload), and object-
+store access logs record GETs against opaque `artifact_sha256`
+paths, not "user X downloaded UK enhanced FRS derived from
+FRS 2023-24".
+
+**Decision needed**: gate the *manifest* fetch, not just the
+payload, so the resolver hit is auditable; maintain a per-country
+access log keyed on manifest content. Without this, UK support
+regresses vs. today.
 
 ### Silent-promote attack
 
-An adversary with bucket write access rewrites `channels/us/stable.json`
-to point at a `build_id` whose manifest is quietly wrong (fork of
-the calibration that drops a progressivity adjustment). sha256
+An adversary with bucket write access rewrites
+`channels/us/latest.json` to point at an artifact with a manifest
+that has a quietly wrong `inputs.composite_digest`. sha256
 verification only protects payload-vs-manifest integrity; it
-doesn't authenticate the channel pointer. This makes the sketch
-**strictly weaker** than today, because PyPI/HF have platform-level
-account auth auditing on tag pushes.
-**Decision needed**: promote the "channel-history signing" open
-question to v1. Either (a) sign channel JSON with a key pinned in
-`pe.py`, with a documented rollover story; or (b) require channel
-updates to land via signed GitHub commits to a `channels/` repo
-that the bucket mirrors. Without one of these, don't ship.
+doesn't authenticate the channel pointer itself. Today's PyPI/HF
+platforms have account auth auditing on tag pushes that the
+sketch does not.
 
-### Non-deterministic builds
+**Decision needed**: before any *release-bundle* certification can
+pull from a channel, the channel JSON must be signed with a key
+pinned in `pe.py`. Channels can stay unsigned for the
+operational-`latest` use case (the certification step verifies),
+but the nomination → certification boundary must validate a
+signature.
 
-Today's Enhanced CPS pipeline uses torch + pandas imputation with
-known non-determinism (dict iteration, torch seeds). The sketch
-assumes `build_id` is stable across re-runs of identical inputs,
-but doesn't state what happens when it isn't. Two CI runs writing
-slightly different bytes under the same `build_id` would cause
-consumer sha256 verification to fail randomly depending on which
-object each resolver fetched.
-**Decision needed**: (a) gate all writes with `If-None-Match: *` so
-concurrent writes are detected, not silently overwritten; (b)
-explicitly state that v1 tolerates "first-writer-wins with 409 on
-conflict" rather than demanding bit-level determinism; (c)
-acknowledge that "optional for v1" for lockfile digests is
-understating the scope — genuine bit-level determinism is a
-multi-month project.
+### Non-deterministic builds (storage-layer version)
 
-### Licence revocation vs immutability
+With output-hash identity (not input-hash), two CI runs from the
+same inputs producing slightly different bytes produce two
+different `artifact_sha256` values. They don't collide. This is
+actually cleaner than the recipe-addressed framing: the storage
+layer doesn't need to promise determinism. The release-bundle
+certification step is where determinism matters, and it's already
+responsible for picking one specific artifact to pin.
 
-"Immutable forever" and "retagging impossible" are sold as features
-but conflict with the reality that upstream licensors (Census
-Bureau, UK Data Service) can yank the right to redistribute.
-Today's mitigation is deleting the HF tag + yanking the PyPI
-release. Under the sketch, deleting the object breaks every paper
-pinned to that `build_id`; keeping it risks licence breach.
-**Decision needed**: add a *tombstone* concept — `build_id`
-resolvable to a manifest with `status: "revoked", reason: "..."`
-but no payload. Channel pointers fall back to the most recent
-non-revoked `build_id`. The replicability guarantee in the doc
-must be qualified: "subject to licence continuity of the source
-microdata".
+### Licence revocation vs "immutable forever"
+
+The earlier sketch called storage "immutable forever." In practice,
+Census / ONS / DWP can yank redistribution rights, and we must be
+able to respond. The storage substrate must support tombstoning:
+an `artifact_sha256` resolves to a manifest with
+`status: "revoked"` and no payload. Release bundles that pinned
+the revoked artifact get marked as "unreproducible: licence
+revoked" in the certification registry (a new release-bundle
+concept, not this sketch's).
 
 ### Cross-cloud replication
 
-"Any org serves the same bytes" is true for payloads (sha256
-verifies). For *channels* it's false — a channel is authoritative
-at one URL. An EU mirror either (a) polls the primary and lags,
-(b) gets write access (violates authority), or (c) publishes its
-own channel namespace. The consumer resolver currently assumes
-one channel URL.
-**Decision needed**: be explicit that v1 replicates payloads
-trivially but channels require either a pull-through proxy or a
-consumer-side multi-mirror config. Don't advertise what we don't
-build.
+Payloads mirror trivially — sha256 verifies. Channels don't (a
+single authoritative URL). An EU partner wanting their own mirror
+runs their own channel namespace. The substrate should not promise
+one-click cross-cloud channels; it should promise one-click
+payload mirrors and make channel namespacing explicit.
 
-## Open questions
+## Relationship to `release-bundles.md` (and what stays load-bearing)
 
-- Single bucket shared with `policyengine-core` + dashboards, or
-  separate per-country? (Lean: shared, one bucket per namespace.)
-- GCS vs S3? (Lean: GCS since the data-build pipelines already run
-  on GCP.)
-- Parquet vs HDF5 for the payload format? (Lean: parquet for new
-  builds; legacy HDF5 for the existing Enhanced CPS until all
-  consumers migrate.)
+The old-design's central claim was "this could replace release
+bundles." It cannot, and it shouldn't try. Release bundles carry
+the certification contract with external stakeholders:
 
-## Revised cost estimate
+- The UK Data Service licence negotiation hangs off the fact that
+  `policyengine.py` releases are the thing that's audited,
+  reviewed, and approved. The storage substrate changes the
+  *mechanism* of how bytes reach users, not the *contract* about
+  what's been certified.
+- Academic replication reviewers need something at citation time
+  that is `vN.M.P`-shaped, not `sha256:…`-shaped. Release bundle
+  versions fill that role.
+- "Is this the PolicyEngine release?" has a legal/regulatory
+  answer that release bundles track. The storage substrate does
+  not attempt that.
 
-The earlier "3 engineer-weeks" was optimistic. Stress-test surfaced
-four multi-month items:
+**The load-bearing sentence of this sketch**: *"When a release
+bundle is certified, it promotes an artifact from `channels/next`
+to a concrete `artifact_sha256` pin in the country release
+manifest. After that, the release manifest is what papers cite;
+the storage channel is just the cache."*
 
-- Bit-level determinism (or explicit first-writer-wins semantics)
-- Channel signing + trust-root rollover story
-- Takedown semantics + tombstone integration
-- Audit-log pipeline for UK-gated content
+## What this fixes that today's HF/PyPI pairing doesn't
 
-Realistic range: **8–12 engineer-weeks**, largely independent of each
-other, so with 2 engineers + agents ~6–8 calendar weeks is plausible.
-Treat this as a v5 scope item, not a v4.x stretch.
+Narrow list, honestly scoped:
+
+| Pain | Today | Under substrate |
+|---|---|---|
+| "Did a retag silently change the artifact?" | Possible, HF tags are mutable | Impossible: cache keyed on output sha256 |
+| "What's the schema of `enhanced_cps_2024`?" | Download 100 MB, open with h5py | Fetch 2 KB manifest |
+| "Where's model-vs-dataset repo type?" | Tripped up `bundle._hf_dataset_sha256` (#310) | No such distinction |
+| "How does an EU partner mirror the payload bytes?" | Coordinate with HF, PyPI, release cadence | Re-upload bytes to their bucket; sha256 verifies |
+
+What it doesn't fix, which the earlier draft overclaimed:
+- "Bump stable to the newest data" — that's a release-bundle
+  certification decision and stays manual.
+- "Reproduce a paper from 5 years ago" — depends on the release
+  bundle being preserved, which is a release-bundle concern.
+- "Two orgs can independently produce the same build" — bit-level
+  determinism is out of scope; the substrate just doesn't pretend
+  otherwise.
+
+## Migration cost (realistic)
+
+Revised after the stress tests:
+
+| Work item | Estimate |
+|---|---|
+| Bucket + manifest schema + one US build end-to-end | 1–2 weeks |
+| Consumer resolver in `pe.py` (`pe-data://` URI scheme, cache, sha256 verify) | 1 week |
+| UK gating with auditable manifest hits | 1–2 weeks |
+| Channel signing + trust-root rollover story (for `next` → certification) | 2–3 weeks |
+| Tombstone + release-bundle "unreproducible" state | 1–2 weeks |
+| Retire the legacy HF resolver path (after 2–3 `pe.py` releases) | 1 week |
+
+**Total: 7–11 engineer-weeks.** With two engineers + agents running
+in parallel on independent tracks, ~5–7 calendar weeks is
+realistic. Not a v4.x stretch; candidate for v5 if pursued at all.
+
+## Whether to pursue
+
+Honest read from both stress tests combined:
+
+- **Keep the storage substrate idea.** Output-hash-addressed
+  storage + a schema-sidecar manifest + a `pe-data://` URI scheme
+  is a real improvement over HF for our use case, independent of
+  everything else.
+- **Drop the "replace release bundles" framing entirely.** That
+  was the codex review's main correction, and it holds.
+- **Don't build it to fix #310 or "is our data stale?"** Both have
+  cheap, targeted fixes already within reach.
+- **If the UK Data Service relationship is going to get stricter**
+  (an external trigger, not an internal one), revisit. A
+  substrate with first-class audit is defensible in a way that the
+  current HF private-repo setup is not.
+
+## Open questions (narrowed)
+
+- Object store: GCS or S3? (Lean: GCS — build pipelines already
+  run on GCP.)
+- Payload format for new builds: parquet or HDF5? (Lean: parquet
+  for new, keep HDF5 for the Enhanced CPS legacy until consumers
+  migrate.)
+- Should the manifest schema have a `schema_version` and a formal
+  migration policy? (Lean: yes, borrow from PEP 621 style
+  pragmatic evolution.)
