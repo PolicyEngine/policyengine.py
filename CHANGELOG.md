@@ -1,3 +1,10 @@
+## [4.3.0] - 2026-04-20
+
+### Added
+
+- Added `policyengine.provenance.refresh_release_bundle`. Given a country and optional new model/data versions, the helper fetches the updated PyPI wheel metadata + HF dataset sha256, rewrites `data/release_manifests/{country}.json` and the matching extra pin in `pyproject.toml`, and (optionally) regenerates the bundle's TRACE TRO sidecar. A thin `scripts/refresh_release_bundle.py` wrapper exposes the library function as a CLI for release engineers. Unit-tested offline via mocked PyPI/HF responses.
+
+
 ## [4.2.1] - 2026-04-20
 
 ### Changed
