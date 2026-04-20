@@ -70,7 +70,7 @@ This project uses [towncrier](https://towncrier.readthedocs.io/) for changelog m
 
 ```bash
 # Fragment types: breaking, added, changed, fixed, removed
-echo "Description of change" > changelog.d/my-change.added
+echo "Description of change" > changelog.d/my-branch.added.md
 ```
 
 On merge, the versioning workflow bumps the version, builds the changelog, and creates a GitHub Release.
@@ -84,14 +84,17 @@ For the target release-bundle architecture, see [Release bundles](release-bundle
 ```
 src/policyengine/
 ├── __init__.py            # Public surface: `pe.uk`, `pe.us`, `pe.Simulation`
+├── cli.py                 # `policyengine` entry point (e.g. TRACE TRO emission)
 ├── core/                  # Domain models (Simulation, Dataset, Policy, etc.)
 ├── tax_benefit_models/
 │   ├── common/            # MicrosimulationModelVersion base, result types, reform compiler
 │   ├── uk/                # UK model, datasets, household calculator, reform analysis
 │   └── us/                # US model, datasets, household calculator, reform analysis
 ├── outputs/               # Output templates (Aggregate, Poverty, etc.)
+├── results/               # Typed results + schema validation
 ├── provenance/            # Release manifests + TRACE TRO export
 ├── countries/             # Geographic region registries (scoping, constituencies, districts)
+├── data/                  # Bundled release manifests and schemas
 └── utils/                 # Helpers (reforms, entity mapping, plotting)
 ```
 
