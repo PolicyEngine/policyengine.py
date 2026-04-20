@@ -13,8 +13,9 @@ inside ``for_each_variable``.
 
 This file guards against regression at three levels of strictness:
 
-1. **End-to-end**: Tara Watson's published reform (policy 94589)
-   exercises three ``gov.contrib.ctc.*.in_effect`` gates at once.
+1. **End-to-end**: a published external reform (policy 94589 on
+   app.policyengine.org) exercises three
+   ``gov.contrib.ctc.*.in_effect`` gates at once.
 2. **Per-gate smoke test**: each individual ``gov.contrib.ctc.*``
    structural reform activates cleanly.
 3. **Invariant**: the ``Microsimulation``'s ``tax_benefit_system``
@@ -85,10 +86,10 @@ def _us_fixture_dataset(tmp_path, year: int = 2025):
     )
 
 
-# --- 1. End-to-end: Tara Watson's real reform runs cleanly --------------
+# --- 1. End-to-end: published external reform runs cleanly -------------
 
 
-TARA_WATSON_REFORM = {
+POLICY_94589_REFORM = {
     # ARPA-style CTC
     "gov.irs.credits.ctc.amount.arpa[0].amount": 4_800,
     "gov.irs.credits.ctc.amount.arpa[1].amount": 4_800,
@@ -137,9 +138,11 @@ TARA_WATSON_REFORM = {
 }
 
 
-def test__tara_watson_reform_runs_end_to_end(tmp_path) -> None:
+def test__policy_94589_reform_runs_end_to_end(tmp_path) -> None:
     """Canary: the exact reform from app.policyengine.org policy 94589
-    must run through ``Simulation.ensure()`` without raising.
+    (a 42-parameter CTC+EITC expansion that activates three
+    ``gov.contrib.ctc.*.in_effect`` gates simultaneously) must run
+    through ``Simulation.ensure()`` without raising.
     """
     import policyengine as pe
     from policyengine.core import Simulation
@@ -148,7 +151,7 @@ def test__tara_watson_reform_runs_end_to_end(tmp_path) -> None:
     sim = Simulation(
         dataset=dataset,
         tax_benefit_model_version=pe.us.model,
-        policy=TARA_WATSON_REFORM,
+        policy=POLICY_94589_REFORM,
     )
     sim.run()
     # Reform can't silently zero everything.
