@@ -1,108 +1,77 @@
-# Development
-
-## Principles
-
-1. **STRONG** preference for simplicity. Let's make this package as simple as it possibly can be.
-2. Remember the goal of this package: to make it easy to create, run, save and analyse PolicyEngine simulations. When considering further features, always ask: can we instead *make it super easy* for people to do this outside the package?
-3. Be consistent about property names. `name` = human readable few words you could put as the noun in a sentence without fail. `id` = unique identifier, ideally a UUID. `description` = longer human readable text that describes the object. `created_at` and `updated_at` = timestamps for when the object was created and last updated.
-4. Constraints can be good. We should set constraints where they help us simplify the codebase and usage, but not where they unnecessarily block useful functionality.
+---
+title: "Development"
+---
 
 ## Setup
 
 ```bash
-git clone https://github.com/PolicyEngine/policyengine.py.git
+git clone https://github.com/PolicyEngine/policyengine.py
 cd policyengine.py
 uv pip install -e ".[dev]"
 ```
 
-This installs the shared analysis layer, both country model extras, and the dev
-dependencies used in CI (pytest, ruff, mypy, towncrier).
-
-## Common commands
+## Running tests
 
 ```bash
-make format           # ruff format
-make test             # pytest with coverage
-make docs             # build static MyST/Jupyter Book 2 HTML docs
-make docs-serve       # preview the docs locally
-make clean            # remove caches, build artifacts, .h5 files
+make test                     # unit tests
+pytest tests/                 # same via pytest
+pytest tests/integration      # integration tests (slower, needs h5 data)
 ```
 
-## Testing
-
-Tests require a `HUGGING_FACE_TOKEN` environment variable for downloading datasets:
+## Formatting and linting
 
 ```bash
-export HUGGING_FACE_TOKEN=hf_...
-make test
+make format                   # ruff format
+ruff check .                  # ruff lint
 ```
 
-To run a specific test:
+## Building docs
 
 ```bash
-pytest tests/test_models.py -v
-pytest tests/test_parametric_reforms.py -k "test_uk" -v
+make docs                     # quarto render docs -> docs/_site/
+make docs-serve               # quarto preview docs with live reload
 ```
 
-## Linting and formatting
+## Regenerating auto-reference pages
 
 ```bash
-ruff format .                    # format code
-ruff check .                     # lint
-mypy src/policyengine            # type check (informational)
+make docs-generate-reference  # pulls variable catalog from installed country models
 ```
 
-## CI pipeline
+Commit the regenerated pages alongside any country-model bumps. CI will check the reference is current.
 
-PRs trigger the following checks:
+## CI
 
-| Check | Status | Command |
-|---|---|---|
-| Lint + format | Required | `ruff check .` + `ruff format --check .` |
-| Tests (Python 3.13) | Required | `make test` |
-| Tests (Python 3.14) | Required | `make test` |
-| Mypy | Informational | `mypy src/policyengine` |
-| Docs build | Required | `make docs` |
+Four workflows in `.github/workflows/`:
 
-## Versioning and releases
+- **`pr_code_changes.yaml`** — unit tests, lint, format, changelog fragment on every PR touching code.
+- **`pr_docs_changes.yaml`** — verifies `quarto render docs` succeeds on every PR touching docs.
+- **`push.yaml`** — full integration tests + publish path on merge to main.
+- **`versioning.yaml`** — auto-bumps version when changelog fragments land.
 
-This project uses [towncrier](https://towncrier.readthedocs.io/) for changelog management. When making a PR, add a changelog fragment:
+## Contributing
 
-```bash
-# Fragment types: breaking, added, changed, fixed, removed
-echo "Description of change" > changelog.d/my-change.added
-```
-
-On merge, the versioning workflow bumps the version, builds the changelog, and creates a GitHub Release.
-
-For the target release-bundle architecture, see [Release bundles](release-bundles.md). That document defines the split between country `*-data` build manifests and `policyengine.py` certified runtime bundles.
+- Follow the existing API shape: `pe.us.calculate_household`, `pe.us.Simulation`, `pe.outputs.*`. Don't add one-off helpers that bypass these.
+- New output types subclass `Output` or `ChangeOutput` and live in `src/policyengine/outputs/`.
+- Country-specific helpers go under `src/policyengine/tax_benefit_models/<country>/`.
+- Add a changelog fragment in `changelog.d/` following towncrier conventions: `echo "Description." > changelog.d/<branch>.<type>.md`. Types: `added`, `changed`, `fixed`, `removed`, `breaking`.
 
 ## Architecture
 
-### Package layout
-
 ```
 src/policyengine/
-├── __init__.py            # Public surface: `pe.uk`, `pe.us`, `pe.Simulation`
-├── core/                  # Domain models (Simulation, Dataset, Policy, etc.)
+├── core/                        # Simulation, Dataset, Output base classes
+├── countries/                   # Country-neutral protocols
+├── data/                        # Generic dataset loading
+├── graph/                       # Variable dependency graph (for reference docs)
+├── outputs/                     # Typed output classes
+├── provenance/                  # Manifests, certification, reproducibility
+├── results/                     # Typed household-result structures
 ├── tax_benefit_models/
-│   ├── common/            # MicrosimulationModelVersion base, result types, reform compiler
-│   ├── uk/                # UK model, datasets, household calculator, reform analysis
-│   └── us/                # US model, datasets, household calculator, reform analysis
-├── outputs/               # Output templates (Aggregate, Poverty, etc.)
-├── provenance/            # Release manifests + TRACE TRO export
-├── countries/             # Geographic region registries (scoping, constituencies, districts)
-└── utils/                 # Helpers (reforms, entity mapping, plotting)
+│   ├── us/                      # US entry point (calculate_household, model, datasets)
+│   ├── uk/                      # UK equivalent
+│   └── common/                  # Shared model-version scaffolding
+└── utils/
 ```
 
-### Key design decisions
-
-**Pydantic everywhere**: All domain objects are Pydantic `BaseModel` subclasses. This gives us validation, serialisation, and clear field documentation.
-
-**HDF5 for storage**: Datasets and simulation outputs are stored as HDF5 files. No database server is required. The `MicroDataFrame` from the `microdf` package wraps pandas DataFrames with weight-aware `.sum()`, `.mean()`, `.count()`.
-
-**Country-specific model classes**: `PolicyEngineUSLatest` and `PolicyEngineUKLatest` inherit from a shared `MicrosimulationModelVersion` base (variable/parameter loading, manifest certification, `save`/`load`). Each subclass only implements `run()` and a handful of country hooks (`_load_system`, `_load_region_registry`, `_dataset_class`, `_get_runtime_data_build_metadata`). The US `run` applies reforms as a dict at `Microsimulation(reform=...)` construction time; the UK `run` wraps inputs as `UKSingleYearDataset` and applies reforms via a modifier after construction.
-
-**LRU cache + file caching**: `Simulation.ensure()` checks an in-process LRU cache (max 100 entries), then tries loading from disk, then falls back to `run()` + `save()`.
-
-**Output pattern**: All output types inherit from `Output`, implement `.run()`, and populate result fields. Convenience functions (e.g., `calculate_us_poverty_rates()`) create, run, and return collections of output objects.
+Everything users touch is exposed through the top-level `policyengine` namespace. Internal modules are imports of convenience; the contract is the exposed API.

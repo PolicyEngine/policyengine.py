@@ -1,20 +1,48 @@
-# policyengine.py
+---
+title: "PolicyEngine"
+subtitle: "Tax-benefit microsimulation for Python"
+---
 
-This package aims to simplify and productionise the use of PolicyEngine's tax-benefit microsimulation models to flexibly produce useful information at scale, slotting into existing analysis pipelines while also standardising analysis.
+Compute household taxes and benefits, simulate reforms, and measure distributional impact — across the US and UK — from a single Python package.
 
-We do this by:
-* Standardising around a set of core types that let us do policy analysis in an object-oriented way
-* Exemplifying this behaviour by using this package in all PolicyEngine's production applications, and analyses
+## Install
 
-## Documentation
+```bash
+pip install policyengine
+```
 
-- [Core concepts](core-concepts.md): Architecture, datasets, simulations, policies, outputs, entity mapping
-- [Economic impact analysis](economic-impact-analysis.md): Full baseline-vs-reform comparison workflow
-- [Advanced outputs](advanced-outputs.md): DecileImpact, Poverty, Inequality, IntraDecileImpact
-- [Regions and scoping](regions-and-scoping.md): Sub-national analysis (states, constituencies, districts)
-- [UK tax-benefit model](country-models-uk.md): Entities, parameters, reform examples
-- [US tax-benefit model](country-models-us.md): Entities, parameters, reform examples
-- [Examples](examples.md): Complete working scripts
-- [Visualisation](visualisation.md): Publication-ready charts with Plotly
-- [Release bundles](release-bundles.md): Reproducible model-plus-data certification and provenance
-- [Development](dev.md): Setup, testing, CI, architecture
+## Minimal example
+
+```python
+import policyengine as pe
+
+result = pe.us.calculate_household(
+    people=[{"age": 35, "employment_income": 60_000}],
+    tax_unit={"filing_status": "SINGLE"},
+    household={"state_code": "CA"},
+    year=2026,
+)
+print(result.household.household_net_income)
+```
+
+## Where to go
+
+| If you want to… | Start here |
+|---|---|
+| Compute taxes and benefits for one household | [Households](households.md) |
+| Simulate a policy change | [Reforms](reforms.md) |
+| Run a population microsimulation | [Microsimulation](microsim.md) |
+| Measure a reform's distributional impact | [Impact analysis](impact-analysis.md) |
+| See every output type | [Outputs](outputs.md) |
+| Look up a variable | Reference (auto-generated catalog, pending) |
+| Contribute | [Development](dev.md) |
+
+## What PolicyEngine is
+
+A platform that encodes the tax and benefit rules of a country as Python formulas and YAML parameters, runs them over microdata or single households, and exposes the results through a small set of typed outputs. The country rules live in country-specific packages (`policyengine-us`, `policyengine-uk`); this package wraps them in one API.
+
+Under the hood PolicyEngine combines the rules with calibrated microdata — the enhanced CPS for the US, the enhanced FRS for the UK — and returns weighted population estimates that match administrative totals.
+
+## Citation
+
+Woodruff and Ghenis (2024), *Enhancing Survey Microdata with Administrative Records: A Novel Approach to Microsimulation Dataset Construction*.

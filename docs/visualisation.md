@@ -1,72 +1,71 @@
-# Visualisation utilities
+---
+title: "Visualisation"
+---
 
-PolicyEngine provides utilities for creating publication-ready charts that follow our visual style guidelines.
+PolicyEngine outputs come with `.to_plotly()` helpers for the most common chart shapes. These produce publication-ready Plotly figures with PolicyEngine's color palette — override or customize as you would any Plotly figure.
 
-## Formatting plotly figures
-
-The `format_fig()` function applies PolicyEngine's visual style to plotly figures, ensuring consistency across all analyses and publications.
+## Decile impact
 
 ```python
-from policyengine.utils import format_fig, COLORS
-import plotly.graph_objects as go
+from policyengine.outputs import DecileImpact
 
-# Create your figure
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=[1, 2, 3], y=[4, 5, 6], name="Data"))
-
-# Apply PolicyEngine styling
-format_fig(
-    fig,
-    title="Example chart",
-    xaxis_title="X axis",
-    yaxis_title="Y axis",
-    height=600,
-    width=800
-)
-
+impact = DecileImpact().compute(baseline, reformed)
+fig = impact.to_plotly()
 fig.show()
 ```
 
-## Visual style principles
+## Budget over reform dimension
 
-The formatting applies these principles automatically:
-
-**Colours**: Primary teal (#319795) with semantic colours for different data types (success/green, warning/yellow, error/red, info/blue). Access colours via the `COLORS` dictionary:
+Iterating a reform over a parameter (e.g. CTC amount from $0 to $3,000) and plotting the trajectory is two steps:
 
 ```python
-from policyengine.utils import COLORS
+amounts = [0, 1_000, 2_000, 3_000]
+budgets = []
+for amount in amounts:
+    impact = economic_impact_analysis(
+        reform={"gov.irs.credits.ctc.amount.adult_dependent": amount},
+        year=2026,
+    )
+    budgets.append(impact.budget.total_change)
 
-fig.add_trace(go.Scatter(
-    x=x_data,
-    y=y_data,
-    line=dict(color=COLORS["primary"])
-))
+import plotly.graph_objects as go
+fig = go.Figure(go.Scatter(x=amounts, y=budgets, mode="lines+markers"))
+fig.update_layout(xaxis_title="CTC amount ($)", yaxis_title="Budget cost ($bn)")
 ```
 
-**Typography**: Inter font family with appropriate sizing (12px for labels, 14px for body text, 16px for titles).
+## Household reform curve
 
-**Layout**: Clean white background with subtle grey gridlines and appropriate margins (48px) for professional presentation.
-
-**Clarity**: Data-driven design that prioritises immediate understanding over decoration.
-
-## Available colours
+`HouseholdImpact` traces one household across a range of employment incomes under a reform:
 
 ```python
-COLORS = {
-    "primary": "#319795",         # Teal (main brand colour)
-    "primary_light": "#E6FFFA",
-    "primary_dark": "#1D4044",
-    "success": "#22C55E",         # Green (positive changes)
-    "warning": "#FEC601",         # Yellow (cautions)
-    "error": "#EF4444",           # Red (negative changes)
-    "info": "#1890FF",            # Blue (neutral information)
-    "gray_light": "#F2F4F7",
-    "gray": "#667085",
-    "gray_dark": "#101828",
-    "blue_secondary": "#026AA2",
-}
+from policyengine.outputs import HouseholdImpact
+
+traj = HouseholdImpact(
+    household_fixture={"people": [{"age": 35}], "tax_unit": {"filing_status": "SINGLE"}},
+    income_range=(0, 200_000, 1_000),
+).compute(baseline_reform={}, reform=REFORM)
+
+traj.to_plotly().show()
 ```
 
-## Complete example
+Useful for showing benefit cliffs and marginal tax rates.
 
-See [UK employment income variation](examples.md#uk-employment-income-variation) for a full demonstration of using `format_fig()` in an analysis workflow.
+## Color palette
+
+PolicyEngine's palette is available via the design system:
+
+```python
+from policyengine.plotting import PALETTE
+
+PALETTE.BLUE_PRIMARY
+PALETTE.GRAY_600
+```
+
+## Exporting
+
+Every Plotly figure can be exported:
+
+```python
+fig.write_image("chart.png", width=1000, height=600)
+fig.write_html("chart.html", include_plotlyjs="cdn")
+```

@@ -1,59 +1,65 @@
-# Examples
+---
+title: "Examples"
+---
 
-Complete working scripts demonstrating common workflows. Each script can be run directly with `python examples/<filename>.py`.
+Complete runnable scripts in `examples/` — each demonstrates one workflow end-to-end. Run with `python examples/<file>.py`.
 
-## US budgetary impact
+## US
 
-The canonical workflow for comparing a baseline and reform simulation, using both `economic_impact_analysis()` and `ChangeAggregate`.
+### Budget impact of a reform
 
 ```{.python include="../examples/us_budgetary_impact.py"}
 ```
 
-## UK policy reform analysis
-
-Applying parametric reforms, comparing baseline and reform with `ChangeAggregate`, analysing winners and losers by income decile, and visualising results with Plotly.
-
-```{.python include="../examples/policy_change_uk.py"}
-```
-
-## UK income bands
-
-Calculating net income and tax by income decile using representative microdata and `Aggregate` with quantile filters.
-
-```{.python include="../examples/income_bands_uk.py"}
-```
-
-## US income distribution
-
-Loading enhanced CPS microdata, running a full microsimulation, and calculating statistics within income deciles.
+### Income distribution over microdata
 
 ```{.python include="../examples/income_distribution_us.py"}
 ```
 
-## UK employment income variation
-
-Creating a custom dataset with varied employment income, running a single simulation, and visualising benefit phase-outs.
-
-```{.python include="../examples/employment_income_variation_uk.py"}
-```
-
-## US employment income variation
-
-Creating a custom dataset with varied employment income, running a single simulation, and visualising benefit phase-outs.
-
-```{.python include="../examples/employment_income_variation_us.py"}
-```
-
-## Household impact
-
-Comparing a single household's baseline vs reform with `HouseholdImpact`.
+### Household impact curve
 
 ```{.python include="../examples/household_impact_example.py"}
 ```
 
-## Speedtest
+### Employment-income variation
 
-A simple benchmark of a full US microsimulation.
+```{.python include="../examples/employment_income_variation_us.py"}
+```
+
+### Full microsimulation speedtest
 
 ```{.python include="../examples/speedtest_us_simulation.py"}
 ```
+
+## UK
+
+### Reform with decile impact
+
+```{.python include="../examples/policy_change_uk.py"}
+```
+
+### Income bands analysis
+
+```{.python include="../examples/income_bands_uk.py"}
+```
+
+### Employment-income variation
+
+```{.python include="../examples/employment_income_variation_uk.py"}
+```
+
+### Paper reproduction
+
+```{.python include="../examples/paper_repro_uk.py"}
+```
+
+## Writing your own
+
+Patterns worth following:
+
+- Always pass `year` explicitly — don't rely on defaults
+- Construct the baseline `Simulation` once; build reforms on top rather than recomputing
+- Save the `.manifest.json` alongside your results for reproducibility
+- Use typed outputs (`Aggregate`, `Poverty`, etc.) rather than ad-hoc `.calculate` calls — the outputs handle edge cases like missing weights
+
+More patterns in [Outputs](outputs.md) and [Impact analysis](impact-analysis.md).
