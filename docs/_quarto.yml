@@ -14,27 +14,38 @@ website:
     left:
       - href: index.md
         text: Overview
-      - core-concepts.md
-      - economic-impact-analysis.md
-      - country-models-us.md
-      - country-models-uk.md
+      - getting-started.md
+      - households.md
+      - reforms.md
+      - microsim.md
+      - impact-analysis.md
       - examples.md
       - dev.md
   sidebar:
     style: "floating"
     collapse-level: 2
     contents:
-      - index.md
-      - core-concepts.md
-      - economic-impact-analysis.md
-      - advanced-outputs.md
-      - regions-and-scoping.md
-      - country-models-uk.md
-      - country-models-us.md
-      - examples.md
-      - visualisation.md
-      - release-bundles.md
-      - dev.md
+      - section: "Get started"
+        contents:
+          - index.md
+          - getting-started.md
+      - section: "Calculate"
+        contents:
+          - households.md
+          - reforms.md
+          - microsim.md
+      - section: "Analyse"
+        contents:
+          - impact-analysis.md
+          - outputs.md
+          - regions.md
+          - visualisation.md
+      - section: "Reference"
+        contents:
+          - countries.md
+          - release-bundles.md
+          - examples.md
+          - dev.md
 
 format:
   html:
