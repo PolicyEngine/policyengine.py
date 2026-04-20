@@ -1,1 +1,0 @@
-Rewrite docs content for the v4 API: separate pages per task (households, reforms, microsim, outputs, impact analysis, regions), updated code samples against real output classes and `Simulation` dict reforms.
