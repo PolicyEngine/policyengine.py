@@ -4,33 +4,47 @@ A Python package for tax-benefit microsimulation analysis. Run policy simulation
 
 ## Quick start
 
-Install the UK country model first:
-
-```bash
-pip install "policyengine[uk]"
-```
+### Household calculator
 
 ```python
+import policyengine as pe
+
+# UK: single adult earning £50,000
+uk = pe.uk.calculate_household(
+    people=[{"age": 35, "employment_income": 50_000}],
+    year=2026,
+)
+print(uk.person[0].income_tax)                   # income tax
+print(uk.household.hbai_household_net_income)    # net income
+
+# US: single filer in California, with a reform
+us = pe.us.calculate_household(
+    people=[{"age": 35, "employment_income": 60_000}],
+    tax_unit={"filing_status": "SINGLE"},
+    household={"state_code": "CA"},
+    year=2026,
+    reform={"gov.irs.credits.ctc.amount.adult_dependent": 1000},
+)
+print(us.tax_unit.income_tax, us.household.household_net_income)
+```
+
+### Population analysis
+
+```python
+import policyengine as pe
 from policyengine.core import Simulation
 from policyengine.outputs.aggregate import Aggregate, AggregateType
-from policyengine.tax_benefit_models.uk import ensure_datasets, uk_latest
 
-# First run downloads representative microdata to ./data; later runs reuse it
-datasets = ensure_datasets(
+datasets = pe.uk.ensure_datasets(
     datasets=["hf://policyengine/policyengine-uk-data/enhanced_frs_2023_24.h5"],
     years=[2026],
     data_folder="./data",
 )
 dataset = datasets["enhanced_frs_2023_24_2026"]
 
-# Run simulation
-simulation = Simulation(
-    dataset=dataset,
-    tax_benefit_model_version=uk_latest,
-)
-simulation.ensure()
+simulation = Simulation(dataset=dataset, tax_benefit_model_version=pe.uk.model)
+simulation.run()
 
-# Calculate total universal credit spending
 agg = Aggregate(
     simulation=simulation,
     variable="universal_credit",
@@ -41,14 +55,8 @@ agg.run()
 print(f"Total UC spending: £{agg.result / 1e9:.1f}bn")
 ```
 
-## Smoke test
-
-To verify a fresh install without downloading representative datasets:
-
-```bash
-pip install "policyengine[uk,us]"
-python examples/household_impact_example.py
-```
+For baseline-vs-reform comparisons, see `pe.uk.economic_impact_analysis`
+and its US counterpart.
 
 ## Documentation
 
@@ -71,13 +79,11 @@ python examples/household_impact_example.py
 pip install policyengine
 ```
 
-This installs the shared analysis layer only. Add country model extras for the
-systems you want to analyze:
+This installs both UK and US country models. To install only one:
 
 ```bash
-pip install "policyengine[uk]"      # shared layer + UK model
-pip install "policyengine[us]"      # shared layer + US model
-pip install "policyengine[uk,us]"   # shared layer + both country models
+pip install policyengine[uk]    # UK model only
+pip install policyengine[us]    # US model only
 ```
 
 ### For development
@@ -85,7 +91,7 @@ pip install "policyengine[uk,us]"   # shared layer + both country models
 ```bash
 git clone https://github.com/PolicyEngine/policyengine.py.git
 cd policyengine.py
-uv pip install -e ".[dev]"      # install with dev dependencies (pytest, ruff, mypy, etc.)
+uv pip install -e .[dev]        # install with dev dependencies (pytest, ruff, mypy, etc.)
 ```
 
 ## Development
@@ -94,18 +100,17 @@ uv pip install -e ".[dev]"      # install with dev dependencies (pytest, ruff, m
 
 | Configuration | Install | Use case |
 |---------------|---------|----------|
-| **Library user** | `pip install policyengine` | Shared analysis layer only |
-| **UK only** | `pip install "policyengine[uk]"` | Shared layer plus UK simulations |
-| **US only** | `pip install "policyengine[us]"` | Shared layer plus US simulations |
-| **Both countries** | `pip install "policyengine[uk,us]"` | Shared layer plus UK and US simulations |
-| **Developer** | `uv pip install -e ".[dev]"` | Contributing to the package |
+| **Library user** | `pip install policyengine` | Using the package in your own code |
+| **UK only** | `pip install policyengine[uk]` | Only need UK simulations |
+| **US only** | `pip install policyengine[us]` | Only need US simulations |
+| **Developer** | `uv pip install -e .[dev]` | Contributing to the package |
 
 ### Common commands
 
 ```bash
 make format           # ruff format
 make test             # pytest with coverage
-make docs             # build static MyST/Jupyter Book 2 HTML docs
+make docs             # build static Quarto HTML docs
 make docs-serve       # preview the docs locally
 make clean            # remove caches, build artifacts, .h5 files
 ```
@@ -144,7 +149,7 @@ PRs trigger the following checks:
 | Tests (Python 3.13) | Required | `make test` |
 | Tests (Python 3.14) | Required | `make test` |
 | Mypy | Informational | `mypy src/policyengine` |
-| Docs build | Required | `make docs` |
+| Docs build | Required | Jupyter Book build |
 
 ### Versioning and releases
 
@@ -183,14 +188,14 @@ On first run this will create `./data/enhanced_frs_2023_24_year_2026.h5`.
 Datasets contain microdata at entity level (person, household, tax unit). Load representative data or create custom scenarios:
 
 ```python
-from policyengine.tax_benefit_models.uk import ensure_datasets
+from policyengine.tax_benefit_models.uk import PolicyEngineUKDataset
 
-datasets = ensure_datasets(
-    datasets=["hf://policyengine/policyengine-uk-data/enhanced_frs_2023_24.h5"],
-    years=[2026],
-    data_folder="./data",
+dataset = PolicyEngineUKDataset(
+    name="Representative data",
+    filepath="./data/frs_2023_24_year_2026.h5",
+    year=2026,
 )
-dataset = datasets["enhanced_frs_2023_24_2026"]
+dataset.load()
 ```
 
 ### Simulations
@@ -198,12 +203,12 @@ dataset = datasets["enhanced_frs_2023_24_2026"]
 Simulations apply tax-benefit models to datasets:
 
 ```python
+import policyengine as pe
 from policyengine.core import Simulation
-from policyengine.tax_benefit_models.uk import uk_latest
 
 simulation = Simulation(
     dataset=dataset,
-    tax_benefit_model_version=uk_latest,
+    tax_benefit_model_version=pe.uk.model,
 )
 simulation.run()
 
@@ -242,7 +247,7 @@ import datetime
 
 parameter = Parameter(
     name="gov.hmrc.income_tax.allowances.personal_allowance.amount",
-    tax_benefit_model_version=uk_latest,
+    tax_benefit_model_version=pe.uk.model,
     data_type=float,
 )
 
@@ -261,7 +266,7 @@ policy = Policy(
 # Run reform simulation
 reform_sim = Simulation(
     dataset=dataset,
-    tax_benefit_model_version=uk_latest,
+    tax_benefit_model_version=pe.uk.model,
     policy=policy,
 )
 reform_sim.run()
@@ -294,7 +299,7 @@ Key taxes: Federal income tax, payroll tax
 
 ## Contributing
 
-See [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md) for development setup and guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
 ## License
 

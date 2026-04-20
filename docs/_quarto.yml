@@ -1,0 +1,59 @@
+project:
+  type: website
+  output-dir: _site
+  preview:
+    port: 8080
+
+website:
+  title: "PolicyEngine"
+  description: "Tax-benefit microsimulation for Python."
+  repo-url: https://github.com/PolicyEngine/policyengine.py
+  repo-actions: [edit, issue]
+  page-navigation: true
+  navbar:
+    left:
+      - href: index.md
+        text: Overview
+      - getting-started.md
+      - households.md
+      - reforms.md
+      - microsim.md
+      - impact-analysis.md
+      - examples.md
+      - dev.md
+  sidebar:
+    style: "floating"
+    collapse-level: 2
+    contents:
+      - section: "Get started"
+        contents:
+          - index.md
+          - getting-started.md
+      - section: "Calculate"
+        contents:
+          - households.md
+          - reforms.md
+          - microsim.md
+      - section: "Analyse"
+        contents:
+          - impact-analysis.md
+          - outputs.md
+          - regions.md
+          - visualisation.md
+      - section: "Reference"
+        contents:
+          - countries.md
+          - release-bundles.md
+          - examples.md
+          - dev.md
+
+format:
+  html:
+    theme: [cosmo]
+    toc: true
+    toc-depth: 3
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+    anchor-sections: true
+    link-external-newwindow: true

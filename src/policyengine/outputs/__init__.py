@@ -20,6 +20,7 @@ from policyengine.outputs.inequality import (
     UK_INEQUALITY_INCOME_VARIABLE,
     US_INEQUALITY_INCOME_VARIABLE,
     Inequality,
+    USInequalityPreset,
     calculate_uk_inequality,
     calculate_us_inequality,
 )
@@ -48,6 +49,7 @@ from policyengine.outputs.poverty import (
     calculate_us_poverty_by_race,
     calculate_us_poverty_rates,
 )
+from policyengine.outputs.program_statistics import ProgramStatistics
 
 __all__ = [
     "Output",
@@ -58,6 +60,7 @@ __all__ = [
     "ChangeAggregateType",
     "DecileImpact",
     "calculate_decile_impacts",
+    "ProgramStatistics",
     "IntraDecileImpact",
     "compute_intra_decile_impacts",
     "Poverty",
@@ -76,6 +79,7 @@ __all__ = [
     "GENDER_GROUPS",
     "RACE_GROUPS",
     "Inequality",
+    "USInequalityPreset",
     "UK_INEQUALITY_INCOME_VARIABLE",
     "US_INEQUALITY_INCOME_VARIABLE",
     "calculate_uk_inequality",

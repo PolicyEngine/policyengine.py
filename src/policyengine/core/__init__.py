@@ -1,7 +1,14 @@
+"""Core value objects: Dataset, Variable, Parameter, Policy, Simulation, Region.
+
+Provenance (release manifests, TRACE TROs) lives in
+:mod:`policyengine.provenance` and is intentionally not re-exported
+here — importing a core value object should not pull in the
+provenance layer.
+"""
+
 from .dataset import Dataset
 from .dataset import YearData as YearData
 from .dataset import map_to_entity as map_to_entity
-from .dataset_version import DatasetVersion as DatasetVersion
 from .dynamic import Dynamic as Dynamic
 from .output import Output as Output
 from .output import OutputCollection as OutputCollection
@@ -12,19 +19,6 @@ from .policy import Policy as Policy
 from .region import Region as Region
 from .region import RegionRegistry as RegionRegistry
 from .region import RegionType as RegionType
-from .release_manifest import CertifiedDataArtifact as CertifiedDataArtifact
-from .release_manifest import CountryReleaseManifest as CountryReleaseManifest
-from .release_manifest import DataBuildInfo as DataBuildInfo
-from .release_manifest import DataCertification as DataCertification
-from .release_manifest import DataPackageVersion as DataPackageVersion
-from .release_manifest import DataReleaseArtifact as DataReleaseArtifact
-from .release_manifest import DataReleaseManifest as DataReleaseManifest
-from .release_manifest import PackageVersion as PackageVersion
-from .release_manifest import (
-    certify_data_release_compatibility as certify_data_release_compatibility,
-)
-from .release_manifest import get_data_release_manifest as get_data_release_manifest
-from .release_manifest import get_release_manifest as get_release_manifest
 from .scoping_strategy import RegionScopingStrategy as RegionScopingStrategy
 from .scoping_strategy import RowFilterStrategy as RowFilterStrategy
 from .scoping_strategy import ScopingStrategy as ScopingStrategy
@@ -36,13 +30,6 @@ from .tax_benefit_model import TaxBenefitModel as TaxBenefitModel
 from .tax_benefit_model_version import (
     TaxBenefitModelVersion as TaxBenefitModelVersion,
 )
-from .trace_tro import (
-    build_trace_tro_from_release_bundle as build_trace_tro_from_release_bundle,
-)
-from .trace_tro import (
-    compute_trace_composition_fingerprint as compute_trace_composition_fingerprint,
-)
-from .trace_tro import serialize_trace_tro as serialize_trace_tro
 from .variable import Variable as Variable
 
 # Rebuild models to resolve forward references

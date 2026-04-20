@@ -1,15 +1,12 @@
 .PHONY: docs docs-serve
 
-MYSTMD_VERSION ?= 1.8.3
-MYST_CMD = npx --yes mystmd@$(MYSTMD_VERSION)
-
 all: build-package
 
 docs:
-	cd docs && $(MYST_CMD) build --html
+	quarto render docs
 
 docs-serve:
-	cd docs && $(MYST_CMD) start
+	quarto preview docs
 
 install:
 	uv pip install -e ".[dev]"

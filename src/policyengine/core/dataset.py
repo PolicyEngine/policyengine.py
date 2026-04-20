@@ -1,3 +1,4 @@
+from typing import Optional
 from uuid import uuid4
 
 import numpy as np
@@ -5,7 +6,6 @@ import pandas as pd
 from microdf import MicroDataFrame
 from pydantic import BaseModel, ConfigDict, Field
 
-from .dataset_version import DatasetVersion
 from .tax_benefit_model import TaxBenefitModel
 
 
@@ -76,7 +76,7 @@ class Dataset(BaseModel):
             household: pd.DataFrame
 
         class MyDataset(Dataset):
-            data: YearData | None = None
+            data: Optional[YearData] = None
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -84,13 +84,12 @@ class Dataset(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
     description: str
-    dataset_version: DatasetVersion | None = None
     filepath: str
     is_output_dataset: bool = False
-    tax_benefit_model: TaxBenefitModel | None = None
+    tax_benefit_model: Optional[TaxBenefitModel] = None
     year: int
 
-    data: BaseModel | None = None
+    data: Optional[BaseModel] = None
 
 
 def map_to_entity(
@@ -98,8 +97,8 @@ def map_to_entity(
     source_entity: str,
     target_entity: str,
     person_entity: str = "person",
-    columns: list[str] | None = None,
-    values: np.ndarray | None = None,
+    columns: Optional[list[str]] = None,
+    values: Optional[np.ndarray] = None,
     how: str = "sum",
 ) -> MicroDataFrame:
     """Map data from source entity to target entity using join keys.

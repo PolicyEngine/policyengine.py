@@ -3,24 +3,27 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from policyengine.core.release_manifest import (
-    DataReleaseManifest,
-    DataReleaseManifestUnavailable,
+from requests import Timeout
+
+from policyengine.core.tax_benefit_model import TaxBenefitModel
+from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
+from policyengine.provenance.manifest import (
+    DataCertification,
+    DataReleaseManifestUnavailableError,
     certify_data_release_compatibility,
     dataset_logical_name,
     get_data_release_manifest,
     get_release_manifest,
-    get_runtime_model_build_metadata,
     resolve_dataset_reference,
-    resolve_runtime_data_certification,
+    resolve_managed_dataset_reference,
 )
-from policyengine.core.tax_benefit_model import TaxBenefitModel
-from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
-from policyengine.core.trace_tro import (
-    build_trace_tro_from_release_bundle,
-    compute_trace_composition_fingerprint,
-    serialize_trace_tro,
+from policyengine.tax_benefit_models.uk import (
+    managed_microsimulation as managed_uk_microsimulation,
 )
+from policyengine.tax_benefit_models.us import (
+    managed_microsimulation as managed_us_microsimulation,
+)
+from policyengine.tax_benefit_models.us import us_latest
 
 
 def _response_with_json(payload: dict) -> MagicMock:
@@ -42,11 +45,11 @@ class TestReleaseManifests:
         manifest = get_release_manifest("us")
 
         assert manifest.schema_version == 1
-        assert manifest.bundle_id == "us-3.4.0"
+        assert manifest.bundle_id == "us-4.0.0"
         assert manifest.country_id == "us"
-        assert manifest.policyengine_version == "3.4.0"
+        assert manifest.policyengine_version == "4.0.0"
         assert manifest.model_package.name == "policyengine-us"
-        assert manifest.model_package.version == "1.602.0"
+        assert manifest.model_package.version == "1.653.3"
         assert manifest.data_package.name == "policyengine-us-data"
         assert manifest.data_package.version == "1.73.0"
         assert manifest.data_package.repo_id == "policyengine/policyengine-us-data"
@@ -57,18 +60,18 @@ class TestReleaseManifests:
         assert manifest.certified_data_artifact.dataset == "enhanced_cps_2024"
         assert manifest.certification is not None
         assert manifest.certification.data_build_id == "policyengine-us-data-1.73.0"
-        assert manifest.certification.built_with_model_version == "1.602.0"
-        assert manifest.certification.certified_for_model_version == "1.602.0"
+        assert manifest.certification.built_with_model_version == "1.647.0"
+        assert manifest.certification.certified_for_model_version == "1.653.3"
 
     def test__given_uk_manifest__then_has_pinned_model_and_data_packages(self):
         manifest = get_release_manifest("uk")
 
         assert manifest.schema_version == 1
-        assert manifest.bundle_id == "uk-3.4.0"
+        assert manifest.bundle_id == "uk-4.0.0"
         assert manifest.country_id == "uk"
-        assert manifest.policyengine_version == "3.4.0"
+        assert manifest.policyengine_version == "4.0.0"
         assert manifest.model_package.name == "policyengine-uk"
-        assert manifest.model_package.version == "2.74.0"
+        assert manifest.model_package.version == "2.88.0"
         assert manifest.data_package.name == "policyengine-uk-data"
         assert manifest.data_package.version == "1.40.4"
         assert (
@@ -81,8 +84,8 @@ class TestReleaseManifests:
         assert manifest.certified_data_artifact.dataset == "enhanced_frs_2023_24"
         assert manifest.certification is not None
         assert manifest.certification.data_build_id == "policyengine-uk-data-1.40.4"
-        assert manifest.certification.built_with_model_version == "2.74.0"
-        assert manifest.certification.certified_for_model_version == "2.74.0"
+        assert manifest.certification.built_with_model_version == "2.88.0"
+        assert manifest.certification.certified_for_model_version == "2.88.0"
 
     def test__given_us_dataset_name__then_resolves_to_versioned_hf_url(self):
         resolved = resolve_dataset_reference("us", "enhanced_cps_2024")
@@ -110,6 +113,31 @@ class TestReleaseManifests:
 
         assert manifest.certified_data_artifact is not None
         assert manifest.default_dataset_uri == manifest.certified_data_artifact.uri
+
+    def test__given_no_dataset__then_managed_resolution_uses_certified_default(self):
+        assert (
+            resolve_managed_dataset_reference("us")
+            == get_release_manifest("us").default_dataset_uri
+        )
+
+    def test__given_explicit_uri__then_managed_resolution_requires_opt_in(self):
+        dataset = "hf://policyengine/policyengine-us-data/cps_2023.h5@1.73.0"
+
+        try:
+            resolve_managed_dataset_reference("us", dataset)
+        except ValueError as error:
+            assert "bypass the policyengine.py release bundle" in str(error)
+        else:
+            raise AssertionError("Expected explicit dataset URI to be rejected")
+
+        assert (
+            resolve_managed_dataset_reference(
+                "us",
+                dataset,
+                allow_unmanaged=True,
+            )
+            == dataset
+        )
 
     def test__given_versioned_dataset_url__then_logical_name_drops_version(self):
         dataset = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.73.0"
@@ -151,7 +179,7 @@ class TestReleaseManifests:
         }
 
         with patch(
-            "policyengine.core.release_manifest.requests.get",
+            "policyengine.provenance.manifest.requests.get",
             return_value=_response_with_json(payload),
         ) as mock_get:
             manifest = get_data_release_manifest("us")
@@ -170,72 +198,61 @@ class TestReleaseManifests:
         )
         assert mock_get.call_count == 1
 
-    def test__given_missing_build_metadata_module__then_runtime_metadata_falls_back(
+    def test__given_missing_data_release_manifest__then_fetch_raises_unavailable(self):
+        get_data_release_manifest.cache_clear()
+        response = MagicMock()
+        response.status_code = 404
+
+        with patch(
+            "policyengine.provenance.manifest.requests.get",
+            return_value=response,
+        ):
+            try:
+                get_data_release_manifest("us")
+            except DataReleaseManifestUnavailableError as error:
+                assert "No data release manifest" in str(error)
+            else:
+                raise AssertionError("Expected missing manifest to be reported")
+
+    def test__given_range_specifier__then_certification_accepts_compatible_version(
         self,
     ):
-        with (
-            patch(
-                "policyengine.core.release_manifest.metadata.version",
-                return_value="2.74.0",
-            ),
-            patch(
-                "policyengine.core.release_manifest.import_module",
-                side_effect=ModuleNotFoundError,
-            ),
-        ):
-            build_metadata = get_runtime_model_build_metadata("policyengine-uk")
-
-        assert build_metadata == {
-            "name": "policyengine-uk",
-            "version": "2.74.0",
-            "git_sha": None,
-            "data_build_fingerprint": None,
+        get_data_release_manifest.cache_clear()
+        payload = {
+            "schema_version": 1,
+            "data_package": {
+                "name": "policyengine-us-data",
+                "version": "1.73.0",
+            },
+            "build": {
+                "build_id": "policyengine-us-data-1.73.0",
+                "built_with_model_package": {
+                    "name": "policyengine-us",
+                    "version": "1.637.0",
+                    "data_build_fingerprint": "sha256:stable",
+                },
+            },
+            "compatible_model_packages": [
+                {
+                    "name": "policyengine-us",
+                    "specifier": ">=1.637.0,<2.0.0",
+                }
+            ],
+            "default_datasets": {"national": "enhanced_cps_2024"},
+            "artifacts": {},
         }
 
-    def test__given_broken_package_import__then_runtime_metadata_falls_back(self):
-        with (
-            patch(
-                "policyengine.core.release_manifest.metadata.version",
-                return_value="1.602.0",
-            ),
-            patch(
-                "policyengine.core.release_manifest.import_module",
-                side_effect=ValueError("broken package init"),
-            ),
+        with patch(
+            "policyengine.provenance.manifest.requests.get",
+            return_value=_response_with_json(payload),
         ):
-            build_metadata = get_runtime_model_build_metadata("policyengine-us")
+            certification = certify_data_release_compatibility(
+                "us",
+                runtime_model_version="1.653.3",
+            )
 
-        assert build_metadata == {
-            "name": "policyengine-us",
-            "version": "1.602.0",
-            "git_sha": None,
-            "data_build_fingerprint": None,
-        }
-
-    def test__given_build_metadata_module__then_runtime_metadata_uses_it(self):
-        module = MagicMock()
-        module.get_data_build_metadata.return_value = {
-            "name": "policyengine-us",
-            "version": "1.602.0",
-            "git_sha": "deadbeef",
-            "data_build_fingerprint": "sha256:build",
-        }
-
-        with (
-            patch(
-                "policyengine.core.release_manifest.metadata.version",
-                return_value="1.602.0",
-            ),
-            patch(
-                "policyengine.core.release_manifest.import_module",
-                return_value=module,
-            ),
-        ):
-            build_metadata = get_runtime_model_build_metadata("policyengine-us")
-
-        assert build_metadata["version"] == "1.602.0"
-        assert build_metadata["git_sha"] == "deadbeef"
-        assert build_metadata["data_build_fingerprint"] == "sha256:build"
+        assert certification.compatibility_basis == "legacy_compatible_model_package"
+        assert certification.certified_for_model_version == "1.653.3"
 
     def test__given_matching_fingerprint__then_certification_allows_reuse(self):
         get_data_release_manifest.cache_clear()
@@ -260,7 +277,7 @@ class TestReleaseManifests:
         }
 
         with patch(
-            "policyengine.core.release_manifest.requests.get",
+            "policyengine.provenance.manifest.requests.get",
             return_value=_response_with_json(payload),
         ):
             certification = certify_data_release_compatibility(
@@ -273,6 +290,73 @@ class TestReleaseManifests:
         assert certification.data_build_id == "policyengine-us-data-1.73.0"
         assert certification.built_with_model_version == "1.601.0"
         assert certification.certified_for_model_version == "1.602.0"
+
+    def test__given_private_manifest_unavailable__then_bundled_certification_is_used(
+        self,
+    ):
+        get_data_release_manifest.cache_clear()
+
+        with patch(
+            "policyengine.provenance.manifest.get_data_release_manifest",
+            side_effect=DataReleaseManifestUnavailableError("private repo"),
+        ):
+            certification = certify_data_release_compatibility(
+                "us",
+                runtime_model_version="1.653.3",
+            )
+
+        assert certification == get_release_manifest("us").certification
+
+    def test__given_private_manifest_unavailable_and_fingerprint_mismatch__then_fails(
+        self,
+    ):
+        get_data_release_manifest.cache_clear()
+
+        with (
+            patch(
+                "policyengine.provenance.manifest.get_data_release_manifest",
+                side_effect=DataReleaseManifestUnavailableError("private repo"),
+            ),
+            patch(
+                "policyengine.provenance.manifest.get_release_manifest",
+                return_value=MagicMock(
+                    certification=DataCertification(
+                        compatibility_basis="matching_data_build_fingerprint",
+                        certified_for_model_version="1.602.0",
+                        data_build_fingerprint="sha256:expected",
+                    ),
+                ),
+            ),
+        ):
+            try:
+                certify_data_release_compatibility(
+                    "us",
+                    runtime_model_version="1.602.0",
+                    runtime_data_build_fingerprint="sha256:not-a-match",
+                )
+            except ValueError as error:
+                assert "does not match the bundled data certification" in str(error)
+            else:
+                raise AssertionError("Expected fingerprint mismatch to fail")
+
+    def test__given_manifest_fetch_failure__then_certification_does_not_fallback(
+        self,
+    ):
+        get_data_release_manifest.cache_clear()
+
+        with patch(
+            "policyengine.provenance.manifest.get_data_release_manifest",
+            side_effect=Timeout("network timeout"),
+        ):
+            try:
+                certify_data_release_compatibility(
+                    "us",
+                    runtime_model_version="1.602.0",
+                )
+            except Timeout as error:
+                assert "network timeout" in str(error)
+            else:
+                raise AssertionError("Expected timeout to propagate")
 
     def test__given_mismatched_version_and_fingerprint__then_certification_fails(self):
         get_data_release_manifest.cache_clear()
@@ -297,7 +381,7 @@ class TestReleaseManifests:
         }
 
         with patch(
-            "policyengine.core.release_manifest.requests.get",
+            "policyengine.provenance.manifest.requests.get",
             return_value=_response_with_json(payload),
         ):
             try:
@@ -310,46 +394,6 @@ class TestReleaseManifests:
                 assert "not certified" in str(error)
             else:
                 raise AssertionError("Expected certification to fail")
-
-    def test__given_missing_release_manifest__then_runtime_uses_bundled_certification(
-        self,
-    ):
-        bundled_certification = get_release_manifest("uk").certification
-        assert bundled_certification is not None
-
-        with patch(
-            "policyengine.core.release_manifest.get_data_release_manifest",
-            side_effect=DataReleaseManifestUnavailable("missing"),
-        ):
-            certification = resolve_runtime_data_certification(
-                "uk",
-                runtime_model_version="2.74.0",
-                bundled_certification=bundled_certification,
-            )
-
-        assert certification.compatibility_basis == "exact_build_model_version"
-        assert certification.certified_for_model_version == "2.74.0"
-
-    def test__given_missing_release_manifest_and_wrong_runtime__then_runtime_fails(
-        self,
-    ):
-        bundled_certification = get_release_manifest("uk").certification
-        assert bundled_certification is not None
-
-        with patch(
-            "policyengine.core.release_manifest.get_data_release_manifest",
-            side_effect=DataReleaseManifestUnavailable("missing"),
-        ):
-            try:
-                resolve_runtime_data_certification(
-                    "uk",
-                    runtime_model_version="2.75.0",
-                    bundled_certification=bundled_certification,
-                )
-            except DataReleaseManifestUnavailable:
-                pass
-            else:
-                raise AssertionError("Expected runtime certification fallback to fail")
 
     def test__given_manifest_certification__then_release_bundle_exposes_it(self):
         manifest = get_release_manifest("uk")
@@ -364,11 +408,11 @@ class TestReleaseManifests:
 
         bundle = model_version.release_bundle
 
-        assert bundle["bundle_id"] == "uk-3.4.0"
+        assert bundle["bundle_id"] == "uk-4.0.0"
         assert bundle["default_dataset"] == "enhanced_frs_2023_24"
         assert bundle["default_dataset_uri"] == manifest.default_dataset_uri
         assert bundle["certified_data_build_id"] == "policyengine-uk-data-1.40.4"
-        assert bundle["data_build_model_version"] == "2.74.0"
+        assert bundle["data_build_model_version"] == "2.88.0"
         assert bundle["compatibility_basis"] == "exact_build_model_version"
         assert bundle["certified_by"] == "policyengine.py bundled manifest"
 
@@ -403,181 +447,75 @@ class TestReleaseManifests:
         assert bundle["compatibility_basis"] == "matching_data_build_fingerprint"
         assert bundle["certified_by"] == "runtime certification"
 
-    def test__given_same_hashes_in_different_orders__then_trace_fingerprint_matches(
+    def test__given_us_managed_microsimulation__then_passes_certified_dataset_and_bundle(
         self,
     ):
-        hashes = ["ccc", "aaa", "bbb"]
+        with patch("policyengine_us.Microsimulation") as mock_microsimulation:
+            microsim = managed_us_microsimulation()
 
-        assert compute_trace_composition_fingerprint(hashes) == (
-            compute_trace_composition_fingerprint(reversed(hashes))
-        )
-
-    def test__given_release_bundle_and_data_manifest__then_trace_tro_tracks_bundle(
-        self,
-    ):
-        country_manifest = get_release_manifest("us")
-        data_release_manifest = DataReleaseManifest.model_validate(
-            {
-                "schema_version": 1,
-                "data_package": {
-                    "name": "policyengine-us-data",
-                    "version": "1.73.0",
-                },
-                "build": {
-                    "build_id": "policyengine-us-data-1.73.0",
-                    "built_at": "2026-04-10T12:00:00Z",
-                    "built_with_model_package": {
-                        "name": "policyengine-us",
-                        "version": "1.602.0",
-                        "git_sha": "deadbeef",
-                        "data_build_fingerprint": "sha256:build",
-                    },
-                },
-                "compatible_model_packages": [],
-                "default_datasets": {"national": "enhanced_cps_2024"},
-                "artifacts": {
-                    "enhanced_cps_2024": {
-                        "kind": "microdata",
-                        "path": "enhanced_cps_2024.h5",
-                        "repo_id": "policyengine/policyengine-us-data",
-                        "revision": "1.73.0",
-                        "sha256": "sha256-dataset",
-                        "size_bytes": 123,
-                    }
-                },
-            }
-        )
-
-        tro = build_trace_tro_from_release_bundle(
-            country_manifest,
-            data_release_manifest,
-        )
-
-        graph = tro["@graph"][0]
-        artifacts = graph["trov:hasComposition"]["trov:hasArtifact"]
-        locations = graph["trov:hasArrangement"][0]["trov:hasArtifactLocation"]
-
-        assert len(artifacts) == 3
-        assert len(locations) == 3
+        dataset = mock_microsimulation.call_args.kwargs["dataset"]
+        assert dataset == microsim.policyengine_bundle["runtime_dataset_source"]
+        assert microsim.policyengine_bundle["policyengine_version"] == "4.0.0"
+        assert microsim.policyengine_bundle["runtime_dataset"] == "enhanced_cps_2024"
         assert (
-            graph["schema:description"]
-            == "TRACE TRO for certified runtime bundle us-3.4.0 covering the bundled country release manifest, the country data release manifest, and the certified dataset artifact. Certified for runtime model version 1.602.0 via exact_build_model_version. Built with policyengine-us 1.602.0."
+            microsim.policyengine_bundle["runtime_dataset_uri"]
+            == us_latest.default_dataset_uri
         )
-        assert locations[0]["trov:path"] == "data/release_manifests/us.json"
+        dataset_source = microsim.policyengine_bundle["runtime_dataset_source"]
+        assert dataset_source == us_latest.default_dataset_uri or str(
+            dataset_source
+        ).endswith("policyengine_us_data/storage/enhanced_cps_2024.h5")
+
+    def test__given_us_unmanaged_dataset_uri__then_source_is_not_rewritten(self):
+        dataset = "hf://policyengine/policyengine-us-data/cps_2023.h5@1.73.0"
+
+        with patch("policyengine_us.Microsimulation") as mock_microsimulation:
+            microsim = managed_us_microsimulation(
+                dataset=dataset,
+                allow_unmanaged=True,
+            )
+
+        assert mock_microsimulation.call_args.kwargs["dataset"] == dataset
+        assert microsim.policyengine_bundle["runtime_dataset_uri"] == dataset
+        assert microsim.policyengine_bundle["runtime_dataset_source"] == dataset
+
+    def test__given_uk_managed_dataset_name__then_resolves_within_bundle(self):
+        with patch("policyengine_uk.Microsimulation") as mock_microsimulation:
+            microsim = managed_uk_microsimulation(dataset="enhanced_frs_2023_24")
+
+        dataset = mock_microsimulation.call_args.kwargs["dataset"]
+        from policyengine_uk.data.dataset_schema import UKSingleYearDataset
+
+        if isinstance(dataset, UKSingleYearDataset):
+            assert getattr(dataset, "time_period", None) == "2023"
+        else:
+            assert dataset == (
+                "hf://policyengine/policyengine-uk-data-private/"
+                "enhanced_frs_2023_24.h5@1.40.4"
+            )
+        assert microsim.policyengine_bundle["policyengine_version"] == "4.0.0"
+        assert microsim.policyengine_bundle["runtime_dataset"] == "enhanced_frs_2023_24"
+        assert microsim.policyengine_bundle["runtime_dataset_uri"] == (
+            "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.4"
+        )
+        dataset_source = microsim.policyengine_bundle["runtime_dataset_source"]
         assert (
-            locations[1]["trov:path"]
-            == "https://huggingface.co/policyengine/policyengine-us-data/resolve/1.73.0/release_manifest.json"
-        )
-        assert (
-            locations[2]["trov:path"]
-            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.73.0"
-        )
-        assert graph["trov:hasComposition"]["trov:hasFingerprint"]["trov:hash"][
-            "trov:hashValue"
-        ] == compute_trace_composition_fingerprint(
-            [artifact["trov:hash"]["trov:hashValue"] for artifact in artifacts]
+            dataset_source
+            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.4"
+            or str(dataset_source).endswith(
+                "policyengine_uk_data/storage/enhanced_frs_2023_24.h5"
+            )
         )
 
-    def test__given_runtime_certification__then_trace_tro_uses_it(self):
-        manifest = get_release_manifest("us")
-        data_release_manifest = DataReleaseManifest.model_validate(
-            {
-                "schema_version": 1,
-                "data_package": {
-                    "name": "policyengine-us-data",
-                    "version": "1.73.0",
-                },
-                "build": {
-                    "build_id": "policyengine-us-data-1.73.0",
-                    "built_at": "2026-04-10T12:00:00Z",
-                    "built_with_model_package": {
-                        "name": "policyengine-us",
-                        "version": "1.602.0",
-                        "git_sha": "deadbeef",
-                        "data_build_fingerprint": "sha256:match",
-                    },
-                },
-                "compatible_model_packages": [],
-                "default_datasets": {"national": "enhanced_cps_2024"},
-                "artifacts": {
-                    "enhanced_cps_2024": {
-                        "kind": "microdata",
-                        "path": "enhanced_cps_2024.h5",
-                        "repo_id": "policyengine/policyengine-us-data",
-                        "revision": "1.73.0",
-                        "sha256": "sha256-dataset",
-                        "size_bytes": 123,
-                    }
-                },
-            }
-        )
-        model_version = TaxBenefitModelVersion(
-            model=TaxBenefitModel(id="us"),
-            version=manifest.model_package.version,
-            release_manifest=manifest,
-            model_package=manifest.model_package,
-            data_package=manifest.data_package,
-            default_dataset_uri=manifest.default_dataset_uri,
-            data_certification={
-                "compatibility_basis": "matching_data_build_fingerprint",
-                "certified_for_model_version": "1.603.0",
-                "data_build_id": "policyengine-us-data-1.73.0",
-                "built_with_model_version": "1.602.0",
-                "built_with_model_git_sha": "deadbeef",
-                "data_build_fingerprint": "sha256:match",
-                "certified_by": "runtime certification",
-            },
-        )
+    def test__given_uk_unmanaged_dataset_uri__then_source_is_not_rewritten(self):
+        dataset = "hf://policyengine/policyengine-uk-data-private/frs_2022_23.h5@1.40.4"
 
-        with patch(
-            "policyengine.core.tax_benefit_model_version.get_data_release_manifest",
-            return_value=data_release_manifest,
-        ):
-            tro = model_version.trace_tro
+        with patch("policyengine_uk.Microsimulation") as mock_microsimulation:
+            microsim = managed_uk_microsimulation(
+                dataset=dataset,
+                allow_unmanaged=True,
+            )
 
-        description = tro["@graph"][0]["schema:description"]
-
-        assert "Certified for runtime model version 1.603.0" in description
-        assert "via matching_data_build_fingerprint." in description
-        assert "Data-build fingerprint: sha256:match." in description
-
-    def test__given_trace_tro__then_serialization_is_deterministic(self):
-        country_manifest = get_release_manifest("uk")
-        data_release_manifest = DataReleaseManifest.model_validate(
-            {
-                "schema_version": 1,
-                "data_package": {
-                    "name": "policyengine-uk-data",
-                    "version": "1.40.4",
-                },
-                "build": {
-                    "build_id": "policyengine-uk-data-1.40.4",
-                    "built_at": "2026-04-10T12:00:00Z",
-                    "built_with_model_package": {
-                        "name": "policyengine-uk",
-                        "version": "2.74.0",
-                        "git_sha": "deadbeef",
-                        "data_build_fingerprint": "sha256:build",
-                    },
-                },
-                "compatible_model_packages": [],
-                "default_datasets": {"national": "enhanced_frs_2023_24"},
-                "artifacts": {
-                    "enhanced_frs_2023_24": {
-                        "kind": "microdata",
-                        "path": "enhanced_frs_2023_24.h5",
-                        "repo_id": "policyengine/policyengine-uk-data-private",
-                        "revision": "1.40.4",
-                        "sha256": "sha256-dataset",
-                        "size_bytes": 123,
-                    }
-                },
-            }
-        )
-
-        tro = build_trace_tro_from_release_bundle(
-            country_manifest,
-            data_release_manifest,
-        )
-
-        assert serialize_trace_tro(tro) == serialize_trace_tro(tro)
+        assert mock_microsimulation.call_args.kwargs["dataset"] == dataset
+        assert microsim.policyengine_bundle["runtime_dataset_uri"] == dataset
+        assert microsim.policyengine_bundle["runtime_dataset_source"] == dataset

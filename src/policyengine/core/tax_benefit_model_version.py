@@ -1,17 +1,18 @@
-from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from .release_manifest import (
+from policyengine.provenance.manifest import (
     CountryReleaseManifest,
     DataCertification,
     PackageVersion,
     get_data_release_manifest,
 )
+from policyengine.provenance.trace import build_trace_tro_from_release_bundle
+
 from .tax_benefit_model import TaxBenefitModel
-from .trace_tro import build_trace_tro_from_release_bundle
 
 if TYPE_CHECKING:
     from .parameter import Parameter
@@ -28,25 +29,27 @@ class TaxBenefitModelVersion(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     model: TaxBenefitModel
     version: str
-    description: str | None = None
-    created_at: datetime | None = Field(default_factory=lambda: datetime.now(UTC))
+    description: Optional[str] = None
+    created_at: Optional[datetime] = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
 
     variables: list["Variable"] = Field(default_factory=list)
     parameters: list["Parameter"] = Field(default_factory=list)
     parameter_nodes: list["ParameterNode"] = Field(default_factory=list)
 
     # Region registry for geographic simulations
-    region_registry: "RegionRegistry | None" = Field(
+    region_registry: "Optional[RegionRegistry]" = Field(
         default=None, description="Registry of supported geographic regions"
     )
-    release_manifest: CountryReleaseManifest | None = Field(
+    release_manifest: Optional[CountryReleaseManifest] = Field(
         default=None,
         exclude=True,
     )
-    model_package: PackageVersion | None = Field(default=None)
-    data_package: PackageVersion | None = Field(default=None)
-    default_dataset_uri: str | None = Field(default=None)
-    data_certification: DataCertification | None = Field(default=None)
+    model_package: Optional[PackageVersion] = Field(default=None)
+    data_package: Optional[PackageVersion] = Field(default=None)
+    default_dataset_uri: Optional[str] = Field(default=None)
+    data_certification: Optional[DataCertification] = Field(default=None)
 
     @property
     def parameter_values(self) -> list["ParameterValue"]:
@@ -118,7 +121,7 @@ class TaxBenefitModelVersion(BaseModel):
             f"ParameterNode '{name}' not found in {self.model.id} version {self.version}"
         )
 
-    def get_region(self, code: str) -> "Region | None":
+    def get_region(self, code: str) -> "Optional[Region]":
         """Get a region by its code.
 
         Args:
@@ -132,7 +135,7 @@ class TaxBenefitModelVersion(BaseModel):
         return self.region_registry.get(code)
 
     @property
-    def release_bundle(self) -> dict[str, str | None]:
+    def release_bundle(self) -> dict[str, Optional[str]]:
         manifest_certification = (
             self.release_manifest.certification
             if self.release_manifest is not None
@@ -209,11 +212,15 @@ class TaxBenefitModelVersion(BaseModel):
 
     @property
     def trace_tro(self) -> dict:
+        """Build a TRACE TRO for this certified bundle.
+
+        Fetches the published data release manifest so the TRO can pin
+        the exact dataset sha256. Requires a bundled release manifest.
+        """
         if self.release_manifest is None:
             raise ValueError(
                 "TRACE TRO export requires a bundled country release manifest."
             )
-
         data_release_manifest = get_data_release_manifest(
             self.release_manifest.country_id
         )

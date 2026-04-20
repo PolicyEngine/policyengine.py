@@ -195,19 +195,139 @@ TRACE sits on top of those manifests as a standards-based export layer.
 
 ### What gets exported
 
-Country `*-data` repos should emit a `trace.tro.jsonld` file for each published data
-release. That TRO should cover:
-
-- the release manifest itself
-- each published artifact hash listed in the release manifest
-- the build-time model provenance recorded in the release manifest
-
-`policyengine.py` should emit a separate certified-bundle TRO. That TRO should cover:
+`policyengine.py` emits a certified-bundle TRO for each supported country. The
+composition pins four artifacts by sha256:
 
 - the bundled country release manifest shipped in `policyengine.py`
 - the country data release manifest resolved for the certified data package version
-- the certified dataset artifact hash
-- the certification basis used to allow runtime reuse
+- the certified dataset artifact
+- the country model wheel published to PyPI (hash read from the bundled manifest
+  when present, otherwise fetched from the PyPI JSON API at emit time)
+
+TROs use the public TROv vocabulary at
+`https://w3id.org/trace/2023/05/trov#`. Every artifact location in the TRO
+is a dereferenceable HTTPS URI or a local path relative to the shipped
+wheel. Certification metadata is carried as structured `pe:*` fields on
+the `trov:TransparentResearchPerformance` node so downstream tooling can
+read `pe:certifiedForModelVersion`, `pe:compatibilityBasis`,
+`pe:builtWithModelVersion`, `pe:dataBuildFingerprint`, and `pe:dataBuildId`
+without parsing prose. Every TRO also carries `pe:emittedIn` set to
+`"github-actions"` or `"local"`; CI-emitted TROs additionally carry
+`pe:ciRunUrl` and `pe:ciGitSha`.
+
+Country `*-data` repos should also emit a matching `trace.tro.jsonld` per
+data release covering the release manifest and every staged artifact hash.
+That is a country-data concern and lives in those repos.
+
+#### Emitting a bundle TRO
+
+From Python:
+
+```python
+from policyengine.provenance.manifest import get_data_release_manifest, get_release_manifest
+from policyengine.provenance.trace import build_trace_tro_from_release_bundle, serialize_trace_tro
+
+country = get_release_manifest("us")
+tro = build_trace_tro_from_release_bundle(country, get_data_release_manifest("us"))
+Path("us.trace.tro.jsonld").write_bytes(serialize_trace_tro(tro))
+```
+
+From the CLI:
+
+```
+policyengine trace-tro us --out us.trace.tro.jsonld
+```
+
+At release time, `scripts/generate_trace_tros.py` regenerates the bundled
+`data/release_manifests/{country}.trace.tro.jsonld` files, and the
+`Versioning` CI job commits them alongside the changelog so every published
+wheel ships with the matching TRO.
+
+#### Emitting a per-simulation TRO
+
+```python
+from policyengine.results import write_results_with_trace_tro
+
+write_results_with_trace_tro(
+    results,                                # ResultsJson instance
+    "results.json",                         # where to write results
+    bundle_tro=bundle_tro,                  # loaded from the shipped bundle
+    reform_payload={"salt_cap": 0},
+    bundle_tro_url=(
+        "https://raw.githubusercontent.com/PolicyEngine/policyengine.py/"
+        "v3.4.5/src/policyengine/data/release_manifests/us.trace.tro.jsonld"
+    ),
+)
+```
+
+The `bundle_tro_url` is recorded on the performance node as
+`pe:bundleTroUrl`. A verifier can fetch that URL, recompute its sha256,
+and confirm it matches the `bundle_tro` artifact hash in the simulation
+TRO's composition. Without this anchor, the bundle reference is only as
+trustworthy as whoever produced the JSON.
+
+#### Validating a received TRO
+
+Structural validation:
+
+```
+policyengine trace-tro-validate path/to/tro.jsonld
+```
+
+The shipped schema at `policyengine/data/schemas/trace_tro.schema.json`
+checks structural fields, canonical hex-encoded sha256s, the required
+`pe:emittedIn`, and that `trov:hasLocation` uses HTTPS (or the
+well-known local paths `results.json`, `reform.json`,
+`bundle.trace.tro.jsonld`). The same schema is exercised in the test
+suite against generated TROs.
+
+Content validation (the verifier workflow a replication reviewer
+should run):
+
+```python
+import hashlib, json, requests
+from policyengine.provenance.trace import canonical_json_bytes
+
+sim_tro = json.load(open("results.trace.tro.jsonld"))
+perf = sim_tro["@graph"][0]["trov:hasPerformance"]
+
+# 1. Fetch the bundle TRO from its pinned URL and recompute its hash.
+bundle_bytes = requests.get(perf["pe:bundleTroUrl"]).content
+bundle_hash = hashlib.sha256(canonical_json_bytes(json.loads(bundle_bytes))).hexdigest()
+
+# 2. Compare against the hash recorded in the simulation TRO's composition.
+recorded = next(
+    a["trov:sha256"]
+    for a in sim_tro["@graph"][0]["trov:hasComposition"]["trov:hasArtifact"]
+    if a["@id"].endswith("bundle_tro")
+)
+assert bundle_hash == recorded, "bundle_tro_url content does not match sim TRO"
+
+# 3. Confirm the fingerprint recorded on the performance matches the
+#    fingerprint inside the fetched bundle.
+bundle = json.loads(bundle_bytes)
+bundle_fp = bundle["@graph"][0]["trov:hasComposition"]["trov:hasFingerprint"]["trov:sha256"]
+assert perf["pe:bundleFingerprint"] == bundle_fp
+```
+
+A sim TRO with a swapped `bundle_tro` dict but a truthful
+`pe:bundleTroUrl` will fail step 2; a sim TRO with both swapped will
+fail step 3.
+
+#### Known limitations
+
+- TROs are emitted unsigned. A signed attestation (sigstore or in-toto)
+  is a future addition that will bind TROs to a trusted-system key.
+- The bundle composition does not yet pin a transitive lockfile
+  (`uv.lock`/`poetry.lock`), a Python interpreter version, or an OS. AEA
+  reviewers may demand these; the schema is extensible.
+- The model wheel is hashed by PyPI's published sha256. If a wheel is
+  yanked and re-uploaded under the same version, the hash will change
+  and the TRO becomes invalid — which is the correct behaviour.
+- Country data packages whose data release manifest is private require
+  `HUGGING_FACE_TOKEN` at emit time. The regeneration script skips
+  countries whose data release manifest is unreachable so a partial run
+  does not block other countries.
 
 ### What TRACE does not replace
 

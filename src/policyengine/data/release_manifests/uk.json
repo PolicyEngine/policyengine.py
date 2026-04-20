@@ -1,11 +1,13 @@
 {
   "schema_version": 1,
-  "bundle_id": "uk-3.4.0",
+  "bundle_id": "uk-4.0.0",
   "country_id": "uk",
-  "policyengine_version": "3.4.0",
+  "policyengine_version": "4.0.0",
   "model_package": {
     "name": "policyengine-uk",
-    "version": "2.74.0"
+    "version": "2.88.0",
+    "sha256": "46a3ba443b43ec810c5efaccd4645edb63c8dc90ef5acf9b0cdf5ace86b9334d",
+    "wheel_url": "https://files.pythonhosted.org/packages/23/7e/8a2a42eac1da63730a865964aa17e7fd4420ce4db4c80001c1b5ca6011e8/policyengine_uk-2.88.0-py3-none-any.whl"
   },
   "data_package": {
     "name": "policyengine-uk-data",
@@ -24,8 +26,8 @@
   "certification": {
     "compatibility_basis": "exact_build_model_version",
     "data_build_id": "policyengine-uk-data-1.40.4",
-    "built_with_model_version": "2.74.0",
-    "certified_for_model_version": "2.74.0",
+    "built_with_model_version": "2.88.0",
+    "certified_for_model_version": "2.88.0",
     "certified_by": "policyengine.py bundled manifest"
   },
   "default_dataset": "enhanced_frs_2023_24",

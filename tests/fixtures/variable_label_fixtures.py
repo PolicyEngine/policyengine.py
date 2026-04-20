@@ -1,13 +1,14 @@
 """Fixtures for variable label tests."""
 
+from typing import Optional
 from unittest.mock import MagicMock
 
 
 def create_mock_openfisca_variable(
     name: str,
-    label: str | None = None,
+    label: Optional[str] = None,
     entity_key: str = "person",
-    documentation: str | None = None,
+    documentation: Optional[str] = None,
     value_type: type = float,
     default_value=0,
 ) -> MagicMock:

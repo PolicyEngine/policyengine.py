@@ -5,9 +5,8 @@ Each local authority has a row in the weight matrix (shape: 360 x N_households)
 that reweights all households to represent that local authority's demographics.
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
-import h5py
 import numpy as np
 import pandas as pd
 from pydantic import ConfigDict
@@ -35,7 +34,7 @@ class LocalAuthorityImpact(Output):
     year: str = "2025"
 
     # Results populated by run()
-    local_authority_results: list[dict] | None = None
+    local_authority_results: Optional[list[dict]] = None
 
     def run(self) -> None:
         """Load weight matrix and compute per-local-authority metrics."""
@@ -43,6 +42,8 @@ class LocalAuthorityImpact(Output):
         la_df = pd.read_csv(self.local_authority_csv_path)
 
         # Load weight matrix: shape (N_local_authorities, N_households)
+        import h5py
+
         with h5py.File(self.weight_matrix_path, "r") as f:
             weight_matrix = f[self.year][...]
 

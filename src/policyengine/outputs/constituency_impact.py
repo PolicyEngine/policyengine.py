@@ -5,9 +5,8 @@ Each constituency has a row in the weight matrix (shape: 650 x N_households)
 that reweights all households to represent that constituency's demographics.
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
-import h5py
 import numpy as np
 import pandas as pd
 from pydantic import ConfigDict
@@ -35,7 +34,7 @@ class ConstituencyImpact(Output):
     year: str = "2025"
 
     # Results populated by run()
-    constituency_results: list[dict] | None = None
+    constituency_results: Optional[list[dict]] = None
 
     def run(self) -> None:
         """Load weight matrix and compute per-constituency metrics."""
@@ -43,6 +42,8 @@ class ConstituencyImpact(Output):
         constituency_df = pd.read_csv(self.constituency_csv_path)
 
         # Load weight matrix: shape (N_constituencies, N_households)
+        import h5py
+
         with h5py.File(self.weight_matrix_path, "r") as f:
             weight_matrix = f[self.year][...]
 

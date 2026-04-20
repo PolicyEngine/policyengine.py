@@ -1,2 +1,5 @@
-# MyST build outputs
-_build
+# Quarto build outputs
+_site
+_freeze
+/.quarto/
+**/*.quarto_ipynb

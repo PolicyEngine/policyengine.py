@@ -1,11 +1,12 @@
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 from microdf import MicroDataFrame
 from pydantic import ConfigDict
 
 from policyengine.core import Dataset, YearData
-from policyengine.core.release_manifest import (
+from policyengine.provenance.manifest import (
     dataset_logical_name,
     resolve_dataset_reference,
 )
@@ -33,7 +34,7 @@ class UKYearData(YearData):
 class PolicyEngineUKDataset(Dataset):
     """UK dataset with multi-year entity-level data."""
 
-    data: UKYearData | None = None
+    data: Optional[UKYearData] = None
 
     def model_post_init(self, __context):
         """Called after Pydantic initialization."""

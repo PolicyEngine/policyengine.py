@@ -6,3 +6,4 @@
 _build/
 .env
 **/.DS_Store
+build/

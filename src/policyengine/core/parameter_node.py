@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -22,8 +22,8 @@ class ParameterNode(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str = Field(description="Full path of the node (e.g., 'gov.hmrc')")
-    label: str | None = Field(
+    label: Optional[str] = Field(
         default=None, description="Human-readable label (e.g., 'HMRC')"
     )
-    description: str | None = Field(default=None, description="Node description")
+    description: Optional[str] = Field(default=None, description="Node description")
     tax_benefit_model_version: "TaxBenefitModelVersion"

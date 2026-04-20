@@ -117,7 +117,13 @@ jobs:
         run: pip install yaml-changelog towncrier && make changelog
       - name: Preview changelog update
         run: ".github/get-changelog-diff.sh"
-      - name: Update changelog
+      - name: Install package for TRO regeneration
+        run: pip install -e . h5py
+      - name: Regenerate bundled TRACE TROs
+        env:
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+        run: python scripts/generate_trace_tros.py
+      - name: Update changelog and TROs
         uses: EndBug/add-and-commit@v9
         with:
           add: "."

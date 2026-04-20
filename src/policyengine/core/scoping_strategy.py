@@ -12,9 +12,8 @@ Provides two concrete strategies for scoping datasets to sub-national regions:
 import logging
 from abc import abstractmethod
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Optional, Union
 
-import h5py
 import numpy as np
 import pandas as pd
 from microdf import MicroDataFrame
@@ -69,7 +68,7 @@ class RowFilterStrategy(RegionScopingStrategy):
 
     strategy_type: Literal["row_filter"] = "row_filter"
     variable_name: str
-    variable_value: str
+    variable_value: Union[str, int, float]
 
     def apply(
         self,
@@ -127,7 +126,11 @@ class WeightReplacementStrategy(RegionScopingStrategy):
 
         region_id = self._find_region_index(lookup_df, self.region_code)
 
-        # Download weight matrix and extract weights for this region
+        # Download weight matrix and extract weights for this region.
+        # h5py is only needed here, so import lazily to keep
+        # `from policyengine.core import ...` light.
+        import h5py
+
         weights_path = download_gcs_file(
             bucket=self.weight_matrix_bucket,
             file_path=self.weight_matrix_key,
@@ -201,7 +204,7 @@ class WeightReplacementStrategy(RegionScopingStrategy):
         )
 
     @staticmethod
-    def _find_household_id_column(df: pd.DataFrame, entity_name: str) -> str | None:
+    def _find_household_id_column(df: pd.DataFrame, entity_name: str) -> Optional[str]:
         """Find the column linking an entity to its household."""
         candidates = [
             "person_household_id",
@@ -219,6 +222,6 @@ class WeightReplacementStrategy(RegionScopingStrategy):
 
 
 ScopingStrategy = Annotated[
-    RowFilterStrategy | WeightReplacementStrategy,
+    Union[RowFilterStrategy, WeightReplacementStrategy],
     Discriminator("strategy_type"),
 ]

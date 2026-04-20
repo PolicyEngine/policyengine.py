@@ -1,37 +1,51 @@
-"""Plotting utilities for PolicyEngine visualisations."""
+"""Plotting utilities for PolicyEngine visualisations.
 
-import plotly.graph_objects as go
+Requires plotly, which is installed via the ``[plotting]`` extra
+(``pip install policyengine[plotting]``). Importing from this module
+fails with a clear error when plotly is absent. Brand tokens
+(``COLORS``, font constants) live in :mod:`policyengine.utils.design`
+so they can be imported without plotly.
+"""
 
-# PolicyEngine brand colours
-COLORS = {
-    "primary": "#319795",  # Teal
-    "primary_light": "#E6FFFA",
-    "primary_dark": "#1D4044",
-    "success": "#22C55E",  # Green (positive changes)
-    "warning": "#FEC601",  # Yellow (cautions)
-    "error": "#EF4444",  # Red (negative changes)
-    "info": "#1890FF",  # Blue (neutral info)
-    "gray_light": "#F2F4F7",
-    "gray": "#667085",
-    "gray_dark": "#101828",
-    "blue_secondary": "#026AA2",
-}
+from typing import TYPE_CHECKING, Optional
 
-# Typography
-FONT_FAMILY = "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-FONT_SIZE_LABEL = 12
-FONT_SIZE_DEFAULT = 14
-FONT_SIZE_TITLE = 16
+try:
+    import plotly.graph_objects as go
+except ImportError as exc:  # pragma: no cover
+    raise ImportError(
+        "policyengine.utils.plotting requires plotly. "
+        "Install with: pip install policyengine[plotting]"
+    ) from exc
+
+if TYPE_CHECKING:
+    import plotly.graph_objects as go  # noqa: F401
+
+from .design import (
+    COLORS,
+    FONT_FAMILY,
+    FONT_SIZE_DEFAULT,
+    FONT_SIZE_LABEL,
+    FONT_SIZE_TITLE,
+)
+
+__all__ = [
+    "COLORS",
+    "FONT_FAMILY",
+    "FONT_SIZE_DEFAULT",
+    "FONT_SIZE_LABEL",
+    "FONT_SIZE_TITLE",
+    "format_fig",
+]
 
 
 def format_fig(
     fig: go.Figure,
-    title: str | None = None,
-    xaxis_title: str | None = None,
-    yaxis_title: str | None = None,
+    title: Optional[str] = None,
+    xaxis_title: Optional[str] = None,
+    yaxis_title: Optional[str] = None,
     show_legend: bool = True,
-    height: int | None = None,
-    width: int | None = None,
+    height: Optional[int] = None,
+    width: Optional[int] = None,
 ) -> go.Figure:
     """Apply PolicyEngine visual style to a plotly figure.
 

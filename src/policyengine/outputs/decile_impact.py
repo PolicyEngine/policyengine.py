@@ -1,3 +1,5 @@
+from typing import Optional
+
 import pandas as pd
 from pydantic import ConfigDict
 
@@ -16,19 +18,19 @@ class DecileImpact(Output):
     baseline_simulation: Simulation
     reform_simulation: Simulation
     income_variable: str = "equiv_hbai_household_net_income"
-    decile_variable: str | None = None  # If set, use pre-computed grouping variable
-    entity: str | None = None
+    decile_variable: Optional[str] = None  # If set, use pre-computed grouping variable
+    entity: Optional[str] = None
     decile: int
     quantiles: int = 10
 
     # Results populated by run()
-    baseline_mean: float | None = None
-    reform_mean: float | None = None
-    absolute_change: float | None = None
-    relative_change: float | None = None
-    count_better_off: float | None = None
-    count_worse_off: float | None = None
-    count_no_change: float | None = None
+    baseline_mean: Optional[float] = None
+    reform_mean: Optional[float] = None
+    absolute_change: Optional[float] = None
+    relative_change: Optional[float] = None
+    count_better_off: Optional[float] = None
+    count_worse_off: Optional[float] = None
+    count_no_change: Optional[float] = None
 
     def run(self):
         """Calculate impact for this specific decile."""
@@ -97,16 +99,16 @@ class DecileImpact(Output):
 
 
 def calculate_decile_impacts(
-    dataset: Dataset | None = None,
-    tax_benefit_model_version: TaxBenefitModelVersion | None = None,
-    baseline_policy: Policy | None = None,
-    reform_policy: Policy | None = None,
-    dynamic: Dynamic | None = None,
+    dataset: Optional[Dataset] = None,
+    tax_benefit_model_version: Optional[TaxBenefitModelVersion] = None,
+    baseline_policy: Optional[Policy] = None,
+    reform_policy: Optional[Policy] = None,
+    dynamic: Optional[Dynamic] = None,
     income_variable: str = "equiv_hbai_household_net_income",
-    entity: str | None = None,
+    entity: Optional[str] = None,
     quantiles: int = 10,
-    baseline_simulation: Simulation | None = None,
-    reform_simulation: Simulation | None = None,
+    baseline_simulation: Optional[Simulation] = None,
+    reform_simulation: Optional[Simulation] = None,
 ) -> OutputCollection[DecileImpact]:
     """Calculate decile-by-decile impact of a reform.
 
