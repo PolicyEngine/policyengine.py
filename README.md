@@ -4,26 +4,47 @@ A Python package for tax-benefit microsimulation analysis. Run policy simulation
 
 ## Quick start
 
-```python
-from policyengine.core import Simulation
-from policyengine.tax_benefit_models.uk import PolicyEngineUKDataset, uk_latest
-from policyengine.outputs.aggregate import Aggregate, AggregateType
+### Household calculator
 
-# Load representative microdata
-dataset = PolicyEngineUKDataset(
-    name="FRS 2023-24",
-    filepath="./data/frs_2023_24_year_2026.h5",
+```python
+import policyengine as pe
+
+# UK: single adult earning £50,000
+uk = pe.uk.calculate_household(
+    people=[{"age": 35, "employment_income": 50_000}],
     year=2026,
 )
+print(uk.person[0].income_tax)                   # income tax
+print(uk.household.hbai_household_net_income)    # net income
 
-# Run simulation
-simulation = Simulation(
-    dataset=dataset,
-    tax_benefit_model_version=uk_latest,
+# US: single filer in California, with a reform
+us = pe.us.calculate_household(
+    people=[{"age": 35, "employment_income": 60_000}],
+    tax_unit={"filing_status": "SINGLE"},
+    household={"state_code": "CA"},
+    year=2026,
+    reform={"gov.irs.credits.ctc.amount.adult_dependent": 1000},
 )
+print(us.tax_unit.income_tax, us.household.household_net_income)
+```
+
+### Population analysis
+
+```python
+import policyengine as pe
+from policyengine.core import Simulation
+from policyengine.outputs.aggregate import Aggregate, AggregateType
+
+datasets = pe.uk.ensure_datasets(
+    datasets=["hf://policyengine/policyengine-uk-data/enhanced_frs_2023_24.h5"],
+    years=[2026],
+    data_folder="./data",
+)
+dataset = datasets["enhanced_frs_2023_24_2026"]
+
+simulation = Simulation(dataset=dataset, tax_benefit_model_version=pe.uk.model)
 simulation.run()
 
-# Calculate total universal credit spending
 agg = Aggregate(
     simulation=simulation,
     variable="universal_credit",
@@ -33,6 +54,9 @@ agg = Aggregate(
 agg.run()
 print(f"Total UC spending: £{agg.result / 1e9:.1f}bn")
 ```
+
+For baseline-vs-reform comparisons, see `pe.uk.economic_impact_analysis`
+and its US counterpart.
 
 ## Documentation
 
@@ -179,12 +203,12 @@ dataset.load()
 Simulations apply tax-benefit models to datasets:
 
 ```python
+import policyengine as pe
 from policyengine.core import Simulation
-from policyengine.tax_benefit_models.uk import uk_latest
 
 simulation = Simulation(
     dataset=dataset,
-    tax_benefit_model_version=uk_latest,
+    tax_benefit_model_version=pe.uk.model,
 )
 simulation.run()
 
@@ -223,7 +247,7 @@ import datetime
 
 parameter = Parameter(
     name="gov.hmrc.income_tax.allowances.personal_allowance.amount",
-    tax_benefit_model_version=uk_latest,
+    tax_benefit_model_version=pe.uk.model,
     data_type=float,
 )
 
@@ -242,7 +266,7 @@ policy = Policy(
 # Run reform simulation
 reform_sim = Simulation(
     dataset=dataset,
-    tax_benefit_model_version=uk_latest,
+    tax_benefit_model_version=pe.uk.model,
     policy=policy,
 )
 reform_sim.run()

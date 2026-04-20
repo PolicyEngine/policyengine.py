@@ -2,6 +2,39 @@
 
 The US tax-benefit model implements the United States federal tax and benefit system using PolicyEngine US as the underlying calculation engine.
 
+## Quick start
+
+```python
+import policyengine as pe
+
+# Single adult earning $60k (SINGLE filer, default state)
+result = pe.us.calculate_household(
+    people=[{"age": 35, "employment_income": 60_000}],
+    tax_unit={"filing_status": "SINGLE"},
+    year=2026,
+)
+print(result.tax_unit.income_tax, result.household.household_net_income)
+
+# With a reform
+result = pe.us.calculate_household(
+    people=[{"age": 35, "employment_income": 60_000}],
+    tax_unit={"filing_status": "SINGLE"},
+    year=2026,
+    reform={"gov.irs.credits.ctc.amount.adult_dependent": 1000},
+)
+
+# Request extra variables not in the default result
+result = pe.us.calculate_household(
+    people=[{"age": 35, "employment_income": 60_000}],
+    tax_unit={"filing_status": "SINGLE"},
+    year=2026,
+    extra_variables=["adjusted_gross_income", "taxable_income"],
+)
+```
+
+For population-level analysis and reform analysis, see
+[Economic impact analysis](economic-impact-analysis.md).
+
 ## Entity structure
 
 The US model uses a more complex entity hierarchy:
@@ -183,11 +216,11 @@ dataset = PolicyEngineUSDataset(
 
 ```python
 from policyengine.core import Simulation
-from policyengine.tax_benefit_models.us import us_latest
+import policyengine as pe
 
 simulation = Simulation(
     dataset=dataset,
-    tax_benefit_model_version=us_latest,
+    tax_benefit_model_version=pe.us.model,
 )
 simulation.run()
 
@@ -239,80 +272,42 @@ print(output.household[["household_net_income", "household_benefits", "household
 
 ## Common policy reforms
 
+All reform examples use the same flat ``{parameter.path: value}`` dict
+the household calculator accepts. ``Simulation`` compiles it into a
+``Policy`` at construction; scalar values default to
+``{dataset.year}-01-01``. Indexed-breakdown parameters (age groups,
+filing statuses) end in ``[N].amount``.
+
 ### Increasing standard deduction
 
 ```python
-from policyengine.core import Policy, Parameter, ParameterValue
-import datetime
-
-parameter = Parameter(
-    name="gov.irs.income.standard_deduction.single",
-    tax_benefit_model_version=us_latest,
-    description="Standard deduction (single)",
-    data_type=float,
-)
-
-policy = Policy(
-    name="Increase standard deduction to $20,000",
-    description="Raises single standard deduction from $14,600 to $20,000",
-    parameter_values=[
-        ParameterValue(
-            parameter=parameter,
-            start_date=datetime.date(2024, 1, 1),
-            end_date=datetime.date(2024, 12, 31),
-            value=20000,
-        )
-    ],
-)
+policy = {"gov.irs.income.standard_deduction.single": 20_000}
 ```
 
 ### Expanding Child Tax Credit
 
 ```python
-parameter = Parameter(
-    name="gov.irs.credits.ctc.amount.base",
-    tax_benefit_model_version=us_latest,
-    description="Base CTC amount",
-    data_type=float,
-)
-
-policy = Policy(
-    name="Increase CTC to $3,000",
-    description="Expands CTC from $2,000 to $3,000 per child",
-    parameter_values=[
-        ParameterValue(
-            parameter=parameter,
-            start_date=datetime.date(2024, 1, 1),
-            end_date=datetime.date(2024, 12, 31),
-            value=3000,
-        )
-    ],
-)
+policy = {"gov.irs.credits.ctc.amount.base[0].amount": 3_000}
 ```
 
 ### Making CTC fully refundable
 
 ```python
-parameter = Parameter(
-    name="gov.irs.credits.ctc.refundable.amount.max",
-    tax_benefit_model_version=us_latest,
-    description="Maximum refundable CTC",
-    data_type=float,
-)
-
-policy = Policy(
-    name="Fully refundable CTC",
-    description="Makes entire $2,000 CTC refundable",
-    parameter_values=[
-        ParameterValue(
-            parameter=parameter,
-            start_date=datetime.date(2024, 1, 1),
-            end_date=datetime.date(2024, 12, 31),
-            value=2000,  # Match base amount
-        )
-    ],
-)
+policy = {"gov.irs.credits.ctc.refundable.amount.max": 2_000}
 ```
+
+### Time-varying reform
+
+```python
+policy = {
+    "gov.irs.credits.ctc.amount.base[0].amount": {
+        "2026-07-01": 2_500,
+        "2027-01-01": 3_000,
+    },
+}
+```
+
+Plug any of the above into ``Simulation(policy=policy, ...)``.
 
 ## State variations
 

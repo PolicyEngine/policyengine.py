@@ -2,6 +2,55 @@
 
 PolicyEngine.py is a Python package for tax-benefit microsimulation analysis. It provides a unified interface for running policy simulations, analysing distributional impacts, and visualising results across different countries.
 
+## Quick start
+
+Most analyses start from the country entry points on the top-level
+package — ``policyengine.uk`` and ``policyengine.us``. They expose flat
+keyword-argument functions that return structured results with
+dot-access for scalar lookups.
+
+```python
+import policyengine as pe
+
+# UK: single adult earning £50,000
+uk = pe.uk.calculate_household(
+    people=[{"age": 35, "employment_income": 50_000}],
+    year=2026,
+)
+print(uk.household.hbai_household_net_income)  # net income
+print(uk.person[0].income_tax)                  # per-person dot access
+
+# US: married couple with two kids in Texas
+us = pe.us.calculate_household(
+    people=[
+        {"age": 35, "employment_income": 40_000},
+        {"age": 33},
+        {"age": 8},
+        {"age": 5},
+    ],
+    tax_unit={"filing_status": "JOINT"},
+    household={"state_code": "TX"},
+    year=2026,
+)
+print(us.tax_unit.income_tax, us.tax_unit.eitc, us.tax_unit.ctc)
+
+# Apply a reform: just pass a parameter-path dict
+reformed = pe.us.calculate_household(
+    people=[{"age": 35, "employment_income": 60_000}],
+    tax_unit={"filing_status": "SINGLE"},
+    year=2026,
+    reform={"gov.irs.credits.ctc.amount.adult_dependent": 1000},
+)
+```
+
+Reforms can be scalar values (treated as ``{year}-01-01`` onwards) or a
+mapping of effective-date strings to values for time-varying reforms.
+Unknown variable names raise with suggestions instead of silently
+returning zero.
+
+For population-level analysis (budget impact, distributional effects),
+see [Economic impact analysis](economic-impact-analysis.md).
+
 ## Architecture overview
 
 The package is organised around several core concepts:
@@ -22,9 +71,14 @@ Tax-benefit models define the rules and calculations for a country's tax and ben
 
 ### Using a tax-benefit model
 
+The country entry points expose pinned model versions as ``pe.uk.model``
+and ``pe.us.model``:
+
 ```python
-from policyengine.tax_benefit_models.uk import uk_latest
-from policyengine.tax_benefit_models.us import us_latest
+import policyengine as pe
+
+uk_latest = pe.uk.model
+us_latest = pe.us.model
 
 # UK model includes variables like:
 # - income_tax, national_insurance, universal_credit
@@ -46,7 +100,7 @@ Datasets contain microdata representing a population. Each dataset has:
 ### Dataset structure
 
 ```python
-from policyengine.tax_benefit_models.uk import PolicyEngineUKDataset
+from policyengine.tax_benefit_models.uk import PolicyEngineUKDataset  # or: pe.uk.PolicyEngineUKDataset
 
 dataset = PolicyEngineUKDataset(
     name="FRS 2023-24",
@@ -126,7 +180,7 @@ Before running simulations, you need representative microdata. The package provi
 - **`load_datasets()`**: Load previously saved HDF5 files from disk
 
 ```python
-from policyengine.tax_benefit_models.us import ensure_datasets
+from policyengine.tax_benefit_models.us import ensure_datasets  # or: pe.us.ensure_datasets
 
 # First run: downloads from HuggingFace, computes variables, saves to ./data/
 # Subsequent runs: loads from disk instantly
@@ -139,7 +193,7 @@ dataset = datasets["enhanced_cps_2024_2026"]
 ```
 
 ```python
-from policyengine.tax_benefit_models.uk import ensure_datasets
+from policyengine.tax_benefit_models.uk import ensure_datasets  # or: pe.uk.ensure_datasets
 
 datasets = ensure_datasets(
     datasets=["hf://policyengine/policyengine-uk-data/enhanced_frs_2023_24.h5"],
@@ -158,12 +212,12 @@ Simulations apply tax-benefit models to datasets, calculating all variables for 
 ### Running a simulation
 
 ```python
+import policyengine as pe
 from policyengine.core import Simulation
-from policyengine.tax_benefit_models.uk import uk_latest
 
 simulation = Simulation(
     dataset=dataset,
-    tax_benefit_model_version=uk_latest,
+    tax_benefit_model_version=pe.uk.model,
 )
 simulation.run()
 
@@ -201,7 +255,7 @@ After running a simulation, you can access the calculated variables from the out
 ```python
 simulation = Simulation(
     dataset=dataset,
-    tax_benefit_model_version=uk_latest,
+    tax_benefit_model_version=pe.uk.model,
 )
 simulation.run()
 
@@ -216,52 +270,67 @@ benunit_data = output.benunit[["benunit_id", "universal_credit", "child_benefit"
 
 Policies modify tax-benefit system parameters through parametric reforms.
 
-### Creating a policy
+### Reform as a dict
+
+The canonical form — same shape ``pe.{uk,us}.calculate_household(reform=...)``
+accepts — is a flat ``{parameter.path: value}`` / ``{parameter.path: {date: value}}``
+dict. ``Simulation`` compiles it to a ``Policy`` at construction:
 
 ```python
-from policyengine.core import Policy, Parameter, ParameterValue
+import policyengine as pe
+from policyengine.core import Simulation
+
+baseline = Simulation(dataset=dataset, tax_benefit_model_version=pe.uk.model)
+reform = Simulation(
+    dataset=dataset,
+    tax_benefit_model_version=pe.uk.model,
+    # Personal allowance raised from ~£12,570 to £15,000.
+    policy={"gov.hmrc.income_tax.allowances.personal_allowance.amount": 15_000},
+)
+baseline.run()
+reform.run()
+```
+
+Scalar values default their effective date to ``{dataset.year}-01-01``.
+For time-varying reforms pass a nested ``{date: value}`` mapping:
+
+```python
+policy = {
+    "gov.hmrc.income_tax.allowances.personal_allowance.amount": {
+        "2026-01-01": 13_000,
+        "2027-01-01": 15_000,
+    }
+}
+```
+
+Unknown paths raise ``ValueError`` with a close-match suggestion.
+
+### Reform as a Policy object (escape hatch)
+
+For reforms that can't be expressed as parameter-value changes (e.g.,
+custom ``simulation_modifier`` callables), build a ``Policy`` directly:
+
+```python
+from policyengine.core import Parameter, ParameterValue, Policy
 import datetime
-
-# Define parameter to modify
-parameter = Parameter(
-    name="gov.hmrc.income_tax.allowances.personal_allowance.amount",
-    tax_benefit_model_version=uk_latest,
-    description="Personal allowance for income tax",
-    data_type=float,
-)
-
-# Set new value
-parameter_value = ParameterValue(
-    parameter=parameter,
-    start_date=datetime.date(2026, 1, 1),
-    end_date=datetime.date(2026, 12, 31),
-    value=15000,  # Increase from ~£12,570 to £15,000
-)
 
 policy = Policy(
     name="Increased personal allowance",
-    description="Raises personal allowance to £15,000",
-    parameter_values=[parameter_value],
+    parameter_values=[
+        ParameterValue(
+            parameter=Parameter(
+                name="gov.hmrc.income_tax.allowances.personal_allowance.amount",
+                tax_benefit_model_version=pe.uk.model,
+                data_type=float,
+            ),
+            start_date=datetime.date(2026, 1, 1),
+            end_date=datetime.date(2026, 12, 31),
+            value=15_000,
+        ),
+    ],
 )
-```
 
-### Running a reform simulation
-
-```python
-# Baseline simulation
-baseline = Simulation(
-    dataset=dataset,
-    tax_benefit_model_version=uk_latest,
-)
-baseline.run()
-
-# Reform simulation
-reform = Simulation(
-    dataset=dataset,
-    tax_benefit_model_version=uk_latest,
-    policy=policy,
-)
-reform.run()
+Simulation(dataset=dataset, tax_benefit_model_version=pe.uk.model, policy=policy)
 ```
 
 ### Combining policies
@@ -306,7 +375,7 @@ dynamic = Dynamic(
 
 simulation = Simulation(
     dataset=dataset,
-    tax_benefit_model_version=uk_latest,
+    tax_benefit_model_version=pe.uk.model,
     policy=policy,
     dynamic=dynamic,
 )

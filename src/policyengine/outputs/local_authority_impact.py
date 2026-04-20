@@ -7,7 +7,6 @@ that reweights all households to represent that local authority's demographics.
 
 from typing import TYPE_CHECKING, Optional
 
-import h5py
 import numpy as np
 import pandas as pd
 from pydantic import ConfigDict
@@ -43,6 +42,8 @@ class LocalAuthorityImpact(Output):
         la_df = pd.read_csv(self.local_authority_csv_path)
 
         # Load weight matrix: shape (N_local_authorities, N_households)
+        import h5py
+
         with h5py.File(self.weight_matrix_path, "r") as f:
             weight_matrix = f[self.year][...]
 

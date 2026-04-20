@@ -1,6 +1,6 @@
 """Tests for TRACE Transparent Research Object (TRO) export.
 
-Covers bundle-level TROs (``policyengine.core.trace_tro``) and per-simulation
+Covers bundle-level TROs (``policyengine.provenance.trace``) and per-simulation
 TROs (``policyengine.results.trace_tro``), plus the ``policyengine trace-tro``
 CLI, determinism guarantees, and JSON-Schema conformance against TROv 2023/05.
 """
@@ -16,14 +16,14 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from policyengine.cli import main as cli_main
-from policyengine.core.release_manifest import (
+from policyengine.core.tax_benefit_model import TaxBenefitModel
+from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
+from policyengine.provenance.manifest import (
     DataReleaseManifest,
     get_data_release_manifest,
     get_release_manifest,
 )
-from policyengine.core.tax_benefit_model import TaxBenefitModel
-from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
-from policyengine.core.trace_tro import (
+from policyengine.provenance.trace import (
     POLICYENGINE_ORGANIZATION,
     TRACE_TROV_NAMESPACE,
     build_trace_tro_from_release_bundle,
@@ -472,7 +472,7 @@ class TestBundleTRO:
             return_value=data_release_manifest,
         ):
             with patch(
-                "policyengine.core.trace_tro.fetch_pypi_wheel_metadata",
+                "policyengine.provenance.trace.fetch_pypi_wheel_metadata",
                 side_effect=_fake_fetch_pypi,
             ):
                 tro = model_version.trace_tro
@@ -641,7 +641,7 @@ class TestCLI:
             return_value=data_release_manifest,
         ):
             with patch(
-                "policyengine.core.trace_tro.fetch_pypi_wheel_metadata",
+                "policyengine.provenance.trace.fetch_pypi_wheel_metadata",
                 side_effect=_fake_fetch_pypi,
             ):
                 exit_code = cli_main(["trace-tro", "us"])
@@ -661,7 +661,7 @@ class TestCLI:
             return_value=data_release_manifest,
         ):
             with patch(
-                "policyengine.core.trace_tro.fetch_pypi_wheel_metadata",
+                "policyengine.provenance.trace.fetch_pypi_wheel_metadata",
                 side_effect=_fake_fetch_pypi,
             ):
                 exit_code = cli_main(["trace-tro", "us", "--out", str(out)])

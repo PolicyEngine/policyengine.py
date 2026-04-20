@@ -5,7 +5,9 @@ from unittest.mock import MagicMock, patch
 
 from requests import Timeout
 
-from policyengine.core.release_manifest import (
+from policyengine.core.tax_benefit_model import TaxBenefitModel
+from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
+from policyengine.provenance.manifest import (
     DataCertification,
     DataReleaseManifestUnavailableError,
     certify_data_release_compatibility,
@@ -15,8 +17,6 @@ from policyengine.core.release_manifest import (
     resolve_dataset_reference,
     resolve_managed_dataset_reference,
 )
-from policyengine.core.tax_benefit_model import TaxBenefitModel
-from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
 from policyengine.tax_benefit_models.uk import (
     managed_microsimulation as managed_uk_microsimulation,
 )
@@ -45,9 +45,9 @@ class TestReleaseManifests:
         manifest = get_release_manifest("us")
 
         assert manifest.schema_version == 1
-        assert manifest.bundle_id == "us-3.5.0"
+        assert manifest.bundle_id == "us-4.0.0"
         assert manifest.country_id == "us"
-        assert manifest.policyengine_version == "3.5.0"
+        assert manifest.policyengine_version == "4.0.0"
         assert manifest.model_package.name == "policyengine-us"
         assert manifest.model_package.version == "1.653.3"
         assert manifest.data_package.name == "policyengine-us-data"
@@ -67,9 +67,9 @@ class TestReleaseManifests:
         manifest = get_release_manifest("uk")
 
         assert manifest.schema_version == 1
-        assert manifest.bundle_id == "uk-3.5.0"
+        assert manifest.bundle_id == "uk-4.0.0"
         assert manifest.country_id == "uk"
-        assert manifest.policyengine_version == "3.5.0"
+        assert manifest.policyengine_version == "4.0.0"
         assert manifest.model_package.name == "policyengine-uk"
         assert manifest.model_package.version == "2.88.0"
         assert manifest.data_package.name == "policyengine-uk-data"
@@ -179,7 +179,7 @@ class TestReleaseManifests:
         }
 
         with patch(
-            "policyengine.core.release_manifest.requests.get",
+            "policyengine.provenance.manifest.requests.get",
             return_value=_response_with_json(payload),
         ) as mock_get:
             manifest = get_data_release_manifest("us")
@@ -204,7 +204,7 @@ class TestReleaseManifests:
         response.status_code = 404
 
         with patch(
-            "policyengine.core.release_manifest.requests.get",
+            "policyengine.provenance.manifest.requests.get",
             return_value=response,
         ):
             try:
@@ -243,7 +243,7 @@ class TestReleaseManifests:
         }
 
         with patch(
-            "policyengine.core.release_manifest.requests.get",
+            "policyengine.provenance.manifest.requests.get",
             return_value=_response_with_json(payload),
         ):
             certification = certify_data_release_compatibility(
@@ -277,7 +277,7 @@ class TestReleaseManifests:
         }
 
         with patch(
-            "policyengine.core.release_manifest.requests.get",
+            "policyengine.provenance.manifest.requests.get",
             return_value=_response_with_json(payload),
         ):
             certification = certify_data_release_compatibility(
@@ -297,7 +297,7 @@ class TestReleaseManifests:
         get_data_release_manifest.cache_clear()
 
         with patch(
-            "policyengine.core.release_manifest.get_data_release_manifest",
+            "policyengine.provenance.manifest.get_data_release_manifest",
             side_effect=DataReleaseManifestUnavailableError("private repo"),
         ):
             certification = certify_data_release_compatibility(
@@ -314,11 +314,11 @@ class TestReleaseManifests:
 
         with (
             patch(
-                "policyengine.core.release_manifest.get_data_release_manifest",
+                "policyengine.provenance.manifest.get_data_release_manifest",
                 side_effect=DataReleaseManifestUnavailableError("private repo"),
             ),
             patch(
-                "policyengine.core.release_manifest.get_release_manifest",
+                "policyengine.provenance.manifest.get_release_manifest",
                 return_value=MagicMock(
                     certification=DataCertification(
                         compatibility_basis="matching_data_build_fingerprint",
@@ -345,7 +345,7 @@ class TestReleaseManifests:
         get_data_release_manifest.cache_clear()
 
         with patch(
-            "policyengine.core.release_manifest.get_data_release_manifest",
+            "policyengine.provenance.manifest.get_data_release_manifest",
             side_effect=Timeout("network timeout"),
         ):
             try:
@@ -381,7 +381,7 @@ class TestReleaseManifests:
         }
 
         with patch(
-            "policyengine.core.release_manifest.requests.get",
+            "policyengine.provenance.manifest.requests.get",
             return_value=_response_with_json(payload),
         ):
             try:
@@ -408,7 +408,7 @@ class TestReleaseManifests:
 
         bundle = model_version.release_bundle
 
-        assert bundle["bundle_id"] == "uk-3.5.0"
+        assert bundle["bundle_id"] == "uk-4.0.0"
         assert bundle["default_dataset"] == "enhanced_frs_2023_24"
         assert bundle["default_dataset_uri"] == manifest.default_dataset_uri
         assert bundle["certified_data_build_id"] == "policyengine-uk-data-1.40.4"
@@ -455,7 +455,7 @@ class TestReleaseManifests:
 
         dataset = mock_microsimulation.call_args.kwargs["dataset"]
         assert dataset == microsim.policyengine_bundle["runtime_dataset_source"]
-        assert microsim.policyengine_bundle["policyengine_version"] == "3.5.0"
+        assert microsim.policyengine_bundle["policyengine_version"] == "4.0.0"
         assert microsim.policyengine_bundle["runtime_dataset"] == "enhanced_cps_2024"
         assert (
             microsim.policyengine_bundle["runtime_dataset_uri"]
@@ -493,7 +493,7 @@ class TestReleaseManifests:
                 "hf://policyengine/policyengine-uk-data-private/"
                 "enhanced_frs_2023_24.h5@1.40.4"
             )
-        assert microsim.policyengine_bundle["policyengine_version"] == "3.5.0"
+        assert microsim.policyengine_bundle["policyengine_version"] == "4.0.0"
         assert microsim.policyengine_bundle["runtime_dataset"] == "enhanced_frs_2023_24"
         assert microsim.policyengine_bundle["runtime_dataset_uri"] == (
             "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.4"

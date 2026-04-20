@@ -23,9 +23,9 @@ A `Region` represents a geographic area with a unique prefixed code:
 Each model version has a `RegionRegistry` providing O(1) lookups:
 
 ```python
-from policyengine.tax_benefit_models.us import us_latest
+import policyengine as pe
 
-registry = us_latest.region_registry
+registry = pe.us.model.region_registry
 
 # Look up by code
 california = registry.get("state/ca")
@@ -43,9 +43,9 @@ ca_districts = registry.get_children("state/ca")
 ```
 
 ```python
-from policyengine.tax_benefit_models.uk import uk_latest
+import policyengine as pe
 
-registry = uk_latest.region_registry
+registry = pe.uk.model.region_registry
 
 # UK countries
 countries = registry.get_by_type("country")
@@ -74,10 +74,10 @@ from policyengine.core.scoping_strategy import RowFilterStrategy
 # Simulate only California households
 simulation = Simulation(
     dataset=dataset,
-    tax_benefit_model_version=us_latest,
+    tax_benefit_model_version=pe.us.model,
     scoping_strategy=RowFilterStrategy(
-        variable_name="state_code",
-        variable_value="CA",
+        variable_name="state_fips",
+        variable_value=6,  # California FIPS code
     ),
 )
 simulation.run()
@@ -89,7 +89,7 @@ This removes all non-California households from the dataset before running the s
 # UK: simulate only England
 simulation = Simulation(
     dataset=dataset,
-    tax_benefit_model_version=uk_latest,
+    tax_benefit_model_version=pe.uk.model,
     scoping_strategy=RowFilterStrategy(
         variable_name="country",
         variable_value="ENGLAND",
@@ -106,7 +106,7 @@ from policyengine.core.scoping_strategy import WeightReplacementStrategy
 
 simulation = Simulation(
     dataset=dataset,
-    tax_benefit_model_version=uk_latest,
+    tax_benefit_model_version=pe.uk.model,
     scoping_strategy=WeightReplacementStrategy(
         weight_matrix_bucket="policyengine-uk-data",
         weight_matrix_key="parliamentary_constituency_weights.h5",
@@ -118,29 +118,6 @@ simulation = Simulation(
 ```
 
 Unlike row filtering, weight replacement keeps all households but assigns region-specific weights. This is more statistically robust for small geographic areas where filtering would leave too few households.
-
-### Legacy filter fields
-
-For backward compatibility, `Simulation` also accepts `filter_field` and `filter_value` parameters, which are auto-converted to a `RowFilterStrategy`:
-
-```python
-# These two are equivalent:
-simulation = Simulation(
-    dataset=dataset,
-    tax_benefit_model_version=us_latest,
-    filter_field="state_code",
-    filter_value="CA",
-)
-
-simulation = Simulation(
-    dataset=dataset,
-    tax_benefit_model_version=us_latest,
-    scoping_strategy=RowFilterStrategy(
-        variable_name="state_code",
-        variable_value="CA",
-    ),
-)
-```
 
 ## Geographic impact outputs
 
@@ -230,19 +207,19 @@ from policyengine.core.scoping_strategy import RowFilterStrategy
 # State-level analysis
 baseline_sim = Simulation(
     dataset=dataset,
-    tax_benefit_model_version=us_latest,
+    tax_benefit_model_version=pe.us.model,
     scoping_strategy=RowFilterStrategy(
-        variable_name="state_code",
-        variable_value="CA",
+        variable_name="state_fips",
+        variable_value=6,  # California FIPS code
     ),
 )
 reform_sim = Simulation(
     dataset=dataset,
-    tax_benefit_model_version=us_latest,
+    tax_benefit_model_version=pe.us.model,
     policy=reform,
     scoping_strategy=RowFilterStrategy(
-        variable_name="state_code",
-        variable_value="CA",
+        variable_name="state_fips",
+        variable_value=6,  # California FIPS code
     ),
 )
 

@@ -1,11 +1,15 @@
-"""Fixtures for US reform application tests."""
+"""Fixtures for US reform application tests.
+
+Household fixtures are plain ``kwargs`` dicts ready to splat into
+``pe.us.calculate_household(**fixture)``.
+"""
 
 from datetime import date
 
 import pytest
 
 from policyengine.core import ParameterValue, Policy
-from policyengine.tax_benefit_models.us import USHouseholdInput, us_latest
+from policyengine.tax_benefit_models.us import us_latest
 
 
 def create_standard_deduction_policy(
@@ -56,51 +60,43 @@ LARGE_STANDARD_DEDUCTION_POLICY = create_standard_deduction_policy(
 )
 
 
-# Pre-built household fixtures
+# Pre-built household fixtures (as kwargs dicts for calculate_household)
 
-HIGH_INCOME_SINGLE_FILER = USHouseholdInput(
-    people=[
-        {
-            "age": 35,
-            "employment_income": 100000,
-            "is_tax_unit_head": True,
-        }
+HIGH_INCOME_SINGLE_FILER = {
+    "people": [
+        {"age": 35, "employment_income": 100000, "is_tax_unit_head": True},
     ],
-    tax_unit={"filing_status": "SINGLE"},
-    year=2024,
-)
+    "tax_unit": {"filing_status": "SINGLE"},
+    "year": 2024,
+}
 
-MODERATE_INCOME_SINGLE_FILER = USHouseholdInput(
-    people=[
-        {
-            "age": 30,
-            "employment_income": 50000,
-            "is_tax_unit_head": True,
-        }
+MODERATE_INCOME_SINGLE_FILER = {
+    "people": [
+        {"age": 30, "employment_income": 50000, "is_tax_unit_head": True},
     ],
-    tax_unit={"filing_status": "SINGLE"},
-    year=2024,
-)
+    "tax_unit": {"filing_status": "SINGLE"},
+    "year": 2024,
+}
 
-MARRIED_COUPLE_WITH_KIDS = USHouseholdInput(
-    people=[
+MARRIED_COUPLE_WITH_KIDS = {
+    "people": [
         {"age": 40, "employment_income": 100000, "is_tax_unit_head": True},
         {"age": 38, "employment_income": 50000, "is_tax_unit_spouse": True},
         {"age": 10},
         {"age": 8},
     ],
-    tax_unit={"filing_status": "JOINT"},
-    year=2024,
-)
+    "tax_unit": {"filing_status": "JOINT"},
+    "year": 2024,
+}
 
-LOW_INCOME_FAMILY = USHouseholdInput(
-    people=[
+LOW_INCOME_FAMILY = {
+    "people": [
         {"age": 28, "employment_income": 25000, "is_tax_unit_head": True},
         {"age": 5},
     ],
-    tax_unit={"filing_status": "HEAD_OF_HOUSEHOLD"},
-    year=2024,
-)
+    "tax_unit": {"filing_status": "HEAD_OF_HOUSEHOLD"},
+    "year": 2024,
+}
 
 
 # Pytest fixtures
@@ -108,17 +104,14 @@ LOW_INCOME_FAMILY = USHouseholdInput(
 
 @pytest.fixture
 def double_standard_deduction_policy():
-    """Pytest fixture for doubled standard deduction policy."""
     return DOUBLE_STANDARD_DEDUCTION_POLICY
 
 
 @pytest.fixture
 def high_income_single_filer():
-    """Pytest fixture for high income single filer household."""
     return HIGH_INCOME_SINGLE_FILER
 
 
 @pytest.fixture
 def married_couple_with_kids():
-    """Pytest fixture for married couple with kids household."""
     return MARRIED_COUPLE_WITH_KIDS
