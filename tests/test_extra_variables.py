@@ -92,6 +92,13 @@ def test__us_extra_variables_appear_on_output_dataset(tmp_path) -> None:
     sim = Simulation(
         dataset=dataset,
         tax_benefit_model_version=pe.us.model,
+        # Issue #303 used ``net_worth`` (imputed from SCF in later
+        # policyengine-us releases). Substituted with two variables
+        # present in the pinned 1.653.3 wheel so the test is
+        # hermetic: ``household_market_income`` is already a default
+        # (so we also cover the dedup path) and
+        # ``adjusted_gross_income`` is a tax_unit variable not in
+        # the defaults.
         extra_variables={
             "household": ["household_market_income"],
             "tax_unit": ["adjusted_gross_income"],
@@ -110,27 +117,80 @@ def test__us_extra_variables_appear_on_output_dataset(tmp_path) -> None:
     )
 
 
-# --- UK: resolver directly (full UK microsim fixture is heavier
-#   than needed to test the shared helper) --------------------------
+def _uk_fixture_dataset(tmp_path):
+    from policyengine.tax_benefit_models.uk.datasets import (
+        PolicyEngineUKDataset,
+        UKYearData,
+    )
+
+    # UK expects ``person_benunit_id`` / ``person_household_id`` as
+    # person-level columns (not ``benunit_id`` / ``household_id``).
+    person = MicroDataFrame(
+        pd.DataFrame(
+            {
+                "person_id": [1, 2],
+                "person_household_id": [1, 1],
+                "person_benunit_id": [1, 1],
+                "person_weight": [1_000.0, 1_000.0],
+                "age": [35, 33],
+                "employment_income": [30_000, 20_000],
+            }
+        ),
+        weights="person_weight",
+    )
+    benunit = MicroDataFrame(
+        pd.DataFrame({"benunit_id": [1], "benunit_weight": [1_000.0]}),
+        weights="benunit_weight",
+    )
+    household = MicroDataFrame(
+        pd.DataFrame(
+            {
+                "household_id": [1],
+                "household_weight": [1_000.0],
+                "region": ["LONDON"],
+                "tenure_type": ["RENT_PRIVATELY"],
+                "rent": [12_000.0],
+                "council_tax": [1_500.0],
+            }
+        ),
+        weights="household_weight",
+    )
+    return PolicyEngineUKDataset(
+        id="test-extra-vars-uk",
+        name="extra_variables UK fixture",
+        description="Small UK dataset for extra_variables regression",
+        filepath=str(tmp_path / "test-uk.h5"),
+        year=2026,
+        data=UKYearData(person=person, benunit=benunit, household=household),
+    )
 
 
-def test__uk_resolve_entity_variables_merges_extras() -> None:
-    """``resolve_entity_variables`` on the UK model must merge extras
-    into defaults the same way US does. Exercising the method directly
-    is sufficient — the UK ``run()`` calls it via the exact line that
-    US does, so identical behaviour there is a one-character diff.
+# --- UK: positive path (end-to-end) ---------------------------------
+
+
+def test__uk_extra_variables_appear_on_output_dataset(tmp_path) -> None:
+    """Issue #303 on the UK path. Integration test — proves that
+    ``uk/model.py`` actually calls ``resolve_entity_variables`` in its
+    ``run()``. A regression that reverts the call site to
+    ``self.entity_variables.items()`` must fail this test.
     """
     pytest.importorskip("policyengine_uk")
     import policyengine as pe
     from policyengine.core import Simulation
 
-    fake_sim = Simulation.model_construct(
-        extra_variables={"person": ["adjusted_net_income"]}
+    dataset = _uk_fixture_dataset(tmp_path)
+    sim = Simulation(
+        dataset=dataset,
+        tax_benefit_model_version=pe.uk.model,
+        extra_variables={"person": ["adjusted_net_income"]},
     )
-    resolved = pe.uk.model.resolve_entity_variables(fake_sim)
-    assert "adjusted_net_income" in resolved["person"]
-    # Non-targeted entities unchanged.
-    assert resolved["benunit"] == list(pe.uk.model.entity_variables["benunit"])
+    sim.run()
+
+    assert "adjusted_net_income" in sim.output_dataset.data.person.columns, (
+        "UK extra_variables['person'] entry missing from output_dataset — "
+        "likely a regression in uk/model.py:run() bypassing "
+        "resolve_entity_variables"
+    )
 
 
 def test__uk_resolve_entity_variables_raises_on_unknown_variable() -> None:
@@ -213,7 +273,58 @@ def test__resolve_entity_variables_dedupes_when_extra_overlaps_default(
     )
     sim.run()
 
+    income_tax_col = sim.output_dataset.data.tax_unit["income_tax"]
+    assert income_tax_col.notna().all(), (
+        "income_tax column has NaN entries after dedup — merge step "
+        "likely blanked the column"
+    )
     tax_unit_cols = list(sim.output_dataset.data.tax_unit.columns)
     assert tax_unit_cols.count("income_tax") == 1, (
         f"income_tax duplicated after extra_variables merge: {tax_unit_cols}"
     )
+
+
+# --- Resolver behavior: default / partial coverage ------------------
+
+
+def test__default_empty_extras_produces_exact_bundled_defaults(
+    tmp_path,
+) -> None:
+    """``Simulation`` defaults ``extra_variables`` to ``{}``. That
+    path must round-trip to exactly the bundled
+    ``entity_variables`` (no extra entries, no missing entries).
+    """
+    pytest.importorskip("policyengine_us")
+    import policyengine as pe
+    from policyengine.core import Simulation
+
+    sim = Simulation.model_construct(extra_variables={})
+    resolved = pe.us.model.resolve_entity_variables(sim)
+    for entity, defaults in pe.us.model.entity_variables.items():
+        assert resolved[entity] == list(defaults), (
+            f"Entity {entity!r}: expected defaults {list(defaults)} "
+            f"but got {resolved[entity]}"
+        )
+
+
+def test__partial_coverage_leaves_untouched_entities_unchanged(
+    tmp_path,
+) -> None:
+    """Passing extras for one entity must not modify any other
+    entity's resolved variable list.
+    """
+    pytest.importorskip("policyengine_us")
+    import policyengine as pe
+    from policyengine.core import Simulation
+
+    sim = Simulation.model_construct(
+        extra_variables={"household": ["household_market_income"]}
+    )
+    resolved = pe.us.model.resolve_entity_variables(sim)
+    # Entities NOT in extras must match the bundled defaults exactly.
+    for entity, defaults in pe.us.model.entity_variables.items():
+        if entity == "household":
+            continue
+        assert resolved[entity] == list(defaults), (
+            f"Untouched entity {entity!r} was mutated: {resolved[entity]}"
+        )

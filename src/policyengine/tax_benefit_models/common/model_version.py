@@ -19,6 +19,7 @@ from __future__ import annotations
 import datetime
 import os
 import warnings
+from difflib import get_close_matches
 from importlib import metadata
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Optional
@@ -241,8 +242,6 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
         does not resolve on the tax-benefit system's variable
         registry.
         """
-        from difflib import get_close_matches
-
         extras = dict(simulation.extra_variables or {})
         known_entities = set(self.entity_variables)
         unknown_entities = [e for e in extras if e not in known_entities]
