@@ -206,7 +206,10 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
             "household": pd.DataFrame(),
         }
 
-        for entity, variables in self.entity_variables.items():
+        # ``resolve_entity_variables`` merges the bundled defaults
+        # with caller-supplied ``simulation.extra_variables``; unknown
+        # entity keys or variable names raise with close-match hints.
+        for entity, variables in self.resolve_entity_variables(simulation).items():
             for var in variables:
                 data[entity][var] = microsim.calculate(
                     var, period=simulation.dataset.year, map_to=entity
