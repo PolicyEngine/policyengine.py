@@ -8,6 +8,18 @@ title: Microdata publishing (design sketch)
 > shape of a "from scratch" approach to publishing PolicyEngine
 > microdata. [Release bundles](release-bundles.md) remains the
 > authoritative doc for what ships today.
+>
+> **Honest framing.** The concrete pains motivating this sketch (HF
+> model-vs-dataset repo confusion; "is our data out of date?"
+> requiring manual inspection) are **not on the critical path for
+> this architecture**. They're fixable with (a) a one-time HF
+> repo-type migration or a small refactor of the HF URL resolver,
+> and (b) a ~50-line CI job diffing the bundled manifest's model
+> sha256 against the current model wheel. The sketch below is a
+> genuinely cleaner architecture, but adopting it is an answer to
+> "where do we want to be in a year?", not "how do we fix the
+> immediate 310 bug?" Readers should choose whether the cleaner
+> shape is worth the cost *independently* of the motivating pains.
 
 Today's stack layers PyPI (country models), PyPI _and_ Hugging Face
 (country data), the `policyengine-{us,uk}-data` GitHub repos (build
@@ -254,6 +266,84 @@ Three questions that are hard today become one-liners:
 - **Cost**. Object-store + egress bandwidth is small money but not
   zero.
 
+## Unresolved risks
+
+These are the non-trivial places the sketch punts. Before accepting
+this design we'd want explicit answers.
+
+### UK Data Service audit trail
+
+Today HF logs who pulls a private-gated tag via auth token. Under the
+sketch, auth happens at the bucket but identity resolves through
+two hops (channel JSON → manifest + payload), and object-store
+access logs record GETs against opaque `build_id` paths, not "user
+X downloaded UK enhanced FRS derived from FRS 2023-24". Any audit
+response needs a join between bucket logs and manifests, offline.
+**Decision needed**: state the audit story explicitly (probably: gate
+the *manifest* fetch, not just the payload, so the resolver hit is
+auditable; maintain a per-country access log keyed on manifest
+content).
+
+### Silent-promote attack
+
+An adversary with bucket write access rewrites `channels/us/stable.json`
+to point at a `build_id` whose manifest is quietly wrong (fork of
+the calibration that drops a progressivity adjustment). sha256
+verification only protects payload-vs-manifest integrity; it
+doesn't authenticate the channel pointer. This makes the sketch
+**strictly weaker** than today, because PyPI/HF have platform-level
+account auth auditing on tag pushes.
+**Decision needed**: promote the "channel-history signing" open
+question to v1. Either (a) sign channel JSON with a key pinned in
+`pe.py`, with a documented rollover story; or (b) require channel
+updates to land via signed GitHub commits to a `channels/` repo
+that the bucket mirrors. Without one of these, don't ship.
+
+### Non-deterministic builds
+
+Today's Enhanced CPS pipeline uses torch + pandas imputation with
+known non-determinism (dict iteration, torch seeds). The sketch
+assumes `build_id` is stable across re-runs of identical inputs,
+but doesn't state what happens when it isn't. Two CI runs writing
+slightly different bytes under the same `build_id` would cause
+consumer sha256 verification to fail randomly depending on which
+object each resolver fetched.
+**Decision needed**: (a) gate all writes with `If-None-Match: *` so
+concurrent writes are detected, not silently overwritten; (b)
+explicitly state that v1 tolerates "first-writer-wins with 409 on
+conflict" rather than demanding bit-level determinism; (c)
+acknowledge that "optional for v1" for lockfile digests is
+understating the scope — genuine bit-level determinism is a
+multi-month project.
+
+### Licence revocation vs immutability
+
+"Immutable forever" and "retagging impossible" are sold as features
+but conflict with the reality that upstream licensors (Census
+Bureau, UK Data Service) can yank the right to redistribute.
+Today's mitigation is deleting the HF tag + yanking the PyPI
+release. Under the sketch, deleting the object breaks every paper
+pinned to that `build_id`; keeping it risks licence breach.
+**Decision needed**: add a *tombstone* concept — `build_id`
+resolvable to a manifest with `status: "revoked", reason: "..."`
+but no payload. Channel pointers fall back to the most recent
+non-revoked `build_id`. The replicability guarantee in the doc
+must be qualified: "subject to licence continuity of the source
+microdata".
+
+### Cross-cloud replication
+
+"Any org serves the same bytes" is true for payloads (sha256
+verifies). For *channels* it's false — a channel is authoritative
+at one URL. An EU mirror either (a) polls the primary and lags,
+(b) gets write access (violates authority), or (c) publishes its
+own channel namespace. The consumer resolver currently assumes
+one channel URL.
+**Decision needed**: be explicit that v1 replicates payloads
+trivially but channels require either a pull-through proxy or a
+consumer-side multi-mirror config. Don't advertise what we don't
+build.
+
 ## Open questions
 
 - Single bucket shared with `policyengine-core` + dashboards, or
@@ -263,5 +353,17 @@ Three questions that are hard today become one-liners:
 - Parquet vs HDF5 for the payload format? (Lean: parquet for new
   builds; legacy HDF5 for the existing Enhanced CPS until all
   consumers migrate.)
-- Channel-history signing — do we want a transparency log so
-  `stable` can't be silently retargeted? (Lean: yes, v2.)
+
+## Revised cost estimate
+
+The earlier "3 engineer-weeks" was optimistic. Stress-test surfaced
+four multi-month items:
+
+- Bit-level determinism (or explicit first-writer-wins semantics)
+- Channel signing + trust-root rollover story
+- Takedown semantics + tombstone integration
+- Audit-log pipeline for UK-gated content
+
+Realistic range: **8–12 engineer-weeks**, largely independent of each
+other, so with 2 engineers + agents ~6–8 calendar weeks is plausible.
+Treat this as a v5 scope item, not a v4.x stretch.
