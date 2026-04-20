@@ -15,6 +15,9 @@ force provenance imports on every consumer.
     )
 """
 
+from .bundle import RefreshResult as RefreshResult
+from .bundle import refresh_release_bundle as refresh_release_bundle
+from .bundle import regenerate_trace_tro as regenerate_trace_tro
 from .manifest import (
     CertifiedDataArtifact as CertifiedDataArtifact,
 )
