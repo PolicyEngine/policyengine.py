@@ -97,25 +97,48 @@ def _pypi_wheel_metadata(package: str, version: str) -> dict:
 
 
 def _hf_dataset_sha256(repo_id: str, path: str, revision: str) -> str:
-    """Fetch the dataset file's sha256 by streaming the resolve URL.
+    """Fetch the HF artifact's sha256 by streaming the resolve URL.
 
-    Uses the ``HUGGING_FACE_TOKEN`` env var for private repos. Streams
-    the file in 8 MiB chunks so memory usage stays flat.
+    ``repo_id`` may name either a HF *dataset* repo or a *model* repo —
+    PolicyEngine publishes country microdata under model repos
+    (historical reasons), so we try the no-prefix URL first and fall
+    back to ``/datasets/`` on 404.
+
+    Uses ``HUGGING_FACE_TOKEN`` (or ``HF_TOKEN``) for private repos.
+    Streams 8 MiB chunks so memory usage stays flat.
     """
-    url = f"https://huggingface.co/datasets/{repo_id}/resolve/{revision}/{path}"
+    from urllib.error import HTTPError
+
     headers = {"User-Agent": "policyengine.py"}
     token = os.environ.get("HUGGING_FACE_TOKEN") or os.environ.get("HF_TOKEN")
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
-    hasher = hashlib.sha256()
-    with urlopen(Request(url, headers=headers)) as f:
-        while True:
-            chunk = f.read(8 * 1024 * 1024)
-            if not chunk:
-                break
-            hasher.update(chunk)
-    return hasher.hexdigest()
+    candidates = [
+        # Model repo (no prefix) — how policyengine-{us,uk}-data publish.
+        f"https://huggingface.co/{repo_id}/resolve/{revision}/{path}",
+        # Dataset repo — standard HF dataset path.
+        f"https://huggingface.co/datasets/{repo_id}/resolve/{revision}/{path}",
+    ]
+    last_error: Optional[Exception] = None
+    for url in candidates:
+        try:
+            hasher = hashlib.sha256()
+            with urlopen(Request(url, headers=headers)) as f:
+                while True:
+                    chunk = f.read(8 * 1024 * 1024)
+                    if not chunk:
+                        break
+                    hasher.update(chunk)
+            return hasher.hexdigest()
+        except HTTPError as exc:
+            if exc.code != 404:
+                raise
+            last_error = exc
+    raise ValueError(
+        f"Could not resolve HF artifact {repo_id}/{path}@{revision} as "
+        f"either a model or dataset repo: {last_error}"
+    )
 
 
 # ---------------------------------------------------------------------------
