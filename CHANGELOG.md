@@ -1,3 +1,11 @@
+## [4.1.1] - 2026-04-20
+
+### Fixed
+
+- Fixed `Simulation.extra_variables` being silently ignored on the US and UK microsim paths. The field is declared on the base `Simulation` and honored by the household calculator, but the country `run()` methods previously only iterated `self.entity_variables` — extras passed via `Simulation(extra_variables={...})` never reached the output dataset. Both country paths now route through a shared `MicrosimulationModelVersion.resolve_entity_variables` helper that merges defaults with extras, dedupes overlapping entries, and validates entity keys + variable names with close-match suggestions. Closes #303.
+- Fixed structural-reform propagation in the US microsim path. `Simulation(policy={"gov.contrib.ctc.*": ...})` previously crashed at `.ensure()` with `AttributeError: 'NoneType' object has no attribute 'entity'` because `_build_simulation_from_dataset` instantiated entities against the module-level `policyengine_us.system` (no reform applied) instead of `microsim.tax_benefit_system` (reform applied). Published external reforms that activate all three `gov.contrib.ctc.*.in_effect` gates (e.g., app.policyengine.org policy 94589) now run end-to-end through `pe.us.economic_impact_analysis`.
+
+
 ## [4.1.0] - 2026-04-20
 
 ### Added
