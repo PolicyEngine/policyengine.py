@@ -200,10 +200,7 @@ def test__bump_data_only_streams_hf_and_updates_uri(sandbox) -> None:
 
     written = json.loads((sandbox["manifest_dir"] / "us.json").read_text())
     assert written["data_package"]["version"] == "1.83.4"
-    assert (
-        written["certified_data_artifact"]["data_package"]["version"]
-        == "1.83.4"
-    )
+    assert written["certified_data_artifact"]["data_package"]["version"] == "1.83.4"
     assert written["certified_data_artifact"]["build_id"] == (
         "policyengine-us-data-1.83.4"
     )
