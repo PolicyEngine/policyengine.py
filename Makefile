@@ -1,15 +1,18 @@
-.PHONY: docs docs-serve
-
-MYSTMD_VERSION ?= 1.8.3
-MYST_CMD = npx --yes mystmd@$(MYSTMD_VERSION)
+.PHONY: docs docs-serve docs-generate-reference
 
 all: build-package
 
 docs:
-	cd docs && $(MYST_CMD) build --html
+	quarto render docs
 
 docs-serve:
-	cd docs && $(MYST_CMD) start
+	quarto preview docs
+
+# Regenerate the auto-generated variable / program reference under docs/reference/.
+# Run once per country model release; commits the refreshed pages alongside code.
+docs-generate-reference:
+	python docs/_generator/build_reference.py --country us --out docs/reference/us
+	python docs/_generator/build_reference.py --country uk --out docs/reference/uk
 
 install:
 	uv pip install -e .[dev]
