@@ -3,6 +3,7 @@
 import pytest
 
 from policyengine.core.region import Region, RegionRegistry
+from policyengine.core.scoping_strategy import RowFilterStrategy
 
 
 def create_national_region(
@@ -43,15 +44,16 @@ def create_place_region(
     name: str,
     state_name: str,
 ) -> Region:
-    """Create a place region that filters from parent state."""
+    """Create a place region that scopes from parent state via row filter."""
     return Region(
         code=f"place/{state_code}-{fips}",
         label=name,
         region_type="place",
         parent_code=f"state/{state_code.lower()}",
-        requires_filter=True,
-        filter_field="place_fips",
-        filter_value=fips,
+        scoping_strategy=RowFilterStrategy(
+            variable_name="place_fips",
+            variable_value=fips,
+        ),
         state_code=state_code,
         state_name=state_name,
     )
@@ -107,9 +109,10 @@ FILTER_REGION = Region(
     label="Paterson",
     region_type="place",
     parent_code="state/nj",
-    requires_filter=True,
-    filter_field="place_fips",
-    filter_value="57000",
+    scoping_strategy=RowFilterStrategy(
+        variable_name="place_fips",
+        variable_value="57000",
+    ),
     state_code="NJ",
     state_name="New Jersey",
 )

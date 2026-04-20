@@ -24,7 +24,7 @@ import os
 from collections.abc import Iterable, Mapping
 from typing import Any, Optional
 
-from .release_manifest import (
+from .manifest import (
     CountryReleaseManifest,
     DataCertification,
     DataReleaseManifest,

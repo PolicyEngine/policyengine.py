@@ -43,18 +43,19 @@ class TestRegion:
         assert region.state_code == "CA"
         assert not region.requires_filter
 
-    def test__given_filter_configuration__then_region_requires_filter(self):
-        """Given: Region with requires_filter=True and filter fields
+    def test__given_scoping_strategy__then_region_requires_filter(self):
+        """Given: Region with a RowFilterStrategy on the parent dataset
         When: Creating the Region
-        Then: Region is configured for filtering from parent
+        Then: Region.requires_filter is derived from scoping_strategy presence
         """
-        # Given (using fixture)
+        from policyengine.core.scoping_strategy import RowFilterStrategy
+
         region = FILTER_REGION
 
-        # Then
         assert region.requires_filter is True
-        assert region.filter_field == "place_fips"
-        assert region.filter_value == "57000"
+        assert isinstance(region.scoping_strategy, RowFilterStrategy)
+        assert region.scoping_strategy.variable_name == "place_fips"
+        assert region.scoping_strategy.variable_value == "57000"
 
     def test__given_same_codes__then_regions_are_equal(self):
         """Given: Two regions with the same code

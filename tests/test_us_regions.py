@@ -210,8 +210,9 @@ class TestUSRegionRegistry:
         assert la.region_type == "place"
         assert la.parent_code == "state/ca"
         assert la.requires_filter
-        assert la.filter_field == "place_fips"
-        assert la.filter_value == "44000"
+        assert la.scoping_strategy is not None
+        assert la.scoping_strategy.variable_name == "place_fips"
+        assert la.scoping_strategy.variable_value == "44000"
         assert la.state_code == "CA"
         assert la.dataset_path is None  # No dedicated dataset
 

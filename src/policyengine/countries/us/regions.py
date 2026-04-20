@@ -8,8 +8,8 @@ in the data/ subdirectory:
 """
 
 from policyengine.core.region import Region, RegionRegistry
-from policyengine.core.release_manifest import resolve_region_dataset_path
 from policyengine.core.scoping_strategy import RowFilterStrategy
+from policyengine.provenance.manifest import resolve_region_dataset_path
 
 from .data import AT_LARGE_STATES, DISTRICT_COUNTS, US_PLACES, US_STATES
 
@@ -101,9 +101,6 @@ def build_us_region_registry() -> RegionRegistry:
                 label=place["name"],
                 region_type="place",
                 parent_code=f"state/{state_abbrev.lower()}",
-                requires_filter=True,
-                filter_field="place_fips",
-                filter_value=fips,
                 state_code=state_abbrev,
                 state_name=place["state_name"],
                 scoping_strategy=RowFilterStrategy(

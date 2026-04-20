@@ -23,7 +23,7 @@ dependencies used in CI (pytest, ruff, mypy, towncrier).
 ```bash
 make format           # ruff format
 make test             # pytest with coverage
-make docs             # build static MyST/Jupyter Book 2 HTML docs
+make docs             # build static Quarto HTML docs
 make docs-serve       # preview the docs locally
 make clean            # remove caches, build artifacts, .h5 files
 ```
@@ -70,7 +70,7 @@ This project uses [towncrier](https://towncrier.readthedocs.io/) for changelog m
 
 ```bash
 # Fragment types: breaking, added, changed, fixed, removed
-echo "Description of change" > changelog.d/my-change.added
+echo "Description of change" > changelog.d/my-branch.added.md
 ```
 
 On merge, the versioning workflow bumps the version, builds the changelog, and creates a GitHub Release.
@@ -83,12 +83,18 @@ For the target release-bundle architecture, see [Release bundles](release-bundle
 
 ```
 src/policyengine/
+├── __init__.py            # Public surface: `pe.uk`, `pe.us`, `pe.Simulation`
+├── cli.py                 # `policyengine` entry point (e.g. TRACE TRO emission)
 ├── core/                  # Domain models (Simulation, Dataset, Policy, etc.)
 ├── tax_benefit_models/
-│   ├── uk/                # UK model, datasets, analysis, outputs
-│   └── us/                # US model, datasets, analysis, outputs
+│   ├── common/            # MicrosimulationModelVersion base, result types, reform compiler
+│   ├── uk/                # UK model, datasets, household calculator, reform analysis
+│   └── us/                # US model, datasets, household calculator, reform analysis
 ├── outputs/               # Output templates (Aggregate, Poverty, etc.)
-├── countries/             # Geographic region registries
+├── results/               # Typed results + schema validation
+├── provenance/            # Release manifests + TRACE TRO export
+├── countries/             # Geographic region registries (scoping, constituencies, districts)
+├── data/                  # Bundled release manifests and schemas
 └── utils/                 # Helpers (reforms, entity mapping, plotting)
 ```
 
@@ -98,7 +104,7 @@ src/policyengine/
 
 **HDF5 for storage**: Datasets and simulation outputs are stored as HDF5 files. No database server is required. The `MicroDataFrame` from the `microdf` package wraps pandas DataFrames with weight-aware `.sum()`, `.mean()`, `.count()`.
 
-**Country-specific model classes**: `PolicyEngineUSLatest` and `PolicyEngineUKLatest` each implement `run()`, `save()`, and `load()`. The US model passes reforms as a dict at `Microsimulation(reform=...)` construction time. The UK model supports both parametric reforms and `simulation_modifier` callables applied post-construction.
+**Country-specific model classes**: `PolicyEngineUSLatest` and `PolicyEngineUKLatest` inherit from a shared `MicrosimulationModelVersion` base (variable/parameter loading, manifest certification, `save`/`load`). Each subclass only implements `run()` and a handful of country hooks (`_load_system`, `_load_region_registry`, `_dataset_class`, `_get_runtime_data_build_metadata`). The US `run` applies reforms as a dict at `Microsimulation(reform=...)` construction time; the UK `run` wraps inputs as `UKSingleYearDataset` and applies reforms via a modifier after construction.
 
 **LRU cache + file caching**: `Simulation.ensure()` checks an in-process LRU cache (max 100 entries), then tries loading from disk, then falls back to `run()` + `save()`.
 

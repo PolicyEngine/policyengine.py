@@ -1,3 +1,133 @@
+## [4.2.1] - 2026-04-20
+
+### Changed
+
+- Rewrite docs content for the v4 API: separate pages per task (households, reforms, microsim, outputs, impact analysis, regions), updated code samples against real output classes and `Simulation` dict reforms.
+
+
+## [4.2.0] - 2026-04-20
+
+### Added
+
+- Added ``policyengine.graph`` — a static-analysis-based variable dependency graph for PolicyEngine source trees. ``extract_from_path(path)`` walks a directory of Variable subclasses, parses formula-method bodies for ``entity("<var>", period)`` and ``add(entity, period, [list])`` references, and returns a ``VariableGraph``. Queries include ``deps(var)`` (direct dependencies), ``impact(var)`` (transitive downstream), and ``path(src, dst)`` (shortest dependency chain). No runtime dependency on country models — indexes ``policyengine-us`` (4,577 variables) in under a second.
+
+
+## [4.1.1] - 2026-04-20
+
+### Fixed
+
+- Fixed `Simulation.extra_variables` being silently ignored on the US and UK microsim paths. The field is declared on the base `Simulation` and honored by the household calculator, but the country `run()` methods previously only iterated `self.entity_variables` — extras passed via `Simulation(extra_variables={...})` never reached the output dataset. Both country paths now route through a shared `MicrosimulationModelVersion.resolve_entity_variables` helper that merges defaults with extras, dedupes overlapping entries, and validates entity keys + variable names with close-match suggestions. Closes #303.
+- Fixed structural-reform propagation in the US microsim path. `Simulation(policy={"gov.contrib.ctc.*": ...})` previously crashed at `.ensure()` with `AttributeError: 'NoneType' object has no attribute 'entity'` because `_build_simulation_from_dataset` instantiated entities against the module-level `policyengine_us.system` (no reform applied) instead of `microsim.tax_benefit_system` (reform applied). Published external reforms that activate all three `gov.contrib.ctc.*.in_effect` gates (e.g., app.policyengine.org policy 94589) now run end-to-end through `pe.us.economic_impact_analysis`.
+
+
+## [4.1.0] - 2026-04-20
+
+### Added
+
+- ``Simulation(policy={...})`` and ``Simulation(dynamic={...})`` now accept the same flat ``{"param.path": value}`` / ``{"param.path": {date: value}}`` dict that ``pe.{uk,us}.calculate_household(reform=...)`` accepts. Dicts are compiled to full ``Policy`` / ``Dynamic`` objects on construction using the ``tax_benefit_model_version`` for parameter-path validation and ``dataset.year`` for scalar effective-date defaulting. Removes the last place where population microsim required building ``Parameter`` / ``ParameterValue`` by hand.
+- **BREAKING (v4):** Collapse the household-calculator surface into a
+  single agent-friendly entry point, ``pe.us.calculate_household`` /
+  ``pe.uk.calculate_household``.
+
+  New public API:
+
+  - ``policyengine/__init__.py`` populated with canonical accessors:
+    ``pe.us``, ``pe.uk``, ``pe.Simulation`` (replacing the empty top-level
+    module). ``import policyengine as pe`` now gives you everything a
+    new coding session needs to reach in one line.
+  - ``pe.us.calculate_household(**kwargs)`` and ``pe.uk.calculate_household``
+    take flat keyword arguments (``people``, per-entity overrides,
+    ``year``, ``reform``, ``extra_variables``) instead of a pydantic
+    input wrapper.
+  - ``reform=`` accepts a plain dict: ``{parameter_path: value}`` or
+    ``{parameter_path: {effective_date: value}}``. Compiles internally.
+  - Returns :class:`HouseholdResult` (new) with dot-access:
+    ``result.tax_unit.income_tax``, ``result.household.household_net_income``,
+    ``result.person[0].age``. Singleton entities are
+    :class:`EntityResult`; ``person`` is a list of them. ``to_dict()``
+    and ``write(path)`` serialize to JSON.
+  - ``extra_variables=[...]`` is now a flat list; the library dispatches
+    each name to its entity by looking it up on the model.
+  - Unknown variable names (in ``people``, entity overrides, or
+    ``extra_variables``) raise ``ValueError`` with a ``difflib`` close-match
+    suggestion and a paste-able fix hint.
+  - Unknown dot-access on a result raises ``AttributeError`` with the
+    list of available variables plus the ``extra_variables=[...]`` call
+    that would surface the requested one.
+
+  Removed (v4 breaking):
+
+  - ``USHouseholdInput`` / ``UKHouseholdInput`` / ``USHouseholdOutput`` /
+    ``UKHouseholdOutput`` pydantic wrappers.
+  - ``calculate_household_impact`` — the name was misleading (it
+    returned levels, not an impact vs. baseline). Reserved for a future
+    delta function.
+  - The bare ``us_model`` / ``uk_model`` label-only singletons; each
+    country module now exposes ``.model`` pointing at the real
+    ``TaxBenefitModelVersion`` (kept ``us_latest`` / ``uk_latest``
+    aliases for compatibility with any in-flight downstream code).
+
+  New internal module:
+
+  - ``policyengine.tax_benefit_models.common`` — ``compile_reform``,
+    ``dispatch_extra_variables``, ``EntityResult``, ``HouseholdResult``
+    shared by both country implementations.
+
+### Changed
+
+- Extracted shared `MicrosimulationModelVersion` base class in `policyengine.tax_benefit_models.common`. Country subclasses now declare class-level metadata (`country_code`, `package_name`, `group_entities`) and implement a handful of thin hooks; `run()` stays per-country. Byte-level snapshot tests verify zero output drift.
+- Documentation refreshed for the v4 agent-first surface. README, `core-concepts`, `economic-impact-analysis`, `country-models-{uk,us}`, `regions-and-scoping`, `examples`, and `dev` now lead with `pe.uk.*` / `pe.us.*` entry points and flat-kwarg `calculate_household` usage. Removed leftover docs for the dropped `filter_field`/`filter_value` simulation fields. `examples/household_impact_example.py` rewritten against the v4 API.
+- **BREAKING (v4):** Separate the provenance layer from the core
+  value-object layer.
+
+  - ``policyengine/core/release_manifest.py`` → ``policyengine/provenance/manifest.py``
+  - ``policyengine/core/trace_tro.py`` → ``policyengine/provenance/trace.py``
+  - New ``policyengine.provenance`` package re-exports the public
+    surface (``get_release_manifest``, ``get_data_release_manifest``,
+    ``build_trace_tro_from_release_bundle``, ``build_simulation_trace_tro``,
+    ``serialize_trace_tro``, ``canonical_json_bytes``,
+    ``compute_trace_composition_fingerprint``, etc.).
+  - ``policyengine.core`` no longer re-exports provenance types.
+    ``policyengine.core`` shrinks to value objects only (Dataset,
+    Variable, Parameter, Policy, Dynamic, Simulation, Region,
+    TaxBenefitModel, TaxBenefitModelVersion, scoping strategies).
+  - ``import policyengine.core.scoping_strategy`` no longer imports
+    ``h5py`` at module load; the weight-replacement code path
+    lazy-imports it. ``import policyengine.outputs.constituency_impact``
+    and ``import policyengine.outputs.local_authority_impact`` do the
+    same.
+  - Migration for downstream: replace
+    ``from policyengine.core import DataReleaseManifest`` (et al.)
+    with ``from policyengine.provenance import DataReleaseManifest``.
+    The country-module imports in internal code (``tax_benefit_models/{us,uk}/model.py``
+    and ``datasets.py``) are already updated.
+
+
+## [3.7.0] - 2026-04-19
+
+### Removed
+
+- Pre-launch cleanup — remove dead code and drop `plotly` from the core dependency set:
+
+  - Delete `policyengine.tax_benefit_models.us` and `policyengine.tax_benefit_models.uk` module shims. Python resolves the package directory first, so the `.py` shims were always shadowed; worse, both attempted to re-export `general_policy_reform_analysis` which is not defined anywhere, making `from policyengine.tax_benefit_models.us import general_policy_reform_analysis` raise `ImportError` at runtime.
+  - Delete `_create_entity_output_model` plus the `PersonOutput` / `BenunitOutput` / `HouseholdEntityOutput` factory products in `policyengine.tax_benefit_models.uk.analysis` — built via `pydantic.create_model` but never referenced anywhere in the codebase.
+  - Delete `policyengine.core.DatasetVersion` (only consumer was an `Optional` field on `Dataset` that was never set, and the `policyengine.core` re-export).
+  - Move `plotly>=5.0.0` from the base install to a new `policyengine[plotting]` extra. Only `policyengine.utils.plotting` uses it, and that module is itself only used by the `examples/` scripts. The package now imports cleanly without `plotly`.
+- **BREAKING (v4):** Remove the legacy `filter_field` / `filter_value`
+  fields from `Simulation` and `Region`, the `_auto_construct_strategy`
+  model validator that rewrote them into a `RowFilterStrategy`, and the
+  `_filter_dataset_by_household_variable` methods they fed on both
+  country models. All scoping now flows through `scoping_strategy:
+  Optional[ScopingStrategy]`. `Region.requires_filter` becomes a derived
+  property (`True` iff `scoping_strategy is not None`). The sub-national
+  region factories (`countries/us/regions.py`, `countries/uk/regions.py`)
+  construct `scoping_strategy=RowFilterStrategy(...)` /
+  `WeightReplacementStrategy(...)` directly. Callers that previously
+  passed `filter_field="place_fips", filter_value="44000"` now pass
+  `scoping_strategy=RowFilterStrategy(variable_name="place_fips",
+  variable_value="44000")`.
+
+
 ## [3.6.0] - 2026-04-18
 
 ### Added
