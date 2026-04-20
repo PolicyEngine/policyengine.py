@@ -179,7 +179,15 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         reform_dict = merge_reform_dicts(policy_reform, dynamic_reform)
 
         microsim = Microsimulation(reform=reform_dict)
-        self._build_simulation_from_dataset(microsim, dataset, system)
+        # Use ``microsim.tax_benefit_system``, not the module-level
+        # ``system``: ``Microsimulation.__init__`` applies structural
+        # reforms (e.g. ``gov.contrib.ctc.*``) to its per-sim system but
+        # leaves the module-level one untouched. Building populations
+        # against the module-level system would hide reform-registered
+        # variables like ``ctc_minimum_refundable_amount`` at calc time.
+        self._build_simulation_from_dataset(
+            microsim, dataset, microsim.tax_benefit_system
+        )
 
         data = {
             "person": pd.DataFrame(),
