@@ -25,8 +25,6 @@ from pathlib import Path
 from textwrap import dedent
 from types import ModuleType
 
-import pytest
-
 
 # ``policyengine/__init__.py`` eagerly imports the full country-model
 # stack (policyengine-us, policyengine-uk), which makes a normal

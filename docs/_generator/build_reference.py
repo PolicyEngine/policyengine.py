@@ -85,7 +85,9 @@ class VariableRecord:
     tree_path: tuple[str, ...]
 
 
-def _tree_path_from_source(source_file: Path | None, package_root: Path) -> tuple[str, ...]:
+def _tree_path_from_source(
+    source_file: Path | None, package_root: Path
+) -> tuple[str, ...]:
     if source_file is None:
         return ("_ungrouped",)
     try:
@@ -131,7 +133,9 @@ def _variable_records(country: str) -> Iterable[VariableRecord]:
         value_type_name = (
             value_type.__name__
             if isinstance(value_type, type)
-            else str(value_type) if value_type is not None else None
+            else str(value_type)
+            if value_type is not None
+            else None
         )
         defined_for = getattr(variable, "defined_for", None)
         defined_for_name = (
@@ -185,7 +189,10 @@ def _render_variable_page(record: VariableRecord, country: str) -> str:
         ("Entity", f"`{record.entity}`" if record.entity else "—"),
         ("Value type", f"`{record.value_type}`" if record.value_type else "—"),
         ("Unit", f"`{record.unit}`" if record.unit else "—"),
-        ("Period", f"`{record.definition_period}`" if record.definition_period else "—"),
+        (
+            "Period",
+            f"`{record.definition_period}`" if record.definition_period else "—",
+        ),
         (
             "Defined for",
             f"`{record.defined_for}`" if record.defined_for else "—",
@@ -230,9 +237,7 @@ def _render_variable_page(record: VariableRecord, country: str) -> str:
 
     if record.source_file:
         try:
-            repo_rel = record.source_file.relative_to(
-                record.source_file.parents[5]
-            )
+            repo_rel = record.source_file.relative_to(record.source_file.parents[5])
         except (ValueError, IndexError):
             repo_rel = record.source_file.name
         lines.append("## Source")

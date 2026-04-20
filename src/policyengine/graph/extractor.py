@@ -34,10 +34,9 @@ from __future__ import annotations
 import ast
 import os
 from pathlib import Path
-from typing import Iterable, Iterator, Sequence, Union
+from typing import Iterable, Iterator, Union
 
 from policyengine.graph.graph import VariableGraph
-
 
 # Names of entity instances as they appear as method parameters in
 # Variable formulas. Any ``Call`` whose ``func`` is a bare ``Name``
