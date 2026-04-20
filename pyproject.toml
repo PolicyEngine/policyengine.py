@@ -36,6 +36,9 @@ policyengine = "policyengine.cli:main"
 plotting = [
     "plotly>=5.0.0",
 ]
+graph = [
+    "networkx>=3.0",
+]
 uk = [
     "policyengine_core>=3.25.0",
     "policyengine-uk==2.88.0",
