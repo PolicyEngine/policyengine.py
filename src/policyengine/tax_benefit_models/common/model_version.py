@@ -290,13 +290,21 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
 
     def save(self, simulation: Simulation) -> None:
         """Persist the simulation's output dataset to its bundled filepath."""
+        if simulation.output_dataset is None:
+            raise ValueError(
+                "Simulation.save() called with no output_dataset. Run "
+                "simulation.run() or simulation.ensure() first so there is "
+                "something to persist."
+            )
         simulation.output_dataset.save()
 
     def load(self, simulation: Simulation) -> None:
         """Rehydrate the simulation's output dataset from disk.
 
-        Loads timestamps from filesystem metadata when the file exists so
-        serialised simulations round-trip ``created_at``/``updated_at``.
+        Filesystem ``ctime``/``mtime`` on the output file are mirrored onto
+        ``simulation.created_at`` / ``updated_at`` on load — these fields
+        are not written back on ``save()``, so they're filesystem
+        approximations, not a true round-trip of the original timestamps.
         """
         filepath = str(
             Path(simulation.dataset.filepath).parent / (simulation.id + ".h5")
