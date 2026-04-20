@@ -228,8 +228,11 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
                 if target_col in id_columns:
                     data["person"][target_col] = person_input_df[col].values
 
-        # Calculate non-ID, non-weight variables from simulation
-        for entity, variables in self.entity_variables.items():
+        # Calculate non-ID, non-weight variables from simulation.
+        # ``resolve_entity_variables`` merges bundled defaults with
+        # caller-supplied ``simulation.extra_variables``; unknown
+        # entity keys or variable names raise with close-match hints.
+        for entity, variables in self.resolve_entity_variables(simulation).items():
             for var in variables:
                 if var not in id_columns and var not in weight_columns:
                     data[entity][var] = microsim.calculate(

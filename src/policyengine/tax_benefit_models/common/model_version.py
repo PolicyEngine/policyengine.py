@@ -225,6 +225,70 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
         person_data = pd.DataFrame(dataset.data.person)
         return build_entity_relationships(person_data, self.group_entities)
 
+    def resolve_entity_variables(
+        self,
+        simulation: Simulation,
+    ) -> dict[str, list[str]]:
+        """Merge :attr:`entity_variables` with ``simulation.extra_variables``.
+
+        Returned dict has one key per known entity, value being the
+        union of the bundled defaults and the caller's extras, with
+        duplicates removed and original order preserved (defaults
+        first, extras appended).
+
+        Raises ``ValueError`` with close-match suggestions if the
+        caller passes an unknown entity key or a variable name that
+        does not resolve on the tax-benefit system's variable
+        registry.
+        """
+        from difflib import get_close_matches
+
+        extras = dict(simulation.extra_variables or {})
+        known_entities = set(self.entity_variables)
+        unknown_entities = [e for e in extras if e not in known_entities]
+        if unknown_entities:
+            lines = [
+                f"Simulation.extra_variables contains entity keys not "
+                f"defined on {self.model.id} {self.version}:"
+            ]
+            for entity in unknown_entities:
+                suggestions = get_close_matches(
+                    entity, sorted(known_entities), n=1, cutoff=0.7
+                )
+                hint = f" (did you mean '{suggestions[0]}'?)" if suggestions else ""
+                lines.append(f"  - '{entity}'{hint}")
+            raise ValueError("\n".join(lines))
+
+        known_variables = set(self.variables_by_name)
+        unknown_variables: list[tuple[str, str]] = []
+        for entity, names in extras.items():
+            for name in names:
+                if name not in known_variables:
+                    unknown_variables.append((entity, name))
+        if unknown_variables:
+            lines = [
+                f"Simulation.extra_variables contains variable names not "
+                f"defined on {self.model.id} {self.version}:"
+            ]
+            for entity, name in unknown_variables:
+                suggestions = get_close_matches(
+                    name, sorted(known_variables), n=1, cutoff=0.7
+                )
+                hint = f" (did you mean '{suggestions[0]}'?)" if suggestions else ""
+                lines.append(f"  - '{name}' (on '{entity}'){hint}")
+            raise ValueError("\n".join(lines))
+
+        resolved: dict[str, list[str]] = {}
+        for entity, defaults in self.entity_variables.items():
+            seen: set[str] = set()
+            merged: list[str] = []
+            for var in list(defaults) + list(extras.get(entity, [])):
+                if var not in seen:
+                    seen.add(var)
+                    merged.append(var)
+            resolved[entity] = merged
+        return resolved
+
     def save(self, simulation: Simulation) -> None:
         """Persist the simulation's output dataset to its bundled filepath."""
         simulation.output_dataset.save()
