@@ -24,7 +24,7 @@ authors:
 affiliations:
   - name: PolicyEngine, Washington, DC, United States
     index: '1'
-date: 17 April 2026
+date: 20 April 2026
 bibliography: paper.bib
 ---
 
@@ -36,7 +36,7 @@ The `policyengine` Python package [@policyengine_py] is open-source software for
 
 Tax-benefit microsimulation models are standard tools for evaluating the distributional impacts of fiscal policy. Governments, think tanks, and researchers use them to estimate how policy reforms affect household incomes, poverty rates, and government budgets. In practice, however, analysts work across separate components: statutory rules, representative microdata, reform definitions, and distributional outputs live in different tools and interfaces. Reproducing a baseline-versus-reform workflow, or carrying the same analysis pattern from one country model to another, therefore often requires bespoke scripts and project-specific conventions. Historical replication is especially difficult when policy rules, analysis tooling, and representative microdata are versioned independently and the analyst must reconstruct which combination produced a published estimate.
 
-The `policyengine` package provides a consistent Python API for tax-benefit analysis across multiple country models. Users can supply their own microdata or use companion representative datasets, then compute the impact of current law or hypothetical reforms, including parametric changes to existing policy parameters and structural modifications to the tax-benefit system, on any household or a national population. The `calculate_household_impact` function computes results for a single household, while the `Simulation` class runs population-level analysis on representative survey datasets with calibrated weights. Optional behavioral-response assumptions, such as labor supply elasticities, are applied after the static reform. Version-pinned releases reduce the bookkeeping needed for replication.
+The `policyengine` package provides a consistent Python API for tax-benefit analysis across multiple country models. Users can supply their own microdata or use companion representative datasets, then compute the impact of current law or hypothetical reforms, including parametric changes to existing policy parameters and structural modifications to the tax-benefit system, on any household or a national population. The country-specific `calculate_household` functions (`pe.us.calculate_household` and `pe.uk.calculate_household`) compute results for a single household, while the `Simulation` class runs population-level analysis on representative survey datasets with calibrated weights. Reforms take the same flat `{"param.path": value}` shape in both entry points. Optional behavioral-response assumptions, such as labor supply elasticities, are applied after the static reform. Version-pinned releases reduce the bookkeeping needed for replication.
 
 # State of the Field
 
@@ -71,39 +71,25 @@ At runtime, a simulation combines a country-model version, household microdata, 
 The following household-level example computes a household's net income under baseline law and under a reform that doubles the US single-filer standard deduction (to \$32,200 for 2026):
 
 ```python
-import datetime
-from policyengine.core import Parameter, ParameterValue, Policy
-from policyengine.tax_benefit_models.us import (
-    USHouseholdInput, calculate_household_impact, us_latest,
-)
+import policyengine as pe
 
-param = Parameter(
-    name="gov.irs.deductions.standard.amount.SINGLE",
-    tax_benefit_model_version=us_latest,
-)
-reform = Policy(
-    name="Double standard deduction",
-    parameter_values=[ParameterValue(
-        parameter=param,
-        start_date=datetime.date(2026, 1, 1),
-        end_date=datetime.date(2026, 12, 31),
-        value=32_200,
-    )],
-)
-
-household = USHouseholdInput(
-    people=[{"age": 40, "employment_income": 50_000,
-             "is_tax_unit_head": True}],
+household = dict(
+    people=[{"age": 40, "employment_income": 50_000}],
     tax_unit={"filing_status": "SINGLE"},
-    household={"state_code_str": "CA"},
+    household={"state_code": "CA"},
     year=2026,
 )
-baseline = calculate_household_impact(household)
-reformed = calculate_household_impact(household, policy=reform)
-# The reform increases this household's net income relative to baseline.
+
+baseline = pe.us.calculate_household(**household)
+reformed = pe.us.calculate_household(
+    **household,
+    reform={"gov.irs.deductions.standard.amount.SINGLE": 32_200},
+)
+# reformed.household.household_net_income exceeds
+# baseline.household.household_net_income for this household.
 ```
 
-The `us_latest` sentinel resolves to the bundled `policyengine-us` version installed alongside `policyengine`, so results are stable for a given pinned environment. This paper describes `policyengine` version 3.4.4 [@policyengine_py], and the checked-in UK reproduction script `examples/paper_repro_uk.py` documents an executable population-level workflow using a pinned interpreter (`uv run --python 3.14 --extra uk python examples/paper_repro_uk.py`).
+Parametric reforms take the same flat dict shape at the population level: the `Simulation` class accepts `policy={"gov.irs.deductions.standard.amount.SINGLE": 32_200}` alongside a dataset and a pinned country-model version. This paper describes `policyengine` version 4.2.1 [@policyengine_py], and the checked-in UK reproduction script `examples/paper_repro_uk.py` documents an executable population-level workflow using a pinned interpreter (`uv run --python 3.14 --extra uk python examples/paper_repro_uk.py`).
 
 # Research Impact Statement
 
