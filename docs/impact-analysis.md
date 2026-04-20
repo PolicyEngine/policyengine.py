@@ -95,10 +95,12 @@ budget = ChangeAggregate(
 budget.run()
 
 deciles = calculate_decile_impacts(baseline_simulation=baseline, reform_simulation=reformed)
-poverty = calculate_us_poverty_rates(baseline_simulation=baseline, reform_simulation=reformed)
-baseline_ineq, reform_ineq = calculate_us_inequality(
-    baseline_simulation=baseline, reform_simulation=reformed,
-)
+
+baseline_poverty = calculate_us_poverty_rates(simulation=baseline)
+reform_poverty = calculate_us_poverty_rates(simulation=reformed)
+
+baseline_ineq = calculate_us_inequality(simulation=baseline)
+reform_ineq = calculate_us_inequality(simulation=reformed)
 ```
 
 ## Next

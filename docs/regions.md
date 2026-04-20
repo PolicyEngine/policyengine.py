@@ -133,13 +133,15 @@ baseline = Simulation(
 )
 ```
 
-Regions in the registry carry their own canonical scoping_strategy where applicable — pull it off the region object instead of constructing it yourself:
+Regions that filter (US places, UK countries, and any region with `region.requires_filter == True`) carry their own `scoping_strategy`. Pull it off the region object rather than reconstructing it:
 
 ```python
-ca = pe.us.model.region_registry.get("state/ca")
+nyc = pe.us.model.region_registry.get("place/NY-51000")
 baseline = Simulation(
     dataset=dataset,
     tax_benefit_model_version=pe.us.model,
-    scoping_strategy=ca.scoping_strategy,
+    scoping_strategy=nyc.scoping_strategy,
 )
 ```
+
+US states and congressional districts don't use a scoping strategy — they point to dedicated state- or district-specific datasets via `region.dataset_path`. Pass that dataset to `Simulation` instead.

@@ -33,7 +33,7 @@ Override in any output with `income_variable=`.
 | | Dataset |
 |---|---|
 | US | Enhanced CPS 2024 (`enhanced_cps_2024.h5`) |
-| UK | Enhanced FRS 2024 (`enhanced_frs_2023_24.h5`) |
+| UK | Enhanced FRS 2023/24 (`enhanced_frs_2023_24.h5`) |
 
 ## State / regional breakdown
 
@@ -43,7 +43,7 @@ UK: constituency code and local authority code on every household where availabl
 
 ## Poverty
 
-US: SPM (Supplemental Poverty Measure), plus deep SPM (below half the threshold), plus official thresholds.
+US: SPM (Supplemental Poverty Measure) and deep SPM (below half the threshold). Tracked measures are listed in `US_POVERTY_VARIABLES`.
 
 UK: AHC (After Housing Costs) and BHC (Before Housing Costs), both relative (60 % of median) and absolute.
 

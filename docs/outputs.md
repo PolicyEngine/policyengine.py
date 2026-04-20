@@ -141,17 +141,17 @@ rate.run()
 rate.headcount, rate.total_population, rate.rate
 ```
 
-For both baseline and reform, covering the canonical demographic breakdowns:
+For all canonical poverty measures over one simulation:
 
 ```python
 from policyengine.outputs import calculate_us_poverty_rates
 
-rates = calculate_us_poverty_rates(baseline_simulation=baseline, reform_simulation=reform)
-rates.outputs                 # Poverty entries for each group × measure × sim
+rates = calculate_us_poverty_rates(simulation=baseline)
+rates.outputs                 # Poverty entries for each measure
 rates.dataframe
 ```
 
-Equivalents exist for age, gender, and race: `calculate_us_poverty_by_age`, `_by_gender`, `_by_race`, and UK counterparts.
+Call it once per simulation for a baseline-vs-reform comparison. Age / gender / race breakdowns: `calculate_us_poverty_by_age`, `_by_gender`, `_by_race`. UK counterparts: `calculate_uk_poverty_rates`, `_by_age`, `_by_gender`.
 
 ## Inequality
 
@@ -169,17 +169,22 @@ ineq.run()
 ineq.gini, ineq.top_10_share, ineq.top_1_share, ineq.bottom_50_share
 ```
 
-For a baseline-vs-reform pair with sensible defaults:
+With defaults pre-wired for the country:
 
 ```python
 from policyengine.outputs import calculate_us_inequality, USInequalityPreset
 
-baseline_ineq, reform_ineq = calculate_us_inequality(
-    baseline_simulation=baseline,
-    reform_simulation=reform,
+baseline_ineq = calculate_us_inequality(
+    simulation=baseline,
+    preset=USInequalityPreset.STANDARD,
+)
+reform_ineq = calculate_us_inequality(
+    simulation=reform,
     preset=USInequalityPreset.STANDARD,
 )
 ```
+
+`calculate_uk_inequality` is the UK equivalent.
 
 ## ProgramStatistics
 
