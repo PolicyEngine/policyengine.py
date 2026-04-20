@@ -65,10 +65,14 @@ def _us_fixture_dataset(tmp_path, year: int = 2025):
         }),
         weights="household_weight",
     )
-    simple = lambda col, rows, weight: MicroDataFrame(  # noqa: E731
-        pd.DataFrame({col: list(range(1, rows + 1)), weight: [1_000.0] * rows}),
-        weights=weight,
-    )
+    def _simple(col: str, rows: int, weight: str) -> MicroDataFrame:
+        return MicroDataFrame(
+            pd.DataFrame(
+                {col: list(range(1, rows + 1)), weight: [1_000.0] * rows}
+            ),
+            weights=weight,
+        )
+
     return PolicyEngineUSDataset(
         id="test-contrib-ctc",
         name="Contrib CTC fixture",
@@ -77,10 +81,10 @@ def _us_fixture_dataset(tmp_path, year: int = 2025):
         year=year,
         data=USYearData(
             person=person,
-            tax_unit=simple("tax_unit_id", 2, "tax_unit_weight"),
-            spm_unit=simple("spm_unit_id", 2, "spm_unit_weight"),
-            family=simple("family_id", 2, "family_weight"),
-            marital_unit=simple("marital_unit_id", 6, "marital_unit_weight"),
+            tax_unit=_simple("tax_unit_id", 2, "tax_unit_weight"),
+            spm_unit=_simple("spm_unit_id", 2, "spm_unit_weight"),
+            family=_simple("family_id", 2, "family_weight"),
+            marital_unit=_simple("marital_unit_id", 6, "marital_unit_weight"),
             household=household,
         ),
     )
@@ -164,36 +168,43 @@ def test__policy_94589_reform_runs_end_to_end(tmp_path) -> None:
 # --- 2. Per-gate smoke tests ------------------------------------------
 
 
-CONTRIB_CTC_GATES = [
-    # Each tuple: (params_to_enable, human description)
+CONTRIB_GATES = [
+    # Each tuple: (params_to_enable, human description).
+    # CTC gates — the original bug's exact shape.
     (
         {
             "gov.contrib.ctc.minimum_refundable.in_effect": True,
             "gov.contrib.ctc.minimum_refundable.amount[0].amount": 2_400,
             "gov.contrib.ctc.minimum_refundable.amount[1].amount": 2_400,
         },
-        "minimum_refundable",
+        "ctc_minimum_refundable",
     ),
     (
         {"gov.contrib.ctc.per_child_phase_in.in_effect": True},
-        "per_child_phase_in",
+        "ctc_per_child_phase_in",
     ),
     (
         {"gov.contrib.ctc.per_child_phase_out.in_effect": True},
-        "per_child_phase_out",
+        "ctc_per_child_phase_out",
+    ),
+    # Non-CTC gate — proves the fix generalises beyond the single
+    # family of structural reforms that triggered the original bug.
+    (
+        {"gov.contrib.streamlined_eitc.in_effect": True},
+        "streamlined_eitc",
     ),
 ]
 
 
 @pytest.mark.parametrize(
     "reform,label",
-    CONTRIB_CTC_GATES,
-    ids=[label for _, label in CONTRIB_CTC_GATES],
+    CONTRIB_GATES,
+    ids=[label for _, label in CONTRIB_GATES],
 )
-def test__gov_contrib_ctc_gate_runs_cleanly(tmp_path, reform, label) -> None:
-    """Each ``gov.contrib.ctc.*`` structural-reform gate activated via
-    a parameter dict must apply cleanly through
-    ``Simulation.run()``. Before the fix, these would crash with
+def test__gov_contrib_gate_runs_cleanly(tmp_path, reform, label) -> None:
+    """Each ``gov.contrib.*`` structural-reform gate activated via a
+    parameter dict must apply cleanly through ``Simulation.run()``.
+    Before the fix, CTC-family gates crashed with
     ``AttributeError: 'NoneType' object has no attribute 'entity'``.
     """
     import policyengine as pe
@@ -211,28 +222,39 @@ def test__gov_contrib_ctc_gate_runs_cleanly(tmp_path, reform, label) -> None:
 # --- 3. Invariant: population built from microsim's own system --------
 
 
-def test__population_built_against_reform_applied_system(tmp_path) -> None:
-    """The fix itself: ``_build_simulation_from_dataset`` must pass
-    ``microsim.tax_benefit_system`` (which has structural reforms
-    applied) to ``instantiate_entities``, not the module-level
-    ``policyengine_us.system`` (which doesn't).
+def test__population_built_against_reform_applied_system(
+    tmp_path, monkeypatch
+) -> None:
+    """The fix's actual contract: ``_build_simulation_from_dataset``
+    must pass the ``TaxBenefitSystem`` that has the structural reform
+    applied — i.e. ``microsim.tax_benefit_system``, not some other copy.
 
-    We enforce this by checking that a variable only registered under
-    the structural reform (``ctc_minimum_refundable_amount``) is
-    retrievable from the post-run simulation's tax-benefit system.
-    The module-level system never has this variable; if the fix ever
-    regressed to using it, the assertion would fail.
+    We intercept the helper, capture the ``system`` it received, and
+    assert identity against ``microsim.tax_benefit_system``. That's a
+    stricter invariant than any behavioral assertion — a silently-
+    diverged copy would still fail the ``is`` check.
+
+    Also verify that a structural-reform-only variable is registered
+    on that captured system. Survives future ``policyengine_us``
+    releases that might ship the variable unconditionally: the
+    identity assertion is the load-bearing one.
     """
     import policyengine as pe
     from policyengine.core import Simulation
-    from policyengine_us.system import system as module_system
+    from policyengine.tax_benefit_models.us.model import PolicyEngineUSLatest
 
-    # Sanity: the module-level system never has the reform variable.
-    assert (
-        module_system.get_variable("ctc_minimum_refundable_amount") is None
-    ), (
-        "Module-level policyengine_us.system should not have "
-        "structural-reform variables until the reform is applied"
+    captured: dict = {}
+    original = PolicyEngineUSLatest._build_simulation_from_dataset
+
+    def _capturing(self_, microsim, dataset_arg, system):
+        captured["system"] = system
+        captured["microsim_system"] = microsim.tax_benefit_system
+        return original(self_, microsim, dataset_arg, system)
+
+    monkeypatch.setattr(
+        PolicyEngineUSLatest,
+        "_build_simulation_from_dataset",
+        _capturing,
     )
 
     dataset = _us_fixture_dataset(tmp_path)
@@ -245,16 +267,25 @@ def test__population_built_against_reform_applied_system(tmp_path) -> None:
             "gov.contrib.ctc.minimum_refundable.amount[1].amount": 2_400,
         },
     )
-    # Before the fix this raised; now it completes.
     sim.run()
 
-    # The module-level system MUST still be pristine (unchanged by the
-    # per-sim reform application).
+    assert "system" in captured, (
+        "_build_simulation_from_dataset was never called — test setup "
+        "is broken"
+    )
+    # The load-bearing contract: the helper got the per-sim system.
+    assert captured["system"] is captured["microsim_system"], (
+        "_build_simulation_from_dataset was passed a TaxBenefitSystem "
+        "that is not microsim.tax_benefit_system. Reform-registered "
+        "variables will be invisible at calc time."
+    )
+    # And that system has the structural reform variable registered.
     assert (
-        module_system.get_variable("ctc_minimum_refundable_amount") is None
+        captured["system"].get_variable("ctc_minimum_refundable_amount")
+        is not None
     ), (
-        "Structural reforms must be confined to the per-sim system; "
-        "they should never mutate the shared module-level system"
+        "Structural reform variable missing from the captured system — "
+        "reform was not applied before population build"
     )
 
 
@@ -262,16 +293,15 @@ def test__population_built_against_reform_applied_system(tmp_path) -> None:
 
 
 def test__reform_parameter_change_is_reflected_in_output(tmp_path) -> None:
-    """A reform that changes a non-structural parameter value must
-    produce different output from baseline. Guards against a broader
-    class of bug where ``_build_simulation_from_dataset`` would
-    silently re-use the pre-reform tax-benefit system, swallowing
-    parameter-value overrides whole.
+    """A reform that changes non-structural parameter values must
+    produce different output from baseline across *every* affected
+    variable. Guards against (a) the reform silently becoming a no-op
+    and (b) partial application where one variable sees the change
+    but another does not.
 
-    Uses ``gov.irs.credits.ctc.amount.base[0].amount`` (a scalar
-    parameter, no structural-reform machinery involved) so this test
-    catches the broader "reform isn't being applied at all" class,
-    not just the contrib-CTC structural-reform class.
+    Uses two non-structural overrides (CTC base and EITC max) so the
+    test flags partial-application regressions, not just "no reform
+    applied at all".
     """
     import policyengine as pe
     from policyengine.core import Simulation
@@ -280,20 +310,32 @@ def test__reform_parameter_change_is_reflected_in_output(tmp_path) -> None:
     baseline = Simulation(
         dataset=dataset, tax_benefit_model_version=pe.us.model
     )
-    # Raise base CTC amount way above baseline so the effect is unmistakable.
+    # Raise base CTC amount AND change EITC phase-in rate — different
+    # program families, both at low incomes where the fixture's 2-kid
+    # tax units are squarely in the phase-in region.
     reformed = Simulation(
         dataset=dataset,
         tax_benefit_model_version=pe.us.model,
-        policy={"gov.irs.credits.ctc.amount.base[0].amount": 10_000},
+        policy={
+            "gov.irs.credits.ctc.amount.base[0].amount": 10_000,
+            "gov.irs.credits.eitc.phase_in_rate[2].amount": 0.9,
+        },
     )
     baseline.run()
     reformed.run()
 
     baseline_ctc = baseline.output_dataset.data.tax_unit["ctc"].sum()
     reform_ctc = reformed.output_dataset.data.tax_unit["ctc"].sum()
+    baseline_eitc = baseline.output_dataset.data.tax_unit["eitc"].sum()
+    reform_eitc = reformed.output_dataset.data.tax_unit["eitc"].sum()
     assert reform_ctc > baseline_ctc, (
-        "Parameter-value reform didn't reach the calculation: "
+        "CTC reform didn't reach the calculation: "
         f"baseline CTC {baseline_ctc} vs reformed CTC {reform_ctc}"
+    )
+    assert reform_eitc != baseline_eitc, (
+        "EITC reform didn't reach the calculation (partial application "
+        f"regression): baseline EITC {baseline_eitc} vs reformed EITC "
+        f"{reform_eitc}"
     )
 
 
