@@ -22,7 +22,7 @@ Before TRACE, a paper citing a PolicyEngine result could say: "PolicyEngine-US c
 
 With a TRO emitted by policyengine.org, the paper cites a URL. That URL resolves to a JSON-LD document which the reader can validate with a stock tool. Inside the TRO, pinned by SHA-256:
 
-- The **rules bundle**: wheel hashes for `policyengine`, `policyengine-us`, and their transitive Python dependencies at the version resolved at run time.
+- The **rules bundle**: wheel hashes for `policyengine` and `policyengine-us` at the version resolved at run time. (We do not pin transitive Python dependencies inside the TRO — TRACE has explicitly not built that in, and a verifier who wants to reconstruct the full environment can resolve the declared dependencies against a public index.)
 - The **calibrated microdata**: the `enhanced_cps_2024.h5` SHA-256 and the `DataReleaseManifest` that describes how it was built.
 - The **reform**: the full reform JSON submitted by the user, content-hashed.
 - The **inputs**: for a household-level simulation, the household JSON the user entered; for an economy-wide simulation, the configuration payload.
@@ -35,20 +35,35 @@ The claims the TRO supports are, in plain language:
 2. _PolicyEngine as an institution ran this simulation; the researcher did not modify the code between our servers and their paper._
 3. _Any future reader can recover the full per-household counterfactual frame for re-analysis, bounded only by what we legally can redistribute._
 
-The third claim is the one Sabelhaus surfaced specifically and that we think is underused in microsimulation publishing today. Papers cite aggregate numbers; reviewers and follow-up work want distributions, state-level breakdowns, variables the paper did not headline. A TRO-bound per-household output lets downstream researchers do that custom analysis as re-aggregation rather than re-simulation.
+The third claim deserves a design-question flag: whether the webapp TRO binds the full per-household counterfactual frame by default, or only on request, is something we have not settled. There is a real tension — papers cite aggregates; reviewers and follow-up work want distributions, state-level breakdowns, variables the paper did not headline; but a always-default full frame has file-size and privacy-posture costs, especially in restricted-data countries. We intend to make the trade-off deliberately rather than defaulting to either extreme.
 
-## UK data and the strongest TRACE case we have
+One framing point worth being careful about: what PolicyEngine provides is *institution-backed self-attestation*, not arms-length third-party certification. The arms-length property — that the verifier of a claim is structurally independent of the party being audited — is genuinely absent when PolicyEngine both runs the simulation and signs the TRO. What the TRO buys in that case is structured evidence that a reader (or a reviewer) can query, backed by institutional reputation, not cryptographic independence. That is a real step up from "trust me, I ran it" — but we should not market it as more than it is.
+
+## UK data as a strong case for TRACE
 
 In our US work the underlying calibrated h5 is already public on Hugging Face, so a local rerun is in principle possible. That weakens the TRACE value proposition on US — a reader motivated enough to verify could just `pip install` the pins and try it themselves. The TRO still buys institutional attestation (the researcher did not modify the code), but re-running is not materially blocked.
 
-In our UK work the underlying microdata is UK Data Service–licensed and cannot be redistributed. A US researcher who wants to verify a UK PolicyEngine result cannot, even in principle, re-run it on their own machine, because they cannot acquire the inputs on any reasonable timescale. The only credibility path is an institution we trust having run the simulation against data that institution legally controls. That is exactly the central-bank-researcher scenario Lars described in the meeting, and it is the strongest fit for TRACE in the PolicyEngine stack.
+In our UK work the underlying microdata is UK Data Service–licensed and cannot be redistributed. A researcher who wants to verify a UK PolicyEngine result cannot re-run it on their own machine on any reasonable timescale, because they cannot acquire the inputs easily. Institutional attestation is a particularly strong credibility path here, which is why the meeting flagged this kind of scenario as where TRACE adds the most value.
 
-Two TRACE features that would make this work cleaner when they land:
+One caveat worth naming explicitly: we are considering publishing a re-calibrated UK variant derived entirely from public-use inputs, which would partially lift the restriction. If that lands, the US and UK cases converge again. And the TRACE project's own plans for external-identifier pinning (UKDS study number + checksum, IRS-PUF agreement number + checksum) — not yet firmed up in TROv at time of writing — would provide an even cleaner mechanism for binding restricted-input provenance without redistribution.
 
-- **External-DOI pinning.** Rather than requiring restricted inputs to be redistributable, allow a TRO to pin by external identifier (UKDS study number + checksum, IRS-PUF agreement number + checksum). This lets a validator confirm that the run references the artifact that a qualified researcher could, in principle, acquire.
-- **OS and compute-environment capture.** For multi-hour runs on specialized hardware, the Python-package pins do not fully determine reproducibility. Capturing the OS, Python version, and cloud-region provenance in the TRO closes that loop.
+## What is explicitly NOT a TRACE case for us
 
-Both of these are on the TRACE roadmap per the meeting. We will adopt as they ship.
+It is worth being equally clear about where TRACE does *not* add value for PolicyEngine, so we do not accidentally scope it there:
+
+- **A researcher running `policyengine.py` locally and emitting their own TRO.** Readers can `pip install` the same pins and rerun themselves. A TRO is bookkeeping, not a credibility upgrade. The TRO emission helpers in `policyengine.py` exist because they are reused by the two cases above, not because local emission is the flagship user experience.
+- **Tracing transitive Python dependencies.** TRACE has, per the meeting, explicitly not built this in, and we should not either. The code documents its declared dependencies; a verifier can resolve them against a public index.
+- **Anything that replaces plain version-and-vintage identification.** Much of what matters for reproducibility is just showing "they used that file with that version." That is documentation, not TRACE — and it is often enough on its own, especially for researchers running the Python package against public-use inputs.
+
+## Adjacent workstreams TRACE does not cover
+
+Several reproducibility commitments came up in the meeting that are TRACE-adjacent rather than TRACE-solved. Flagging them so they do not get lost:
+
+- **Preservation-grade archiving.** Hugging Face, where our calibrated h5 artifacts are hosted today, does not publish a preservation commitment comparable to Zenodo or a CLOCKSS / LOCKSS participant. For a TRO citation URL to be durable decades from now, the artifacts it pins need to live somewhere with an explicit long-term preservation policy. Zenodo as a secondary / mirror target is worth serious consideration.
+- **PolicyEngine-specific TRACE vocabulary contribution.** We already use `pe:*` extension fields; as we implement and find patterns that generalize (e.g., institution-backed self-attestation, microdata-build provenance, infrastructure-run attestation), contributing those upstream to TROv vocabulary design is in scope.
+- **Plain version-identification work outside TRACE.** Version badges, shareable permalinks that resolve to the same numbers, a "why did this number move?" diff view between release pairs. These are separate deliverables that are on our app roadmap; TRACE is not the right frame for them.
+
+Both external-identifier pinning and OS / compute-environment capture are on the TRACE roadmap and would help when they land. We will adopt as they ship.
 
 ## What PolicyEngine is building in response
 
@@ -72,8 +87,9 @@ We will keep notes as the implementation proceeds. The TRACE team is welcome to 
 
 ## Open questions
 
-- **Per-household frame as default or opt-in.** We think default-on for countries with public microdata (US) and default-off for countries with restricted microdata (UK). The choice affects TRO file size, privacy posture, and what a reviewer of a UK PolicyEngine paper can actually re-analyze.
-- **Retention and addressing of webapp-run TROs.** These become permanent citations. We need to commit to durable URLs, content-addressing, and a policy on how or whether they ever get pruned.
-- **Signing key and key rotation.** A PolicyEngine service-account signature is straightforward to implement; the longer-term concern is what happens when we rotate keys or restructure the service. Chain-of-trust design deserves more thought.
+- **Per-household frame as default or opt-in.** The meeting did not reach consensus on this; we flagged it as unsettled. Default-on has downstream-analysis utility but file-size and privacy-posture costs. Default-off makes TROs smaller but forces downstream researchers to rerun the simulation for any custom split. Design choice should be made deliberately with trade-offs listed, not defaulted to either extreme.
+- **Retention and addressing of webapp-run TROs.** These become permanent citations. Commitments needed on durable URLs, content-addressing, migration policy for storage-provider changes, and whether we ever prune. Zenodo as a secondary / mirror target is worth serious consideration — Hugging Face does not publish a preservation commitment, and a TRO URL that 404s in 2040 is a worse outcome than a TRO URL that 404s in a PolicyEngine-controlled bucket.
+- **Signing key and key trust model.** A PolicyEngine service-account signature is straightforward to implement; the harder question is how a reader in 2040 verifies the signature belongs to PolicyEngine. Options include a published keychain rooted in a DNS TXT record, a Sigstore-style transparency log, or GCP workload-identity with short-lived signatures. Chain-of-trust design deserves more thought than "we sign it with a service account."
+- **Binding to the actual production runtime.** CI run URL + git SHA documents how the container that ran the simulation was *built*. The TRO should additionally bind the running container image SHA, cloud region, and pod / function instance at execution time. Otherwise the TRO only attests to a build, not a run.
 
 Feedback welcomed from Lars, Tim, Casper, Tara, John — and anyone else reading.
