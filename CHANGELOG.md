@@ -1,3 +1,10 @@
+## [4.3.1] - 2026-04-21
+
+### Changed
+
+- Migrated TRACE TRO emission from the prerelease TROv namespace `https://w3id.org/trace/2023/05/trov#` to the canonical `https://w3id.org/trace/trov/0.1#`. This aligns policyengine.py with policyengine-us-data (which already uses the canonical namespace per us-data PR #746), so both sides can share SHACL validators and TROs emitted by either side validate against the same vocabulary. Fixes #313.
+
+
 ## [4.3.0] - 2026-04-20
 
 ### Added
