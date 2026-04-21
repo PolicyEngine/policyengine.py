@@ -2417,12 +2417,12 @@ wheels = [
 
 [[package]]
 name = "policyengine"
-version = "3.4.5"
+version = "4.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "microdf-python" },
+    { name = "packaging" },
     { name = "pandas" },
-    { name = "plotly" },
     { name = "psutil" },
     { name = "pydantic" },
     { name = "requests" },
@@ -2438,6 +2438,7 @@ dev = [
     { name = "jupyter-book" },
     { name = "mypy", version = "1.19.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "mypy", version = "1.20.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
+    { name = "plotly" },
     { name = "policyengine-core" },
     { name = "policyengine-uk" },
     { name = "policyengine-us" },
@@ -2447,6 +2448,14 @@ dev = [
     { name = "ruff" },
     { name = "towncrier" },
     { name = "yaml-changelog" },
+]
+graph = [
+    { name = "networkx", version = "3.2.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
+    { name = "networkx", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+]
+plotting = [
+    { name = "plotly" },
 ]
 uk = [
     { name = "policyengine-core" },
@@ -2467,15 +2476,18 @@ requires-dist = [
     { name = "jupyter-book", marker = "extra == 'dev'" },
     { name = "microdf-python", specifier = ">=1.2.1" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11.0" },
+    { name = "networkx", marker = "extra == 'graph'", specifier = ">=3.0" },
+    { name = "packaging", specifier = ">=23.0" },
     { name = "pandas", specifier = ">=2.0.0" },
-    { name = "plotly", specifier = ">=5.0.0" },
+    { name = "plotly", marker = "extra == 'dev'", specifier = ">=5.0.0" },
+    { name = "plotly", marker = "extra == 'plotting'", specifier = ">=5.0.0" },
     { name = "policyengine-core", marker = "extra == 'dev'", specifier = ">=3.25.0" },
     { name = "policyengine-core", marker = "extra == 'uk'", specifier = ">=3.25.0" },
     { name = "policyengine-core", marker = "extra == 'us'", specifier = ">=3.25.0" },
     { name = "policyengine-uk", marker = "extra == 'dev'", specifier = "==2.88.0" },
     { name = "policyengine-uk", marker = "extra == 'uk'", specifier = "==2.88.0" },
-    { name = "policyengine-us", marker = "extra == 'dev'", specifier = "==1.647.0" },
-    { name = "policyengine-us", marker = "extra == 'us'", specifier = "==1.647.0" },
+    { name = "policyengine-us", marker = "extra == 'dev'", specifier = "==1.653.3" },
+    { name = "policyengine-us", marker = "extra == 'us'", specifier = "==1.653.3" },
     { name = "psutil", specifier = ">=5.9.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pytest", marker = "extra == 'dev'" },
@@ -2486,7 +2498,7 @@ requires-dist = [
     { name = "towncrier", marker = "extra == 'dev'", specifier = ">=24.8.0" },
     { name = "yaml-changelog", marker = "extra == 'dev'", specifier = ">=0.1.7" },
 ]
-provides-extras = ["uk", "us", "dev"]
+provides-extras = ["plotting", "graph", "uk", "us", "dev"]
 
 [[package]]
 name = "policyengine-core"
@@ -2538,7 +2550,7 @@ wheels = [
 
 [[package]]
 name = "policyengine-us"
-version = "1.647.0"
+version = "1.653.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "microdf-python" },
@@ -2550,9 +2562,9 @@ dependencies = [
     { name = "tables", version = "3.11.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/60/85/bef86a7edb48fe7f3d7005ef03f955690c9f3bc6c1fa69598ae70b7e04e8/policyengine_us-1.647.0.tar.gz", hash = "sha256:118afa1b4dc7b0d23e04b5cf0dbacfd6c518c069ff506c4b264d919c1a964cce", size = 9067156, upload-time = "2026-04-17T21:00:38.12Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a2/60/5b736fa238559857fbf29168933c809eaada9abf006d26910b7958f5748e/policyengine_us-1.653.3.tar.gz", hash = "sha256:8a5c33997b7aefa2061d0dafce837b130e8ebdb0b9f83ae8c236f80cbf1805d6", size = 9180339, upload-time = "2026-04-18T12:06:45.764Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2a/96/4814f2630395350915d819452d7684f232c9b8df1d9ba5c279f3b6d02c17/policyengine_us-1.647.0-py3-none-any.whl", hash = "sha256:50e64bf910772b224cdc2b5af5a3414f976f68a9e1748107da7e1de6e325425c", size = 9156799, upload-time = "2026-04-17T21:00:33.492Z" },
+    { url = "https://files.pythonhosted.org/packages/02/07/25f39a2bfa1ff210cd8e78826c47c03b9040a98a83f4eed59c434c1ed862/policyengine_us-1.653.3-py3-none-any.whl", hash = "sha256:67a49b98d85c060b24d547a569e91a6703c0fc9c41299c1c67f4ecfac75c67c6", size = 9445650, upload-time = "2026-04-18T12:06:43.163Z" },
 ]
 
 [[package]]

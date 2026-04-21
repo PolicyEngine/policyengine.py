@@ -1,7 +1,7 @@
 """TRACE Transparent Research Object (TRO) export.
 
 Emits JSON-LD that conforms to the TRACE TROv vocabulary
-(https://w3id.org/trace/2023/05/trov#) for a PolicyEngine certified
+(https://w3id.org/trace/trov/0.1#) for a PolicyEngine certified
 runtime bundle or a PolicyEngine simulation result. The bundle TRO pins
 the country model wheel, the country data release manifest, the
 certified dataset, and the bundle manifest itself by sha256. The
@@ -33,7 +33,7 @@ from .manifest import (
     https_release_manifest_uri,
 )
 
-TRACE_TROV_NAMESPACE = "https://w3id.org/trace/2023/05/trov#"
+TRACE_TROV_NAMESPACE = "https://w3id.org/trace/trov/0.1#"
 POLICYENGINE_TRACE_NAMESPACE = "https://policyengine.org/trace/0.1#"
 
 TRACE_CONTEXT: list[dict[str, str]] = [
