@@ -118,7 +118,7 @@ class TestBundleTRO:
     def test__given_context__then_uses_public_trov_namespace(self, us_bundle_tro):
         context = us_bundle_tro["@context"][0]
         assert context["trov"] == TRACE_TROV_NAMESPACE
-        assert context["trov"] == "https://w3id.org/trace/2023/05/trov#"
+        assert context["trov"] == "https://w3id.org/trace/trov/0.1#"
 
     def test__given_root_type__then_is_single_transparent_research_object(
         self, us_bundle_tro

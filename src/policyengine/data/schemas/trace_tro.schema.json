@@ -15,7 +15,7 @@
         "properties": {
           "trov": {
             "type": "string",
-            "const": "https://w3id.org/trace/2023/05/trov#"
+            "const": "https://w3id.org/trace/trov/0.1#"
           },
           "schema": {
             "type": "string",

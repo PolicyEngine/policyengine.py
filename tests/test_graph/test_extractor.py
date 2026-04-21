@@ -102,7 +102,6 @@ class TestDirectEntityReference:
     """Pattern 1: ``entity("<var>", period)`` produces an edge."""
 
     def test_single_direct_reference(self, tmp_path: Path) -> None:
-
         root = tmp_path / "variables"
         _write_variable(
             root,
@@ -153,7 +152,6 @@ class TestAddHelperReference:
     """Pattern 2: ``add(entity, period, [...])`` emits one edge per list item."""
 
     def test_add_helper_list(self, tmp_path: Path) -> None:
-
         root = tmp_path / "variables"
         _write_variable(
             root,
@@ -175,7 +173,6 @@ class TestImpactAnalysis:
     """``impact(var)`` returns variables that depend on ``var`` transitively."""
 
     def test_transitive_upstream(self, tmp_path: Path) -> None:
-
         root = tmp_path / "variables"
         _write_variable(root, "wages", "return 0")
         _write_variable(
@@ -228,7 +225,6 @@ class TestMultipleFormulas:
     """Year-specific ``formula_YYYY`` methods contribute edges too."""
 
     def test_year_specific_formula_contributes_edges(self, tmp_path: Path) -> None:
-
         root = tmp_path / "variables"
         (root / "ctc.py").parent.mkdir(parents=True, exist_ok=True)
         (root / "ctc.py").write_text(
@@ -260,7 +256,6 @@ class TestPath:
     """``path(src, dst)`` returns a dependency chain if one exists."""
 
     def test_path_two_hops(self, tmp_path: Path) -> None:
-
         root = tmp_path / "variables"
         _write_variable(root, "wages", "return 0")
         _write_variable(root, "gross_income", 'return tax_unit("wages", period)')
@@ -278,7 +273,6 @@ class TestPath:
         ]
 
     def test_path_returns_none_if_unreachable(self, tmp_path: Path) -> None:
-
         root = tmp_path / "variables"
         _write_variable(root, "island_a", "return 0")
         _write_variable(root, "island_b", "return 0")
@@ -295,7 +289,6 @@ class TestRequiresVariableSubclass:
     """
 
     def test_non_variable_classes_are_ignored(self, tmp_path: Path) -> None:
-
         root = tmp_path / "variables"
         root.mkdir(parents=True, exist_ok=True)
         # Looks like a variable body but the class is not a Variable.
