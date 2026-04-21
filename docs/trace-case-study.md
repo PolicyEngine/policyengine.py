@@ -12,30 +12,30 @@ The answer we walked out with is narrower and cleaner than what we had been buil
 
 TRACE matters in exactly the places where the reader cannot easily re-run the analysis:
 
-1. **The calibrated microdata build.** Each `enhanced_cps_YYYY.h5` that we publish to Hugging Face is derived from inputs that the public cannot all access directly (IRS-PUF requires agreeing to IRS's terms of use; the build itself takes hours on Modal with specific GPU configurations). Every release emits a TRO that binds the upstream input fingerprints, the build code, and the output h5 under canonical TROv 0.1.
+1. **The calibrated microdata build.** Each `enhanced_cps_YYYY.h5` that we publish to Hugging Face is derived from inputs that the public cannot all access directly (IRS-PUF requires agreeing to IRS's terms of use; the build itself takes hours on Modal with specific GPU configurations). Each release emits a TRO that binds the upstream input fingerprints, the build code, and the output h5 under canonical TROv 0.1. **This is live today** — us-data PR #746 shipped the emission — though cross-linking from the Hugging Face dataset card is still in flight.
 
-2. **Simulation runs through policyengine.org.** When a researcher uses the webapp to score a reform, we run the simulation on our infrastructure against our pinned calibrated data, and we return the result. A paper that cites that result is asking its readers to trust PolicyEngine's institutional attestation — not to trust that the researcher reproduced a Python pipeline faithfully on their own laptop. A TRO signed by PolicyEngine and served from our infrastructure makes that institutional attestation explicit and machine-verifiable.
+2. **Simulation runs through policyengine.org.** When a researcher uses the webapp to score a reform, we run the simulation on our infrastructure against our pinned calibrated data and return the result. A paper that cites that result is asking its readers to trust PolicyEngine's institutional attestation — not to trust that the researcher reproduced a Python pipeline faithfully on their own laptop. A TRO signed by PolicyEngine and served from our infrastructure would make that institutional attestation explicit and machine-verifiable. **This is not yet live** — backend emission is scoped in policyengine-api#3485, the "Cite this result" UI in policyengine-app#2830, both blocked on a pe.py v4 migration (api#3486, draft in #3487). This document describes the intended shape of the workflow, not its current state.
 
-## The precise claims a PolicyEngine TRO lets us make
+## The claims a PolicyEngine TRO should let us make
 
 Before TRACE, a paper citing a PolicyEngine result could say: "PolicyEngine-US computed an EITC expansion impact of $X using `policyengine-us==1.653.3` and `policyengine-us-data==1.85.2`." The reader had to take it on faith that those versions, run on that reform, actually produced $X — or install the pins and try it themselves, which presumes the researcher's environment was not modified.
 
-With a TRO emitted by policyengine.org, the paper cites a URL. That URL resolves to a JSON-LD document which the reader can validate with a stock tool. Inside the TRO, pinned by SHA-256:
+A TRO emitted by policyengine.org would let the paper cite a URL instead. That URL would resolve to a JSON-LD document the reader can validate with a stock tool. The artifact set we are designing toward, pinned by SHA-256:
 
 - The **rules bundle**: wheel hashes for `policyengine` and `policyengine-us` at the version resolved at run time. (We do not pin transitive Python dependencies inside the TRO — TRACE has explicitly not built that in, and a verifier who wants to reconstruct the full environment can resolve the declared dependencies against a public index.)
 - The **calibrated microdata**: the `enhanced_cps_2024.h5` SHA-256 and the `DataReleaseManifest` that describes how it was built.
 - The **reform**: the full reform JSON submitted by the user, content-hashed.
 - The **inputs**: for a household-level simulation, the household JSON the user entered; for an economy-wide simulation, the configuration payload.
-- The **outputs**: a content-hashed `results.json` carrying the aggregate metrics the webapp displays, and — for US runs, where the underlying microdata is already public — the full per-household weighted simulation frame as parquet, so downstream researchers can compute custom splits, subgroup analyses, or variables not reported in the paper without re-running the simulation.
-- The **institutional attestation**: CI/deploy run URL, git SHA, cloud region, timestamp, and a signature by a PolicyEngine service account.
+- The **outputs**: a content-hashed `results.json` carrying the aggregate metrics the webapp displays. Whether to *also* bind a full per-household weighted simulation frame is an open design question (see below) — it would enable downstream custom splits without re-running the simulation, at a file-size and privacy-posture cost that varies by country.
+- The **institutional attestation**: CI/deploy run URL, git SHA, cloud region, timestamp, and a cryptographic signature. The signing mechanism is not yet settled (see open questions); options under consideration include a GCP workload-identity short-lived signature, a published keychain rooted in a DNS TXT record at policyengine.org, or a Sigstore-style transparency log.
 
-The claims the TRO supports are, in plain language:
+Claims we believe such a TRO *should* support, in plain language:
 
-1. _These were the rules, this was the calibrated microdata, and these were the inputs that produced those outputs._
-2. _PolicyEngine as an institution ran this simulation; the researcher did not modify the code between our servers and their paper._
-3. _Any future reader can recover the full per-household counterfactual frame for re-analysis, bounded only by what we legally can redistribute._
+1. _These were the rules, this was the calibrated microdata, and these were the inputs that produced those outputs._ — This is the artifact-composition claim; TROv core supports it.
+2. _PolicyEngine as an institution ran this simulation; the researcher did not modify the code between our servers and their paper._ — This requires the institutional-attestation design to be nailed down. The service-account signature we envision is one implementation; it is not the only one.
+3. _Any future reader can recover the full per-household counterfactual frame for re-analysis, bounded only by what we legally can redistribute._ — This depends on the per-household-frame default-or-opt-in design question below.
 
-The third claim deserves a design-question flag: whether the webapp TRO binds the full per-household counterfactual frame by default, or only on request, is something we have not settled. There is a real tension — papers cite aggregates; reviewers and follow-up work want distributions, state-level breakdowns, variables the paper did not headline; but a always-default full frame has file-size and privacy-posture costs, especially in restricted-data countries. We intend to make the trade-off deliberately rather than defaulting to either extreme.
+The per-household frame question deserves a specific flag: whether the webapp TRO binds the full per-household counterfactual frame by default, or only on request, is unsettled. Papers cite aggregates; reviewers and follow-up work want distributions, state-level breakdowns, variables the paper did not headline; but an always-default full frame has file-size and privacy-posture costs, especially in restricted-data countries. We intend to make the trade-off deliberately rather than defaulting to either extreme. Transcript note: this came up in the meeting (Sabelhaus on what the microdata contains beyond the summary, Max on whether the full frame belongs in a TRO); no consensus on "default-on" emerged.
 
 One framing point worth being careful about: what PolicyEngine provides is *institution-backed self-attestation*, not arms-length third-party certification. The arms-length property — that the verifier of a claim is structurally independent of the party being audited — is genuinely absent when PolicyEngine both runs the simulation and signs the TRO. What the TRO buys in that case is structured evidence that a reader (or a reviewer) can query, backed by institutional reputation, not cryptographic independence. That is a real step up from "trust me, I ran it" — but we should not market it as more than it is.
 
@@ -70,7 +70,7 @@ Both external-identifier pinning and OS / compute-environment capture are on the
 Three concrete workstreams, each tracked as a GitHub issue:
 
 - **`policyengine-us-data`**: each `enhanced_cps_YYYY.h5` release already emits a build TRO. We will verify these TROs are published alongside the h5 and cross-linked from the Hugging Face dataset card so they are discoverable. (us-data PR #746 shipped the emission; issue #808 addresses a parallel licensing-documentation correction.)
-- **`policyengine-api`**: emit a TRACE TRO for every webapp simulation run, signed by a PolicyEngine service account, persisted to GCS with durable URL, and exposed on the result response. (Issue #3485.)
+- **`policyengine-api`**: emit a TRACE TRO for every webapp simulation run. The exact signing mechanism and persistence store are open design questions — service-account + GCS is the current strawman, but a Zenodo / Sigstore / DNS-rooted-keychain alternative is under consideration, especially for long-term durability. (Issue #3485; prerequisite v4 migration in #3487.)
 - **`policyengine-app`**: surface the TRO as a "Cite this result" action with a citation download panel, an always-visible rules-vs-data version badge so the "rules changed or data changed?" question is answerable at a glance, and shareable permalinks that resolve the same numbers forever. (Issue #2830, blocked on the api work.)
 
 Documentation for researchers is being updated (household-api-docs PR #7) to put the webapp-run citation flow ahead of the local-Python-CLI flow, matching the framing that emerged in the meeting.
