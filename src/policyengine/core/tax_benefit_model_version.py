@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from policyengine.provenance.manifest import (
     CountryReleaseManifest,
     DataCertification,
+    DataReleaseManifestUnavailableError,
     PackageVersion,
     get_data_release_manifest,
 )
@@ -214,16 +215,20 @@ class TaxBenefitModelVersion(BaseModel):
     def trace_tro(self) -> dict:
         """Build a TRACE TRO for this certified bundle.
 
-        Fetches the published data release manifest so the TRO can pin
-        the exact dataset sha256. Requires a bundled release manifest.
+        Uses the published data release manifest when available. If it
+        has not been published, the TRO falls back to the certified
+        dataset sha256 and URI pinned in the bundled release manifest.
         """
         if self.release_manifest is None:
             raise ValueError(
                 "TRACE TRO export requires a bundled country release manifest."
             )
-        data_release_manifest = get_data_release_manifest(
-            self.release_manifest.country_id
-        )
+        try:
+            data_release_manifest = get_data_release_manifest(
+                self.release_manifest.country_id
+            )
+        except DataReleaseManifestUnavailableError:
+            data_release_manifest = None
         return build_trace_tro_from_release_bundle(
             self.release_manifest,
             data_release_manifest,

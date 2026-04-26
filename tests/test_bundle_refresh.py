@@ -181,6 +181,7 @@ def test__bump_data_only_streams_hf_and_updates_uri(sandbox) -> None:
         url = request.full_url
         if "huggingface.co" in url:
             assert "@" not in url  # URI revision is in the URL path
+            assert "/datasets/" not in url
             assert "1.83.4" in url
             return _FakeHFResponse(hf_bytes)
         raise AssertionError(f"Unexpected URL: {url}")

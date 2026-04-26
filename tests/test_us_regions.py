@@ -105,7 +105,7 @@ class TestUSRegionRegistry:
         assert national.region_type == "national"
         assert (
             national.dataset_path
-            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.73.0"
+            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.78.2"
         )
 
     def test__given_us_registry__then_has_51_states(self):
@@ -134,7 +134,7 @@ class TestUSRegionRegistry:
         assert ca.parent_code == "us"
         assert (
             ca.dataset_path
-            == "hf://policyengine/policyengine-us-data/states/CA.h5@1.73.0"
+            == "hf://policyengine/policyengine-us-data/states/CA.h5@1.78.2"
         )
         assert ca.state_code == "CA"
         assert ca.state_name == "California"
@@ -167,7 +167,7 @@ class TestUSRegionRegistry:
         assert ca01.parent_code == "state/ca"
         assert (
             ca01.dataset_path
-            == "hf://policyengine/policyengine-us-data/districts/CA-01.h5@1.73.0"
+            == "hf://policyengine/policyengine-us-data/districts/CA-01.h5@1.78.2"
         )
         assert ca01.state_code == "CA"
         assert not ca01.requires_filter

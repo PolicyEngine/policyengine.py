@@ -69,6 +69,25 @@ def _artifact_mime_type(path_or_uri: str) -> Optional[str]:
     return _MIME_TYPES.get(suffix)
 
 
+def _dataset_location_from_uri(uri: str) -> str:
+    if not uri.startswith("hf://"):
+        return uri
+
+    without_scheme = uri[5:]
+    if "@" not in without_scheme:
+        return uri
+    path_without_revision, revision = without_scheme.rsplit("@", 1)
+    parts = path_without_revision.split("/", 2)
+    if len(parts) != 3:
+        return uri
+    repo_id = f"{parts[0]}/{parts[1]}"
+    return https_dataset_uri(
+        repo_id=repo_id,
+        path_in_repo=parts[2],
+        revision=revision,
+    )
+
+
 def canonical_json_bytes(value: Mapping) -> bytes:
     """Canonical JSON serialization used for every content hash in the TRO.
 
@@ -268,7 +287,7 @@ def _assemble_tro_node(
 
 def build_trace_tro_from_release_bundle(
     country_manifest: CountryReleaseManifest,
-    data_release_manifest: DataReleaseManifest,
+    data_release_manifest: Optional[DataReleaseManifest],
     *,
     certification: Optional[DataCertification] = None,
     bundle_manifest_path: Optional[str] = None,
@@ -280,8 +299,11 @@ def build_trace_tro_from_release_bundle(
 ) -> dict:
     """Build a TRACE TRO for a certified runtime bundle.
 
-    Artifacts in the composition: bundle manifest, data release manifest,
-    certified dataset, and (when resolvable) the country model wheel.
+    Artifacts in the composition: bundle manifest, certified dataset,
+    and (when resolvable) the country model wheel. When the external
+    data release manifest is available, it is included as an additional
+    artifact; when it has not been published, the TRO still binds the
+    dataset sha256 and URI pinned in the bundled country manifest.
     Certification metadata is encoded as structured ``pe:*`` fields on
     the :class:`trov:TransparentResearchPerformance` node.
 
@@ -302,13 +324,19 @@ def build_trace_tro_from_release_bundle(
             "Country release manifest does not define a certified artifact."
         )
 
-    dataset_artifact = data_release_manifest.artifacts.get(certified_artifact.dataset)
-    if dataset_artifact is None:
+    dataset_artifact = (
+        data_release_manifest.artifacts.get(certified_artifact.dataset)
+        if data_release_manifest is not None
+        else None
+    )
+    if data_release_manifest is not None and dataset_artifact is None:
         raise ValueError(
             "Data release manifest does not include the certified dataset "
             f"'{certified_artifact.dataset}'."
         )
-    dataset_sha256 = certified_artifact.sha256 or dataset_artifact.sha256
+    dataset_sha256 = certified_artifact.sha256 or (
+        dataset_artifact.sha256 if dataset_artifact is not None else None
+    )
     if dataset_sha256 is None:
         raise ValueError(
             "Neither the country release manifest nor the data release manifest "
@@ -319,21 +347,31 @@ def build_trace_tro_from_release_bundle(
         bundle_manifest_path
         or f"data/release_manifests/{country_manifest.country_id}.json"
     )
-    data_manifest_location = data_release_manifest_path or https_release_manifest_uri(
-        country_manifest.data_package
+    data_manifest_location = (
+        data_release_manifest_path or https_release_manifest_uri(country_manifest.data_package)
+        if data_release_manifest is not None
+        else None
     )
-    dataset_location = https_dataset_uri(
-        repo_id=dataset_artifact.repo_id,
-        path_in_repo=dataset_artifact.path,
-        revision=dataset_artifact.revision,
+    dataset_location = (
+        https_dataset_uri(
+            repo_id=dataset_artifact.repo_id,
+            path_in_repo=dataset_artifact.path,
+            revision=dataset_artifact.revision,
+        )
+        if dataset_artifact is not None
+        else _dataset_location_from_uri(certified_artifact.uri)
     )
 
     bundle_manifest_hash = hashlib.sha256(
         canonical_json_bytes(country_manifest.model_dump(mode="json"))
     ).hexdigest()
-    data_release_manifest_hash = hashlib.sha256(
-        canonical_json_bytes(data_release_manifest.model_dump(mode="json"))
-    ).hexdigest()
+    data_release_manifest_hash = (
+        hashlib.sha256(
+            canonical_json_bytes(data_release_manifest.model_dump(mode="json"))
+        ).hexdigest()
+        if data_release_manifest is not None
+        else None
+    )
 
     model_wheel_sha, model_wheel_https = _resolve_model_wheel(
         country_manifest,
@@ -351,21 +389,27 @@ def build_trace_tro_from_release_bundle(
             "name": f"policyengine.py bundle manifest for {country_manifest.country_id}",
         },
         {
-            "id": "data_release_manifest",
-            "hash": data_release_manifest_hash,
-            "location": data_manifest_location,
-            "mime_type": "application/json",
-            "name": f"{country_manifest.data_package.name} release manifest "
-            f"{country_manifest.data_package.version}",
-        },
-        {
             "id": "dataset",
             "hash": dataset_sha256,
             "location": dataset_location,
-            "mime_type": _artifact_mime_type(dataset_artifact.path),
+            "mime_type": _artifact_mime_type(
+                dataset_artifact.path if dataset_artifact is not None else certified_artifact.uri
+            ),
             "name": certified_artifact.dataset,
         },
     ]
+    if data_release_manifest_hash is not None and data_manifest_location is not None:
+        artifact_specs.insert(
+            1,
+            {
+                "id": "data_release_manifest",
+                "hash": data_release_manifest_hash,
+                "location": data_manifest_location,
+                "mime_type": "application/json",
+                "name": f"{country_manifest.data_package.name} release manifest "
+                f"{country_manifest.data_package.version}",
+            },
+        )
     if model_wheel_sha is not None:
         artifact_specs.append(
             {
@@ -405,25 +449,33 @@ def build_trace_tro_from_release_bundle(
         certification=effective_certification,
         started_at=(
             data_release_manifest.build.built_at
-            if data_release_manifest.build is not None
+            if (
+                data_release_manifest is not None
+                and data_release_manifest.build is not None
+            )
             else country_manifest.published_at
         ),
         ended_at=country_manifest.published_at,
     )
+    if data_release_manifest is None:
+        performance["pe:dataReleaseManifestStatus"] = "unavailable"
 
     tro_node = _assemble_tro_node(
         tro_name=f"policyengine {country_manifest.country_id} certified bundle TRO",
         tro_description=(
             f"TRACE TRO for certified runtime bundle "
             f"{country_manifest.bundle_id or country_manifest.country_id} "
-            f"covering the bundle manifest, the country data release "
-            f"manifest, the certified dataset artifact, and the country "
-            f"model wheel."
+            f"covering the bundle manifest, the certified dataset "
+            f"artifact, the country model wheel, and the country data "
+            f"release manifest when it is available."
         ),
         created_at=country_manifest.published_at
         or (
             data_release_manifest.build.built_at
-            if data_release_manifest.build is not None
+            if (
+                data_release_manifest is not None
+                and data_release_manifest.build is not None
+            )
             else None
         ),
         creator=POLICYENGINE_ORGANIZATION,
@@ -535,22 +587,37 @@ def build_simulation_trace_tro(
     results_payload: Mapping,
     reform_payload: Optional[Mapping] = None,
     reform_name: Optional[str] = None,
+    input_payload: Optional[Mapping] = None,
+    input_name: Optional[str] = None,
+    request_payload: Optional[Mapping] = None,
+    runtime_payload: Optional[Mapping] = None,
+    runtime_environment: Optional[Mapping[str, Any]] = None,
+    emission_context: Optional[Mapping[str, Any]] = None,
     simulation_id: Optional[str] = None,
     created_at: Optional[str] = None,
     started_at: Optional[str] = None,
     results_location: Optional[str] = None,
     reform_location: Optional[str] = None,
+    input_location: Optional[str] = None,
+    request_location: Optional[str] = None,
+    runtime_location: Optional[str] = None,
     bundle_tro_location: Optional[str] = None,
     bundle_tro_url: Optional[str] = None,
 ) -> dict:
-    """Build a per-simulation TRO chaining a bundle TRO to a results payload.
+    """Build a per-simulation TRO chaining a bundle TRO to a web/API run.
 
-    The simulation TRO composition pins: the bundle TRO itself, the
-    reform JSON (if provided), and the ``results.json`` payload. The
-    ``bundle_tro_url`` field is recorded on the performance node under
-    ``pe:bundleTroUrl`` so a verifier can cross-check the bundle TRO
-    hash against bytes fetched from a canonical location rather than
-    trusting the caller's dict.
+    The simulation TRO composition always pins the certified bundle TRO and
+    ``results.json`` payload. API callers should also pass the reform,
+    input/request payload, and runtime payload so the TRO binds the specific
+    production request that produced the output. This is intentionally broader
+    than a researcher-local helper: the valuable TRACE surface for PolicyEngine
+    is an institution-operated web/API run that readers cannot simply rerun on
+    their own machines.
+
+    The ``bundle_tro_url`` field is recorded on the performance node under
+    ``pe:bundleTroUrl`` so a verifier can cross-check the bundle TRO hash
+    against bytes fetched from a canonical location rather than trusting the
+    caller's dict.
     """
     bundle_reference = extract_bundle_tro_reference(bundle_tro)
     bundle_hash = hashlib.sha256(canonical_json_bytes(bundle_tro)).hexdigest()
@@ -576,6 +643,43 @@ def build_simulation_trace_tro(
                 "location": reform_location or "reform.json",
                 "mime_type": "application/json",
                 "name": reform_name or "reform",
+            }
+        )
+    if input_payload is not None:
+        input_hash = hashlib.sha256(canonical_json_bytes(input_payload)).hexdigest()
+        artifact_specs.append(
+            {
+                "id": "input",
+                "hash": input_hash,
+                "location": input_location or "input.json",
+                "mime_type": "application/json",
+                "name": input_name or "simulation input",
+            }
+        )
+    if request_payload is not None:
+        request_hash = hashlib.sha256(
+            canonical_json_bytes(request_payload)
+        ).hexdigest()
+        artifact_specs.append(
+            {
+                "id": "request",
+                "hash": request_hash,
+                "location": request_location or "request.json",
+                "mime_type": "application/json",
+                "name": "API request payload",
+            }
+        )
+    if runtime_payload is not None:
+        runtime_hash = hashlib.sha256(
+            canonical_json_bytes(runtime_payload)
+        ).hexdigest()
+        artifact_specs.append(
+            {
+                "id": "runtime",
+                "hash": runtime_hash,
+                "location": runtime_location or "runtime.json",
+                "mime_type": "application/json",
+                "name": "runtime environment",
             }
         )
     artifact_specs.append(
@@ -611,14 +715,21 @@ def build_simulation_trace_tro(
         performance["trov:startedAtTime"] = started_at or created_at
     if created_at is not None:
         performance["trov:endedAtTime"] = created_at
-    performance.update(_emission_context())
+    if runtime_environment is not None:
+        for key, value in runtime_environment.items():
+            if value is None:
+                continue
+            performance[f"pe:{key}"] = value
+    performance.update(dict(emission_context or _emission_context()))
 
     tro_node = _assemble_tro_node(
         tro_name=f"policyengine simulation TRO ({simulation_slug})",
         tro_description=(
             "TRACE TRO for a PolicyEngine simulation result. Composition "
             "pins the certified runtime bundle TRO, the reform "
-            "specification (where applicable), and the results.json payload."
+            "specification (where applicable), the request/input payloads "
+            "(where supplied), the runtime environment (where supplied), "
+            "and the results.json payload."
         ),
         created_at=created_at,
         creator=POLICYENGINE_ORGANIZATION,
