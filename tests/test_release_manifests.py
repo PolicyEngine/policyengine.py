@@ -49,19 +49,19 @@ class TestReleaseManifests:
         assert manifest.country_id == "us"
         assert manifest.policyengine_version == "4.0.0"
         assert manifest.model_package.name == "policyengine-us"
-        assert manifest.model_package.version == "1.653.3"
+        assert manifest.model_package.version == "1.667.1"
         assert manifest.data_package.name == "policyengine-us-data"
-        assert manifest.data_package.version == "1.73.0"
+        assert manifest.data_package.version == "1.78.2"
         assert manifest.data_package.repo_id == "policyengine/policyengine-us-data"
         assert manifest.certified_data_artifact is not None
         assert (
-            manifest.certified_data_artifact.build_id == "policyengine-us-data-1.73.0"
+            manifest.certified_data_artifact.build_id == "policyengine-us-data-1.78.2"
         )
         assert manifest.certified_data_artifact.dataset == "enhanced_cps_2024"
         assert manifest.certification is not None
-        assert manifest.certification.data_build_id == "policyengine-us-data-1.73.0"
+        assert manifest.certification.data_build_id == "policyengine-us-data-1.78.2"
         assert manifest.certification.built_with_model_version == "1.647.0"
-        assert manifest.certification.certified_for_model_version == "1.653.3"
+        assert manifest.certification.certified_for_model_version == "1.667.1"
 
     def test__given_uk_manifest__then_has_pinned_model_and_data_packages(self):
         manifest = get_release_manifest("uk")
@@ -92,7 +92,7 @@ class TestReleaseManifests:
 
         assert (
             resolved
-            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.73.0"
+            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.78.2"
         )
 
     def test__given_uk_dataset_name__then_resolves_to_versioned_hf_url(self):
@@ -302,7 +302,7 @@ class TestReleaseManifests:
         ):
             certification = certify_data_release_compatibility(
                 "us",
-                runtime_model_version="1.653.3",
+                runtime_model_version="1.667.1",
             )
 
         assert certification == get_release_manifest("us").certification

@@ -72,7 +72,7 @@
         },
         "trov:hasLocation": {
           "type": "string",
-          "pattern": "^(https://[^\\s]+$|data/release_manifests/[a-z]{2,3}\\.json$|reform\\.json$|results\\.json$|bundle\\.trace\\.tro\\.jsonld(#[a-f0-9]{64})?$)"
+          "pattern": "^(https://[^\\s]+$|data/release_manifests/[a-z]{2,3}\\.json$|(bundle\\.trace\\.tro\\.jsonld(#[a-f0-9]{64})?)|[a-z_]+\\.json$)"
         }
       }
     },
@@ -174,7 +174,7 @@
             },
             "pe:emittedIn": {
               "type": "string",
-              "enum": ["local", "github-actions"]
+              "enum": ["local", "github-actions", "policyengine-api"]
             }
           }
         }

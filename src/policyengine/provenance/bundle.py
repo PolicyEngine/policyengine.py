@@ -45,6 +45,7 @@ from urllib.request import Request, urlopen
 from policyengine.provenance.manifest import (
     CountryReleaseManifest,
     get_release_manifest,
+    https_dataset_uri,
 )
 
 # ---------------------------------------------------------------------------
@@ -102,7 +103,11 @@ def _hf_dataset_sha256(repo_id: str, path: str, revision: str) -> str:
     Uses the ``HUGGING_FACE_TOKEN`` env var for private repos. Streams
     the file in 8 MiB chunks so memory usage stays flat.
     """
-    url = f"https://huggingface.co/datasets/{repo_id}/resolve/{revision}/{path}"
+    url = https_dataset_uri(
+        repo_id=repo_id,
+        path_in_repo=path,
+        revision=revision,
+    )
     headers = {"User-Agent": "policyengine.py"}
     token = os.environ.get("HUGGING_FACE_TOKEN") or os.environ.get("HF_TOKEN")
     if token:
@@ -299,20 +304,27 @@ def _bump_pyproject_pin(
 
 def regenerate_trace_tro(country: str, manifest_dir: Path = MANIFEST_DIR) -> Path:
     """Regenerate ``{country}.trace.tro.jsonld`` from the country's
-    release manifest + the live data-release manifest on HF.
+    release manifest plus the live data-release manifest on HF when
+    that manifest is available.
 
     Thin wrapper around the same code path ``scripts/generate_trace_tros.py``
     uses; exposed here so the refresh function can chain
     ``refresh_release_bundle(...)`` with TRO regeneration in one call.
     """
-    from policyengine.provenance.manifest import get_data_release_manifest
+    from policyengine.provenance.manifest import (
+        DataReleaseManifestUnavailableError,
+        get_data_release_manifest,
+    )
     from policyengine.provenance.trace import (
         build_trace_tro_from_release_bundle,
         serialize_trace_tro,
     )
 
     release = get_release_manifest(country)
-    data_release = get_data_release_manifest(country)
+    try:
+        data_release = get_data_release_manifest(country)
+    except DataReleaseManifestUnavailableError:
+        data_release = None
     tro = build_trace_tro_from_release_bundle(release, data_release)
     out_path = manifest_dir / f"{country}.trace.tro.jsonld"
     out_path.write_bytes(serialize_trace_tro(tro))

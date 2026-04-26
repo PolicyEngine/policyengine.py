@@ -20,12 +20,14 @@ from policyengine.core.tax_benefit_model import TaxBenefitModel
 from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
 from policyengine.provenance.manifest import (
     DataReleaseManifest,
+    DataReleaseManifestUnavailableError,
     get_data_release_manifest,
     get_release_manifest,
 )
 from policyengine.provenance.trace import (
     POLICYENGINE_ORGANIZATION,
     TRACE_TROV_NAMESPACE,
+    build_simulation_trace_tro,
     build_trace_tro_from_release_bundle,
     compute_trace_composition_fingerprint,
     extract_bundle_tro_reference,
@@ -227,6 +229,34 @@ class TestBundleTRO:
         artifacts = tro["@graph"][0]["trov:hasComposition"]["trov:hasArtifact"]
         dataset = next(a for a in artifacts if a["@id"].endswith("dataset"))
         assert dataset["trov:sha256"] == "d" * 64
+
+    def test__given_missing_data_release_manifest__then_emits_limited_bundle_tro(
+        self, tro_schema
+    ):
+        tro = build_trace_tro_from_release_bundle(
+            get_release_manifest("us"),
+            None,
+            fetch_pypi=_fake_fetch_pypi,
+        )
+
+        artifacts = tro["@graph"][0]["trov:hasComposition"]["trov:hasArtifact"]
+        artifact_ids = {a["@id"].rsplit("/", 1)[-1] for a in artifacts}
+        assert artifact_ids == {"bundle_manifest", "dataset", "model_wheel"}
+        assert (
+            tro["@graph"][0]["trov:hasPerformance"]["pe:dataReleaseManifestStatus"]
+            == "unavailable"
+        )
+        locations = tro["@graph"][0]["trov:hasArrangement"][0][
+            "trov:hasArtifactLocation"
+        ]
+        dataset_location = next(
+            loc for loc in locations if loc["@id"].endswith("dataset")
+        )
+        assert dataset_location["trov:hasLocation"].startswith(
+            "https://huggingface.co/"
+        )
+        errors = list(Draft202012Validator(tro_schema).iter_errors(tro))
+        assert errors == [], [error.message for error in errors]
 
     def test__given_artifact_locations__then_all_paths_are_https_or_local(
         self, us_bundle_tro
@@ -479,6 +509,37 @@ class TestBundleTRO:
 
         assert tro["@graph"][0]["schema:creator"] == POLICYENGINE_ORGANIZATION
 
+    def test__given_trace_tro_property_without_data_release_manifest__then_falls_back(
+        self, tro_schema
+    ):
+        manifest = get_release_manifest("us")
+        model_version = TaxBenefitModelVersion(
+            model=TaxBenefitModel(id="us"),
+            version=manifest.model_package.version,
+            release_manifest=manifest,
+            model_package=manifest.model_package,
+            data_package=manifest.data_package,
+            default_dataset_uri=manifest.default_dataset_uri,
+            data_certification=manifest.certification,
+        )
+
+        with patch(
+            "policyengine.core.tax_benefit_model_version.get_data_release_manifest",
+            side_effect=DataReleaseManifestUnavailableError("missing"),
+        ):
+            with patch(
+                "policyengine.provenance.trace.fetch_pypi_wheel_metadata",
+                side_effect=_fake_fetch_pypi,
+            ):
+                tro = model_version.trace_tro
+
+        artifacts = tro["@graph"][0]["trov:hasComposition"]["trov:hasArtifact"]
+        artifact_ids = {a["@id"].rsplit("/", 1)[-1] for a in artifacts}
+        assert "dataset" in artifact_ids
+        assert "data_release_manifest" not in artifact_ids
+        errors = list(Draft202012Validator(tro_schema).iter_errors(tro))
+        assert errors == [], [error.message for error in errors]
+
 
 class TestSimulationTRO:
     """Per-simulation TROs chained from a bundle TRO."""
@@ -549,6 +610,50 @@ class TestSimulationTRO:
             "composition/1/artifact/bundle_tro",
             "composition/1/artifact/results",
         }
+
+    def test__given_web_run_payloads__then_binds_request_input_and_runtime(
+        self, tro_schema, us_bundle_tro
+    ):
+        tro = build_simulation_trace_tro(
+            bundle_tro=us_bundle_tro,
+            simulation_id="run-123",
+            reform_payload={"gov.irs.credits.ctc.amount.base[0].amount": 3000},
+            input_payload={"country": "us", "region": "state/CA"},
+            request_payload={"path": "/us/economy/2/over/1"},
+            runtime_payload={
+                "container_image_sha": "sha256:abc",
+                "cloud_region": "us-central1",
+            },
+            runtime_environment={
+                "runId": "run-123",
+                "executionId": "job-456",
+                "containerImageSha": "sha256:abc",
+                "cloudRegion": "us-central1",
+            },
+            emission_context={"pe:emittedIn": "policyengine-api"},
+            results_payload={"budgetary_impact": 1},
+            created_at="2026-04-18T12:05:00Z",
+            started_at="2026-04-18T12:00:00Z",
+        )
+
+        artifact_ids = {
+            a["@id"]
+            for a in tro["@graph"][0]["trov:hasComposition"]["trov:hasArtifact"]
+        }
+        assert artifact_ids == {
+            "composition/1/artifact/bundle_tro",
+            "composition/1/artifact/reform",
+            "composition/1/artifact/input",
+            "composition/1/artifact/request",
+            "composition/1/artifact/runtime",
+            "composition/1/artifact/results",
+        }
+        performance = tro["@graph"][0]["trov:hasPerformance"]
+        assert performance["pe:emittedIn"] == "policyengine-api"
+        assert performance["pe:runId"] == "run-123"
+        assert performance["pe:containerImageSha"] == "sha256:abc"
+        errors = list(Draft202012Validator(tro_schema).iter_errors(tro))
+        assert errors == [], [error.message for error in errors]
 
     def test__given_bundle_tro_url__then_performance_records_it(self, us_bundle_tro):
         tro = build_results_trace_tro(
@@ -650,6 +755,27 @@ class TestCLI:
         payload = json.loads(capsysbinary.readouterr().out)
         assert payload["@graph"][0]["schema:creator"] == POLICYENGINE_ORGANIZATION
         assert payload["@graph"][0]["trov:hasPerformance"]["pe:emittedIn"] == "local"
+
+    def test__given_missing_data_release_manifest__then_trace_tro_still_writes(
+        self, capsysbinary, monkeypatch
+    ):
+        monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+
+        with patch(
+            "policyengine.cli.get_data_release_manifest",
+            side_effect=DataReleaseManifestUnavailableError("missing"),
+        ):
+            with patch(
+                "policyengine.provenance.trace.fetch_pypi_wheel_metadata",
+                side_effect=_fake_fetch_pypi,
+            ):
+                exit_code = cli_main(["trace-tro", "us"])
+
+        assert exit_code == 0
+        payload = json.loads(capsysbinary.readouterr().out)
+        artifacts = payload["@graph"][0]["trov:hasComposition"]["trov:hasArtifact"]
+        artifact_ids = {a["@id"].rsplit("/", 1)[-1] for a in artifacts}
+        assert artifact_ids == {"bundle_manifest", "dataset", "model_wheel"}
 
     def test__given_out_path__then_writes_to_file(self, tmp_path, monkeypatch):
         monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
