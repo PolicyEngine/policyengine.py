@@ -243,18 +243,14 @@ class TestBundleTRO:
         artifact_ids = {a["@id"].rsplit("/", 1)[-1] for a in artifacts}
         assert artifact_ids == {"bundle_manifest", "dataset", "model_wheel"}
         assert (
-            tro["@graph"][0]["trov:hasPerformance"][
-                "pe:dataReleaseManifestStatus"
-            ]
+            tro["@graph"][0]["trov:hasPerformance"]["pe:dataReleaseManifestStatus"]
             == "unavailable"
         )
         locations = tro["@graph"][0]["trov:hasArrangement"][0][
             "trov:hasArtifactLocation"
         ]
         dataset_location = next(
-            loc
-            for loc in locations
-            if loc["@id"].endswith("dataset")
+            loc for loc in locations if loc["@id"].endswith("dataset")
         )
         assert dataset_location["trov:hasLocation"].startswith(
             "https://huggingface.co/"

@@ -348,7 +348,8 @@ def build_trace_tro_from_release_bundle(
         or f"data/release_manifests/{country_manifest.country_id}.json"
     )
     data_manifest_location = (
-        data_release_manifest_path or https_release_manifest_uri(country_manifest.data_package)
+        data_release_manifest_path
+        or https_release_manifest_uri(country_manifest.data_package)
         if data_release_manifest is not None
         else None
     )
@@ -393,7 +394,9 @@ def build_trace_tro_from_release_bundle(
             "hash": dataset_sha256,
             "location": dataset_location,
             "mime_type": _artifact_mime_type(
-                dataset_artifact.path if dataset_artifact is not None else certified_artifact.uri
+                dataset_artifact.path
+                if dataset_artifact is not None
+                else certified_artifact.uri
             ),
             "name": certified_artifact.dataset,
         },
@@ -657,9 +660,7 @@ def build_simulation_trace_tro(
             }
         )
     if request_payload is not None:
-        request_hash = hashlib.sha256(
-            canonical_json_bytes(request_payload)
-        ).hexdigest()
+        request_hash = hashlib.sha256(canonical_json_bytes(request_payload)).hexdigest()
         artifact_specs.append(
             {
                 "id": "request",
@@ -670,9 +671,7 @@ def build_simulation_trace_tro(
             }
         )
     if runtime_payload is not None:
-        runtime_hash = hashlib.sha256(
-            canonical_json_bytes(runtime_payload)
-        ).hexdigest()
+        runtime_hash = hashlib.sha256(canonical_json_bytes(runtime_payload)).hexdigest()
         artifact_specs.append(
             {
                 "id": "runtime",
