@@ -103,6 +103,44 @@ result = pe.us.calculate_household(
 )
 ```
 
+## Axes
+
+Use `axes` to evaluate one household across a grid of input values. Pass either
+the lower-level nested shape or a flat list of axis dictionaries; missing
+`period` values default to `year`.
+
+```python
+result = pe.us.calculate_household(
+    people=[
+        {
+            "age": 35,
+            "employment_income": 60_000,
+            "is_tax_unit_head": True,
+            "charitable_cash_donations": 0,
+        }
+    ],
+    tax_unit={"filing_status": "SINGLE"},
+    household={"state_code": "CA"},
+    year=2026,
+    axes=[
+        {
+            "name": "charitable_cash_donations",
+            "min": 0,
+            "max": 10_000,
+            "count": 3,
+        }
+    ],
+    extra_variables=["charitable_cash_donations"],
+)
+
+result.person[0].charitable_cash_donations  # [0, 5000, 10000]
+result.tax_unit.income_tax                  # one value per axis point
+```
+
+When axes are present, result values are lists ordered by the axis grid instead
+of scalars. For person results, each person still has their own result object;
+each variable on that person is its own axis series.
+
 ## Accessing the result
 
 ```python

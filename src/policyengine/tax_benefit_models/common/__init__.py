@@ -5,6 +5,8 @@ The country modules (:mod:`policyengine.tax_benefit_models.us`,
 their public ``calculate_household`` / ``analyze_reform`` entry points.
 """
 
+from .axes import normalize_axes as normalize_axes
+from .axes import values_for_entity as values_for_entity
 from .extra_variables import dispatch_extra_variables as dispatch_extra_variables
 from .model_version import (
     MicrosimulationModelVersion as MicrosimulationModelVersion,
