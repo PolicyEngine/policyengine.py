@@ -38,6 +38,9 @@ result.household.household_net_income
 | Produce population estimates (budget cost, poverty) | [Microsimulation](microsim.md) |
 | See the full catalog of typed outputs | [Outputs](outputs.md) |
 | Run the canonical baseline-vs-reform bundle | [Impact analysis](impact-analysis.md) |
+| Understand model structure and assumptions | [Methodology](methodology/index.md) |
+| Understand US health coverage and costs | [US health coverage and costs](methodology/us-health-costs.md) |
+| Read program-level methodology | [Programs](programs/index.md) |
 | Break results down by state, constituency, district | [Regions](regions.md) |
 | Understand US vs UK differences | [Countries](countries.md) |
 | Build publication-ready charts | [Visualisation](visualisation.md) |
