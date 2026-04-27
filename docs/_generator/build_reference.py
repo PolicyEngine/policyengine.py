@@ -47,6 +47,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import logging
+import os
 import re
 import textwrap
 from dataclasses import dataclass
@@ -83,6 +84,10 @@ class VariableRecord:
     adds: tuple[str, ...]
     subtracts: tuple[str, ...]
     tree_path: tuple[str, ...]
+
+
+def _variable_page_path(record: VariableRecord, out_root: Path) -> Path:
+    return out_root.joinpath(*record.tree_path) / f"{_slug(record.name)}.qmd"
 
 
 def _tree_path_from_source(
@@ -255,6 +260,16 @@ def _slug(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9_-]+", "-", value).strip("-")
 
 
+def _relative_link(source: Path, target: Path) -> str:
+    return os.path.relpath(target, start=source.parent).replace(os.sep, "/")
+
+
+def _table_cell(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value).replace("\n", " ").replace("|", "\\|")
+
+
 def _write_variables(
     records: list[VariableRecord],
     out_root: Path,
@@ -262,9 +277,9 @@ def _write_variables(
 ) -> int:
     written = 0
     for record in records:
-        tree_dir = out_root.joinpath(*record.tree_path)
+        page_path = _variable_page_path(record, out_root)
+        tree_dir = page_path.parent
         tree_dir.mkdir(parents=True, exist_ok=True)
-        page_path = tree_dir / f"{_slug(record.name)}.qmd"
         page_path.write_text(_render_variable_page(record, country))
         written += 1
     return written
@@ -295,36 +310,240 @@ def _write_tree_indices(out_root: Path) -> int:
     return written
 
 
-def _write_programs_index(country: str, out_root: Path) -> int:
+def _load_programs(country: str) -> list[dict]:
     module_name = COUNTRY_MODULES[country]
     country_module = importlib.import_module(module_name)
     package_root = Path(country_module.__file__).parent
     programs_path = package_root / "programs.yaml"
     if not programs_path.exists():
-        return 0
+        return []
     with programs_path.open() as f:
         registry = yaml.safe_load(f)
-    programs = registry.get("programs", [])
+    return registry.get("programs", [])
+
+
+def _program_page_path(program: dict, out_root: Path) -> Path:
+    identifier = program.get("id") or program.get("name") or "program"
+    return out_root / "programs" / f"{_slug(str(identifier))}.qmd"
+
+
+def _program_title(program: dict) -> str:
+    return str(program.get("full_name") or program.get("name") or program.get("id"))
+
+
+def _program_variable_records(
+    program: dict,
+    records: list[VariableRecord],
+) -> list[VariableRecord]:
+    root_variable = program.get("variable")
+    parameter_prefix = program.get("parameter_prefix")
+    prefix_parts = (
+        tuple(str(parameter_prefix).replace("/", ".").split("."))
+        if parameter_prefix
+        else ()
+    )
+    selected: list[VariableRecord] = []
+    for record in records:
+        if root_variable and record.name == root_variable:
+            selected.append(record)
+            continue
+        if prefix_parts and record.tree_path[: len(prefix_parts)] == prefix_parts:
+            selected.append(record)
+
+    return sorted(
+        selected,
+        key=lambda record: (
+            0 if root_variable and record.name == root_variable else 1,
+            "/".join(record.tree_path),
+            record.name,
+        ),
+    )
+
+
+def _render_program_variable_link(
+    record: VariableRecord,
+    record_pages: dict[str, Path],
+    page_path: Path,
+) -> str:
+    target = record_pages.get(record.name)
+    if target is None:
+        return f"`{record.name}`"
+    return f"[`{record.name}`]({_relative_link(page_path, target)})"
+
+
+def _render_program_page(
+    program: dict,
+    records: list[VariableRecord],
+    record_pages: dict[str, Path],
+    out_root: Path,
+) -> str:
+    page_path = _program_page_path(program, out_root)
+    title = _program_title(program)
+    identifier = str(program.get("id") or "")
+    lines: list[str] = [
+        "---",
+        f'title: "{_escape_yaml_scalar(title)}"',
+    ]
+    if identifier:
+        lines.append(f'subtitle: "`{_escape_yaml_scalar(identifier)}`"')
+    lines.extend(["---", ""])
+
+    root_variable = program.get("variable")
+    if root_variable and root_variable in record_pages:
+        root_value = (
+            f"[`{root_variable}`]"
+            f"({_relative_link(page_path, record_pages[str(root_variable)])})"
+        )
+    elif root_variable:
+        root_value = f"`{root_variable}`"
+    else:
+        root_value = ""
+
+    verified_start_year = program.get("verified_start_year")
+    verified_end_year = program.get("verified_end_year")
+    if verified_start_year and verified_end_year:
+        verified = f"{verified_start_year}-{verified_end_year}"
+    elif verified_start_year:
+        verified = f"{verified_start_year}+"
+    elif verified_end_year:
+        verified = f"through {verified_end_year}"
+    else:
+        verified = ""
+
+    metadata = [
+        ("Program ID", f"`{identifier}`" if identifier else ""),
+        ("Category", program.get("category")),
+        ("Agency", program.get("agency")),
+        ("Status", program.get("status")),
+        ("Coverage", program.get("coverage")),
+        (
+            "State variation",
+            "Yes" if program.get("has_state_variation") else "No",
+        ),
+        ("Verification years", verified),
+        (
+            "Parameter prefix",
+            f"`{program.get('parameter_prefix')}`"
+            if program.get("parameter_prefix")
+            else "",
+        ),
+        ("Root variable", root_value),
+    ]
+    lines.append("| Field | Value |")
+    lines.append("|---|---|")
+    for key, value in metadata:
+        lines.append(f"| {key} | {_table_cell(value)} |")
+    lines.append("")
+
+    if program.get("notes"):
+        lines.append("## Notes")
+        lines.append("")
+        lines.append(str(program["notes"]))
+        lines.append("")
+
+    program_records = _program_variable_records(program, records)
+    lines.append("## Implementation variables")
+    lines.append("")
+    if program_records:
+        lines.append("| Variable | Label | Entity | Period |")
+        lines.append("|---|---|---|---|")
+        for record in program_records:
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        _render_program_variable_link(record, record_pages, page_path),
+                        _table_cell(record.label),
+                        f"`{record.entity}`" if record.entity else "",
+                        f"`{record.definition_period}`"
+                        if record.definition_period
+                        else "",
+                    ]
+                )
+                + " |"
+            )
+        lines.append("")
+    else:
+        lines.append(
+            "No implementation variables were emitted for this program in this "
+            "reference run."
+        )
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _write_program_pages(
+    programs: list[dict],
+    records: list[VariableRecord],
+    out_root: Path,
+) -> int:
+    if not programs:
+        return 0
+    record_pages = {
+        record.name: _variable_page_path(record, out_root) for record in records
+    }
+    program_dir = out_root / "programs"
+    program_dir.mkdir(parents=True, exist_ok=True)
+    for program in programs:
+        page_path = _program_page_path(program, out_root)
+        page_path.write_text(
+            _render_program_page(program, records, record_pages, out_root)
+        )
+    return len(programs)
+
+
+def _write_programs_index(
+    programs: list[dict],
+    records: list[VariableRecord],
+    out_root: Path,
+) -> int:
+    if not programs:
+        return 0
+    record_pages = {
+        record.name: _variable_page_path(record, out_root) for record in records
+    }
+    programs_index_path = out_root / "programs.qmd"
     lines: list[str] = [
         "---",
         'title: "Program coverage"',
         'description: "Programs modeled in the country model, generated from programs.yaml."',
         "---",
         "",
-        "| ID | Name | Category | Agency | Status | Coverage |",
+        "| Program | Category | Agency | Status | Coverage | Root variable |",
         "|---|---|---|---|---|---|",
     ]
     for program in programs:
+        page_path = _program_page_path(program, out_root)
+        program_link = (
+            f"[{_program_title(program)}]"
+            f"({_relative_link(programs_index_path, page_path)})"
+        )
+        root_variable = program.get("variable")
+        if root_variable and root_variable in record_pages:
+            root_value = (
+                f"[`{root_variable}`]"
+                f"({_relative_link(programs_index_path, record_pages[str(root_variable)])})"
+            )
+        elif root_variable:
+            root_value = f"`{root_variable}`"
+        else:
+            root_value = ""
         lines.append(
             "| "
             + " | ".join(
-                str(program.get(field, "")).replace("\n", " ")
-                for field in ("id", "name", "category", "agency", "status", "coverage")
+                [
+                    _table_cell(program_link),
+                    _table_cell(program.get("category")),
+                    _table_cell(program.get("agency")),
+                    _table_cell(program.get("status")),
+                    _table_cell(program.get("coverage")),
+                    _table_cell(root_value),
+                ]
             )
             + " |"
         )
-    target = out_root / "programs.qmd"
-    target.write_text("\n".join(lines) + "\n")
+    programs_index_path.write_text("\n".join(lines) + "\n")
     return 1
 
 
@@ -344,11 +563,13 @@ def build_reference(
             or needle in " ".join(str(p).lower() for p in r.tree_path)
         ]
     variables_written = _write_variables(records, out_root, country)
-    programs_written = _write_programs_index(country, out_root)
+    programs = _load_programs(country)
+    program_pages_written = _write_program_pages(programs, records, out_root)
+    programs_index_written = _write_programs_index(programs, records, out_root)
     indices_written = _write_tree_indices(out_root)
     return {
         "variables": variables_written,
-        "programs": programs_written,
+        "programs": program_pages_written + programs_index_written,
         "indices": indices_written,
     }
 
@@ -380,7 +601,7 @@ def main() -> None:
     args = _parse_args()
     stats = build_reference(args.country, args.out, args.filter)
     logger.info(
-        "Wrote %d variable pages, %d programs page, %d directory indices to %s",
+        "Wrote %d variable pages, %d program pages, %d directory indices to %s",
         stats["variables"],
         stats["programs"],
         stats["indices"],

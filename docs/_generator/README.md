@@ -1,6 +1,6 @@
 # Reference generator prototype
 
-Auto-generates one Quarto page per variable in a country model, plus a program-coverage page, purely from metadata on the `Variable` classes and `programs.yaml`.
+Auto-generates one Quarto page per variable in a country model, plus a program coverage index and one page per program, purely from metadata on the `Variable` classes and `programs.yaml`.
 
 ## Run
 
@@ -29,7 +29,7 @@ Per variable:
 - Statutory references (from `reference = ...`)
 - Source file path and line number
 
-Per program: a row in the generated program-coverage page pulled from `programs.yaml` (id, name, category, agency, status, coverage).
+Per program: a row in the generated program coverage index pulled from `programs.yaml` (name, category, agency, status, coverage, root variable), plus a generated program page with metadata, notes, and links to implementation variables.
 
 Per directory (`gov/hhs/chip/`, `gov/usda/snap/`, etc.): a listing page using Quarto's built-in directory listing so the nav auto-organizes.
 
@@ -49,4 +49,4 @@ Extensions worth considering:
 1. Walk `parameters/` YAML tree and emit a page per parameter with its time series, breakdowns, and references.
 2. For each variable with a formula, surface the dependency graph (other variables / parameters it reads). `policyengine_core`'s `Variable.exhaustive_parameter_dependencies` gets partway there.
 3. For each calibration target (in `policyengine-us-data/storage/calibration_targets/*.csv`), emit a page describing source, aggregation level, freshness.
-4. Cross-link variables to the programs they contribute to via `programs.yaml`'s `variable:` field.
+4. Add reverse links from variable pages back to the programs that use them.

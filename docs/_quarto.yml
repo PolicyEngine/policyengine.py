@@ -51,6 +51,7 @@ website:
           - programs/us-chip.md
       - section: "Reference"
         contents:
+          - reference/index.md
           - countries.md
           - release-bundles.md
           - data-publishing-design.md
