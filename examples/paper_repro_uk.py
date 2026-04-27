@@ -1,7 +1,8 @@
-"""Reproduce the UK policy-reform analysis used in the JOSS paper draft.
+"""Reproduce a UK policy-reform analysis for the JOSS paper.
 
-This script uses the same reform shown in `paper.md`, but adds the missing
-dataset setup so it can run end-to-end from a fresh checkout.
+This script demonstrates the population-level workflow described in the paper,
+using a UK reform (raising the personal allowance). The paper's inline code
+example uses a US reform; this script complements it with the UK equivalent.
 
 Run:
     uv run --python 3.14 --extra uk python examples/paper_repro_uk.py
