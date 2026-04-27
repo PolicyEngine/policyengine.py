@@ -30,7 +30,11 @@ if find_spec("policyengine_us") is not None:
     from policyengine.core import Dataset
     from policyengine.outputs import ProgramStatistics
 
-    from .analysis import economic_impact_analysis
+    from .analysis import (
+        BudgetaryImpact,
+        calculate_budgetary_impact,
+        economic_impact_analysis,
+    )
     from .datasets import (
         PolicyEngineUSDataset,
         USYearData,
@@ -68,6 +72,8 @@ if find_spec("policyengine_us") is not None:
         "us_latest",
         "calculate_household",
         "economic_impact_analysis",
+        "calculate_budgetary_impact",
+        "BudgetaryImpact",
         "ProgramStatistics",
     ]
 else:
