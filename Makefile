@@ -1,9 +1,19 @@
-.PHONY: docs docs-serve
+.PHONY: docs docs-serve docs-generate-reference docs-reference-smoke
 
 all: build-package
 
 docs:
 	quarto render docs
+
+docs-generate-reference:
+	uv run --extra us python docs/_generator/build_reference.py --country us --out docs/_generated/reference/us
+
+docs-reference-smoke:
+	rm -rf /tmp/policyengine-reference-smoke
+	uv run --extra us python docs/_generator/build_reference.py --country us --filter chip --out /tmp/policyengine-reference-smoke/us
+	quarto render /tmp/policyengine-reference-smoke/us/index.qmd --output-dir /tmp/policyengine-reference-smoke/rendered
+	quarto render /tmp/policyengine-reference-smoke/us/programs.qmd --output-dir /tmp/policyengine-reference-smoke/rendered
+	quarto render $$(find /tmp/policyengine-reference-smoke/us -type f -name "*.qmd" ! -name "index.qmd" ! -name "programs.qmd" | head -n 1) --output-dir /tmp/policyengine-reference-smoke/rendered
 
 docs-serve:
 	quarto preview docs
