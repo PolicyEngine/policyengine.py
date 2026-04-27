@@ -40,6 +40,15 @@ website:
           - outputs.md
           - regions.md
           - visualisation.md
+      - section: "Methodology"
+        contents:
+          - methodology/index.md
+          - methodology/model-architecture.md
+          - methodology/us-health-costs.md
+      - section: "Programs"
+        contents:
+          - programs/index.md
+          - programs/us-chip.md
       - section: "Reference"
         contents:
           - countries.md
