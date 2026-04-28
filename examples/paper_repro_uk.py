@@ -1,7 +1,8 @@
-"""Reproduce the UK policy-reform analysis used in the JOSS paper draft.
+"""Reproduce a UK policy-reform analysis for the JOSS paper.
 
-This script uses the same reform shown in `paper.md`, but adds the missing
-dataset setup so it can run end-to-end from a fresh checkout.
+This script demonstrates the population-level workflow described in the paper,
+using a UK reform (raising the personal allowance). The paper's inline code
+example uses a US reform; this script complements it with the UK equivalent.
 
 Run:
     uv run --python 3.14 --extra uk python examples/paper_repro_uk.py
@@ -69,7 +70,7 @@ def main():
     print(f"Baseline Gini: {analysis.baseline_inequality.gini:.4f}")
     print(f"Reform Gini: {analysis.reform_inequality.gini:.4f}")
     print(f"Decile 1 mean change: {first_decile.absolute_change:,.2f}")
-    print(f"Programmes analysed: {len(analysis.programme_statistics.outputs)}")
+    print(f"Programmes analysed: {len(analysis.program_statistics.outputs)}")
 
 
 if __name__ == "__main__":

@@ -20,7 +20,7 @@ docs-serve:
 	quarto preview docs
 
 install:
-	uv pip install -e .[dev]
+	uv pip install -e ".[dev]"
 
 format:
 	ruff format .
