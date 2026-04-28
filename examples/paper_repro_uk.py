@@ -70,7 +70,7 @@ def main():
     print(f"Baseline Gini: {analysis.baseline_inequality.gini:.4f}")
     print(f"Reform Gini: {analysis.reform_inequality.gini:.4f}")
     print(f"Decile 1 mean change: {first_decile.absolute_change:,.2f}")
-    print(f"Programmes analysed: {len(analysis.programme_statistics.outputs)}")
+    print(f"Programmes analysed: {len(analysis.program_statistics.outputs)}")
 
 
 if __name__ == "__main__":
