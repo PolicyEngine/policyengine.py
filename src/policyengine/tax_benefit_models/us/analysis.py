@@ -79,26 +79,20 @@ def _validate_program_statistics_config(
 
             resolved_variables = model_version.resolve_entity_variables(simulation)
             if variable_name not in resolved_variables.get(variable.entity, []):
-                missing_outputs.add(
-                    (program_name, variable_name, variable.entity)
-                )
+                missing_outputs.add((program_name, variable_name, variable.entity))
 
     if not missing_variables and not missing_outputs:
         return
 
     lines = ["US program statistics config is invalid:"]
     if missing_variables:
-        lines.append(
-            "Missing model variables: " + ", ".join(sorted(missing_variables))
-        )
+        lines.append("Missing model variables: " + ", ".join(sorted(missing_variables)))
     if missing_outputs:
         formatted = ", ".join(
             f"{program_name} -> {variable_name} on {entity}"
             for program_name, variable_name, entity in sorted(missing_outputs)
         )
-        lines.append(
-            "Variables not materialized in simulation outputs: " + formatted
-        )
+        lines.append("Variables not materialized in simulation outputs: " + formatted)
         lines.append(
             "Add them to the model version's entity_variables or pass them "
             "via Simulation.extra_variables before running the simulation."
