@@ -21,6 +21,7 @@ class ProgramStatistics(Output):
     reform_simulation: Simulation
     program_name: str
     entity: str
+    variable_name: Optional[str] = None
     is_tax: bool = False
 
     # Results populated by run()
@@ -34,10 +35,12 @@ class ProgramStatistics(Output):
 
     def run(self):
         """Calculate statistics for this program."""
+        variable_name = self.variable_name or self.program_name
+
         # Baseline totals
         baseline_total = Aggregate(
             simulation=self.baseline_simulation,
-            variable=self.program_name,
+            variable=variable_name,
             aggregate_type=AggregateType.SUM,
             entity=self.entity,
         )
@@ -46,7 +49,7 @@ class ProgramStatistics(Output):
         # Reform totals
         reform_total = Aggregate(
             simulation=self.reform_simulation,
-            variable=self.program_name,
+            variable=variable_name,
             aggregate_type=AggregateType.SUM,
             entity=self.entity,
         )
@@ -55,10 +58,10 @@ class ProgramStatistics(Output):
         # Count of recipients/payers (baseline)
         baseline_count = Aggregate(
             simulation=self.baseline_simulation,
-            variable=self.program_name,
+            variable=variable_name,
             aggregate_type=AggregateType.COUNT,
             entity=self.entity,
-            filter_variable=self.program_name,
+            filter_variable=variable_name,
             filter_variable_geq=0.01,
         )
         baseline_count.run()
@@ -66,10 +69,10 @@ class ProgramStatistics(Output):
         # Count of recipients/payers (reform)
         reform_count = Aggregate(
             simulation=self.reform_simulation,
-            variable=self.program_name,
+            variable=variable_name,
             aggregate_type=AggregateType.COUNT,
             entity=self.entity,
-            filter_variable=self.program_name,
+            filter_variable=variable_name,
             filter_variable_geq=0.01,
         )
         reform_count.run()
@@ -78,7 +81,7 @@ class ProgramStatistics(Output):
         winners = ChangeAggregate(
             baseline_simulation=self.baseline_simulation,
             reform_simulation=self.reform_simulation,
-            variable=self.program_name,
+            variable=variable_name,
             aggregate_type=ChangeAggregateType.COUNT,
             entity=self.entity,
             change_geq=0.01 if not self.is_tax else -0.01,
@@ -88,7 +91,7 @@ class ProgramStatistics(Output):
         losers = ChangeAggregate(
             baseline_simulation=self.baseline_simulation,
             reform_simulation=self.reform_simulation,
-            variable=self.program_name,
+            variable=variable_name,
             aggregate_type=ChangeAggregateType.COUNT,
             entity=self.entity,
             change_leq=-0.01 if not self.is_tax else 0.01,

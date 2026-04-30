@@ -2,6 +2,11 @@ from enum import Enum
 from typing import Any, Optional
 
 from policyengine.core import Output, Simulation
+from policyengine.outputs.aggregate import (
+    get_aggregate_variable,
+    get_output_entity_data,
+    require_output_column,
+)
 
 
 class ChangeAggregateType(str, Enum):
@@ -59,34 +64,75 @@ class ChangeAggregate(Output):
             elif self.quantile_geq is not None:
                 self.filter_variable_geq = (self.quantile_geq - 1) / self.quantile
 
-        # Get variable object
-        var_obj = next(
-            v
-            for v in self.baseline_simulation.tax_benefit_model_version.variables
-            if v.name == self.variable
+        var_obj = get_aggregate_variable(
+            self.baseline_simulation, self.variable, "ChangeAggregate.variable"
         )
 
         # Get the target entity data
         target_entity = self.entity or var_obj.entity
-        baseline_data = getattr(
-            self.baseline_simulation.output_dataset.data, target_entity
+        baseline_data = get_output_entity_data(
+            self.baseline_simulation,
+            target_entity,
+            "ChangeAggregate.baseline_entity",
         )
-        reform_data = getattr(self.reform_simulation.output_dataset.data, target_entity)
+        reform_data = get_output_entity_data(
+            self.reform_simulation,
+            target_entity,
+            "ChangeAggregate.reform_entity",
+        )
 
         # Map variable to target entity if needed
         if var_obj.entity != target_entity:
+            baseline_source_data = get_output_entity_data(
+                self.baseline_simulation,
+                var_obj.entity,
+                "ChangeAggregate.variable",
+            )
+            reform_source_data = get_output_entity_data(
+                self.reform_simulation,
+                var_obj.entity,
+                "ChangeAggregate.variable",
+            )
+            require_output_column(
+                baseline_source_data,
+                self.variable,
+                var_obj.entity,
+                self.baseline_simulation,
+                "ChangeAggregate.variable",
+            )
+            require_output_column(
+                reform_source_data,
+                self.variable,
+                var_obj.entity,
+                self.reform_simulation,
+                "ChangeAggregate.variable",
+            )
             baseline_mapped = (
                 self.baseline_simulation.output_dataset.data.map_to_entity(
-                    var_obj.entity, target_entity
+                    var_obj.entity, target_entity, columns=[self.variable]
                 )
             )
             baseline_series = baseline_mapped[self.variable]
 
             reform_mapped = self.reform_simulation.output_dataset.data.map_to_entity(
-                var_obj.entity, target_entity
+                var_obj.entity, target_entity, columns=[self.variable]
             )
             reform_series = reform_mapped[self.variable]
         else:
+            require_output_column(
+                baseline_data,
+                self.variable,
+                target_entity,
+                self.baseline_simulation,
+                "ChangeAggregate.variable",
+            )
+            require_output_column(
+                reform_data,
+                self.variable,
+                target_entity,
+                self.reform_simulation,
+                "ChangeAggregate.variable",
+            )
             baseline_series = baseline_data[self.variable]
             reform_series = reform_data[self.variable]
 
@@ -124,20 +170,41 @@ class ChangeAggregate(Output):
 
         # Apply filter_variable filters
         if self.filter_variable is not None:
-            filter_var_obj = next(
-                v
-                for v in self.baseline_simulation.tax_benefit_model_version.variables
-                if v.name == self.filter_variable
+            filter_var_obj = get_aggregate_variable(
+                self.baseline_simulation,
+                self.filter_variable,
+                "ChangeAggregate.filter_variable",
             )
 
             if filter_var_obj.entity != target_entity:
+                filter_source_data = get_output_entity_data(
+                    self.baseline_simulation,
+                    filter_var_obj.entity,
+                    "ChangeAggregate.filter_variable",
+                )
+                require_output_column(
+                    filter_source_data,
+                    self.filter_variable,
+                    filter_var_obj.entity,
+                    self.baseline_simulation,
+                    "ChangeAggregate.filter_variable",
+                )
                 filter_mapped = (
                     self.baseline_simulation.output_dataset.data.map_to_entity(
-                        filter_var_obj.entity, target_entity
+                        filter_var_obj.entity,
+                        target_entity,
+                        columns=[self.filter_variable],
                     )
                 )
                 filter_series = filter_mapped[self.filter_variable]
             else:
+                require_output_column(
+                    baseline_data,
+                    self.filter_variable,
+                    target_entity,
+                    self.baseline_simulation,
+                    "ChangeAggregate.filter_variable",
+                )
                 filter_series = baseline_data[self.filter_variable]
 
             if self.filter_variable_describes_quantiles:

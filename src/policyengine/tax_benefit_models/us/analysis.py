@@ -27,6 +27,24 @@ from policyengine.outputs.poverty import (
     calculate_us_poverty_rates,
 )
 
+US_PROGRAMS = {
+    "income_tax": {"entity": "tax_unit", "is_tax": True},
+    "employee_payroll_tax": {"entity": "tax_unit", "is_tax": True},
+    "state_income_tax": {
+        "entity": "tax_unit",
+        "variable_name": "household_state_income_tax",
+        "is_tax": True,
+    },
+    "snap": {"entity": "spm_unit", "is_tax": False},
+    "tanf": {"entity": "spm_unit", "is_tax": False},
+    "ssi": {"entity": "person", "is_tax": False},
+    "social_security": {"entity": "person", "is_tax": False},
+    "medicare_cost": {"entity": "person", "is_tax": False},
+    "medicaid": {"entity": "person", "is_tax": False},
+    "eitc": {"entity": "tax_unit", "is_tax": False},
+    "ctc": {"entity": "tax_unit", "is_tax": False},
+}
+
 
 class PolicyReformAnalysis(BaseModel):
     """Complete policy reform analysis result."""
@@ -37,6 +55,56 @@ class PolicyReformAnalysis(BaseModel):
     reform_poverty: OutputCollection[Poverty]
     baseline_inequality: Inequality
     reform_inequality: Inequality
+
+
+def _validate_program_statistics_config(
+    baseline_simulation: Simulation,
+    reform_simulation: Simulation,
+) -> None:
+    """Validate US program-stat variables before running simulations."""
+    missing_variables: set[str] = set()
+    missing_outputs: set[tuple[str, str, str]] = set()
+
+    simulations = (baseline_simulation, reform_simulation)
+    for program_name, program_info in US_PROGRAMS.items():
+        variable_name = program_info.get("variable_name", program_name)
+
+        for simulation in simulations:
+            model_version = simulation.tax_benefit_model_version
+            try:
+                variable = model_version.get_variable(variable_name)
+            except ValueError:
+                missing_variables.add(variable_name)
+                continue
+
+            resolved_variables = model_version.resolve_entity_variables(simulation)
+            if variable_name not in resolved_variables.get(variable.entity, []):
+                missing_outputs.add(
+                    (program_name, variable_name, variable.entity)
+                )
+
+    if not missing_variables and not missing_outputs:
+        return
+
+    lines = ["US program statistics config is invalid:"]
+    if missing_variables:
+        lines.append(
+            "Missing model variables: " + ", ".join(sorted(missing_variables))
+        )
+    if missing_outputs:
+        formatted = ", ".join(
+            f"{program_name} -> {variable_name} on {entity}"
+            for program_name, variable_name, entity in sorted(missing_outputs)
+        )
+        lines.append(
+            "Variables not materialized in simulation outputs: " + formatted
+        )
+        lines.append(
+            "Add them to the model version's entity_variables or pass them "
+            "via Simulation.extra_variables before running the simulation."
+        )
+
+    raise ValueError("\n".join(lines))
 
 
 def economic_impact_analysis(
@@ -55,6 +123,8 @@ def economic_impact_analysis(
         ``PolicyReformAnalysis`` with decile impacts, program
         statistics, baseline and reform poverty, and inequality.
     """
+    _validate_program_statistics_config(baseline_simulation, reform_simulation)
+
     baseline_simulation.ensure()
     reform_simulation.ensure()
 
@@ -71,26 +141,13 @@ def economic_impact_analysis(
         income_variable="household_net_income",
     )
 
-    programs = {
-        "income_tax": {"entity": "tax_unit", "is_tax": True},
-        "payroll_tax": {"entity": "person", "is_tax": True},
-        "state_income_tax": {"entity": "tax_unit", "is_tax": True},
-        "snap": {"entity": "spm_unit", "is_tax": False},
-        "tanf": {"entity": "spm_unit", "is_tax": False},
-        "ssi": {"entity": "person", "is_tax": False},
-        "social_security": {"entity": "person", "is_tax": False},
-        "medicare": {"entity": "person", "is_tax": False},
-        "medicaid": {"entity": "person", "is_tax": False},
-        "eitc": {"entity": "tax_unit", "is_tax": False},
-        "ctc": {"entity": "tax_unit", "is_tax": False},
-    }
-
     program_statistics = []
-    for program_name, program_info in programs.items():
+    for program_name, program_info in US_PROGRAMS.items():
         stats = ProgramStatistics(
             baseline_simulation=baseline_simulation,
             reform_simulation=reform_simulation,
             program_name=program_name,
+            variable_name=program_info.get("variable_name", program_name),
             entity=program_info["entity"],
             is_tax=program_info["is_tax"],
         )

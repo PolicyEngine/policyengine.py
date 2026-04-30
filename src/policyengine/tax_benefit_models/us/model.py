@@ -65,6 +65,7 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             # Benefits
             "ssi",
             "social_security",
+            "medicare_cost",
             "medicaid",
             "unemployment_compensation",
         ],
