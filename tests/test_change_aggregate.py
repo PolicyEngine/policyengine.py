@@ -2,6 +2,7 @@ import os
 import tempfile
 
 import pandas as pd
+import pytest
 from microdf import MicroDataFrame
 
 from policyengine.core import (
@@ -16,6 +17,118 @@ from policyengine.tax_benefit_models.uk import (
     UKYearData,
     uk_latest,
 )
+
+
+def _make_change_aggregate_simulations(tmp_path):
+    person_df = MicroDataFrame(
+        pd.DataFrame(
+            {
+                "person_id": [1, 2],
+                "benunit_id": [1, 2],
+                "household_id": [1, 2],
+                "age": [30, 40],
+                "employment_income": [50000, 60000],
+                "person_weight": [1.0, 1.0],
+            }
+        ),
+        weights="person_weight",
+    )
+    reform_person_df = MicroDataFrame(
+        pd.DataFrame(
+            {
+                "person_id": [1, 2],
+                "benunit_id": [1, 2],
+                "household_id": [1, 2],
+                "age": [30, 40],
+                "employment_income": [51000, 61000],
+                "person_weight": [1.0, 1.0],
+            }
+        ),
+        weights="person_weight",
+    )
+    benunit_df = MicroDataFrame(
+        pd.DataFrame(
+            {
+                "benunit_id": [1, 2],
+                "benunit_weight": [1.0, 1.0],
+            }
+        ),
+        weights="benunit_weight",
+    )
+    household_df = MicroDataFrame(
+        pd.DataFrame(
+            {
+                "household_id": [1, 2],
+                "household_weight": [1.0, 1.0],
+            }
+        ),
+        weights="household_weight",
+    )
+
+    baseline_dataset = PolicyEngineUKDataset(
+        name="Baseline",
+        description="Baseline dataset",
+        filepath=str(tmp_path / "baseline.h5"),
+        year=2024,
+        data=UKYearData(person=person_df, benunit=benunit_df, household=household_df),
+    )
+    reform_dataset = PolicyEngineUKDataset(
+        name="Reform",
+        description="Reform dataset",
+        filepath=str(tmp_path / "reform.h5"),
+        year=2024,
+        data=UKYearData(
+            person=reform_person_df,
+            benunit=benunit_df,
+            household=household_df,
+        ),
+    )
+
+    baseline_sim = Simulation(
+        dataset=baseline_dataset,
+        tax_benefit_model_version=uk_latest,
+        output_dataset=baseline_dataset,
+    )
+    reform_sim = Simulation(
+        dataset=reform_dataset,
+        tax_benefit_model_version=uk_latest,
+        output_dataset=reform_dataset,
+    )
+    return baseline_sim, reform_sim
+
+
+def test_change_aggregate_invalid_variable(tmp_path):
+    baseline_sim, reform_sim = _make_change_aggregate_simulations(tmp_path)
+
+    agg = ChangeAggregate(
+        baseline_simulation=baseline_sim,
+        reform_simulation=reform_sim,
+        variable="not_a_variable",
+        aggregate_type=ChangeAggregateType.COUNT,
+    )
+
+    with pytest.raises(ValueError, match="ChangeAggregate.variable") as exc_info:
+        agg.run()
+
+    assert "not_a_variable" in str(exc_info.value)
+
+
+def test_change_aggregate_invalid_filter_variable(tmp_path):
+    baseline_sim, reform_sim = _make_change_aggregate_simulations(tmp_path)
+
+    agg = ChangeAggregate(
+        baseline_simulation=baseline_sim,
+        reform_simulation=reform_sim,
+        variable="employment_income",
+        aggregate_type=ChangeAggregateType.COUNT,
+        filter_variable="not_a_filter_variable",
+        filter_variable_geq=0,
+    )
+
+    with pytest.raises(ValueError, match="ChangeAggregate.filter_variable") as exc_info:
+        agg.run()
+
+    assert "not_a_filter_variable" in str(exc_info.value)
 
 
 def test_change_aggregate_count():

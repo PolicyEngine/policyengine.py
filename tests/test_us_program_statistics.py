@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 from microdf import MicroDataFrame
 
 from policyengine.core import Simulation
@@ -137,10 +138,9 @@ def test_us_program_statistics_config_fails_before_simulation_run(
         entity_variables,
     )
 
-    try:
+    with pytest.raises(
+        ValueError, match="US program statistics config is invalid"
+    ) as exc_info:
         _validate_program_statistics_config(baseline, reform)
-    except ValueError as exc:
-        assert "US program statistics config is invalid" in str(exc)
-        assert "medicare_cost" in str(exc)
-    else:
-        raise AssertionError("Expected ValueError")
+
+    assert "medicare_cost" in str(exc_info.value)
