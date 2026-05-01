@@ -1,0 +1,40 @@
+name: Release manifest sync smoke
+
+on:
+  pull_request:
+    paths:
+      - .github/bump_version.py
+      - .github/smoke_release_manifest_sync.py
+      - .github/workflows/release_manifest_sync_smoke.yaml
+      - src/policyengine/data/release_manifests/**
+      - src/policyengine/provenance/bundle.py
+      - tests/test_bump_version.py
+      - tests/test_bundle_refresh.py
+      - tests/test_release_manifests.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sample-manifest-sync:
+    name: Sample manifest sync
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo without write credentials
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Run sync against copied sample manifests
+        run: python .github/smoke_release_manifest_sync.py --target-version 9.8.7
+
+      - name: Verify source manifests were not modified
+        run: |
+          git status --short
+          git diff --exit-code -- .github/bump_version.py src/policyengine/data/release_manifests
