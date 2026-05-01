@@ -10,7 +10,6 @@ Run: python examples/income_distribution_us.py
 """
 
 import time
-from pathlib import Path
 
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -19,29 +18,25 @@ from policyengine.core import Simulation
 from policyengine.outputs.aggregate import Aggregate, AggregateType
 from policyengine.tax_benefit_models.us import (
     PolicyEngineUSDataset,
+    ensure_datasets,
     us_latest,
 )
 from policyengine.utils.plotting import COLORS, format_fig
 
 
 def load_representative_data(year: int = 2024) -> PolicyEngineUSDataset:
-    """Load representative household microdata for a given year."""
-    dataset_path = Path(__file__).parent / "data" / f"enhanced_cps_2024_year_{year}.h5"
+    """Load representative household microdata for a given year.
 
-    if not dataset_path.exists():
-        raise FileNotFoundError(
-            f"Dataset not found at {dataset_path}. "
-            "Run create_datasets() from policyengine.tax_benefit_models.us first."
-        )
-
-    dataset = PolicyEngineUSDataset(
-        name=f"Enhanced CPS {year}",
-        description=f"Representative household microdata for {year}",
-        filepath=str(dataset_path),
-        year=year,
+    Downloads the enhanced CPS dataset from HuggingFace on first run and
+    caches it locally under ./data, matching the pattern used by the
+    other examples (e.g. us_budgetary_impact.py).
+    """
+    datasets = ensure_datasets(
+        datasets=["hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"],
+        years=[year],
+        data_folder="./data",
     )
-    dataset.load()
-    return dataset
+    return datasets[f"enhanced_cps_2024_{year}"]
 
 
 def run_simulation(dataset: PolicyEngineUSDataset) -> Simulation:
