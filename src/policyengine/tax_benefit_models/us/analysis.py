@@ -30,11 +30,7 @@ from policyengine.outputs.poverty import (
 US_PROGRAMS = {
     "income_tax": {"entity": "tax_unit", "is_tax": True},
     "employee_payroll_tax": {"entity": "tax_unit", "is_tax": True},
-    "state_income_tax": {
-        "entity": "tax_unit",
-        "variable_name": "household_state_income_tax",
-        "is_tax": True,
-    },
+    "state_income_tax": {"entity": "tax_unit", "is_tax": True},
     "snap": {"entity": "spm_unit", "is_tax": False},
     "tanf": {"entity": "spm_unit", "is_tax": False},
     "ssi": {"entity": "person", "is_tax": False},
@@ -63,23 +59,21 @@ def _validate_program_statistics_config(
 ) -> None:
     """Validate US program-stat variables before running simulations."""
     missing_variables: set[str] = set()
-    missing_outputs: set[tuple[str, str, str]] = set()
+    missing_outputs: set[tuple[str, str]] = set()
 
     simulations = (baseline_simulation, reform_simulation)
     for program_name, program_info in US_PROGRAMS.items():
-        variable_name = program_info.get("variable_name", program_name)
-
         for simulation in simulations:
             model_version = simulation.tax_benefit_model_version
             try:
-                variable = model_version.get_variable(variable_name)
+                variable = model_version.get_variable(program_name)
             except ValueError:
-                missing_variables.add(variable_name)
+                missing_variables.add(program_name)
                 continue
 
             resolved_variables = model_version.resolve_entity_variables(simulation)
-            if variable_name not in resolved_variables.get(variable.entity, []):
-                missing_outputs.add((program_name, variable_name, variable.entity))
+            if program_name not in resolved_variables.get(variable.entity, []):
+                missing_outputs.add((program_name, variable.entity))
 
     if not missing_variables and not missing_outputs:
         return
@@ -89,8 +83,8 @@ def _validate_program_statistics_config(
         lines.append("Missing model variables: " + ", ".join(sorted(missing_variables)))
     if missing_outputs:
         formatted = ", ".join(
-            f"{program_name} -> {variable_name} on {entity}"
-            for program_name, variable_name, entity in sorted(missing_outputs)
+            f"{program_name} on {entity}"
+            for program_name, entity in sorted(missing_outputs)
         )
         lines.append("Variables not materialized in simulation outputs: " + formatted)
         lines.append(
@@ -141,7 +135,6 @@ def economic_impact_analysis(
             baseline_simulation=baseline_simulation,
             reform_simulation=reform_simulation,
             program_name=program_name,
-            variable_name=program_info.get("variable_name", program_name),
             entity=program_info["entity"],
             is_tax=program_info["is_tax"],
         )

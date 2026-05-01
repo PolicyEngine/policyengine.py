@@ -92,6 +92,7 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             "tax_unit_weight",
             "income_tax",
             "employee_payroll_tax",
+            "state_income_tax",
             "household_state_income_tax",
             "eitc",
             "ctc",

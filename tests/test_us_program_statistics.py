@@ -65,7 +65,7 @@ def _make_us_output_simulation(tmp_path, simulation_id: str, multiplier: float):
                 "tax_unit_weight": [1.0, 2.0],
                 "income_tax": [700.0 * multiplier, 0.0],
                 "employee_payroll_tax": [0.0, 800.0 * multiplier],
-                "household_state_income_tax": [900.0 * multiplier, 0.0],
+                "state_income_tax": [900.0 * multiplier, 0.0],
                 "eitc": [0.0, 1_000.0 * multiplier],
                 "ctc": [1_100.0 * multiplier, 0.0],
             },
@@ -108,7 +108,6 @@ def test_us_program_statistics_config_runs_against_mocked_outputs(tmp_path):
             baseline_simulation=baseline,
             reform_simulation=reform,
             program_name=program_name,
-            variable_name=program_info.get("variable_name", program_name),
             entity=program_info["entity"],
             is_tax=program_info["is_tax"],
         )
@@ -118,7 +117,6 @@ def test_us_program_statistics_config_runs_against_mocked_outputs(tmp_path):
     assert set(results) == set(US_PROGRAMS)
     assert results["employee_payroll_tax"].baseline_total == 1_600.0
     assert results["medicare_cost"].baseline_total == 300.0
-    assert results["state_income_tax"].variable_name == "household_state_income_tax"
     assert results["state_income_tax"].baseline_total == 900.0
 
 
