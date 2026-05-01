@@ -8,6 +8,14 @@ Demonstrates the canonical policyengine.py workflow:
 5. Use ChangeAggregate for targeted single-metric queries
 
 Run: python examples/us_budgetary_impact.py
+
+System requirements: this example holds two full enhanced-CPS US
+simulations in memory simultaneously to compute reform-vs-baseline
+deltas. On a 2026 dataset (~101k people / 41k households) peak memory
+has been observed at ~7.5 GiB RSS / ~80 GiB virtual, and end-to-end
+runtime is ~20 minutes on a developer laptop. Run with at least 16 GiB
+of free RAM and expect to close other memory-heavy applications. See
+https://github.com/PolicyEngine/policyengine.py/issues/328 for tracking.
 """
 
 import datetime
