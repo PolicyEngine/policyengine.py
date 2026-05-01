@@ -116,11 +116,37 @@ def update_file(path: Path, new_version: str):
         print(f"  Updated {path}")
 
 
+def sync_release_manifest_versions(manifest_dir: Path, new_version: str):
+    if not manifest_dir.exists():
+        return
+
+    for manifest_path in sorted(manifest_dir.glob("*.json")):
+        country_id = manifest_path.stem
+        text = manifest_path.read_text()
+        updated = text
+        updated = re.sub(
+            r'("bundle_id"\s*:\s*")[^"]+(")',
+            rf"\g<1>{country_id}-{new_version}\g<2>",
+            updated,
+            count=1,
+        )
+        updated = re.sub(
+            r'("policyengine_version"\s*:\s*")[^"]+(")',
+            rf"\g<1>{new_version}\g<2>",
+            updated,
+            count=1,
+        )
+        if updated != text:
+            manifest_path.write_text(updated)
+            print(f"  Updated {manifest_path}")
+
+
 def main():
     root = Path(__file__).resolve().parent.parent
     pyproject = root / "pyproject.toml"
     changelog = root / "CHANGELOG.md"
     changelog_dir = root / "changelog.d"
+    manifest_dir = root / "src" / "policyengine" / "data" / "release_manifests"
 
     current = get_current_version(pyproject, changelog, root)
     bump = infer_bump(changelog_dir)
@@ -129,6 +155,7 @@ def main():
     print(f"Version: {current} -> {new} ({bump})")
 
     update_file(pyproject, new)
+    sync_release_manifest_versions(manifest_dir, new)
 
 
 if __name__ == "__main__":

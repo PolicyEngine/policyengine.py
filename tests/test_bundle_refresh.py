@@ -127,6 +127,9 @@ def sandbox(tmp_path: Path) -> dict:
 
     pyproject_path = tmp_path / "pyproject.toml"
     pyproject_path.write_text(
+        "[project]\n"
+        'version = "4.2.0"\n'
+        "\n"
         "[project.optional-dependencies]\n"
         "us = [\n"
         '    "policyengine_core>=3.25.0",\n'
@@ -166,6 +169,8 @@ def test__bump_model_only_rewrites_wheel_pins_and_pyproject(sandbox) -> None:
     written = json.loads((sandbox["manifest_dir"] / "us.json").read_text())
     assert written["model_package"]["version"] == "1.653.3"
     assert written["model_package"]["sha256"] == "a" * 64
+    assert written["bundle_id"] == "us-4.2.0"
+    assert written["policyengine_version"] == "4.2.0"
     # Dataset pins untouched.
     assert written["data_package"]["version"] == "1.70.0"
     assert written["certified_data_artifact"]["sha256"] == "d" * 64

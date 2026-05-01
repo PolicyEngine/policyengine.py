@@ -54,3 +54,23 @@ def test_update_file_replaces_stale_version_field(tmp_path):
     bump_version.update_file(pyproject, "3.4.3")
 
     assert 'version = "3.4.3"' in pyproject.read_text()
+
+
+def test_sync_release_manifest_versions_rewrites_bundle_identity(tmp_path):
+    manifest_dir = tmp_path / "release_manifests"
+    manifest_dir.mkdir()
+    manifest_path = manifest_dir / "uk.json"
+    manifest_path.write_text(
+        "{\n"
+        '  "schema_version": 1,\n'
+        '  "bundle_id": "uk-4.0.0",\n'
+        '  "country_id": "uk",\n'
+        '  "policyengine_version": "4.0.0"\n'
+        "}\n"
+    )
+
+    bump_version.sync_release_manifest_versions(manifest_dir, "4.3.2")
+
+    text = manifest_path.read_text()
+    assert '"bundle_id": "uk-4.3.2"' in text
+    assert '"policyengine_version": "4.3.2"' in text

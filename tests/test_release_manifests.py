@@ -1,6 +1,8 @@
 """Tests for bundled compatibility manifests and data release manifests."""
 
 import json
+import re
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from requests import Timeout
@@ -25,6 +27,13 @@ from policyengine.tax_benefit_models.us import (
 )
 from policyengine.tax_benefit_models.us import us_latest
 
+PYPROJECT = Path(__file__).resolve().parents[1] / "pyproject.toml"
+POLICYENGINE_VERSION = re.search(
+    r'^version\s*=\s*"([^"]+)"',
+    PYPROJECT.read_text(),
+    re.MULTILINE,
+).group(1)
+
 
 def _response_with_json(payload: dict) -> MagicMock:
     response = MagicMock()
@@ -45,9 +54,9 @@ class TestReleaseManifests:
         manifest = get_release_manifest("us")
 
         assert manifest.schema_version == 1
-        assert manifest.bundle_id == "us-4.0.0"
+        assert manifest.bundle_id == f"us-{POLICYENGINE_VERSION}"
         assert manifest.country_id == "us"
-        assert manifest.policyengine_version == "4.0.0"
+        assert manifest.policyengine_version == POLICYENGINE_VERSION
         assert manifest.model_package.name == "policyengine-us"
         assert manifest.model_package.version == "1.667.1"
         assert manifest.data_package.name == "policyengine-us-data"
@@ -67,9 +76,9 @@ class TestReleaseManifests:
         manifest = get_release_manifest("uk")
 
         assert manifest.schema_version == 1
-        assert manifest.bundle_id == "uk-4.0.0"
+        assert manifest.bundle_id == f"uk-{POLICYENGINE_VERSION}"
         assert manifest.country_id == "uk"
-        assert manifest.policyengine_version == "4.0.0"
+        assert manifest.policyengine_version == POLICYENGINE_VERSION
         assert manifest.model_package.name == "policyengine-uk"
         assert manifest.model_package.version == "2.88.0"
         assert manifest.data_package.name == "policyengine-uk-data"
@@ -408,7 +417,7 @@ class TestReleaseManifests:
 
         bundle = model_version.release_bundle
 
-        assert bundle["bundle_id"] == "uk-4.0.0"
+        assert bundle["bundle_id"] == f"uk-{POLICYENGINE_VERSION}"
         assert bundle["default_dataset"] == "enhanced_frs_2023_24"
         assert bundle["default_dataset_uri"] == manifest.default_dataset_uri
         assert bundle["certified_data_build_id"] == "policyengine-uk-data-1.40.4"
@@ -455,7 +464,9 @@ class TestReleaseManifests:
 
         dataset = mock_microsimulation.call_args.kwargs["dataset"]
         assert dataset == microsim.policyengine_bundle["runtime_dataset_source"]
-        assert microsim.policyengine_bundle["policyengine_version"] == "4.0.0"
+        assert (
+            microsim.policyengine_bundle["policyengine_version"] == POLICYENGINE_VERSION
+        )
         assert microsim.policyengine_bundle["runtime_dataset"] == "enhanced_cps_2024"
         assert (
             microsim.policyengine_bundle["runtime_dataset_uri"]
@@ -493,7 +504,9 @@ class TestReleaseManifests:
                 "hf://policyengine/policyengine-uk-data-private/"
                 "enhanced_frs_2023_24.h5@1.40.4"
             )
-        assert microsim.policyengine_bundle["policyengine_version"] == "4.0.0"
+        assert (
+            microsim.policyengine_bundle["policyengine_version"] == POLICYENGINE_VERSION
+        )
         assert microsim.policyengine_bundle["runtime_dataset"] == "enhanced_frs_2023_24"
         assert microsim.policyengine_bundle["runtime_dataset_uri"] == (
             "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.4"
