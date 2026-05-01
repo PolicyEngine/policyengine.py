@@ -35,7 +35,7 @@ def main():
         data_folder="./data",
     )
     dataset = datasets[f"enhanced_cps_2024_{year}"]
-    print(f"  Loaded: {dataset}")
+    print(f"  Loaded: {dataset.name} ({len(dataset.data.person):,} people)")
 
     # ── Step 2: Define a reform ──
     # Example: double the standard deduction for single filers
