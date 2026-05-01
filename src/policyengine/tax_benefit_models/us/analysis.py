@@ -26,6 +26,10 @@ from policyengine.outputs.poverty import (
     Poverty,
     calculate_us_poverty_rates,
 )
+from policyengine.utils.errors import (
+    create_error,
+    format_conditional_error_detail,
+)
 
 US_PROGRAMS = {
     "income_tax": {"entity": "tax_unit", "is_tax": True},
@@ -53,6 +57,38 @@ class PolicyReformAnalysis(BaseModel):
     reform_inequality: Inequality
 
 
+def _format_missing_program_variables(missing_variables: set[str]) -> str | None:
+    """Format the optional missing-variable detail for program statistics."""
+    return format_conditional_error_detail(
+        "Missing model variables",
+        missing_variables,
+    )
+
+
+def _program_statistics_config_error_message(
+    missing_variables: set[str],
+    missing_outputs: set[tuple[str, str]],
+) -> str:
+    lines = ["US program statistics config is invalid:"]
+
+    missing_variables_message = _format_missing_program_variables(missing_variables)
+    if missing_variables_message is not None:
+        lines.append(missing_variables_message)
+
+    if missing_outputs:
+        formatted = ", ".join(
+            f"{program_name} on {entity}"
+            for program_name, entity in sorted(missing_outputs)
+        )
+        lines.append("Variables not materialized in simulation outputs: " + formatted)
+        lines.append(
+            "Add them to the model version's entity_variables or pass them "
+            "via Simulation.extra_variables before running the simulation."
+        )
+
+    return "\n".join(lines)
+
+
 def _validate_program_statistics_config(
     baseline_simulation: Simulation,
     reform_simulation: Simulation,
@@ -78,21 +114,13 @@ def _validate_program_statistics_config(
     if not missing_variables and not missing_outputs:
         return
 
-    lines = ["US program statistics config is invalid:"]
-    if missing_variables:
-        lines.append("Missing model variables: " + ", ".join(sorted(missing_variables)))
-    if missing_outputs:
-        formatted = ", ".join(
-            f"{program_name} on {entity}"
-            for program_name, entity in sorted(missing_outputs)
-        )
-        lines.append("Variables not materialized in simulation outputs: " + formatted)
-        lines.append(
-            "Add them to the model version's entity_variables or pass them "
-            "via Simulation.extra_variables before running the simulation."
-        )
-
-    raise ValueError("\n".join(lines))
+    raise create_error(
+        ValueError,
+        _program_statistics_config_error_message(
+            missing_variables,
+            missing_outputs,
+        ),
+    )
 
 
 def economic_impact_analysis(
