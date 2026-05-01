@@ -259,6 +259,24 @@ def test__update_pyproject_false_leaves_pins_alone(sandbox) -> None:
     assert "policyengine-us==1.600.0" in sandbox["pyproject_path"].read_text()
 
 
+def test__invalid_pyproject_version_fails_before_manifest_write(
+    sandbox, tmp_path
+) -> None:
+    invalid_pyproject = tmp_path / "invalid-pyproject.toml"
+    invalid_pyproject.write_text('[project]\nname = "policyengine"\n')
+    manifest_path = sandbox["manifest_dir"] / "us.json"
+    original = manifest_path.read_text()
+
+    with pytest.raises(ValueError, match="Could not find project version"):
+        refresh_release_bundle(
+            country="us",
+            manifest_dir=sandbox["manifest_dir"],
+            pyproject_path=invalid_pyproject,
+        )
+
+    assert manifest_path.read_text() == original
+
+
 def test__no_matching_wheel_on_pypi_raises(sandbox) -> None:
     def fake_urlopen(*args, **kwargs):
         return io.BytesIO(json.dumps({"urls": []}).encode())

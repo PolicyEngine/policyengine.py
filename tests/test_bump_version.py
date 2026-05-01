@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = REPO_ROOT / ".github" / "bump_version.py"
 
@@ -74,3 +76,22 @@ def test_sync_release_manifest_versions_rewrites_bundle_identity(tmp_path):
     text = manifest_path.read_text()
     assert '"bundle_id": "uk-4.3.2"' in text
     assert '"policyengine_version": "4.3.2"' in text
+
+
+def test_sync_release_manifest_versions_fails_when_required_field_missing(tmp_path):
+    manifest_dir = tmp_path / "release_manifests"
+    manifest_dir.mkdir()
+    manifest_path = manifest_dir / "uk.json"
+    manifest_path.write_text(
+        "{\n"
+        '  "schema_version": 1,\n'
+        '  "bundle_id": "uk-4.0.0",\n'
+        '  "country_id": "uk"\n'
+        "}\n"
+    )
+    original = manifest_path.read_text()
+
+    with pytest.raises(SystemExit):
+        bump_version.sync_release_manifest_versions(manifest_dir, "4.3.2")
+
+    assert manifest_path.read_text() == original

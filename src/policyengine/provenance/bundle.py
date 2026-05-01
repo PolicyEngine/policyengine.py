@@ -282,6 +282,7 @@ def refresh_release_bundle(
     else:
         new_dataset_sha256 = old_dataset_sha256
     new_uri = f"hf://{repo_id}/{dataset_path}@{new_data}"
+    policyengine_version = _pyproject_version(pyproject_path)
 
     # Mutate the manifest JSON in place (keep unknown fields untouched).
     manifest_json["model_package"]["version"] = new_model
@@ -303,8 +304,8 @@ def refresh_release_bundle(
         json.dumps(manifest_json, indent=2, sort_keys=False) + "\n"
     )
     sync_release_manifest_policyengine_version(
+        policyengine_version=policyengine_version,
         manifest_dir=manifest_dir,
-        pyproject_path=pyproject_path,
     )
 
     pyproject_updated = False
