@@ -13,7 +13,12 @@ from policyengine.outputs.change_aggregate import (
 
 
 class ProgramStatistics(Output):
-    """Single program's statistics from a policy reform - represents one database row."""
+    """Single program's statistics from a policy reform.
+
+    Count fields are reported in the configured entity's units. For example,
+    a tax-unit variable reports tax-unit recipient/winner/loser counts, while
+    a person variable reports person counts.
+    """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
