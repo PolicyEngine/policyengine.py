@@ -119,6 +119,40 @@ class TestUSCalculateHousehold:
         )
         assert result.tax_unit.ctc >= 0
 
+    def test__monthly_year_period__then_raises_before_calculation(self):
+        with pytest.raises(ValueError, match="Monthly periods are not supported"):
+            pe.us.calculate_household(
+                people=[{"age": 30, "is_tax_unit_head": True}],
+                year="2026-01",
+            )
+
+    def test__periodized_person_input__then_raises_before_calculation(self):
+        with pytest.raises(
+            ValueError,
+            match=r"Periodized US household inputs.*people\[0\]\.employment_income",
+        ):
+            pe.us.calculate_household(
+                people=[
+                    {
+                        "age": 30,
+                        "is_tax_unit_head": True,
+                        "employment_income": {"2026-01": 1_000},
+                    }
+                ],
+                year=2026,
+            )
+
+    def test__periodized_group_input__then_raises_before_calculation(self):
+        with pytest.raises(
+            ValueError,
+            match=r"Periodized US household inputs.*household\.state_code",
+        ):
+            pe.us.calculate_household(
+                people=[{"age": 30, "is_tax_unit_head": True}],
+                household={"state_code": {"2026-01": "CA"}},
+                year=2026,
+            )
+
 
 class TestHouseholdInputValidation:
     def test__unknown_person_variable__then_raises_with_suggestion(self):

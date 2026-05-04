@@ -92,6 +92,48 @@ def _safe_convert(value: Any) -> Any:
         return str(value) if value is not None else None
 
 
+def _validate_annual_year(year: Any) -> int:
+    if isinstance(year, bool):
+        raise ValueError(
+            "US household calculations require a calendar year as an integer, "
+            "for example year=2026. Monthly periods are not supported by "
+            "pe.us.calculate_household."
+        )
+    if isinstance(year, int):
+        return year
+    if isinstance(year, str) and year.isdecimal() and len(year) == 4:
+        return int(year)
+    raise ValueError(
+        "US household calculations require a calendar year as an integer, "
+        "for example year=2026. Monthly periods are not supported by "
+        "pe.us.calculate_household."
+    )
+
+
+def _validate_unperiodized_household_inputs(
+    *,
+    people: list[Mapping[str, Any]],
+    entities: Mapping[str, Mapping[str, Any]],
+) -> None:
+    for index, person in enumerate(people):
+        for variable, value in person.items():
+            if variable != "id" and isinstance(value, Mapping):
+                raise ValueError(
+                    "Periodized US household inputs are not supported by "
+                    "pe.us.calculate_household. Pass annual scalar input values "
+                    f"only; received a periodized value for people[{index}].{variable}."
+                )
+
+    for entity, values in entities.items():
+        for variable, value in values.items():
+            if variable != "id" and isinstance(value, Mapping):
+                raise ValueError(
+                    "Periodized US household inputs are not supported by "
+                    "pe.us.calculate_household. Pass annual scalar input values "
+                    f"only; received a periodized value for {entity}.{variable}."
+                )
+
+
 def _build_situation(
     *,
     people: list[Mapping[str, Any]],
@@ -181,13 +223,13 @@ def calculate_household(
             if a variable is placed on the wrong entity (e.g.
             ``filing_status`` on ``people``), or if ``extra_variables``
             / ``reform`` names a variable or parameter path not defined
-            on the US model.
+            on the US model. Raises if ``year`` is not an annual calendar
+            year or if household input values are already periodized.
     """
     if unexpected:
         _raise_unexpected_kwargs(unexpected)
 
-    from policyengine_us import Simulation
-
+    year = _validate_annual_year(year)
     people = list(people)
     entities = {
         "marital_unit": dict(marital_unit or {}),
@@ -196,6 +238,9 @@ def calculate_household(
         "tax_unit": dict(tax_unit or {}),
         "household": dict(household or {}),
     }
+    _validate_unperiodized_household_inputs(people=people, entities=entities)
+
+    from policyengine_us import Simulation
 
     validate_household_input(
         model_version=us_latest,
