@@ -45,6 +45,7 @@ from policyengine.tax_benefit_models.common import (
     HouseholdResult,
     compile_reform,
     dispatch_extra_variables,
+    validate_annual_household_inputs,
 )
 from policyengine.utils.household_validation import validate_household_input
 
@@ -90,48 +91,6 @@ def _safe_convert(value: Any) -> Any:
         return float(value)
     except (ValueError, TypeError):
         return str(value) if value is not None else None
-
-
-def _validate_annual_year(year: Any) -> int:
-    if isinstance(year, bool):
-        raise ValueError(
-            "US household calculations require a calendar year as an integer, "
-            "for example year=2026. Monthly periods are not supported by "
-            "pe.us.calculate_household."
-        )
-    if isinstance(year, int):
-        return year
-    if isinstance(year, str) and year.isdecimal() and len(year) == 4:
-        return int(year)
-    raise ValueError(
-        "US household calculations require a calendar year as an integer, "
-        "for example year=2026. Monthly periods are not supported by "
-        "pe.us.calculate_household."
-    )
-
-
-def _validate_unperiodized_household_inputs(
-    *,
-    people: list[Mapping[str, Any]],
-    entities: Mapping[str, Mapping[str, Any]],
-) -> None:
-    for index, person in enumerate(people):
-        for variable, value in person.items():
-            if variable != "id" and isinstance(value, Mapping):
-                raise ValueError(
-                    "Periodized US household inputs are not supported by "
-                    "pe.us.calculate_household. Pass annual scalar input values "
-                    f"only; received a periodized value for people[{index}].{variable}."
-                )
-
-    for entity, values in entities.items():
-        for variable, value in values.items():
-            if variable != "id" and isinstance(value, Mapping):
-                raise ValueError(
-                    "Periodized US household inputs are not supported by "
-                    "pe.us.calculate_household. Pass annual scalar input values "
-                    f"only; received a periodized value for {entity}.{variable}."
-                )
 
 
 def _build_situation(
@@ -229,7 +188,6 @@ def calculate_household(
     if unexpected:
         _raise_unexpected_kwargs(unexpected)
 
-    year = _validate_annual_year(year)
     people = list(people)
     entities = {
         "marital_unit": dict(marital_unit or {}),
@@ -238,7 +196,13 @@ def calculate_household(
         "tax_unit": dict(tax_unit or {}),
         "household": dict(household or {}),
     }
-    _validate_unperiodized_household_inputs(people=people, entities=entities)
+    year = validate_annual_household_inputs(
+        year=year,
+        entities={
+            "people": people,
+            **{name: [value] for name, value in entities.items()},
+        },
+    )
 
     from policyengine_us import Simulation
 

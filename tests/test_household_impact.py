@@ -65,6 +65,34 @@ class TestUKCalculateHousehold:
         assert isinstance(reformed.benunit.child_benefit, float)
         assert isinstance(baseline.benunit.child_benefit, float)
 
+    def test__monthly_year_period__then_raises_before_calculation(self):
+        with pytest.raises(ValueError, match="Monthly periods are not supported"):
+            pe.uk.calculate_household(
+                people=[{"age": 30}],
+                year="2026-01",
+            )
+
+    def test__periodized_person_input__then_raises_before_calculation(self):
+        with pytest.raises(
+            ValueError,
+            match=r"Periodized household inputs.*people\[0\]\.employment_income",
+        ):
+            pe.uk.calculate_household(
+                people=[{"age": 30, "employment_income": {"2026-01": 1_000}}],
+                year=2026,
+            )
+
+    def test__periodized_group_input__then_raises_before_calculation(self):
+        with pytest.raises(
+            ValueError,
+            match=r"Periodized household inputs.*benunit\.would_claim_child_benefit",
+        ):
+            pe.uk.calculate_household(
+                people=[{"age": 30}],
+                benunit={"would_claim_child_benefit": {"2026-01": True}},
+                year=2026,
+            )
+
 
 class TestUSCalculateHousehold:
     def test__single_adult__then_returns_result_with_net_income(self):
@@ -129,7 +157,7 @@ class TestUSCalculateHousehold:
     def test__periodized_person_input__then_raises_before_calculation(self):
         with pytest.raises(
             ValueError,
-            match=r"Periodized US household inputs.*people\[0\]\.employment_income",
+            match=r"Periodized household inputs.*people\[0\]\.employment_income",
         ):
             pe.us.calculate_household(
                 people=[
@@ -145,7 +173,7 @@ class TestUSCalculateHousehold:
     def test__periodized_group_input__then_raises_before_calculation(self):
         with pytest.raises(
             ValueError,
-            match=r"Periodized US household inputs.*household\.state_code",
+            match=r"Periodized household inputs.*household\.state_code",
         ):
             pe.us.calculate_household(
                 people=[{"age": 30, "is_tax_unit_head": True}],
