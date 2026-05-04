@@ -55,6 +55,57 @@ from policyengine.provenance.manifest import (
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 MANIFEST_DIR = REPO_ROOT / "src" / "policyengine" / "data" / "release_manifests"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
+SEMVER_PATTERN = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+
+
+# ---------------------------------------------------------------------------
+# policyengine.py bundle identity
+# ---------------------------------------------------------------------------
+
+
+def _pyproject_version(pyproject_path: Path) -> str:
+    text = pyproject_path.read_text()
+    match = re.search(r'^version\s*=\s*"(\d+\.\d+\.\d+)"', text, re.MULTILINE)
+    if match is None:
+        raise ValueError(f"Could not find project version in {pyproject_path}")
+    return match.group(1)
+
+
+def sync_release_manifest_policyengine_version(
+    *,
+    policyengine_version: Optional[str] = None,
+    manifest_dir: Path = MANIFEST_DIR,
+    pyproject_path: Path = PYPROJECT,
+) -> list[Path]:
+    """Sync bundled release manifests to the current ``policyengine.py`` version.
+
+    Country model/data refreshes and package release bumps move through
+    different automation paths. This helper keeps the top-level bundle identity
+    tied to the package release regardless of which path writes the manifest.
+    """
+    resolved_version = policyengine_version or _pyproject_version(pyproject_path)
+    if not SEMVER_PATTERN.match(resolved_version):
+        raise ValueError(f"Invalid policyengine version: {resolved_version}")
+
+    updated_paths: list[Path] = []
+    for manifest_path in sorted(manifest_dir.glob("*.json")):
+        manifest_json = json.loads(manifest_path.read_text())
+        country_id = manifest_json.get("country_id") or manifest_path.stem
+        expected_bundle_id = f"{country_id}-{resolved_version}"
+        if (
+            manifest_json.get("policyengine_version") == resolved_version
+            and manifest_json.get("bundle_id") == expected_bundle_id
+        ):
+            continue
+
+        manifest_json["policyengine_version"] = resolved_version
+        manifest_json["bundle_id"] = expected_bundle_id
+        manifest_path.write_text(
+            json.dumps(manifest_json, indent=2, sort_keys=False) + "\n"
+        )
+        updated_paths.append(manifest_path)
+
+    return updated_paths
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +282,7 @@ def refresh_release_bundle(
     else:
         new_dataset_sha256 = old_dataset_sha256
     new_uri = f"hf://{repo_id}/{dataset_path}@{new_data}"
+    policyengine_version = _pyproject_version(pyproject_path)
 
     # Mutate the manifest JSON in place (keep unknown fields untouched).
     manifest_json["model_package"]["version"] = new_model
@@ -250,6 +302,10 @@ def refresh_release_bundle(
 
     manifest_path.write_text(
         json.dumps(manifest_json, indent=2, sort_keys=False) + "\n"
+    )
+    sync_release_manifest_policyengine_version(
+        policyengine_version=policyengine_version,
+        manifest_dir=manifest_dir,
     )
 
     pyproject_updated = False

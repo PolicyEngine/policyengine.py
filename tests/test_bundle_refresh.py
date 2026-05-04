@@ -127,6 +127,9 @@ def sandbox(tmp_path: Path) -> dict:
 
     pyproject_path = tmp_path / "pyproject.toml"
     pyproject_path.write_text(
+        "[project]\n"
+        'version = "4.2.0"\n'
+        "\n"
         "[project.optional-dependencies]\n"
         "us = [\n"
         '    "policyengine_core>=3.25.0",\n'
@@ -166,6 +169,8 @@ def test__bump_model_only_rewrites_wheel_pins_and_pyproject(sandbox) -> None:
     written = json.loads((sandbox["manifest_dir"] / "us.json").read_text())
     assert written["model_package"]["version"] == "1.653.3"
     assert written["model_package"]["sha256"] == "a" * 64
+    assert written["bundle_id"] == "us-4.2.0"
+    assert written["policyengine_version"] == "4.2.0"
     # Dataset pins untouched.
     assert written["data_package"]["version"] == "1.70.0"
     assert written["certified_data_artifact"]["sha256"] == "d" * 64
@@ -252,6 +257,24 @@ def test__update_pyproject_false_leaves_pins_alone(sandbox) -> None:
 
     assert not result.pyproject_updated
     assert "policyengine-us==1.600.0" in sandbox["pyproject_path"].read_text()
+
+
+def test__invalid_pyproject_version_fails_before_manifest_write(
+    sandbox, tmp_path
+) -> None:
+    invalid_pyproject = tmp_path / "invalid-pyproject.toml"
+    invalid_pyproject.write_text('[project]\nname = "policyengine"\n')
+    manifest_path = sandbox["manifest_dir"] / "us.json"
+    original = manifest_path.read_text()
+
+    with pytest.raises(ValueError, match="Could not find project version"):
+        refresh_release_bundle(
+            country="us",
+            manifest_dir=sandbox["manifest_dir"],
+            pyproject_path=invalid_pyproject,
+        )
+
+    assert manifest_path.read_text() == original
 
 
 def test__no_matching_wheel_on_pypi_raises(sandbox) -> None:
