@@ -107,10 +107,11 @@ def test_change_aggregate_invalid_variable(tmp_path):
         aggregate_type=ChangeAggregateType.COUNT,
     )
 
-    with pytest.raises(ValueError, match="ChangeAggregate.variable") as exc_info:
+    with pytest.raises(ValueError) as exc_info:
         agg.run()
 
     assert "not_a_variable" in str(exc_info.value)
+    assert "references missing variable" in str(exc_info.value)
 
 
 def test_change_aggregate_invalid_filter_variable(tmp_path):
@@ -125,10 +126,11 @@ def test_change_aggregate_invalid_filter_variable(tmp_path):
         filter_variable_geq=0,
     )
 
-    with pytest.raises(ValueError, match="ChangeAggregate.filter_variable") as exc_info:
+    with pytest.raises(ValueError) as exc_info:
         agg.run()
 
     assert "not_a_filter_variable" in str(exc_info.value)
+    assert "references missing variable" in str(exc_info.value)
 
 
 def test_change_aggregate_count():

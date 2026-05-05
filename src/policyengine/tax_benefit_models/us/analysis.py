@@ -26,10 +26,7 @@ from policyengine.outputs.poverty import (
     Poverty,
     calculate_us_poverty_rates,
 )
-from policyengine.utils.errors import (
-    create_error,
-    format_conditional_error_detail,
-)
+from policyengine.utils.errors import format_conditional_error_detail
 
 US_PROGRAMS = {
     "income_tax": {"entity": "tax_unit", "is_tax": True},
@@ -114,8 +111,7 @@ def _validate_program_statistics_config(
     if not missing_variables and not missing_outputs:
         return
 
-    raise create_error(
-        ValueError,
+    raise ValueError(
         _program_statistics_config_error_message(
             missing_variables,
             missing_outputs,

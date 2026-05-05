@@ -3,14 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Optional, TypeVar
-
-ErrorT = TypeVar("ErrorT", bound=Exception)
-
-
-def create_error(error_type: type[ErrorT], message: str) -> ErrorT:
-    """Create an exception instance from an error type and message."""
-    return error_type(message)
+from typing import Optional
 
 
 def format_conditional_error_detail(

@@ -2,7 +2,7 @@ from difflib import get_close_matches
 from enum import Enum
 from typing import Any, Optional
 
-from policyengine.core import Output, Simulation
+from policyengine.core import Output, Simulation, Variable
 
 
 class AggregateType(str, Enum):
@@ -11,7 +11,11 @@ class AggregateType(str, Enum):
     COUNT = "count"
 
 
-def get_aggregate_variable(simulation: Simulation, variable: str, context: str):
+def get_aggregate_variable(
+    simulation: Simulation,
+    variable: str,
+    context: str,
+) -> Variable:
     """Return a model variable with an aggregation-specific error message."""
     model_version = simulation.tax_benefit_model_version
     try:
@@ -31,7 +35,11 @@ def get_aggregate_variable(simulation: Simulation, variable: str, context: str):
         ) from exc
 
 
-def get_output_entity_data(simulation: Simulation, entity: str, context: str):
+def get_output_entity_data(
+    simulation: Simulation,
+    entity: str,
+    context: str,
+) -> Any:
     """Return output data for an entity with a clear error if it is unavailable."""
     if simulation.output_dataset is None or simulation.output_dataset.data is None:
         raise ValueError(
@@ -49,7 +57,7 @@ def get_output_entity_data(simulation: Simulation, entity: str, context: str):
 
 
 def require_output_column(
-    data,
+    data: Any,
     variable: str,
     entity: str,
     simulation: Simulation,

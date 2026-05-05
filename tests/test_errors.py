@@ -1,14 +1,4 @@
-from policyengine.utils.errors import (
-    create_error,
-    format_conditional_error_detail,
-)
-
-
-def test_create_error_returns_requested_error_type():
-    error = create_error(ValueError, "Example failure")
-
-    assert isinstance(error, ValueError)
-    assert str(error) == "Example failure"
+from policyengine.utils.errors import format_conditional_error_detail
 
 
 def test_format_conditional_error_detail():
