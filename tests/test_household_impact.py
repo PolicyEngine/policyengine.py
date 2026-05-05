@@ -9,7 +9,11 @@ names; extra variables are a flat list dispatched by the library.
 import pytest
 
 import policyengine as pe
-from policyengine.tax_benefit_models.common import EntityResult, HouseholdResult
+from policyengine.tax_benefit_models.common import (
+    EntityResult,
+    HouseholdResult,
+    validate_annual_household_inputs,
+)
 
 
 class TestUKCalculateHousehold:
@@ -183,6 +187,19 @@ class TestUSCalculateHousehold:
 
 
 class TestHouseholdInputValidation:
+    def test__annual_year_string__then_preserves_string_year(self):
+        assert (
+            validate_annual_household_inputs(year="2026", entities={"people": []})
+            == "2026"
+        )
+
+    def test__non_annual_year__then_error_includes_received_year(self):
+        with pytest.raises(ValueError, match=r"Received year='2026-01'"):
+            validate_annual_household_inputs(
+                year="2026-01",
+                entities={"people": []},
+            )
+
     def test__unknown_person_variable__then_raises_with_suggestion(self):
         with pytest.raises(ValueError, match="employment_incme"):
             pe.us.calculate_household(

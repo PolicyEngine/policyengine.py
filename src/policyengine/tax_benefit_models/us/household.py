@@ -38,7 +38,7 @@ an optional reform, get back a dot-accessible result.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from policyengine.tax_benefit_models.common import (
     EntityResult,
@@ -101,7 +101,7 @@ def _build_situation(
     spm_unit: Mapping[str, Any],
     tax_unit: Mapping[str, Any],
     household: Mapping[str, Any],
-    year: int,
+    year: Union[int, str],
 ) -> dict[str, Any]:
     year_str = str(year)
 
@@ -147,7 +147,7 @@ def calculate_household(
     spm_unit: Optional[Mapping[str, Any]] = None,
     tax_unit: Optional[Mapping[str, Any]] = None,
     household: Optional[Mapping[str, Any]] = None,
-    year: int = 2026,
+    year: Union[int, str] = 2026,
     reform: Optional[Mapping[str, Any]] = None,
     extra_variables: Optional[list[str]] = None,
     **unexpected: Any,

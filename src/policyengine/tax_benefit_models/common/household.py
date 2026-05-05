@@ -1,35 +1,38 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, Union
+
+AnnualYear = Union[int, str]
 
 
 def validate_annual_household_inputs(
     *,
     year: Any,
     entities: Mapping[str, Sequence[Mapping[str, Any]]],
-) -> int:
+) -> AnnualYear:
     """Validate annual-only household calculator inputs."""
     validated_year = _validate_annual_year(year)
     _validate_unperiodized_values(entities)
     return validated_year
 
 
-def _validate_annual_year(year: Any) -> int:
+def _validate_annual_year(year: Any) -> AnnualYear:
     if isinstance(year, bool):
-        raise _annual_period_error()
+        raise _annual_period_error(year)
     if isinstance(year, int):
         return year
     if isinstance(year, str) and year.isdecimal() and len(year) == 4:
-        return int(year)
-    raise _annual_period_error()
+        return year
+    raise _annual_period_error(year)
 
 
-def _annual_period_error() -> ValueError:
+def _annual_period_error(year: Any) -> ValueError:
     return ValueError(
-        "Household calculations require a calendar year as an integer, "
-        "for example year=2026. Monthly periods are not supported by "
-        "calculate_household."
+        "Household calculations require a calendar year as an integer "
+        "or four-digit string, for example year=2026 or year='2026'. "
+        "Monthly periods are not supported by calculate_household. "
+        f"Received year={year!r}."
     )
 
 
