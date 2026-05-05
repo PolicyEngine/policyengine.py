@@ -94,7 +94,7 @@ def test__us_extra_variables_appear_on_output_dataset(tmp_path) -> None:
         tax_benefit_model_version=pe.us.model,
         # Issue #303 used ``net_worth`` (imputed from SCF in later
         # policyengine-us releases). Substituted with two variables
-        # present in the pinned 1.653.3 wheel so the test is
+        # present in the pinned US wheel so the test is
         # hermetic: ``household_market_income`` is already a default
         # (so we also cover the dedup path) and
         # ``adjusted_gross_income`` is a tax_unit variable not in
