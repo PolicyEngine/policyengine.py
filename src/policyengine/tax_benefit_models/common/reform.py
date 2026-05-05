@@ -40,7 +40,7 @@ from __future__ import annotations
 import datetime
 from collections.abc import Mapping
 from difflib import get_close_matches
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 if TYPE_CHECKING:
     from policyengine.core.dynamic import Dynamic
@@ -51,7 +51,7 @@ if TYPE_CHECKING:
 def compile_reform(
     reform: Optional[Mapping[str, Any]],
     *,
-    year: Optional[int] = None,
+    year: Optional[Union[int, str]] = None,
     model_version: Optional[TaxBenefitModelVersion] = None,
 ) -> Optional[dict[str, dict[str, Any]]]:
     """Compile a simple reform dict to the core reform-dict format.
@@ -97,7 +97,7 @@ def compile_reform(
 def _reform_dict_to_parameter_values(
     reform: Mapping[str, Any],
     *,
-    year: Optional[int],
+    year: Optional[Union[int, str]],
     model_version: TaxBenefitModelVersion,
 ) -> list:
     """Compile a flat reform dict into a list of ``ParameterValue`` objects.
@@ -138,7 +138,7 @@ def _compile_reform_to(
     default_name: str,
     reform: Optional[Mapping[str, Any]],
     *,
-    year: Optional[int],
+    year: Optional[Union[int, str]],
     model_version: TaxBenefitModelVersion,
     name: Optional[str] = None,
 ):
@@ -153,7 +153,7 @@ def _compile_reform_to(
 def compile_reform_to_policy(
     reform: Optional[Mapping[str, Any]],
     *,
-    year: Optional[int],
+    year: Optional[Union[int, str]],
     model_version: TaxBenefitModelVersion,
     name: Optional[str] = None,
 ) -> Optional[Policy]:
@@ -180,7 +180,7 @@ def compile_reform_to_policy(
 def compile_reform_to_dynamic(
     reform: Optional[Mapping[str, Any]],
     *,
-    year: Optional[int],
+    year: Optional[Union[int, str]],
     model_version: TaxBenefitModelVersion,
     name: Optional[str] = None,
 ) -> Optional[Dynamic]:
