@@ -58,7 +58,7 @@ class TestReleaseManifests:
         assert manifest.country_id == "us"
         assert manifest.policyengine_version == POLICYENGINE_VERSION
         assert manifest.model_package.name == "policyengine-us"
-        assert manifest.model_package.version == "1.667.1"
+        assert manifest.model_package.version == "1.687.0"
         assert manifest.data_package.name == "policyengine-us-data"
         assert manifest.data_package.version == "1.78.2"
         assert manifest.data_package.repo_id == "policyengine/policyengine-us-data"
@@ -70,7 +70,7 @@ class TestReleaseManifests:
         assert manifest.certification is not None
         assert manifest.certification.data_build_id == "policyengine-us-data-1.78.2"
         assert manifest.certification.built_with_model_version == "1.647.0"
-        assert manifest.certification.certified_for_model_version == "1.667.1"
+        assert manifest.certification.certified_for_model_version == "1.687.0"
 
     def test__given_uk_manifest__then_has_pinned_model_and_data_packages(self):
         manifest = get_release_manifest("uk")
@@ -311,7 +311,7 @@ class TestReleaseManifests:
         ):
             certification = certify_data_release_compatibility(
                 "us",
-                runtime_model_version="1.667.1",
+                runtime_model_version="1.687.0",
             )
 
         assert certification == get_release_manifest("us").certification
