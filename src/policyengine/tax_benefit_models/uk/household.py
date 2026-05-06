@@ -28,6 +28,7 @@ from policyengine.tax_benefit_models.common import (
     HouseholdResult,
     compile_reform,
     dispatch_extra_variables,
+    validate_annual_household_inputs,
 )
 from policyengine.utils.household_validation import validate_household_input
 
@@ -131,19 +132,28 @@ def calculate_household(
         :class:`HouseholdResult` with dot-accessible entity results.
 
     Raises:
-        ValueError: on unknown or mis-placed variable names, or
-            unknown reform parameter paths.
+        ValueError: on unknown or mis-placed variable names,
+            unknown reform parameter paths, non-annual ``year`` values,
+            or periodized household input values.
         TypeError: on US-only kwargs (``tax_unit``, etc.) or other
             unsupported keyword arguments.
     """
     if unexpected:
         _raise_unexpected_kwargs(unexpected)
 
-    from policyengine_uk import Simulation
-
     people = list(people)
     benunit_dict = dict(benunit or {})
     household_dict = dict(household or {})
+    year = validate_annual_household_inputs(
+        year=year,
+        entities={
+            "people": people,
+            "benunit": [benunit_dict],
+            "household": [household_dict],
+        },
+    )
+
+    from policyengine_uk import Simulation
 
     validate_household_input(
         model_version=uk_latest,

@@ -6,6 +6,9 @@ their public ``calculate_household`` / ``analyze_reform`` entry points.
 """
 
 from .extra_variables import dispatch_extra_variables as dispatch_extra_variables
+from .household import (
+    validate_annual_household_inputs as validate_annual_household_inputs,
+)
 from .model_version import (
     MicrosimulationModelVersion as MicrosimulationModelVersion,
 )

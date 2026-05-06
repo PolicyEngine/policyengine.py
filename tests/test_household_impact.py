@@ -9,7 +9,11 @@ names; extra variables are a flat list dispatched by the library.
 import pytest
 
 import policyengine as pe
-from policyengine.tax_benefit_models.common import EntityResult, HouseholdResult
+from policyengine.tax_benefit_models.common import (
+    EntityResult,
+    HouseholdResult,
+    validate_annual_household_inputs,
+)
 
 
 class TestUKCalculateHousehold:
@@ -65,6 +69,34 @@ class TestUKCalculateHousehold:
         assert isinstance(reformed.benunit.child_benefit, float)
         assert isinstance(baseline.benunit.child_benefit, float)
 
+    def test__monthly_year_period__then_raises_before_calculation(self):
+        with pytest.raises(ValueError, match="Monthly periods are not supported"):
+            pe.uk.calculate_household(
+                people=[{"age": 30}],
+                year="2026-01",
+            )
+
+    def test__periodized_person_input__then_raises_before_calculation(self):
+        with pytest.raises(
+            ValueError,
+            match=r"Periodized household inputs.*people\[0\]\.employment_income",
+        ):
+            pe.uk.calculate_household(
+                people=[{"age": 30, "employment_income": {"2026-01": 1_000}}],
+                year=2026,
+            )
+
+    def test__periodized_group_input__then_raises_before_calculation(self):
+        with pytest.raises(
+            ValueError,
+            match=r"Periodized household inputs.*benunit\.would_claim_child_benefit",
+        ):
+            pe.uk.calculate_household(
+                people=[{"age": 30}],
+                benunit={"would_claim_child_benefit": {"2026-01": True}},
+                year=2026,
+            )
+
 
 class TestUSCalculateHousehold:
     def test__single_adult__then_returns_result_with_net_income(self):
@@ -119,8 +151,55 @@ class TestUSCalculateHousehold:
         )
         assert result.tax_unit.ctc >= 0
 
+    def test__monthly_year_period__then_raises_before_calculation(self):
+        with pytest.raises(ValueError, match="Monthly periods are not supported"):
+            pe.us.calculate_household(
+                people=[{"age": 30, "is_tax_unit_head": True}],
+                year="2026-01",
+            )
+
+    def test__periodized_person_input__then_raises_before_calculation(self):
+        with pytest.raises(
+            ValueError,
+            match=r"Periodized household inputs.*people\[0\]\.employment_income",
+        ):
+            pe.us.calculate_household(
+                people=[
+                    {
+                        "age": 30,
+                        "is_tax_unit_head": True,
+                        "employment_income": {"2026-01": 1_000},
+                    }
+                ],
+                year=2026,
+            )
+
+    def test__periodized_group_input__then_raises_before_calculation(self):
+        with pytest.raises(
+            ValueError,
+            match=r"Periodized household inputs.*household\.state_code",
+        ):
+            pe.us.calculate_household(
+                people=[{"age": 30, "is_tax_unit_head": True}],
+                household={"state_code": {"2026-01": "CA"}},
+                year=2026,
+            )
+
 
 class TestHouseholdInputValidation:
+    def test__annual_year_string__then_normalizes_to_int(self):
+        assert (
+            validate_annual_household_inputs(year="2026", entities={"people": []})
+            == 2026
+        )
+
+    def test__non_annual_year__then_error_includes_received_year(self):
+        with pytest.raises(ValueError, match=r"Received year='2026-01'"):
+            validate_annual_household_inputs(
+                year="2026-01",
+                entities={"people": []},
+            )
+
     def test__unknown_person_variable__then_raises_with_suggestion(self):
         with pytest.raises(ValueError, match="employment_incme"):
             pe.us.calculate_household(

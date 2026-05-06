@@ -45,6 +45,7 @@ from policyengine.tax_benefit_models.common import (
     HouseholdResult,
     compile_reform,
     dispatch_extra_variables,
+    validate_annual_household_inputs,
 )
 from policyengine.utils.household_validation import validate_household_input
 
@@ -181,12 +182,11 @@ def calculate_household(
             if a variable is placed on the wrong entity (e.g.
             ``filing_status`` on ``people``), or if ``extra_variables``
             / ``reform`` names a variable or parameter path not defined
-            on the US model.
+            on the US model. Raises if ``year`` is not an annual calendar
+            year or if household input values are already periodized.
     """
     if unexpected:
         _raise_unexpected_kwargs(unexpected)
-
-    from policyengine_us import Simulation
 
     people = list(people)
     entities = {
@@ -196,6 +196,15 @@ def calculate_household(
         "tax_unit": dict(tax_unit or {}),
         "household": dict(household or {}),
     }
+    year = validate_annual_household_inputs(
+        year=year,
+        entities={
+            "people": people,
+            **{name: [value] for name, value in entities.items()},
+        },
+    )
+
+    from policyengine_us import Simulation
 
     validate_household_input(
         model_version=us_latest,
