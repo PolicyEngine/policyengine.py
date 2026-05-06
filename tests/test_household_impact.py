@@ -187,10 +187,10 @@ class TestUSCalculateHousehold:
 
 
 class TestHouseholdInputValidation:
-    def test__annual_year_string__then_preserves_string_year(self):
+    def test__annual_year_string__then_normalizes_to_int(self):
         assert (
             validate_annual_household_inputs(year="2026", entities={"people": []})
-            == "2026"
+            == 2026
         )
 
     def test__non_annual_year__then_error_includes_received_year(self):
