@@ -21,6 +21,7 @@
   "person[0].is_male": 1.0,
   "person[0].marital_unit_id": 0.0,
   "person[0].medicaid": 0.0,
+  "person[0].medicare_cost": 14500.0,
   "person[0].person_id": 0.0,
   "person[0].person_weight": 1.0,
   "person[0].race": 3.0,
@@ -41,6 +42,7 @@
   "tax_unit.employee_payroll_tax": 5370.0,
   "tax_unit.household_state_income_tax": 1602.86,
   "tax_unit.income_tax": 5020.0,
+  "tax_unit.state_income_tax": 1602.86,
   "tax_unit.tax_unit_id": 0.0,
   "tax_unit.tax_unit_weight": 1.0
 }
