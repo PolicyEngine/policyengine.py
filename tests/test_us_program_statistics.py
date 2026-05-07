@@ -152,4 +152,3 @@ def test_us_programs_entities_match_model_metadata():
         assert program_name in us_latest.variables_by_name, (
             f"{program_name} is not defined in the US model"
         )
-
