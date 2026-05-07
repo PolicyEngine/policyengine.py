@@ -28,18 +28,23 @@ from policyengine.outputs.poverty import (
 )
 from policyengine.utils.errors import format_conditional_error_detail
 
-US_PROGRAMS = {
-    "income_tax": {"entity": "tax_unit", "is_tax": True},
-    "employee_payroll_tax": {"entity": "tax_unit", "is_tax": True},
-    "state_income_tax": {"entity": "tax_unit", "is_tax": True},
-    "snap": {"entity": "spm_unit", "is_tax": False},
-    "tanf": {"entity": "spm_unit", "is_tax": False},
-    "ssi": {"entity": "person", "is_tax": False},
-    "social_security": {"entity": "person", "is_tax": False},
-    "medicare_cost": {"entity": "person", "is_tax": False},
-    "medicaid": {"entity": "person", "is_tax": False},
-    "eitc": {"entity": "tax_unit", "is_tax": False},
-    "ctc": {"entity": "tax_unit", "is_tax": False},
+# Map of US program-statistics variable name -> is_tax flag. The
+# entity for each program is derived from the variable's own metadata
+# at runtime (see ``_validate_program_statistics_config`` and
+# ``economic_impact_analysis``), so this list cannot silently drift
+# when policyengine-us moves a variable between entities.
+US_PROGRAMS: dict[str, bool] = {
+    "income_tax": True,
+    "employee_payroll_tax": True,
+    "state_income_tax": True,
+    "snap": False,
+    "tanf": False,
+    "ssi": False,
+    "social_security": False,
+    "medicare_cost": False,
+    "medicaid": False,
+    "eitc": False,
+    "ctc": False,
 }
 
 
@@ -95,7 +100,7 @@ def _validate_program_statistics_config(
     missing_outputs: set[tuple[str, str]] = set()
 
     simulations = (baseline_simulation, reform_simulation)
-    for program_name, program_info in US_PROGRAMS.items():
+    for program_name in US_PROGRAMS:
         for simulation in simulations:
             model_version = simulation.tax_benefit_model_version
             try:
@@ -153,14 +158,15 @@ def economic_impact_analysis(
         income_variable="household_net_income",
     )
 
+    model_version = baseline_simulation.tax_benefit_model_version
     program_statistics = []
-    for program_name, program_info in US_PROGRAMS.items():
+    for program_name, is_tax in US_PROGRAMS.items():
         stats = ProgramStatistics(
             baseline_simulation=baseline_simulation,
             reform_simulation=reform_simulation,
             program_name=program_name,
-            entity=program_info["entity"],
-            is_tax=program_info["is_tax"],
+            entity=model_version.get_variable(program_name).entity,
+            is_tax=is_tax,
         )
         stats.run()
         program_statistics.append(stats)

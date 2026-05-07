@@ -103,14 +103,15 @@ def test_us_program_statistics_config_runs_against_mocked_outputs(tmp_path):
 
     _validate_program_statistics_config(baseline, reform)
 
+    model_version = baseline.tax_benefit_model_version
     results = {}
-    for program_name, program_info in US_PROGRAMS.items():
+    for program_name, is_tax in US_PROGRAMS.items():
         stats = ProgramStatistics(
             baseline_simulation=baseline,
             reform_simulation=reform,
             program_name=program_name,
-            entity=program_info["entity"],
-            is_tax=program_info["is_tax"],
+            entity=model_version.get_variable(program_name).entity,
+            is_tax=is_tax,
         )
         stats.run()
         results[program_name] = stats
@@ -144,3 +145,11 @@ def test_us_program_statistics_config_fails_before_simulation_run(
         _validate_program_statistics_config(baseline, reform)
 
     assert "medicare_cost" in str(exc_info.value)
+
+
+def test_us_programs_entities_match_model_metadata():
+    for program_name in US_PROGRAMS:
+        assert program_name in us_latest.variables_by_name, (
+            f"{program_name} is not defined in the US model"
+        )
+
