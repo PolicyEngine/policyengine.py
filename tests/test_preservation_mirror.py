@@ -1,7 +1,5 @@
 """Tests for the PreservationMirror extension to DataReleaseManifest."""
 
-import pytest
-
 from policyengine.provenance.manifest import (
     DataPackageVersion,
     DataReleaseArtifact,
