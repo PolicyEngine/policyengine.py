@@ -40,12 +40,17 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from policyengine.provenance.manifest import (
     CountryReleaseManifest,
+    DataPackageVersion,
+    DataReleaseArtifact,
+    DataReleaseManifest,
     get_release_manifest,
     https_dataset_uri,
+    https_release_manifest_uri,
 )
 
 # ---------------------------------------------------------------------------
@@ -159,19 +164,56 @@ def _hf_dataset_sha256(repo_id: str, path: str, revision: str) -> str:
         path_in_repo=path,
         revision=revision,
     )
-    headers = {"User-Agent": "policyengine.py"}
-    token = os.environ.get("HUGGING_FACE_TOKEN") or os.environ.get("HF_TOKEN")
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
     hasher = hashlib.sha256()
-    with urlopen(Request(url, headers=headers)) as f:
+    with urlopen(Request(url, headers=_hf_request_headers())) as f:
         while True:
             chunk = f.read(8 * 1024 * 1024)
             if not chunk:
                 break
             hasher.update(chunk)
     return hasher.hexdigest()
+
+
+def _hf_request_headers() -> dict[str, str]:
+    headers = {"User-Agent": "policyengine.py"}
+    token = os.environ.get("HUGGING_FACE_TOKEN") or os.environ.get("HF_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+def _hf_data_release_manifest(
+    data_package: DataPackageVersion,
+    revision: str,
+) -> Optional[DataReleaseManifest]:
+    """Fetch the HF data release manifest when a release publishes one.
+
+    Older data releases predate ``release_manifest.json``. Those remain
+    supported by returning ``None`` and falling back to streaming the dataset.
+    """
+    package_at_revision = data_package.model_copy(update={"version": revision})
+    url = https_release_manifest_uri(package_at_revision)
+    try:
+        with urlopen(Request(url, headers=_hf_request_headers())) as f:
+            return DataReleaseManifest.model_validate_json(f.read().decode())
+    except HTTPError as exc:
+        if exc.code == 404:
+            return None
+        if exc.code in (401, 403):
+            raise ValueError(
+                "Could not fetch the data release manifest from Hugging Face. "
+                "If this country uses a private data repo, set HUGGING_FACE_TOKEN."
+            ) from exc
+        raise
+
+
+def _release_artifact(
+    data_release: Optional[DataReleaseManifest],
+    dataset: str,
+) -> Optional[DataReleaseArtifact]:
+    if data_release is None:
+        return None
+    return data_release.artifacts.get(dataset)
 
 
 # ---------------------------------------------------------------------------
@@ -275,14 +317,52 @@ def refresh_release_bundle(
             f"'hf://{{owner}}/{{repo}}/{{path}}@{{revision}}'"
         )
     repo_id, dataset_path, _old_revision = repo_id_match.groups()
+    data_release = (
+        _hf_data_release_manifest(current.data_package, new_data)
+        if new_data != old_data
+        else None
+    )
+    release_artifact = _release_artifact(
+        data_release,
+        current.certified_data_artifact.dataset,
+    )
+    if release_artifact is not None:
+        repo_id = release_artifact.repo_id
+        dataset_path = release_artifact.path
+        artifact_revision = release_artifact.revision
+    else:
+        artifact_revision = new_data
 
     # Only hit HF if the data version actually changed.
     if new_data != old_data:
-        new_dataset_sha256 = _hf_dataset_sha256(repo_id, dataset_path, new_data)
+        new_dataset_sha256 = (
+            release_artifact.sha256
+            if release_artifact is not None and release_artifact.sha256 is not None
+            else _hf_dataset_sha256(repo_id, dataset_path, artifact_revision)
+        )
     else:
         new_dataset_sha256 = old_dataset_sha256
-    new_uri = f"hf://{repo_id}/{dataset_path}@{new_data}"
+    new_uri = f"hf://{repo_id}/{dataset_path}@{artifact_revision}"
     policyengine_version = _pyproject_version(pyproject_path)
+    data_build_id = (
+        data_release.build.build_id
+        if (
+            data_release is not None
+            and data_release.build is not None
+            and data_release.build.build_id is not None
+        )
+        else f"{current.data_package.name}-{new_data}"
+    )
+    built_with_model = (
+        data_release.build.built_with_model_package
+        if data_release is not None and data_release.build is not None
+        else None
+    )
+    if built_with_model is not None and built_with_model.name != package_name:
+        raise ValueError(
+            "Data release manifest was built with a different model package: "
+            f"expected {package_name}, got {built_with_model.name}."
+        )
 
     # Mutate the manifest JSON in place (keep unknown fields untouched).
     manifest_json["model_package"]["version"] = new_model
@@ -290,15 +370,27 @@ def refresh_release_bundle(
     manifest_json["model_package"]["wheel_url"] = new_wheel_url
     manifest_json["data_package"]["version"] = new_data
     manifest_json["certified_data_artifact"]["data_package"]["version"] = new_data
-    manifest_json["certified_data_artifact"]["build_id"] = (
-        f"{current.data_package.name}-{new_data}"
-    )
+    manifest_json["certified_data_artifact"]["build_id"] = data_build_id
     manifest_json["certified_data_artifact"]["uri"] = new_uri
     manifest_json["certified_data_artifact"]["sha256"] = new_dataset_sha256
-    manifest_json["certification"]["data_build_id"] = (
-        f"{current.data_package.name}-{new_data}"
-    )
+    manifest_json["certification"]["data_build_id"] = data_build_id
     manifest_json["certification"]["certified_for_model_version"] = new_model
+    if data_release is not None:
+        manifest_json["certification"].pop("built_with_model_version", None)
+        manifest_json["certification"].pop("built_with_model_git_sha", None)
+        manifest_json["certification"].pop("data_build_fingerprint", None)
+        if built_with_model is not None:
+            manifest_json["certification"]["built_with_model_version"] = (
+                built_with_model.version
+            )
+            if built_with_model.git_sha is not None:
+                manifest_json["certification"]["built_with_model_git_sha"] = (
+                    built_with_model.git_sha
+                )
+            if built_with_model.data_build_fingerprint is not None:
+                manifest_json["certification"]["data_build_fingerprint"] = (
+                    built_with_model.data_build_fingerprint
+                )
 
     manifest_path.write_text(
         json.dumps(manifest_json, indent=2, sort_keys=False) + "\n"

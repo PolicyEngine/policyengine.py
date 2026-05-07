@@ -24,6 +24,7 @@ import io
 import json
 from pathlib import Path
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 import pytest
 
@@ -76,6 +77,10 @@ class _FakeHFResponse:
 
     def __exit__(self, *args):
         self._buffer.close()
+
+
+def _missing_release_manifest(url: str) -> HTTPError:
+    return HTTPError(url, 404, "Not Found", hdrs=None, fp=None)
 
 
 @pytest.fixture
@@ -184,6 +189,8 @@ def test__bump_data_only_streams_hf_and_updates_uri(sandbox) -> None:
 
     def fake_urlopen(request, *args, **kwargs):
         url = request.full_url
+        if url.endswith("/release_manifest.json"):
+            raise _missing_release_manifest(url)
         if "huggingface.co" in url:
             assert "@" not in url  # URI revision is in the URL path
             assert "/datasets/" not in url
@@ -224,6 +231,8 @@ def test__bump_both_updates_everything(sandbox) -> None:
         url = request.full_url
         if "pypi.org" in url:
             return _pypi_response("policyengine-us", "1.653.3")
+        if url.endswith("/release_manifest.json"):
+            raise _missing_release_manifest(url)
         if "huggingface.co" in url:
             return _FakeHFResponse(hf_bytes)
         raise AssertionError(url)
@@ -240,6 +249,66 @@ def test__bump_both_updates_everything(sandbox) -> None:
     assert result.pyproject_updated
     assert result.new_model == "1.653.3"
     assert result.new_data == "1.83.4"
+
+
+def test__bump_data_with_release_manifest_updates_build_metadata(sandbox) -> None:
+    release_manifest = {
+        "schema_version": 1,
+        "data_package": {
+            "name": "policyengine-us-data",
+            "version": "1.83.4",
+        },
+        "build": {
+            "build_id": "policyengine-us-data-1.83.4",
+            "built_with_model_package": {
+                "name": "policyengine-us",
+                "version": "1.653.3",
+                "git_sha": "abc123",
+                "data_build_fingerprint": "sha256:" + "f" * 64,
+            },
+        },
+        "artifacts": {
+            "enhanced_cps_2024": {
+                "kind": "dataset",
+                "path": "enhanced_cps_2024.h5",
+                "repo_id": "policyengine/policyengine-us-data",
+                "revision": "1.83.4",
+                "sha256": "e" * 64,
+            }
+        },
+    }
+
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        if "pypi.org" in url:
+            return _pypi_response("policyengine-us", "1.653.3")
+        if url.endswith("/release_manifest.json"):
+            return io.BytesIO(json.dumps(release_manifest).encode())
+        if "huggingface.co" in url:
+            raise AssertionError(f"Dataset should not be streamed: {url}")
+        raise AssertionError(url)
+
+    with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
+        result = refresh_release_bundle(
+            country="us",
+            model_version="1.653.3",
+            data_version="1.83.4",
+            manifest_dir=sandbox["manifest_dir"],
+            pyproject_path=sandbox["pyproject_path"],
+        )
+
+    assert result.new_dataset_sha256 == "e" * 64
+
+    written = json.loads((sandbox["manifest_dir"] / "us.json").read_text())
+    assert written["certified_data_artifact"]["sha256"] == "e" * 64
+    assert (
+        written["certified_data_artifact"]["build_id"] == "policyengine-us-data-1.83.4"
+    )
+    assert written["certification"]["data_build_id"] == "policyengine-us-data-1.83.4"
+    assert written["certification"]["built_with_model_version"] == "1.653.3"
+    assert written["certification"]["built_with_model_git_sha"] == "abc123"
+    assert written["certification"]["data_build_fingerprint"] == "sha256:" + "f" * 64
+    assert written["certification"]["certified_for_model_version"] == "1.653.3"
 
 
 def test__update_pyproject_false_leaves_pins_alone(sandbox) -> None:
