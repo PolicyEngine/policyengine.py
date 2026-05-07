@@ -60,6 +60,34 @@ class ArtifactPathTemplate(BaseModel):
         return self.path_template.format(**kwargs)
 
 
+class PreservationMirror(BaseModel):
+    """Durable mirror of a data artifact on a preservation-grade host.
+
+    The primary host for PolicyEngine calibrated h5 files is Hugging
+    Face, which is fast and integrated with the Python client but does
+    not publish a preservation commitment. A ``PreservationMirror``
+    records an additional copy on a host that *does* publish one
+    (Zenodo, the Internet Archive, or an institutional archive), so a
+    TRO citation URL can fall back if the primary location is ever
+    unavailable.
+    """
+
+    kind: str
+    """Short identifier for the preservation host: ``zenodo``, ``internet_archive``, ``archival_gcs``, etc."""
+
+    url: str
+    """Dereferenceable HTTPS URL for the mirrored artifact."""
+
+    doi: Optional[str] = None
+    """DOI for the preservation deposit, when the host assigns one (Zenodo always does)."""
+
+    sha256: Optional[str] = None
+    """Content hash of the mirrored bytes. When equal to the primary artifact's ``sha256``, the mirror is byte-identical and the hash can be reused for verification."""
+
+    deposited_at: Optional[str] = None
+    """ISO 8601 timestamp of when the mirror was deposited, if known."""
+
+
 class DataReleaseArtifact(BaseModel):
     kind: str
     path: str
@@ -67,6 +95,10 @@ class DataReleaseArtifact(BaseModel):
     revision: str
     sha256: Optional[str] = None
     size_bytes: Optional[int] = None
+    preservation_mirrors: list[PreservationMirror] = Field(default_factory=list)
+    """Durable secondary locations for this artifact. Populated when the
+    release pipeline mirrors the artifact to a preservation-grade host.
+    Empty when no preservation deposit exists yet."""
 
     @property
     def uri(self) -> str:
@@ -86,6 +118,11 @@ class DataReleaseManifest(BaseModel):
     default_datasets: dict[str, str] = Field(default_factory=dict)
     build: Optional[DataBuildInfo] = None
     artifacts: dict[str, DataReleaseArtifact] = Field(default_factory=dict)
+    preservation_dois: list[str] = Field(default_factory=list)
+    """DOIs covering the release as a whole (Zenodo concept: one DOI
+    can enclose the full set of artifacts published together). Distinct
+    from per-artifact DOIs on ``DataReleaseArtifact.preservation_mirrors``.
+    Populated when the release pipeline mirrors to a DOI-minting host."""
 
 
 class DataCertification(BaseModel):
