@@ -34,9 +34,12 @@ class DataPackageVersion(PackageVersion):
     release_manifest_revision: Optional[str] = None
 
 
-class CompatibleModelPackage(BaseModel):
+class CompatiblePackage(BaseModel):
     name: str
     specifier: str
+
+
+CompatibleModelPackage = CompatiblePackage
 
 
 class BuiltWithModelPackage(PackageVersion):
@@ -47,6 +50,7 @@ class BuiltWithModelPackage(PackageVersion):
 class DataBuildInfo(BaseModel):
     build_id: Optional[str] = None
     built_at: Optional[str] = None
+    built_with_core_package: Optional[PackageVersion] = None
     built_with_model_package: Optional[BuiltWithModelPackage] = None
 
 
@@ -113,9 +117,8 @@ class DataReleaseArtifact(BaseModel):
 class DataReleaseManifest(BaseModel):
     schema_version: int
     data_package: PackageVersion
-    compatible_model_packages: list[CompatibleModelPackage] = Field(
-        default_factory=list
-    )
+    compatible_model_packages: list[CompatiblePackage] = Field(default_factory=list)
+    compatible_core_packages: list[CompatiblePackage] = Field(default_factory=list)
     default_datasets: dict[str, str] = Field(default_factory=dict)
     build: Optional[DataBuildInfo] = None
     artifacts: dict[str, DataReleaseArtifact] = Field(default_factory=dict)
