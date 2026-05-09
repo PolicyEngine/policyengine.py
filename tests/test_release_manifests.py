@@ -83,21 +83,25 @@ class TestReleaseManifests:
         assert manifest.country_id == "uk"
         assert manifest.policyengine_version == POLICYENGINE_VERSION
         assert manifest.model_package.name == "policyengine-uk"
-        assert manifest.model_package.version == "2.88.0"
+        assert manifest.model_package.version == "2.88.14"
         assert manifest.data_package.name == "policyengine-uk-data"
-        assert manifest.data_package.version == "1.40.4"
+        assert manifest.data_package.version == "1.55.5"
         assert (
             manifest.data_package.repo_id == "policyengine/policyengine-uk-data-private"
         )
         assert manifest.certified_data_artifact is not None
         assert (
-            manifest.certified_data_artifact.build_id == "policyengine-uk-data-1.40.4"
+            manifest.certified_data_artifact.build_id == "policyengine-uk-data-1.55.5"
         )
         assert manifest.certified_data_artifact.dataset == "enhanced_frs_2023_24"
         assert manifest.certification is not None
-        assert manifest.certification.data_build_id == "policyengine-uk-data-1.40.4"
-        assert manifest.certification.built_with_model_version == "2.88.0"
-        assert manifest.certification.certified_for_model_version == "2.88.0"
+        assert manifest.certification.data_build_id == "policyengine-uk-data-1.55.5"
+        assert manifest.certification.built_with_model_version == "2.88.14"
+        assert manifest.certification.certified_for_model_version == "2.88.14"
+        assert (
+            manifest.certification.data_build_fingerprint
+            == "sha256:dff5c5bb976ce254fa965ecfce6a0d84859fe1629a714ae28a79b3075522a0ae"
+        )
 
     def test__given_us_dataset_name__then_resolves_to_versioned_hf_url(self):
         resolved = resolve_dataset_reference("us", "enhanced_cps_2024")
@@ -112,7 +116,7 @@ class TestReleaseManifests:
 
         assert (
             resolved
-            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.4"
+            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.55.5"
         )
 
     def test__given_explicit_url__then_resolution_is_noop(self):
@@ -483,9 +487,9 @@ class TestReleaseManifests:
         assert bundle["bundle_id"] == f"uk-{POLICYENGINE_VERSION}"
         assert bundle["default_dataset"] == "enhanced_frs_2023_24"
         assert bundle["default_dataset_uri"] == manifest.default_dataset_uri
-        assert bundle["certified_data_build_id"] == "policyengine-uk-data-1.40.4"
-        assert bundle["data_build_model_version"] == "2.88.0"
-        assert bundle["compatibility_basis"] == "exact_build_model_version"
+        assert bundle["certified_data_build_id"] == "policyengine-uk-data-1.55.5"
+        assert bundle["data_build_model_version"] == "2.88.14"
+        assert bundle["compatibility_basis"] == "matching_data_build_fingerprint"
         assert bundle["certified_by"] == "policyengine.py bundled manifest"
 
     def test__given_runtime_certification__then_release_bundle_prefers_runtime_value(
@@ -565,19 +569,19 @@ class TestReleaseManifests:
         else:
             assert dataset == (
                 "hf://policyengine/policyengine-uk-data-private/"
-                "enhanced_frs_2023_24.h5@1.40.4"
+                "enhanced_frs_2023_24.h5@1.55.5"
             )
         assert (
             microsim.policyengine_bundle["policyengine_version"] == POLICYENGINE_VERSION
         )
         assert microsim.policyengine_bundle["runtime_dataset"] == "enhanced_frs_2023_24"
         assert microsim.policyengine_bundle["runtime_dataset_uri"] == (
-            "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.4"
+            "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.55.5"
         )
         dataset_source = microsim.policyengine_bundle["runtime_dataset_source"]
         assert (
             dataset_source
-            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.4"
+            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.55.5"
             or str(dataset_source).endswith(
                 "policyengine_uk_data/storage/enhanced_frs_2023_24.h5"
             )
