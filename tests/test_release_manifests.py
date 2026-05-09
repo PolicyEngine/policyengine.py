@@ -180,6 +180,10 @@ class TestReleaseManifests:
             "build": {
                 "build_id": "policyengine-us-data-1.78.2",
                 "built_at": "2026-04-10T12:00:00Z",
+                "built_with_core_package": {
+                    "name": "policyengine-core",
+                    "version": "3.26.0",
+                },
                 "built_with_model_package": {
                     "name": "policyengine-us",
                     "version": "1.687.0",
@@ -189,6 +193,9 @@ class TestReleaseManifests:
             },
             "compatible_model_packages": [
                 {"name": "policyengine-us", "specifier": "==1.687.0"}
+            ],
+            "compatible_core_packages": [
+                {"name": "policyengine-core", "specifier": "==3.26.0"}
             ],
             "default_datasets": {"national": "enhanced_cps_2024"},
             "artifacts": {
@@ -215,8 +222,11 @@ class TestReleaseManifests:
         assert manifest.build is not None
         assert manifest.build.build_id == "policyengine-us-data-1.78.2"
         assert manifest.build.built_at == "2026-04-10T12:00:00Z"
+        assert manifest.build.built_with_core_package is not None
+        assert manifest.build.built_with_core_package.version == "3.26.0"
         assert manifest.build.built_with_model_package is not None
         assert manifest.build.built_with_model_package.version == "1.687.0"
+        assert manifest.compatible_core_packages[0].specifier == "==3.26.0"
         assert (
             manifest.artifacts["enhanced_cps_2024"].uri
             == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.78.2"
