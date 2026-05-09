@@ -31,6 +31,7 @@ class DataPackageVersion(PackageVersion):
     repo_id: str
     repo_type: str = "model"
     release_manifest_path: str = "release_manifest.json"
+    release_manifest_revision: Optional[str] = None
 
 
 class CompatibleModelPackage(BaseModel):
@@ -178,9 +179,10 @@ def https_dataset_uri(repo_id: str, path_in_repo: str, revision: str) -> str:
 
 def https_release_manifest_uri(data_package: "DataPackageVersion") -> str:
     """Return a dereferenceable HTTPS URI for a data release manifest."""
+    revision = data_package.release_manifest_revision or data_package.version
     return (
         f"https://huggingface.co/{data_package.repo_id}/resolve/"
-        f"{data_package.version}/{data_package.release_manifest_path}"
+        f"{revision}/{data_package.release_manifest_path}"
     )
 
 

@@ -12,7 +12,9 @@
   "data_package": {
     "name": "policyengine-us-data",
     "version": "1.78.2",
-    "repo_id": "policyengine/policyengine-us-data"
+    "repo_id": "policyengine/policyengine-us-data",
+    "release_manifest_path": "releases/1.78.2/release_manifest.json",
+    "release_manifest_revision": "2f1ea16b152cd9db4a4d2f1aad4d42e7484d5999"
   },
   "certified_data_artifact": {
     "data_package": {
