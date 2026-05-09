@@ -1,3 +1,10 @@
+## [4.4.1] - 2026-05-09
+
+### Fixed
+
+- Preserve core-package compatibility metadata when parsing data release manifests, and deploy the Quarto documentation output from the correct `_site` directory.
+
+
 ## [4.4.0] - 2026-05-09
 
 ### Added
