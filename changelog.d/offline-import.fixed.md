@@ -1,1 +1,0 @@
-Country model imports now work without network access when the bundled release manifest already certifies the installed country package version. Hugging Face release-manifest transport failures fall back to bundled data certification only when the runtime model version and data build fingerprint gates still match.

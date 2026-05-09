@@ -1,3 +1,28 @@
+## [4.4.0] - 2026-05-09
+
+### Added
+
+- Extended `DataReleaseManifest` with optional preservation-mirror fields. Added a `PreservationMirror` model (kind, url, optional doi / sha256 / deposited_at), a `preservation_mirrors` list on each `DataReleaseArtifact`, and a top-level `preservation_dois` list on the manifest. Back-compatible: all new fields have defaults, and pre-existing manifests continue to validate. Populated by release pipelines that mirror artifacts to Zenodo or another preservation-grade host; addresses PolicyEngine/policyengine-us-data#810.
+- Added `docs/trace-case-study.md`, a working draft describing the PolicyEngine TRACE use case for Lars Vilhuber (AEA Data Editor) and the TRACE project team. Covers which PolicyEngine surfaces warrant institutional certification, the precise claims a TRO lets us make, UK data as the strongest case, the three concrete workstreams (us-data build TROs, policyengine-api webapp-run TROs, policyengine-app "Cite this result" UI), and open questions we want feedback on.
+
+### Changed
+
+- Updated GitHub Actions workflows for Node 24-compatible action runtimes.
+- Updated the bundled UK release to policyengine-uk 2.88.14 and policyengine-uk-data 1.55.5.
+- Bump the bundled US model pin to policyengine-us 1.687.0.
+
+### Fixed
+
+- Country model imports now work without network access when the bundled release manifest already certifies the installed country package version. Hugging Face release-manifest transport failures fall back to bundled data certification only when the runtime model version and data build fingerprint gates still match.
+- Sync bundled release manifest bundle IDs and `policyengine_version` fields during release version bumps.
+- Two small follow-ups surfaced by the v4 audit:
+
+  - ``Simulation.save()`` now raises a helpful ``ValueError`` when ``output_dataset`` is still ``None`` (run or ensure was never called), instead of the raw ``AttributeError: 'NoneType' object has no attribute 'save'``.
+  - New ``scripts/check_data_staleness.py`` prints a one-line verdict per country comparing the bundled release manifest's pinned model version against the installed country package; exits non-zero when any country is stale. Drop into CI to get automated "bundle is behind" alerts without waiting for a human to notice.
+
+  Also clarified the ``load()`` docstring: ``created_at``/``updated_at`` are filesystem ``ctime``/``mtime`` approximations, not a true round-trip of the original timestamps.
+
+
 ## [4.3.1] - 2026-04-21
 
 ### Changed
