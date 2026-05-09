@@ -14,7 +14,7 @@
     "version": "1.78.2",
     "repo_id": "policyengine/policyengine-us-data",
     "release_manifest_path": "releases/1.78.2/release_manifest.json",
-    "release_manifest_revision": "2f1ea16b152cd9db4a4d2f1aad4d42e7484d5999"
+    "release_manifest_revision": "9cb665df0a546f9c3d79b496f8eb2dd55859d38d"
   },
   "certified_data_artifact": {
     "data_package": {

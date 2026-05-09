@@ -72,7 +72,7 @@ class TestReleaseManifests:
         )
         assert (
             manifest.data_package.release_manifest_revision
-            == "2f1ea16b152cd9db4a4d2f1aad4d42e7484d5999"
+            == "9cb665df0a546f9c3d79b496f8eb2dd55859d38d"
         )
         assert manifest.certified_data_artifact is not None
         assert (
@@ -195,7 +195,8 @@ class TestReleaseManifests:
                 {"name": "policyengine-us", "specifier": "==1.687.0"}
             ],
             "compatible_core_packages": [
-                {"name": "policyengine-core", "specifier": "==3.26.0"}
+                {"name": "policyengine-core", "specifier": "==3.26.0"},
+                {"name": "policyengine-core", "specifier": "==3.26.1"},
             ],
             "default_datasets": {"national": "enhanced_cps_2024"},
             "artifacts": {
@@ -226,7 +227,10 @@ class TestReleaseManifests:
         assert manifest.build.built_with_core_package.version == "3.26.0"
         assert manifest.build.built_with_model_package is not None
         assert manifest.build.built_with_model_package.version == "1.687.0"
-        assert manifest.compatible_core_packages[0].specifier == "==3.26.0"
+        assert [package.specifier for package in manifest.compatible_core_packages] == [
+            "==3.26.0",
+            "==3.26.1",
+        ]
         assert (
             manifest.artifacts["enhanced_cps_2024"].uri
             == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.78.2"
@@ -234,7 +238,7 @@ class TestReleaseManifests:
         mock_get.assert_called_once()
         assert mock_get.call_args.args[0] == (
             "https://huggingface.co/policyengine/policyengine-us-data/resolve/"
-            "2f1ea16b152cd9db4a4d2f1aad4d42e7484d5999/"
+            "9cb665df0a546f9c3d79b496f8eb2dd55859d38d/"
             "releases/1.78.2/release_manifest.json"
         )
 
@@ -243,7 +247,7 @@ class TestReleaseManifests:
 
         assert https_release_manifest_uri(manifest.data_package) == (
             "https://huggingface.co/policyengine/policyengine-us-data/resolve/"
-            "2f1ea16b152cd9db4a4d2f1aad4d42e7484d5999/"
+            "9cb665df0a546f9c3d79b496f8eb2dd55859d38d/"
             "releases/1.78.2/release_manifest.json"
         )
 
