@@ -19,6 +19,7 @@ from policyengine.provenance.manifest import (
     dataset_logical_name,
     get_data_release_manifest,
     get_release_manifest,
+    https_release_manifest_uri,
     resolve_dataset_reference,
     resolve_managed_dataset_reference,
 )
@@ -65,6 +66,14 @@ class TestReleaseManifests:
         assert manifest.data_package.name == "policyengine-us-data"
         assert manifest.data_package.version == "1.78.2"
         assert manifest.data_package.repo_id == "policyengine/policyengine-us-data"
+        assert (
+            manifest.data_package.release_manifest_path
+            == "releases/1.78.2/release_manifest.json"
+        )
+        assert (
+            manifest.data_package.release_manifest_revision
+            == "2f1ea16b152cd9db4a4d2f1aad4d42e7484d5999"
+        )
         assert manifest.certified_data_artifact is not None
         assert (
             manifest.certified_data_artifact.build_id == "policyengine-us-data-1.78.2"
@@ -166,20 +175,20 @@ class TestReleaseManifests:
             "schema_version": 1,
             "data_package": {
                 "name": "policyengine-us-data",
-                "version": "1.73.0",
+                "version": "1.78.2",
             },
             "build": {
-                "build_id": "policyengine-us-data-1.73.0",
+                "build_id": "policyengine-us-data-1.78.2",
                 "built_at": "2026-04-10T12:00:00Z",
                 "built_with_model_package": {
                     "name": "policyengine-us",
-                    "version": "1.602.0",
+                    "version": "1.687.0",
                     "git_sha": "deadbeef",
                     "data_build_fingerprint": "sha256:fingerprint",
                 },
             },
             "compatible_model_packages": [
-                {"name": "policyengine-us", "specifier": "==1.602.0"}
+                {"name": "policyengine-us", "specifier": "==1.687.0"}
             ],
             "default_datasets": {"national": "enhanced_cps_2024"},
             "artifacts": {
@@ -187,7 +196,7 @@ class TestReleaseManifests:
                     "kind": "microdata",
                     "path": "enhanced_cps_2024.h5",
                     "repo_id": "policyengine/policyengine-us-data",
-                    "revision": "1.73.0",
+                    "revision": "1.78.2",
                     "sha256": "abc",
                     "size_bytes": 123,
                 }
@@ -204,15 +213,29 @@ class TestReleaseManifests:
         assert manifest.data_package.name == "policyengine-us-data"
         assert manifest.default_datasets["national"] == "enhanced_cps_2024"
         assert manifest.build is not None
-        assert manifest.build.build_id == "policyengine-us-data-1.73.0"
+        assert manifest.build.build_id == "policyengine-us-data-1.78.2"
         assert manifest.build.built_at == "2026-04-10T12:00:00Z"
         assert manifest.build.built_with_model_package is not None
-        assert manifest.build.built_with_model_package.version == "1.602.0"
+        assert manifest.build.built_with_model_package.version == "1.687.0"
         assert (
             manifest.artifacts["enhanced_cps_2024"].uri
-            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.73.0"
+            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.78.2"
         )
-        assert mock_get.call_count == 1
+        mock_get.assert_called_once()
+        assert mock_get.call_args.args[0] == (
+            "https://huggingface.co/policyengine/policyengine-us-data/resolve/"
+            "2f1ea16b152cd9db4a4d2f1aad4d42e7484d5999/"
+            "releases/1.78.2/release_manifest.json"
+        )
+
+    def test__given_explicit_manifest_revision__then_builds_manifest_url(self):
+        manifest = get_release_manifest("us")
+
+        assert https_release_manifest_uri(manifest.data_package) == (
+            "https://huggingface.co/policyengine/policyengine-us-data/resolve/"
+            "2f1ea16b152cd9db4a4d2f1aad4d42e7484d5999/"
+            "releases/1.78.2/release_manifest.json"
+        )
 
     def test__given_missing_data_release_manifest__then_fetch_raises_unavailable(self):
         get_data_release_manifest.cache_clear()
