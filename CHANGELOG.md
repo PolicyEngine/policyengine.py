@@ -1,3 +1,10 @@
+## [4.4.2] - 2026-05-09
+
+### Fixed
+
+- Point the bundled US data release manifest at a revision that certifies policyengine-core 3.26.1 compatibility.
+
+
 ## [4.4.1] - 2026-05-09
 
 ### Fixed
