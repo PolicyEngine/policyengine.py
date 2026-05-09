@@ -236,11 +236,17 @@ def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
-    response = requests.get(
-        https_release_manifest_uri(country_manifest.data_package),
-        headers=headers,
-        timeout=HF_REQUEST_TIMEOUT_SECONDS,
-    )
+    try:
+        response = requests.get(
+            https_release_manifest_uri(country_manifest.data_package),
+            headers=headers,
+            timeout=HF_REQUEST_TIMEOUT_SECONDS,
+        )
+    except requests.RequestException as exc:
+        raise DataReleaseManifestUnavailableError(
+            "Could not fetch the data release manifest from Hugging Face."
+        ) from exc
+
     if response.status_code in (401, 403):
         raise DataReleaseManifestUnavailableError(
             "Could not fetch the data release manifest from Hugging Face. "
@@ -250,7 +256,12 @@ def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
         raise DataReleaseManifestUnavailableError(
             "No data release manifest was published for this data package."
         )
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        raise DataReleaseManifestUnavailableError(
+            "Could not fetch the data release manifest from Hugging Face."
+        ) from exc
     return DataReleaseManifest.model_validate_json(response.text)
 
 

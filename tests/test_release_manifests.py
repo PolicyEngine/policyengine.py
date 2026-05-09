@@ -1,7 +1,10 @@
 """Tests for bundled compatibility manifests and data release manifests."""
 
 import json
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -316,6 +319,22 @@ class TestReleaseManifests:
 
         assert certification == get_release_manifest("us").certification
 
+    def test__given_manifest_request_timeout__then_bundled_certification_is_used(
+        self,
+    ):
+        get_data_release_manifest.cache_clear()
+
+        with patch(
+            "policyengine.provenance.manifest.requests.get",
+            side_effect=Timeout("network timeout"),
+        ):
+            certification = certify_data_release_compatibility(
+                "us",
+                runtime_model_version="1.687.0",
+            )
+
+        assert certification == get_release_manifest("us").certification
+
     def test__given_private_manifest_unavailable_and_fingerprint_mismatch__then_fails(
         self,
     ):
@@ -348,13 +367,13 @@ class TestReleaseManifests:
             else:
                 raise AssertionError("Expected fingerprint mismatch to fail")
 
-    def test__given_manifest_fetch_failure__then_certification_does_not_fallback(
+    def test__given_manifest_fetch_failure_and_version_mismatch__then_fallback_fails(
         self,
     ):
         get_data_release_manifest.cache_clear()
 
         with patch(
-            "policyengine.provenance.manifest.get_data_release_manifest",
+            "policyengine.provenance.manifest.requests.get",
             side_effect=Timeout("network timeout"),
         ):
             try:
@@ -362,10 +381,54 @@ class TestReleaseManifests:
                     "us",
                     runtime_model_version="1.602.0",
                 )
-            except Timeout as error:
-                assert "network timeout" in str(error)
+            except DataReleaseManifestUnavailableError as error:
+                assert "Could not fetch" in str(error)
             else:
-                raise AssertionError("Expected timeout to propagate")
+                raise AssertionError("Expected offline mismatched version to fail")
+
+    def test__given_offline_hf__then_us_import_uses_bundled_certification(
+        self,
+        tmp_path,
+    ):
+        sitecustomize = tmp_path / "sitecustomize.py"
+        sitecustomize.write_text(
+            "\n".join(
+                [
+                    "import requests",
+                    "from requests import Timeout",
+                    "",
+                    "def offline_get(*args, **kwargs):",
+                    "    raise Timeout('offline')",
+                    "",
+                    "requests.get = offline_get",
+                ]
+            )
+        )
+        env = os.environ.copy()
+        existing_pythonpath = env.get("PYTHONPATH")
+        env["PYTHONPATH"] = (
+            f"{tmp_path}{os.pathsep}{existing_pythonpath}"
+            if existing_pythonpath
+            else str(tmp_path)
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import policyengine.tax_benefit_models.us as us; "
+                    "print(us.model.data_certification.certified_by)"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert "policyengine.py bundled manifest" in result.stdout
 
     def test__given_mismatched_version_and_fingerprint__then_certification_fails(self):
         get_data_release_manifest.cache_clear()
