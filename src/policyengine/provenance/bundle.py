@@ -174,6 +174,66 @@ def _hf_dataset_sha256(repo_id: str, path: str, revision: str) -> str:
     return hasher.hexdigest()
 
 
+@dataclass(frozen=True)
+class _DataReleaseManifestFetch:
+    payload: dict
+    repo_commit: Optional[str]
+
+
+def _fetch_data_release_manifest(
+    repo_id: str,
+    release_manifest_path: str,
+    revision: str,
+) -> Optional[_DataReleaseManifestFetch]:
+    """Fetch a data release manifest from HF if one is available.
+
+    Older data releases may not have a machine-readable release manifest at the
+    inferred path. In that case the bundle refresh falls back to hashing the
+    dataset artifact directly.
+
+    Data releases are stored under versioned paths, but the HF repository does
+    not necessarily create a matching git tag for each data version. Try the
+    version revision first for repositories that do publish tags, then fall
+    back to ``main`` and persist the immutable ``x-repo-commit`` header.
+    """
+    headers = {"User-Agent": "policyengine.py"}
+    token = os.environ.get("HUGGING_FACE_TOKEN") or os.environ.get("HF_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    revisions = [revision]
+    if revision != "main":
+        revisions.append("main")
+
+    for candidate in revisions:
+        url = (
+            f"https://huggingface.co/{repo_id}/resolve/"
+            f"{candidate}/{release_manifest_path}"
+        )
+        try:
+            with urlopen(Request(url, headers=headers)) as f:
+                payload = json.load(f)
+                repo_commit = getattr(f, "headers", {}).get("x-repo-commit")
+                return _DataReleaseManifestFetch(
+                    payload=payload,
+                    repo_commit=repo_commit,
+                )
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def _updated_release_manifest_path(
+    current_path: str,
+    old_data: str,
+    new_data: str,
+) -> str:
+    """Preserve country-specific release-manifest layout while bumping versions."""
+    if old_data in current_path:
+        return current_path.replace(old_data, new_data)
+    return current_path
+
+
 # ---------------------------------------------------------------------------
 # Refresh result
 # ---------------------------------------------------------------------------
@@ -276,19 +336,90 @@ def refresh_release_bundle(
         )
     repo_id, dataset_path, _old_revision = repo_id_match.groups()
 
+    data_package_json = manifest_json["data_package"]
+    release_manifest_json = None
+    new_release_manifest_revision = None
+    new_release_manifest_path = data_package_json.get("release_manifest_path")
+    if new_data != old_data and new_release_manifest_path is not None:
+        new_release_manifest_path = _updated_release_manifest_path(
+            current_path=new_release_manifest_path,
+            old_data=old_data,
+            new_data=new_data,
+        )
+        release_manifest_fetch = _fetch_data_release_manifest(
+            repo_id=repo_id,
+            release_manifest_path=new_release_manifest_path,
+            revision=new_data,
+        )
+        if release_manifest_fetch is None:
+            raise ValueError(
+                "Could not fetch data release manifest "
+                f"{new_release_manifest_path!r} from {repo_id}@{new_data}. "
+                "Refusing to refresh a release-manifest-backed bundle with "
+                "partial certification metadata."
+            )
+        if release_manifest_fetch.repo_commit is None:
+            raise ValueError(
+                "Could not resolve an immutable HF commit for data release "
+                f"manifest {new_release_manifest_path!r} from {repo_id}@{new_data}."
+            )
+        release_manifest_json = release_manifest_fetch.payload
+        release_manifest_data_version = release_manifest_json.get(
+            "data_package", {}
+        ).get("version")
+        if release_manifest_data_version != new_data:
+            raise ValueError(
+                "Data release manifest "
+                f"{new_release_manifest_path!r} from {repo_id} declares "
+                f"version {release_manifest_data_version!r}, expected {new_data!r}."
+            )
+        new_release_manifest_revision = release_manifest_fetch.repo_commit
+
+    certified_dataset = (
+        current.certified_data_artifact.dataset
+        if current.certified_data_artifact is not None
+        else current.default_dataset
+    )
+    data_artifact_json = {}
+    if release_manifest_json is not None:
+        data_artifact_json = release_manifest_json.get("artifacts", {}).get(
+            certified_dataset,
+            {},
+        )
+        if not data_artifact_json:
+            raise ValueError(
+                "Data release manifest "
+                f"{new_release_manifest_path!r} from {repo_id}@{new_data} "
+                f"does not include certified dataset {certified_dataset!r}."
+            )
+    dataset_repo_id = data_artifact_json.get("repo_id", repo_id)
+    dataset_path = data_artifact_json.get("path", dataset_path)
+    dataset_revision = data_artifact_json.get("revision", new_data)
+
     # Only hit HF if the data version actually changed.
     if new_data != old_data:
-        new_dataset_sha256 = _hf_dataset_sha256(repo_id, dataset_path, new_data)
+        new_dataset_sha256 = data_artifact_json.get("sha256") or _hf_dataset_sha256(
+            dataset_repo_id,
+            dataset_path,
+            dataset_revision,
+        )
     else:
         new_dataset_sha256 = old_dataset_sha256
-    new_uri = f"hf://{repo_id}/{dataset_path}@{new_data}"
+    new_uri = f"hf://{dataset_repo_id}/{dataset_path}@{dataset_revision}"
     policyengine_version = _pyproject_version(pyproject_path)
 
     # Mutate the manifest JSON in place (keep unknown fields untouched).
     manifest_json["model_package"]["version"] = new_model
     manifest_json["model_package"]["sha256"] = new_wheel_sha256
     manifest_json["model_package"]["wheel_url"] = new_wheel_url
-    manifest_json["data_package"]["version"] = new_data
+    data_package_json["version"] = new_data
+    if new_data != old_data:
+        if new_release_manifest_path is not None:
+            data_package_json["release_manifest_path"] = new_release_manifest_path
+        if new_release_manifest_revision is not None:
+            data_package_json["release_manifest_revision"] = (
+                new_release_manifest_revision
+            )
     manifest_json["certified_data_artifact"]["data_package"]["version"] = new_data
     manifest_json["certified_data_artifact"]["build_id"] = (
         f"{current.data_package.name}-{new_data}"
@@ -299,10 +430,43 @@ def refresh_release_bundle(
         f"{current.data_package.name}-{new_data}"
     )
     manifest_json["certification"]["certified_for_model_version"] = new_model
+    if release_manifest_json is not None:
+        build = release_manifest_json.get("build") or {}
+        built_with_model = build.get("built_with_model_package") or {}
+        data_build_id = (
+            build.get("build_id") or f"{current.data_package.name}-{new_data}"
+        )
+        manifest_json["certified_data_artifact"]["build_id"] = data_build_id
+        certification_json = manifest_json["certification"]
+        certification_json["data_build_id"] = data_build_id
+        certification_json["certified_for_model_version"] = new_model
+        built_with_model_version = built_with_model.get("version")
+        if built_with_model_version is not None:
+            certification_json["built_with_model_version"] = built_with_model_version
+        if built_with_model.get("git_sha") is not None:
+            certification_json["built_with_model_git_sha"] = built_with_model["git_sha"]
+        else:
+            certification_json.pop("built_with_model_git_sha", None)
+        data_build_fingerprint = built_with_model.get("data_build_fingerprint")
+        if data_build_fingerprint is not None:
+            certification_json["data_build_fingerprint"] = data_build_fingerprint
+        else:
+            certification_json.pop("data_build_fingerprint", None)
+        if built_with_model_version == new_model:
+            certification_json["compatibility_basis"] = "exact_build_model_version"
+        elif data_build_fingerprint is not None:
+            certification_json["compatibility_basis"] = (
+                "matching_data_build_fingerprint"
+            )
+        else:
+            certification_json["compatibility_basis"] = (
+                "legacy_compatible_model_package"
+            )
 
     manifest_path.write_text(
         json.dumps(manifest_json, indent=2, sort_keys=False) + "\n"
     )
+    get_release_manifest.cache_clear()
     sync_release_manifest_policyengine_version(
         policyengine_version=policyengine_version,
         manifest_dir=manifest_dir,

@@ -24,6 +24,7 @@ import io
 import json
 from pathlib import Path
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 import pytest
 
@@ -65,8 +66,9 @@ def _pypi_response(package: str, version: str):
 class _FakeHFResponse:
     """Streams a deterministic byte sequence so sha256 is predictable."""
 
-    def __init__(self, content: bytes) -> None:
+    def __init__(self, content: bytes, headers: dict | None = None) -> None:
         self._buffer = io.BytesIO(content)
+        self.headers = headers or {}
 
     def read(self, size: int = -1) -> bytes:
         return self._buffer.read(size)
@@ -76,6 +78,48 @@ class _FakeHFResponse:
 
     def __exit__(self, *args):
         self._buffer.close()
+
+
+def _data_release_manifest_response(
+    *,
+    model_version: str = "1.653.3",
+    data_version: str = "1.83.4",
+    dataset_sha256: str = "e" * 64,
+    headers: dict | None = None,
+):
+    payload = {
+        "schema_version": 1,
+        "data_package": {
+            "name": "policyengine-us-data",
+            "version": data_version,
+        },
+        "build": {
+            "build_id": f"policyengine-us-data-{data_version}",
+            "built_with_model_package": {
+                "name": "policyengine-us",
+                "version": model_version,
+                "git_sha": "deadbeef",
+                "data_build_fingerprint": "sha256:fingerprint",
+            },
+        },
+        "artifacts": {
+            "enhanced_cps_2024": {
+                "kind": "microdata",
+                "path": "enhanced_cps_2024.h5",
+                "repo_id": "policyengine/policyengine-us-data",
+                "revision": data_version,
+                "sha256": dataset_sha256,
+            }
+        },
+    }
+    return _FakeHFResponse(
+        json.dumps(payload).encode(),
+        headers=(
+            {"x-repo-commit": "release-manifest-commit-sha"}
+            if headers is None
+            else headers
+        ),
+    )
 
 
 @pytest.fixture
@@ -101,6 +145,8 @@ def sandbox(tmp_path: Path) -> dict:
             "name": "policyengine-us-data",
             "version": "1.70.0",
             "repo_id": "policyengine/policyengine-us-data",
+            "release_manifest_path": "releases/1.70.0/release_manifest.json",
+            "release_manifest_revision": "old-release-manifest-commit",
         },
         "certified_data_artifact": {
             "data_package": {
@@ -173,12 +219,26 @@ def test__bump_model_only_rewrites_wheel_pins_and_pyproject(sandbox) -> None:
     assert written["policyengine_version"] == "4.2.0"
     # Dataset pins untouched.
     assert written["data_package"]["version"] == "1.70.0"
+    assert (
+        written["data_package"]["release_manifest_path"]
+        == "releases/1.70.0/release_manifest.json"
+    )
+    assert (
+        written["data_package"]["release_manifest_revision"]
+        == "old-release-manifest-commit"
+    )
     assert written["certified_data_artifact"]["sha256"] == "d" * 64
 
 
 def test__bump_data_only_streams_hf_and_updates_uri(sandbox) -> None:
     """Bumping only the data version streams the HF file, recomputes
     its sha256, and rewrites the URI revision."""
+    manifest_path = sandbox["manifest_dir"] / "us.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["data_package"].pop("release_manifest_path")
+    manifest["data_package"].pop("release_manifest_revision")
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+
     hf_bytes = b"synthetic dataset payload"
     expected_sha256 = hashlib.sha256(hf_bytes).hexdigest()
 
@@ -206,6 +266,8 @@ def test__bump_data_only_streams_hf_and_updates_uri(sandbox) -> None:
 
     written = json.loads((sandbox["manifest_dir"] / "us.json").read_text())
     assert written["data_package"]["version"] == "1.83.4"
+    assert "release_manifest_path" not in written["data_package"]
+    assert "release_manifest_revision" not in written["data_package"]
     assert written["certified_data_artifact"]["data_package"]["version"] == "1.83.4"
     assert written["certified_data_artifact"]["build_id"] == (
         "policyengine-us-data-1.83.4"
@@ -217,15 +279,93 @@ def test__bump_data_only_streams_hf_and_updates_uri(sandbox) -> None:
     )
 
 
-def test__bump_both_updates_everything(sandbox) -> None:
-    hf_bytes = b"another payload"
+def test__bump_data_only_writes_release_manifest_revision_when_absent(
+    sandbox,
+) -> None:
+    manifest_path = sandbox["manifest_dir"] / "us.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["data_package"].pop("release_manifest_revision")
+    manifest_path.write_text(json.dumps(manifest, indent=2))
 
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        if url.endswith("releases/1.83.4/release_manifest.json"):
+            return _data_release_manifest_response()
+        raise AssertionError(f"Unexpected URL fetched: {url}")
+
+    with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
+        refresh_release_bundle(
+            country="us",
+            data_version="1.83.4",
+            manifest_dir=sandbox["manifest_dir"],
+            pyproject_path=sandbox["pyproject_path"],
+        )
+
+    written = json.loads((sandbox["manifest_dir"] / "us.json").read_text())
+    assert (
+        written["data_package"]["release_manifest_revision"]
+        == "release-manifest-commit-sha"
+    )
+
+
+def test__bump_data_only_falls_back_to_main_for_release_manifest(
+    sandbox,
+) -> None:
+    seen_urls = []
+
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        seen_urls.append(url)
+        if "/resolve/1.83.4/releases/1.83.4/release_manifest.json" in url:
+            raise HTTPError(url, 404, "Not Found", hdrs=None, fp=None)
+        if "/resolve/main/releases/1.83.4/release_manifest.json" in url:
+            return _data_release_manifest_response()
+        raise AssertionError(f"Unexpected URL fetched: {url}")
+
+    with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
+        refresh_release_bundle(
+            country="us",
+            data_version="1.83.4",
+            manifest_dir=sandbox["manifest_dir"],
+            pyproject_path=sandbox["pyproject_path"],
+        )
+
+    assert any("/resolve/1.83.4/" in url for url in seen_urls)
+    assert any("/resolve/main/" in url for url in seen_urls)
+    written = json.loads((sandbox["manifest_dir"] / "us.json").read_text())
+    assert (
+        written["data_package"]["release_manifest_revision"]
+        == "release-manifest-commit-sha"
+    )
+
+
+def test__release_manifest_version_mismatch_raises(sandbox) -> None:
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        if url.endswith("releases/1.83.4/release_manifest.json"):
+            return _data_release_manifest_response(data_version="1.83.3")
+        raise AssertionError(f"Unexpected URL fetched: {url}")
+
+    with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
+        with pytest.raises(
+            ValueError,
+            match="declares version '1.83.3', expected '1.83.4'",
+        ):
+            refresh_release_bundle(
+                country="us",
+                data_version="1.83.4",
+                manifest_dir=sandbox["manifest_dir"],
+                pyproject_path=sandbox["pyproject_path"],
+            )
+
+
+def test__bump_both_updates_everything(sandbox) -> None:
     def fake_urlopen(request, *args, **kwargs):
         url = request.full_url
         if "pypi.org" in url:
             return _pypi_response("policyengine-us", "1.653.3")
-        if "huggingface.co" in url:
-            return _FakeHFResponse(hf_bytes)
+        if url.endswith("releases/1.83.4/release_manifest.json"):
+            return _data_release_manifest_response()
         raise AssertionError(url)
 
     with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
@@ -240,6 +380,122 @@ def test__bump_both_updates_everything(sandbox) -> None:
     assert result.pyproject_updated
     assert result.new_model == "1.653.3"
     assert result.new_data == "1.83.4"
+
+
+def test__bump_both_uses_data_release_manifest_metadata(sandbox) -> None:
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        if "pypi.org" in url:
+            return _pypi_response("policyengine-us", "1.653.3")
+        if url.endswith("releases/1.83.4/release_manifest.json"):
+            return _data_release_manifest_response()
+        raise AssertionError(f"Unexpected URL fetched: {url}")
+
+    with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
+        result = refresh_release_bundle(
+            country="us",
+            model_version="1.653.3",
+            data_version="1.83.4",
+            manifest_dir=sandbox["manifest_dir"],
+            pyproject_path=sandbox["pyproject_path"],
+        )
+
+    assert result.new_dataset_sha256 == "e" * 64
+
+    written = json.loads((sandbox["manifest_dir"] / "us.json").read_text())
+    assert written["certified_data_artifact"]["build_id"] == (
+        "policyengine-us-data-1.83.4"
+    )
+    assert written["certified_data_artifact"]["sha256"] == "e" * 64
+    assert written["certification"]["compatibility_basis"] == (
+        "exact_build_model_version"
+    )
+    assert written["certification"]["built_with_model_version"] == "1.653.3"
+    assert written["certification"]["built_with_model_git_sha"] == "deadbeef"
+    assert written["certification"]["data_build_fingerprint"] == ("sha256:fingerprint")
+    assert (
+        written["data_package"]["release_manifest_revision"]
+        == "release-manifest-commit-sha"
+    )
+
+
+def test__missing_release_manifest_metadata_raises(sandbox) -> None:
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        if url.endswith("releases/1.83.4/release_manifest.json"):
+            return _FakeHFResponse(b"not json")
+        raise AssertionError(f"Unexpected URL fetched: {url}")
+
+    with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
+        with pytest.raises(
+            ValueError,
+            match="Could not fetch data release manifest",
+        ):
+            refresh_release_bundle(
+                country="us",
+                data_version="1.83.4",
+                manifest_dir=sandbox["manifest_dir"],
+                pyproject_path=sandbox["pyproject_path"],
+            )
+
+
+def test__missing_release_manifest_commit_raises(sandbox) -> None:
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        if url.endswith("releases/1.83.4/release_manifest.json"):
+            return _data_release_manifest_response(headers={})
+        raise AssertionError(f"Unexpected URL fetched: {url}")
+
+    with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
+        with pytest.raises(
+            ValueError,
+            match="Could not resolve an immutable HF commit",
+        ):
+            refresh_release_bundle(
+                country="us",
+                data_version="1.83.4",
+                manifest_dir=sandbox["manifest_dir"],
+                pyproject_path=sandbox["pyproject_path"],
+            )
+
+
+def test__release_manifest_missing_certified_artifact_raises(sandbox) -> None:
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        if url.endswith("releases/1.83.4/release_manifest.json"):
+            payload = {
+                "schema_version": 1,
+                "data_package": {
+                    "name": "policyengine-us-data",
+                    "version": "1.83.4",
+                },
+                "artifacts": {
+                    "other_dataset": {
+                        "kind": "microdata",
+                        "path": "other_dataset.h5",
+                        "repo_id": "policyengine/policyengine-us-data",
+                        "revision": "1.83.4",
+                        "sha256": "e" * 64,
+                    }
+                },
+            }
+            return _FakeHFResponse(
+                json.dumps(payload).encode(),
+                headers={"x-repo-commit": "release-manifest-commit-sha"},
+            )
+        raise AssertionError(f"Unexpected URL fetched: {url}")
+
+    with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
+        with pytest.raises(
+            ValueError,
+            match="does not include certified dataset",
+        ):
+            refresh_release_bundle(
+                country="us",
+                data_version="1.83.4",
+                manifest_dir=sandbox["manifest_dir"],
+                pyproject_path=sandbox["pyproject_path"],
+            )
 
 
 def test__update_pyproject_false_leaves_pins_alone(sandbox) -> None:

@@ -28,17 +28,20 @@ Each country module exposes ``calculate_household``, ``model``
 (the pinned ``TaxBenefitModelVersion``), and the microsim helpers.
 """
 
+import os
 from importlib.util import find_spec
 
 from policyengine import outputs as outputs
 from policyengine.core import Simulation as Simulation
 
-if find_spec("policyengine_us") is not None:
+_SKIP_COUNTRY_IMPORTS = os.environ.get("POLICYENGINE_SKIP_COUNTRY_IMPORTS") == "1"
+
+if not _SKIP_COUNTRY_IMPORTS and find_spec("policyengine_us") is not None:
     from policyengine.tax_benefit_models import us as us
 else:  # pragma: no cover
     us = None  # type: ignore[assignment]
 
-if find_spec("policyengine_uk") is not None:
+if not _SKIP_COUNTRY_IMPORTS and find_spec("policyengine_uk") is not None:
     from policyengine.tax_benefit_models import uk as uk
 else:  # pragma: no cover
     uk = None  # type: ignore[assignment]
