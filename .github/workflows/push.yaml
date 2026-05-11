@@ -150,6 +150,14 @@ jobs:
         run: uv pip install -e .[dev] --system
       - name: Install policyengine
         run: uv pip install policyengine --system
+      - name: Verify matching bundle release asset
+        run: |
+          VERSION=$(python .github/fetch_version.py)
+          curl -fsSL \
+            -o /tmp/policyengine-bundle.json \
+            "https://github.com/PolicyEngine/policyengine-bundles/releases/download/v${VERSION}/bundle-${VERSION}.json"
+          python .github/check_bundle_consistency.py \
+            --release-bundle /tmp/policyengine-bundle.json
       - name: Publish a git tag
         run: ".github/publish-git-tag.sh"
       - name: Build package

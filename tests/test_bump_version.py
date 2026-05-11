@@ -58,40 +58,22 @@ def test_update_file_replaces_stale_version_field(tmp_path):
     assert 'version = "3.4.3"' in pyproject.read_text()
 
 
-def test_sync_release_manifest_versions_rewrites_bundle_identity(tmp_path):
-    manifest_dir = tmp_path / "release_manifests"
-    manifest_dir.mkdir()
-    manifest_path = manifest_dir / "uk.json"
-    manifest_path.write_text(
-        "{\n"
-        '  "schema_version": 1,\n'
-        '  "bundle_id": "uk-4.0.0",\n'
-        '  "country_id": "uk",\n'
-        '  "policyengine_version": "4.0.0"\n'
-        "}\n"
+def test_validate_vendored_bundle_version_accepts_matching_bundle(tmp_path):
+    bundle_path = tmp_path / "src" / "policyengine" / "data" / "bundle.json"
+    bundle_path.parent.mkdir(parents=True)
+    bundle_path.write_text(
+        '{"bundle_version": "4.3.2", "policyengine": {"version": "4.3.2"}}'
     )
 
-    bump_version.sync_release_manifest_versions(manifest_dir, "4.3.2")
-
-    text = manifest_path.read_text()
-    assert '"bundle_id": "uk-4.3.2"' in text
-    assert '"policyengine_version": "4.3.2"' in text
+    bump_version.validate_vendored_bundle_version(tmp_path, "4.3.2")
 
 
-def test_sync_release_manifest_versions_fails_when_required_field_missing(tmp_path):
-    manifest_dir = tmp_path / "release_manifests"
-    manifest_dir.mkdir()
-    manifest_path = manifest_dir / "uk.json"
-    manifest_path.write_text(
-        "{\n"
-        '  "schema_version": 1,\n'
-        '  "bundle_id": "uk-4.0.0",\n'
-        '  "country_id": "uk"\n'
-        "}\n"
+def test_validate_vendored_bundle_version_rejects_stale_bundle(tmp_path):
+    bundle_path = tmp_path / "src" / "policyengine" / "data" / "bundle.json"
+    bundle_path.parent.mkdir(parents=True)
+    bundle_path.write_text(
+        '{"bundle_version": "4.0.0", "policyengine": {"version": "4.0.0"}}'
     )
-    original = manifest_path.read_text()
 
     with pytest.raises(SystemExit):
-        bump_version.sync_release_manifest_versions(manifest_dir, "4.3.2")
-
-    assert manifest_path.read_text() == original
+        bump_version.validate_vendored_bundle_version(tmp_path, "4.3.2")
