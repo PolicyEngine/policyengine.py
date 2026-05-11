@@ -26,7 +26,10 @@ After running:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+
+os.environ.setdefault("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
 
 from policyengine.provenance.bundle import (
     refresh_release_bundle,
