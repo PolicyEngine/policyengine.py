@@ -1,3 +1,11 @@
+## [4.4.3] - 2026-05-11
+
+### Changed
+
+- Derive US program-statistics entity from variable metadata instead of duplicating it in the program list.
+- Update the bundled US release to policyengine-us 1.690.7 and refresh data provenance metadata.
+
+
 ## [4.4.2] - 2026-05-09
 
 ### Fixed
