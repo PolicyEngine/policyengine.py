@@ -1,5 +1,5 @@
 {
-  "bundle_digest": "sha256:18e1bb4fcb9300d1ab9334b441ad448b2906cd43461696624fa8a54e9c704046",
+  "bundle_digest": "sha256:bcc9609cf369a6f1a399eaed4bd8328f99f2844e35ff1b1d2f41da49066203b1",
   "bundle_version": "4.4.2",
   "countries": {
     "uk": "countries/uk.json",
@@ -16,7 +16,8 @@
       "exclude_newer": "2026-05-09T10:39:06Z",
       "name": "uv",
       "resolution": "highest",
-      "universal": true
+      "universal": true,
+      "version": "0.8.5"
     },
     "testing_only": false
   },
