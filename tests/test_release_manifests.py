@@ -571,6 +571,15 @@ class TestReleaseManifests:
         assert (
             microsim.policyengine_bundle["policyengine_version"] == POLICYENGINE_VERSION
         )
+        assert (
+            microsim.policyengine_bundle["policyengine_bundle_version"]
+            == POLICYENGINE_VERSION
+        )
+        assert microsim.policyengine_bundle["policyengine_bundle_digest"].startswith(
+            "sha256:"
+        )
+        assert microsim.policyengine_bundle["profile"] == "us"
+        assert microsim.policyengine_bundle["runtime_dataset_managed"] is True
         assert microsim.policyengine_bundle["runtime_dataset"] == "enhanced_cps_2024"
         assert (
             microsim.policyengine_bundle["runtime_dataset_uri"]
@@ -593,6 +602,7 @@ class TestReleaseManifests:
         assert mock_microsimulation.call_args.kwargs["dataset"] == dataset
         assert microsim.policyengine_bundle["runtime_dataset_uri"] == dataset
         assert microsim.policyengine_bundle["runtime_dataset_source"] == dataset
+        assert microsim.policyengine_bundle["runtime_dataset_managed"] is False
 
     def test__given_uk_managed_dataset_name__then_resolves_within_bundle(self):
         with patch("policyengine_uk.Microsimulation") as mock_microsimulation:
@@ -611,6 +621,15 @@ class TestReleaseManifests:
         assert (
             microsim.policyengine_bundle["policyengine_version"] == POLICYENGINE_VERSION
         )
+        assert (
+            microsim.policyengine_bundle["policyengine_bundle_version"]
+            == POLICYENGINE_VERSION
+        )
+        assert microsim.policyengine_bundle["policyengine_bundle_digest"].startswith(
+            "sha256:"
+        )
+        assert microsim.policyengine_bundle["profile"] == "uk"
+        assert microsim.policyengine_bundle["runtime_dataset_managed"] is True
         assert microsim.policyengine_bundle["runtime_dataset"] == "enhanced_frs_2023_24"
         assert microsim.policyengine_bundle["runtime_dataset_uri"] == (
             "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.55.5"
@@ -636,3 +655,4 @@ class TestReleaseManifests:
         assert mock_microsimulation.call_args.kwargs["dataset"] == dataset
         assert microsim.policyengine_bundle["runtime_dataset_uri"] == dataset
         assert microsim.policyengine_bundle["runtime_dataset_source"] == dataset
+        assert microsim.policyengine_bundle["runtime_dataset_managed"] is False

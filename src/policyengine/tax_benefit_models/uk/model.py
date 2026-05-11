@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Optional
 import pandas as pd
 from microdf import MicroDataFrame
 
+from policyengine.bundle import current_profile_summary
 from policyengine.core import TaxBenefitModel
 from policyengine.provenance.manifest import (
     dataset_logical_name,
@@ -241,12 +242,18 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
 def _managed_release_bundle(
     dataset_uri: str,
     dataset_source: Optional[str] = None,
-) -> dict[str, Optional[str]]:
+    unmanaged: bool = False,
+) -> dict[str, object]:
     bundle = dict(uk_latest.release_bundle)
+    profile_bundle = current_profile_summary("uk")
+    bundle["policyengine_bundle_version"] = profile_bundle["bundle_version"]
+    bundle["policyengine_bundle_digest"] = profile_bundle["bundle_digest"]
+    bundle["profile"] = profile_bundle["profile"]
     bundle["runtime_dataset"] = dataset_logical_name(dataset_uri)
     bundle["runtime_dataset_uri"] = dataset_uri
     if dataset_source:
         bundle["runtime_dataset_source"] = dataset_source
+    bundle["runtime_dataset_managed"] = not unmanaged
     bundle["managed_by"] = "policyengine.py"
     return bundle
 
@@ -284,6 +291,7 @@ def managed_microsimulation(
             allow_unmanaged and dataset is not None and "://" in dataset
         ),
     )
+    unmanaged = allow_unmanaged and dataset is not None and "://" in dataset
     runtime_dataset = dataset_source
     if isinstance(dataset_source, str) and "hf://" not in dataset_source:
         from policyengine_uk.data.dataset_schema import (
@@ -299,6 +307,7 @@ def managed_microsimulation(
     microsim.policyengine_bundle = _managed_release_bundle(
         dataset_uri,
         dataset_source,
+        unmanaged,
     )
     return microsim
 

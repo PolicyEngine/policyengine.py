@@ -1,0 +1,90 @@
+{
+  "artifact_release": {
+    "release_manifest_sha256": "2e8e144a175bc95ebc5ba1cce8ad3d895767776b92841091595266850f6e577b",
+    "release_manifest_uri": "hf://model/policyengine/policyengine-us-data@9cb665df0a546f9c3d79b496f8eb2dd55859d38d/releases/1.78.2/release_manifest.json",
+    "repo_id": "policyengine/policyengine-us-data",
+    "repo_type": "model",
+    "version": "9cb665df0a546f9c3d79b496f8eb2dd55859d38d"
+  },
+  "bundle_version": "4.4.2",
+  "certification": {
+    "built_with_core_package": {
+      "name": "policyengine-core",
+      "resolution_status": "pinned",
+      "version": "3.26.0"
+    },
+    "built_with_model_package": {
+      "name": "policyengine-us",
+      "resolution_status": "pinned",
+      "version": "1.687.0"
+    },
+    "certified_by": "policyengine-bundles generator",
+    "certified_for_core_package": {
+      "name": "policyengine-core",
+      "resolution_status": "pinned",
+      "sdist_url": "https://files.pythonhosted.org/packages/e7/56/666e1e708cbd61078989edc943d5389d45123beb7124a5e3180171656ff6/policyengine_core-3.26.1.tar.gz",
+      "sha256": "185374b3c1fe13dc951637c49a9853211ca61a8a9971eb9cc4c4b07b1477240a",
+      "source": "pypi",
+      "version": "3.26.1",
+      "wheel_url": "https://files.pythonhosted.org/packages/15/2f/9be635fe4dfb2fe65d200c33695f5a96ef98a2921f06ff6d465384b0e551/policyengine_core-3.26.1-py3-none-any.whl"
+    },
+    "certified_for_model_package": {
+      "name": "policyengine-us",
+      "resolution_status": "pinned",
+      "sdist_url": "https://files.pythonhosted.org/packages/26/49/d34803002b058e7ad91861975d26aa7d2bac3b4988756290e1588e00a776/policyengine_us-1.687.0.tar.gz",
+      "sha256": "cac7da3aa9ba4bf57009eee75d798217bbef7e1c5ca17646d472fad715ab634f",
+      "source": "pypi",
+      "version": "1.687.0",
+      "wheel_url": "https://files.pythonhosted.org/packages/c3/36/5633f5a3996c915494154ec3852011b1a239ea06d9f08cb6287ab709618c/policyengine_us-1.687.0-py3-none-any.whl"
+    },
+    "compatibility_basis": "release_manifest_exact_compatibility",
+    "data_build_id": "policyengine-us-data-1.78.2",
+    "metadata": {}
+  },
+  "core_package": {
+    "name": "policyengine-core",
+    "resolution_status": "pinned",
+    "sdist_url": "https://files.pythonhosted.org/packages/e7/56/666e1e708cbd61078989edc943d5389d45123beb7124a5e3180171656ff6/policyengine_core-3.26.1.tar.gz",
+    "sha256": "185374b3c1fe13dc951637c49a9853211ca61a8a9971eb9cc4c4b07b1477240a",
+    "source": "pypi",
+    "version": "3.26.1",
+    "wheel_url": "https://files.pythonhosted.org/packages/15/2f/9be635fe4dfb2fe65d200c33695f5a96ef98a2921f06ff6d465384b0e551/policyengine_core-3.26.1-py3-none-any.whl"
+  },
+  "country_id": "us",
+  "data_package": {
+    "name": "policyengine-us-data",
+    "release_manifest_path": "releases/1.78.2/release_manifest.json",
+    "repo_id": "policyengine/policyengine-us-data",
+    "repo_type": "model",
+    "version": "1.78.2"
+  },
+  "datasets": {
+    "enhanced_cps_2024": {
+      "kind": "microdata",
+      "metadata": {},
+      "path": "enhanced_cps_2024.h5",
+      "preservation_mirrors": [],
+      "repo_id": "policyengine/policyengine-us-data",
+      "revision": "1.78.2",
+      "sha256": "4e92b340c3ea3e200ed5d55edf752ee1a13baf787442956fb67d25242fed13b5",
+      "size_bytes": 110419040,
+      "status": "certified"
+    }
+  },
+  "default_dataset": "enhanced_cps_2024",
+  "metadata": {
+    "input_release_manifest_sha256": "2e8e144a175bc95ebc5ba1cce8ad3d895767776b92841091595266850f6e577b",
+    "input_release_manifest_uri": "hf://model/policyengine/policyengine-us-data@9cb665df0a546f9c3d79b496f8eb2dd55859d38d/releases/1.78.2/release_manifest.json"
+  },
+  "model_package": {
+    "name": "policyengine-us",
+    "resolution_status": "pinned",
+    "sdist_url": "https://files.pythonhosted.org/packages/26/49/d34803002b058e7ad91861975d26aa7d2bac3b4988756290e1588e00a776/policyengine_us-1.687.0.tar.gz",
+    "sha256": "cac7da3aa9ba4bf57009eee75d798217bbef7e1c5ca17646d472fad715ab634f",
+    "source": "pypi",
+    "version": "1.687.0",
+    "wheel_url": "https://files.pythonhosted.org/packages/c3/36/5633f5a3996c915494154ec3852011b1a239ea06d9f08cb6287ab709618c/policyengine_us-1.687.0-py3-none-any.whl"
+  },
+  "region_datasets": {},
+  "schema_version": 1
+}

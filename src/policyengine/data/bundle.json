@@ -1,0 +1,127 @@
+{
+  "bundle_digest": "sha256:6828143eb81f276a7d99b1b1e75bcda0746e1eea23dbce9a0e0c8e9341017295",
+  "bundle_version": "4.4.2",
+  "countries": {
+    "uk": "countries/uk.json",
+    "us": "countries/us.json"
+  },
+  "created_at": "2026-05-09T10:21:38Z",
+  "metadata": {
+    "generated_by": "scripts/generate_bundle.py",
+    "install_artifact_layout": "install/{profile}/{python}/",
+    "python_versions": [
+      "3.13"
+    ],
+    "testing_only": false
+  },
+  "packages": {
+    "policyengine": {
+      "name": "policyengine",
+      "resolution_status": "pinned",
+      "sdist_url": "https://files.pythonhosted.org/packages/32/a5/4556d22ac1c42afc7bc2e7bab43fe98c4e7ad4f58eefdbd91409f8c03152/policyengine-4.4.2.tar.gz",
+      "sha256": "403303224e94665521f7d648a54918df8f28c56b97a83d29799d66cfd92bb7a2",
+      "source": "pypi",
+      "version": "4.4.2",
+      "wheel_url": "https://files.pythonhosted.org/packages/44/c6/75c1516c087c64419def4edd4841dd0d4748c9e304423b49ae7c61dcfb61/policyengine-4.4.2-py3-none-any.whl"
+    },
+    "policyengine-core": {
+      "name": "policyengine-core",
+      "resolution_status": "pinned",
+      "sdist_url": "https://files.pythonhosted.org/packages/e7/56/666e1e708cbd61078989edc943d5389d45123beb7124a5e3180171656ff6/policyengine_core-3.26.1.tar.gz",
+      "sha256": "185374b3c1fe13dc951637c49a9853211ca61a8a9971eb9cc4c4b07b1477240a",
+      "source": "pypi",
+      "version": "3.26.1",
+      "wheel_url": "https://files.pythonhosted.org/packages/15/2f/9be635fe4dfb2fe65d200c33695f5a96ef98a2921f06ff6d465384b0e551/policyengine_core-3.26.1-py3-none-any.whl"
+    },
+    "policyengine-uk": {
+      "name": "policyengine-uk",
+      "resolution_status": "pinned",
+      "sdist_url": "https://files.pythonhosted.org/packages/8c/2b/ab82aa30c5d27176fd9d449ff5ed9708d0080b00912f7dc2efa0af0fd87e/policyengine_uk-2.88.14.tar.gz",
+      "sha256": "ed10005ba7d0c973c0966ebbf7672853fb3caaa0456b8bf485fb13f8c323d975",
+      "source": "pypi",
+      "version": "2.88.14",
+      "wheel_url": "https://files.pythonhosted.org/packages/a3/fc/276fb639a46bda35523329d8968bcc4089fde9e97fab82722c0ec853c6cc/policyengine_uk-2.88.14-py3-none-any.whl"
+    },
+    "policyengine-us": {
+      "name": "policyengine-us",
+      "resolution_status": "pinned",
+      "sdist_url": "https://files.pythonhosted.org/packages/26/49/d34803002b058e7ad91861975d26aa7d2bac3b4988756290e1588e00a776/policyengine_us-1.687.0.tar.gz",
+      "sha256": "cac7da3aa9ba4bf57009eee75d798217bbef7e1c5ca17646d472fad715ab634f",
+      "source": "pypi",
+      "version": "1.687.0",
+      "wheel_url": "https://files.pythonhosted.org/packages/c3/36/5633f5a3996c915494154ec3852011b1a239ea06d9f08cb6287ab709618c/policyengine_us-1.687.0-py3-none-any.whl"
+    }
+  },
+  "policyengine": {
+    "name": "policyengine",
+    "resolution_status": "pinned",
+    "sdist_url": "https://files.pythonhosted.org/packages/32/a5/4556d22ac1c42afc7bc2e7bab43fe98c4e7ad4f58eefdbd91409f8c03152/policyengine-4.4.2.tar.gz",
+    "sha256": "403303224e94665521f7d648a54918df8f28c56b97a83d29799d66cfd92bb7a2",
+    "source": "pypi",
+    "version": "4.4.2",
+    "wheel_url": "https://files.pythonhosted.org/packages/44/c6/75c1516c087c64419def4edd4841dd0d4748c9e304423b49ae7c61dcfb61/policyengine-4.4.2-py3-none-any.whl"
+  },
+  "profiles": {
+    "all": {
+      "countries": [
+        "uk",
+        "us"
+      ],
+      "description": "all runtime profile generated from bundle candidate.",
+      "install_targets": {
+        "py313": {
+          "constraints": "install/all/py313/constraints.txt",
+          "lockfile": "install/all/py313/pylock.toml",
+          "python_version": "3.13",
+          "resolver": "uv"
+        }
+      },
+      "packages": [
+        "policyengine",
+        "policyengine-core",
+        "policyengine-uk",
+        "policyengine-us"
+      ]
+    },
+    "uk": {
+      "countries": [
+        "uk"
+      ],
+      "description": "uk runtime profile generated from bundle candidate.",
+      "install_targets": {
+        "py313": {
+          "constraints": "install/uk/py313/constraints.txt",
+          "lockfile": "install/uk/py313/pylock.toml",
+          "python_version": "3.13",
+          "resolver": "uv"
+        }
+      },
+      "packages": [
+        "policyengine",
+        "policyengine-core",
+        "policyengine-uk"
+      ]
+    },
+    "us": {
+      "countries": [
+        "us"
+      ],
+      "description": "us runtime profile generated from bundle candidate.",
+      "install_targets": {
+        "py313": {
+          "constraints": "install/us/py313/constraints.txt",
+          "lockfile": "install/us/py313/pylock.toml",
+          "python_version": "3.13",
+          "resolver": "uv"
+        }
+      },
+      "packages": [
+        "policyengine",
+        "policyengine-core",
+        "policyengine-us"
+      ]
+    }
+  },
+  "schema_version": 1,
+  "validation_report": "validation-report.json"
+}

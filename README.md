@@ -32,31 +32,33 @@ print(us.tax_unit.income_tax, us.household.household_net_income)
 
 ```python
 import policyengine as pe
-from policyengine.core import Simulation
-from policyengine.outputs.aggregate import Aggregate, AggregateType
 
-datasets = pe.uk.ensure_datasets(
-    datasets=["hf://policyengine/policyengine-uk-data/enhanced_frs_2023_24.h5"],
-    years=[2026],
-    data_folder="./data",
-)
-dataset = datasets["enhanced_frs_2023_24_2026"]
-
-simulation = Simulation(dataset=dataset, tax_benefit_model_version=pe.uk.model)
-simulation.run()
-
-agg = Aggregate(
-    simulation=simulation,
-    variable="universal_credit",
-    aggregate_type=AggregateType.SUM,
-    entity="benunit",
-)
-agg.run()
-print(f"Total UC spending: £{agg.result / 1e9:.1f}bn")
+microsim = pe.uk.managed_microsimulation()
+print(microsim.policyengine_bundle["runtime_dataset_uri"])
 ```
 
 For baseline-vs-reform comparisons, see `pe.uk.economic_impact_analysis`
 and its US counterpart.
+
+### Reproducible bundle metadata
+
+Each `policyengine` release vendors the matching bundle manifest. The bundle
+pins the human-facing `.py` version to exact direct PolicyEngine-owned package
+versions, country data artifacts, and a validation digest.
+
+```python
+import policyengine as pe
+
+pe.bundle.require_bundle("4.4.2", profile="uk")
+print(pe.bundle.get_bundle_digest())
+print(pe.uk.bundle["data_package"]["version"])
+```
+
+Use `pe.us.managed_microsimulation()` or `pe.uk.managed_microsimulation()` for
+bundle-managed population runs. Direct country constructors, such as
+`policyengine_us.Microsimulation`, bypass `.py` bundle enforcement. Set
+`POLICYENGINE_BUNDLE_STRICT=1` to hard-fail when installed direct packages do
+not match the vendored bundle.
 
 ## Documentation
 
@@ -79,12 +81,16 @@ and its US counterpart.
 pip install policyengine
 ```
 
-This installs both UK and US country models. To install only one:
+Install a country profile to include the certified direct country dependencies:
 
 ```bash
-pip install policyengine[uk]    # UK model only
-pip install policyengine[us]    # US model only
+pip install "policyengine[uk]==4.4.2"       # UK model profile
+pip install "policyengine[us]==4.4.2"       # US model profile
+pip install "policyengine[uk,us]==4.4.2"    # both country profiles
 ```
+
+For exact transitive reproducibility, install with the matching constraints or
+lock artifacts from the corresponding `policyengine-bundles` release.
 
 ### For development
 

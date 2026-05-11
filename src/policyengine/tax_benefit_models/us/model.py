@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Optional
 import pandas as pd
 from microdf import MicroDataFrame
 
+from policyengine.bundle import current_profile_summary
 from policyengine.core import TaxBenefitModel
 from policyengine.provenance.manifest import (
     dataset_logical_name,
@@ -395,12 +396,18 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
 def _managed_release_bundle(
     dataset_uri: str,
     dataset_source: Optional[str] = None,
-) -> dict[str, Optional[str]]:
+    unmanaged: bool = False,
+) -> dict[str, object]:
     bundle = dict(us_latest.release_bundle)
+    profile_bundle = current_profile_summary("us")
+    bundle["policyengine_bundle_version"] = profile_bundle["bundle_version"]
+    bundle["policyengine_bundle_digest"] = profile_bundle["bundle_digest"]
+    bundle["profile"] = profile_bundle["profile"]
     bundle["runtime_dataset"] = dataset_logical_name(dataset_uri)
     bundle["runtime_dataset_uri"] = dataset_uri
     if dataset_source:
         bundle["runtime_dataset_source"] = dataset_source
+    bundle["runtime_dataset_managed"] = not unmanaged
     bundle["managed_by"] = "policyengine.py"
     return bundle
 
@@ -438,10 +445,12 @@ def managed_microsimulation(
             allow_unmanaged and dataset is not None and "://" in dataset
         ),
     )
+    unmanaged = allow_unmanaged and dataset is not None and "://" in dataset
     microsim = Microsimulation(dataset=dataset_source, **kwargs)
     microsim.policyengine_bundle = _managed_release_bundle(
         dataset_uri,
         dataset_source,
+        unmanaged,
     )
     return microsim
 
