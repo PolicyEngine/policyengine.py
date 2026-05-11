@@ -100,7 +100,9 @@ def _check_country_manifests(bundle: dict[str, Any]) -> list[str]:
         country_bundle = _load_json(COUNTRY_BUNDLE_ROOT / country_bundle_path)
         country_manifest = _load_json(COUNTRY_MANIFEST_ROOT / f"{country_id}.json")
         if country_bundle.get("bundle_version") != bundle.get("bundle_version"):
-            errors.append(f"{country_bundle_path} bundle_version does not match bundle.")
+            errors.append(
+                f"{country_bundle_path} bundle_version does not match bundle."
+            )
         if country_manifest.get("policyengine_version") != bundle.get("bundle_version"):
             errors.append(
                 f"release_manifests/{country_id}.json policyengine_version "
@@ -198,9 +200,9 @@ def _optional_dependency_pins(pyproject: Path) -> dict[str, dict[str, str]]:
             dependency = dependency_match.group(1)
             pin_match = re.match(r"^([A-Za-z0-9_.-]+)==([^;]+)$", dependency)
             if pin_match:
-                extras[current_extra][
-                    _normalized_package_name(pin_match.group(1))
-                ] = pin_match.group(2)
+                extras[current_extra][_normalized_package_name(pin_match.group(1))] = (
+                    pin_match.group(2)
+                )
     return extras
 
 

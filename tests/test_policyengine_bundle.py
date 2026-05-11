@@ -42,7 +42,9 @@ class LocalPackageFiles:
         return self.path.read_text()
 
 
-bundle.files = lambda _package_name: LocalPackageFiles(REPO_ROOT / "src" / "policyengine")
+bundle.files = lambda _package_name: LocalPackageFiles(
+    REPO_ROOT / "src" / "policyengine"
+)
 
 
 def pyproject_version() -> str:
@@ -93,6 +95,54 @@ def test_require_bundle_strict_rejects_version_mismatch(monkeypatch) -> None:
 
     with pytest.raises(bundle.BundleMismatchError, match="do not match"):
         bundle.require_bundle(bundle.get_bundle_version(), profile="us")
+
+
+def test_constraints_url_uses_bundle_install_target() -> None:
+    assert bundle.constraints_url("us", "3.13") == (
+        "https://raw.githubusercontent.com/PolicyEngine/policyengine-bundles/"
+        "v4.4.2/bundles/4.4.2/install/us/py313/constraints.txt"
+    )
+
+
+def test_install_command_uses_target_python_and_constraints() -> None:
+    assert bundle.install_command(
+        "all",
+        "3.13",
+        target_python="/tmp/project/.venv/bin/python",
+    ) == [
+        "/tmp/project/.venv/bin/python",
+        "-m",
+        "pip",
+        "install",
+        "policyengine[uk,us]==4.4.2",
+        "-c",
+        (
+            "https://raw.githubusercontent.com/PolicyEngine/policyengine-bundles/"
+            "v4.4.2/bundles/4.4.2/install/all/py313/constraints.txt"
+        ),
+    ]
+
+
+def test_install_profile_supports_dry_run() -> None:
+    command = bundle.install_profile(
+        "uk",
+        "3.13",
+        target_python="/tmp/project/.venv/bin/python",
+        dry_run=True,
+    )
+
+    assert command[0:5] == [
+        "/tmp/project/.venv/bin/python",
+        "-m",
+        "pip",
+        "install",
+        "policyengine[uk]==4.4.2",
+    ]
+
+
+def test_install_target_rejects_unsupported_python_version() -> None:
+    with pytest.raises(bundle.BundleMismatchError, match="No install target"):
+        bundle.get_install_target("us", "3.14")
 
 
 def test_repository_bundle_consistency_check_passes() -> None:

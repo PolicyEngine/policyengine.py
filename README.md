@@ -89,8 +89,22 @@ pip install "policyengine[us]==4.4.2"       # US model profile
 pip install "policyengine[uk,us]==4.4.2"    # both country profiles
 ```
 
-For exact transitive reproducibility, install with the matching constraints or
-lock artifacts from the corresponding `policyengine-bundles` release.
+For exact transitive reproducibility, install with the matching constraints from
+the corresponding `policyengine-bundles` release. Once `policyengine` is
+available in the target environment, the bundled helper can run the constrained
+install:
+
+```bash
+python -m policyengine.bundle install us --python-version 3.13
+```
+
+From outside the target environment, run it with an explicit target interpreter:
+
+```bash
+uvx --from policyengine==4.4.2 policyengine-bundle install us \
+  --python-version 3.13 \
+  --target-python .venv/bin/python
+```
 
 ### For development
 

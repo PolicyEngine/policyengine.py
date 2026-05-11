@@ -2,13 +2,27 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 from functools import lru_cache
 from importlib import metadata
 from importlib.resources import files
+from pathlib import Path
 from typing import Any, Optional
 
 STRICT_BUNDLE_ENV_VAR = "POLICYENGINE_BUNDLE_STRICT"
 TRUTHY_ENV_VALUES = {"1", "true", "yes", "on"}
+BUNDLE_REPOSITORY = "PolicyEngine/policyengine-bundles"
+BUNDLE_RAW_URL_TEMPLATE = (
+    "https://raw.githubusercontent.com/"
+    + BUNDLE_REPOSITORY
+    + "/{ref}/bundles/{version}/{path}"
+)
+PROFILE_EXTRAS = {
+    "us": "us",
+    "uk": "uk",
+    "all": "uk,us",
+}
 
 
 class BundleMismatchError(RuntimeError):
@@ -37,7 +51,9 @@ def get_profile(profile: str) -> dict[str, Any]:
     try:
         return profiles[profile]
     except KeyError as exc:
-        raise BundleMismatchError(f"Unknown PolicyEngine bundle profile: {profile}") from exc
+        raise BundleMismatchError(
+            f"Unknown PolicyEngine bundle profile: {profile}"
+        ) from exc
 
 
 def get_country_bundle(country_id: str) -> dict[str, Any]:
@@ -56,6 +72,134 @@ def get_country_bundle(country_id: str) -> dict[str, Any]:
             "is not vendored in this policyengine wheel."
         )
     return json.loads(country_bundle_path.read_text())
+
+
+def get_install_target(
+    profile: str,
+    python_version: Optional[str] = None,
+) -> dict[str, Any]:
+    resolved_python_version = python_version or current_python_version()
+    target_key = python_version_key(resolved_python_version)
+    install_targets = get_profile(profile).get("install_targets", {})
+    try:
+        return install_targets[target_key]
+    except KeyError as exc:
+        raise BundleMismatchError(
+            f"No install target for profile {profile!r} and Python "
+            f"{resolved_python_version!r} in PolicyEngine bundle "
+            f"{get_bundle_version()}."
+        ) from exc
+
+
+def constraints_url(
+    profile: str,
+    python_version: Optional[str] = None,
+    *,
+    bundle_ref: Optional[str] = None,
+) -> str:
+    """Return the immutable constraints URL for a profile install target."""
+
+    version = get_bundle_version()
+    target = get_install_target(profile, python_version)
+    constraints_path = str(target["constraints"])
+    ref = bundle_ref or f"v{version}"
+    return BUNDLE_RAW_URL_TEMPLATE.format(
+        ref=ref,
+        version=version,
+        path=constraints_path,
+    )
+
+
+def install_profile(
+    profile: str,
+    python_version: Optional[str] = None,
+    *,
+    installer: str = "pip",
+    target_python: Optional[str] = None,
+    dry_run: bool = False,
+    runner: Optional[Any] = None,
+) -> list[str]:
+    """Install a certified profile using the vendored bundle's constraints."""
+
+    command = install_command(
+        profile,
+        python_version,
+        installer=installer,
+        target_python=target_python,
+    )
+    if dry_run:
+        return command
+    resolved_runner = runner or _run_command
+    resolved_runner(command)
+    return command
+
+
+def install_command(
+    profile: str,
+    python_version: Optional[str] = None,
+    *,
+    installer: str = "pip",
+    target_python: Optional[str] = None,
+) -> list[str]:
+    resolved_target_python = target_python or default_target_python()
+    package_spec = policyengine_package_spec(profile)
+    constraints = constraints_url(profile, python_version)
+    if installer == "pip":
+        return [
+            resolved_target_python,
+            "-m",
+            "pip",
+            "install",
+            package_spec,
+            "-c",
+            constraints,
+        ]
+    if installer == "uv":
+        return [
+            "uv",
+            "pip",
+            "install",
+            "--python",
+            resolved_target_python,
+            package_spec,
+            "-c",
+            constraints,
+        ]
+    raise BundleMismatchError(
+        f"Unsupported installer {installer!r}. Expected 'pip' or 'uv'."
+    )
+
+
+def policyengine_package_spec(profile: str) -> str:
+    try:
+        extra = PROFILE_EXTRAS[profile]
+    except KeyError as exc:
+        raise BundleMismatchError(
+            f"Unknown PolicyEngine bundle profile: {profile}"
+        ) from exc
+    return f"policyengine[{extra}]=={get_bundle_version()}"
+
+
+def python_version_key(python_version: str) -> str:
+    parts = python_version.split(".")
+    if len(parts) != 2 or not all(part.isdigit() for part in parts):
+        raise BundleMismatchError(
+            "Python version must use major.minor form, e.g. '3.13'."
+        )
+    return f"py{parts[0]}{parts[1]}"
+
+
+def current_python_version() -> str:
+    return f"{sys.version_info.major}.{sys.version_info.minor}"
+
+
+def default_target_python() -> str:
+    virtual_env = os.environ.get("VIRTUAL_ENV")
+    if virtual_env:
+        candidate = _virtualenv_python(Path(virtual_env))
+        if candidate.is_file():
+            return str(candidate)
+    return sys.executable
 
 
 def current_profile_summary(profile: Optional[str] = None) -> dict[str, Any]:
@@ -139,6 +283,16 @@ def _installed_version(package_name: str) -> Optional[str]:
         return None
 
 
+def _run_command(command: list[str]) -> None:
+    subprocess.run(command, check=True)
+
+
+def _virtualenv_python(virtual_env: Path) -> Path:
+    if os.name == "nt":
+        return virtual_env / "Scripts" / "python.exe"
+    return virtual_env / "bin" / "python"
+
+
 class CurrentBundle:
     def as_dict(self) -> dict[str, Any]:
         return get_bundle_manifest()
@@ -148,3 +302,13 @@ class CurrentBundle:
 
 
 current = CurrentBundle()
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    from policyengine.bundle_cli import main as bundle_cli_main
+
+    return bundle_cli_main(argv)
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

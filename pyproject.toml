@@ -32,6 +32,7 @@ dependencies = [
 
 [project.scripts]
 policyengine = "policyengine.cli:main"
+policyengine-bundle = "policyengine.bundle_cli:main"
 
 [project.optional-dependencies]
 plotting = [

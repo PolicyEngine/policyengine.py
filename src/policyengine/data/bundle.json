@@ -1,5 +1,5 @@
 {
-  "bundle_digest": "sha256:6828143eb81f276a7d99b1b1e75bcda0746e1eea23dbce9a0e0c8e9341017295",
+  "bundle_digest": "sha256:01f6fbeefb5e16d79a35c56f64cedf8ed8b45ac5c18cfe3af6fcad3da925f96b",
   "bundle_version": "4.4.2",
   "countries": {
     "uk": "countries/uk.json",
@@ -12,6 +12,11 @@
     "python_versions": [
       "3.13"
     ],
+    "resolver": {
+      "exclude_newer": "2026-05-09T10:39:06Z",
+      "name": "uv",
+      "resolution": "highest"
+    },
     "testing_only": false
   },
   "packages": {

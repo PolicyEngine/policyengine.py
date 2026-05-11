@@ -56,6 +56,7 @@ It does not define the final supported runtime bundle exposed to users.
 - runtime bundle certification
 - user-facing reproducibility boundaries
 - the supported mapping from `policyengine.py` version to country model version and certified data artifact
+- a package-provided installer helper that maps a profile and Python version to the matching bundle constraints
 
 It does not rebuild microdata artifacts.
 
@@ -436,6 +437,39 @@ The target implementation in `policyengine.py` should add:
 - hard validation of bundle certification rules
 - explicit runtime bundle metadata on simulations, APIs, and app responses
 - checksum-backed dataset resolution from the certified bundle manifest
+
+## Installing from a bundle
+
+Country extras remain the convenient install surface:
+
+```bash
+pip install "policyengine[us]==4.4.2"
+```
+
+That pins the direct PolicyEngine-owned packages recorded in the vendored
+bundle. For exact transitive reproducibility, use the profile/Python constraints
+recorded in the matching `policyengine-bundles` release:
+
+```bash
+python -m policyengine.bundle constraints-url us --python-version 3.13
+python -m policyengine.bundle install us --python-version 3.13
+```
+
+If the helper is run through `uvx` or another isolated tool runner, pass the
+target interpreter explicitly so the install lands in the intended environment:
+
+```bash
+uvx --from policyengine==4.4.2 policyengine-bundle install us \
+  --python-version 3.13 \
+  --target-python .venv/bin/python
+```
+
+The helper constructs an install equivalent to:
+
+```bash
+python -m pip install "policyengine[us]==4.4.2" \
+  -c https://raw.githubusercontent.com/PolicyEngine/policyengine-bundles/v4.4.2/bundles/4.4.2/install/us/py313/constraints.txt
+```
 
 ## Why not let `policyengine.py` build all country data directly?
 
