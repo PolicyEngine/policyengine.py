@@ -105,13 +105,13 @@ def test_us_program_statistics_config_runs_against_mocked_outputs(tmp_path):
 
     model_version = baseline.tax_benefit_model_version
     results = {}
-    for program_name, is_tax in US_PROGRAMS.items():
+    for program_name, program_info in US_PROGRAMS.items():
         stats = ProgramStatistics(
             baseline_simulation=baseline,
             reform_simulation=reform,
             program_name=program_name,
             entity=model_version.get_variable(program_name).entity,
-            is_tax=is_tax,
+            is_tax=program_info["is_tax"],
         )
         stats.run()
         results[program_name] = stats

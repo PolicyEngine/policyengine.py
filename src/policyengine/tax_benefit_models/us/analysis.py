@@ -28,23 +28,23 @@ from policyengine.outputs.poverty import (
 )
 from policyengine.utils.errors import format_conditional_error_detail
 
-# Map of US program-statistics variable name -> is_tax flag. The
+# Map of US program-statistics variable name -> program metadata. The
 # entity for each program is derived from the variable's own metadata
 # at runtime (see ``_validate_program_statistics_config`` and
 # ``economic_impact_analysis``), so this list cannot silently drift
 # when policyengine-us moves a variable between entities.
-US_PROGRAMS: dict[str, bool] = {
-    "income_tax": True,
-    "employee_payroll_tax": True,
-    "state_income_tax": True,
-    "snap": False,
-    "tanf": False,
-    "ssi": False,
-    "social_security": False,
-    "medicare_cost": False,
-    "medicaid": False,
-    "eitc": False,
-    "ctc": False,
+US_PROGRAMS: dict[str, dict] = {
+    "income_tax": {"is_tax": True},
+    "employee_payroll_tax": {"is_tax": True},
+    "state_income_tax": {"is_tax": True},
+    "snap": {"is_tax": False},
+    "tanf": {"is_tax": False},
+    "ssi": {"is_tax": False},
+    "social_security": {"is_tax": False},
+    "medicare_cost": {"is_tax": False},
+    "medicaid": {"is_tax": False},
+    "eitc": {"is_tax": False},
+    "ctc": {"is_tax": False},
 }
 
 
@@ -160,13 +160,13 @@ def economic_impact_analysis(
 
     model_version = baseline_simulation.tax_benefit_model_version
     program_statistics = []
-    for program_name, is_tax in US_PROGRAMS.items():
+    for program_name, program_info in US_PROGRAMS.items():
         stats = ProgramStatistics(
             baseline_simulation=baseline_simulation,
             reform_simulation=reform_simulation,
             program_name=program_name,
             entity=model_version.get_variable(program_name).entity,
-            is_tax=is_tax,
+            is_tax=program_info["is_tax"],
         )
         stats.run()
         program_statistics.append(stats)
