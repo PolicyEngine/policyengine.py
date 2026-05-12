@@ -140,6 +140,32 @@ def validate_vendored_bundle_version(repo_root: Path, new_version: str):
         sys.exit(1)
 
 
+def vendored_bundle_matches(repo_root: Path, new_version: str) -> bool:
+    bundle_path = repo_root / "src" / "policyengine" / "data" / "bundle.json"
+    if not bundle_path.exists():
+        return False
+    bundle = json.loads(bundle_path.read_text())
+    return (
+        bundle.get("bundle_version") == new_version
+        and (bundle.get("policyengine") or {}).get("version") == new_version
+    )
+
+
+def vendor_matching_bundle(repo_root: Path, new_version: str):
+    if vendored_bundle_matches(repo_root, new_version):
+        return
+    subprocess.run(
+        [
+            sys.executable,
+            str(repo_root / ".github" / "vendor_release_bundle.py"),
+            "--version",
+            new_version,
+        ],
+        cwd=repo_root,
+        check=True,
+    )
+
+
 def main():
     root = Path(__file__).resolve().parent.parent
     pyproject = root / "pyproject.toml"
@@ -152,6 +178,7 @@ def main():
 
     print(f"Version: {current} -> {new} ({bump})")
 
+    vendor_matching_bundle(root, new)
     validate_vendored_bundle_version(root, new)
     update_file(pyproject, new)
 

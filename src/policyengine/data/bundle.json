@@ -10,7 +10,8 @@
     "generated_by": "scripts/generate_bundle.py",
     "install_artifact_layout": "install/{profile}/{python}/",
     "python_versions": [
-      "3.13"
+      "3.13",
+      "3.14"
     ],
     "resolver": {
       "exclude_newer": "2026-05-09T10:39:06Z",
@@ -81,6 +82,12 @@
           "lockfile": "install/all/py313/pylock.toml",
           "python_version": "3.13",
           "resolver": "uv"
+        },
+        "py314": {
+          "constraints": "install/all/py314/constraints.txt",
+          "lockfile": "install/all/py314/pylock.toml",
+          "python_version": "3.14",
+          "resolver": "uv"
         }
       },
       "packages": [
@@ -101,6 +108,12 @@
           "lockfile": "install/uk/py313/pylock.toml",
           "python_version": "3.13",
           "resolver": "uv"
+        },
+        "py314": {
+          "constraints": "install/uk/py314/constraints.txt",
+          "lockfile": "install/uk/py314/pylock.toml",
+          "python_version": "3.14",
+          "resolver": "uv"
         }
       },
       "packages": [
@@ -119,6 +132,12 @@
           "constraints": "install/us/py313/constraints.txt",
           "lockfile": "install/us/py313/pylock.toml",
           "python_version": "3.13",
+          "resolver": "uv"
+        },
+        "py314": {
+          "constraints": "install/us/py314/constraints.txt",
+          "lockfile": "install/us/py314/pylock.toml",
+          "python_version": "3.14",
           "resolver": "uv"
         }
       },

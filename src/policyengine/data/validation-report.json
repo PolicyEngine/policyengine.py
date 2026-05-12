@@ -1,0 +1,355 @@
+{
+  "bundle_version": "4.4.2",
+  "checks": [
+    {
+      "country": "uk",
+      "details": {},
+      "name": "data_release_manifest_contract",
+      "profile": "all",
+      "status": "passed"
+    },
+    {
+      "country": "us",
+      "details": {},
+      "name": "data_release_manifest_contract",
+      "profile": "all",
+      "status": "passed"
+    },
+    {
+      "country": "uk",
+      "details": {},
+      "name": "data_release_manifest_contract",
+      "profile": "uk",
+      "status": "passed"
+    },
+    {
+      "country": "us",
+      "details": {},
+      "name": "data_release_manifest_contract",
+      "profile": "us",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "declared_python_versions": [
+          "3.13"
+        ],
+        "install_targets": [
+          "py313"
+        ]
+      },
+      "name": "install_targets_complete",
+      "profile": "all",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "path": "install/all/py313/pylock.toml",
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "name": "lockfile_present",
+      "profile": "all",
+      "python_version": "3.13",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "path": "install/all/py313/constraints.txt",
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "name": "constraints_present",
+      "profile": "all",
+      "python_version": "3.13",
+      "status": "passed"
+    },
+    {
+      "command": "uv venv --python 3.13 /tmp/tmpgw24pqjg/venv",
+      "details": {
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "ended_at": "2026-05-09T10:21:50Z",
+      "name": "create_venv",
+      "profile": "all",
+      "python_version": "3.13",
+      "started_at": "2026-05-09T10:21:50Z",
+      "status": "passed"
+    },
+    {
+      "command": "uv pip install --python /tmp/tmpgw24pqjg/venv/bin/python -r .tmp/bundle-4.4.2/install/all/py313/constraints.txt",
+      "details": {
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "ended_at": "2026-05-09T10:21:55Z",
+      "name": "install_constraints",
+      "profile": "all",
+      "python_version": "3.13",
+      "started_at": "2026-05-09T10:21:50Z",
+      "status": "passed"
+    },
+    {
+      "command": "/tmp/tmpgw24pqjg/venv/bin/python -c import importlib.metadata as md\nexpected = {\"policyengine\": \"4.4.2\", \"policyengine-core\": \"3.26.1\", \"policyengine-uk\": \"2.88.14\", \"policyengine-us\": \"1.687.0\"}\nfor name, version in expected.items():\n    actual = md.version(name)\n    assert actual == version, f'{name}: expected {version}, got {actual}'\n",
+      "details": {
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "ended_at": "2026-05-09T10:21:55Z",
+      "name": "verify_direct_package_versions",
+      "profile": "all",
+      "python_version": "3.13",
+      "started_at": "2026-05-09T10:21:55Z",
+      "status": "passed"
+    },
+    {
+      "command": "/tmp/tmpgw24pqjg/venv/bin/python -c import policyengine\nimport policyengine_core\nimport policyengine_uk\nimport policyengine_us\n",
+      "details": {
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "ended_at": "2026-05-09T10:22:23Z",
+      "name": "import_smoke",
+      "profile": "all",
+      "python_version": "3.13",
+      "started_at": "2026-05-09T10:21:55Z",
+      "status": "passed"
+    },
+    {
+      "command": "/tmp/tmpgw24pqjg/venv/bin/python -c import policyengine as pe\npe.uk.calculate_household(people=[{'age': 35}], year=2026)\n",
+      "details": {
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "ended_at": "2026-05-09T10:22:45Z",
+      "name": "uk_household_smoke",
+      "profile": "all",
+      "python_version": "3.13",
+      "started_at": "2026-05-09T10:22:23Z",
+      "status": "passed"
+    },
+    {
+      "command": "/tmp/tmpgw24pqjg/venv/bin/python -c import policyengine as pe\npe.us.calculate_household(people=[{'age': 35}], tax_unit={'filing_status': 'SINGLE'}, year=2026)\n",
+      "details": {
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "ended_at": "2026-05-09T10:23:19Z",
+      "name": "us_household_smoke",
+      "profile": "all",
+      "python_version": "3.13",
+      "started_at": "2026-05-09T10:22:45Z",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "declared_python_versions": [
+          "3.13"
+        ],
+        "install_targets": [
+          "py313"
+        ]
+      },
+      "name": "install_targets_complete",
+      "profile": "uk",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "path": "install/uk/py313/pylock.toml",
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "name": "lockfile_present",
+      "profile": "uk",
+      "python_version": "3.13",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "path": "install/uk/py313/constraints.txt",
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "name": "constraints_present",
+      "profile": "uk",
+      "python_version": "3.13",
+      "status": "passed"
+    },
+    {
+      "command": "uv venv --python 3.13 /tmp/tmpr7z_c8u8/venv",
+      "details": {
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "ended_at": "2026-05-09T10:23:20Z",
+      "name": "create_venv",
+      "profile": "uk",
+      "python_version": "3.13",
+      "started_at": "2026-05-09T10:23:20Z",
+      "status": "passed"
+    },
+    {
+      "command": "uv pip install --python /tmp/tmpr7z_c8u8/venv/bin/python -r .tmp/bundle-4.4.2/install/uk/py313/constraints.txt",
+      "details": {
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "ended_at": "2026-05-09T10:23:21Z",
+      "name": "install_constraints",
+      "profile": "uk",
+      "python_version": "3.13",
+      "started_at": "2026-05-09T10:23:20Z",
+      "status": "passed"
+    },
+    {
+      "command": "/tmp/tmpr7z_c8u8/venv/bin/python -c import importlib.metadata as md\nexpected = {\"policyengine\": \"4.4.2\", \"policyengine-core\": \"3.26.1\", \"policyengine-uk\": \"2.88.14\"}\nfor name, version in expected.items():\n    actual = md.version(name)\n    assert actual == version, f'{name}: expected {version}, got {actual}'\n",
+      "details": {
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "ended_at": "2026-05-09T10:23:21Z",
+      "name": "verify_direct_package_versions",
+      "profile": "uk",
+      "python_version": "3.13",
+      "started_at": "2026-05-09T10:23:21Z",
+      "status": "passed"
+    },
+    {
+      "command": "/tmp/tmpr7z_c8u8/venv/bin/python -c import policyengine\nimport policyengine_core\nimport policyengine_uk\n",
+      "details": {
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "ended_at": "2026-05-09T10:23:28Z",
+      "name": "import_smoke",
+      "profile": "uk",
+      "python_version": "3.13",
+      "started_at": "2026-05-09T10:23:21Z",
+      "status": "passed"
+    },
+    {
+      "command": "/tmp/tmpr7z_c8u8/venv/bin/python -c import policyengine as pe\npe.uk.calculate_household(people=[{'age': 35}], year=2026)\n",
+      "details": {
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "ended_at": "2026-05-09T10:23:33Z",
+      "name": "uk_household_smoke",
+      "profile": "uk",
+      "python_version": "3.13",
+      "started_at": "2026-05-09T10:23:28Z",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "declared_python_versions": [
+          "3.13"
+        ],
+        "install_targets": [
+          "py313"
+        ]
+      },
+      "name": "install_targets_complete",
+      "profile": "us",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "path": "install/us/py313/pylock.toml",
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "name": "lockfile_present",
+      "profile": "us",
+      "python_version": "3.13",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "path": "install/us/py313/constraints.txt",
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "name": "constraints_present",
+      "profile": "us",
+      "python_version": "3.13",
+      "status": "passed"
+    },
+    {
+      "command": "uv venv --python 3.13 /tmp/tmpwb1cski5/venv",
+      "details": {
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "ended_at": "2026-05-09T10:23:33Z",
+      "name": "create_venv",
+      "profile": "us",
+      "python_version": "3.13",
+      "started_at": "2026-05-09T10:23:33Z",
+      "status": "passed"
+    },
+    {
+      "command": "uv pip install --python /tmp/tmpwb1cski5/venv/bin/python -r .tmp/bundle-4.4.2/install/us/py313/constraints.txt",
+      "details": {
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "ended_at": "2026-05-09T10:23:34Z",
+      "name": "install_constraints",
+      "profile": "us",
+      "python_version": "3.13",
+      "started_at": "2026-05-09T10:23:33Z",
+      "status": "passed"
+    },
+    {
+      "command": "/tmp/tmpwb1cski5/venv/bin/python -c import importlib.metadata as md\nexpected = {\"policyengine\": \"4.4.2\", \"policyengine-core\": \"3.26.1\", \"policyengine-us\": \"1.687.0\"}\nfor name, version in expected.items():\n    actual = md.version(name)\n    assert actual == version, f'{name}: expected {version}, got {actual}'\n",
+      "details": {
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "ended_at": "2026-05-09T10:23:34Z",
+      "name": "verify_direct_package_versions",
+      "profile": "us",
+      "python_version": "3.13",
+      "started_at": "2026-05-09T10:23:34Z",
+      "status": "passed"
+    },
+    {
+      "command": "/tmp/tmpwb1cski5/venv/bin/python -c import policyengine\nimport policyengine_core\nimport policyengine_us\n",
+      "details": {
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "ended_at": "2026-05-09T10:23:58Z",
+      "name": "import_smoke",
+      "profile": "us",
+      "python_version": "3.13",
+      "started_at": "2026-05-09T10:23:34Z",
+      "status": "passed"
+    },
+    {
+      "command": "/tmp/tmpwb1cski5/venv/bin/python -c import policyengine as pe\npe.us.calculate_household(people=[{'age': 35}], tax_unit={'filing_status': 'SINGLE'}, year=2026)\n",
+      "details": {
+        "target": "py313",
+        "validated_on_platform": "linux"
+      },
+      "ended_at": "2026-05-09T10:24:31Z",
+      "name": "us_household_smoke",
+      "profile": "us",
+      "python_version": "3.13",
+      "started_at": "2026-05-09T10:23:58Z",
+      "status": "passed"
+    }
+  ],
+  "generated_at": "2026-05-09T10:24:32Z",
+  "metadata": {
+    "generated_by": "scripts/validate_bundle.py",
+    "validate_runtime": true,
+    "validation_scope": "full",
+    "verify_data": true
+  },
+  "schema_version": 1,
+  "status": "passed"
+}

@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
+import json
 import re
+import tarfile
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = REPO_ROOT / "pyproject.toml"
+VENDORED_BUNDLE_ROOT = REPO_ROOT / "src" / "policyengine" / "data"
 BUNDLE_MODULE_PATH = REPO_ROOT / "src" / "policyengine" / "bundle.py"
 CHECK_BUNDLE_PATH = REPO_ROOT / ".github" / "check_bundle_consistency.py"
 
@@ -104,6 +108,26 @@ def test_constraints_url_uses_bundle_install_target() -> None:
     )
 
 
+def test_constraints_url_supports_python_314() -> None:
+    assert bundle.constraints_url("us", "3.14") == (
+        "https://raw.githubusercontent.com/PolicyEngine/policyengine-bundles/"
+        "v4.4.2/bundles/4.4.2/install/us/py314/constraints.txt"
+    )
+
+
+def test_install_target_files_are_vendored() -> None:
+    target = bundle.get_install_target("us", "3.13")
+    target_314 = bundle.get_install_target("us", "3.14")
+
+    assert (VENDORED_BUNDLE_ROOT / target["constraints"]).is_file()
+    assert (VENDORED_BUNDLE_ROOT / target["lockfile"]).is_file()
+    assert (VENDORED_BUNDLE_ROOT / target_314["constraints"]).is_file()
+    assert (VENDORED_BUNDLE_ROOT / target_314["lockfile"]).is_file()
+    assert (
+        VENDORED_BUNDLE_ROOT / bundle.get_bundle_manifest()["validation_report"]
+    ).is_file()
+
+
 def test_install_command_uses_target_python_and_constraints() -> None:
     assert bundle.install_command(
         "all",
@@ -142,8 +166,87 @@ def test_install_profile_supports_dry_run() -> None:
 
 def test_install_target_rejects_unsupported_python_version() -> None:
     with pytest.raises(bundle.BundleMismatchError, match="No install target"):
-        bundle.get_install_target("us", "3.14")
+        bundle.get_install_target("us", "3.12")
 
 
 def test_repository_bundle_consistency_check_passes() -> None:
     assert check_bundle_consistency.check_bundle_consistency() == []
+
+
+def test_release_asset_dir_consistency_check_passes(tmp_path: Path) -> None:
+    asset_dir = _write_release_assets(tmp_path)
+
+    assert (
+        check_bundle_consistency.check_bundle_consistency(
+            release_asset_dir=asset_dir,
+        )
+        == []
+    )
+
+
+def test_release_asset_dir_consistency_requires_archive(tmp_path: Path) -> None:
+    asset_dir = _write_release_assets(tmp_path)
+    version = bundle.get_bundle_version()
+    (asset_dir / f"policyengine-bundle-{version}.tar.gz").unlink()
+
+    errors = check_bundle_consistency.check_bundle_consistency(
+        release_asset_dir=asset_dir,
+    )
+
+    assert (
+        f"Bundle release asset is missing: policyengine-bundle-{version}.tar.gz."
+        in errors
+    )
+
+
+def _write_release_assets(tmp_path: Path) -> Path:
+    manifest = bundle.get_bundle_manifest()
+    version = manifest["bundle_version"]
+    asset_dir = tmp_path / "assets"
+    asset_dir.mkdir()
+
+    _write_json(asset_dir / f"bundle-{version}.json", manifest)
+    validation_report = json.loads(
+        (VENDORED_BUNDLE_ROOT / manifest["validation_report"]).read_text()
+    )
+    _write_json(asset_dir / f"validation-report-{version}.json", validation_report)
+
+    archive_path = asset_dir / f"policyengine-bundle-{version}.tar.gz"
+    archive_root = f"policyengine-bundle-{version}"
+    archive_members = {
+        "bundle.json",
+        *check_bundle_consistency._bundle_referenced_paths(manifest),
+    }
+    with tarfile.open(archive_path, "w:gz") as archive:
+        for relative_path in sorted(archive_members):
+            archive.add(
+                VENDORED_BUNDLE_ROOT / relative_path,
+                arcname=str(Path(archive_root) / relative_path),
+            )
+
+    archive_sha256 = _sha256_file(archive_path)
+    (asset_dir / f"policyengine-bundle-{version}.tar.gz.sha256").write_text(
+        f"{archive_sha256}  {archive_path.name}\n"
+    )
+    _write_json(
+        asset_dir / f"policyengine-bundle-{version}.json",
+        {
+            "bundle_version": version,
+            "bundle_digest": manifest["bundle_digest"],
+            "archive": archive_path.name,
+            "archive_sha256": archive_sha256,
+        },
+    )
+    return asset_dir
+
+
+def _write_json(path: Path, payload: dict) -> None:
+    path.write_text(json.dumps(payload, indent=2) + "\n")
+
+
+def _sha256_file(path: Path) -> str:
+    hasher = hashlib.sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()

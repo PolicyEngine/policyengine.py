@@ -42,9 +42,16 @@ and its US counterpart.
 
 ### Reproducible bundle metadata
 
-Each `policyengine` release vendors the matching bundle manifest. The bundle
-pins the human-facing `.py` version to exact direct PolicyEngine-owned package
-versions, country data artifacts, and a validation digest.
+Each `policyengine` release vendors the matching bundle manifest, country
+manifests, validation report, and profile install constraints/lockfiles. The
+bundle pins the human-facing `.py` version to exact direct PolicyEngine-owned
+package versions, country data artifacts, and a validation digest.
+
+The matching `policyengine-bundles` release is created first and treats
+`policyengine` as the bundle carrier, so it does not need the future `.py` wheel
+hash. During `policyengine.py` versioning, the workflow vendors that bundle;
+after PyPI publish, the GitHub release can attach an attestation with the
+actual `.py` wheel SHA256.
 
 ```python
 import policyengine as pe
@@ -95,14 +102,14 @@ available in the target environment, the bundled helper can run the constrained
 install:
 
 ```bash
-python -m policyengine.bundle install us --python-version 3.13
+python -m policyengine.bundle install us
 ```
 
 From outside the target environment, run it with an explicit target interpreter:
 
 ```bash
 uvx --from policyengine==4.4.2 policyengine-bundle install us \
-  --python-version 3.13 \
+  --python-version 3.14 \
   --target-python .venv/bin/python
 ```
 

@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from functools import lru_cache
 from importlib import metadata
 from importlib.resources import files
@@ -23,6 +24,7 @@ PROFILE_EXTRAS = {
     "uk": "uk",
     "all": "uk,us",
 }
+CommandRunner = Callable[[list[str]], None]
 
 
 class BundleMismatchError(RuntimeError):
@@ -117,7 +119,7 @@ def install_profile(
     installer: str = "pip",
     target_python: Optional[str] = None,
     dry_run: bool = False,
-    runner: Optional[Any] = None,
+    runner: Optional[CommandRunner] = None,
 ) -> list[str]:
     """Install a certified profile using the vendored bundle's constraints."""
 

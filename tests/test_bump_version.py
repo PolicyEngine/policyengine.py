@@ -77,3 +77,28 @@ def test_validate_vendored_bundle_version_rejects_stale_bundle(tmp_path):
 
     with pytest.raises(SystemExit):
         bump_version.validate_vendored_bundle_version(tmp_path, "4.3.2")
+
+
+def test_vendor_matching_bundle_downloads_when_vendored_bundle_is_stale(
+    tmp_path,
+    monkeypatch,
+):
+    bundle_path = tmp_path / "src" / "policyengine" / "data" / "bundle.json"
+    bundle_path.parent.mkdir(parents=True)
+    bundle_path.write_text(
+        '{"bundle_version": "4.0.0", "policyengine": {"version": "4.0.0"}}'
+    )
+    calls = []
+
+    def fake_run(command, cwd, check):
+        calls.append((command, cwd, check))
+
+    monkeypatch.setattr(bump_version.subprocess, "run", fake_run)
+
+    bump_version.vendor_matching_bundle(tmp_path, "4.3.2")
+
+    assert len(calls) == 1
+    command, cwd, check = calls[0]
+    assert command[-2:] == ["--version", "4.3.2"]
+    assert cwd == tmp_path
+    assert check is True
