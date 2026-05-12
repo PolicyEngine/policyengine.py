@@ -6,7 +6,7 @@
     "repo_type": "model",
     "version": "1.55.5"
   },
-  "bundle_version": "4.4.2",
+  "bundle_version": "4.4.3",
   "certification": {
     "built_with_core_package": {
       "name": "policyengine-core",

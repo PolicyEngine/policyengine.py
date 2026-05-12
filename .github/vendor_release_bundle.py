@@ -274,6 +274,8 @@ def _bundle_hf_uri_to_policyengine_uri(uri: str) -> str:
 def _update_pyproject_pins(bundle: dict[str, Any], pyproject_path: Path) -> None:
     text = pyproject_path.read_text()
     for package_name, package in sorted(bundle.get("packages", {}).items()):
+        if package_name == "policyengine":
+            continue
         if package.get("role") == "bundle_carrier":
             continue
         version = package.get("version")
