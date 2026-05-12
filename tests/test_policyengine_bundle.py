@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import io
 import json
 import re
 import tarfile
@@ -64,7 +65,8 @@ def test_vendored_bundle_matches_policyengine_version() -> None:
 
     assert manifest["bundle_version"] == pyproject_version()
     assert manifest["policyengine"]["version"] == pyproject_version()
-    assert bundle.get_bundle_digest().startswith("sha256:")
+    digest = bundle.get_bundle_digest()
+    assert digest is None or digest.startswith("sha256:")
 
 
 def test_country_bundle_is_vendored() -> None:
@@ -73,9 +75,10 @@ def test_country_bundle_is_vendored() -> None:
 
     assert us_bundle["country_id"] == "us"
     assert us_bundle["bundle_version"] == bundle.get_bundle_version()
-    assert us_bundle["model_package"]["version"] == manifest["packages"][
-        "policyengine-us"
-    ]["version"]
+    assert (
+        us_bundle["model_package"]["version"]
+        == manifest["packages"]["policyengine-us"]["version"]
+    )
 
 
 def test_require_bundle_strict_checks_installed_versions(monkeypatch) -> None:
@@ -175,6 +178,16 @@ def test_repository_bundle_consistency_check_passes() -> None:
     assert check_bundle_consistency.check_bundle_consistency() == []
 
 
+def test_certified_bundle_check_requires_release_grade_evidence() -> None:
+    errors = check_bundle_consistency.check_bundle_consistency(
+        require_certified=True,
+    )
+
+    assert "Certified bundle must define bundle_digest starting with sha256:." in errors
+    assert any("validation_scope='full'" in error for error in errors)
+    assert any("skipped check" in error for error in errors)
+
+
 def test_release_asset_dir_consistency_check_passes(tmp_path: Path) -> None:
     asset_dir = _write_release_assets(tmp_path)
 
@@ -201,11 +214,34 @@ def test_release_asset_dir_consistency_requires_archive(tmp_path: Path) -> None:
     )
 
 
-def _write_release_assets(tmp_path: Path) -> Path:
+def test_release_asset_dir_consistency_rejects_archive_member_mismatch(
+    tmp_path: Path,
+) -> None:
+    manifest = bundle.get_bundle_manifest()
+    asset_dir = _write_release_assets(
+        tmp_path,
+        archive_overrides={
+            manifest["validation_report"]: '{"status": "stale"}\n',
+        },
+    )
+
+    errors = check_bundle_consistency.check_bundle_consistency(
+        release_asset_dir=asset_dir,
+    )
+
+    assert any("validation-report.json" in error for error in errors)
+
+
+def _write_release_assets(
+    tmp_path: Path,
+    *,
+    archive_overrides: dict[str, str] | None = None,
+) -> Path:
     manifest = bundle.get_bundle_manifest()
     version = manifest["bundle_version"]
     asset_dir = tmp_path / "assets"
     asset_dir.mkdir()
+    overrides = archive_overrides or {}
 
     _write_json(asset_dir / f"bundle-{version}.json", manifest)
     validation_report = json.loads(
@@ -221,6 +257,12 @@ def _write_release_assets(tmp_path: Path) -> Path:
     }
     with tarfile.open(archive_path, "w:gz") as archive:
         for relative_path in sorted(archive_members):
+            if relative_path in overrides:
+                payload = overrides[relative_path].encode()
+                info = tarfile.TarInfo(str(Path(archive_root) / relative_path))
+                info.size = len(payload)
+                archive.addfile(info, io.BytesIO(payload))
+                continue
             archive.add(
                 VENDORED_BUNDLE_ROOT / relative_path,
                 arcname=str(Path(archive_root) / relative_path),
@@ -234,7 +276,7 @@ def _write_release_assets(tmp_path: Path) -> Path:
         asset_dir / f"policyengine-bundle-{version}.json",
         {
             "bundle_version": version,
-            "bundle_digest": manifest["bundle_digest"],
+            "bundle_digest": manifest.get("bundle_digest"),
             "archive": archive_path.name,
             "archive_sha256": archive_sha256,
         },

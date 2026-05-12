@@ -137,11 +137,11 @@ def test_vendor_bundle_derives_py_release_manifest_and_pins(tmp_path: Path) -> N
     pyproject.write_text(
         "[project.optional-dependencies]\n"
         "us = [\n"
-        '    "policyengine-core==0.0.1",\n'
-        '    "policyengine-us==0.0.1",\n'
+        '    "policyengine_core>=0.0.1",\n'
+        '    "policyengine_us==0.0.1",\n'
         "]\n"
         "dev = [\n"
-        '    "policyengine-core==0.0.1",\n'
+        '    "policyengine-core>=0.0.1",\n'
         '    "policyengine-us==0.0.1",\n'
         "]\n"
     )

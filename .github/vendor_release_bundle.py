@@ -281,11 +281,61 @@ def _update_pyproject_pins(bundle: dict[str, Any], pyproject_path: Path) -> None
         version = package.get("version")
         if not isinstance(version, str):
             continue
-        pattern = rf'("{re.escape(package_name)}==)[^"]+(")'
-        text, replacements = re.subn(pattern, rf"\g<1>{version}\g<2>", text)
+        text, replacements = _replace_optional_dependency_pin(
+            text,
+            package_name=package_name,
+            version=version,
+        )
         if replacements == 0:
             raise ValueError(f"Could not find pyproject pin for {package_name}.")
     pyproject_path.write_text(text)
+
+
+def _replace_optional_dependency_pin(
+    text: str,
+    *,
+    package_name: str,
+    version: str,
+) -> tuple[str, int]:
+    normalized_target = _normalized_package_name(package_name)
+    replacements = 0
+    output_lines = []
+    in_optional_dependencies = False
+    for raw_line in text.splitlines(keepends=True):
+        line = raw_line.strip()
+        if line == "[project.optional-dependencies]":
+            in_optional_dependencies = True
+            output_lines.append(raw_line)
+            continue
+        if in_optional_dependencies and line.startswith("["):
+            in_optional_dependencies = False
+        if not in_optional_dependencies:
+            output_lines.append(raw_line)
+            continue
+        dependency_match = re.match(r'^(\s*)"([^"]+)"(,?\s*)$', raw_line)
+        if dependency_match is None:
+            output_lines.append(raw_line)
+            continue
+        indent, dependency, suffix = dependency_match.groups()
+        dependency_name = _dependency_name(dependency)
+        if _normalized_package_name(dependency_name) != normalized_target:
+            output_lines.append(raw_line)
+            continue
+        output_lines.append(f'{indent}"{package_name}=={version}"{suffix}')
+        replacements += 1
+    return "".join(output_lines), replacements
+
+
+def _dependency_name(dependency: str) -> str:
+    requirement = dependency.split(";", 1)[0].strip()
+    match = re.match(r"^([A-Za-z0-9_.-]+)", requirement)
+    if match is None:
+        return requirement
+    return match.group(1)
+
+
+def _normalized_package_name(package_name: str) -> str:
+    return re.sub(r"[-_.]+", "-", package_name).lower()
 
 
 def _load_json(path: Path) -> dict[str, Any]:

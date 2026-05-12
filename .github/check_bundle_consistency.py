@@ -9,6 +9,8 @@ import tarfile
 from pathlib import Path
 from typing import Any
 
+import tomllib
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 VENDORED_BUNDLE_ROOT = REPO_ROOT / "src" / "policyengine" / "data"
@@ -36,9 +38,21 @@ def main() -> int:
             "release assets for this version."
         ),
     )
+    parser.add_argument(
+        "--require-certified",
+        action="store_true",
+        help=(
+            "Require release-grade bundle evidence: digest, full validation, "
+            "and no skipped or failed validation checks."
+        ),
+    )
     args = parser.parse_args()
 
-    errors = check_bundle_consistency(args.release_bundle, args.release_asset_dir)
+    errors = check_bundle_consistency(
+        args.release_bundle,
+        args.release_asset_dir,
+        require_certified=args.require_certified,
+    )
     if errors:
         print("\n".join(f"- {error}" for error in errors), file=sys.stderr)
         return 1
@@ -49,6 +63,8 @@ def main() -> int:
 def check_bundle_consistency(
     release_bundle: Path | None = None,
     release_asset_dir: Path | None = None,
+    *,
+    require_certified: bool = False,
 ) -> list[str]:
     errors: list[str] = []
     bundle = _load_json(BUNDLE_PATH)
@@ -67,10 +83,17 @@ def check_bundle_consistency(
     errors.extend(_check_dev_extra(bundle, extras))
     errors.extend(_check_vendored_bundle_files(bundle))
     errors.extend(_check_country_manifests(bundle))
+    if require_certified:
+        errors.extend(_check_certified_bundle(bundle))
     if release_bundle is not None:
         errors.extend(_check_release_bundle(bundle, _load_json(release_bundle)))
     if release_asset_dir is not None:
-        errors.extend(_check_release_asset_dir(bundle, release_asset_dir))
+        errors.extend(
+            _check_release_asset_dir(
+                bundle,
+                release_asset_dir,
+            )
+        )
     return errors
 
 
@@ -187,11 +210,18 @@ def _check_release_bundle(
     release_bundle: dict[str, Any],
 ) -> list[str]:
     errors = []
-    for field_name in ("bundle_version", "bundle_digest"):
+    for field_name in ("bundle_version",):
         if vendored_bundle.get(field_name) != release_bundle.get(field_name):
             errors.append(
                 f"Vendored {field_name} does not match bundle release asset: "
                 f"{vendored_bundle.get(field_name)} != {release_bundle.get(field_name)}."
+            )
+    if vendored_bundle.get("bundle_digest") != release_bundle.get("bundle_digest"):
+        if vendored_bundle.get("bundle_digest") or release_bundle.get("bundle_digest"):
+            errors.append(
+                "Vendored bundle_digest does not match bundle release asset: "
+                f"{vendored_bundle.get('bundle_digest')} != "
+                f"{release_bundle.get('bundle_digest')}."
             )
     return errors
 
@@ -244,11 +274,18 @@ def _check_release_summary(
     checksum_path: Path,
 ) -> list[str]:
     errors = []
-    for field_name in ("bundle_version", "bundle_digest"):
+    for field_name in ("bundle_version",):
         if vendored_bundle.get(field_name) != summary.get(field_name):
             errors.append(
                 f"Vendored {field_name} does not match bundle release summary: "
                 f"{vendored_bundle.get(field_name)} != {summary.get(field_name)}."
+            )
+    if vendored_bundle.get("bundle_digest") != summary.get("bundle_digest"):
+        if vendored_bundle.get("bundle_digest") or summary.get("bundle_digest"):
+            errors.append(
+                "Vendored bundle_digest does not match bundle release summary: "
+                f"{vendored_bundle.get('bundle_digest')} != "
+                f"{summary.get('bundle_digest')}."
             )
     if summary.get("archive") != archive_path.name:
         errors.append(
@@ -310,16 +347,70 @@ def _check_release_archive(
                 + ", ".join(missing)
                 + "."
             )
-        bundle_member_path = str(Path(archive_root) / "bundle.json")
-        if bundle_member_path not in names:
-            errors.append("Bundle release archive is missing bundle.json.")
-        else:
-            bundle_member = archive.extractfile(bundle_member_path)
-            if bundle_member is None:
-                errors.append("Bundle release archive bundle.json is not a file.")
-                return errors
-            archive_bundle = json.loads(bundle_member.read().decode())
-            errors.extend(_check_release_bundle(vendored_bundle, archive_bundle))
+        for member_path in sorted(expected_members.intersection(names)):
+            member = archive.extractfile(member_path)
+            if member is None:
+                errors.append(f"Bundle release archive {member_path} is not a file.")
+                continue
+            member_bytes = member.read()
+            relative_path = Path(member_path).relative_to(archive_root).as_posix()
+            vendored_path = _vendored_bundle_member_path(relative_path)
+            if not vendored_path.is_file():
+                errors.append(
+                    f"Vendored file is missing for archive member {member_path}."
+                )
+                continue
+            vendored_bytes = vendored_path.read_bytes()
+            if member_bytes != vendored_bytes:
+                errors.append(
+                    "Bundle release archive member does not match vendored file: "
+                    f"{member_path}."
+                )
+            if relative_path == "bundle.json":
+                archive_bundle = json.loads(member_bytes.decode())
+                errors.extend(_check_release_bundle(vendored_bundle, archive_bundle))
+    return errors
+
+
+def _vendored_bundle_member_path(relative_path: str) -> Path:
+    if relative_path == "bundle.json":
+        return BUNDLE_PATH
+    return VENDORED_BUNDLE_ROOT / relative_path
+
+
+def _check_certified_bundle(bundle: dict[str, Any]) -> list[str]:
+    errors = []
+    digest = bundle.get("bundle_digest")
+    if not isinstance(digest, str) or not digest.startswith("sha256:"):
+        errors.append(
+            "Certified bundle must define bundle_digest starting with sha256:."
+        )
+    report_reference = bundle.get("validation_report")
+    if not isinstance(report_reference, str):
+        return errors + ["Certified bundle must define validation_report."]
+    report_path = VENDORED_BUNDLE_ROOT / report_reference
+    if not report_path.is_file():
+        return errors + [
+            f"Certified bundle validation report is missing: {report_reference}."
+        ]
+    report = _load_json(report_path)
+    if report.get("status") != "passed":
+        errors.append(
+            "Certified bundle validation report status must be passed: "
+            f"{report.get('status')}."
+        )
+    metadata = report.get("metadata", {})
+    if metadata.get("validation_scope") != "full":
+        errors.append(
+            "Certified bundle validation report must have validation_scope='full': "
+            f"{metadata.get('validation_scope')}."
+        )
+    for check in report.get("checks", []):
+        if check.get("status") in {"failed", "skipped"}:
+            errors.append(
+                "Certified bundle validation report contains a "
+                f"{check.get('status')} check: {check.get('name')}."
+            )
     return errors
 
 
@@ -351,37 +442,27 @@ def _expected_profile_pins(bundle: dict[str, Any], profile: str) -> dict[str, st
 
 
 def _optional_dependency_pins(pyproject: Path) -> dict[str, dict[str, str]]:
+    pyproject_data = tomllib.loads(pyproject.read_text())
+    optional_dependencies = pyproject_data.get("project", {}).get(
+        "optional-dependencies", {}
+    )
     extras: dict[str, dict[str, str]] = {}
-    current_extra = None
-    in_optional_dependencies = False
-    for raw_line in pyproject.read_text().splitlines():
-        line = raw_line.strip()
-        if line == "[project.optional-dependencies]":
-            in_optional_dependencies = True
-            continue
-        if in_optional_dependencies and line.startswith("["):
-            break
-        if not in_optional_dependencies or not line or line.startswith("#"):
-            continue
-        extra_match = re.match(r"^([A-Za-z0-9_-]+)\s*=\s*\[$", line)
-        if extra_match:
-            current_extra = extra_match.group(1)
-            extras[current_extra] = {}
-            continue
-        if current_extra is None:
-            continue
-        if line == "]":
-            current_extra = None
-            continue
-        dependency_match = re.match(r'^"([^"]+)"\s*,?$', line)
-        if dependency_match:
-            dependency = dependency_match.group(1)
-            pin_match = re.match(r"^([A-Za-z0-9_.-]+)==([^;]+)$", dependency)
-            if pin_match:
-                extras[current_extra][_normalized_package_name(pin_match.group(1))] = (
-                    pin_match.group(2)
-                )
+    for extra_name, dependencies in optional_dependencies.items():
+        extras[extra_name] = {}
+        for dependency in dependencies:
+            pin = _exact_dependency_pin(dependency)
+            if pin is not None:
+                package_name, version = pin
+                extras[extra_name][_normalized_package_name(package_name)] = version
     return extras
+
+
+def _exact_dependency_pin(dependency: str) -> tuple[str, str] | None:
+    requirement = dependency.split(";", 1)[0].strip()
+    match = re.match(r"^([A-Za-z0-9_.-]+)\s*==\s*([^,\s]+)$", requirement)
+    if match is None:
+        return None
+    return match.group(1), match.group(2)
 
 
 def _pyproject_version(pyproject: Path) -> str:
@@ -396,7 +477,7 @@ def _pyproject_version(pyproject: Path) -> str:
 
 
 def _normalized_package_name(package_name: str) -> str:
-    return package_name.replace("_", "-").lower()
+    return re.sub(r"[-_.]+", "-", package_name).lower()
 
 
 def _load_json(path: Path) -> dict[str, Any]:
