@@ -68,11 +68,14 @@ def test_vendored_bundle_matches_policyengine_version() -> None:
 
 
 def test_country_bundle_is_vendored() -> None:
+    manifest = bundle.get_bundle_manifest()
     us_bundle = bundle.get_country_bundle("us")
 
     assert us_bundle["country_id"] == "us"
     assert us_bundle["bundle_version"] == bundle.get_bundle_version()
-    assert us_bundle["model_package"]["version"] == "1.687.0"
+    assert us_bundle["model_package"]["version"] == manifest["packages"][
+        "policyengine-us"
+    ]["version"]
 
 
 def test_require_bundle_strict_checks_installed_versions(monkeypatch) -> None:
@@ -101,34 +104,32 @@ def test_require_bundle_strict_rejects_version_mismatch(monkeypatch) -> None:
         bundle.require_bundle(bundle.get_bundle_version(), profile="us")
 
 
-def test_constraints_url_uses_bundle_install_target() -> None:
-    assert bundle.constraints_url("us", "3.13") == (
-        "https://raw.githubusercontent.com/PolicyEngine/policyengine-bundles/"
-        "v4.4.2/bundles/4.4.2/install/us/py313/constraints.txt"
-    )
+def test_constraints_url_uses_bundle_install_targets() -> None:
+    version = bundle.get_bundle_version()
+    profile = bundle.get_bundle_manifest()["profiles"]["us"]
 
-
-def test_constraints_url_supports_python_314() -> None:
-    assert bundle.constraints_url("us", "3.14") == (
-        "https://raw.githubusercontent.com/PolicyEngine/policyengine-bundles/"
-        "v4.4.2/bundles/4.4.2/install/us/py314/constraints.txt"
-    )
+    for target in profile["install_targets"].values():
+        assert bundle.constraints_url("us", target["python_version"]) == (
+            "https://raw.githubusercontent.com/PolicyEngine/policyengine-bundles/"
+            f"v{version}/bundles/{version}/{target['constraints']}"
+        )
 
 
 def test_install_target_files_are_vendored() -> None:
-    target = bundle.get_install_target("us", "3.13")
-    target_314 = bundle.get_install_target("us", "3.14")
+    profile = bundle.get_bundle_manifest()["profiles"]["us"]
 
-    assert (VENDORED_BUNDLE_ROOT / target["constraints"]).is_file()
-    assert (VENDORED_BUNDLE_ROOT / target["lockfile"]).is_file()
-    assert (VENDORED_BUNDLE_ROOT / target_314["constraints"]).is_file()
-    assert (VENDORED_BUNDLE_ROOT / target_314["lockfile"]).is_file()
+    for target in profile["install_targets"].values():
+        assert (VENDORED_BUNDLE_ROOT / target["constraints"]).is_file()
+        assert (VENDORED_BUNDLE_ROOT / target["lockfile"]).is_file()
     assert (
         VENDORED_BUNDLE_ROOT / bundle.get_bundle_manifest()["validation_report"]
     ).is_file()
 
 
 def test_install_command_uses_target_python_and_constraints() -> None:
+    version = bundle.get_bundle_version()
+    target = bundle.get_install_target("all", "3.13")
+
     assert bundle.install_command(
         "all",
         "3.13",
@@ -138,16 +139,17 @@ def test_install_command_uses_target_python_and_constraints() -> None:
         "-m",
         "pip",
         "install",
-        "policyengine[uk,us]==4.4.2",
+        f"policyengine[uk,us]=={version}",
         "-c",
         (
             "https://raw.githubusercontent.com/PolicyEngine/policyengine-bundles/"
-            "v4.4.2/bundles/4.4.2/install/all/py313/constraints.txt"
+            f"v{version}/bundles/{version}/{target['constraints']}"
         ),
     ]
 
 
 def test_install_profile_supports_dry_run() -> None:
+    version = bundle.get_bundle_version()
     command = bundle.install_profile(
         "uk",
         "3.13",
@@ -160,7 +162,7 @@ def test_install_profile_supports_dry_run() -> None:
         "-m",
         "pip",
         "install",
-        "policyengine[uk]==4.4.2",
+        f"policyengine[uk]=={version}",
     ]
 
 
