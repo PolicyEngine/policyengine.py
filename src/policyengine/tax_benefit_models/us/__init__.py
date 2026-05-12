@@ -27,6 +27,7 @@ Typical usage (fresh session, no other imports required):
 from importlib.util import find_spec
 
 if find_spec("policyengine_us") is not None:
+    from policyengine.bundle import get_country_bundle
     from policyengine.core import Dataset
     from policyengine.outputs import ProgramStatistics
 
@@ -48,6 +49,8 @@ if find_spec("policyengine_us") is not None:
 
     model = us_latest
     """The pinned US ``TaxBenefitModelVersion`` for this policyengine release."""
+    bundle = get_country_bundle("us")
+    """The vendored US country bundle metadata for this policyengine release."""
 
     Dataset.model_rebuild()
     USYearData.model_rebuild()
@@ -69,6 +72,7 @@ if find_spec("policyengine_us") is not None:
         "calculate_household",
         "economic_impact_analysis",
         "ProgramStatistics",
+        "bundle",
     ]
 else:
     __all__ = []

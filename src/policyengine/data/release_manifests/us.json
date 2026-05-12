@@ -13,6 +13,7 @@
     "name": "policyengine-us-data",
     "version": "1.110.12",
     "repo_id": "policyengine/policyengine-us-data",
+    "repo_type": "model",
     "release_manifest_path": "releases/1.110.12/release_manifest.json",
     "release_manifest_revision": "3aac4505ec10d31efc1b3799a1e6458a15853ecc"
   },
@@ -27,17 +28,1490 @@
     "sha256": "58a6639f7511b8d804701417e2647f0c3a77f51a3d90441037eaf004b1f00761"
   },
   "certification": {
-    "compatibility_basis": "exact_build_model_version",
+    "compatibility_basis": "release_manifest_exact_compatibility",
     "data_build_id": "policyengine-us-data-1.110.12",
     "built_with_model_version": "1.690.7",
     "certified_for_model_version": "1.690.7",
-    "certified_by": "policyengine.py bundled manifest",
-    "data_build_fingerprint": "sha256:9961ed1c5d00943a360724da560eee425eb9f99f91896f053dca74724c46e96e"
+    "data_build_fingerprint": "sha256:9961ed1c5d00943a360724da560eee425eb9f99f91896f053dca74724c46e96e",
+    "certified_by": "policyengine.py bundled manifest"
   },
   "default_dataset": "enhanced_cps_2024",
   "datasets": {
+    "cities/NYC": {
+      "path": "cities/NYC.h5"
+    },
+    "cps_2024": {
+      "path": "cps_2024.h5"
+    },
+    "districts/AK-01": {
+      "path": "districts/AK-01.h5"
+    },
+    "districts/AL-01": {
+      "path": "districts/AL-01.h5"
+    },
+    "districts/AL-02": {
+      "path": "districts/AL-02.h5"
+    },
+    "districts/AL-03": {
+      "path": "districts/AL-03.h5"
+    },
+    "districts/AL-04": {
+      "path": "districts/AL-04.h5"
+    },
+    "districts/AL-05": {
+      "path": "districts/AL-05.h5"
+    },
+    "districts/AL-06": {
+      "path": "districts/AL-06.h5"
+    },
+    "districts/AL-07": {
+      "path": "districts/AL-07.h5"
+    },
+    "districts/AR-01": {
+      "path": "districts/AR-01.h5"
+    },
+    "districts/AR-02": {
+      "path": "districts/AR-02.h5"
+    },
+    "districts/AR-03": {
+      "path": "districts/AR-03.h5"
+    },
+    "districts/AR-04": {
+      "path": "districts/AR-04.h5"
+    },
+    "districts/AZ-01": {
+      "path": "districts/AZ-01.h5"
+    },
+    "districts/AZ-02": {
+      "path": "districts/AZ-02.h5"
+    },
+    "districts/AZ-03": {
+      "path": "districts/AZ-03.h5"
+    },
+    "districts/AZ-04": {
+      "path": "districts/AZ-04.h5"
+    },
+    "districts/AZ-05": {
+      "path": "districts/AZ-05.h5"
+    },
+    "districts/AZ-06": {
+      "path": "districts/AZ-06.h5"
+    },
+    "districts/AZ-07": {
+      "path": "districts/AZ-07.h5"
+    },
+    "districts/AZ-08": {
+      "path": "districts/AZ-08.h5"
+    },
+    "districts/AZ-09": {
+      "path": "districts/AZ-09.h5"
+    },
+    "districts/CA-01": {
+      "path": "districts/CA-01.h5"
+    },
+    "districts/CA-02": {
+      "path": "districts/CA-02.h5"
+    },
+    "districts/CA-03": {
+      "path": "districts/CA-03.h5"
+    },
+    "districts/CA-04": {
+      "path": "districts/CA-04.h5"
+    },
+    "districts/CA-05": {
+      "path": "districts/CA-05.h5"
+    },
+    "districts/CA-06": {
+      "path": "districts/CA-06.h5"
+    },
+    "districts/CA-07": {
+      "path": "districts/CA-07.h5"
+    },
+    "districts/CA-08": {
+      "path": "districts/CA-08.h5"
+    },
+    "districts/CA-09": {
+      "path": "districts/CA-09.h5"
+    },
+    "districts/CA-10": {
+      "path": "districts/CA-10.h5"
+    },
+    "districts/CA-11": {
+      "path": "districts/CA-11.h5"
+    },
+    "districts/CA-12": {
+      "path": "districts/CA-12.h5"
+    },
+    "districts/CA-13": {
+      "path": "districts/CA-13.h5"
+    },
+    "districts/CA-14": {
+      "path": "districts/CA-14.h5"
+    },
+    "districts/CA-15": {
+      "path": "districts/CA-15.h5"
+    },
+    "districts/CA-16": {
+      "path": "districts/CA-16.h5"
+    },
+    "districts/CA-17": {
+      "path": "districts/CA-17.h5"
+    },
+    "districts/CA-18": {
+      "path": "districts/CA-18.h5"
+    },
+    "districts/CA-19": {
+      "path": "districts/CA-19.h5"
+    },
+    "districts/CA-20": {
+      "path": "districts/CA-20.h5"
+    },
+    "districts/CA-21": {
+      "path": "districts/CA-21.h5"
+    },
+    "districts/CA-22": {
+      "path": "districts/CA-22.h5"
+    },
+    "districts/CA-23": {
+      "path": "districts/CA-23.h5"
+    },
+    "districts/CA-24": {
+      "path": "districts/CA-24.h5"
+    },
+    "districts/CA-25": {
+      "path": "districts/CA-25.h5"
+    },
+    "districts/CA-26": {
+      "path": "districts/CA-26.h5"
+    },
+    "districts/CA-27": {
+      "path": "districts/CA-27.h5"
+    },
+    "districts/CA-28": {
+      "path": "districts/CA-28.h5"
+    },
+    "districts/CA-29": {
+      "path": "districts/CA-29.h5"
+    },
+    "districts/CA-30": {
+      "path": "districts/CA-30.h5"
+    },
+    "districts/CA-31": {
+      "path": "districts/CA-31.h5"
+    },
+    "districts/CA-32": {
+      "path": "districts/CA-32.h5"
+    },
+    "districts/CA-33": {
+      "path": "districts/CA-33.h5"
+    },
+    "districts/CA-34": {
+      "path": "districts/CA-34.h5"
+    },
+    "districts/CA-35": {
+      "path": "districts/CA-35.h5"
+    },
+    "districts/CA-36": {
+      "path": "districts/CA-36.h5"
+    },
+    "districts/CA-37": {
+      "path": "districts/CA-37.h5"
+    },
+    "districts/CA-38": {
+      "path": "districts/CA-38.h5"
+    },
+    "districts/CA-39": {
+      "path": "districts/CA-39.h5"
+    },
+    "districts/CA-40": {
+      "path": "districts/CA-40.h5"
+    },
+    "districts/CA-41": {
+      "path": "districts/CA-41.h5"
+    },
+    "districts/CA-42": {
+      "path": "districts/CA-42.h5"
+    },
+    "districts/CA-43": {
+      "path": "districts/CA-43.h5"
+    },
+    "districts/CA-44": {
+      "path": "districts/CA-44.h5"
+    },
+    "districts/CA-45": {
+      "path": "districts/CA-45.h5"
+    },
+    "districts/CA-46": {
+      "path": "districts/CA-46.h5"
+    },
+    "districts/CA-47": {
+      "path": "districts/CA-47.h5"
+    },
+    "districts/CA-48": {
+      "path": "districts/CA-48.h5"
+    },
+    "districts/CA-49": {
+      "path": "districts/CA-49.h5"
+    },
+    "districts/CA-50": {
+      "path": "districts/CA-50.h5"
+    },
+    "districts/CA-51": {
+      "path": "districts/CA-51.h5"
+    },
+    "districts/CA-52": {
+      "path": "districts/CA-52.h5"
+    },
+    "districts/CO-01": {
+      "path": "districts/CO-01.h5"
+    },
+    "districts/CO-02": {
+      "path": "districts/CO-02.h5"
+    },
+    "districts/CO-03": {
+      "path": "districts/CO-03.h5"
+    },
+    "districts/CO-04": {
+      "path": "districts/CO-04.h5"
+    },
+    "districts/CO-05": {
+      "path": "districts/CO-05.h5"
+    },
+    "districts/CO-06": {
+      "path": "districts/CO-06.h5"
+    },
+    "districts/CO-07": {
+      "path": "districts/CO-07.h5"
+    },
+    "districts/CO-08": {
+      "path": "districts/CO-08.h5"
+    },
+    "districts/CT-01": {
+      "path": "districts/CT-01.h5"
+    },
+    "districts/CT-02": {
+      "path": "districts/CT-02.h5"
+    },
+    "districts/CT-03": {
+      "path": "districts/CT-03.h5"
+    },
+    "districts/CT-04": {
+      "path": "districts/CT-04.h5"
+    },
+    "districts/CT-05": {
+      "path": "districts/CT-05.h5"
+    },
+    "districts/DC-01": {
+      "path": "districts/DC-01.h5"
+    },
+    "districts/DE-01": {
+      "path": "districts/DE-01.h5"
+    },
+    "districts/FL-01": {
+      "path": "districts/FL-01.h5"
+    },
+    "districts/FL-02": {
+      "path": "districts/FL-02.h5"
+    },
+    "districts/FL-03": {
+      "path": "districts/FL-03.h5"
+    },
+    "districts/FL-04": {
+      "path": "districts/FL-04.h5"
+    },
+    "districts/FL-05": {
+      "path": "districts/FL-05.h5"
+    },
+    "districts/FL-06": {
+      "path": "districts/FL-06.h5"
+    },
+    "districts/FL-07": {
+      "path": "districts/FL-07.h5"
+    },
+    "districts/FL-08": {
+      "path": "districts/FL-08.h5"
+    },
+    "districts/FL-09": {
+      "path": "districts/FL-09.h5"
+    },
+    "districts/FL-10": {
+      "path": "districts/FL-10.h5"
+    },
+    "districts/FL-11": {
+      "path": "districts/FL-11.h5"
+    },
+    "districts/FL-12": {
+      "path": "districts/FL-12.h5"
+    },
+    "districts/FL-13": {
+      "path": "districts/FL-13.h5"
+    },
+    "districts/FL-14": {
+      "path": "districts/FL-14.h5"
+    },
+    "districts/FL-15": {
+      "path": "districts/FL-15.h5"
+    },
+    "districts/FL-16": {
+      "path": "districts/FL-16.h5"
+    },
+    "districts/FL-17": {
+      "path": "districts/FL-17.h5"
+    },
+    "districts/FL-18": {
+      "path": "districts/FL-18.h5"
+    },
+    "districts/FL-19": {
+      "path": "districts/FL-19.h5"
+    },
+    "districts/FL-20": {
+      "path": "districts/FL-20.h5"
+    },
+    "districts/FL-21": {
+      "path": "districts/FL-21.h5"
+    },
+    "districts/FL-22": {
+      "path": "districts/FL-22.h5"
+    },
+    "districts/FL-23": {
+      "path": "districts/FL-23.h5"
+    },
+    "districts/FL-24": {
+      "path": "districts/FL-24.h5"
+    },
+    "districts/FL-25": {
+      "path": "districts/FL-25.h5"
+    },
+    "districts/FL-26": {
+      "path": "districts/FL-26.h5"
+    },
+    "districts/FL-27": {
+      "path": "districts/FL-27.h5"
+    },
+    "districts/FL-28": {
+      "path": "districts/FL-28.h5"
+    },
+    "districts/GA-01": {
+      "path": "districts/GA-01.h5"
+    },
+    "districts/GA-02": {
+      "path": "districts/GA-02.h5"
+    },
+    "districts/GA-03": {
+      "path": "districts/GA-03.h5"
+    },
+    "districts/GA-04": {
+      "path": "districts/GA-04.h5"
+    },
+    "districts/GA-05": {
+      "path": "districts/GA-05.h5"
+    },
+    "districts/GA-06": {
+      "path": "districts/GA-06.h5"
+    },
+    "districts/GA-07": {
+      "path": "districts/GA-07.h5"
+    },
+    "districts/GA-08": {
+      "path": "districts/GA-08.h5"
+    },
+    "districts/GA-09": {
+      "path": "districts/GA-09.h5"
+    },
+    "districts/GA-10": {
+      "path": "districts/GA-10.h5"
+    },
+    "districts/GA-11": {
+      "path": "districts/GA-11.h5"
+    },
+    "districts/GA-12": {
+      "path": "districts/GA-12.h5"
+    },
+    "districts/GA-13": {
+      "path": "districts/GA-13.h5"
+    },
+    "districts/GA-14": {
+      "path": "districts/GA-14.h5"
+    },
+    "districts/HI-01": {
+      "path": "districts/HI-01.h5"
+    },
+    "districts/HI-02": {
+      "path": "districts/HI-02.h5"
+    },
+    "districts/IA-01": {
+      "path": "districts/IA-01.h5"
+    },
+    "districts/IA-02": {
+      "path": "districts/IA-02.h5"
+    },
+    "districts/IA-03": {
+      "path": "districts/IA-03.h5"
+    },
+    "districts/IA-04": {
+      "path": "districts/IA-04.h5"
+    },
+    "districts/ID-01": {
+      "path": "districts/ID-01.h5"
+    },
+    "districts/ID-02": {
+      "path": "districts/ID-02.h5"
+    },
+    "districts/IL-01": {
+      "path": "districts/IL-01.h5"
+    },
+    "districts/IL-02": {
+      "path": "districts/IL-02.h5"
+    },
+    "districts/IL-03": {
+      "path": "districts/IL-03.h5"
+    },
+    "districts/IL-04": {
+      "path": "districts/IL-04.h5"
+    },
+    "districts/IL-05": {
+      "path": "districts/IL-05.h5"
+    },
+    "districts/IL-06": {
+      "path": "districts/IL-06.h5"
+    },
+    "districts/IL-07": {
+      "path": "districts/IL-07.h5"
+    },
+    "districts/IL-08": {
+      "path": "districts/IL-08.h5"
+    },
+    "districts/IL-09": {
+      "path": "districts/IL-09.h5"
+    },
+    "districts/IL-10": {
+      "path": "districts/IL-10.h5"
+    },
+    "districts/IL-11": {
+      "path": "districts/IL-11.h5"
+    },
+    "districts/IL-12": {
+      "path": "districts/IL-12.h5"
+    },
+    "districts/IL-13": {
+      "path": "districts/IL-13.h5"
+    },
+    "districts/IL-14": {
+      "path": "districts/IL-14.h5"
+    },
+    "districts/IL-15": {
+      "path": "districts/IL-15.h5"
+    },
+    "districts/IL-16": {
+      "path": "districts/IL-16.h5"
+    },
+    "districts/IL-17": {
+      "path": "districts/IL-17.h5"
+    },
+    "districts/IN-01": {
+      "path": "districts/IN-01.h5"
+    },
+    "districts/IN-02": {
+      "path": "districts/IN-02.h5"
+    },
+    "districts/IN-03": {
+      "path": "districts/IN-03.h5"
+    },
+    "districts/IN-04": {
+      "path": "districts/IN-04.h5"
+    },
+    "districts/IN-05": {
+      "path": "districts/IN-05.h5"
+    },
+    "districts/IN-06": {
+      "path": "districts/IN-06.h5"
+    },
+    "districts/IN-07": {
+      "path": "districts/IN-07.h5"
+    },
+    "districts/IN-08": {
+      "path": "districts/IN-08.h5"
+    },
+    "districts/IN-09": {
+      "path": "districts/IN-09.h5"
+    },
+    "districts/KS-01": {
+      "path": "districts/KS-01.h5"
+    },
+    "districts/KS-02": {
+      "path": "districts/KS-02.h5"
+    },
+    "districts/KS-03": {
+      "path": "districts/KS-03.h5"
+    },
+    "districts/KS-04": {
+      "path": "districts/KS-04.h5"
+    },
+    "districts/KY-01": {
+      "path": "districts/KY-01.h5"
+    },
+    "districts/KY-02": {
+      "path": "districts/KY-02.h5"
+    },
+    "districts/KY-03": {
+      "path": "districts/KY-03.h5"
+    },
+    "districts/KY-04": {
+      "path": "districts/KY-04.h5"
+    },
+    "districts/KY-05": {
+      "path": "districts/KY-05.h5"
+    },
+    "districts/KY-06": {
+      "path": "districts/KY-06.h5"
+    },
+    "districts/LA-01": {
+      "path": "districts/LA-01.h5"
+    },
+    "districts/LA-02": {
+      "path": "districts/LA-02.h5"
+    },
+    "districts/LA-03": {
+      "path": "districts/LA-03.h5"
+    },
+    "districts/LA-04": {
+      "path": "districts/LA-04.h5"
+    },
+    "districts/LA-05": {
+      "path": "districts/LA-05.h5"
+    },
+    "districts/LA-06": {
+      "path": "districts/LA-06.h5"
+    },
+    "districts/MA-01": {
+      "path": "districts/MA-01.h5"
+    },
+    "districts/MA-02": {
+      "path": "districts/MA-02.h5"
+    },
+    "districts/MA-03": {
+      "path": "districts/MA-03.h5"
+    },
+    "districts/MA-04": {
+      "path": "districts/MA-04.h5"
+    },
+    "districts/MA-05": {
+      "path": "districts/MA-05.h5"
+    },
+    "districts/MA-06": {
+      "path": "districts/MA-06.h5"
+    },
+    "districts/MA-07": {
+      "path": "districts/MA-07.h5"
+    },
+    "districts/MA-08": {
+      "path": "districts/MA-08.h5"
+    },
+    "districts/MA-09": {
+      "path": "districts/MA-09.h5"
+    },
+    "districts/MD-01": {
+      "path": "districts/MD-01.h5"
+    },
+    "districts/MD-02": {
+      "path": "districts/MD-02.h5"
+    },
+    "districts/MD-03": {
+      "path": "districts/MD-03.h5"
+    },
+    "districts/MD-04": {
+      "path": "districts/MD-04.h5"
+    },
+    "districts/MD-05": {
+      "path": "districts/MD-05.h5"
+    },
+    "districts/MD-06": {
+      "path": "districts/MD-06.h5"
+    },
+    "districts/MD-07": {
+      "path": "districts/MD-07.h5"
+    },
+    "districts/MD-08": {
+      "path": "districts/MD-08.h5"
+    },
+    "districts/ME-01": {
+      "path": "districts/ME-01.h5"
+    },
+    "districts/ME-02": {
+      "path": "districts/ME-02.h5"
+    },
+    "districts/MI-01": {
+      "path": "districts/MI-01.h5"
+    },
+    "districts/MI-02": {
+      "path": "districts/MI-02.h5"
+    },
+    "districts/MI-03": {
+      "path": "districts/MI-03.h5"
+    },
+    "districts/MI-04": {
+      "path": "districts/MI-04.h5"
+    },
+    "districts/MI-05": {
+      "path": "districts/MI-05.h5"
+    },
+    "districts/MI-06": {
+      "path": "districts/MI-06.h5"
+    },
+    "districts/MI-07": {
+      "path": "districts/MI-07.h5"
+    },
+    "districts/MI-08": {
+      "path": "districts/MI-08.h5"
+    },
+    "districts/MI-09": {
+      "path": "districts/MI-09.h5"
+    },
+    "districts/MI-10": {
+      "path": "districts/MI-10.h5"
+    },
+    "districts/MI-11": {
+      "path": "districts/MI-11.h5"
+    },
+    "districts/MI-12": {
+      "path": "districts/MI-12.h5"
+    },
+    "districts/MI-13": {
+      "path": "districts/MI-13.h5"
+    },
+    "districts/MN-01": {
+      "path": "districts/MN-01.h5"
+    },
+    "districts/MN-02": {
+      "path": "districts/MN-02.h5"
+    },
+    "districts/MN-03": {
+      "path": "districts/MN-03.h5"
+    },
+    "districts/MN-04": {
+      "path": "districts/MN-04.h5"
+    },
+    "districts/MN-05": {
+      "path": "districts/MN-05.h5"
+    },
+    "districts/MN-06": {
+      "path": "districts/MN-06.h5"
+    },
+    "districts/MN-07": {
+      "path": "districts/MN-07.h5"
+    },
+    "districts/MN-08": {
+      "path": "districts/MN-08.h5"
+    },
+    "districts/MO-01": {
+      "path": "districts/MO-01.h5"
+    },
+    "districts/MO-02": {
+      "path": "districts/MO-02.h5"
+    },
+    "districts/MO-03": {
+      "path": "districts/MO-03.h5"
+    },
+    "districts/MO-04": {
+      "path": "districts/MO-04.h5"
+    },
+    "districts/MO-05": {
+      "path": "districts/MO-05.h5"
+    },
+    "districts/MO-06": {
+      "path": "districts/MO-06.h5"
+    },
+    "districts/MO-07": {
+      "path": "districts/MO-07.h5"
+    },
+    "districts/MO-08": {
+      "path": "districts/MO-08.h5"
+    },
+    "districts/MS-01": {
+      "path": "districts/MS-01.h5"
+    },
+    "districts/MS-02": {
+      "path": "districts/MS-02.h5"
+    },
+    "districts/MS-03": {
+      "path": "districts/MS-03.h5"
+    },
+    "districts/MS-04": {
+      "path": "districts/MS-04.h5"
+    },
+    "districts/MT-01": {
+      "path": "districts/MT-01.h5"
+    },
+    "districts/MT-02": {
+      "path": "districts/MT-02.h5"
+    },
+    "districts/NC-01": {
+      "path": "districts/NC-01.h5"
+    },
+    "districts/NC-02": {
+      "path": "districts/NC-02.h5"
+    },
+    "districts/NC-03": {
+      "path": "districts/NC-03.h5"
+    },
+    "districts/NC-04": {
+      "path": "districts/NC-04.h5"
+    },
+    "districts/NC-05": {
+      "path": "districts/NC-05.h5"
+    },
+    "districts/NC-06": {
+      "path": "districts/NC-06.h5"
+    },
+    "districts/NC-07": {
+      "path": "districts/NC-07.h5"
+    },
+    "districts/NC-08": {
+      "path": "districts/NC-08.h5"
+    },
+    "districts/NC-09": {
+      "path": "districts/NC-09.h5"
+    },
+    "districts/NC-10": {
+      "path": "districts/NC-10.h5"
+    },
+    "districts/NC-11": {
+      "path": "districts/NC-11.h5"
+    },
+    "districts/NC-12": {
+      "path": "districts/NC-12.h5"
+    },
+    "districts/NC-13": {
+      "path": "districts/NC-13.h5"
+    },
+    "districts/NC-14": {
+      "path": "districts/NC-14.h5"
+    },
+    "districts/ND-01": {
+      "path": "districts/ND-01.h5"
+    },
+    "districts/NE-01": {
+      "path": "districts/NE-01.h5"
+    },
+    "districts/NE-02": {
+      "path": "districts/NE-02.h5"
+    },
+    "districts/NE-03": {
+      "path": "districts/NE-03.h5"
+    },
+    "districts/NH-01": {
+      "path": "districts/NH-01.h5"
+    },
+    "districts/NH-02": {
+      "path": "districts/NH-02.h5"
+    },
+    "districts/NJ-01": {
+      "path": "districts/NJ-01.h5"
+    },
+    "districts/NJ-02": {
+      "path": "districts/NJ-02.h5"
+    },
+    "districts/NJ-03": {
+      "path": "districts/NJ-03.h5"
+    },
+    "districts/NJ-04": {
+      "path": "districts/NJ-04.h5"
+    },
+    "districts/NJ-05": {
+      "path": "districts/NJ-05.h5"
+    },
+    "districts/NJ-06": {
+      "path": "districts/NJ-06.h5"
+    },
+    "districts/NJ-07": {
+      "path": "districts/NJ-07.h5"
+    },
+    "districts/NJ-08": {
+      "path": "districts/NJ-08.h5"
+    },
+    "districts/NJ-09": {
+      "path": "districts/NJ-09.h5"
+    },
+    "districts/NJ-10": {
+      "path": "districts/NJ-10.h5"
+    },
+    "districts/NJ-11": {
+      "path": "districts/NJ-11.h5"
+    },
+    "districts/NJ-12": {
+      "path": "districts/NJ-12.h5"
+    },
+    "districts/NM-01": {
+      "path": "districts/NM-01.h5"
+    },
+    "districts/NM-02": {
+      "path": "districts/NM-02.h5"
+    },
+    "districts/NM-03": {
+      "path": "districts/NM-03.h5"
+    },
+    "districts/NV-01": {
+      "path": "districts/NV-01.h5"
+    },
+    "districts/NV-02": {
+      "path": "districts/NV-02.h5"
+    },
+    "districts/NV-03": {
+      "path": "districts/NV-03.h5"
+    },
+    "districts/NV-04": {
+      "path": "districts/NV-04.h5"
+    },
+    "districts/NY-01": {
+      "path": "districts/NY-01.h5"
+    },
+    "districts/NY-02": {
+      "path": "districts/NY-02.h5"
+    },
+    "districts/NY-03": {
+      "path": "districts/NY-03.h5"
+    },
+    "districts/NY-04": {
+      "path": "districts/NY-04.h5"
+    },
+    "districts/NY-05": {
+      "path": "districts/NY-05.h5"
+    },
+    "districts/NY-06": {
+      "path": "districts/NY-06.h5"
+    },
+    "districts/NY-07": {
+      "path": "districts/NY-07.h5"
+    },
+    "districts/NY-08": {
+      "path": "districts/NY-08.h5"
+    },
+    "districts/NY-09": {
+      "path": "districts/NY-09.h5"
+    },
+    "districts/NY-10": {
+      "path": "districts/NY-10.h5"
+    },
+    "districts/NY-11": {
+      "path": "districts/NY-11.h5"
+    },
+    "districts/NY-12": {
+      "path": "districts/NY-12.h5"
+    },
+    "districts/NY-13": {
+      "path": "districts/NY-13.h5"
+    },
+    "districts/NY-14": {
+      "path": "districts/NY-14.h5"
+    },
+    "districts/NY-15": {
+      "path": "districts/NY-15.h5"
+    },
+    "districts/NY-16": {
+      "path": "districts/NY-16.h5"
+    },
+    "districts/NY-17": {
+      "path": "districts/NY-17.h5"
+    },
+    "districts/NY-18": {
+      "path": "districts/NY-18.h5"
+    },
+    "districts/NY-19": {
+      "path": "districts/NY-19.h5"
+    },
+    "districts/NY-20": {
+      "path": "districts/NY-20.h5"
+    },
+    "districts/NY-21": {
+      "path": "districts/NY-21.h5"
+    },
+    "districts/NY-22": {
+      "path": "districts/NY-22.h5"
+    },
+    "districts/NY-23": {
+      "path": "districts/NY-23.h5"
+    },
+    "districts/NY-24": {
+      "path": "districts/NY-24.h5"
+    },
+    "districts/NY-25": {
+      "path": "districts/NY-25.h5"
+    },
+    "districts/NY-26": {
+      "path": "districts/NY-26.h5"
+    },
+    "districts/OH-01": {
+      "path": "districts/OH-01.h5"
+    },
+    "districts/OH-02": {
+      "path": "districts/OH-02.h5"
+    },
+    "districts/OH-03": {
+      "path": "districts/OH-03.h5"
+    },
+    "districts/OH-04": {
+      "path": "districts/OH-04.h5"
+    },
+    "districts/OH-05": {
+      "path": "districts/OH-05.h5"
+    },
+    "districts/OH-06": {
+      "path": "districts/OH-06.h5"
+    },
+    "districts/OH-07": {
+      "path": "districts/OH-07.h5"
+    },
+    "districts/OH-08": {
+      "path": "districts/OH-08.h5"
+    },
+    "districts/OH-09": {
+      "path": "districts/OH-09.h5"
+    },
+    "districts/OH-10": {
+      "path": "districts/OH-10.h5"
+    },
+    "districts/OH-11": {
+      "path": "districts/OH-11.h5"
+    },
+    "districts/OH-12": {
+      "path": "districts/OH-12.h5"
+    },
+    "districts/OH-13": {
+      "path": "districts/OH-13.h5"
+    },
+    "districts/OH-14": {
+      "path": "districts/OH-14.h5"
+    },
+    "districts/OH-15": {
+      "path": "districts/OH-15.h5"
+    },
+    "districts/OK-01": {
+      "path": "districts/OK-01.h5"
+    },
+    "districts/OK-02": {
+      "path": "districts/OK-02.h5"
+    },
+    "districts/OK-03": {
+      "path": "districts/OK-03.h5"
+    },
+    "districts/OK-04": {
+      "path": "districts/OK-04.h5"
+    },
+    "districts/OK-05": {
+      "path": "districts/OK-05.h5"
+    },
+    "districts/OR-01": {
+      "path": "districts/OR-01.h5"
+    },
+    "districts/OR-02": {
+      "path": "districts/OR-02.h5"
+    },
+    "districts/OR-03": {
+      "path": "districts/OR-03.h5"
+    },
+    "districts/OR-04": {
+      "path": "districts/OR-04.h5"
+    },
+    "districts/OR-05": {
+      "path": "districts/OR-05.h5"
+    },
+    "districts/OR-06": {
+      "path": "districts/OR-06.h5"
+    },
+    "districts/PA-01": {
+      "path": "districts/PA-01.h5"
+    },
+    "districts/PA-02": {
+      "path": "districts/PA-02.h5"
+    },
+    "districts/PA-03": {
+      "path": "districts/PA-03.h5"
+    },
+    "districts/PA-04": {
+      "path": "districts/PA-04.h5"
+    },
+    "districts/PA-05": {
+      "path": "districts/PA-05.h5"
+    },
+    "districts/PA-06": {
+      "path": "districts/PA-06.h5"
+    },
+    "districts/PA-07": {
+      "path": "districts/PA-07.h5"
+    },
+    "districts/PA-08": {
+      "path": "districts/PA-08.h5"
+    },
+    "districts/PA-09": {
+      "path": "districts/PA-09.h5"
+    },
+    "districts/PA-10": {
+      "path": "districts/PA-10.h5"
+    },
+    "districts/PA-11": {
+      "path": "districts/PA-11.h5"
+    },
+    "districts/PA-12": {
+      "path": "districts/PA-12.h5"
+    },
+    "districts/PA-13": {
+      "path": "districts/PA-13.h5"
+    },
+    "districts/PA-14": {
+      "path": "districts/PA-14.h5"
+    },
+    "districts/PA-15": {
+      "path": "districts/PA-15.h5"
+    },
+    "districts/PA-16": {
+      "path": "districts/PA-16.h5"
+    },
+    "districts/PA-17": {
+      "path": "districts/PA-17.h5"
+    },
+    "districts/RI-01": {
+      "path": "districts/RI-01.h5"
+    },
+    "districts/RI-02": {
+      "path": "districts/RI-02.h5"
+    },
+    "districts/SC-01": {
+      "path": "districts/SC-01.h5"
+    },
+    "districts/SC-02": {
+      "path": "districts/SC-02.h5"
+    },
+    "districts/SC-03": {
+      "path": "districts/SC-03.h5"
+    },
+    "districts/SC-04": {
+      "path": "districts/SC-04.h5"
+    },
+    "districts/SC-05": {
+      "path": "districts/SC-05.h5"
+    },
+    "districts/SC-06": {
+      "path": "districts/SC-06.h5"
+    },
+    "districts/SC-07": {
+      "path": "districts/SC-07.h5"
+    },
+    "districts/SD-01": {
+      "path": "districts/SD-01.h5"
+    },
+    "districts/TN-01": {
+      "path": "districts/TN-01.h5"
+    },
+    "districts/TN-02": {
+      "path": "districts/TN-02.h5"
+    },
+    "districts/TN-03": {
+      "path": "districts/TN-03.h5"
+    },
+    "districts/TN-04": {
+      "path": "districts/TN-04.h5"
+    },
+    "districts/TN-05": {
+      "path": "districts/TN-05.h5"
+    },
+    "districts/TN-06": {
+      "path": "districts/TN-06.h5"
+    },
+    "districts/TN-07": {
+      "path": "districts/TN-07.h5"
+    },
+    "districts/TN-08": {
+      "path": "districts/TN-08.h5"
+    },
+    "districts/TN-09": {
+      "path": "districts/TN-09.h5"
+    },
+    "districts/TX-01": {
+      "path": "districts/TX-01.h5"
+    },
+    "districts/TX-02": {
+      "path": "districts/TX-02.h5"
+    },
+    "districts/TX-03": {
+      "path": "districts/TX-03.h5"
+    },
+    "districts/TX-04": {
+      "path": "districts/TX-04.h5"
+    },
+    "districts/TX-05": {
+      "path": "districts/TX-05.h5"
+    },
+    "districts/TX-06": {
+      "path": "districts/TX-06.h5"
+    },
+    "districts/TX-07": {
+      "path": "districts/TX-07.h5"
+    },
+    "districts/TX-08": {
+      "path": "districts/TX-08.h5"
+    },
+    "districts/TX-09": {
+      "path": "districts/TX-09.h5"
+    },
+    "districts/TX-10": {
+      "path": "districts/TX-10.h5"
+    },
+    "districts/TX-11": {
+      "path": "districts/TX-11.h5"
+    },
+    "districts/TX-12": {
+      "path": "districts/TX-12.h5"
+    },
+    "districts/TX-13": {
+      "path": "districts/TX-13.h5"
+    },
+    "districts/TX-14": {
+      "path": "districts/TX-14.h5"
+    },
+    "districts/TX-15": {
+      "path": "districts/TX-15.h5"
+    },
+    "districts/TX-16": {
+      "path": "districts/TX-16.h5"
+    },
+    "districts/TX-17": {
+      "path": "districts/TX-17.h5"
+    },
+    "districts/TX-18": {
+      "path": "districts/TX-18.h5"
+    },
+    "districts/TX-19": {
+      "path": "districts/TX-19.h5"
+    },
+    "districts/TX-20": {
+      "path": "districts/TX-20.h5"
+    },
+    "districts/TX-21": {
+      "path": "districts/TX-21.h5"
+    },
+    "districts/TX-22": {
+      "path": "districts/TX-22.h5"
+    },
+    "districts/TX-23": {
+      "path": "districts/TX-23.h5"
+    },
+    "districts/TX-24": {
+      "path": "districts/TX-24.h5"
+    },
+    "districts/TX-25": {
+      "path": "districts/TX-25.h5"
+    },
+    "districts/TX-26": {
+      "path": "districts/TX-26.h5"
+    },
+    "districts/TX-27": {
+      "path": "districts/TX-27.h5"
+    },
+    "districts/TX-28": {
+      "path": "districts/TX-28.h5"
+    },
+    "districts/TX-29": {
+      "path": "districts/TX-29.h5"
+    },
+    "districts/TX-30": {
+      "path": "districts/TX-30.h5"
+    },
+    "districts/TX-31": {
+      "path": "districts/TX-31.h5"
+    },
+    "districts/TX-32": {
+      "path": "districts/TX-32.h5"
+    },
+    "districts/TX-33": {
+      "path": "districts/TX-33.h5"
+    },
+    "districts/TX-34": {
+      "path": "districts/TX-34.h5"
+    },
+    "districts/TX-35": {
+      "path": "districts/TX-35.h5"
+    },
+    "districts/TX-36": {
+      "path": "districts/TX-36.h5"
+    },
+    "districts/TX-37": {
+      "path": "districts/TX-37.h5"
+    },
+    "districts/TX-38": {
+      "path": "districts/TX-38.h5"
+    },
+    "districts/UT-01": {
+      "path": "districts/UT-01.h5"
+    },
+    "districts/UT-02": {
+      "path": "districts/UT-02.h5"
+    },
+    "districts/UT-03": {
+      "path": "districts/UT-03.h5"
+    },
+    "districts/UT-04": {
+      "path": "districts/UT-04.h5"
+    },
+    "districts/VA-01": {
+      "path": "districts/VA-01.h5"
+    },
+    "districts/VA-02": {
+      "path": "districts/VA-02.h5"
+    },
+    "districts/VA-03": {
+      "path": "districts/VA-03.h5"
+    },
+    "districts/VA-04": {
+      "path": "districts/VA-04.h5"
+    },
+    "districts/VA-05": {
+      "path": "districts/VA-05.h5"
+    },
+    "districts/VA-06": {
+      "path": "districts/VA-06.h5"
+    },
+    "districts/VA-07": {
+      "path": "districts/VA-07.h5"
+    },
+    "districts/VA-08": {
+      "path": "districts/VA-08.h5"
+    },
+    "districts/VA-09": {
+      "path": "districts/VA-09.h5"
+    },
+    "districts/VA-10": {
+      "path": "districts/VA-10.h5"
+    },
+    "districts/VA-11": {
+      "path": "districts/VA-11.h5"
+    },
+    "districts/VT-01": {
+      "path": "districts/VT-01.h5"
+    },
+    "districts/WA-01": {
+      "path": "districts/WA-01.h5"
+    },
+    "districts/WA-02": {
+      "path": "districts/WA-02.h5"
+    },
+    "districts/WA-03": {
+      "path": "districts/WA-03.h5"
+    },
+    "districts/WA-04": {
+      "path": "districts/WA-04.h5"
+    },
+    "districts/WA-05": {
+      "path": "districts/WA-05.h5"
+    },
+    "districts/WA-06": {
+      "path": "districts/WA-06.h5"
+    },
+    "districts/WA-07": {
+      "path": "districts/WA-07.h5"
+    },
+    "districts/WA-08": {
+      "path": "districts/WA-08.h5"
+    },
+    "districts/WA-09": {
+      "path": "districts/WA-09.h5"
+    },
+    "districts/WA-10": {
+      "path": "districts/WA-10.h5"
+    },
+    "districts/WI-01": {
+      "path": "districts/WI-01.h5"
+    },
+    "districts/WI-02": {
+      "path": "districts/WI-02.h5"
+    },
+    "districts/WI-03": {
+      "path": "districts/WI-03.h5"
+    },
+    "districts/WI-04": {
+      "path": "districts/WI-04.h5"
+    },
+    "districts/WI-05": {
+      "path": "districts/WI-05.h5"
+    },
+    "districts/WI-06": {
+      "path": "districts/WI-06.h5"
+    },
+    "districts/WI-07": {
+      "path": "districts/WI-07.h5"
+    },
+    "districts/WI-08": {
+      "path": "districts/WI-08.h5"
+    },
+    "districts/WV-01": {
+      "path": "districts/WV-01.h5"
+    },
+    "districts/WV-02": {
+      "path": "districts/WV-02.h5"
+    },
+    "districts/WY-01": {
+      "path": "districts/WY-01.h5"
+    },
     "enhanced_cps_2024": {
       "path": "enhanced_cps_2024.h5"
+    },
+    "national/US": {
+      "path": "national/US.h5"
+    },
+    "small_enhanced_cps_2024": {
+      "path": "small_enhanced_cps_2024.h5"
+    },
+    "states/AK": {
+      "path": "states/AK.h5"
+    },
+    "states/AL": {
+      "path": "states/AL.h5"
+    },
+    "states/AR": {
+      "path": "states/AR.h5"
+    },
+    "states/AZ": {
+      "path": "states/AZ.h5"
+    },
+    "states/CA": {
+      "path": "states/CA.h5"
+    },
+    "states/CO": {
+      "path": "states/CO.h5"
+    },
+    "states/CT": {
+      "path": "states/CT.h5"
+    },
+    "states/DC": {
+      "path": "states/DC.h5"
+    },
+    "states/DE": {
+      "path": "states/DE.h5"
+    },
+    "states/FL": {
+      "path": "states/FL.h5"
+    },
+    "states/GA": {
+      "path": "states/GA.h5"
+    },
+    "states/HI": {
+      "path": "states/HI.h5"
+    },
+    "states/IA": {
+      "path": "states/IA.h5"
+    },
+    "states/ID": {
+      "path": "states/ID.h5"
+    },
+    "states/IL": {
+      "path": "states/IL.h5"
+    },
+    "states/IN": {
+      "path": "states/IN.h5"
+    },
+    "states/KS": {
+      "path": "states/KS.h5"
+    },
+    "states/KY": {
+      "path": "states/KY.h5"
+    },
+    "states/LA": {
+      "path": "states/LA.h5"
+    },
+    "states/MA": {
+      "path": "states/MA.h5"
+    },
+    "states/MD": {
+      "path": "states/MD.h5"
+    },
+    "states/ME": {
+      "path": "states/ME.h5"
+    },
+    "states/MI": {
+      "path": "states/MI.h5"
+    },
+    "states/MN": {
+      "path": "states/MN.h5"
+    },
+    "states/MO": {
+      "path": "states/MO.h5"
+    },
+    "states/MS": {
+      "path": "states/MS.h5"
+    },
+    "states/MT": {
+      "path": "states/MT.h5"
+    },
+    "states/NC": {
+      "path": "states/NC.h5"
+    },
+    "states/ND": {
+      "path": "states/ND.h5"
+    },
+    "states/NE": {
+      "path": "states/NE.h5"
+    },
+    "states/NH": {
+      "path": "states/NH.h5"
+    },
+    "states/NJ": {
+      "path": "states/NJ.h5"
+    },
+    "states/NM": {
+      "path": "states/NM.h5"
+    },
+    "states/NV": {
+      "path": "states/NV.h5"
+    },
+    "states/NY": {
+      "path": "states/NY.h5"
+    },
+    "states/OH": {
+      "path": "states/OH.h5"
+    },
+    "states/OK": {
+      "path": "states/OK.h5"
+    },
+    "states/OR": {
+      "path": "states/OR.h5"
+    },
+    "states/PA": {
+      "path": "states/PA.h5"
+    },
+    "states/RI": {
+      "path": "states/RI.h5"
+    },
+    "states/SC": {
+      "path": "states/SC.h5"
+    },
+    "states/SD": {
+      "path": "states/SD.h5"
+    },
+    "states/TN": {
+      "path": "states/TN.h5"
+    },
+    "states/TX": {
+      "path": "states/TX.h5"
+    },
+    "states/UT": {
+      "path": "states/UT.h5"
+    },
+    "states/VA": {
+      "path": "states/VA.h5"
+    },
+    "states/VT": {
+      "path": "states/VT.h5"
+    },
+    "states/WA": {
+      "path": "states/WA.h5"
+    },
+    "states/WI": {
+      "path": "states/WI.h5"
+    },
+    "states/WV": {
+      "path": "states/WV.h5"
+    },
+    "states/WY": {
+      "path": "states/WY.h5"
     }
   },
   "region_datasets": {

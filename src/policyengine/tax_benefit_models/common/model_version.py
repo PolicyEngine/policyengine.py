@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Optional
 
 import pandas as pd
 
+from policyengine.bundle import require_bundle, strict_bundle_enabled
 from policyengine.core import (
     Parameter,
     ParameterNode,
@@ -82,7 +83,13 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             kwargs["version"] = manifest.model_package.version
 
         installed_model_version = metadata.version(self.package_name)
-        if installed_model_version != manifest.model_package.version:
+        if strict_bundle_enabled():
+            require_bundle(
+                manifest.policyengine_version,
+                profile=self.country_code,
+                strict=True,
+            )
+        elif installed_model_version != manifest.model_package.version:
             warnings.warn(
                 f"Installed {self.package_name} version "
                 f"({installed_model_version}) does not match the bundled "

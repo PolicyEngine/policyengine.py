@@ -8,6 +8,7 @@ on:
       - tests/**
       - .github/**
       - changelog.d/**
+      - pyproject.toml
   workflow_dispatch:
 
 jobs:
@@ -44,6 +45,16 @@ jobs:
           run: uv pip install -e .[dev] --system
         - name: Run mypy (informational)
           run: mypy src/policyengine || echo "mypy found errors (non-blocking until codebase is clean)"
+  Bundle-Consistency:
+    runs-on: ubuntu-latest
+    steps:
+        - uses: actions/checkout@v6
+        - name: Set up Python
+          uses: actions/setup-python@v6
+          with:
+              python-version: '3.13'
+        - name: Check vendored bundle consistency
+          run: python .github/check_bundle_consistency.py
   Python-Compat:
     name: Install + smoke-import (py${{ matrix.python-version }})
     runs-on: ubuntu-latest

@@ -14,6 +14,7 @@
 from importlib.util import find_spec
 
 if find_spec("policyengine_uk") is not None:
+    from policyengine.bundle import get_country_bundle
     from policyengine.core import Dataset
     from policyengine.outputs import ProgramStatistics
 
@@ -35,6 +36,8 @@ if find_spec("policyengine_uk") is not None:
 
     model = uk_latest
     """The pinned UK ``TaxBenefitModelVersion`` for this policyengine release."""
+    bundle = get_country_bundle("uk")
+    """The vendored UK country bundle metadata for this policyengine release."""
 
     Dataset.model_rebuild()
     UKYearData.model_rebuild()
@@ -56,6 +59,7 @@ if find_spec("policyengine_uk") is not None:
         "calculate_household",
         "economic_impact_analysis",
         "ProgramStatistics",
+        "bundle",
     ]
 else:
     __all__ = []

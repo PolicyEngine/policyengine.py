@@ -1,5 +1,6 @@
 """Infer semver bump from towncrier fragment types and update version."""
 
+import json
 import re
 import subprocess
 import sys
@@ -116,41 +117,53 @@ def update_file(path: Path, new_version: str):
         print(f"  Updated {path}")
 
 
-def sync_release_manifest_versions(manifest_dir: Path, new_version: str):
-    if not manifest_dir.exists():
-        return
+def validate_vendored_bundle_version(repo_root: Path, new_version: str):
+    bundle_path = repo_root / "src" / "policyengine" / "data" / "bundle.json"
+    if not bundle_path.exists():
+        print(
+            f"Could not find vendored bundle manifest at {bundle_path}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
-    for manifest_path in sorted(manifest_dir.glob("*.json")):
-        country_id = manifest_path.stem
-        text = manifest_path.read_text()
-        updated = text
-        updated, bundle_id_replacements = re.subn(
-            r'("bundle_id"\s*:\s*")[^"]+(")',
-            rf"\g<1>{country_id}-{new_version}\g<2>",
-            updated,
-            count=1,
+    bundle = json.loads(bundle_path.read_text())
+    bundle_version = bundle.get("bundle_version")
+    policyengine_version = (bundle.get("policyengine") or {}).get("version")
+    if bundle_version != new_version or policyengine_version != new_version:
+        print(
+            "Vendored bundle version must be updated before bumping "
+            "policyengine.py: "
+            f"expected {new_version}, got bundle_version={bundle_version}, "
+            f"policyengine.version={policyengine_version}",
+            file=sys.stderr,
         )
-        updated, policyengine_version_replacements = re.subn(
-            r'("policyengine_version"\s*:\s*")[^"]+(")',
-            rf"\g<1>{new_version}\g<2>",
-            updated,
-            count=1,
-        )
-        missing_fields = []
-        if bundle_id_replacements == 0:
-            missing_fields.append("bundle_id")
-        if policyengine_version_replacements == 0:
-            missing_fields.append("policyengine_version")
-        if missing_fields:
-            print(
-                f"Could not update {manifest_path}: missing fields "
-                f"{', '.join(missing_fields)}",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        if updated != text:
-            manifest_path.write_text(updated)
-            print(f"  Updated {manifest_path}")
+        sys.exit(1)
+
+
+def vendored_bundle_matches(repo_root: Path, new_version: str) -> bool:
+    bundle_path = repo_root / "src" / "policyengine" / "data" / "bundle.json"
+    if not bundle_path.exists():
+        return False
+    bundle = json.loads(bundle_path.read_text())
+    return (
+        bundle.get("bundle_version") == new_version
+        and (bundle.get("policyengine") or {}).get("version") == new_version
+    )
+
+
+def vendor_matching_bundle(repo_root: Path, new_version: str):
+    if vendored_bundle_matches(repo_root, new_version):
+        return
+    subprocess.run(
+        [
+            sys.executable,
+            str(repo_root / ".github" / "vendor_release_bundle.py"),
+            "--version",
+            new_version,
+        ],
+        cwd=repo_root,
+        check=True,
+    )
 
 
 def main():
@@ -158,7 +171,6 @@ def main():
     pyproject = root / "pyproject.toml"
     changelog = root / "CHANGELOG.md"
     changelog_dir = root / "changelog.d"
-    manifest_dir = root / "src" / "policyengine" / "data" / "release_manifests"
 
     current = get_current_version(pyproject, changelog, root)
     bump = infer_bump(changelog_dir)
@@ -166,8 +178,9 @@ def main():
 
     print(f"Version: {current} -> {new} ({bump})")
 
+    vendor_matching_bundle(root, new)
+    validate_vendored_bundle_version(root, new)
     update_file(pyproject, new)
-    sync_release_manifest_versions(manifest_dir, new)
 
 
 if __name__ == "__main__":
