@@ -69,9 +69,11 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
             "income_support",
             "working_tax_credit",
             "child_tax_credit",
+            "state_pension",
             # Tax
             "income_tax",
             "national_insurance",
+            "ni_employer",
         ],
         "benunit": [
             # IDs and weights
@@ -84,6 +86,7 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
             "child_benefit",
             "pension_credit",
             "income_support",
+            "tax_credits",
             "working_tax_credit",
             "child_tax_credit",
         ],
@@ -104,6 +107,7 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
             "household_benefits",
             "household_tax",
             "vat",
+            "fuel_duty",
             # Housing
             "rent",
             "council_tax",
