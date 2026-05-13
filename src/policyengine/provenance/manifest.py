@@ -180,9 +180,13 @@ def https_dataset_uri(repo_id: str, path_in_repo: str, revision: str) -> str:
     return f"https://huggingface.co/{repo_id}/resolve/{revision}/{path_in_repo}"
 
 
+def _artifact_revision(data_package: "DataPackageVersion") -> str:
+    return data_package.release_manifest_revision or data_package.version
+
+
 def https_release_manifest_uri(data_package: "DataPackageVersion") -> str:
     """Return a dereferenceable HTTPS URI for a data release manifest."""
-    revision = data_package.release_manifest_revision or data_package.version
+    revision = _artifact_revision(data_package)
     return (
         f"https://huggingface.co/{data_package.repo_id}/resolve/"
         f"{revision}/{data_package.release_manifest_path}"
@@ -267,7 +271,16 @@ def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
         raise DataReleaseManifestUnavailableError(
             "Could not fetch the data release manifest from Hugging Face."
         ) from exc
-    return DataReleaseManifest.model_validate_json(response.text)
+    data_release_manifest = DataReleaseManifest.model_validate_json(response.text)
+    release_revision = country_manifest.data_package.release_manifest_revision
+    if release_revision is not None:
+        for artifact in data_release_manifest.artifacts.values():
+            if (
+                artifact.repo_id == country_manifest.data_package.repo_id
+                and artifact.revision == country_manifest.data_package.version
+            ):
+                artifact.revision = release_revision
+    return data_release_manifest
 
 
 def _specifier_matches(version: str, specifier: str) -> bool:
@@ -404,7 +417,7 @@ def resolve_dataset_reference(country_id: str, dataset: str) -> str:
         return build_hf_uri(
             repo_id=manifest.data_package.repo_id,
             path_in_repo=path_reference.path,
-            revision=manifest.data_package.version,
+            revision=_artifact_revision(manifest.data_package),
         )
 
     data_release_manifest = get_data_release_manifest(country_id)
@@ -525,5 +538,5 @@ def resolve_region_dataset_path(
     return build_hf_uri(
         repo_id=manifest.data_package.repo_id,
         path_in_repo=resolved_path,
-        revision=manifest.data_package.version,
+        revision=_artifact_revision(manifest.data_package),
     )

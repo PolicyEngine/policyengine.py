@@ -269,6 +269,31 @@ class TestBundleTRO:
         for path in paths[1:]:
             assert path.startswith("https://"), path
 
+    def test__given_data_manifest_revision_is_unresolvable__then_dataset_location_uses_certified_artifact(
+        self,
+    ):
+        country_manifest = get_release_manifest("us")
+        data_manifest = _us_data_release_manifest()
+        data_manifest.artifacts["enhanced_cps_2024"].revision = "1.113.1"
+
+        tro = build_trace_tro_from_release_bundle(
+            country_manifest,
+            data_manifest,
+            fetch_pypi=_fake_fetch_pypi,
+        )
+
+        locations = tro["@graph"][0]["trov:hasArrangement"][0][
+            "trov:hasArtifactLocation"
+        ]
+        dataset_location = next(
+            loc for loc in locations if loc["@id"].endswith("dataset")
+        )
+        assert (
+            dataset_location["trov:hasLocation"]
+            == "https://huggingface.co/policyengine/policyengine-us-data/resolve/99e0ec7e784cdba43dd21ff1d80a081599a7a537/enhanced_cps_2024.h5"
+        )
+        assert "/resolve/1.113.1/" not in dataset_location["trov:hasLocation"]
+
     def test__given_certification__then_fields_are_machine_readable(
         self, us_bundle_tro
     ):

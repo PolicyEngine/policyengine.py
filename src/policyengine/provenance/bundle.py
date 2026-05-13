@@ -395,6 +395,13 @@ def refresh_release_bundle(
     dataset_repo_id = data_artifact_json.get("repo_id", repo_id)
     dataset_path = data_artifact_json.get("path", dataset_path)
     dataset_revision = data_artifact_json.get("revision", new_data)
+    if (
+        release_manifest_json is not None
+        and new_release_manifest_revision is not None
+        and dataset_repo_id == repo_id
+        and dataset_revision == new_data
+    ):
+        dataset_revision = new_release_manifest_revision
 
     # Only hit HF if the data version actually changed.
     if new_data != old_data:

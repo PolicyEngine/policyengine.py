@@ -113,12 +113,12 @@ class TestUSModel:
         assert us_latest.release_manifest is not None
         assert us_latest.release_manifest.country_id == "us"
         assert us_latest.model_package.name == "policyengine-us"
-        assert us_latest.model_package.version == "1.690.7"
+        assert us_latest.model_package.version == "1.691.3"
         assert us_latest.data_package.name == "policyengine-us-data"
-        assert us_latest.data_package.version == "1.110.12"
+        assert us_latest.data_package.version == "1.113.1"
         assert (
             us_latest.default_dataset_uri
-            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12"
+            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@99e0ec7e784cdba43dd21ff1d80a081599a7a537"
         )
 
     def test_has_hundreds_of_parameters(self):

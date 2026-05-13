@@ -306,6 +306,10 @@ def test__bump_data_only_writes_release_manifest_revision_when_absent(
         written["data_package"]["release_manifest_revision"]
         == "release-manifest-commit-sha"
     )
+    assert (
+        written["certified_data_artifact"]["uri"]
+        == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@release-manifest-commit-sha"
+    )
 
 
 def test__bump_data_only_falls_back_to_main_for_release_manifest(
@@ -336,6 +340,10 @@ def test__bump_data_only_falls_back_to_main_for_release_manifest(
     assert (
         written["data_package"]["release_manifest_revision"]
         == "release-manifest-commit-sha"
+    )
+    assert (
+        written["certified_data_artifact"]["uri"]
+        == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@release-manifest-commit-sha"
     )
 
 

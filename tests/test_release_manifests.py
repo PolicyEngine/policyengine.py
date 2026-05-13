@@ -62,27 +62,27 @@ class TestReleaseManifests:
         assert manifest.country_id == "us"
         assert manifest.policyengine_version == POLICYENGINE_VERSION
         assert manifest.model_package.name == "policyengine-us"
-        assert manifest.model_package.version == "1.690.7"
+        assert manifest.model_package.version == "1.691.3"
         assert manifest.data_package.name == "policyengine-us-data"
-        assert manifest.data_package.version == "1.110.12"
+        assert manifest.data_package.version == "1.113.1"
         assert manifest.data_package.repo_id == "policyengine/policyengine-us-data"
         assert (
             manifest.data_package.release_manifest_path
-            == "releases/1.110.12/release_manifest.json"
+            == "releases/1.113.1/release_manifest.json"
         )
         assert (
             manifest.data_package.release_manifest_revision
-            == "3aac4505ec10d31efc1b3799a1e6458a15853ecc"
+            == "99e0ec7e784cdba43dd21ff1d80a081599a7a537"
         )
         assert manifest.certified_data_artifact is not None
         assert (
-            manifest.certified_data_artifact.build_id == "policyengine-us-data-1.110.12"
+            manifest.certified_data_artifact.build_id == "policyengine-us-data-1.113.1"
         )
         assert manifest.certified_data_artifact.dataset == "enhanced_cps_2024"
         assert manifest.certification is not None
-        assert manifest.certification.data_build_id == "policyengine-us-data-1.110.12"
-        assert manifest.certification.built_with_model_version == "1.690.7"
-        assert manifest.certification.certified_for_model_version == "1.690.7"
+        assert manifest.certification.data_build_id == "policyengine-us-data-1.113.1"
+        assert manifest.certification.built_with_model_version == "1.691.3"
+        assert manifest.certification.certified_for_model_version == "1.691.3"
 
     def test__given_uk_manifest__then_has_pinned_model_and_data_packages(self):
         manifest = get_release_manifest("uk")
@@ -117,7 +117,7 @@ class TestReleaseManifests:
 
         assert (
             resolved
-            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12"
+            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@99e0ec7e784cdba43dd21ff1d80a081599a7a537"
         )
 
     def test__given_uk_dataset_name__then_resolves_to_versioned_hf_url(self):
@@ -238,8 +238,8 @@ class TestReleaseManifests:
         mock_get.assert_called_once()
         assert mock_get.call_args.args[0] == (
             "https://huggingface.co/policyengine/policyengine-us-data/resolve/"
-            "3aac4505ec10d31efc1b3799a1e6458a15853ecc/"
-            "releases/1.110.12/release_manifest.json"
+            "99e0ec7e784cdba43dd21ff1d80a081599a7a537/"
+            "releases/1.113.1/release_manifest.json"
         )
 
     def test__given_explicit_manifest_revision__then_builds_manifest_url(self):
@@ -247,8 +247,41 @@ class TestReleaseManifests:
 
         assert https_release_manifest_uri(manifest.data_package) == (
             "https://huggingface.co/policyengine/policyengine-us-data/resolve/"
-            "3aac4505ec10d31efc1b3799a1e6458a15853ecc/"
-            "releases/1.110.12/release_manifest.json"
+            "99e0ec7e784cdba43dd21ff1d80a081599a7a537/"
+            "releases/1.113.1/release_manifest.json"
+        )
+
+    def test__given_release_manifest_artifact_uses_version_tag__then_rewrites_to_commit(
+        self,
+    ):
+        get_data_release_manifest.cache_clear()
+        payload = {
+            "schema_version": 1,
+            "data_package": {
+                "name": "policyengine-us-data",
+                "version": "1.113.1",
+            },
+            "artifacts": {
+                "enhanced_cps_2024": {
+                    "kind": "microdata",
+                    "path": "enhanced_cps_2024.h5",
+                    "repo_id": "policyengine/policyengine-us-data",
+                    "revision": "1.113.1",
+                    "sha256": "abc",
+                    "size_bytes": 123,
+                }
+            },
+        }
+
+        with patch(
+            "policyengine.provenance.manifest.requests.get",
+            return_value=_response_with_json(payload),
+        ):
+            manifest = get_data_release_manifest("us")
+
+        assert (
+            manifest.artifacts["enhanced_cps_2024"].uri
+            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@99e0ec7e784cdba43dd21ff1d80a081599a7a537"
         )
 
     def test__given_missing_data_release_manifest__then_fetch_raises_unavailable(self):
@@ -355,7 +388,7 @@ class TestReleaseManifests:
         ):
             certification = certify_data_release_compatibility(
                 "us",
-                runtime_model_version="1.690.7",
+                runtime_model_version="1.691.3",
             )
 
         assert certification == get_release_manifest("us").certification
@@ -371,7 +404,7 @@ class TestReleaseManifests:
         ):
             certification = certify_data_release_compatibility(
                 "us",
-                runtime_model_version="1.690.7",
+                runtime_model_version="1.691.3",
             )
 
         assert certification == get_release_manifest("us").certification
