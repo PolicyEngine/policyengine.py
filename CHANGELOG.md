@@ -1,3 +1,10 @@
+## [4.4.4] - 2026-05-13
+
+### Changed
+
+- Update the bundled US release to policyengine-us 1.691.3 and policyengine-us-data 1.113.1.
+
+
 ## [4.4.3] - 2026-05-11
 
 ### Changed
