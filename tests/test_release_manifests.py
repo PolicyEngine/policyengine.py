@@ -1,5 +1,6 @@
 """Tests for bundled compatibility manifests and data release manifests."""
 
+import hashlib
 import json
 import os
 import re
@@ -43,6 +44,7 @@ def _response_with_json(payload: dict) -> MagicMock:
     response = MagicMock()
     response.status_code = 200
     response.text = json.dumps(payload)
+    response.content = response.text.encode("utf-8")
     response.raise_for_status.return_value = None
     return response
 
@@ -282,6 +284,10 @@ class TestReleaseManifests:
         assert (
             manifest.artifacts["enhanced_cps_2024"].uri
             == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@99e0ec7e784cdba43dd21ff1d80a081599a7a537"
+        )
+        assert (
+            manifest.source_sha256
+            == hashlib.sha256(json.dumps(payload).encode("utf-8")).hexdigest()
         )
 
     def test__given_missing_data_release_manifest__then_fetch_raises_unavailable(self):

@@ -1,3 +1,4 @@
+import hashlib
 import os
 from functools import lru_cache
 from importlib import import_module
@@ -127,6 +128,8 @@ class DataReleaseManifest(BaseModel):
     can enclose the full set of artifacts published together). Distinct
     from per-artifact DOIs on ``DataReleaseArtifact.preservation_mirrors``.
     Populated when the release pipeline mirrors to a DOI-minting host."""
+    source_sha256: Optional[str] = Field(default=None, exclude=True)
+    """Byte sha256 of the fetched manifest before runtime URI rewrites."""
 
 
 class DataCertification(BaseModel):
@@ -272,6 +275,10 @@ def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
             "Could not fetch the data release manifest from Hugging Face."
         ) from exc
     data_release_manifest = DataReleaseManifest.model_validate_json(response.text)
+    source_bytes = response.content
+    if not isinstance(source_bytes, bytes):
+        source_bytes = response.text.encode("utf-8")
+    data_release_manifest.source_sha256 = hashlib.sha256(source_bytes).hexdigest()
     release_revision = country_manifest.data_package.release_manifest_revision
     if release_revision is not None:
         for artifact in data_release_manifest.artifacts.values():

@@ -82,7 +82,7 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine-us-data release manifest 1.113.1",
             "trov:mimeType": "application/json",
-            "trov:sha256": "f73ccb685ee98ca7e9c4c3d30ff5f02f2b869ea8298b2be466baabdb1d18ec42"
+            "trov:sha256": "d6b29ceff0cbf6a5cff4de94362ebc533dc5044c6a4155a46da7143140a8cb5f"
           },
           {
             "@id": "composition/1/artifact/dataset",
@@ -102,7 +102,7 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "fdd760bdc354160c8f4fbf452ecd78ab24cfcb0fba9c50332a66ae74584f32e2"
+          "trov:sha256": "316e373ed13360efa12037200719c9621ce7bced6d80acc4dfa7bbb72962892f"
         }
       },
       "trov:hasPerformance": {
