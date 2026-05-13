@@ -105,6 +105,7 @@ def calculate_decile_impacts(
     reform_policy: Optional[Policy] = None,
     dynamic: Optional[Dynamic] = None,
     income_variable: str = "equiv_hbai_household_net_income",
+    decile_variable: Optional[str] = None,
     entity: Optional[str] = None,
     quantiles: int = 10,
     baseline_simulation: Optional[Simulation] = None,
@@ -112,8 +113,16 @@ def calculate_decile_impacts(
 ) -> OutputCollection[DecileImpact]:
     """Calculate decile-by-decile impact of a reform.
 
+    By default, deciles are computed from ``income_variable``. Pass
+    ``decile_variable`` to group by a pre-computed decile variable while
+    still measuring changes in ``income_variable``; for example, UK wealth
+    deciles use ``income_variable="household_net_income"`` with
+    ``decile_variable="household_wealth_decile"``.
+
     Returns:
-        OutputCollection containing list of DecileImpact objects and DataFrame
+        OutputCollection containing list of DecileImpact objects and a DataFrame.
+        The DataFrame includes ``decile_variable`` so callers can distinguish
+        income-derived deciles from pre-computed grouping variables.
     """
     if (baseline_simulation is None) != (reform_simulation is None):
         raise ValueError(
@@ -148,6 +157,7 @@ def calculate_decile_impacts(
             baseline_simulation=baseline_simulation,
             reform_simulation=reform_simulation,
             income_variable=income_variable,
+            decile_variable=decile_variable,
             entity=entity,
             decile=decile,
             quantiles=quantiles,
@@ -162,6 +172,7 @@ def calculate_decile_impacts(
                 "baseline_simulation_id": r.baseline_simulation.id,
                 "reform_simulation_id": r.reform_simulation.id,
                 "income_variable": r.income_variable,
+                "decile_variable": r.decile_variable,
                 "decile": r.decile,
                 "baseline_mean": r.baseline_mean,
                 "reform_mean": r.reform_mean,

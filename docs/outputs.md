@@ -96,6 +96,8 @@ Or on a relative change — `relative_change_geq=0.05` selects households with a
 
 One decile's baseline mean, reform mean, and mean change. For all ten at once, use `calculate_decile_impacts`.
 
+By default, `calculate_decile_impacts` ranks units into deciles using `income_variable`. To measure changes in one variable while grouping by an existing decile variable, pass `decile_variable`. For example, UK wealth-decile impacts measure changes in household net income grouped by `household_wealth_decile`.
+
 ```python
 from policyengine.outputs import calculate_decile_impacts
 
@@ -108,12 +110,20 @@ impacts = calculate_decile_impacts(
 for row in impacts.outputs:
     print(row.decile, row.absolute_change, row.relative_change)
 
-impacts.dataframe                        # same data as a DataFrame
+wealth_deciles = calculate_decile_impacts(
+    baseline_simulation=baseline,
+    reform_simulation=reform,
+    income_variable="household_net_income",
+    decile_variable="household_wealth_decile",
+    entity="household",
+)
+
+impacts.dataframe                        # includes the decile_variable column
 ```
 
 ## IntraDecileImpact
 
-Distribution of household-level impact within each decile (five bucket categories summing to 1.0). Use `compute_intra_decile_impacts` for the full set.
+Distribution of household-level impact within each decile (five bucket categories summing to 1.0). Use `compute_intra_decile_impacts` for the full set. Like `calculate_decile_impacts`, this helper accepts `decile_variable` when the grouping variable is already present in the simulation output.
 
 ```python
 from policyengine.outputs import compute_intra_decile_impacts
@@ -122,6 +132,14 @@ spread = compute_intra_decile_impacts(
     baseline_simulation=baseline,
     reform_simulation=reform,
     income_variable="household_net_income",
+)
+
+wealth_spread = compute_intra_decile_impacts(
+    baseline_simulation=baseline,
+    reform_simulation=reform,
+    income_variable="household_net_income",
+    decile_variable="household_wealth_decile",
+    entity="household",
 )
 ```
 
