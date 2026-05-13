@@ -7,6 +7,7 @@ CLI, determinism guarantees, and JSON-Schema conformance against TROv 2023/05.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from importlib.resources import files
 from pathlib import Path
@@ -29,6 +30,7 @@ from policyengine.provenance.trace import (
     TRACE_TROV_NAMESPACE,
     build_simulation_trace_tro,
     build_trace_tro_from_release_bundle,
+    canonical_json_bytes,
     compute_trace_composition_fingerprint,
     extract_bundle_tro_reference,
     serialize_trace_tro,
@@ -268,6 +270,57 @@ class TestBundleTRO:
         assert paths[0].startswith("data/release_manifests/")
         for path in paths[1:]:
             assert path.startswith("https://"), path
+
+    def test__given_data_manifest_revision_is_unresolvable__then_dataset_location_uses_certified_artifact(
+        self,
+    ):
+        country_manifest = get_release_manifest("us")
+        data_manifest = _us_data_release_manifest()
+        data_manifest.artifacts["enhanced_cps_2024"].revision = "1.113.1"
+
+        tro = build_trace_tro_from_release_bundle(
+            country_manifest,
+            data_manifest,
+            fetch_pypi=_fake_fetch_pypi,
+        )
+
+        locations = tro["@graph"][0]["trov:hasArrangement"][0][
+            "trov:hasArtifactLocation"
+        ]
+        dataset_location = next(
+            loc for loc in locations if loc["@id"].endswith("dataset")
+        )
+        assert (
+            dataset_location["trov:hasLocation"]
+            == "https://huggingface.co/policyengine/policyengine-us-data/resolve/99e0ec7e784cdba43dd21ff1d80a081599a7a537/enhanced_cps_2024.h5"
+        )
+        assert "/resolve/1.113.1/" not in dataset_location["trov:hasLocation"]
+
+    def test__given_rewritten_data_manifest__then_tro_hashes_original_source(
+        self,
+    ):
+        country_manifest = get_release_manifest("us")
+        data_manifest = _us_data_release_manifest()
+        source_sha256 = hashlib.sha256(
+            canonical_json_bytes(data_manifest.model_dump(mode="json"))
+        ).hexdigest()
+        data_manifest.source_sha256 = source_sha256
+        data_manifest.artifacts["enhanced_cps_2024"].revision = "1.113.1"
+
+        tro = build_trace_tro_from_release_bundle(
+            country_manifest,
+            data_manifest,
+            fetch_pypi=_fake_fetch_pypi,
+        )
+
+        artifacts = tro["@graph"][0]["trov:hasComposition"]["trov:hasArtifact"]
+        data_manifest_artifact = next(
+            artifact
+            for artifact in artifacts
+            if artifact["@id"].endswith("data_release_manifest")
+        )
+
+        assert data_manifest_artifact["trov:sha256"] == source_sha256
 
     def test__given_certification__then_fields_are_machine_readable(
         self, us_bundle_tro

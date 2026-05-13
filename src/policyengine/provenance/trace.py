@@ -353,21 +353,14 @@ def build_trace_tro_from_release_bundle(
         if data_release_manifest is not None
         else None
     )
-    dataset_location = (
-        https_dataset_uri(
-            repo_id=dataset_artifact.repo_id,
-            path_in_repo=dataset_artifact.path,
-            revision=dataset_artifact.revision,
-        )
-        if dataset_artifact is not None
-        else _dataset_location_from_uri(certified_artifact.uri)
-    )
+    dataset_location = _dataset_location_from_uri(certified_artifact.uri)
 
     bundle_manifest_hash = hashlib.sha256(
         canonical_json_bytes(country_manifest.model_dump(mode="json"))
     ).hexdigest()
     data_release_manifest_hash = (
-        hashlib.sha256(
+        data_release_manifest.source_sha256
+        or hashlib.sha256(
             canonical_json_bytes(data_release_manifest.model_dump(mode="json"))
         ).hexdigest()
         if data_release_manifest is not None

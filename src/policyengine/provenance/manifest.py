@@ -1,3 +1,4 @@
+import hashlib
 import os
 from functools import lru_cache
 from importlib import import_module
@@ -127,6 +128,8 @@ class DataReleaseManifest(BaseModel):
     can enclose the full set of artifacts published together). Distinct
     from per-artifact DOIs on ``DataReleaseArtifact.preservation_mirrors``.
     Populated when the release pipeline mirrors to a DOI-minting host."""
+    source_sha256: Optional[str] = Field(default=None, exclude=True)
+    """Byte sha256 of the fetched manifest before runtime URI rewrites."""
 
 
 class DataCertification(BaseModel):
@@ -180,9 +183,13 @@ def https_dataset_uri(repo_id: str, path_in_repo: str, revision: str) -> str:
     return f"https://huggingface.co/{repo_id}/resolve/{revision}/{path_in_repo}"
 
 
+def _artifact_revision(data_package: "DataPackageVersion") -> str:
+    return data_package.release_manifest_revision or data_package.version
+
+
 def https_release_manifest_uri(data_package: "DataPackageVersion") -> str:
     """Return a dereferenceable HTTPS URI for a data release manifest."""
-    revision = data_package.release_manifest_revision or data_package.version
+    revision = _artifact_revision(data_package)
     return (
         f"https://huggingface.co/{data_package.repo_id}/resolve/"
         f"{revision}/{data_package.release_manifest_path}"
@@ -267,7 +274,20 @@ def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
         raise DataReleaseManifestUnavailableError(
             "Could not fetch the data release manifest from Hugging Face."
         ) from exc
-    return DataReleaseManifest.model_validate_json(response.text)
+    data_release_manifest = DataReleaseManifest.model_validate_json(response.text)
+    source_bytes = response.content
+    if not isinstance(source_bytes, bytes):
+        source_bytes = response.text.encode("utf-8")
+    data_release_manifest.source_sha256 = hashlib.sha256(source_bytes).hexdigest()
+    release_revision = country_manifest.data_package.release_manifest_revision
+    if release_revision is not None:
+        for artifact in data_release_manifest.artifacts.values():
+            if (
+                artifact.repo_id == country_manifest.data_package.repo_id
+                and artifact.revision == country_manifest.data_package.version
+            ):
+                artifact.revision = release_revision
+    return data_release_manifest
 
 
 def _specifier_matches(version: str, specifier: str) -> bool:
@@ -404,7 +424,7 @@ def resolve_dataset_reference(country_id: str, dataset: str) -> str:
         return build_hf_uri(
             repo_id=manifest.data_package.repo_id,
             path_in_repo=path_reference.path,
-            revision=manifest.data_package.version,
+            revision=_artifact_revision(manifest.data_package),
         )
 
     data_release_manifest = get_data_release_manifest(country_id)
@@ -525,5 +545,5 @@ def resolve_region_dataset_path(
     return build_hf_uri(
         repo_id=manifest.data_package.repo_id,
         path_in_repo=resolved_path,
-        revision=manifest.data_package.version,
+        revision=_artifact_revision(manifest.data_package),
     )
