@@ -33,6 +33,32 @@ def _microdf(data: dict, weights: str) -> MicroDataFrame:
     return MicroDataFrame(pd.DataFrame(data), weights=weights)
 
 
+def _replace_entity_frame(
+    simulation: Simulation,
+    entity: str,
+    data: pd.DataFrame,
+    weights: str,
+) -> None:
+    setattr(
+        simulation.output_dataset.data,
+        entity,
+        MicroDataFrame(data, weights=weights),
+    )
+
+
+def _set_us_fixture_weights_and_household_index(
+    simulation: Simulation,
+) -> None:
+    person = pd.DataFrame(simulation.output_dataset.data.person).copy()
+    person["person_weight"] = [2.0, 2.0, 3.0]
+    _replace_entity_frame(simulation, "person", person, "person_weight")
+
+    household = pd.DataFrame(simulation.output_dataset.data.household).copy()
+    household["household_weight"] = [2.0, 3.0]
+    household.index = [10, 20]
+    _replace_entity_frame(simulation, "household", household, "household_weight")
+
+
 def _lsr_dynamic() -> Dynamic:
     return Dynamic(
         name="Mock labor-supply response",
@@ -297,6 +323,71 @@ def test_configure_labor_supply_response_variables_detects_us_parameter_values(
     assert reform.extra_variables == baseline.extra_variables
 
 
+def test_configure_labor_supply_response_variables_detects_us_parameter_descendants(
+    tmp_path,
+):
+    baseline = _make_us_lsr_simulation(
+        tmp_path,
+        "baseline",
+        include_lsr=False,
+    )
+    reform = _make_us_lsr_simulation(
+        tmp_path,
+        "reform",
+        include_lsr=False,
+        is_reform=True,
+        dynamic=_dynamic_with_parameter(
+            "gov.simulation.labor_supply_responses.elasticities.substitution.all",
+            model_version=us_latest,
+        ),
+    )
+
+    assert configure_labor_supply_response_variables(
+        baseline,
+        reform,
+        country_code="us",
+    )
+    assert baseline.extra_variables["person"] == [
+        "income_elasticity_lsr",
+        "substitution_elasticity_lsr",
+        "weekly_hours_worked_behavioural_response_income_elasticity",
+        "weekly_hours_worked_behavioural_response_substitution_elasticity",
+    ]
+    assert reform.extra_variables == baseline.extra_variables
+
+
+def test_configure_labor_supply_response_variables_detects_policy_mapping_parameters(
+    tmp_path,
+):
+    baseline = _make_us_lsr_simulation(
+        tmp_path,
+        "baseline",
+        include_lsr=False,
+    )
+    reform = _make_us_lsr_simulation(
+        tmp_path,
+        "reform",
+        include_lsr=False,
+        is_reform=True,
+    )
+    reform.policy = {
+        "gov.simulation.labor_supply_responses.elasticities.income": 0.1
+    }
+
+    assert configure_labor_supply_response_variables(
+        baseline,
+        reform,
+        country_code="us",
+    )
+    assert baseline.extra_variables["person"] == [
+        "income_elasticity_lsr",
+        "substitution_elasticity_lsr",
+        "weekly_hours_worked_behavioural_response_income_elasticity",
+        "weekly_hours_worked_behavioural_response_substitution_elasticity",
+    ]
+    assert reform.extra_variables == baseline.extra_variables
+
+
 @pytest.mark.parametrize(
     "parameter_name",
     [
@@ -334,6 +425,57 @@ def test_configure_labor_supply_response_variables_detects_uk_parameter_values(
         "substitution_elasticity_lsr",
     ]
     assert reform.extra_variables == baseline.extra_variables
+
+
+@pytest.mark.parametrize(
+    ("country_code", "parameter_name", "model_version"),
+    [
+        (
+            "us",
+            "gov.simulation.labor_supply_responses.elasticities.income_support",
+            us_latest,
+        ),
+        (
+            "uk",
+            "gov.simulation.labour_supply_responses.income_elasticity_adjustment",
+            uk_latest,
+        ),
+    ],
+)
+def test_configure_labor_supply_response_variables_ignores_parameter_siblings(
+    tmp_path,
+    country_code,
+    parameter_name,
+    model_version,
+):
+    make_simulation = (
+        _make_us_lsr_simulation
+        if country_code == "us"
+        else _make_uk_lsr_simulation
+    )
+    baseline = make_simulation(
+        tmp_path,
+        "baseline",
+        include_lsr=False,
+    )
+    reform = make_simulation(
+        tmp_path,
+        "reform",
+        include_lsr=False,
+        is_reform=True,
+        dynamic=_dynamic_with_parameter(
+            parameter_name,
+            model_version=model_version,
+        ),
+    )
+
+    assert not configure_labor_supply_response_variables(
+        baseline,
+        reform,
+        country_code=country_code,
+    )
+    assert baseline.extra_variables == {}
+    assert reform.extra_variables == {}
 
 
 def test_configure_labor_supply_response_variables_ignores_inactive_runs(tmp_path):
@@ -458,6 +600,58 @@ def test_calculate_us_labor_supply_response_uses_legacy_shape(tmp_path):
     assert result.hours.substitution_effect == pytest.approx(3.0)
 
 
+def test_calculate_us_labor_supply_response_uses_positional_household_data(
+    tmp_path,
+):
+    baseline = _make_us_lsr_simulation(
+        tmp_path,
+        "baseline",
+        include_lsr=True,
+    )
+    reform = _make_us_lsr_simulation(
+        tmp_path,
+        "reform",
+        include_lsr=True,
+        is_reform=True,
+        dynamic=_lsr_dynamic(),
+    )
+    _set_us_fixture_weights_and_household_index(baseline)
+    _set_us_fixture_weights_and_household_index(reform)
+
+    result = calculate_labor_supply_response(
+        baseline,
+        reform,
+        country_code="us",
+    )
+
+    assert result.income_lsr == pytest.approx(100.0)
+    assert result.substitution_lsr == pytest.approx(60.0)
+    assert result.total_change == pytest.approx(160.0)
+    assert result.relative_lsr == {
+        "income": pytest.approx(100.0 / 690.0),
+        "substitution": pytest.approx(60.0 / 690.0),
+    }
+    assert result.decile["average"]["income"] == {
+        1: pytest.approx(20.0),
+        2: pytest.approx(20.0),
+    }
+    assert result.decile["average"]["substitution"] == {
+        1: pytest.approx(15.0),
+        2: pytest.approx(10.0),
+    }
+    assert result.decile["relative"]["income"] == {
+        1: pytest.approx(20.0 / 165.0),
+        2: pytest.approx(20.0 / 120.0),
+    }
+    assert result.decile["relative"]["substitution"] == {
+        1: pytest.approx(15.0 / 165.0),
+        2: pytest.approx(10.0 / 120.0),
+    }
+    assert result.hours.baseline == pytest.approx(210.0)
+    assert result.hours.reform == pytest.approx(233.0)
+    assert result.hours.change == pytest.approx(23.0)
+
+
 def test_inactive_us_labor_supply_response_does_not_require_lsr_columns(tmp_path):
     baseline = _make_us_lsr_simulation(
         tmp_path,
@@ -470,6 +664,8 @@ def test_inactive_us_labor_supply_response_does_not_require_lsr_columns(tmp_path
         include_lsr=False,
         is_reform=True,
     )
+    _set_us_fixture_weights_and_household_index(baseline)
+    _set_us_fixture_weights_and_household_index(reform)
 
     result = calculate_labor_supply_response(
         baseline,
@@ -494,8 +690,8 @@ def test_inactive_us_labor_supply_response_does_not_require_lsr_columns(tmp_path
             "substitution": {1: pytest.approx(0.0), 2: pytest.approx(0.0)},
         },
     }
-    assert result.hours.baseline == pytest.approx(90.0)
-    assert result.hours.reform == pytest.approx(99.0)
+    assert result.hours.baseline == pytest.approx(210.0)
+    assert result.hours.reform == pytest.approx(233.0)
     assert result.hours.income_effect == pytest.approx(0.0)
     assert result.hours.substitution_effect == pytest.approx(0.0)
 
