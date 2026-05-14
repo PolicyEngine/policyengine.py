@@ -94,6 +94,16 @@ def _labor_supply_parameter_prefixes(country_code: CountryCode) -> tuple[str, ..
     )
 
 
+def _parameter_matches_labor_supply_response_prefix(
+    parameter_name: str,
+    prefixes: tuple[str, ...],
+) -> bool:
+    return any(
+        parameter_name == prefix or parameter_name.startswith(f"{prefix}.")
+        for prefix in prefixes
+    )
+
+
 def _simulation_may_have_labor_supply_response(
     simulation: Simulation,
     country_code: CountryCode,
@@ -104,10 +114,9 @@ def _simulation_may_have_labor_supply_response(
 
     prefixes = _labor_supply_parameter_prefixes(country_code)
     return any(
-        parameter_name.startswith(prefix)
+        _parameter_matches_labor_supply_response_prefix(parameter_name, prefixes)
         for source in sources
         for parameter_name in _iter_reform_parameter_names(source)
-        for prefix in prefixes
     )
 
 
@@ -250,8 +259,12 @@ def _zero_household_series(baseline_simulation: Simulation) -> MicroSeries:
     )
     return MicroSeries(
         [0.0] * len(household_data),
-        weights=household_data["household_weight"],
+        weights=household_data["household_weight"].to_numpy(),
     )
+
+
+def _positional_microseries(series: Any, weights: Any) -> MicroSeries:
+    return MicroSeries(series.to_numpy(), weights=weights)
 
 
 def _decile_values(series: MicroSeries) -> DecileValues:
@@ -473,7 +486,7 @@ def calculate_labor_supply_response(
             "household_income_decile",
             "LaborSupplyResponse.household_income_decile",
         )
-        decile = household_data["household_income_decile"]
+        decile = household_data["household_income_decile"].to_numpy()
         zero_lsr_hh = _zero_household_series(baseline_simulation)
         decile_average = _decile_values(zero_lsr_hh.groupby(decile).mean())
         decile_relative = _positive_decile_values(zero_lsr_hh.groupby(decile).sum())
@@ -524,33 +537,43 @@ def calculate_labor_supply_response(
         "household_weight",
         "LaborSupplyResponse.household_weight",
     )
-    decile = household_data["household_income_decile"]
-    household_weight = household_data["household_weight"]
+    decile = household_data["household_income_decile"].to_numpy()
+    household_weight = household_data["household_weight"].to_numpy()
 
-    employment_income_hh = MicroSeries(
+    employment_income_hh = _positional_microseries(
         _series_for_variable(
             baseline_simulation,
             "employment_income",
             "household",
             "LaborSupplyResponse.employment_income_hh",
         ),
-        weights=household_weight,
+        household_weight,
     )
-    self_employment_income_hh = MicroSeries(
+    self_employment_income_hh = _positional_microseries(
         _series_for_variable(
             baseline_simulation,
             "self_employment_income",
             "household",
             "LaborSupplyResponse.self_employment_income_hh",
         ),
-        weights=household_weight,
+        household_weight,
     )
 
-    total_lsr_hh = income_lsr_hh + substitution_lsr_hh
-    original_earnings = employment_income_hh + self_employment_income_hh - total_lsr_hh
-
-    income_lsr_hh = MicroSeries(income_lsr_hh, weights=household_weight)
-    substitution_lsr_hh = MicroSeries(substitution_lsr_hh, weights=household_weight)
+    income_lsr_hh = _positional_microseries(income_lsr_hh, household_weight)
+    substitution_lsr_hh = _positional_microseries(
+        substitution_lsr_hh,
+        household_weight,
+    )
+    total_lsr_hh = MicroSeries(
+        income_lsr_hh.to_numpy() + substitution_lsr_hh.to_numpy(),
+        weights=household_weight,
+    )
+    original_earnings = MicroSeries(
+        employment_income_hh.to_numpy()
+        + self_employment_income_hh.to_numpy()
+        - total_lsr_hh.to_numpy(),
+        weights=household_weight,
+    )
 
     decile_average = {
         "income": _decile_values(income_lsr_hh.groupby(decile).mean()),
