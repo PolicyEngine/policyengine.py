@@ -370,9 +370,7 @@ def test_configure_labor_supply_response_variables_detects_policy_mapping_parame
         include_lsr=False,
         is_reform=True,
     )
-    reform.policy = {
-        "gov.simulation.labor_supply_responses.elasticities.income": 0.1
-    }
+    reform.policy = {"gov.simulation.labor_supply_responses.elasticities.income": 0.1}
 
     assert configure_labor_supply_response_variables(
         baseline,
@@ -449,9 +447,7 @@ def test_configure_labor_supply_response_variables_ignores_parameter_siblings(
     model_version,
 ):
     make_simulation = (
-        _make_us_lsr_simulation
-        if country_code == "us"
-        else _make_uk_lsr_simulation
+        _make_us_lsr_simulation if country_code == "us" else _make_uk_lsr_simulation
     )
     baseline = make_simulation(
         tmp_path,
