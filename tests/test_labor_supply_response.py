@@ -28,6 +28,15 @@ from policyengine.tax_benefit_models.us.datasets import (
 )
 from policyengine.tax_benefit_models.us.model import us_latest
 
+US_EXPECTED_LSR_EXTRA_VARIABLES = [
+    "self_employment_income",
+    "weekly_hours_worked",
+    "income_elasticity_lsr",
+    "substitution_elasticity_lsr",
+    "weekly_hours_worked_behavioural_response_income_elasticity",
+    "weekly_hours_worked_behavioural_response_substitution_elasticity",
+]
+
 
 def _microdf(data: dict, weights: str) -> MicroDataFrame:
     return MicroDataFrame(pd.DataFrame(data), weights=weights)
@@ -262,6 +271,11 @@ def test_policy_reform_analysis_models_include_labor_supply_response():
     )
 
 
+def test_us_default_outputs_do_not_include_optional_lsr_support_variables():
+    assert "self_employment_income" not in us_latest.entity_variables["person"]
+    assert "weekly_hours_worked" not in us_latest.entity_variables["person"]
+
+
 def test_configure_labor_supply_response_variables_adds_us_extras(tmp_path):
     baseline = _make_us_lsr_simulation(
         tmp_path,
@@ -281,12 +295,7 @@ def test_configure_labor_supply_response_variables_adds_us_extras(tmp_path):
         reform,
         country_code="us",
     )
-    assert baseline.extra_variables["person"] == [
-        "income_elasticity_lsr",
-        "substitution_elasticity_lsr",
-        "weekly_hours_worked_behavioural_response_income_elasticity",
-        "weekly_hours_worked_behavioural_response_substitution_elasticity",
-    ]
+    assert baseline.extra_variables["person"] == US_EXPECTED_LSR_EXTRA_VARIABLES
     assert reform.extra_variables == baseline.extra_variables
 
 
@@ -314,12 +323,7 @@ def test_configure_labor_supply_response_variables_detects_us_parameter_values(
         reform,
         country_code="us",
     )
-    assert baseline.extra_variables["person"] == [
-        "income_elasticity_lsr",
-        "substitution_elasticity_lsr",
-        "weekly_hours_worked_behavioural_response_income_elasticity",
-        "weekly_hours_worked_behavioural_response_substitution_elasticity",
-    ]
+    assert baseline.extra_variables["person"] == US_EXPECTED_LSR_EXTRA_VARIABLES
     assert reform.extra_variables == baseline.extra_variables
 
 
@@ -347,12 +351,7 @@ def test_configure_labor_supply_response_variables_detects_us_parameter_descenda
         reform,
         country_code="us",
     )
-    assert baseline.extra_variables["person"] == [
-        "income_elasticity_lsr",
-        "substitution_elasticity_lsr",
-        "weekly_hours_worked_behavioural_response_income_elasticity",
-        "weekly_hours_worked_behavioural_response_substitution_elasticity",
-    ]
+    assert baseline.extra_variables["person"] == US_EXPECTED_LSR_EXTRA_VARIABLES
     assert reform.extra_variables == baseline.extra_variables
 
 
@@ -377,12 +376,7 @@ def test_configure_labor_supply_response_variables_detects_policy_mapping_parame
         reform,
         country_code="us",
     )
-    assert baseline.extra_variables["person"] == [
-        "income_elasticity_lsr",
-        "substitution_elasticity_lsr",
-        "weekly_hours_worked_behavioural_response_income_elasticity",
-        "weekly_hours_worked_behavioural_response_substitution_elasticity",
-    ]
+    assert baseline.extra_variables["person"] == US_EXPECTED_LSR_EXTRA_VARIABLES
     assert reform.extra_variables == baseline.extra_variables
 
 

@@ -31,6 +31,9 @@ UK_LSR_PARAMETER_PREFIXES = (
 
 US_ACTIVE_LSR_VARIABLES = {
     "person": [
+        # Keep LSR-only support columns out of default household outputs.
+        "self_employment_income",
+        "weekly_hours_worked",
         "income_elasticity_lsr",
         "substitution_elasticity_lsr",
         "weekly_hours_worked_behavioural_response_income_elasticity",
