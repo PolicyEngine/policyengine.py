@@ -62,8 +62,6 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             "is_adult",
             # Income
             "employment_income",
-            "self_employment_income",
-            "weekly_hours_worked",
             # Benefits
             "ssi",
             "social_security",
