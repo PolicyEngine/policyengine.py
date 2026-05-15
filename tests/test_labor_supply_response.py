@@ -21,6 +21,7 @@ from policyengine.tax_benefit_models.uk.datasets import (
 from policyengine.tax_benefit_models.uk.model import uk_latest
 from policyengine.tax_benefit_models.us.analysis import (
     PolicyReformAnalysis as USPolicyReformAnalysis,
+    economic_impact_analysis as us_economic_impact_analysis,
 )
 from policyengine.tax_benefit_models.us.datasets import (
     PolicyEngineUSDataset,
@@ -488,6 +489,41 @@ def test_configure_labor_supply_response_variables_ignores_inactive_runs(tmp_pat
     )
     assert baseline.extra_variables == {}
     assert reform.extra_variables == {}
+
+
+def test_us_economic_impact_analysis_configures_lsr_extras_before_ensure(
+    tmp_path,
+    monkeypatch,
+):
+    baseline = _make_us_lsr_simulation(
+        tmp_path,
+        "baseline",
+        include_lsr=False,
+    )
+    reform = _make_us_lsr_simulation(
+        tmp_path,
+        "reform",
+        include_lsr=False,
+        is_reform=True,
+        dynamic=_lsr_dynamic(),
+    )
+    ensure_calls = []
+
+    class StopAfterEnsure(Exception):
+        pass
+
+    def fake_ensure(self):
+        assert self.extra_variables["person"] == US_EXPECTED_LSR_EXTRA_VARIABLES
+        ensure_calls.append(self.id)
+        if len(ensure_calls) == 2:
+            raise StopAfterEnsure
+
+    monkeypatch.setattr(Simulation, "ensure", fake_ensure)
+
+    with pytest.raises(StopAfterEnsure):
+        us_economic_impact_analysis(baseline, reform)
+
+    assert ensure_calls == ["baseline", "reform"]
 
 
 def test_inactive_labor_supply_response_tolerates_missing_optional_columns(
