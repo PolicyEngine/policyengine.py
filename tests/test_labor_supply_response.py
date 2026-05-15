@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 from microdf import MicroDataFrame
 
-from policyengine.core import Dynamic, Parameter, ParameterValue, Simulation
+from policyengine.core import Dynamic, Parameter, ParameterValue, Policy, Simulation
 from policyengine.outputs import (
     LaborSupplyResponse,
     calculate_labor_supply_response,
@@ -21,6 +21,8 @@ from policyengine.tax_benefit_models.uk.datasets import (
 from policyengine.tax_benefit_models.uk.model import uk_latest
 from policyengine.tax_benefit_models.us.analysis import (
     PolicyReformAnalysis as USPolicyReformAnalysis,
+)
+from policyengine.tax_benefit_models.us.analysis import (
     economic_impact_analysis as us_economic_impact_analysis,
 )
 from policyengine.tax_benefit_models.us.datasets import (
@@ -489,6 +491,146 @@ def test_configure_labor_supply_response_variables_ignores_inactive_runs(tmp_pat
     )
     assert baseline.extra_variables == {}
     assert reform.extra_variables == {}
+
+
+def test_configure_labor_supply_response_variables_honors_explicit_false_marker(
+    tmp_path,
+):
+    baseline = _make_us_lsr_simulation(
+        tmp_path,
+        "baseline",
+        include_lsr=False,
+    )
+    reform = _make_us_lsr_simulation(
+        tmp_path,
+        "reform",
+        include_lsr=False,
+        is_reform=True,
+        dynamic=Dynamic(
+            name="Non-LSR modifier",
+            simulation_modifier=lambda microsim: microsim,
+            affects_labor_supply_response=False,
+        ),
+    )
+
+    assert not configure_labor_supply_response_variables(
+        baseline,
+        reform,
+        country_code="us",
+    )
+    assert baseline.extra_variables == {}
+    assert reform.extra_variables == {}
+
+
+def test_configure_labor_supply_response_variables_honors_explicit_true_marker(
+    tmp_path,
+):
+    baseline = _make_us_lsr_simulation(
+        tmp_path,
+        "baseline",
+        include_lsr=False,
+    )
+    reform = _make_us_lsr_simulation(
+        tmp_path,
+        "reform",
+        include_lsr=False,
+        is_reform=True,
+        dynamic=Dynamic(
+            name="LSR marker",
+            affects_labor_supply_response=True,
+        ),
+    )
+
+    assert configure_labor_supply_response_variables(
+        baseline,
+        reform,
+        country_code="us",
+    )
+    assert baseline.extra_variables["person"] == US_EXPECTED_LSR_EXTRA_VARIABLES
+    assert reform.extra_variables == baseline.extra_variables
+
+
+def test_configure_labor_supply_response_variables_detects_lsr_parameters_before_marker(
+    tmp_path,
+):
+    baseline = _make_us_lsr_simulation(
+        tmp_path,
+        "baseline",
+        include_lsr=False,
+    )
+    reform = _make_us_lsr_simulation(
+        tmp_path,
+        "reform",
+        include_lsr=False,
+        is_reform=True,
+        dynamic=Dynamic(
+            name="Contradictory LSR parameter marker",
+            affects_labor_supply_response=False,
+            parameter_values=[
+                ParameterValue(
+                    parameter=Parameter(
+                        name="gov.simulation.labor_supply_responses.elasticities.income",
+                        tax_benefit_model_version=us_latest,
+                    ),
+                    start_date=datetime.datetime(2026, 1, 1),
+                    value=0.1,
+                )
+            ],
+        ),
+    )
+
+    assert configure_labor_supply_response_variables(
+        baseline,
+        reform,
+        country_code="us",
+    )
+    assert baseline.extra_variables["person"] == US_EXPECTED_LSR_EXTRA_VARIABLES
+    assert reform.extra_variables == baseline.extra_variables
+
+
+def test_combined_policy_and_dynamic_lsr_markers_preserve_unknown_state():
+    assert (
+        Dynamic(name="yes", affects_labor_supply_response=True)
+        + Dynamic(name="unknown")
+    ).affects_labor_supply_response is True
+    assert (
+        Dynamic(name="no", affects_labor_supply_response=False)
+        + Dynamic(name="unknown")
+    ).affects_labor_supply_response is None
+    assert (
+        Policy(name="no", affects_labor_supply_response=False)
+        + Policy(name="no again", affects_labor_supply_response=False)
+    ).affects_labor_supply_response is False
+
+
+def test_policy_lsr_marker_does_not_suppress_unmarked_dynamic_modifier(
+    tmp_path,
+):
+    baseline = _make_us_lsr_simulation(
+        tmp_path,
+        "baseline",
+        include_lsr=False,
+    )
+    reform = _make_us_lsr_simulation(
+        tmp_path,
+        "reform",
+        include_lsr=False,
+        is_reform=True,
+        dynamic=_lsr_dynamic(),
+    )
+    reform.policy = Policy(
+        name="Non-LSR policy modifier",
+        simulation_modifier=lambda microsim: microsim,
+        affects_labor_supply_response=False,
+    )
+
+    assert configure_labor_supply_response_variables(
+        baseline,
+        reform,
+        country_code="us",
+    )
+    assert baseline.extra_variables["person"] == US_EXPECTED_LSR_EXTRA_VARIABLES
+    assert reform.extra_variables == baseline.extra_variables
 
 
 def test_us_economic_impact_analysis_configures_lsr_extras_before_ensure(

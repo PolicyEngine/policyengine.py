@@ -87,6 +87,10 @@ def _has_simulation_modifier(source: Any) -> bool:
     return getattr(source, "simulation_modifier", None) is not None
 
 
+def _explicit_labor_supply_response_marker(source: Any) -> bool | None:
+    return getattr(source, "affects_labor_supply_response", None)
+
+
 def _labor_supply_parameter_prefixes(country_code: CountryCode) -> tuple[str, ...]:
     if country_code == "us":
         return US_LSR_PARAMETER_PREFIXES
@@ -111,15 +115,24 @@ def _simulation_may_have_labor_supply_response(
     simulation: Simulation,
     country_code: CountryCode,
 ) -> bool:
-    sources = (simulation.policy, simulation.dynamic)
-    if any(_has_simulation_modifier(source) for source in sources):
-        return True
-
     prefixes = _labor_supply_parameter_prefixes(country_code)
+
+    def source_may_have_labor_supply_response(source: Any) -> bool:
+        if any(
+            _parameter_matches_labor_supply_response_prefix(parameter_name, prefixes)
+            for parameter_name in _iter_reform_parameter_names(source)
+        ):
+            return True
+
+        explicit_marker = _explicit_labor_supply_response_marker(source)
+        if explicit_marker is not None:
+            return explicit_marker
+
+        return _has_simulation_modifier(source)
+
     return any(
-        _parameter_matches_labor_supply_response_prefix(parameter_name, prefixes)
-        for source in sources
-        for parameter_name in _iter_reform_parameter_names(source)
+        source_may_have_labor_supply_response(source)
+        for source in (simulation.policy, simulation.dynamic)
     )
 
 
