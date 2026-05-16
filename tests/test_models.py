@@ -183,8 +183,8 @@ class TestUSModel:
         found = False
         for p in us_latest.parameters:
             if ".SINGLE" in p.name and p.label and "(" in p.label:
-                assert "(Single)" in p.label, (
-                    f"Label '{p.label}' should contain '(Single)'"
+                assert re.search(r"\([^)]*\bSingle\b[^)]*\)", p.label), (
+                    f"Label '{p.label}' should contain 'Single' in parentheses"
                 )
                 found = True
                 break
