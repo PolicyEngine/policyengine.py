@@ -1,3 +1,10 @@
+## [4.5.1] - 2026-05-16
+
+### Changed
+
+- Updated the bundled US release manifest to policyengine-us 1.691.10 and policyengine-us-data 1.115.3.
+
+
 ## [4.5.0] - 2026-05-16
 
 ### Added
