@@ -166,6 +166,29 @@ class TestReleaseManifests:
             == dataset
         )
 
+    def test__given_local_dataset_path__then_managed_resolution_requires_opt_in(
+        self,
+        tmp_path,
+    ):
+        dataset_path = tmp_path / "local_2100.h5"
+        dataset_path.write_bytes(b"not a real h5; resolution only")
+
+        try:
+            resolve_managed_dataset_reference("us", str(dataset_path))
+        except ValueError as error:
+            assert (
+                "Local dataset paths bypass the policyengine.py release bundle"
+                in str(error)
+            )
+        else:
+            raise AssertionError("Expected local dataset path to be rejected")
+
+        assert resolve_managed_dataset_reference(
+            "us",
+            str(dataset_path),
+            allow_unmanaged=True,
+        ) == str(dataset_path.resolve())
+
     def test__given_versioned_dataset_url__then_logical_name_drops_version(self):
         dataset = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.73.0"
 
@@ -632,6 +655,25 @@ class TestReleaseManifests:
         assert mock_microsimulation.call_args.kwargs["dataset"] == dataset
         assert microsim.policyengine_bundle["runtime_dataset_uri"] == dataset
         assert microsim.policyengine_bundle["runtime_dataset_source"] == dataset
+
+    def test__given_us_unmanaged_local_dataset__then_source_is_local_path(
+        self,
+        tmp_path,
+    ):
+        dataset_path = tmp_path / "local_2100.h5"
+        dataset_path.write_bytes(b"not a real h5; source plumbing only")
+
+        with patch("policyengine_us.Microsimulation") as mock_microsimulation:
+            microsim = managed_us_microsimulation(
+                dataset=str(dataset_path),
+                allow_unmanaged=True,
+            )
+
+        resolved_path = str(dataset_path.resolve())
+        assert mock_microsimulation.call_args.kwargs["dataset"] == resolved_path
+        assert microsim.policyengine_bundle["runtime_dataset"] == "local_2100"
+        assert microsim.policyengine_bundle["runtime_dataset_uri"] == resolved_path
+        assert microsim.policyengine_bundle["runtime_dataset_source"] == resolved_path
 
     def test__given_uk_managed_dataset_name__then_resolves_within_bundle(self):
         with patch("policyengine_uk.Microsimulation") as mock_microsimulation:

@@ -438,6 +438,23 @@ def resolve_dataset_reference(country_id: str, dataset: str) -> str:
     return artifact.uri
 
 
+def _existing_local_dataset_path(dataset: str) -> Optional[Path]:
+    path = Path(dataset).expanduser()
+    if not path.exists():
+        return None
+
+    is_path_like = (
+        path.is_absolute()
+        or dataset.startswith(("~", "."))
+        or os.sep in dataset
+        or (os.altsep is not None and os.altsep in dataset)
+        or path.suffix.lower() in {".h5", ".hdf5"}
+    )
+    if not is_path_like:
+        return None
+    return path.resolve()
+
+
 def resolve_managed_dataset_reference(
     country_id: str,
     dataset: Optional[str] = None,
@@ -470,6 +487,17 @@ def resolve_managed_dataset_reference(
             "Pass a manifest dataset name or omit `dataset` to use the certified "
             "default dataset. Set `allow_unmanaged=True` only if you intend to "
             "bypass bundle enforcement."
+        )
+
+    local_dataset_path = _existing_local_dataset_path(dataset)
+    if local_dataset_path is not None:
+        if allow_unmanaged:
+            return str(local_dataset_path)
+        raise ValueError(
+            "Local dataset paths bypass the policyengine.py release bundle. "
+            "Pass a manifest dataset name or omit `dataset` to use the certified "
+            "default dataset. Set `allow_unmanaged=True` only if you intend to "
+            "run against a local dataset outside the bundle."
         )
 
     return resolve_dataset_reference(country_id, dataset)
