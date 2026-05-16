@@ -1,5 +1,6 @@
 import json
 import warnings
+from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any, Optional
 
@@ -529,6 +530,59 @@ def _require_metadata_value(
         )
 
 
+def _policyengine_us_git_sha(policyengine_us_metadata: dict) -> Optional[str]:
+    direct_url = policyengine_us_metadata.get("direct_url") or {}
+    vcs_info = direct_url.get("vcs_info") or {}
+    for key in ("commit_id", "git_commit_id", "vcs_commit_id"):
+        value = vcs_info.get(key) or policyengine_us_metadata.get(key)
+        if value:
+            return str(value)
+    return None
+
+
+def _runtime_policyengine_us_metadata() -> dict[str, Any]:
+    try:
+        distribution = importlib_metadata.distribution("policyengine-us")
+    except importlib_metadata.PackageNotFoundError:
+        return {}
+
+    result: dict[str, Any] = {"version": distribution.version}
+    direct_url_text = distribution.read_text("direct_url.json")
+    if direct_url_text:
+        try:
+            result["direct_url"] = json.loads(direct_url_text)
+        except json.JSONDecodeError:
+            result["direct_url"] = {}
+    return result
+
+
+def _validate_runtime_policyengine_us_match(
+    metadata: dict,
+    *,
+    path: Path,
+) -> None:
+    policyengine_us = metadata.get("policyengine_us") or {}
+    runtime_policyengine_us = _runtime_policyengine_us_metadata()
+    metadata_version = policyengine_us.get("version")
+    runtime_version = runtime_policyengine_us.get("version")
+
+    if metadata_version and runtime_version != metadata_version:
+        raise ValueError(
+            f"Long-term dataset {path} was built with policyengine-us "
+            f"version {metadata_version!r}, but the installed runtime is "
+            f"{runtime_version!r}."
+        )
+
+    metadata_git_sha = _policyengine_us_git_sha(policyengine_us)
+    runtime_git_sha = _policyengine_us_git_sha(runtime_policyengine_us)
+    if metadata_git_sha and runtime_git_sha != metadata_git_sha:
+        raise ValueError(
+            f"Long-term dataset {path} was built with policyengine-us git SHA "
+            f"{metadata_git_sha!r}, but the installed runtime has "
+            f"{runtime_git_sha!r}."
+        )
+
+
 def validate_long_term_dataset_metadata(
     metadata: dict,
     *,
@@ -549,6 +603,10 @@ def validate_long_term_dataset_metadata(
     ] = None,
     minimum_calibration_quality: Optional[str] = None,
     require_validation_passed: bool = False,
+    required_policyengine_us_version: Optional[str] = None,
+    required_policyengine_us_git_sha: Optional[str] = None,
+    require_policyengine_us_clean_build: bool = False,
+    require_runtime_policyengine_us_match: bool = False,
 ) -> None:
     """Validate sidecar metadata for a long-term projected US dataset."""
 
@@ -564,6 +622,7 @@ def validate_long_term_dataset_metadata(
     tax_assumption = metadata.get("tax_assumption") or {}
     support_augmentation = metadata.get("support_augmentation") or {}
     calibration_audit = metadata.get("calibration_audit") or {}
+    policyengine_us = metadata.get("policyengine_us") or {}
 
     _require_metadata_value(
         metadata,
@@ -652,6 +711,31 @@ def validate_long_term_dataset_metadata(
             f"{calibration_audit.get('validation_passed')!r}; expected true."
         )
 
+    _require_metadata_value(
+        metadata,
+        path,
+        "policyengine_us.version",
+        policyengine_us.get("version"),
+        required_policyengine_us_version,
+    )
+    _require_metadata_value(
+        metadata,
+        path,
+        "policyengine_us.git_sha",
+        _policyengine_us_git_sha(policyengine_us),
+        required_policyengine_us_git_sha,
+    )
+    if (
+        require_policyengine_us_clean_build
+        and policyengine_us.get("git_dirty") is not False
+    ):
+        raise ValueError(
+            f"Long-term dataset {path} has policyengine_us.git_dirty="
+            f"{policyengine_us.get('git_dirty')!r}; expected false."
+        )
+    if require_runtime_policyengine_us_match:
+        _validate_runtime_policyengine_us_match(metadata, path=path)
+
 
 def load_long_term_datasets(
     years: list[int],
@@ -674,12 +758,17 @@ def load_long_term_datasets(
     ] = None,
     minimum_calibration_quality: Optional[str] = None,
     require_validation_passed: bool = False,
+    required_policyengine_us_version: Optional[str] = None,
+    required_policyengine_us_git_sha: Optional[str] = None,
+    require_policyengine_us_clean_build: bool = False,
+    require_runtime_policyengine_us_match: bool = False,
 ) -> dict[str, PolicyEngineUSDataset]:
     """Load pre-built long-term US projected datasets.
 
     The country data repo still owns the expensive projection and calibration
     build. This helper lets policyengine.py consume those year-specific H5
-    artifacts with sidecar metadata validation.
+    artifacts with sidecar metadata validation, including optional checks that
+    the installed ``policyengine-us`` runtime matches the H5 build metadata.
     """
 
     result = {}
@@ -718,6 +807,14 @@ def load_long_term_datasets(
                 ),
                 minimum_calibration_quality=minimum_calibration_quality,
                 require_validation_passed=require_validation_passed,
+                required_policyengine_us_version=required_policyengine_us_version,
+                required_policyengine_us_git_sha=required_policyengine_us_git_sha,
+                require_policyengine_us_clean_build=(
+                    require_policyengine_us_clean_build
+                ),
+                require_runtime_policyengine_us_match=(
+                    require_runtime_policyengine_us_match
+                ),
             )
 
         dataset = PolicyEngineUSDataset(

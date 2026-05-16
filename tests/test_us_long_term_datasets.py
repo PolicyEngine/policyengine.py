@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 from microdf import MicroDataFrame
 
+import policyengine.tax_benefit_models.us.datasets as us_datasets_module
 from policyengine.tax_benefit_models.us.datasets import (
     PolicyEngineUSDataset,
     USYearData,
@@ -102,6 +103,16 @@ def _write_metadata(path: Path, year: int, **overrides) -> None:
         "calibration_audit": {
             "calibration_quality": "exact",
             "validation_passed": True,
+        },
+        "policyengine_us": {
+            "version": "1.691.10",
+            "direct_url": {
+                "vcs_info": {
+                    "commit_id": "4fd79e6608bc2dac3a7fde0be37191cb4870bd85",
+                    "vcs": "git",
+                },
+            },
+            "git_dirty": False,
         },
     }
     for key, value in overrides.items():
@@ -217,3 +228,84 @@ def test__load_long_term_datasets__rejects_support_contract_mismatch(tmp_path):
             data_folder=str(tmp_path),
             require_support_augmentation_sanitize_clone_non_target_income=True,
         )
+
+
+def test__load_long_term_datasets__rejects_policyengine_us_version_mismatch(
+    tmp_path,
+):
+    h5_path = tmp_path / "2075.h5"
+    _write_us_h5(h5_path, 2075)
+    _write_metadata(h5_path, 2075)
+
+    with pytest.raises(ValueError, match="policyengine_us.version"):
+        load_long_term_datasets(
+            [2075],
+            data_folder=str(tmp_path),
+            required_policyengine_us_version="1.691.3",
+        )
+
+
+def test__load_long_term_datasets__rejects_policyengine_us_git_sha_mismatch(
+    tmp_path,
+):
+    h5_path = tmp_path / "2075.h5"
+    _write_us_h5(h5_path, 2075)
+    _write_metadata(h5_path, 2075)
+
+    with pytest.raises(ValueError, match="policyengine_us.git_sha"):
+        load_long_term_datasets(
+            [2075],
+            data_folder=str(tmp_path),
+            required_policyengine_us_git_sha="a" * 40,
+        )
+
+
+def test__load_long_term_datasets__rejects_dirty_policyengine_us_build(
+    tmp_path,
+):
+    h5_path = tmp_path / "2075.h5"
+    _write_us_h5(h5_path, 2075)
+    _write_metadata(
+        h5_path,
+        2075,
+        policyengine_us={"version": "1.691.10", "git_dirty": True},
+    )
+
+    with pytest.raises(ValueError, match="policyengine_us.git_dirty"):
+        load_long_term_datasets(
+            [2075],
+            data_folder=str(tmp_path),
+            require_policyengine_us_clean_build=True,
+        )
+
+
+def test__load_long_term_datasets__can_require_runtime_policyengine_us_match(
+    monkeypatch,
+    tmp_path,
+):
+    h5_path = tmp_path / "2075.h5"
+    _write_us_h5(h5_path, 2075)
+    _write_metadata(h5_path, 2075)
+    monkeypatch.setattr(
+        us_datasets_module,
+        "_runtime_policyengine_us_metadata",
+        lambda: {
+            "version": "1.691.10",
+            "direct_url": {
+                "vcs_info": {
+                    "commit_id": "4fd79e6608bc2dac3a7fde0be37191cb4870bd85",
+                    "vcs": "git",
+                },
+            },
+        },
+    )
+
+    datasets = load_long_term_datasets(
+        [2075],
+        data_folder=str(tmp_path),
+        require_runtime_policyengine_us_match=True,
+    )
+
+    assert datasets["long_term_cps_2075"].metadata["policyengine_us"]["version"] == (
+        "1.691.10"
+    )
