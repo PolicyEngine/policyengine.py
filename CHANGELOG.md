@@ -1,3 +1,10 @@
+## [4.5.0] - 2026-05-16
+
+### Added
+
+- Add metadata-aware loading for pre-built long-term US projected datasets.
+
+
 ## [4.4.4] - 2026-05-13
 
 ### Changed
