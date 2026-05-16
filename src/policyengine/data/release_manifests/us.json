@@ -5,34 +5,34 @@
   "policyengine_version": "4.5.0",
   "model_package": {
     "name": "policyengine-us",
-    "version": "1.691.3",
-    "sha256": "c5d37aa4442f23d48bd5d587a02876c89d83c6135809f12988cc39bd3a47e8b2",
-    "wheel_url": "https://files.pythonhosted.org/packages/2a/03/e21c872664f90dcc99f1fcf29d1da71409c50cf8a7798ff0596ad10d9400/policyengine_us-1.691.3-py3-none-any.whl"
+    "version": "1.691.10",
+    "sha256": "a2c8365f152c2ec3332e996c4003d560b433b6c204bdfcc73bf094a0ae49f10e",
+    "wheel_url": "https://files.pythonhosted.org/packages/a7/a3/53630e30285cb441cc96e5264621b1b9e5af3b648ccd176b376f0e03a458/policyengine_us-1.691.10-py3-none-any.whl"
   },
   "data_package": {
     "name": "policyengine-us-data",
-    "version": "1.113.1",
+    "version": "1.115.3",
     "repo_id": "policyengine/policyengine-us-data",
-    "release_manifest_path": "releases/1.113.1/release_manifest.json",
-    "release_manifest_revision": "99e0ec7e784cdba43dd21ff1d80a081599a7a537"
+    "release_manifest_path": "releases/1.115.3/release_manifest.json",
+    "release_manifest_revision": "69fc39a7fece4c49ba87291e598e76b40568cc5d"
   },
   "certified_data_artifact": {
     "data_package": {
       "name": "policyengine-us-data",
-      "version": "1.113.1"
+      "version": "1.115.3"
     },
-    "build_id": "policyengine-us-data-1.113.1",
+    "build_id": "policyengine-us-data-1.115.3",
     "dataset": "enhanced_cps_2024",
-    "uri": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@99e0ec7e784cdba43dd21ff1d80a081599a7a537",
-    "sha256": "0ce549af18753287c097718362b8cd5cdccfc47953acf7f282709d604cf314d2"
+    "uri": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@69fc39a7fece4c49ba87291e598e76b40568cc5d",
+    "sha256": "96965b0d9931d36beb29486b25fffee8b630e3b62c9376e7265976e02f7ab3ca"
   },
   "certification": {
     "compatibility_basis": "exact_build_model_version",
-    "data_build_id": "policyengine-us-data-1.113.1",
-    "built_with_model_version": "1.691.3",
-    "certified_for_model_version": "1.691.3",
+    "data_build_id": "policyengine-us-data-1.115.3",
+    "built_with_model_version": "1.691.10",
+    "certified_for_model_version": "1.691.10",
     "certified_by": "policyengine.py bundled manifest",
-    "data_build_fingerprint": "sha256:d891044ece8ec3338904771c879b98ec11a12f1090c074e5b8cee846825d8056"
+    "data_build_fingerprint": "sha256:b80625974285a9cff23bc2436fc46df98477997d50aea61e73b7f137b5121584"
   },
   "default_dataset": "enhanced_cps_2024",
   "datasets": {

@@ -24,6 +24,7 @@ from policyengine.provenance.manifest import (
     DataReleaseManifestUnavailableError,
     get_data_release_manifest,
     get_release_manifest,
+    https_dataset_uri,
 )
 from policyengine.provenance.trace import (
     POLICYENGINE_ORGANIZATION,
@@ -52,6 +53,17 @@ FAKE_WHEEL_URL = (
 
 def _fake_fetch_pypi(name: str, version: str) -> dict:
     return {"sha256": FAKE_WHEEL_SHA, "url": FAKE_WHEEL_URL}
+
+
+def _https_location_from_hf_uri(uri: str) -> str:
+    path_without_scheme = uri.removeprefix("hf://")
+    path_without_revision, revision = path_without_scheme.rsplit("@", 1)
+    repo_owner, repo_name, path_in_repo = path_without_revision.split("/", 2)
+    return https_dataset_uri(
+        repo_id=f"{repo_owner}/{repo_name}",
+        path_in_repo=path_in_repo,
+        revision=revision,
+    )
 
 
 def _us_data_release_manifest(
@@ -290,9 +302,9 @@ class TestBundleTRO:
         dataset_location = next(
             loc for loc in locations if loc["@id"].endswith("dataset")
         )
-        assert (
-            dataset_location["trov:hasLocation"]
-            == "https://huggingface.co/policyengine/policyengine-us-data/resolve/99e0ec7e784cdba43dd21ff1d80a081599a7a537/enhanced_cps_2024.h5"
+        assert country_manifest.certified_data_artifact is not None
+        assert dataset_location["trov:hasLocation"] == _https_location_from_hf_uri(
+            country_manifest.certified_data_artifact.uri
         )
         assert "/resolve/1.113.1/" not in dataset_location["trov:hasLocation"]
 
