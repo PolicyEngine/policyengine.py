@@ -2411,9 +2411,11 @@ wheels = [
 
 [[package]]
 name = "policyengine"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "." }
 dependencies = [
+    { name = "h5py", version = "3.14.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "h5py", version = "3.16.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "jsonschema" },
     { name = "microdf-python" },
     { name = "packaging" },
@@ -2465,6 +2467,7 @@ requires-dist = [
     { name = "autodoc-pydantic", marker = "extra == 'dev'" },
     { name = "build", marker = "extra == 'dev'" },
     { name = "furo", marker = "extra == 'dev'" },
+    { name = "h5py", specifier = ">=3.0.0" },
     { name = "itables", marker = "extra == 'dev'" },
     { name = "jsonschema", specifier = ">=4.0.0" },
     { name = "jupyter-book", marker = "extra == 'dev'" },

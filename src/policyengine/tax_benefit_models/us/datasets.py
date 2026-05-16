@@ -1,10 +1,12 @@
+import json
 import warnings
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
+import h5py
 import pandas as pd
 from microdf import MicroDataFrame
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 
 from policyengine.core import Dataset, YearData
 from policyengine.provenance.manifest import (
@@ -42,6 +44,8 @@ class PolicyEngineUSDataset(Dataset):
     """US dataset with multi-year entity-level data."""
 
     data: Optional[USYearData] = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata_filepath: Optional[str] = None
 
     def model_post_init(self, __context) -> None:
         """Called after Pydantic initialization."""
@@ -73,6 +77,10 @@ class PolicyEngineUSDataset(Dataset):
     def load(self) -> None:
         """Load dataset from HDF5 file into this instance."""
         filepath = self.filepath
+        if _is_policyengine_core_h5(Path(filepath)):
+            self.data = _load_policyengine_core_h5(Path(filepath), self.year)
+            return
+
         with pd.HDFStore(filepath, mode="r") as store:
             self.data = USYearData(
                 person=MicroDataFrame(store["person"], weights="person_weight"),
@@ -98,6 +106,154 @@ class PolicyEngineUSDataset(Dataset):
             n_tax_units = len(self.data.tax_unit)
             n_households = len(self.data.household)
             return f"<PolicyEngineUSDataset id={self.id} year={self.year} filepath={self.filepath} people={n_people} marital_units={n_marital_units} families={n_families} spm_units={n_spm_units} tax_units={n_tax_units} households={n_households}>"
+
+
+US_ENTITY_KEYS = (
+    "person",
+    "household",
+    "tax_unit",
+    "spm_unit",
+    "family",
+    "marital_unit",
+)
+
+US_ENTITY_ID_COLUMNS = {entity: f"{entity}_id" for entity in US_ENTITY_KEYS}
+US_ENTITY_WEIGHT_COLUMNS = {entity: f"{entity}_weight" for entity in US_ENTITY_KEYS}
+US_PERSON_ENTITY_ID_COLUMNS = {
+    "household": "person_household_id",
+    "tax_unit": "person_tax_unit_id",
+    "spm_unit": "person_spm_unit_id",
+    "family": "person_family_id",
+    "marital_unit": "person_marital_unit_id",
+}
+
+
+def _is_policyengine_core_h5(path: Path) -> bool:
+    """Return whether ``path`` uses PolicyEngine core's variable/period H5 layout."""
+
+    try:
+        with h5py.File(path, "r") as h5_file:
+            node = h5_file.get("person_id")
+            return isinstance(node, h5py.Group)
+    except OSError:
+        return False
+
+
+def _read_core_h5_period_values(
+    h5_file: h5py.File,
+    variable_name: str,
+    year: int,
+) -> Any:
+    group = h5_file[variable_name]
+    period = str(year)
+    if period not in group:
+        periods = [key for key in group.keys() if key != "ETERNITY"]
+        period = sorted(periods)[0] if periods else sorted(group.keys())[0]
+    values = group[period][:]
+    if getattr(values, "dtype", None) is not None and values.dtype.kind in {"O", "S"}:
+        return (
+            pd.Series(values)
+            .map(
+                lambda value: (
+                    value.decode("utf-8") if isinstance(value, bytes) else value
+                )
+            )
+            .to_numpy()
+        )
+    return values
+
+
+def _core_h5_entity_lengths(h5_file: h5py.File, year: int) -> dict[str, int]:
+    lengths: dict[str, int] = {}
+    for entity, id_column in US_ENTITY_ID_COLUMNS.items():
+        if id_column in h5_file:
+            lengths[entity] = len(_read_core_h5_period_values(h5_file, id_column, year))
+    return lengths
+
+
+def _core_h5_variable_entities() -> dict[str, str]:
+    from policyengine_us.system import system
+
+    return {name: variable.entity.key for name, variable in system.variables.items()}
+
+
+def _assign_missing_entity_weights(data: dict[str, pd.DataFrame]) -> None:
+    household = data["household"]
+    if "household_id" not in household or "household_weight" not in household:
+        return
+
+    household_weights = household[["household_id", "household_weight"]]
+    person = data["person"]
+    if (
+        "person_weight" not in person
+        and "person_household_id" in person
+        and len(person) > 0
+    ):
+        person.loc[:, "person_weight"] = person["person_household_id"].map(
+            household_weights.set_index("household_id")["household_weight"]
+        )
+
+    for entity, person_entity_id in US_PERSON_ENTITY_ID_COLUMNS.items():
+        if entity == "household":
+            continue
+        entity_id = US_ENTITY_ID_COLUMNS[entity]
+        entity_weight = US_ENTITY_WEIGHT_COLUMNS[entity]
+        if (
+            entity_weight in data[entity]
+            or entity_id not in data[entity]
+            or person_entity_id not in person
+            or "person_household_id" not in person
+        ):
+            continue
+
+        entity_households = person[
+            [person_entity_id, "person_household_id"]
+        ].drop_duplicates(subset=[person_entity_id])
+        weight_lookup = entity_households.merge(
+            household_weights,
+            left_on="person_household_id",
+            right_on="household_id",
+            how="left",
+        ).set_index(person_entity_id)["household_weight"]
+        data[entity].loc[:, entity_weight] = data[entity][entity_id].map(weight_lookup)
+
+
+def _load_policyengine_core_h5(path: Path, year: int) -> USYearData:
+    """Load a PolicyEngine core variable/period H5 into .py entity DataFrames."""
+
+    data = {entity: pd.DataFrame() for entity in US_ENTITY_KEYS}
+    variable_entities = _core_h5_variable_entities()
+
+    with h5py.File(path, "r") as h5_file:
+        entity_lengths = _core_h5_entity_lengths(h5_file, year)
+        for variable_name in h5_file.keys():
+            values = _read_core_h5_period_values(h5_file, variable_name, year)
+            entity = variable_entities.get(variable_name)
+            if entity is None:
+                matching_entities = [
+                    key
+                    for key, length in entity_lengths.items()
+                    if length == len(values)
+                ]
+                if len(matching_entities) != 1:
+                    continue
+                entity = matching_entities[0]
+            if entity not in data:
+                continue
+            data[entity][variable_name] = values
+
+    _assign_missing_entity_weights(data)
+
+    return USYearData(
+        person=MicroDataFrame(data["person"], weights="person_weight"),
+        household=MicroDataFrame(data["household"], weights="household_weight"),
+        tax_unit=MicroDataFrame(data["tax_unit"], weights="tax_unit_weight"),
+        spm_unit=MicroDataFrame(data["spm_unit"], weights="spm_unit_weight"),
+        family=MicroDataFrame(data["family"], weights="family_weight"),
+        marital_unit=MicroDataFrame(
+            data["marital_unit"], weights="marital_unit_weight"
+        ),
+    )
 
 
 def create_datasets(
@@ -319,6 +475,261 @@ def load_datasets(
 
             dataset_key = f"{dataset_stem}_{year}"
             result[dataset_key] = us_dataset
+
+    return result
+
+
+CALIBRATION_QUALITY_RANK = {
+    "aggregate": 0,
+    "approximate": 1,
+    "exact": 2,
+}
+
+
+def _metadata_path_for_h5(path: Path) -> Path:
+    return Path(f"{path}.metadata.json")
+
+
+def _load_dataset_metadata(
+    path: Path, require_metadata: bool
+) -> tuple[dict, Optional[Path]]:
+    metadata_path = _metadata_path_for_h5(path)
+    if not metadata_path.exists():
+        if require_metadata:
+            raise FileNotFoundError(
+                f"Long-term dataset metadata missing for {path}. Expected "
+                f"{metadata_path}."
+            )
+        return {}, None
+    return json.loads(metadata_path.read_text(encoding="utf-8")), metadata_path
+
+
+def _quality_rank(quality: str) -> int:
+    try:
+        return CALIBRATION_QUALITY_RANK[quality]
+    except KeyError as error:
+        valid = ", ".join(sorted(CALIBRATION_QUALITY_RANK))
+        raise ValueError(
+            f"Unknown calibration quality {quality!r}. Valid qualities: {valid}."
+        ) from error
+
+
+def _require_metadata_value(
+    metadata: dict,
+    path: Path,
+    label: str,
+    actual: Any,
+    expected: Any,
+) -> None:
+    if expected is None:
+        return
+    if actual != expected:
+        raise ValueError(
+            f"Long-term dataset {path} has {label}={actual!r}, expected {expected!r}."
+        )
+
+
+def validate_long_term_dataset_metadata(
+    metadata: dict,
+    *,
+    path: Path,
+    year: int,
+    required_profile: Optional[str] = None,
+    required_target_source: Optional[str] = None,
+    required_tax_assumption: Optional[str] = None,
+    required_support_augmentation_profile: Optional[str] = None,
+    required_support_augmentation_target_year: Optional[int] = None,
+    required_support_augmentation_target_year_strategy: Optional[str] = None,
+    required_support_augmentation_blueprint_base_weight_scale: Optional[float] = None,
+    require_support_augmentation_sanitize_clone_non_target_income: Optional[
+        bool
+    ] = None,
+    require_support_augmentation_sanitize_worker_non_target_income: Optional[
+        bool
+    ] = None,
+    minimum_calibration_quality: Optional[str] = None,
+    require_validation_passed: bool = False,
+) -> None:
+    """Validate sidecar metadata for a long-term projected US dataset."""
+
+    metadata_year = metadata.get("year")
+    if metadata_year is not None and int(metadata_year) != int(year):
+        raise ValueError(
+            f"Long-term dataset {path} metadata year={metadata_year!r}, "
+            f"expected {year}."
+        )
+
+    profile = metadata.get("profile") or {}
+    target_source = metadata.get("target_source") or {}
+    tax_assumption = metadata.get("tax_assumption") or {}
+    support_augmentation = metadata.get("support_augmentation") or {}
+    calibration_audit = metadata.get("calibration_audit") or {}
+
+    _require_metadata_value(
+        metadata,
+        path,
+        "profile.name",
+        profile.get("name"),
+        required_profile,
+    )
+    _require_metadata_value(
+        metadata,
+        path,
+        "target_source.name",
+        target_source.get("name"),
+        required_target_source,
+    )
+    _require_metadata_value(
+        metadata,
+        path,
+        "tax_assumption.name",
+        tax_assumption.get("name"),
+        required_tax_assumption,
+    )
+    _require_metadata_value(
+        metadata,
+        path,
+        "support_augmentation.name",
+        support_augmentation.get("name"),
+        required_support_augmentation_profile,
+    )
+    _require_metadata_value(
+        metadata,
+        path,
+        "support_augmentation.target_year",
+        support_augmentation.get("target_year"),
+        required_support_augmentation_target_year,
+    )
+    _require_metadata_value(
+        metadata,
+        path,
+        "support_augmentation.target_year_strategy",
+        support_augmentation.get("target_year_strategy"),
+        required_support_augmentation_target_year_strategy,
+    )
+    _require_metadata_value(
+        metadata,
+        path,
+        "support_augmentation.blueprint_base_weight_scale",
+        support_augmentation.get("blueprint_base_weight_scale"),
+        required_support_augmentation_blueprint_base_weight_scale,
+    )
+    _require_metadata_value(
+        metadata,
+        path,
+        "support_augmentation.sanitize_clone_non_target_income",
+        support_augmentation.get("sanitize_clone_non_target_income"),
+        require_support_augmentation_sanitize_clone_non_target_income,
+    )
+    _require_metadata_value(
+        metadata,
+        path,
+        "support_augmentation.sanitize_worker_non_target_income",
+        support_augmentation.get("sanitize_worker_non_target_income"),
+        require_support_augmentation_sanitize_worker_non_target_income,
+    )
+
+    if minimum_calibration_quality is not None:
+        quality = calibration_audit.get("calibration_quality")
+        if quality is None:
+            raise ValueError(
+                f"Long-term dataset {path} is missing "
+                "calibration_audit.calibration_quality."
+            )
+        if _quality_rank(quality) < _quality_rank(minimum_calibration_quality):
+            raise ValueError(
+                f"Long-term dataset {path} has calibration quality {quality!r}, "
+                f"below required minimum {minimum_calibration_quality!r}."
+            )
+
+    if (
+        require_validation_passed
+        and calibration_audit.get("validation_passed") is not True
+    ):
+        raise ValueError(
+            f"Long-term dataset {path} has "
+            f"calibration_audit.validation_passed="
+            f"{calibration_audit.get('validation_passed')!r}; expected true."
+        )
+
+
+def load_long_term_datasets(
+    years: list[int],
+    data_folder: str = "./projected_datasets",
+    dataset_template: str = "{year}.h5",
+    dataset_name: str = "long_term_cps",
+    require_metadata: bool = True,
+    required_profile: Optional[str] = None,
+    required_target_source: Optional[str] = None,
+    required_tax_assumption: Optional[str] = None,
+    required_support_augmentation_profile: Optional[str] = None,
+    required_support_augmentation_target_year: Optional[int] = None,
+    required_support_augmentation_target_year_strategy: Optional[str] = None,
+    required_support_augmentation_blueprint_base_weight_scale: Optional[float] = None,
+    require_support_augmentation_sanitize_clone_non_target_income: Optional[
+        bool
+    ] = None,
+    require_support_augmentation_sanitize_worker_non_target_income: Optional[
+        bool
+    ] = None,
+    minimum_calibration_quality: Optional[str] = None,
+    require_validation_passed: bool = False,
+) -> dict[str, PolicyEngineUSDataset]:
+    """Load pre-built long-term US projected datasets.
+
+    The country data repo still owns the expensive projection and calibration
+    build. This helper lets policyengine.py consume those year-specific H5
+    artifacts with sidecar metadata validation.
+    """
+
+    result = {}
+    root = Path(data_folder).expanduser()
+    for year in years:
+        path = root / dataset_template.format(year=year)
+        if not path.exists():
+            raise FileNotFoundError(f"Long-term dataset not found: {path}")
+
+        metadata, metadata_path = _load_dataset_metadata(path, require_metadata)
+        if metadata_path is not None:
+            validate_long_term_dataset_metadata(
+                metadata,
+                path=path,
+                year=year,
+                required_profile=required_profile,
+                required_target_source=required_target_source,
+                required_tax_assumption=required_tax_assumption,
+                required_support_augmentation_profile=(
+                    required_support_augmentation_profile
+                ),
+                required_support_augmentation_target_year=(
+                    required_support_augmentation_target_year
+                ),
+                required_support_augmentation_target_year_strategy=(
+                    required_support_augmentation_target_year_strategy
+                ),
+                required_support_augmentation_blueprint_base_weight_scale=(
+                    required_support_augmentation_blueprint_base_weight_scale
+                ),
+                require_support_augmentation_sanitize_clone_non_target_income=(
+                    require_support_augmentation_sanitize_clone_non_target_income
+                ),
+                require_support_augmentation_sanitize_worker_non_target_income=(
+                    require_support_augmentation_sanitize_worker_non_target_income
+                ),
+                minimum_calibration_quality=minimum_calibration_quality,
+                require_validation_passed=require_validation_passed,
+            )
+
+        dataset = PolicyEngineUSDataset(
+            id=f"{dataset_name}_{year}",
+            name=f"{dataset_name}-{year}",
+            description=f"US long-term projected dataset for {year}",
+            filepath=str(path),
+            year=int(year),
+            metadata=metadata,
+            metadata_filepath=str(metadata_path) if metadata_path else None,
+        )
+        result[f"{dataset_name}_{year}"] = dataset
 
     return result
 
