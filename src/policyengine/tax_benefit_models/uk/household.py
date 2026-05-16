@@ -28,7 +28,9 @@ from policyengine.tax_benefit_models.common import (
     HouseholdResult,
     compile_reform,
     dispatch_extra_variables,
+    normalize_axes,
     validate_annual_household_inputs,
+    values_for_entity,
 )
 from policyengine.utils.household_validation import validate_household_input
 
@@ -63,6 +65,7 @@ def _build_situation(
     benunit: Mapping[str, Any],
     household: Mapping[str, Any],
     year: int,
+    axes: Optional[list[Any]] = None,
 ) -> dict[str, Any]:
     year_str = str(year)
 
@@ -75,15 +78,18 @@ def _build_situation(
     def _group(spec: Mapping[str, Any]) -> dict[str, Any]:
         return {"members": list(person_ids), **_periodise(spec)}
 
-    return {
+    situation = {
         "people": persons,
         "benunits": {"benunit_0": _group(benunit)},
         "households": {"household_0": _group(household)},
     }
+    if axes is not None:
+        situation["axes"] = axes
+    return situation
 
 
 _ALLOWED_KWARGS = frozenset(
-    {"people", "benunit", "household", "year", "reform", "extra_variables"}
+    {"people", "benunit", "household", "year", "reform", "extra_variables", "axes"}
 )
 
 
@@ -100,7 +106,7 @@ def _raise_unexpected_kwargs(unexpected: Mapping[str, Any]) -> None:
             )
         lines.append(f"  - '{name}'{hint}")
     lines.append(
-        "Valid kwargs: people, benunit, household, year, reform, extra_variables."
+        "Valid kwargs: people, benunit, household, year, reform, extra_variables, axes."
     )
     raise TypeError("\n".join(lines))
 
@@ -113,6 +119,7 @@ def calculate_household(
     year: int = 2026,
     reform: Optional[Mapping[str, Any]] = None,
     extra_variables: Optional[list[str]] = None,
+    axes: Optional[list[Any]] = None,
     **unexpected: Any,
 ) -> HouseholdResult:
     """Compute tax and benefit variables for a single UK household.
@@ -127,6 +134,11 @@ def calculate_household(
             close-match suggestion.
         extra_variables: Flat list of extra UK variables to compute;
             the library dispatches each to its entity.
+        axes: Optional household-calculator axes. Pass either the lower-level
+            ``[[{"name": ..., "min": ..., "max": ..., "count": ...}]]``
+            shape or a flat list of axis dictionaries. Missing ``period``
+            values default to ``year``. When axes are present, result values
+            are lists ordered by the axis grid instead of scalars.
 
     Returns:
         :class:`HouseholdResult` with dot-accessible entity results.
@@ -170,6 +182,8 @@ def calculate_household(
     )
     output_columns = _default_output_columns(extra_by_entity)
     reform_dict = compile_reform(reform, year=year, model_version=uk_latest)
+    normalized_axes = normalize_axes(axes=axes, year=year, model_version=uk_latest)
+    axes_active = normalized_axes is not None
 
     simulation = Simulation(
         situation=_build_situation(
@@ -177,6 +191,7 @@ def calculate_household(
             benunit=benunit_dict,
             household=household_dict,
             year=year,
+            axes=normalized_axes,
         ),
         reform=reform_dict,
     )
@@ -190,12 +205,27 @@ def calculate_household(
         if entity == "person":
             result["person"] = [
                 EntityResult(
-                    {variable: _safe_convert(raw[variable][i]) for variable in columns}
+                    {
+                        variable: values_for_entity(
+                            [_safe_convert(value) for value in raw[variable]],
+                            entity_index=i,
+                            entity_count=len(people),
+                            axes_active=axes_active,
+                        )
+                        for variable in columns
+                    }
                 )
                 for i in range(len(people))
             ]
         else:
             result[entity] = EntityResult(
-                {variable: _safe_convert(raw[variable][0]) for variable in columns}
+                {
+                    variable: (
+                        [_safe_convert(value) for value in raw[variable]]
+                        if axes_active
+                        else _safe_convert(raw[variable][0])
+                    )
+                    for variable in columns
+                }
             )
     return result
