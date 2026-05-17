@@ -57,6 +57,8 @@ class DataBuildInfo(BaseModel):
 
 class ArtifactPathReference(BaseModel):
     path: str
+    sha256: Optional[str] = None
+    metadata_sha256: Optional[str] = None
 
 
 class ArtifactPathTemplate(BaseModel):
@@ -502,6 +504,28 @@ def resolve_local_managed_dataset_source(
     _, _, path_in_repo = parts
 
     model_module_name, data_repo_name, data_package_name = local_hint
+    explicit_repo_roots = []
+    country_env = f"POLICYENGINE_{country_id.upper()}_DATA_REPO"
+    for env_name in (country_env, "POLICYENGINE_LOCAL_DATA_REPO_ROOT"):
+        env_value = os.environ.get(env_name)
+        if env_value:
+            explicit_repo_roots.extend(
+                [
+                    Path(env_value).expanduser(),
+                    Path(env_value).expanduser() / data_repo_name,
+                ]
+            )
+
+    for candidate_repo_root in explicit_repo_roots:
+        local_path = (
+            candidate_repo_root
+            / data_package_name
+            / "storage"
+            / path_in_repo
+        )
+        if local_path.exists():
+            return str(local_path)
+
     try:
         model_module = import_module(model_module_name)
     except ImportError:
