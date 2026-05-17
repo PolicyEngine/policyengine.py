@@ -517,12 +517,7 @@ def resolve_local_managed_dataset_source(
             )
 
     for candidate_repo_root in explicit_repo_roots:
-        local_path = (
-            candidate_repo_root
-            / data_package_name
-            / "storage"
-            / path_in_repo
-        )
+        local_path = candidate_repo_root / data_package_name / "storage" / path_in_repo
         if local_path.exists():
             return str(local_path)
 

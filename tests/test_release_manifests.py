@@ -82,7 +82,9 @@ class TestReleaseManifests:
         assert manifest.data_package.version == "1.115.3"
         assert manifest.data_package.repo_id == "policyengine/policyengine-us-data"
         assert manifest.data_package.release_manifest_path == US_DATA_RELEASE_PATH
-        assert manifest.data_package.release_manifest_revision == US_DATA_RELEASE_REVISION
+        assert (
+            manifest.data_package.release_manifest_revision == US_DATA_RELEASE_REVISION
+        )
         assert manifest.certified_data_artifact is not None
         assert (
             manifest.certified_data_artifact.build_id == "policyengine-us-data-1.115.3"
@@ -308,7 +310,9 @@ class TestReleaseManifests:
         ):
             manifest = get_data_release_manifest("us")
 
-        assert manifest.artifacts["enhanced_cps_2024"].uri == US_ENHANCED_CPS_MANAGED_URI
+        assert (
+            manifest.artifacts["enhanced_cps_2024"].uri == US_ENHANCED_CPS_MANAGED_URI
+        )
         assert (
             manifest.source_sha256
             == hashlib.sha256(json.dumps(payload).encode("utf-8")).hexdigest()
