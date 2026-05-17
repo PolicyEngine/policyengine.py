@@ -1,3 +1,5 @@
+import hashlib
+import importlib.util
 import json
 import warnings
 from importlib import metadata as importlib_metadata
@@ -12,7 +14,10 @@ from pydantic import ConfigDict, Field
 from policyengine.core import Dataset, YearData
 from policyengine.provenance.manifest import (
     dataset_logical_name,
+    get_release_manifest,
     resolve_dataset_reference,
+    resolve_local_managed_dataset_source,
+    resolve_managed_dataset_reference,
 )
 
 
@@ -553,7 +558,37 @@ def _runtime_policyengine_us_metadata() -> dict[str, Any]:
             result["direct_url"] = json.loads(direct_url_text)
         except json.JSONDecodeError:
             result["direct_url"] = {}
+    package_file = _runtime_policyengine_us_package_file()
+    if package_file is not None:
+        result["package_file_sha256"] = _sha256_file(package_file)
+        result["package_tree_sha256"] = _sha256_directory(package_file.parent)
     return result
+
+
+def _runtime_policyengine_us_package_file() -> Optional[Path]:
+    spec = importlib.util.find_spec("policyengine_us")
+    if spec is None or spec.origin is None:
+        return None
+    path = Path(spec.origin)
+    return path if path.exists() else None
+
+
+def _sha256_directory(path: Path) -> str:
+    digest = hashlib.sha256()
+    for file_path in sorted(path.rglob("*")):
+        if not file_path.is_file():
+            continue
+        if "__pycache__" in file_path.parts or file_path.suffix in {".pyc", ".pyo"}:
+            continue
+        relative_path = file_path.relative_to(path).as_posix()
+        contents = file_path.read_bytes()
+        digest.update(relative_path.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(len(contents)).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(contents)
+        digest.update(b"\0")
+    return digest.hexdigest()
 
 
 def _validate_runtime_policyengine_us_match(
@@ -581,6 +616,15 @@ def _validate_runtime_policyengine_us_match(
             f"{metadata_git_sha!r}, but the installed runtime has "
             f"{runtime_git_sha!r}."
         )
+    for label in ("package_tree_sha256", "package_file_sha256"):
+        metadata_hash = policyengine_us.get(label)
+        runtime_hash = runtime_policyengine_us.get(label)
+        if metadata_hash and runtime_hash != metadata_hash:
+            raise ValueError(
+                f"Long-term dataset {path} was built with policyengine-us "
+                f"{label} {metadata_hash!r}, but the installed runtime has "
+                f"{runtime_hash!r}."
+            )
 
 
 def validate_long_term_dataset_metadata(
@@ -737,6 +781,104 @@ def validate_long_term_dataset_metadata(
         _validate_runtime_policyengine_us_match(metadata, path=path)
 
 
+def _long_term_dataset_key(dataset_name: str, year: int) -> str:
+    return f"{dataset_name}_{int(year)}"
+
+
+def _build_long_term_dataset(
+    *,
+    path: Path,
+    year: int,
+    dataset_name: str,
+    metadata: dict,
+    metadata_path: Optional[Path],
+    dataset_uri: Optional[str] = None,
+) -> PolicyEngineUSDataset:
+    dataset = PolicyEngineUSDataset(
+        id=_long_term_dataset_key(dataset_name, year),
+        name=f"{dataset_name}-{year}",
+        description=f"US long-term projected dataset for {year}",
+        filepath=str(path),
+        year=int(year),
+        metadata=metadata,
+        metadata_filepath=str(metadata_path) if metadata_path else None,
+    )
+    if dataset_uri is not None:
+        dataset.metadata.setdefault("policyengine_bundle", {})
+        dataset.metadata["policyengine_bundle"].update(
+            {
+                "managed_by": "policyengine.py",
+                "runtime_dataset": _long_term_dataset_key(dataset_name, year),
+                "runtime_dataset_uri": dataset_uri,
+            }
+        )
+    return dataset
+
+
+def _validate_loaded_long_term_metadata(
+    *,
+    metadata: dict,
+    metadata_path: Optional[Path],
+    path: Path,
+    year: int,
+    required_profile: Optional[str],
+    required_target_source: Optional[str],
+    required_tax_assumption: Optional[str],
+    required_support_augmentation_profile: Optional[str],
+    required_support_augmentation_target_year: Optional[int],
+    required_support_augmentation_target_year_strategy: Optional[str],
+    required_support_augmentation_blueprint_base_weight_scale: Optional[float],
+    require_support_augmentation_sanitize_clone_non_target_income: Optional[bool],
+    require_support_augmentation_sanitize_worker_non_target_income: Optional[bool],
+    minimum_calibration_quality: Optional[str],
+    require_validation_passed: bool,
+    required_policyengine_us_version: Optional[str],
+    required_policyengine_us_git_sha: Optional[str],
+    require_policyengine_us_clean_build: bool,
+    require_runtime_policyengine_us_match: bool,
+) -> None:
+    if metadata_path is None:
+        return
+    validate_long_term_dataset_metadata(
+        metadata,
+        path=path,
+        year=year,
+        required_profile=required_profile,
+        required_target_source=required_target_source,
+        required_tax_assumption=required_tax_assumption,
+        required_support_augmentation_profile=required_support_augmentation_profile,
+        required_support_augmentation_target_year=(
+            required_support_augmentation_target_year
+        ),
+        required_support_augmentation_target_year_strategy=(
+            required_support_augmentation_target_year_strategy
+        ),
+        required_support_augmentation_blueprint_base_weight_scale=(
+            required_support_augmentation_blueprint_base_weight_scale
+        ),
+        require_support_augmentation_sanitize_clone_non_target_income=(
+            require_support_augmentation_sanitize_clone_non_target_income
+        ),
+        require_support_augmentation_sanitize_worker_non_target_income=(
+            require_support_augmentation_sanitize_worker_non_target_income
+        ),
+        minimum_calibration_quality=minimum_calibration_quality,
+        require_validation_passed=require_validation_passed,
+        required_policyengine_us_version=required_policyengine_us_version,
+        required_policyengine_us_git_sha=required_policyengine_us_git_sha,
+        require_policyengine_us_clean_build=require_policyengine_us_clean_build,
+        require_runtime_policyengine_us_match=require_runtime_policyengine_us_match,
+    )
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def load_long_term_datasets(
     years: list[int],
     data_folder: str = "./projected_datasets",
@@ -779,54 +921,178 @@ def load_long_term_datasets(
             raise FileNotFoundError(f"Long-term dataset not found: {path}")
 
         metadata, metadata_path = _load_dataset_metadata(path, require_metadata)
-        if metadata_path is not None:
-            validate_long_term_dataset_metadata(
-                metadata,
-                path=path,
-                year=year,
-                required_profile=required_profile,
-                required_target_source=required_target_source,
-                required_tax_assumption=required_tax_assumption,
-                required_support_augmentation_profile=(
-                    required_support_augmentation_profile
-                ),
-                required_support_augmentation_target_year=(
-                    required_support_augmentation_target_year
-                ),
-                required_support_augmentation_target_year_strategy=(
-                    required_support_augmentation_target_year_strategy
-                ),
-                required_support_augmentation_blueprint_base_weight_scale=(
-                    required_support_augmentation_blueprint_base_weight_scale
-                ),
-                require_support_augmentation_sanitize_clone_non_target_income=(
-                    require_support_augmentation_sanitize_clone_non_target_income
-                ),
-                require_support_augmentation_sanitize_worker_non_target_income=(
-                    require_support_augmentation_sanitize_worker_non_target_income
-                ),
-                minimum_calibration_quality=minimum_calibration_quality,
-                require_validation_passed=require_validation_passed,
-                required_policyengine_us_version=required_policyengine_us_version,
-                required_policyengine_us_git_sha=required_policyengine_us_git_sha,
-                require_policyengine_us_clean_build=(
-                    require_policyengine_us_clean_build
-                ),
-                require_runtime_policyengine_us_match=(
-                    require_runtime_policyengine_us_match
-                ),
+        _validate_loaded_long_term_metadata(
+            metadata=metadata,
+            metadata_path=metadata_path,
+            path=path,
+            year=year,
+            required_profile=required_profile,
+            required_target_source=required_target_source,
+            required_tax_assumption=required_tax_assumption,
+            required_support_augmentation_profile=(
+                required_support_augmentation_profile
+            ),
+            required_support_augmentation_target_year=(
+                required_support_augmentation_target_year
+            ),
+            required_support_augmentation_target_year_strategy=(
+                required_support_augmentation_target_year_strategy
+            ),
+            required_support_augmentation_blueprint_base_weight_scale=(
+                required_support_augmentation_blueprint_base_weight_scale
+            ),
+            require_support_augmentation_sanitize_clone_non_target_income=(
+                require_support_augmentation_sanitize_clone_non_target_income
+            ),
+            require_support_augmentation_sanitize_worker_non_target_income=(
+                require_support_augmentation_sanitize_worker_non_target_income
+            ),
+            minimum_calibration_quality=minimum_calibration_quality,
+            require_validation_passed=require_validation_passed,
+            required_policyengine_us_version=required_policyengine_us_version,
+            required_policyengine_us_git_sha=required_policyengine_us_git_sha,
+            require_policyengine_us_clean_build=require_policyengine_us_clean_build,
+            require_runtime_policyengine_us_match=require_runtime_policyengine_us_match,
+        )
+
+        dataset = _build_long_term_dataset(
+            path=path,
+            year=year,
+            dataset_name=dataset_name,
+            metadata=metadata,
+            metadata_path=metadata_path,
+        )
+        result[_long_term_dataset_key(dataset_name, year)] = dataset
+
+    return result
+
+
+def load_managed_long_term_datasets(
+    years: list[int],
+    dataset_name: str = "long_term_cps",
+    require_metadata: bool = True,
+    required_profile: Optional[str] = None,
+    required_target_source: Optional[str] = None,
+    required_tax_assumption: Optional[str] = None,
+    required_support_augmentation_profile: Optional[str] = None,
+    required_support_augmentation_target_year: Optional[int] = None,
+    required_support_augmentation_target_year_strategy: Optional[str] = None,
+    required_support_augmentation_blueprint_base_weight_scale: Optional[float] = None,
+    require_support_augmentation_sanitize_clone_non_target_income: Optional[
+        bool
+    ] = None,
+    require_support_augmentation_sanitize_worker_non_target_income: Optional[
+        bool
+    ] = None,
+    minimum_calibration_quality: Optional[str] = None,
+    require_validation_passed: bool = False,
+    required_policyengine_us_version: Optional[str] = None,
+    required_policyengine_us_git_sha: Optional[str] = None,
+    require_policyengine_us_clean_build: bool = False,
+    require_runtime_policyengine_us_match: bool = True,
+) -> dict[str, PolicyEngineUSDataset]:
+    """Load bundled long-term US datasets from the managed release manifest.
+
+    Each requested year must have a logical dataset entry named
+    ``{dataset_name}_{year}`` in the bundled US manifest. For local development,
+    policyengine.py first checks for the corresponding sibling data-repo mirror
+    before falling back to the managed URI. Long-term H5 files are large, so this
+    helper intentionally refuses to stream remote files directly; callers should
+    either provide the published local mirror or use ``load_long_term_datasets``
+    with an explicit local data folder.
+    """
+
+    manifest = get_release_manifest("us")
+    if required_policyengine_us_version is None:
+        required_policyengine_us_version = manifest.model_package.version
+
+    result = {}
+    for year in years:
+        key = _long_term_dataset_key(dataset_name, year)
+        path_reference = manifest.datasets.get(key)
+        if path_reference is None:
+            raise ValueError(
+                f"Managed long-term dataset {key!r} is not present in the "
+                "bundled US release manifest."
+            )
+        if not path_reference.sha256:
+            raise ValueError(
+                f"Managed long-term dataset {key!r} is missing a sha256 in "
+                "the bundled US release manifest."
+            )
+        dataset_uri = resolve_managed_dataset_reference("us", key)
+        dataset_source = resolve_local_managed_dataset_source("us", dataset_uri)
+        if "://" in dataset_source:
+            raise FileNotFoundError(
+                f"Managed long-term dataset {key!r} resolves to {dataset_uri}, "
+                "but no local mirror exists. Download the bundled artifact into "
+                "the sibling policyengine-us-data storage mirror or call "
+                "load_long_term_datasets(..., data_folder=...) with an explicit "
+                "local directory."
             )
 
-        dataset = PolicyEngineUSDataset(
-            id=f"{dataset_name}_{year}",
-            name=f"{dataset_name}-{year}",
-            description=f"US long-term projected dataset for {year}",
-            filepath=str(path),
-            year=int(year),
+        path = Path(dataset_source).expanduser()
+        actual_sha256 = _sha256_file(path)
+        if actual_sha256 != path_reference.sha256:
+            raise ValueError(
+                f"Managed long-term dataset {key!r} at {path} has sha256 "
+                f"{actual_sha256}, expected {path_reference.sha256}."
+            )
+        metadata, metadata_path = _load_dataset_metadata(path, require_metadata)
+        if path_reference.metadata_sha256:
+            if metadata_path is None:
+                raise FileNotFoundError(
+                    f"Managed long-term dataset {key!r} at {path} is missing "
+                    "metadata sidecar required by the bundled manifest."
+                )
+            metadata_sha256 = _sha256_file(metadata_path)
+            if metadata_sha256 != path_reference.metadata_sha256:
+                raise ValueError(
+                    f"Managed long-term dataset {key!r} metadata at "
+                    f"{metadata_path} has sha256 {metadata_sha256}, expected "
+                    f"{path_reference.metadata_sha256}."
+                )
+        _validate_loaded_long_term_metadata(
             metadata=metadata,
-            metadata_filepath=str(metadata_path) if metadata_path else None,
+            metadata_path=metadata_path,
+            path=path,
+            year=year,
+            required_profile=required_profile,
+            required_target_source=required_target_source,
+            required_tax_assumption=required_tax_assumption,
+            required_support_augmentation_profile=(
+                required_support_augmentation_profile
+            ),
+            required_support_augmentation_target_year=(
+                required_support_augmentation_target_year
+            ),
+            required_support_augmentation_target_year_strategy=(
+                required_support_augmentation_target_year_strategy
+            ),
+            required_support_augmentation_blueprint_base_weight_scale=(
+                required_support_augmentation_blueprint_base_weight_scale
+            ),
+            require_support_augmentation_sanitize_clone_non_target_income=(
+                require_support_augmentation_sanitize_clone_non_target_income
+            ),
+            require_support_augmentation_sanitize_worker_non_target_income=(
+                require_support_augmentation_sanitize_worker_non_target_income
+            ),
+            minimum_calibration_quality=minimum_calibration_quality,
+            require_validation_passed=require_validation_passed,
+            required_policyengine_us_version=required_policyengine_us_version,
+            required_policyengine_us_git_sha=required_policyengine_us_git_sha,
+            require_policyengine_us_clean_build=require_policyengine_us_clean_build,
+            require_runtime_policyengine_us_match=require_runtime_policyengine_us_match,
         )
-        result[f"{dataset_name}_{year}"] = dataset
+        result[key] = _build_long_term_dataset(
+            path=path,
+            year=year,
+            dataset_name=dataset_name,
+            metadata=metadata,
+            metadata_path=metadata_path,
+            dataset_uri=dataset_uri,
+        )
 
     return result
 

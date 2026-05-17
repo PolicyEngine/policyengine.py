@@ -22,6 +22,7 @@ from policyengine.provenance.manifest import (
     get_release_manifest,
     https_release_manifest_uri,
     resolve_dataset_reference,
+    resolve_local_managed_dataset_source,
     resolve_managed_dataset_reference,
 )
 from policyengine.tax_benefit_models.uk import (
@@ -38,6 +39,18 @@ POLICYENGINE_VERSION = re.search(
     PYPROJECT.read_text(),
     re.MULTILINE,
 ).group(1)
+US_MODEL_VERSION = "1.691.12"
+US_DATA_RELEASE_PATH = "releases/crfb-longrun-20260517/release_manifest.json"
+US_DATA_RELEASE_REVISION = "crfb-longrun-20260517"
+US_CERTIFICATION_SOURCE = "policyengine.py candidate long-term manifest"
+US_DEFAULT_DATASET_URI = (
+    "hf://policyengine/policyengine-us-data/"
+    "enhanced_cps_2024.h5@69fc39a7fece4c49ba87291e598e76b40568cc5d"
+)
+US_ENHANCED_CPS_MANAGED_URI = (
+    "hf://policyengine/policyengine-us-data/"
+    f"enhanced_cps_2024.h5@{US_DATA_RELEASE_REVISION}"
+)
 
 
 def _response_with_json(payload: dict) -> MagicMock:
@@ -64,17 +77,13 @@ class TestReleaseManifests:
         assert manifest.country_id == "us"
         assert manifest.policyengine_version == POLICYENGINE_VERSION
         assert manifest.model_package.name == "policyengine-us"
-        assert manifest.model_package.version == "1.691.10"
+        assert manifest.model_package.version == US_MODEL_VERSION
         assert manifest.data_package.name == "policyengine-us-data"
         assert manifest.data_package.version == "1.115.3"
         assert manifest.data_package.repo_id == "policyengine/policyengine-us-data"
+        assert manifest.data_package.release_manifest_path == US_DATA_RELEASE_PATH
         assert (
-            manifest.data_package.release_manifest_path
-            == "releases/1.115.3/release_manifest.json"
-        )
-        assert (
-            manifest.data_package.release_manifest_revision
-            == "69fc39a7fece4c49ba87291e598e76b40568cc5d"
+            manifest.data_package.release_manifest_revision == US_DATA_RELEASE_REVISION
         )
         assert manifest.certified_data_artifact is not None
         assert (
@@ -82,9 +91,12 @@ class TestReleaseManifests:
         )
         assert manifest.certified_data_artifact.dataset == "enhanced_cps_2024"
         assert manifest.certification is not None
-        assert manifest.certification.data_build_id == "policyengine-us-data-1.115.3"
-        assert manifest.certification.built_with_model_version == "1.691.10"
-        assert manifest.certification.certified_for_model_version == "1.691.10"
+        assert (
+            manifest.certification.data_build_id
+            == "policyengine-us-data-crfb-longrun-20260517"
+        )
+        assert manifest.certification.built_with_model_version == US_MODEL_VERSION
+        assert manifest.certification.certified_for_model_version == US_MODEL_VERSION
 
     def test__given_uk_manifest__then_has_pinned_model_and_data_packages(self):
         manifest = get_release_manifest("uk")
@@ -117,10 +129,7 @@ class TestReleaseManifests:
     def test__given_us_dataset_name__then_resolves_to_versioned_hf_url(self):
         resolved = resolve_dataset_reference("us", "enhanced_cps_2024")
 
-        assert (
-            resolved
-            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@69fc39a7fece4c49ba87291e598e76b40568cc5d"
-        )
+        assert resolved == US_ENHANCED_CPS_MANAGED_URI
 
     def test__given_uk_dataset_name__then_resolves_to_versioned_hf_url(self):
         resolved = resolve_dataset_reference("uk", "enhanced_frs_2023_24")
@@ -170,6 +179,28 @@ class TestReleaseManifests:
         dataset = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.73.0"
 
         assert dataset_logical_name(dataset) == "enhanced_cps_2024"
+
+    def test__given_explicit_local_data_repo__then_resolves_local_mirror(
+        self, monkeypatch, tmp_path
+    ):
+        local_dataset = (
+            tmp_path
+            / "policyengine-us-data"
+            / "policyengine_us_data"
+            / "storage"
+            / "long_term"
+            / "2100.h5"
+        )
+        local_dataset.parent.mkdir(parents=True)
+        local_dataset.write_text("", encoding="utf-8")
+        monkeypatch.setenv("POLICYENGINE_LOCAL_DATA_REPO_ROOT", str(tmp_path))
+
+        resolved = resolve_local_managed_dataset_source(
+            "us",
+            "hf://policyengine/policyengine-us-data/long_term/2100.h5@candidate",
+        )
+
+        assert resolved == str(local_dataset)
 
     def test__given_country__then_can_fetch_data_release_manifest(self):
         get_data_release_manifest.cache_clear()
@@ -240,8 +271,7 @@ class TestReleaseManifests:
         mock_get.assert_called_once()
         assert mock_get.call_args.args[0] == (
             "https://huggingface.co/policyengine/policyengine-us-data/resolve/"
-            "69fc39a7fece4c49ba87291e598e76b40568cc5d/"
-            "releases/1.115.3/release_manifest.json"
+            f"{US_DATA_RELEASE_REVISION}/{US_DATA_RELEASE_PATH}"
         )
 
     def test__given_explicit_manifest_revision__then_builds_manifest_url(self):
@@ -249,8 +279,7 @@ class TestReleaseManifests:
 
         assert https_release_manifest_uri(manifest.data_package) == (
             "https://huggingface.co/policyengine/policyengine-us-data/resolve/"
-            "69fc39a7fece4c49ba87291e598e76b40568cc5d/"
-            "releases/1.115.3/release_manifest.json"
+            f"{US_DATA_RELEASE_REVISION}/{US_DATA_RELEASE_PATH}"
         )
 
     def test__given_release_manifest_artifact_uses_version_tag__then_rewrites_to_commit(
@@ -282,8 +311,7 @@ class TestReleaseManifests:
             manifest = get_data_release_manifest("us")
 
         assert (
-            manifest.artifacts["enhanced_cps_2024"].uri
-            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@69fc39a7fece4c49ba87291e598e76b40568cc5d"
+            manifest.artifacts["enhanced_cps_2024"].uri == US_ENHANCED_CPS_MANAGED_URI
         )
         assert (
             manifest.source_sha256
@@ -394,7 +422,7 @@ class TestReleaseManifests:
         ):
             certification = certify_data_release_compatibility(
                 "us",
-                runtime_model_version="1.691.10",
+                runtime_model_version=US_MODEL_VERSION,
             )
 
         assert certification == get_release_manifest("us").certification
@@ -410,7 +438,7 @@ class TestReleaseManifests:
         ):
             certification = certify_data_release_compatibility(
                 "us",
-                runtime_model_version="1.691.10",
+                runtime_model_version=US_MODEL_VERSION,
             )
 
         assert certification == get_release_manifest("us").certification
@@ -508,7 +536,7 @@ class TestReleaseManifests:
         )
 
         assert result.returncode == 0, result.stderr
-        assert "policyengine.py bundled manifest" in result.stdout
+        assert US_CERTIFICATION_SOURCE in result.stdout
 
     def test__given_mismatched_version_and_fingerprint__then_certification_fails(self):
         get_data_release_manifest.cache_clear()

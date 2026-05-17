@@ -1,5 +1,7 @@
+import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import h5py
 import pandas as pd
@@ -11,6 +13,7 @@ from policyengine.tax_benefit_models.us.datasets import (
     PolicyEngineUSDataset,
     USYearData,
     load_long_term_datasets,
+    load_managed_long_term_datasets,
 )
 
 
@@ -123,6 +126,26 @@ def _write_metadata(path: Path, year: int, **overrides) -> None:
     )
 
 
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _manifest_with_long_term_sha(
+    sha256: str,
+    version: str = "1.691.12",
+    metadata_sha256=None,
+):
+    return SimpleNamespace(
+        model_package=SimpleNamespace(version=version),
+        datasets={
+            "long_term_cps_2100": SimpleNamespace(
+                sha256=sha256,
+                metadata_sha256=metadata_sha256,
+            )
+        },
+    )
+
+
 def test__load_long_term_datasets__loads_h5_and_sidecar_metadata(tmp_path):
     h5_path = tmp_path / "2075.h5"
     _write_us_h5(h5_path, 2075)
@@ -230,6 +253,167 @@ def test__load_long_term_datasets__rejects_support_contract_mismatch(tmp_path):
         )
 
 
+def test__load_managed_long_term_datasets__loads_bundled_local_mirror(
+    monkeypatch,
+    tmp_path,
+):
+    h5_path = tmp_path / "2100.h5"
+    _write_us_h5(h5_path, 2100)
+    _write_metadata(
+        h5_path,
+        2100,
+        policyengine_us={"version": "1.691.12"},
+    )
+    dataset_uri = "hf://policyengine/policyengine-us-data/long_term/2100.h5@abc123"
+
+    monkeypatch.setattr(
+        us_datasets_module,
+        "get_release_manifest",
+        lambda country_id: _manifest_with_long_term_sha(_sha256(h5_path)),
+    )
+    monkeypatch.setattr(
+        us_datasets_module,
+        "resolve_managed_dataset_reference",
+        lambda country_id, dataset: dataset_uri,
+    )
+    monkeypatch.setattr(
+        us_datasets_module,
+        "resolve_local_managed_dataset_source",
+        lambda country_id, uri: str(h5_path),
+    )
+
+    datasets = load_managed_long_term_datasets(
+        [2100],
+        required_profile="ss-payroll-tob",
+        required_target_source="trustees_2025_current_law",
+        required_tax_assumption="trustees-core-thresholds-v1",
+        minimum_calibration_quality="exact",
+        require_validation_passed=True,
+    )
+
+    dataset = datasets["long_term_cps_2100"]
+    assert dataset.filepath == str(h5_path)
+    assert dataset.metadata["policyengine_bundle"] == {
+        "managed_by": "policyengine.py",
+        "runtime_dataset": "long_term_cps_2100",
+        "runtime_dataset_uri": dataset_uri,
+    }
+
+
+def test__load_managed_long_term_datasets__defaults_to_manifest_model_version(
+    monkeypatch,
+    tmp_path,
+):
+    h5_path = tmp_path / "2100.h5"
+    _write_us_h5(h5_path, 2100)
+    _write_metadata(h5_path, 2100, policyengine_us={"version": "1.691.10"})
+    dataset_uri = "hf://policyengine/policyengine-us-data/long_term/2100.h5@abc123"
+
+    monkeypatch.setattr(
+        us_datasets_module,
+        "get_release_manifest",
+        lambda country_id: _manifest_with_long_term_sha(_sha256(h5_path)),
+    )
+    monkeypatch.setattr(
+        us_datasets_module,
+        "resolve_managed_dataset_reference",
+        lambda country_id, dataset: dataset_uri,
+    )
+    monkeypatch.setattr(
+        us_datasets_module,
+        "resolve_local_managed_dataset_source",
+        lambda country_id, uri: str(h5_path),
+    )
+
+    with pytest.raises(ValueError, match="policyengine_us.version"):
+        load_managed_long_term_datasets([2100])
+
+
+def test__load_managed_long_term_datasets__checks_manifest_sha256(
+    monkeypatch,
+    tmp_path,
+):
+    h5_path = tmp_path / "2100.h5"
+    _write_us_h5(h5_path, 2100)
+    _write_metadata(h5_path, 2100, policyengine_us={"version": "1.691.12"})
+    dataset_uri = "hf://policyengine/policyengine-us-data/long_term/2100.h5@abc123"
+
+    monkeypatch.setattr(
+        us_datasets_module,
+        "get_release_manifest",
+        lambda country_id: _manifest_with_long_term_sha("0" * 64),
+    )
+    monkeypatch.setattr(
+        us_datasets_module,
+        "resolve_managed_dataset_reference",
+        lambda country_id, dataset: dataset_uri,
+    )
+    monkeypatch.setattr(
+        us_datasets_module,
+        "resolve_local_managed_dataset_source",
+        lambda country_id, uri: str(h5_path),
+    )
+
+    with pytest.raises(ValueError, match="sha256"):
+        load_managed_long_term_datasets([2100])
+
+
+def test__load_managed_long_term_datasets__checks_metadata_sha256(
+    monkeypatch,
+    tmp_path,
+):
+    h5_path = tmp_path / "2100.h5"
+    _write_us_h5(h5_path, 2100)
+    _write_metadata(h5_path, 2100, policyengine_us={"version": "1.691.12"})
+    dataset_uri = "hf://policyengine/policyengine-us-data/long_term/2100.h5@abc123"
+
+    monkeypatch.setattr(
+        us_datasets_module,
+        "get_release_manifest",
+        lambda country_id: _manifest_with_long_term_sha(
+            _sha256(h5_path),
+            metadata_sha256="0" * 64,
+        ),
+    )
+    monkeypatch.setattr(
+        us_datasets_module,
+        "resolve_managed_dataset_reference",
+        lambda country_id, dataset: dataset_uri,
+    )
+    monkeypatch.setattr(
+        us_datasets_module,
+        "resolve_local_managed_dataset_source",
+        lambda country_id, uri: str(h5_path),
+    )
+
+    with pytest.raises(ValueError, match="metadata"):
+        load_managed_long_term_datasets([2100])
+
+
+def test__load_managed_long_term_datasets__requires_local_mirror(
+    monkeypatch,
+):
+    dataset_uri = "hf://policyengine/policyengine-us-data/long_term/2100.h5@abc123"
+    monkeypatch.setattr(
+        us_datasets_module,
+        "get_release_manifest",
+        lambda country_id: _manifest_with_long_term_sha("0" * 64),
+    )
+    monkeypatch.setattr(
+        us_datasets_module,
+        "resolve_managed_dataset_reference",
+        lambda country_id, dataset: dataset_uri,
+    )
+    monkeypatch.setattr(
+        us_datasets_module,
+        "resolve_local_managed_dataset_source",
+        lambda country_id, uri: uri,
+    )
+
+    with pytest.raises(FileNotFoundError, match="no local mirror exists"):
+        load_managed_long_term_datasets([2100])
+
+
 def test__load_long_term_datasets__rejects_policyengine_us_version_mismatch(
     tmp_path,
 ):
@@ -309,3 +493,34 @@ def test__load_long_term_datasets__can_require_runtime_policyengine_us_match(
     assert datasets["long_term_cps_2075"].metadata["policyengine_us"]["version"] == (
         "1.691.10"
     )
+
+
+def test__load_long_term_datasets__can_require_runtime_policyengine_us_hash_match(
+    monkeypatch,
+    tmp_path,
+):
+    h5_path = tmp_path / "2075.h5"
+    _write_us_h5(h5_path, 2075)
+    _write_metadata(
+        h5_path,
+        2075,
+        policyengine_us={
+            "version": "1.691.12",
+            "package_tree_sha256": "a" * 64,
+        },
+    )
+    monkeypatch.setattr(
+        us_datasets_module,
+        "_runtime_policyengine_us_metadata",
+        lambda: {
+            "version": "1.691.12",
+            "package_tree_sha256": "b" * 64,
+        },
+    )
+
+    with pytest.raises(ValueError, match="package_tree_sha256"):
+        load_long_term_datasets(
+            [2075],
+            data_folder=str(tmp_path),
+            require_runtime_policyengine_us_match=True,
+        )

@@ -38,6 +38,7 @@ if find_spec("policyengine_us") is not None:
         ensure_datasets,
         load_datasets,
         load_long_term_datasets,
+        load_managed_long_term_datasets,
         validate_long_term_dataset_metadata,
     )
     from .household import calculate_household
@@ -63,6 +64,7 @@ if find_spec("policyengine_us") is not None:
         "create_datasets",
         "load_datasets",
         "load_long_term_datasets",
+        "load_managed_long_term_datasets",
         "ensure_datasets",
         "validate_long_term_dataset_metadata",
         "PolicyEngineUS",

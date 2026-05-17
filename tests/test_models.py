@@ -113,7 +113,7 @@ class TestUSModel:
         assert us_latest.release_manifest is not None
         assert us_latest.release_manifest.country_id == "us"
         assert us_latest.model_package.name == "policyengine-us"
-        assert us_latest.model_package.version == "1.691.10"
+        assert us_latest.model_package.version == "1.691.12"
         assert us_latest.data_package.name == "policyengine-us-data"
         assert us_latest.data_package.version == "1.115.3"
         assert (
