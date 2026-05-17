@@ -71,28 +71,45 @@ class Derivation:
         return top_level_contributions(self)
 
 
-def _scalar(value: Any) -> Any:
-    """Reduce a vectorized OpenFisca result to a single Python scalar."""
-    if hasattr(value, "__len__") and len(value):
-        item = value[0]
-    else:
-        item = value
-    if hasattr(item, "item"):
-        item = item.item()
-    return item
+def _to_python(value: Any) -> Any:
+    """Convert a numpy scalar to a native Python scalar; pass through tuples."""
+    if hasattr(value, "item"):
+        return value.item()
+    return value
+
+
+def _capture(value: Any) -> Any:
+    """Capture an OpenFisca trace value as a Python scalar or tuple.
+
+    Per-person variables come through as numpy arrays of length N (one per
+    person in the household); tax-unit / household variables come through as
+    length-1 arrays. Length-1 arrays collapse to a scalar so most renderings
+    stay terse; multi-entity arrays are preserved as tuples so that
+    summarising "$45,000 SE income + $40,000 wages" doesn't silently drop
+    the spouse's row.
+    """
+    if hasattr(value, "__len__"):
+        if len(value) == 0:
+            return None
+        if len(value) == 1:
+            return _to_python(value[0])
+        return tuple(_to_python(item) for item in value)
+    return _to_python(value)
 
 
 def is_zero_value(value: Any) -> bool:
-    """True if ``value`` is the zero of its type (False, 0, 0.0).
+    """True iff ``value`` is the zero of its type across every entity.
 
-    Exported because callers sometimes want to filter their own copies of the
-    tree without redefining what "zero" means.
+    For multi-entity (tuple) values, every entry must be falsy/zero. Exported
+    because callers sometimes want to filter their own copies of the tree
+    without redefining what "zero" means.
     """
-    item = _scalar(value)
-    if isinstance(item, bool):
-        return item is False
-    if isinstance(item, (int, float)):
-        return item == 0
+    if isinstance(value, tuple):
+        return all(is_zero_value(item) for item in value)
+    if isinstance(value, bool):
+        return value is False
+    if isinstance(value, (int, float)):
+        return value == 0
     return False
 
 
@@ -100,7 +117,7 @@ def _convert(node: Any) -> TraceNode:
     """Convert an OpenFisca tracer node into our stable ``TraceNode`` shape."""
     return TraceNode(
         name=node.name,
-        value=_scalar(node.value),
+        value=_capture(node.value),
         children=tuple(_convert(child) for child in node.children),
     )
 
@@ -129,6 +146,19 @@ def _render(
 
 
 def _format_value(value: Any) -> str:
+    if isinstance(value, tuple):
+        formatted = [_format_value(item) for item in value]
+        if all(
+            isinstance(item, (int, float)) and not isinstance(item, bool)
+            for item in value
+        ):
+            total = sum(value)
+            return f"{_format_scalar(total)} (per entity: {', '.join(formatted)})"
+        return "[" + ", ".join(formatted) + "]"
+    return _format_scalar(value)
+
+
+def _format_scalar(value: Any) -> str:
     if isinstance(value, bool):
         return "True" if value else "False"
     if isinstance(value, float):
@@ -174,7 +204,7 @@ def derive(simulation: Any, variable: str, period: Any) -> Derivation:
         )
     return Derivation(
         variable=variable,
-        value=_scalar(root.value),
+        value=_capture(root.value),
         trace=_convert(root),
         period=period,
     )

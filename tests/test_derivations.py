@@ -103,6 +103,28 @@ def test_trace_text_drops_zero_subtrees_below_depth_one():
     assert "dependent_real_thing = 5" in text
 
 
+def test_trace_text_shows_per_entity_values_with_sum():
+    # Multi-person households: per-person values come through as tuples and
+    # render as "sum (per entity: a, b)" so summarisers don't silently drop
+    # the spouse's contribution.
+    root = TraceNode(
+        name="irs_gross_income",
+        value=(45000.0, 40000.0),
+    )
+    text = root.to_text()
+    assert "85000" in text
+    assert "45000" in text
+    assert "40000" in text
+    assert "per entity" in text
+
+
+def test_is_zero_value_handles_multi_entity_tuples():
+    assert is_zero_value((0, 0, 0))
+    assert is_zero_value((False, False))
+    assert not is_zero_value((0, 1))
+    assert not is_zero_value((False, True))
+
+
 def test_narrate_passes_trace_to_litellm(monkeypatch):
     captured: dict[str, object] = {}
 
