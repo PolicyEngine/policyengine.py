@@ -184,6 +184,8 @@ def _fetch_data_release_manifest(
     repo_id: str,
     release_manifest_path: str,
     revision: str,
+    *,
+    allow_main_fallback: bool = True,
 ) -> Optional[_DataReleaseManifestFetch]:
     """Fetch a data release manifest from HF if one is available.
 
@@ -192,9 +194,11 @@ def _fetch_data_release_manifest(
     dataset artifact directly.
 
     Data releases are stored under versioned paths, but the HF repository does
-    not necessarily create a matching git tag for each data version. Try the
-    version revision first for repositories that do publish tags, then fall
-    back to ``main`` and persist the immutable ``x-repo-commit`` header.
+    not necessarily create a matching git tag for each data version. For
+    inferred data-version revisions, try the version revision first for
+    repositories that do publish tags, then fall back to ``main`` and persist
+    the immutable ``x-repo-commit`` header. Explicit revisions do not get that
+    fallback because a typo or stale CRFB run ref should fail closed.
     """
     headers = {"User-Agent": "policyengine.py"}
     token = os.environ.get("HUGGING_FACE_TOKEN") or os.environ.get("HF_TOKEN")
@@ -202,7 +206,7 @@ def _fetch_data_release_manifest(
         headers["Authorization"] = f"Bearer {token}"
 
     revisions = [revision]
-    if revision != "main":
+    if allow_main_fallback and revision != "main":
         revisions.append("main")
 
     for candidate in revisions:
@@ -232,6 +236,83 @@ def _updated_release_manifest_path(
     if old_data in current_path:
         return current_path.replace(old_data, new_data)
     return current_path
+
+
+def _release_artifact_by_path(
+    release_manifest_json: dict,
+    path: str,
+) -> Optional[dict]:
+    artifacts = release_manifest_json.get("artifacts", {})
+    for artifact in artifacts.values():
+        if artifact.get("path") == path:
+            return artifact
+    return None
+
+
+def _metadata_sidecar_path(path: str) -> str:
+    return f"{path}.metadata.json"
+
+
+def _refresh_dataset_path_references_from_data_release(
+    manifest_json: dict,
+    release_manifest_json: dict,
+) -> None:
+    """Refresh bundled dataset hash pins from a data release manifest.
+
+    The certified default dataset is handled separately because it also carries
+    a URI and build ID. This helper covers every logical dataset entry under
+    ``datasets``; notably the US long-term bundle stores one entry per year with
+    both H5 and metadata-sidecar hashes.
+    """
+    for path_reference in manifest_json.get("datasets", {}).values():
+        path = path_reference.get("path")
+        if not path:
+            continue
+        artifact = _release_artifact_by_path(release_manifest_json, path)
+        if artifact is None:
+            if "sha256" in path_reference or "metadata_sha256" in path_reference:
+                raise ValueError(
+                    "Data release manifest is missing dataset artifact "
+                    f"for existing pinned path {path!r}; refusing to leave "
+                    "stale dataset hash pins in place."
+                )
+            continue
+        if artifact.get("path"):
+            path_reference["path"] = artifact["path"]
+            path = artifact["path"]
+        dataset_sha256 = artifact.get("sha256")
+        if dataset_sha256:
+            path_reference["sha256"] = dataset_sha256
+        elif "sha256" in path_reference:
+            raise ValueError(
+                "Data release manifest dataset artifact lacks sha256 "
+                f"for existing pinned path {path!r}; refusing to leave "
+                "stale dataset hash pin in place."
+            )
+
+        metadata_artifact = _release_artifact_by_path(
+            release_manifest_json,
+            _metadata_sidecar_path(path),
+        )
+        had_metadata_pin = "metadata_sha256" in path_reference
+        if metadata_artifact is None:
+            if had_metadata_pin:
+                raise ValueError(
+                    "Data release manifest is missing metadata sidecar artifact "
+                    f"for {path!r}; refusing to drop existing metadata hash pin."
+                )
+            path_reference.pop("metadata_sha256", None)
+            continue
+        metadata_sha256 = metadata_artifact.get("sha256")
+        if not metadata_sha256:
+            if had_metadata_pin:
+                raise ValueError(
+                    "Data release manifest metadata sidecar artifact lacks sha256 "
+                    f"for {path!r}; refusing to drop existing metadata hash pin."
+                )
+            path_reference.pop("metadata_sha256", None)
+            continue
+        path_reference["metadata_sha256"] = metadata_sha256
 
 
 # ---------------------------------------------------------------------------
@@ -281,6 +362,8 @@ def refresh_release_bundle(
     *,
     model_version: Optional[str] = None,
     data_version: Optional[str] = None,
+    release_manifest_path: Optional[str] = None,
+    release_manifest_revision: Optional[str] = None,
     update_pyproject: bool = True,
     manifest_dir: Path = MANIFEST_DIR,
     pyproject_path: Path = PYPROJECT,
@@ -293,6 +376,11 @@ def refresh_release_bundle(
             If ``None``, keeps the existing pin.
         data_version: New data-package version, e.g. ``"1.83.4"``. If
             ``None``, keeps the existing pin.
+        release_manifest_path: Optional explicit data release manifest path.
+            Needed for custom bundles whose path does not include the data
+            package version, such as CRFB long-run candidate releases.
+        release_manifest_revision: Optional HF revision to fetch the data
+            release manifest from before pinning the immutable repo commit.
         update_pyproject: When True, also bumps the country extra in
             ``pyproject.toml`` to ``model_version``.
         manifest_dir: Overridable for tests.
@@ -339,17 +427,27 @@ def refresh_release_bundle(
     data_package_json = manifest_json["data_package"]
     release_manifest_json = None
     new_release_manifest_revision = None
-    new_release_manifest_path = data_package_json.get("release_manifest_path")
-    if new_data != old_data and new_release_manifest_path is not None:
-        new_release_manifest_path = _updated_release_manifest_path(
-            current_path=new_release_manifest_path,
-            old_data=old_data,
-            new_data=new_data,
-        )
+    new_release_manifest_path = release_manifest_path or data_package_json.get(
+        "release_manifest_path"
+    )
+    should_fetch_release_manifest = new_release_manifest_path is not None and (
+        new_data != old_data
+        or release_manifest_path is not None
+        or release_manifest_revision is not None
+    )
+    if should_fetch_release_manifest:
+        if release_manifest_path is None:
+            new_release_manifest_path = _updated_release_manifest_path(
+                current_path=new_release_manifest_path,
+                old_data=old_data,
+                new_data=new_data,
+            )
+        fetch_revision = release_manifest_revision or new_data
         release_manifest_fetch = _fetch_data_release_manifest(
             repo_id=repo_id,
             release_manifest_path=new_release_manifest_path,
-            revision=new_data,
+            revision=fetch_revision,
+            allow_main_fallback=release_manifest_revision is None,
         )
         if release_manifest_fetch is None:
             raise ValueError(
@@ -399,12 +497,16 @@ def refresh_release_bundle(
         release_manifest_json is not None
         and new_release_manifest_revision is not None
         and dataset_repo_id == repo_id
-        and dataset_revision == new_data
+        and dataset_revision in {new_data, release_manifest_revision}
     ):
         dataset_revision = new_release_manifest_revision
 
-    # Only hit HF if the data version actually changed.
-    if new_data != old_data:
+    release_manifest_override = (
+        release_manifest_path is not None or release_manifest_revision is not None
+    )
+
+    # Only hit HF if the data version or release manifest target changed.
+    if new_data != old_data or release_manifest_override:
         new_dataset_sha256 = data_artifact_json.get("sha256") or _hf_dataset_sha256(
             dataset_repo_id,
             dataset_path,
@@ -420,7 +522,7 @@ def refresh_release_bundle(
     manifest_json["model_package"]["sha256"] = new_wheel_sha256
     manifest_json["model_package"]["wheel_url"] = new_wheel_url
     data_package_json["version"] = new_data
-    if new_data != old_data:
+    if new_data != old_data or release_manifest_override:
         if new_release_manifest_path is not None:
             data_package_json["release_manifest_path"] = new_release_manifest_path
         if new_release_manifest_revision is not None:
@@ -469,6 +571,10 @@ def refresh_release_bundle(
             certification_json["compatibility_basis"] = (
                 "legacy_compatible_model_package"
             )
+        _refresh_dataset_path_references_from_data_release(
+            manifest_json,
+            release_manifest_json,
+        )
 
     manifest_path.write_text(
         json.dumps(manifest_json, indent=2, sort_keys=False) + "\n"

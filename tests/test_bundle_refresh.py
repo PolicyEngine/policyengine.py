@@ -85,8 +85,20 @@ def _data_release_manifest_response(
     model_version: str = "1.653.3",
     data_version: str = "1.83.4",
     dataset_sha256: str = "e" * 64,
+    extra_artifacts: dict | None = None,
     headers: dict | None = None,
 ):
+    artifacts = {
+        "enhanced_cps_2024": {
+            "kind": "microdata",
+            "path": "enhanced_cps_2024.h5",
+            "repo_id": "policyengine/policyengine-us-data",
+            "revision": data_version,
+            "sha256": dataset_sha256,
+        }
+    }
+    if extra_artifacts:
+        artifacts.update(extra_artifacts)
     payload = {
         "schema_version": 1,
         "data_package": {
@@ -102,15 +114,7 @@ def _data_release_manifest_response(
                 "data_build_fingerprint": "sha256:fingerprint",
             },
         },
-        "artifacts": {
-            "enhanced_cps_2024": {
-                "kind": "microdata",
-                "path": "enhanced_cps_2024.h5",
-                "repo_id": "policyengine/policyengine-us-data",
-                "revision": data_version,
-                "sha256": dataset_sha256,
-            }
-        },
+        "artifacts": artifacts,
     }
     return _FakeHFResponse(
         json.dumps(payload).encode(),
@@ -425,6 +429,259 @@ def test__bump_both_uses_data_release_manifest_metadata(sandbox) -> None:
         written["data_package"]["release_manifest_revision"]
         == "release-manifest-commit-sha"
     )
+
+
+def test__custom_release_manifest_refreshes_long_term_dataset_hashes(
+    sandbox,
+) -> None:
+    manifest_path = sandbox["manifest_dir"] / "us.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["data_package"]["release_manifest_path"] = (
+        "releases/crfb-longrun-old/release_manifest.json"
+    )
+    manifest["data_package"]["release_manifest_revision"] = "crfb-longrun-old"
+    manifest["datasets"]["long_term_cps_2100"] = {
+        "path": "long_term/2100.h5",
+        "sha256": "1" * 64,
+        "metadata_sha256": "2" * 64,
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        if (
+            "/resolve/crfb-longrun-new/releases/crfb-longrun-new/release_manifest.json"
+            in url
+        ):
+            return _data_release_manifest_response(
+                data_version="1.83.4",
+                extra_artifacts={
+                    "long_term/2100": {
+                        "kind": "microdata",
+                        "path": "long_term/2100.h5",
+                        "repo_id": "policyengine/policyengine-us-data",
+                        "revision": "1.83.4",
+                        "sha256": "3" * 64,
+                    },
+                    "long_term/2100.h5.metadata": {
+                        "kind": "auxiliary",
+                        "path": "long_term/2100.h5.metadata.json",
+                        "repo_id": "policyengine/policyengine-us-data",
+                        "revision": "1.83.4",
+                        "sha256": "4" * 64,
+                    },
+                },
+            )
+        raise AssertionError(f"Unexpected URL fetched: {url}")
+
+    with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
+        refresh_release_bundle(
+            country="us",
+            data_version="1.83.4",
+            release_manifest_path="releases/crfb-longrun-new/release_manifest.json",
+            release_manifest_revision="crfb-longrun-new",
+            manifest_dir=sandbox["manifest_dir"],
+            pyproject_path=sandbox["pyproject_path"],
+        )
+
+    written = json.loads((sandbox["manifest_dir"] / "us.json").read_text())
+    assert (
+        written["data_package"]["release_manifest_path"]
+        == "releases/crfb-longrun-new/release_manifest.json"
+    )
+    assert (
+        written["data_package"]["release_manifest_revision"]
+        == "release-manifest-commit-sha"
+    )
+    assert written["datasets"]["long_term_cps_2100"]["sha256"] == "3" * 64
+    assert written["datasets"]["long_term_cps_2100"]["metadata_sha256"] == "4" * 64
+    assert (
+        written["certified_data_artifact"]["uri"]
+        == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@release-manifest-commit-sha"
+    )
+
+
+def test__custom_release_manifest_requires_existing_long_term_metadata_sidecar(
+    sandbox,
+) -> None:
+    manifest_path = sandbox["manifest_dir"] / "us.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["data_package"]["release_manifest_path"] = (
+        "releases/crfb-longrun-old/release_manifest.json"
+    )
+    manifest["data_package"]["release_manifest_revision"] = "crfb-longrun-old"
+    manifest["datasets"]["long_term_cps_2100"] = {
+        "path": "long_term/2100.h5",
+        "sha256": "1" * 64,
+        "metadata_sha256": "2" * 64,
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        if (
+            "/resolve/crfb-longrun-new/releases/crfb-longrun-new/release_manifest.json"
+            in url
+        ):
+            return _data_release_manifest_response(
+                data_version="1.83.4",
+                extra_artifacts={
+                    "long_term/2100": {
+                        "kind": "microdata",
+                        "path": "long_term/2100.h5",
+                        "repo_id": "policyengine/policyengine-us-data",
+                        "revision": "1.83.4",
+                        "sha256": "3" * 64,
+                    },
+                },
+            )
+        raise AssertionError(f"Unexpected URL fetched: {url}")
+
+    with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
+        with pytest.raises(
+            ValueError,
+            match="missing metadata sidecar artifact",
+        ):
+            refresh_release_bundle(
+                country="us",
+                data_version="1.83.4",
+                release_manifest_path="releases/crfb-longrun-new/release_manifest.json",
+                release_manifest_revision="crfb-longrun-new",
+                manifest_dir=sandbox["manifest_dir"],
+                pyproject_path=sandbox["pyproject_path"],
+            )
+
+
+def test__custom_release_manifest_requires_existing_long_term_dataset_artifact(
+    sandbox,
+) -> None:
+    manifest_path = sandbox["manifest_dir"] / "us.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["data_package"]["release_manifest_path"] = (
+        "releases/crfb-longrun-old/release_manifest.json"
+    )
+    manifest["data_package"]["release_manifest_revision"] = "crfb-longrun-old"
+    manifest["datasets"]["long_term_cps_2100"] = {
+        "path": "long_term/2100.h5",
+        "sha256": "1" * 64,
+        "metadata_sha256": "2" * 64,
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        if (
+            "/resolve/crfb-longrun-new/releases/crfb-longrun-new/release_manifest.json"
+            in url
+        ):
+            return _data_release_manifest_response(data_version="1.83.4")
+        raise AssertionError(f"Unexpected URL fetched: {url}")
+
+    with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
+        with pytest.raises(
+            ValueError,
+            match="missing dataset artifact",
+        ):
+            refresh_release_bundle(
+                country="us",
+                data_version="1.83.4",
+                release_manifest_path="releases/crfb-longrun-new/release_manifest.json",
+                release_manifest_revision="crfb-longrun-new",
+                manifest_dir=sandbox["manifest_dir"],
+                pyproject_path=sandbox["pyproject_path"],
+            )
+
+
+def test__custom_release_manifest_requires_existing_long_term_dataset_sha(
+    sandbox,
+) -> None:
+    manifest_path = sandbox["manifest_dir"] / "us.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["data_package"]["release_manifest_path"] = (
+        "releases/crfb-longrun-old/release_manifest.json"
+    )
+    manifest["data_package"]["release_manifest_revision"] = "crfb-longrun-old"
+    manifest["datasets"]["long_term_cps_2100"] = {
+        "path": "long_term/2100.h5",
+        "sha256": "1" * 64,
+        "metadata_sha256": "2" * 64,
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        if (
+            "/resolve/crfb-longrun-new/releases/crfb-longrun-new/release_manifest.json"
+            in url
+        ):
+            return _data_release_manifest_response(
+                data_version="1.83.4",
+                extra_artifacts={
+                    "long_term/2100": {
+                        "kind": "microdata",
+                        "path": "long_term/2100.h5",
+                        "repo_id": "policyengine/policyengine-us-data",
+                        "revision": "1.83.4",
+                    },
+                    "long_term/2100.h5.metadata": {
+                        "kind": "auxiliary",
+                        "path": "long_term/2100.h5.metadata.json",
+                        "repo_id": "policyengine/policyengine-us-data",
+                        "revision": "1.83.4",
+                        "sha256": "4" * 64,
+                    },
+                },
+            )
+        raise AssertionError(f"Unexpected URL fetched: {url}")
+
+    with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
+        with pytest.raises(
+            ValueError,
+            match="dataset artifact lacks sha256",
+        ):
+            refresh_release_bundle(
+                country="us",
+                data_version="1.83.4",
+                release_manifest_path="releases/crfb-longrun-new/release_manifest.json",
+                release_manifest_revision="crfb-longrun-new",
+                manifest_dir=sandbox["manifest_dir"],
+                pyproject_path=sandbox["pyproject_path"],
+            )
+
+
+def test__explicit_release_manifest_revision_does_not_fallback_to_main(
+    sandbox,
+) -> None:
+    seen_urls = []
+
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        seen_urls.append(url)
+        if (
+            "/resolve/bad-crfb-ref/releases/crfb-longrun-new/release_manifest.json"
+            in url
+        ):
+            raise HTTPError(url, 404, "Not Found", hdrs=None, fp=None)
+        if "/resolve/main/releases/crfb-longrun-new/release_manifest.json" in url:
+            return _data_release_manifest_response(data_version="1.83.4")
+        raise AssertionError(f"Unexpected URL fetched: {url}")
+
+    with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
+        with pytest.raises(
+            ValueError,
+            match="Could not fetch data release manifest",
+        ):
+            refresh_release_bundle(
+                country="us",
+                data_version="1.83.4",
+                release_manifest_path="releases/crfb-longrun-new/release_manifest.json",
+                release_manifest_revision="bad-crfb-ref",
+                manifest_dir=sandbox["manifest_dir"],
+                pyproject_path=sandbox["pyproject_path"],
+            )
+
+    assert any("/resolve/bad-crfb-ref/" in url for url in seen_urls)
+    assert not any("/resolve/main/" in url for url in seen_urls)
 
 
 def test__missing_release_manifest_metadata_raises(sandbox) -> None:

@@ -49,6 +49,20 @@ def main(argv: list[str] | None = None) -> int:
         help="New policyengine-{country}-data version (e.g. 1.83.4)",
     )
     parser.add_argument(
+        "--release-manifest-path",
+        help=(
+            "Override the data release manifest path, e.g. "
+            "releases/crfb-longrun-20260518/release_manifest.json"
+        ),
+    )
+    parser.add_argument(
+        "--release-manifest-revision",
+        help=(
+            "HF revision to fetch the data release manifest from before "
+            "pinning the immutable repo commit."
+        ),
+    )
+    parser.add_argument(
         "--no-pyproject",
         action="store_true",
         help="Do not bump the country extra in pyproject.toml",
@@ -67,6 +81,8 @@ def main(argv: list[str] | None = None) -> int:
         country=args.country,
         model_version=args.model_version,
         data_version=args.data_version,
+        release_manifest_path=args.release_manifest_path,
+        release_manifest_revision=args.release_manifest_revision,
         update_pyproject=not args.no_pyproject,
     )
     print(result.summary())
