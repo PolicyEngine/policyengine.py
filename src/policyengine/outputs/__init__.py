@@ -28,6 +28,13 @@ from policyengine.outputs.intra_decile_impact import (
     IntraDecileImpact,
     compute_intra_decile_impacts,
 )
+from policyengine.outputs.labor_supply_response import (
+    HoursResponse,
+    LaborSupplyResponse,
+    calculate_labor_supply_response,
+    configure_labor_supply_response_variables,
+    labor_supply_response_is_active,
+)
 from policyengine.outputs.local_authority_impact import (
     LocalAuthorityImpact,
     compute_uk_local_authority_impacts,
@@ -63,6 +70,11 @@ __all__ = [
     "ProgramStatistics",
     "IntraDecileImpact",
     "compute_intra_decile_impacts",
+    "HoursResponse",
+    "LaborSupplyResponse",
+    "calculate_labor_supply_response",
+    "configure_labor_supply_response_variables",
+    "labor_supply_response_is_active",
     "Poverty",
     "UKPovertyType",
     "USPovertyType",

@@ -10,7 +10,12 @@ import pandas as pd
 from pydantic import BaseModel
 
 from policyengine.core import OutputCollection, Simulation
-from policyengine.outputs import ProgramStatistics
+from policyengine.outputs import (
+    LaborSupplyResponse,
+    ProgramStatistics,
+    calculate_labor_supply_response,
+    configure_labor_supply_response_variables,
+)
 from policyengine.outputs.decile_impact import (
     DecileImpact,
     calculate_decile_impacts,
@@ -34,6 +39,7 @@ class PolicyReformAnalysis(BaseModel):
     reform_poverty: OutputCollection[Poverty]
     baseline_inequality: Inequality
     reform_inequality: Inequality
+    labor_supply_response: LaborSupplyResponse
 
 
 def economic_impact_analysis(
@@ -41,6 +47,11 @@ def economic_impact_analysis(
     reform_simulation: Simulation,
 ) -> PolicyReformAnalysis:
     """Perform comprehensive analysis of a UK policy reform."""
+    configure_labor_supply_response_variables(
+        baseline_simulation,
+        reform_simulation,
+        country_code="uk",
+    )
     baseline_simulation.ensure()
     reform_simulation.ensure()
 
@@ -111,6 +122,11 @@ def economic_impact_analysis(
     reform_poverty = calculate_uk_poverty_rates(reform_simulation)
     baseline_inequality = calculate_uk_inequality(baseline_simulation)
     reform_inequality = calculate_uk_inequality(reform_simulation)
+    labor_supply_response = calculate_labor_supply_response(
+        baseline_simulation,
+        reform_simulation,
+        country_code="uk",
+    )
 
     return PolicyReformAnalysis(
         decile_impacts=decile_impacts,
@@ -119,4 +135,5 @@ def economic_impact_analysis(
         reform_poverty=reform_poverty,
         baseline_inequality=baseline_inequality,
         reform_inequality=reform_inequality,
+        labor_supply_response=labor_supply_response,
     )
