@@ -330,10 +330,12 @@ def build_trace_tro_from_release_bundle(
         else None
     )
     if data_release_manifest is not None and dataset_artifact is None:
-        raise ValueError(
-            "Data release manifest does not include the certified dataset "
-            f"'{certified_artifact.dataset}'."
-        )
+        if certified_artifact.sha256 is None:
+            raise ValueError(
+                "Data release manifest does not include the certified dataset "
+                f"'{certified_artifact.dataset}'."
+            )
+        data_release_manifest = None
     dataset_sha256 = certified_artifact.sha256 or (
         dataset_artifact.sha256 if dataset_artifact is not None else None
     )

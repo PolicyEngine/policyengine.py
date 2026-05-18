@@ -334,6 +334,40 @@ class TestBundleTRO:
 
         assert data_manifest_artifact["trov:sha256"] == source_sha256
 
+    def test__given_data_manifest_without_certified_dataset__then_falls_back(
+        self,
+    ):
+        data_manifest = _us_data_release_manifest()
+        data_manifest.artifacts.pop("enhanced_cps_2024")
+
+        tro = build_trace_tro_from_release_bundle(
+            get_release_manifest("us"),
+            data_manifest,
+            fetch_pypi=_fake_fetch_pypi,
+        )
+
+        artifacts = tro["@graph"][0]["trov:hasComposition"]["trov:hasArtifact"]
+        artifact_ids = {a["@id"].rsplit("/", 1)[-1] for a in artifacts}
+        assert "dataset" in artifact_ids
+        assert "data_release_manifest" not in artifact_ids
+
+    def test__given_no_dataset_hash_source__then_raises(self):
+        country_manifest = get_release_manifest("us").model_copy(deep=True)
+        assert country_manifest.certified_data_artifact is not None
+        country_manifest.certified_data_artifact.sha256 = None
+        data_manifest = _us_data_release_manifest()
+        data_manifest.artifacts.pop("enhanced_cps_2024")
+
+        with pytest.raises(
+            ValueError,
+            match="Data release manifest does not include the certified dataset",
+        ):
+            build_trace_tro_from_release_bundle(
+                country_manifest,
+                data_manifest,
+                fetch_pypi=_fake_fetch_pypi,
+            )
+
     def test__given_certification__then_fields_are_machine_readable(
         self, us_bundle_tro
     ):
