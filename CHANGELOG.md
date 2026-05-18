@@ -1,3 +1,14 @@
+## [4.6.0] - 2026-05-18
+
+### Added
+
+- Added the US long-run managed dataset bundle.
+
+### Fixed
+
+- Refresh US long-term dataset hash pins from data release manifests.
+
+
 ## [4.5.1] - 2026-05-16
 
 ### Changed
