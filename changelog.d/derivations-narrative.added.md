@@ -1,1 +1,0 @@
-Add ``policyengine.derivations`` for per-variable computation explanations: ``derive(simulation, variable, period)`` returns a structured ``Derivation`` (with pruned trace and top-level contributions); ``narrate(derivation)`` optionally hands it to an LLM for a plain-prose walkthrough.
