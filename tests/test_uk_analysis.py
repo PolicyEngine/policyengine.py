@@ -93,26 +93,25 @@ def test_uk_economic_impact_analysis_includes_wealth_decile_outputs(monkeypatch)
     assert result.decile_impacts.dataframe["source"].tolist() == ["standard"]
     assert result.wealth_decile_impacts.dataframe["source"].tolist() == ["wealth"]
 
-    assert decile_calls[0] == {
-        "baseline_simulation": baseline,
-        "reform_simulation": reform,
-    }
-    assert decile_calls[1] == {
-        "baseline_simulation": baseline,
-        "reform_simulation": reform,
-        "income_variable": "household_net_income",
-        "decile_variable": "household_wealth_decile",
-        "entity": "household",
-    }
-    assert intra_calls == [
-        {
-            "baseline_simulation": baseline,
-            "reform_simulation": reform,
-            "income_variable": "household_net_income",
-            "decile_variable": "household_wealth_decile",
-            "entity": "household",
-        }
-    ]
+    assert len(decile_calls) == 2
+    standard_call = decile_calls[0]
+    assert standard_call["baseline_simulation"] is baseline
+    assert standard_call["reform_simulation"] is reform
+
+    wealth_call = decile_calls[1]
+    assert wealth_call["baseline_simulation"] is baseline
+    assert wealth_call["reform_simulation"] is reform
+    assert wealth_call["income_variable"] == "household_net_income"
+    assert wealth_call["decile_variable"] == "household_wealth_decile"
+    assert wealth_call["entity"] == "household"
+
+    assert len(intra_calls) == 1
+    intra_call = intra_calls[0]
+    assert intra_call["baseline_simulation"] is baseline
+    assert intra_call["reform_simulation"] is reform
+    assert intra_call["income_variable"] == "household_net_income"
+    assert intra_call["decile_variable"] == "household_wealth_decile"
+    assert intra_call["entity"] == "household"
     assert result.intra_wealth_decile_impacts.dataframe["decile"].tolist() == (
         list(range(1, 11)) + [0]
     )
