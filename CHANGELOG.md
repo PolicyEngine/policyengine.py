@@ -1,3 +1,10 @@
+## [4.8.0] - 2026-05-19
+
+### Added
+
+- Add UK wealth-decile impact outputs and integration coverage for economic impact analysis.
+
+
 ## [4.7.0] - 2026-05-18
 
 ### Added
