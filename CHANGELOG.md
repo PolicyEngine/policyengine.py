@@ -1,3 +1,10 @@
+## [4.8.1] - 2026-05-19
+
+### Changed
+
+- Add UK program-statistics rows for fuel duty, state pension, employer National Insurance, and tax credits.
+
+
 ## [4.8.0] - 2026-05-19
 
 ### Added
