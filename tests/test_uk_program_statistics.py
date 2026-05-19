@@ -3,7 +3,7 @@ import pytest
 from microdf import MicroDataFrame
 
 from policyengine.core import OutputCollection, Simulation
-from policyengine.outputs import ProgramStatistics
+from policyengine.outputs import LaborSupplyResponse, ProgramStatistics
 from policyengine.outputs.inequality import Inequality
 from policyengine.tax_benefit_models.uk import analysis as uk_analysis
 from policyengine.tax_benefit_models.uk.analysis import (
@@ -19,6 +19,10 @@ from policyengine.tax_benefit_models.uk.model import uk_latest
 
 def _microdf(data: dict, weights: str) -> MicroDataFrame:
     return MicroDataFrame(pd.DataFrame(data), weights=weights)
+
+
+def _empty_labor_supply_response() -> LaborSupplyResponse:
+    return LaborSupplyResponse.model_construct()
 
 
 PROGRAM_VALUES = {
@@ -191,6 +195,18 @@ def test_uk_economic_impact_analysis_returns_configured_program_statistics(
         lambda simulation: Inequality(
             simulation=simulation,
             income_variable="household_net_income",
+        ),
+    )
+    monkeypatch.setattr(
+        uk_analysis,
+        "configure_labor_supply_response_variables",
+        lambda baseline_simulation, reform_simulation, country_code: None,
+    )
+    monkeypatch.setattr(
+        uk_analysis,
+        "calculate_labor_supply_response",
+        lambda baseline_simulation, reform_simulation, country_code: (
+            _empty_labor_supply_response()
         ),
     )
 
