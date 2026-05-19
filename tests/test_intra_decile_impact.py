@@ -211,6 +211,13 @@ def test_intra_decile_with_decile_variable():
         decile_2.gain_more_than_5pct == 1.0
         or abs(decile_2.gain_more_than_5pct - 1.0) < 1e-9
     )
+    assert results.dataframe["decile"].tolist() == [1, 2, 0]
+    assert (
+        results.dataframe.loc[
+            results.dataframe["decile"] == 1, "gain_more_than_5pct"
+        ].iloc[0]
+        == 1.0
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -252,6 +259,74 @@ def test_decile_impact_with_decile_variable():
     assert abs(di.baseline_mean - 50000.0) < 1e-6
     assert abs(di.reform_mean - 52000.0) < 1e-6
     assert abs(di.absolute_change - 2000.0) < 1e-6
+
+
+def test_calculate_decile_impacts_with_decile_variable(monkeypatch):
+    """calculate_decile_impacts passes pre-computed grouping through."""
+    version = _make_version("household_net_income", "household")
+    baseline = Simulation.model_construct(
+        tax_benefit_model_version=version,
+        output_dataset=MagicMock(
+            data=MagicMock(
+                household=MicroDataFrame(
+                    pd.DataFrame(
+                        {
+                            "household_net_income": [10.0, 20.0, 100.0, 200.0],
+                            "household_weight": [1.0, 1.0, 1.0, 1.0],
+                            "household_wealth_decile": [2, 2, 1, 1],
+                        }
+                    ),
+                    weights="household_weight",
+                )
+            )
+        ),
+    )
+    reform = Simulation.model_construct(
+        tax_benefit_model_version=version,
+        output_dataset=MagicMock(
+            data=MagicMock(
+                household=MicroDataFrame(
+                    pd.DataFrame(
+                        {
+                            "household_net_income": [11.0, 21.0, 110.0, 210.0],
+                            "household_weight": [1.0, 1.0, 1.0, 1.0],
+                            "household_wealth_decile": [2, 2, 1, 1],
+                        }
+                    ),
+                    weights="household_weight",
+                )
+            )
+        ),
+    )
+
+    monkeypatch.setattr(
+        "policyengine.outputs.decile_impact.Simulation.ensure",
+        lambda self: None,
+    )
+
+    results = calculate_decile_impacts(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable="household_net_income",
+        decile_variable="household_wealth_decile",
+        entity="household",
+        quantiles=2,
+    )
+
+    decile_1 = next(r for r in results.outputs if r.decile == 1)
+    decile_2 = next(r for r in results.outputs if r.decile == 2)
+
+    assert decile_1.decile_variable == "household_wealth_decile"
+    assert decile_1.baseline_mean == 150.0
+    assert decile_1.reform_mean == 160.0
+    assert decile_1.absolute_change == 10.0
+    assert decile_2.baseline_mean == 15.0
+    assert decile_2.absolute_change == 1.0
+    assert results.dataframe["decile"].tolist() == [1, 2]
+    assert results.dataframe["decile_variable"].tolist() == [
+        "household_wealth_decile",
+        "household_wealth_decile",
+    ]
 
 
 def test_decile_impact_qcut_default():

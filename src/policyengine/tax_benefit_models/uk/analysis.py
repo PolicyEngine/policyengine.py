@@ -19,6 +19,10 @@ from policyengine.outputs.inequality import (
     Inequality,
     calculate_uk_inequality,
 )
+from policyengine.outputs.intra_decile_impact import (
+    IntraDecileImpact,
+    compute_intra_decile_impacts,
+)
 from policyengine.outputs.poverty import (
     Poverty,
     calculate_uk_poverty_rates,
@@ -29,6 +33,8 @@ class PolicyReformAnalysis(BaseModel):
     """Complete policy reform analysis result."""
 
     decile_impacts: OutputCollection[DecileImpact]
+    wealth_decile_impacts: OutputCollection[DecileImpact]
+    intra_wealth_decile_impacts: OutputCollection[IntraDecileImpact]
     program_statistics: OutputCollection[ProgramStatistics]
     baseline_poverty: OutputCollection[Poverty]
     reform_poverty: OutputCollection[Poverty]
@@ -54,6 +60,20 @@ def economic_impact_analysis(
     decile_impacts = calculate_decile_impacts(
         baseline_simulation=baseline_simulation,
         reform_simulation=reform_simulation,
+    )
+    wealth_decile_impacts = calculate_decile_impacts(
+        baseline_simulation=baseline_simulation,
+        reform_simulation=reform_simulation,
+        income_variable="household_net_income",
+        decile_variable="household_wealth_decile",
+        entity="household",
+    )
+    intra_wealth_decile_impacts = compute_intra_decile_impacts(
+        baseline_simulation=baseline_simulation,
+        reform_simulation=reform_simulation,
+        income_variable="household_net_income",
+        decile_variable="household_wealth_decile",
+        entity="household",
     )
 
     programs = {
@@ -114,6 +134,8 @@ def economic_impact_analysis(
 
     return PolicyReformAnalysis(
         decile_impacts=decile_impacts,
+        wealth_decile_impacts=wealth_decile_impacts,
+        intra_wealth_decile_impacts=intra_wealth_decile_impacts,
         program_statistics=program_collection,
         baseline_poverty=baseline_poverty,
         reform_poverty=reform_poverty,
