@@ -1,3 +1,10 @@
+## [4.9.0] - 2026-05-19
+
+### Added
+
+- - Add a legacy-compatible labor-supply response output for US and UK macro analyses.
+
+
 ## [4.8.1] - 2026-05-19
 
 ### Changed
