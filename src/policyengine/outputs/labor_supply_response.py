@@ -226,6 +226,16 @@ def _has_direct_output_column(
     return column in data.columns
 
 
+def _zero_hours_response() -> HoursResponse:
+    return HoursResponse(
+        baseline=0.0,
+        reform=0.0,
+        change=0.0,
+        income_effect=0.0,
+        substitution_effect=0.0,
+    )
+
+
 def _series_for_variable(
     simulation: Simulation,
     variable_name: str,
@@ -261,7 +271,9 @@ def _series_for_variable(
     return target_data[variable_name]
 
 
-def _zero_household_series(baseline_simulation: Simulation) -> MicroSeries:
+def _household_lsr_data(
+    baseline_simulation: Simulation,
+):
     household_data = get_output_entity_data(
         baseline_simulation,
         "household",
@@ -270,9 +282,23 @@ def _zero_household_series(baseline_simulation: Simulation) -> MicroSeries:
     _require_direct_output_column(
         baseline_simulation,
         "household",
+        "household_income_decile",
+        "LaborSupplyResponse.household_income_decile",
+    )
+    _require_direct_output_column(
+        baseline_simulation,
+        "household",
         "household_weight",
         "LaborSupplyResponse.household_weight",
     )
+    return (
+        household_data,
+        household_data["household_income_decile"].to_numpy(),
+        household_data["household_weight"].to_numpy(),
+    )
+
+
+def _zero_household_series(household_data: Any) -> MicroSeries:
     return MicroSeries(
         [0.0] * len(household_data),
         weights=household_data["household_weight"].to_numpy(),
@@ -323,6 +349,45 @@ def _sum_variable(
     return float(_series_for_variable(simulation, variable_name, entity, context).sum())
 
 
+def _variable_change(
+    baseline_simulation: Simulation,
+    reform_simulation: Simulation,
+    variable_name: str,
+    entity: str,
+    context: str,
+) -> float:
+    return _sum_variable(
+        reform_simulation,
+        variable_name,
+        entity,
+        context,
+    ) - _sum_variable(
+        baseline_simulation,
+        variable_name,
+        entity,
+        context,
+    )
+
+
+def _household_variable_change(
+    baseline_simulation: Simulation,
+    reform_simulation: Simulation,
+    variable_name: str,
+    context: str,
+) -> MicroSeries:
+    return _series_for_variable(
+        reform_simulation,
+        variable_name,
+        "household",
+        context,
+    ) - _series_for_variable(
+        baseline_simulation,
+        variable_name,
+        "household",
+        context,
+    )
+
+
 def _calculate_hours(
     baseline_simulation: Simulation,
     reform_simulation: Simulation,
@@ -331,15 +396,9 @@ def _calculate_hours(
     active: bool,
 ) -> HoursResponse:
     if country_code != "us":
-        return HoursResponse(
-            baseline=0.0,
-            reform=0.0,
-            change=0.0,
-            income_effect=0.0,
-            substitution_effect=0.0,
-        )
+        return _zero_hours_response()
 
-    if _has_direct_output_column(
+    has_hours_columns = _has_direct_output_column(
         baseline_simulation,
         "person",
         "weekly_hours_worked",
@@ -347,20 +406,8 @@ def _calculate_hours(
         reform_simulation,
         "person",
         "weekly_hours_worked",
-    ):
-        baseline_hours = _sum_variable(
-            baseline_simulation,
-            "weekly_hours_worked",
-            "person",
-            "LaborSupplyResponse.hours",
-        )
-        reform_hours = _sum_variable(
-            reform_simulation,
-            "weekly_hours_worked",
-            "person",
-            "LaborSupplyResponse.hours",
-        )
-    elif active:
+    )
+    if active or has_hours_columns:
         baseline_hours = _sum_variable(
             baseline_simulation,
             "weekly_hours_worked",
@@ -378,42 +425,30 @@ def _calculate_hours(
         reform_hours = 0.0
 
     if active:
-        baseline_income_effect = _sum_variable(
+        income_effect = _variable_change(
             baseline_simulation,
-            "weekly_hours_worked_behavioural_response_income_elasticity",
-            "person",
-            "LaborSupplyResponse.hours.income_effect",
-        )
-        reform_income_effect = _sum_variable(
             reform_simulation,
             "weekly_hours_worked_behavioural_response_income_elasticity",
             "person",
             "LaborSupplyResponse.hours.income_effect",
         )
-        baseline_substitution_effect = _sum_variable(
+        substitution_effect = _variable_change(
             baseline_simulation,
-            "weekly_hours_worked_behavioural_response_substitution_elasticity",
-            "person",
-            "LaborSupplyResponse.hours.substitution_effect",
-        )
-        reform_substitution_effect = _sum_variable(
             reform_simulation,
             "weekly_hours_worked_behavioural_response_substitution_elasticity",
             "person",
             "LaborSupplyResponse.hours.substitution_effect",
         )
     else:
-        baseline_income_effect = 0.0
-        reform_income_effect = 0.0
-        baseline_substitution_effect = 0.0
-        reform_substitution_effect = 0.0
+        income_effect = 0.0
+        substitution_effect = 0.0
 
     return HoursResponse(
         baseline=baseline_hours,
         reform=reform_hours,
         change=reform_hours - baseline_hours,
-        income_effect=reform_income_effect - baseline_income_effect,
-        substitution_effect=reform_substitution_effect - baseline_substitution_effect,
+        income_effect=income_effect,
+        substitution_effect=substitution_effect,
     )
 
 
@@ -429,193 +464,117 @@ def calculate_labor_supply_response(
         reform_simulation,
         country_code=country_code,
     )
+    household_data, decile, household_weight = _household_lsr_data(
+        baseline_simulation,
+    )
 
     if active:
-        baseline_income_lsr = _sum_variable(
+        income_lsr = _variable_change(
             baseline_simulation,
-            "income_elasticity_lsr",
-            "person",
-            "LaborSupplyResponse.income_lsr",
-        )
-        reform_income_lsr = _sum_variable(
             reform_simulation,
             "income_elasticity_lsr",
             "person",
             "LaborSupplyResponse.income_lsr",
         )
-        baseline_substitution_lsr = _sum_variable(
+        substitution_lsr = _variable_change(
             baseline_simulation,
-            "substitution_elasticity_lsr",
-            "person",
-            "LaborSupplyResponse.substitution_lsr",
-        )
-        reform_substitution_lsr = _sum_variable(
             reform_simulation,
             "substitution_elasticity_lsr",
             "person",
             "LaborSupplyResponse.substitution_lsr",
         )
 
-        income_lsr_hh = _series_for_variable(
+        income_lsr_hh = _household_variable_change(
+            baseline_simulation,
             reform_simulation,
             "income_elasticity_lsr",
-            "household",
-            "LaborSupplyResponse.income_lsr_hh",
-        ) - _series_for_variable(
-            baseline_simulation,
-            "income_elasticity_lsr",
-            "household",
             "LaborSupplyResponse.income_lsr_hh",
         )
-        substitution_lsr_hh = _series_for_variable(
+        substitution_lsr_hh = _household_variable_change(
+            baseline_simulation,
             reform_simulation,
             "substitution_elasticity_lsr",
-            "household",
-            "LaborSupplyResponse.substitution_lsr_hh",
-        ) - _series_for_variable(
-            baseline_simulation,
-            "substitution_elasticity_lsr",
-            "household",
             "LaborSupplyResponse.substitution_lsr_hh",
         )
     else:
-        baseline_income_lsr = 0.0
-        reform_income_lsr = 0.0
-        baseline_substitution_lsr = 0.0
-        reform_substitution_lsr = 0.0
-        income_lsr_hh = _zero_household_series(baseline_simulation)
-        substitution_lsr_hh = _zero_household_series(baseline_simulation)
+        income_lsr = 0.0
+        substitution_lsr = 0.0
+        income_lsr_hh = _zero_household_series(household_data)
+        substitution_lsr_hh = _zero_household_series(household_data)
 
-    income_lsr = reform_income_lsr - baseline_income_lsr
-    substitution_lsr = reform_substitution_lsr - baseline_substitution_lsr
     total_change = substitution_lsr + income_lsr
-
-    if not active:
-        household_data = get_output_entity_data(
-            baseline_simulation,
-            "household",
-            "LaborSupplyResponse.household",
-        )
-        _require_direct_output_column(
-            baseline_simulation,
-            "household",
-            "household_income_decile",
-            "LaborSupplyResponse.household_income_decile",
-        )
-        decile = household_data["household_income_decile"].to_numpy()
-        zero_lsr_hh = _zero_household_series(baseline_simulation)
-        decile_average = _decile_values(zero_lsr_hh.groupby(decile).mean())
-        decile_relative = _positive_decile_values(zero_lsr_hh.groupby(decile).sum())
-
-        return LaborSupplyResponse(
-            substitution_lsr=0.0,
-            income_lsr=0.0,
-            relative_lsr={
-                "income": 0.0,
-                "substitution": 0.0,
-            },
-            total_change=0.0,
-            # Legacy ``budgetary_impact_lsr`` was initialised to zero and not
-            # recalculated, so preserve the effective public value.
-            revenue_change=0.0,
-            decile={
-                "average": {
-                    "income": decile_average,
-                    "substitution": decile_average,
-                },
-                "relative": {
-                    "income": decile_relative,
-                    "substitution": decile_relative,
-                },
-            },
-            hours=_calculate_hours(
-                baseline_simulation,
-                reform_simulation,
-                country_code=country_code,
-                active=False,
-            ),
-        )
-
-    household_data = get_output_entity_data(
-        baseline_simulation,
-        "household",
-        "LaborSupplyResponse.household",
-    )
-    _require_direct_output_column(
-        baseline_simulation,
-        "household",
-        "household_income_decile",
-        "LaborSupplyResponse.household_income_decile",
-    )
-    _require_direct_output_column(
-        baseline_simulation,
-        "household",
-        "household_weight",
-        "LaborSupplyResponse.household_weight",
-    )
-    decile = household_data["household_income_decile"].to_numpy()
-    household_weight = household_data["household_weight"].to_numpy()
-
-    employment_income_hh = _positional_microseries(
-        _series_for_variable(
-            baseline_simulation,
-            "employment_income",
-            "household",
-            "LaborSupplyResponse.employment_income_hh",
-        ),
-        household_weight,
-    )
-    self_employment_income_hh = _positional_microseries(
-        _series_for_variable(
-            baseline_simulation,
-            "self_employment_income",
-            "household",
-            "LaborSupplyResponse.self_employment_income_hh",
-        ),
-        household_weight,
-    )
-
     income_lsr_hh = _positional_microseries(income_lsr_hh, household_weight)
     substitution_lsr_hh = _positional_microseries(
         substitution_lsr_hh,
         household_weight,
     )
-    total_lsr_hh = MicroSeries(
-        income_lsr_hh.to_numpy() + substitution_lsr_hh.to_numpy(),
-        weights=household_weight,
-    )
-    original_earnings = MicroSeries(
-        employment_income_hh.to_numpy()
-        + self_employment_income_hh.to_numpy()
-        - total_lsr_hh.to_numpy(),
-        weights=household_weight,
-    )
-
     decile_average = {
         "income": _decile_values(income_lsr_hh.groupby(decile).mean()),
         "substitution": _decile_values(substitution_lsr_hh.groupby(decile).mean()),
     }
-    decile_relative = {
-        "income": _positive_decile_ratios(
-            income_lsr_hh.groupby(decile).sum(),
-            original_earnings.groupby(decile).sum(),
-        ),
-        "substitution": _positive_decile_ratios(
-            substitution_lsr_hh.groupby(decile).sum(),
-            original_earnings.groupby(decile).sum(),
-        ),
-    }
 
-    return LaborSupplyResponse(
-        substitution_lsr=float(substitution_lsr),
-        income_lsr=float(income_lsr),
-        relative_lsr={
+    if active:
+        employment_income_hh = _positional_microseries(
+            _series_for_variable(
+                baseline_simulation,
+                "employment_income",
+                "household",
+                "LaborSupplyResponse.employment_income_hh",
+            ),
+            household_weight,
+        )
+        self_employment_income_hh = _positional_microseries(
+            _series_for_variable(
+                baseline_simulation,
+                "self_employment_income",
+                "household",
+                "LaborSupplyResponse.self_employment_income_hh",
+            ),
+            household_weight,
+        )
+        total_lsr_hh = MicroSeries(
+            income_lsr_hh.to_numpy() + substitution_lsr_hh.to_numpy(),
+            weights=household_weight,
+        )
+        original_earnings = MicroSeries(
+            employment_income_hh.to_numpy()
+            + self_employment_income_hh.to_numpy()
+            - total_lsr_hh.to_numpy(),
+            weights=household_weight,
+        )
+        decile_relative = {
+            "income": _positive_decile_ratios(
+                income_lsr_hh.groupby(decile).sum(),
+                original_earnings.groupby(decile).sum(),
+            ),
+            "substitution": _positive_decile_ratios(
+                substitution_lsr_hh.groupby(decile).sum(),
+                original_earnings.groupby(decile).sum(),
+            ),
+        }
+        relative_lsr = {
             "income": _safe_ratio(income_lsr_hh.sum(), original_earnings.sum()),
             "substitution": _safe_ratio(
                 substitution_lsr_hh.sum(),
                 original_earnings.sum(),
             ),
-        },
+        }
+    else:
+        decile_relative = {
+            "income": _positive_decile_values(income_lsr_hh.groupby(decile).sum()),
+            "substitution": _positive_decile_values(
+                substitution_lsr_hh.groupby(decile).sum()
+            ),
+        }
+        relative_lsr = {
+            "income": 0.0,
+            "substitution": 0.0,
+        }
+
+    return LaborSupplyResponse(
+        substitution_lsr=float(substitution_lsr),
+        income_lsr=float(income_lsr),
+        relative_lsr=relative_lsr,
         total_change=float(total_change),
         # Legacy ``budgetary_impact_lsr`` was initialised to zero and not
         # recalculated, so preserve the effective public value.
