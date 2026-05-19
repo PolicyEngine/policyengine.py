@@ -81,6 +81,11 @@ def test_uk_economic_impact_analysis_includes_wealth_decile_outputs(monkeypatch)
     monkeypatch.setattr(
         uk_analysis, "compute_intra_decile_impacts", fake_compute_intra_decile_impacts
     )
+    monkeypatch.setattr(
+        uk_analysis,
+        "_validate_program_statistics_config",
+        lambda baseline_simulation, reform_simulation: None,
+    )
     monkeypatch.setattr(uk_analysis, "ProgramStatistics", fake_program_statistics)
     monkeypatch.setattr(uk_analysis, "calculate_uk_poverty_rates", fake_poverty_rates)
     monkeypatch.setattr(uk_analysis, "calculate_uk_inequality", fake_inequality)
