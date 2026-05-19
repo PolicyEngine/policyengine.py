@@ -3,13 +3,17 @@ from unittest.mock import MagicMock
 import pandas as pd
 
 from policyengine.core import OutputCollection
-from policyengine.outputs import ProgramStatistics
+from policyengine.outputs import LaborSupplyResponse, ProgramStatistics
 from policyengine.outputs.inequality import Inequality
 from policyengine.tax_benefit_models.uk import analysis as uk_analysis
 
 
 def _empty_collection() -> OutputCollection:
     return OutputCollection(outputs=[], dataframe=pd.DataFrame())
+
+
+def _empty_labor_supply_response() -> LaborSupplyResponse:
+    return LaborSupplyResponse.model_construct()
 
 
 def _make_simulation() -> MagicMock:
@@ -89,6 +93,18 @@ def test_uk_economic_impact_analysis_includes_wealth_decile_outputs(monkeypatch)
     monkeypatch.setattr(uk_analysis, "ProgramStatistics", fake_program_statistics)
     monkeypatch.setattr(uk_analysis, "calculate_uk_poverty_rates", fake_poverty_rates)
     monkeypatch.setattr(uk_analysis, "calculate_uk_inequality", fake_inequality)
+    monkeypatch.setattr(
+        uk_analysis,
+        "configure_labor_supply_response_variables",
+        lambda baseline_simulation, reform_simulation, country_code: None,
+    )
+    monkeypatch.setattr(
+        uk_analysis,
+        "calculate_labor_supply_response",
+        lambda baseline_simulation, reform_simulation, country_code: (
+            _empty_labor_supply_response()
+        ),
+    )
 
     result = uk_analysis.economic_impact_analysis(
         baseline_simulation=baseline,
