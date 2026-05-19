@@ -177,6 +177,11 @@ def test_uk_economic_impact_analysis_returns_configured_program_statistics(
     )
     monkeypatch.setattr(
         uk_analysis,
+        "compute_intra_decile_impacts",
+        lambda **kwargs: OutputCollection(outputs=[], dataframe=pd.DataFrame()),
+    )
+    monkeypatch.setattr(
+        uk_analysis,
         "calculate_uk_poverty_rates",
         lambda simulation: OutputCollection(outputs=[], dataframe=pd.DataFrame()),
     )
