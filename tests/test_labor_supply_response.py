@@ -858,8 +858,9 @@ def test_inactive_us_labor_supply_response_does_not_require_lsr_columns(tmp_path
             "substitution": {1: pytest.approx(0.0), 2: pytest.approx(0.0)},
         },
     }
-    assert result.hours.baseline == pytest.approx(210.0)
-    assert result.hours.reform == pytest.approx(233.0)
+    assert result.hours.baseline == pytest.approx(0.0)
+    assert result.hours.reform == pytest.approx(0.0)
+    assert result.hours.change == pytest.approx(0.0)
     assert result.hours.income_effect == pytest.approx(0.0)
     assert result.hours.substitution_effect == pytest.approx(0.0)
 

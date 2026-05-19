@@ -213,19 +213,6 @@ def _require_direct_output_column(
     )
 
 
-def _has_direct_output_column(
-    simulation: Simulation,
-    entity: str,
-    column: str,
-) -> bool:
-    data = get_output_entity_data(
-        simulation,
-        entity,
-        f"LaborSupplyResponse.{entity}",
-    )
-    return column in data.columns
-
-
 def _zero_hours_response() -> HoursResponse:
     return HoursResponse(
         baseline=0.0,
@@ -395,53 +382,35 @@ def _calculate_hours(
     country_code: CountryCode,
     active: bool,
 ) -> HoursResponse:
-    if country_code != "us":
+    if country_code != "us" or not active:
         return _zero_hours_response()
 
-    has_hours_columns = _has_direct_output_column(
+    baseline_hours = _sum_variable(
         baseline_simulation,
-        "person",
         "weekly_hours_worked",
-    ) and _has_direct_output_column(
-        reform_simulation,
         "person",
-        "weekly_hours_worked",
+        "LaborSupplyResponse.hours",
     )
-    if active or has_hours_columns:
-        baseline_hours = _sum_variable(
-            baseline_simulation,
-            "weekly_hours_worked",
-            "person",
-            "LaborSupplyResponse.hours",
-        )
-        reform_hours = _sum_variable(
-            reform_simulation,
-            "weekly_hours_worked",
-            "person",
-            "LaborSupplyResponse.hours",
-        )
-    else:
-        baseline_hours = 0.0
-        reform_hours = 0.0
-
-    if active:
-        income_effect = _variable_change(
-            baseline_simulation,
-            reform_simulation,
-            "weekly_hours_worked_behavioural_response_income_elasticity",
-            "person",
-            "LaborSupplyResponse.hours.income_effect",
-        )
-        substitution_effect = _variable_change(
-            baseline_simulation,
-            reform_simulation,
-            "weekly_hours_worked_behavioural_response_substitution_elasticity",
-            "person",
-            "LaborSupplyResponse.hours.substitution_effect",
-        )
-    else:
-        income_effect = 0.0
-        substitution_effect = 0.0
+    reform_hours = _sum_variable(
+        reform_simulation,
+        "weekly_hours_worked",
+        "person",
+        "LaborSupplyResponse.hours",
+    )
+    income_effect = _variable_change(
+        baseline_simulation,
+        reform_simulation,
+        "weekly_hours_worked_behavioural_response_income_elasticity",
+        "person",
+        "LaborSupplyResponse.hours.income_effect",
+    )
+    substitution_effect = _variable_change(
+        baseline_simulation,
+        reform_simulation,
+        "weekly_hours_worked_behavioural_response_substitution_elasticity",
+        "person",
+        "LaborSupplyResponse.hours.substitution_effect",
+    )
 
     return HoursResponse(
         baseline=baseline_hours,
