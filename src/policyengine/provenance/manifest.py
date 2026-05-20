@@ -57,6 +57,7 @@ class DataBuildInfo(BaseModel):
 
 class ArtifactPathReference(BaseModel):
     path: str
+    revision: Optional[str] = None
     sha256: Optional[str] = None
     metadata_sha256: Optional[str] = None
 
@@ -426,7 +427,8 @@ def resolve_dataset_reference(country_id: str, dataset: str) -> str:
         return build_hf_uri(
             repo_id=manifest.data_package.repo_id,
             path_in_repo=path_reference.path,
-            revision=_artifact_revision(manifest.data_package),
+            revision=path_reference.revision
+            or _artifact_revision(manifest.data_package),
         )
 
     data_release_manifest = get_data_release_manifest(country_id)

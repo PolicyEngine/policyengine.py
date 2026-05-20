@@ -21,7 +21,7 @@
   "person[0].is_male": 1.0,
   "person[0].marital_unit_id": 0.0,
   "person[0].medicaid": 0.0,
-  "person[0].medicare_cost": 14500.0,
+  "person[0].medicare_cost": 0.0,
   "person[0].person_id": 0.0,
   "person[0].person_weight": 1.0,
   "person[0].race": 3.0,

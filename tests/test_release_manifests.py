@@ -14,6 +14,7 @@ from requests import Timeout
 from policyengine.core.tax_benefit_model import TaxBenefitModel
 from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
 from policyengine.provenance.manifest import (
+    ArtifactPathReference,
     DataCertification,
     DataReleaseManifestUnavailableError,
     certify_data_release_compatibility,
@@ -39,13 +40,14 @@ POLICYENGINE_VERSION = re.search(
     PYPROJECT.read_text(),
     re.MULTILINE,
 ).group(1)
-US_MODEL_VERSION = "1.691.12"
-US_DATA_RELEASE_PATH = "releases/crfb-longrun-20260517/release_manifest.json"
-US_DATA_RELEASE_REVISION = "crfb-longrun-20260517"
-US_CERTIFICATION_SOURCE = "policyengine.py candidate long-term manifest"
+US_MODEL_VERSION = "1.700.0"
+US_DATA_RELEASE_VERSION = "1.115.5"
+US_DATA_RELEASE_PATH = "release_manifest.json"
+US_DATA_RELEASE_REVISION = "688f972425f5e858fc52bda2b696e0af74fea920"
+US_CERTIFICATION_SOURCE = "policyengine-us-data release manifest"
 US_DEFAULT_DATASET_URI = (
     "hf://policyengine/policyengine-us-data/"
-    "enhanced_cps_2024.h5@69fc39a7fece4c49ba87291e598e76b40568cc5d"
+    f"enhanced_cps_2024.h5@{US_DATA_RELEASE_REVISION}"
 )
 US_ENHANCED_CPS_MANAGED_URI = (
     "hf://policyengine/policyengine-us-data/"
@@ -79,7 +81,7 @@ class TestReleaseManifests:
         assert manifest.model_package.name == "policyengine-us"
         assert manifest.model_package.version == US_MODEL_VERSION
         assert manifest.data_package.name == "policyengine-us-data"
-        assert manifest.data_package.version == "1.115.3"
+        assert manifest.data_package.version == US_DATA_RELEASE_VERSION
         assert manifest.data_package.repo_id == "policyengine/policyengine-us-data"
         assert manifest.data_package.release_manifest_path == US_DATA_RELEASE_PATH
         assert (
@@ -87,13 +89,14 @@ class TestReleaseManifests:
         )
         assert manifest.certified_data_artifact is not None
         assert (
-            manifest.certified_data_artifact.build_id == "policyengine-us-data-1.115.3"
+            manifest.certified_data_artifact.build_id
+            == f"policyengine-us-data-{US_DATA_RELEASE_VERSION}"
         )
         assert manifest.certified_data_artifact.dataset == "enhanced_cps_2024"
         assert manifest.certification is not None
         assert (
             manifest.certification.data_build_id
-            == "policyengine-us-data-crfb-longrun-20260517"
+            == f"policyengine-us-data-{US_DATA_RELEASE_VERSION}"
         )
         assert manifest.certification.built_with_model_version == US_MODEL_VERSION
         assert manifest.certification.certified_for_model_version == US_MODEL_VERSION
@@ -130,6 +133,24 @@ class TestReleaseManifests:
         resolved = resolve_dataset_reference("us", "enhanced_cps_2024")
 
         assert resolved == US_ENHANCED_CPS_MANAGED_URI
+
+    def test__given_dataset_explicit_revision__then_resolves_to_that_revision(self):
+        manifest = get_release_manifest("us").model_copy(deep=True)
+        manifest.datasets["long_term_cps_2100"] = ArtifactPathReference(
+            path="long_term/2100.h5",
+            revision="crfb-longrun-20260517",
+        )
+
+        with patch(
+            "policyengine.provenance.manifest.get_release_manifest",
+            return_value=manifest,
+        ):
+            resolved = resolve_dataset_reference("us", "long_term_cps_2100")
+
+        assert resolved == (
+            "hf://policyengine/policyengine-us-data/"
+            "long_term/2100.h5@crfb-longrun-20260517"
+        )
 
     def test__given_uk_dataset_name__then_resolves_to_versioned_hf_url(self):
         resolved = resolve_dataset_reference("uk", "enhanced_frs_2023_24")
@@ -290,14 +311,14 @@ class TestReleaseManifests:
             "schema_version": 1,
             "data_package": {
                 "name": "policyengine-us-data",
-                "version": "1.115.3",
+                "version": US_DATA_RELEASE_VERSION,
             },
             "artifacts": {
                 "enhanced_cps_2024": {
                     "kind": "microdata",
                     "path": "enhanced_cps_2024.h5",
                     "repo_id": "policyengine/policyengine-us-data",
-                    "revision": "1.115.3",
+                    "revision": US_DATA_RELEASE_VERSION,
                     "sha256": "abc",
                     "size_bytes": 123,
                 }

@@ -262,14 +262,17 @@ def test__load_managed_long_term_datasets__loads_bundled_local_mirror(
     _write_metadata(
         h5_path,
         2100,
-        policyengine_us={"version": "1.691.12"},
+        policyengine_us={"version": "1.700.0"},
     )
     dataset_uri = "hf://policyengine/policyengine-us-data/long_term/2100.h5@abc123"
 
     monkeypatch.setattr(
         us_datasets_module,
         "get_release_manifest",
-        lambda country_id: _manifest_with_long_term_sha(_sha256(h5_path)),
+        lambda country_id: _manifest_with_long_term_sha(
+            _sha256(h5_path),
+            version="1.700.0",
+        ),
     )
     monkeypatch.setattr(
         us_datasets_module,

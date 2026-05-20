@@ -268,6 +268,8 @@ def _refresh_dataset_path_references_from_data_release(
         path = path_reference.get("path")
         if not path:
             continue
+        if path_reference.get("revision"):
+            continue
         artifact = _release_artifact_by_path(release_manifest_json, path)
         if artifact is None:
             if "sha256" in path_reference or "metadata_sha256" in path_reference:
@@ -549,6 +551,9 @@ def refresh_release_bundle(
         certification_json = manifest_json["certification"]
         certification_json["data_build_id"] = data_build_id
         certification_json["certified_for_model_version"] = new_model
+        certification_json["certified_by"] = (
+            f"{current.data_package.name} release manifest"
+        )
         built_with_model_version = built_with_model.get("version")
         if built_with_model_version is not None:
             certification_json["built_with_model_version"] = built_with_model_version

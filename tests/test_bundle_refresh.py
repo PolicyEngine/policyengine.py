@@ -592,6 +592,46 @@ def test__custom_release_manifest_requires_existing_long_term_dataset_artifact(
             )
 
 
+def test__refresh_preserves_dataset_entries_with_explicit_revisions(
+    sandbox,
+) -> None:
+    manifest_path = sandbox["manifest_dir"] / "us.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["datasets"]["long_term_cps_2100"] = {
+        "path": "long_term/2100.h5",
+        "revision": "crfb-longrun-20260517",
+        "sha256": "1" * 64,
+        "metadata_sha256": "2" * 64,
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        if url.endswith("releases/1.83.4/release_manifest.json"):
+            return _data_release_manifest_response(data_version="1.83.4")
+        raise AssertionError(f"Unexpected URL fetched: {url}")
+
+    with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
+        refresh_release_bundle(
+            country="us",
+            data_version="1.83.4",
+            manifest_dir=sandbox["manifest_dir"],
+            pyproject_path=sandbox["pyproject_path"],
+        )
+
+    written = json.loads((sandbox["manifest_dir"] / "us.json").read_text())
+    assert written["datasets"]["long_term_cps_2100"] == {
+        "path": "long_term/2100.h5",
+        "revision": "crfb-longrun-20260517",
+        "sha256": "1" * 64,
+        "metadata_sha256": "2" * 64,
+    }
+    assert (
+        written["certified_data_artifact"]["uri"]
+        == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@release-manifest-commit-sha"
+    )
+
+
 def test__custom_release_manifest_requires_existing_long_term_dataset_sha(
     sandbox,
 ) -> None:
