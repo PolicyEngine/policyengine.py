@@ -1,3 +1,10 @@
+## [4.9.2] - 2026-05-20
+
+### Changed
+
+- Update the bundled UK release to calibrated fuel-duty litres.
+
+
 ## [4.9.1] - 2026-05-20
 
 ### Changed
