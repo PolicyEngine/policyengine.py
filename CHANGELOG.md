@@ -1,3 +1,10 @@
+## [4.9.1] - 2026-05-20
+
+### Changed
+
+- Update the bundled US model and enhanced CPS data release while preserving explicitly versioned dataset entries.
+
+
 ## [4.9.0] - 2026-05-19
 
 ### Added
