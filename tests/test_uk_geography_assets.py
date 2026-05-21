@@ -10,6 +10,7 @@ from policyengine.outputs.uk_geography_assets import (
     LOCAL_AUTHORITY_ASSET_SPEC,
     GCSUKGeographyAssetStrategy,
     LocalUKGeographyAssetStrategy,
+    UKGeographyAssetSpec,
     UKGeographyAssetStrategy,
     resolve_uk_geography_asset_paths,
 )
@@ -83,6 +84,25 @@ def test_gcs_strategy_downloads_missing_standard_files(tmp_path):
         CONSTITUENCY_ASSET_SPEC.weight_matrix_filename,
         CONSTITUENCY_ASSET_SPEC.lookup_csv_filename,
     }
+
+
+def test_resolver_local_only_does_not_download_missing_standard_files():
+    spec = UKGeographyAssetSpec(
+        geography_type="test",
+        weight_matrix_filename="missing-test-weights.h5",
+        lookup_csv_filename="missing-test-lookup.csv",
+    )
+
+    with patch("policyengine_core.tools.google_cloud.download_gcs_file") as download:
+        with pytest.raises(FileNotFoundError) as exc_info:
+            resolve_uk_geography_asset_paths(
+                spec,
+                download_missing_assets=False,
+            )
+
+    download.assert_not_called()
+    assert "Unable to resolve UK test geography assets" in str(exc_info.value)
+    assert spec.weight_matrix_filename in str(exc_info.value)
 
 
 def test_resolver_rejects_missing_explicit_path_before_strategies(tmp_path):

@@ -61,7 +61,7 @@ impacts = compute_uk_constituency_impacts(
 impacts.constituency_results
 ```
 
-To force local files, pass `weight_matrix_path` and `constituency_csv_path`. To set a reusable local data directory, set `POLICYENGINE_UK_GEOGRAPHY_DATA_DIR`.
+To force specific local files, pass `weight_matrix_path` and `constituency_csv_path`. If either provided path is missing, the helper raises `FileNotFoundError` and does not fall back to GCS. To require the canonical files to be available locally or in the cache, pass `download_missing_assets=False`. To set a reusable local data directory and download cache, set `POLICYENGINE_UK_GEOGRAPHY_DATA_DIR`.
 
 ## UK local authorities
 
@@ -76,7 +76,7 @@ impacts = compute_uk_local_authority_impacts(
 impacts.local_authority_results
 ```
 
-`compute_uk_local_authority_impacts` accepts explicit paths with `weight_matrix_path` and `local_authority_csv_path` when callers need to bypass the default local-first, GCS-fallback resolver.
+`compute_uk_local_authority_impacts` accepts explicit paths with `weight_matrix_path` and `local_authority_csv_path` when callers need to bypass the default local-first, GCS-fallback resolver. It also accepts `download_missing_assets=False` for local-only canonical asset resolution.
 
 ## Region registries
 

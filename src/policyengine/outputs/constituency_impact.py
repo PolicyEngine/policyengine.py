@@ -109,6 +109,7 @@ def compute_uk_constituency_impacts(
     constituency_csv_path: Optional[str] = None,
     year: str = "2025",
     asset_strategies: Optional[Sequence[UKGeographyAssetStrategy]] = None,
+    download_missing_assets: bool = True,
 ) -> ConstituencyImpact:
     """Compute per-constituency income changes for UK.
 
@@ -120,8 +121,10 @@ def compute_uk_constituency_impacts(
         constituency_csv_path: Optional path to constituencies_2024.csv.
             If omitted, standard local paths are checked before downloading from GCS.
         year: Year key in the H5 file (default "2025").
-        asset_strategies: Optional resolver strategy chain. Defaults to local lookup,
-            then GCS download.
+        asset_strategies: Optional resolver strategy chain. If omitted, defaults to
+            local lookup, then optional GCS download.
+        download_missing_assets: Whether to download canonical missing assets from GCS.
+            Set to False to require local/cache files.
 
     Returns:
         ConstituencyImpact with constituency_results populated.
@@ -131,6 +134,7 @@ def compute_uk_constituency_impacts(
         weight_matrix_path=weight_matrix_path,
         lookup_csv_path=constituency_csv_path,
         asset_strategies=asset_strategies,
+        download_missing_assets=download_missing_assets,
     )
     impact = ConstituencyImpact.model_construct(
         baseline_simulation=baseline_simulation,

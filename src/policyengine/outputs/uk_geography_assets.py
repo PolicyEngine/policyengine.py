@@ -63,6 +63,7 @@ def default_local_search_dirs() -> list[Path]:
     candidates = [
         _env_path(UK_GEOGRAPHY_DATA_DIR_ENV),
         _env_path(POLICYENGINE_DATA_FOLDER_ENV),
+        Path.home() / ".policyengine" / "uk-geography",
         Path(".datasets"),
         Path.cwd(),
     ]
@@ -242,9 +243,15 @@ class GCSUKGeographyAssetStrategy(UKGeographyAssetStrategy):
         )
 
 
-def default_uk_geography_asset_strategies() -> list[UKGeographyAssetStrategy]:
-    """Return the default local-first, GCS-fallback strategy chain."""
-    return [LocalUKGeographyAssetStrategy(), GCSUKGeographyAssetStrategy()]
+def default_uk_geography_asset_strategies(
+    *,
+    download_missing_assets: bool = True,
+) -> list[UKGeographyAssetStrategy]:
+    """Return the default asset resolution strategy chain."""
+    strategies: list[UKGeographyAssetStrategy] = [LocalUKGeographyAssetStrategy()]
+    if download_missing_assets:
+        strategies.append(GCSUKGeographyAssetStrategy())
+    return strategies
 
 
 def resolve_uk_geography_asset_paths(
@@ -253,8 +260,9 @@ def resolve_uk_geography_asset_paths(
     weight_matrix_path: Optional[str] = None,
     lookup_csv_path: Optional[str] = None,
     asset_strategies: Optional[Sequence[UKGeographyAssetStrategy]] = None,
+    download_missing_assets: bool = True,
 ) -> UKGeographyAssetPaths:
-    """Resolve required UK geography files with local lookup, then GCS fallback."""
+    """Resolve required UK geography files with optional GCS fallback."""
     _validate_explicit_path(
         weight_matrix_path,
         asset_label=f"{spec.geography_type} weight matrix",
@@ -267,7 +275,9 @@ def resolve_uk_geography_asset_paths(
     strategies = (
         list(asset_strategies)
         if asset_strategies is not None
-        else default_uk_geography_asset_strategies()
+        else default_uk_geography_asset_strategies(
+            download_missing_assets=download_missing_assets,
+        )
     )
 
     errors = []
@@ -283,6 +293,8 @@ def resolve_uk_geography_asset_paths(
             errors.append(f"{strategy.__class__.__name__}: {strategy.last_error}")
 
     detail = "; ".join(errors) if errors else "no asset strategies configured"
+    if not download_missing_assets and asset_strategies is None:
+        detail += "; GCS fallback disabled by download_missing_assets=False"
     raise FileNotFoundError(
         f"Unable to resolve UK {spec.geography_type} geography assets "
         f"({spec.weight_matrix_filename}, {spec.lookup_csv_filename}). {detail}. "
