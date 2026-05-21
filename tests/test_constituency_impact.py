@@ -12,6 +12,10 @@ from microdf import MicroDataFrame
 from policyengine.outputs.constituency_impact import (
     compute_uk_constituency_impacts,
 )
+from policyengine.outputs.uk_geography_assets import (
+    CONSTITUENCY_ASSET_SPEC,
+    LocalUKGeographyAssetStrategy,
+)
 
 
 def _make_sim(household_data: dict) -> MagicMock:
@@ -148,3 +152,43 @@ def test_relative_change():
         abs(impact.constituency_results[0]["relative_household_income_change"] - 0.1)
         < 1e-6
     )
+
+
+def test_compute_resolves_standard_constituency_assets_from_local_dir():
+    """The helper can run without explicit asset paths when standard files exist."""
+    baseline = _make_sim(
+        {
+            "household_net_income": [100.0, 200.0],
+            "household_weight": [1.0, 1.0],
+        }
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [110.0, 220.0],
+            "household_weight": [1.0, 1.0],
+        }
+    )
+
+    weight_matrix = [[1.0, 0.0], [0.0, 1.0]]
+    csv_rows = [
+        {"code": "C001", "name": "A", "x": 0, "y": 0},
+        {"code": "C002", "name": "B", "x": 1, "y": 1},
+    ]
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        h5_path = os.path.join(tmpdir, CONSTITUENCY_ASSET_SPEC.weight_matrix_filename)
+        with h5py.File(h5_path, "w") as f:
+            f.create_dataset("2025", data=np.array(weight_matrix, dtype=np.float64))
+
+        csv_path = os.path.join(tmpdir, CONSTITUENCY_ASSET_SPEC.lookup_csv_filename)
+        pd.DataFrame(csv_rows).to_csv(csv_path, index=False)
+
+        impact = compute_uk_constituency_impacts(
+            baseline,
+            reform,
+            asset_strategies=[LocalUKGeographyAssetStrategy(search_dirs=[tmpdir])],
+        )
+
+    assert impact.weight_matrix_path == h5_path
+    assert impact.constituency_csv_path == csv_path
+    assert len(impact.constituency_results) == 2
