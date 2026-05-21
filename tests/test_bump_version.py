@@ -14,6 +14,37 @@ assert spec.loader is not None
 spec.loader.exec_module(bump_version)
 
 
+def test_infer_bump_uses_flat_towncrier_fragment_types(tmp_path):
+    changelog_dir = tmp_path / "changelog.d"
+    changelog_dir.mkdir()
+    (changelog_dir / "feature.added.md").write_text("Add a feature.\n")
+
+    bump = bump_version.infer_bump(changelog_dir)
+
+    assert bump == "minor"
+
+
+def test_infer_bump_uses_breaking_fragment_precedence(tmp_path):
+    changelog_dir = tmp_path / "changelog.d"
+    changelog_dir.mkdir()
+    (changelog_dir / "bugfix.fixed.md").write_text("Fix a bug.\n")
+    (changelog_dir / "api.breaking.md").write_text("Break an API.\n")
+
+    bump = bump_version.infer_bump(changelog_dir)
+
+    assert bump == "major"
+
+
+def test_infer_bump_rejects_fragments_towncrier_would_ignore(tmp_path):
+    changelog_dir = tmp_path / "changelog.d"
+    nested_dir = changelog_dir / "added"
+    nested_dir.mkdir(parents=True)
+    (nested_dir / "feature.md").write_text("Add a feature.\n")
+
+    with pytest.raises(SystemExit):
+        bump_version.infer_bump(changelog_dir)
+
+
 def test_get_current_version_prefers_highest_seen_version(tmp_path):
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text('[project]\nversion = "3.4.1"\n')

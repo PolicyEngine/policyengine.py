@@ -16,6 +16,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Install towncrier
+        run: pip install towncrier
       - name: Check for changelog fragment
         run: .github/check-changelog.sh
   Lint:
