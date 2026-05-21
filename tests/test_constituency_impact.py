@@ -2,7 +2,7 @@
 
 import os
 import tempfile
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import h5py
 import numpy as np
@@ -14,7 +14,6 @@ from policyengine.outputs.constituency_impact import (
 )
 from policyengine.outputs.uk_geography_assets import (
     CONSTITUENCY_ASSET_SPEC,
-    LocalUKGeographyAssetStrategy,
 )
 
 
@@ -154,7 +153,9 @@ def test_relative_change():
     )
 
 
-def test_compute_resolves_standard_constituency_assets_from_local_dir():
+def test_compute_resolves_standard_constituency_assets_from_default_local_dir(
+    monkeypatch,
+):
     """The helper can run without explicit asset paths when standard files exist."""
     baseline = _make_sim(
         {
@@ -183,11 +184,16 @@ def test_compute_resolves_standard_constituency_assets_from_local_dir():
         csv_path = os.path.join(tmpdir, CONSTITUENCY_ASSET_SPEC.lookup_csv_filename)
         pd.DataFrame(csv_rows).to_csv(csv_path, index=False)
 
-        impact = compute_uk_constituency_impacts(
-            baseline,
-            reform,
-            asset_strategies=[LocalUKGeographyAssetStrategy(search_dirs=[tmpdir])],
-        )
+        monkeypatch.setenv("POLICYENGINE_UK_GEOGRAPHY_DATA_DIR", tmpdir)
+        with patch(
+            "policyengine_core.tools.google_cloud.download_gcs_file"
+        ) as download:
+            impact = compute_uk_constituency_impacts(
+                baseline,
+                reform,
+            )
+
+        download.assert_not_called()
 
     assert impact.weight_matrix_path == h5_path
     assert impact.constituency_csv_path == csv_path

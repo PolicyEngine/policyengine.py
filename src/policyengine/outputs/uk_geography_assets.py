@@ -7,19 +7,28 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Sequence, Union
 
-UK_GEOGRAPHY_BUCKET = "policyengine-uk-data-private"
+from policyengine.data.uk_geography_assets import (
+    CONSTITUENCY_ASSET_SPEC,
+    LOCAL_AUTHORITY_ASSET_SPEC,
+    UK_GEOGRAPHY_BUCKET,
+    UKGeographyAssetSpec,
+)
+
+__all__ = [
+    "CONSTITUENCY_ASSET_SPEC",
+    "LOCAL_AUTHORITY_ASSET_SPEC",
+    "UK_GEOGRAPHY_BUCKET",
+    "UKGeographyAssetPaths",
+    "UKGeographyAssetSpec",
+    "UKGeographyAssetStrategy",
+    "LocalUKGeographyAssetStrategy",
+    "GCSUKGeographyAssetStrategy",
+    "default_uk_geography_asset_strategies",
+    "resolve_uk_geography_asset_paths",
+]
+
 UK_GEOGRAPHY_DATA_DIR_ENV = "POLICYENGINE_UK_GEOGRAPHY_DATA_DIR"
 POLICYENGINE_DATA_FOLDER_ENV = "POLICYENGINE_DATA_FOLDER"
-
-
-@dataclass(frozen=True)
-class UKGeographyAssetSpec:
-    """The paired files needed to compute one UK geography output."""
-
-    geography_type: str
-    weight_matrix_filename: str
-    lookup_csv_filename: str
-    bucket: str = UK_GEOGRAPHY_BUCKET
 
 
 @dataclass(frozen=True)
@@ -28,19 +37,6 @@ class UKGeographyAssetPaths:
 
     weight_matrix_path: str
     lookup_csv_path: str
-
-
-CONSTITUENCY_ASSET_SPEC = UKGeographyAssetSpec(
-    geography_type="constituency",
-    weight_matrix_filename="parliamentary_constituency_weights.h5",
-    lookup_csv_filename="constituencies_2024.csv",
-)
-
-LOCAL_AUTHORITY_ASSET_SPEC = UKGeographyAssetSpec(
-    geography_type="local_authority",
-    weight_matrix_filename="local_authority_weights.h5",
-    lookup_csv_filename="local_authorities_2021.csv",
-)
 
 
 def _env_path(name: str) -> Optional[Path]:
@@ -81,6 +77,18 @@ def default_download_dir() -> Path:
     if configured is not None:
         return configured
     return Path.home() / ".policyengine" / "uk-geography"
+
+
+def _validate_explicit_path(path: Optional[str], *, asset_label: str) -> None:
+    if not path:
+        return
+
+    candidate = Path(path).expanduser()
+    if not candidate.is_file():
+        raise FileNotFoundError(
+            f"Provided UK geography {asset_label} path does not exist "
+            f"or is not a file: {candidate}"
+        )
 
 
 class UKGeographyAssetStrategy:
@@ -247,6 +255,15 @@ def resolve_uk_geography_asset_paths(
     asset_strategies: Optional[Sequence[UKGeographyAssetStrategy]] = None,
 ) -> UKGeographyAssetPaths:
     """Resolve required UK geography files with local lookup, then GCS fallback."""
+    _validate_explicit_path(
+        weight_matrix_path,
+        asset_label=f"{spec.geography_type} weight matrix",
+    )
+    _validate_explicit_path(
+        lookup_csv_path,
+        asset_label=f"{spec.geography_type} lookup CSV",
+    )
+
     strategies = (
         list(asset_strategies)
         if asset_strategies is not None

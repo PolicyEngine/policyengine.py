@@ -10,6 +10,7 @@ from policyengine.outputs.uk_geography_assets import (
     LOCAL_AUTHORITY_ASSET_SPEC,
     GCSUKGeographyAssetStrategy,
     LocalUKGeographyAssetStrategy,
+    UKGeographyAssetStrategy,
     resolve_uk_geography_asset_paths,
 )
 
@@ -82,6 +83,27 @@ def test_gcs_strategy_downloads_missing_standard_files(tmp_path):
         CONSTITUENCY_ASSET_SPEC.weight_matrix_filename,
         CONSTITUENCY_ASSET_SPEC.lookup_csv_filename,
     }
+
+
+def test_resolver_rejects_missing_explicit_path_before_strategies(tmp_path):
+    class ShouldNotRunStrategy(UKGeographyAssetStrategy):
+        def resolve(self, *args, **kwargs):
+            raise AssertionError("Strategy should not run for a missing explicit path")
+
+    missing_weight_matrix_path = tmp_path / "missing_weights.h5"
+    lookup_csv_path = tmp_path / "lookup.csv"
+    _touch(lookup_csv_path)
+
+    with pytest.raises(FileNotFoundError) as exc_info:
+        resolve_uk_geography_asset_paths(
+            CONSTITUENCY_ASSET_SPEC,
+            weight_matrix_path=str(missing_weight_matrix_path),
+            lookup_csv_path=str(lookup_csv_path),
+            asset_strategies=[ShouldNotRunStrategy()],
+        )
+
+    assert "constituency weight matrix" in str(exc_info.value)
+    assert str(missing_weight_matrix_path) in str(exc_info.value)
 
 
 def test_resolver_raises_clear_error_when_no_strategy_succeeds():
