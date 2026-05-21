@@ -105,6 +105,18 @@ def test_resolver_local_only_does_not_download_missing_standard_files():
     assert spec.weight_matrix_filename in str(exc_info.value)
 
 
+def test_resolver_rejects_downloading_strategy_when_downloads_disabled(tmp_path):
+    with pytest.raises(ValueError) as exc_info:
+        resolve_uk_geography_asset_paths(
+            CONSTITUENCY_ASSET_SPEC,
+            asset_strategies=[GCSUKGeographyAssetStrategy(download_dir=tmp_path)],
+            download_missing_assets=False,
+        )
+
+    assert "download_missing_assets=False" in str(exc_info.value)
+    assert "GCSUKGeographyAssetStrategy" in str(exc_info.value)
+
+
 def test_resolver_rejects_missing_explicit_path_before_strategies(tmp_path):
     class ShouldNotRunStrategy(UKGeographyAssetStrategy):
         def resolve(self, *args, **kwargs):

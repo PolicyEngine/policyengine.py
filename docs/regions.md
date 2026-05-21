@@ -76,7 +76,7 @@ impacts = compute_uk_local_authority_impacts(
 impacts.local_authority_results
 ```
 
-`compute_uk_local_authority_impacts` accepts explicit paths with `weight_matrix_path` and `local_authority_csv_path` when callers need to bypass the default local-first, GCS-fallback resolver. It also accepts `download_missing_assets=False` for local-only canonical asset resolution.
+`compute_uk_local_authority_impacts` accepts explicit paths with `weight_matrix_path` and `local_authority_csv_path` when callers need to use specific local files instead of the default local/GCS lookup. It also accepts `download_missing_assets=False` for local-only canonical asset resolution.
 
 ## Region registries
 

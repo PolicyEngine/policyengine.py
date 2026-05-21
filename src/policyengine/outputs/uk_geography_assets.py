@@ -95,6 +95,7 @@ def _validate_explicit_path(path: Optional[str], *, asset_label: str) -> None:
 class UKGeographyAssetStrategy:
     """Base class for UK geography asset resolution strategies."""
 
+    downloads_missing_assets = False
     last_error: Optional[str] = None
 
     def resolve(
@@ -178,6 +179,8 @@ class LocalUKGeographyAssetStrategy(UKGeographyAssetStrategy):
 
 class GCSUKGeographyAssetStrategy(UKGeographyAssetStrategy):
     """Download geography assets from the standard PolicyEngine UK GCS bucket."""
+
+    downloads_missing_assets = True
 
     def __init__(self, download_dir: Optional[PathLike] = None):
         self.download_dir = (
@@ -279,6 +282,18 @@ def resolve_uk_geography_asset_paths(
             download_missing_assets=download_missing_assets,
         )
     )
+    if not download_missing_assets:
+        download_strategy_names = [
+            strategy.__class__.__name__
+            for strategy in strategies
+            if strategy.downloads_missing_assets
+        ]
+        if download_strategy_names:
+            raise ValueError(
+                "download_missing_assets=False cannot be used with asset "
+                "strategies that download missing assets: "
+                + ", ".join(download_strategy_names)
+            )
 
     errors = []
     for strategy in strategies:
@@ -293,7 +308,7 @@ def resolve_uk_geography_asset_paths(
             errors.append(f"{strategy.__class__.__name__}: {strategy.last_error}")
 
     detail = "; ".join(errors) if errors else "no asset strategies configured"
-    if not download_missing_assets and asset_strategies is None:
+    if not download_missing_assets:
         detail += "; GCS fallback disabled by download_missing_assets=False"
     raise FileNotFoundError(
         f"Unable to resolve UK {spec.geography_type} geography assets "

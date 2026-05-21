@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import h5py
 import numpy as np
 import pandas as pd
+import pytest
 from microdf import MicroDataFrame
 
 from policyengine.outputs.constituency_impact import (
@@ -198,3 +199,37 @@ def test_compute_resolves_standard_constituency_assets_from_default_local_dir(
     assert impact.weight_matrix_path == h5_path
     assert impact.constituency_csv_path == csv_path
     assert len(impact.constituency_results) == 2
+
+
+def test_compute_constituency_impacts_local_only_does_not_call_gcs(tmp_path):
+    baseline = _make_sim(
+        {
+            "household_net_income": [100.0],
+            "household_weight": [1.0],
+        }
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [110.0],
+            "household_weight": [1.0],
+        }
+    )
+
+    with (
+        patch(
+            "policyengine.outputs.uk_geography_assets.default_local_search_dirs",
+            return_value=[tmp_path / "missing"],
+        ),
+        patch("policyengine_core.tools.google_cloud.download_gcs_file") as download,
+    ):
+        with pytest.raises(FileNotFoundError) as exc_info:
+            compute_uk_constituency_impacts(
+                baseline,
+                reform,
+                download_missing_assets=False,
+            )
+
+    download.assert_not_called()
+    assert "GCS fallback disabled by download_missing_assets=False" in str(
+        exc_info.value
+    )

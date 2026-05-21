@@ -255,7 +255,7 @@ impacts = compute_uk_constituency_impacts(
 impacts.constituency_results
 ```
 
-`compute_uk_local_authority_impacts` follows the same pattern. Pass explicit paths to bypass the resolver; missing explicit paths raise `FileNotFoundError` without falling back to GCS. Pass `download_missing_assets=False` to require the canonical files to exist locally or in the cache. Set `POLICYENGINE_UK_GEOGRAPHY_DATA_DIR` to choose the local lookup and download cache directory. See [Regions](regions.md).
+`compute_uk_local_authority_impacts` follows the same pattern. Pass explicit paths to use specific local files instead of the default local/GCS lookup; missing explicit paths raise `FileNotFoundError` without falling back to GCS. Pass `download_missing_assets=False` to require the canonical files to exist locally or in the cache. Set `POLICYENGINE_UK_GEOGRAPHY_DATA_DIR` to choose the local lookup and download cache directory. See [Regions](regions.md).
 
 ## Writing your own
 
