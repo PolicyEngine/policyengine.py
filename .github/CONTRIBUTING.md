@@ -7,10 +7,11 @@ See the [shared PolicyEngine contribution guide](https://github.com/PolicyEngine
 ```bash
 make install                         # install deps (uv)
 make format                          # format (required)
-ruff check .                         # lint
+make lint                            # format check and lint
 uv run mypy src/policyengine         # type check
 make test                            # test suite
 make docs                            # build documentation
+make push-pr-branch                  # push to origin with correct tracking before opening PRs
 
 uv run pytest tests/test_household_impact.py::TestUKHouseholdImpact -v
 ```
@@ -28,6 +29,21 @@ policyengine.py is the user-facing analysis package. It wraps `policyengine-uk` 
 - `src/policyengine/utils/` — parametric-reform helpers, entity utilities
 
 Country pins live in `pyproject.toml` under the `[uk]` / `[us]` / `[dev]` extras. Bumping a pin is a patch-level change most of the time; include the motivation in the PR body.
+
+## Opening PRs
+
+Read `docs/engineering/skills/github-prs.md` before opening, replacing, or
+sharing a PR. In short:
+
+1. Open or identify an issue.
+2. Put `Fixes #ISSUE_NUMBER` as the first line of the PR body.
+3. Add a Towncrier fragment such as `changelog.d/ISSUE_NUMBER.fixed.md`.
+4. Run `make format` and `make lint`.
+5. Run `make push-pr-branch`.
+6. Open a same-repository draft PR:
+   `gh pr create --draft --repo PolicyEngine/policyengine.py --head "$(git branch --show-current)" --base main`.
+7. Verify it is draft and from `PolicyEngine/policyengine.py`:
+   `gh pr view <PR> --repo PolicyEngine/policyengine.py --json isDraft,headRepositoryOwner,headRepository`.
 
 ## Repo-specific anti-patterns
 
