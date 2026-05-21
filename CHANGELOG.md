@@ -1,3 +1,14 @@
+## [4.10.0] - 2026-05-21
+
+### Added
+
+- UK constituency and local-authority output helpers can now resolve standard geography files locally or download them from GCS by default.
+
+### Fixed
+
+- Align the pull-request changelog check with Towncrier's post-merge fragment discovery and add model-neutral AI PR guidance.
+
+
 ## [4.9.2] - 2026-05-20
 
 ### Changed
