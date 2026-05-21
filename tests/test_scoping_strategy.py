@@ -79,8 +79,10 @@ class TestWeightReplacementStrategy:
 
     @patch("policyengine_core.tools.google_cloud.download_gcs_file")
     def test__given_weight_replacement__then_apply_replaces_weights(
-        self, mock_download, uk_test_entity_data, tmp_path
+        self, mock_download, uk_test_entity_data, tmp_path, monkeypatch
     ):
+        monkeypatch.setenv("POLICYENGINE_UK_GEOGRAPHY_DATA_DIR", str(tmp_path))
+
         # Set up mock lookup CSV
         lookup_csv_path = tmp_path / "lookup.csv"
         lookup_df = pd.DataFrame(
@@ -108,10 +110,6 @@ class TestWeightReplacementStrategy:
                 ),
             )
 
-        mock_download.side_effect = lambda bucket, file_path: (
-            str(lookup_csv_path) if file_path.endswith(".csv") else str(weights_h5_path)
-        )
-
         strategy = WeightReplacementStrategy(
             weight_matrix_bucket="test-bucket",
             weight_matrix_key="weights.h5",
@@ -138,11 +136,14 @@ class TestWeightReplacementStrategy:
         # All 6 persons should still be present
         person_df = pd.DataFrame(result["person"])
         assert len(person_df) == 6
+        mock_download.assert_not_called()
 
     @patch("policyengine_core.tools.google_cloud.download_gcs_file")
     def test__given_weight_replacement__then_raises_on_dimension_mismatch(
-        self, mock_download, uk_test_entity_data, tmp_path
+        self, mock_download, uk_test_entity_data, tmp_path, monkeypatch
     ):
+        monkeypatch.setenv("POLICYENGINE_UK_GEOGRAPHY_DATA_DIR", str(tmp_path))
+
         lookup_csv_path = tmp_path / "lookup.csv"
         pd.DataFrame({"code": ["R001"], "name": ["Region A"]}).to_csv(
             lookup_csv_path, index=False
@@ -154,10 +155,6 @@ class TestWeightReplacementStrategy:
 
         with h5py.File(weights_h5_path, "w") as f:
             f.create_dataset("2024", data=np.array([[100.0, 200.0]]))
-
-        mock_download.side_effect = lambda bucket, file_path: (
-            str(lookup_csv_path) if file_path.endswith(".csv") else str(weights_h5_path)
-        )
 
         strategy = WeightReplacementStrategy(
             weight_matrix_bucket="test-bucket",
@@ -173,6 +170,89 @@ class TestWeightReplacementStrategy:
                 group_entities=["benunit", "household"],
                 year=2024,
             )
+        mock_download.assert_not_called()
+
+    @patch("policyengine_core.tools.google_cloud.download_gcs_file")
+    def test__given_weight_replacement_local_only_missing_assets__then_does_not_download(
+        self, mock_download, uk_test_entity_data, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv(
+            "POLICYENGINE_UK_GEOGRAPHY_DATA_DIR",
+            str(tmp_path / "missing-assets"),
+        )
+
+        strategy = WeightReplacementStrategy(
+            weight_matrix_bucket="test-bucket",
+            weight_matrix_key="missing-test-weights.h5",
+            lookup_csv_bucket="test-bucket",
+            lookup_csv_key="missing-test-lookup.csv",
+            region_code="R001",
+            download_missing_assets=False,
+        )
+
+        with pytest.raises(FileNotFoundError, match="GCS fallback disabled"):
+            strategy.apply(
+                entity_data=uk_test_entity_data,
+                group_entities=["benunit", "household"],
+                year=2024,
+            )
+        mock_download.assert_not_called()
+
+    @patch("policyengine_core.tools.google_cloud.download_gcs_file")
+    def test__given_weight_replacement_missing_local_assets__then_downloads(
+        self, mock_download, uk_test_entity_data, tmp_path, monkeypatch
+    ):
+        cache_dir = tmp_path / "cache"
+        monkeypatch.setenv("POLICYENGINE_UK_GEOGRAPHY_DATA_DIR", str(cache_dir))
+
+        def fake_download_gcs_file(*, bucket, file_path, local_path):
+            if file_path == "lookup.csv":
+                assert bucket == "lookup-bucket"
+                pd.DataFrame(
+                    {
+                        "code": ["R001", "R002"],
+                        "name": ["Region A", "Region B"],
+                    }
+                ).to_csv(local_path, index=False)
+                return local_path
+
+            assert bucket == "weights-bucket"
+            assert file_path == "weights.h5"
+            import h5py
+
+            with h5py.File(local_path, "w") as f:
+                f.create_dataset(
+                    "2024",
+                    data=np.array(
+                        [
+                            [100.0, 200.0, 300.0],
+                            [400.0, 500.0, 600.0],
+                        ]
+                    ),
+                )
+            return local_path
+
+        mock_download.side_effect = fake_download_gcs_file
+        strategy = WeightReplacementStrategy(
+            weight_matrix_bucket="weights-bucket",
+            weight_matrix_key="weights.h5",
+            lookup_csv_bucket="lookup-bucket",
+            lookup_csv_key="lookup.csv",
+            region_code="R002",
+        )
+
+        result = strategy.apply(
+            entity_data=uk_test_entity_data,
+            group_entities=["benunit", "household"],
+            year=2024,
+        )
+
+        household_df = pd.DataFrame(result["household"])
+        np.testing.assert_array_almost_equal(
+            household_df["household_weight"].values,
+            [400.0, 500.0, 600.0],
+        )
+        assert mock_download.call_count == 2
 
     def test__given_weight_replacement__then_cache_key_is_descriptive(self):
         strategy = WeightReplacementStrategy(

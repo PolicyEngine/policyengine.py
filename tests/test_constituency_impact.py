@@ -217,7 +217,7 @@ def test_compute_constituency_impacts_local_only_does_not_call_gcs(tmp_path):
 
     with (
         patch(
-            "policyengine.outputs.uk_geography_assets.default_local_search_dirs",
+            "policyengine.data.uk_geography_assets.default_local_search_dirs",
             return_value=[tmp_path / "missing"],
         ),
         patch("policyengine_core.tools.google_cloud.download_gcs_file") as download,
