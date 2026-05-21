@@ -57,6 +57,17 @@ from policyengine.outputs.poverty import (
     calculate_us_poverty_rates,
 )
 from policyengine.outputs.program_statistics import ProgramStatistics
+from policyengine.outputs.uk_geography_assets import (
+    CONSTITUENCY_ASSET_SPEC,
+    LOCAL_AUTHORITY_ASSET_SPEC,
+    GCSUKGeographyAssetStrategy,
+    LocalUKGeographyAssetStrategy,
+    UKGeographyAssetPaths,
+    UKGeographyAssetSpec,
+    UKGeographyAssetStrategy,
+    default_uk_geography_asset_strategies,
+    resolve_uk_geography_asset_paths,
+)
 
 __all__ = [
     "Output",
@@ -102,4 +113,13 @@ __all__ = [
     "compute_uk_constituency_impacts",
     "LocalAuthorityImpact",
     "compute_uk_local_authority_impacts",
+    "CONSTITUENCY_ASSET_SPEC",
+    "LOCAL_AUTHORITY_ASSET_SPEC",
+    "GCSUKGeographyAssetStrategy",
+    "LocalUKGeographyAssetStrategy",
+    "UKGeographyAssetPaths",
+    "UKGeographyAssetSpec",
+    "UKGeographyAssetStrategy",
+    "default_uk_geography_asset_strategies",
+    "resolve_uk_geography_asset_paths",
 ]

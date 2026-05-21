@@ -2,15 +2,19 @@
 
 import os
 import tempfile
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import h5py
 import numpy as np
 import pandas as pd
+import pytest
 from microdf import MicroDataFrame
 
 from policyengine.outputs.constituency_impact import (
     compute_uk_constituency_impacts,
+)
+from policyengine.outputs.uk_geography_assets import (
+    CONSTITUENCY_ASSET_SPEC,
 )
 
 
@@ -147,4 +151,85 @@ def test_relative_change():
     assert (
         abs(impact.constituency_results[0]["relative_household_income_change"] - 0.1)
         < 1e-6
+    )
+
+
+def test_compute_resolves_standard_constituency_assets_from_default_local_dir(
+    monkeypatch,
+):
+    """The helper can run without explicit asset paths when standard files exist."""
+    baseline = _make_sim(
+        {
+            "household_net_income": [100.0, 200.0],
+            "household_weight": [1.0, 1.0],
+        }
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [110.0, 220.0],
+            "household_weight": [1.0, 1.0],
+        }
+    )
+
+    weight_matrix = [[1.0, 0.0], [0.0, 1.0]]
+    csv_rows = [
+        {"code": "C001", "name": "A", "x": 0, "y": 0},
+        {"code": "C002", "name": "B", "x": 1, "y": 1},
+    ]
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        h5_path = os.path.join(tmpdir, CONSTITUENCY_ASSET_SPEC.weight_matrix_filename)
+        with h5py.File(h5_path, "w") as f:
+            f.create_dataset("2025", data=np.array(weight_matrix, dtype=np.float64))
+
+        csv_path = os.path.join(tmpdir, CONSTITUENCY_ASSET_SPEC.lookup_csv_filename)
+        pd.DataFrame(csv_rows).to_csv(csv_path, index=False)
+
+        monkeypatch.setenv("POLICYENGINE_UK_GEOGRAPHY_DATA_DIR", tmpdir)
+        with patch(
+            "policyengine_core.tools.google_cloud.download_gcs_file"
+        ) as download:
+            impact = compute_uk_constituency_impacts(
+                baseline,
+                reform,
+            )
+
+        download.assert_not_called()
+
+    assert impact.weight_matrix_path == h5_path
+    assert impact.constituency_csv_path == csv_path
+    assert len(impact.constituency_results) == 2
+
+
+def test_compute_constituency_impacts_local_only_does_not_call_gcs(tmp_path):
+    baseline = _make_sim(
+        {
+            "household_net_income": [100.0],
+            "household_weight": [1.0],
+        }
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [110.0],
+            "household_weight": [1.0],
+        }
+    )
+
+    with (
+        patch(
+            "policyengine.data.uk_geography_assets.default_local_search_dirs",
+            return_value=[tmp_path / "missing"],
+        ),
+        patch("policyengine_core.tools.google_cloud.download_gcs_file") as download,
+    ):
+        with pytest.raises(FileNotFoundError) as exc_info:
+            compute_uk_constituency_impacts(
+                baseline,
+                reform,
+                download_missing_assets=False,
+            )
+
+    download.assert_not_called()
+    assert "GCS fallback disabled by download_missing_assets=False" in str(
+        exc_info.value
     )

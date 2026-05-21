@@ -242,7 +242,7 @@ for row in impacts.district_results:
 
 ### UK constituencies / local authorities
 
-Constituency and local-authority breakdowns require externally-supplied weight matrices:
+Constituency and local-authority breakdowns use externally-maintained weight matrices. The convenience helpers first look for the standard files locally, then download them from the PolicyEngine UK GCS bucket:
 
 ```python
 from policyengine.outputs import compute_uk_constituency_impacts
@@ -250,14 +250,12 @@ from policyengine.outputs import compute_uk_constituency_impacts
 impacts = compute_uk_constituency_impacts(
     baseline_simulation=baseline,
     reform_simulation=reform,
-    weight_matrix_path="parliamentary_constituency_weights.h5",
-    constituency_csv_path="constituencies_2024.csv",
     year="2025",
 )
 impacts.constituency_results
 ```
 
-`compute_uk_local_authority_impacts` follows the same pattern. See [Regions](regions.md).
+`compute_uk_local_authority_impacts` follows the same pattern. Pass explicit paths to use specific local files instead of the default local/GCS lookup; missing explicit paths raise `FileNotFoundError` without falling back to GCS. Pass `download_missing_assets=False` to require the canonical files to exist locally or in the cache. Set `POLICYENGINE_UK_GEOGRAPHY_DATA_DIR` to choose the local lookup and download cache directory. See [Regions](regions.md).
 
 ## Writing your own
 

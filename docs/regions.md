@@ -48,7 +48,7 @@ for row in impacts.district_results:
 
 ## UK parliamentary constituencies
 
-Constituency-level impacts reweight every household to each constituency's demographic profile using a pre-computed weight matrix, so both the weight file and a constituency metadata CSV are required inputs:
+Constituency-level impacts reweight every household to each constituency's demographic profile using a pre-computed weight matrix. By default, PolicyEngine looks for the standard constituency files locally and downloads them from the PolicyEngine UK GCS bucket if they are not present:
 
 ```python
 from policyengine.outputs import compute_uk_constituency_impacts
@@ -56,12 +56,12 @@ from policyengine.outputs import compute_uk_constituency_impacts
 impacts = compute_uk_constituency_impacts(
     baseline_simulation=baseline,
     reform_simulation=reform,
-    weight_matrix_path="parliamentary_constituency_weights.h5",
-    constituency_csv_path="constituencies_2024.csv",
     year="2025",
 )
 impacts.constituency_results
 ```
+
+To force specific local files, pass `weight_matrix_path` and `constituency_csv_path`. If either provided path is missing, the helper raises `FileNotFoundError` and does not fall back to GCS. To require the canonical files to be available locally or in the cache, pass `download_missing_assets=False`. To set a reusable local data directory and download cache, set `POLICYENGINE_UK_GEOGRAPHY_DATA_DIR`.
 
 ## UK local authorities
 
@@ -71,12 +71,12 @@ from policyengine.outputs import compute_uk_local_authority_impacts
 impacts = compute_uk_local_authority_impacts(
     baseline_simulation=baseline,
     reform_simulation=reform,
-    weight_matrix_path="local_authority_weights.h5",
-    local_authority_csv_path="local_authorities_2021.csv",
     year="2025",
 )
 impacts.local_authority_results
 ```
+
+`compute_uk_local_authority_impacts` accepts explicit paths with `weight_matrix_path` and `local_authority_csv_path` when callers need to use specific local files instead of the default local/GCS lookup. It also accepts `download_missing_assets=False` for local-only canonical asset resolution.
 
 ## Region registries
 
