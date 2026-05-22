@@ -3,7 +3,7 @@ message: "If you use this software, please cite it as below."
 type: software
 title: policyengine
 version: 4.10.0
-date-released: "2026-04-13"
+date-released: "2026-05-22"
 url: "https://github.com/PolicyEngine/policyengine.py"
 abstract: "An open-source Python package that provides a common analysis layer for tax-benefit microsimulation across the US and the UK."
 license: AGPL-3.0
