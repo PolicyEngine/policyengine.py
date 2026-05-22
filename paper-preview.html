@@ -600,7 +600,10 @@ poverty, inequality, and regional impacts. Because the runtime exposes
 the resolved certified bundle and compatibility basis, results can be
 traced to a specific <code>policyengine</code> release, runtime
 country-model release, microdata release, versioned dataset artifact,
-and build-time country-model version.</p>
+and build-time country-model version. Population-scale runs operate on
+representative survey microdata and can require several gigabytes of
+memory; the US enhanced CPS pipeline is the most demanding of the
+bundled workloads.</p>
 <p>The following household-level example computes a household’s net
 income under baseline law and under a reform that doubles the US
 single-filer standard deduction (to $32,200 for 2026):</p>
@@ -639,7 +642,7 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a hr
 <code>policyengine-us</code> version installed alongside
 <code>policyengine</code>, so results are stable for a given pinned
 environment. This paper describes <code>policyengine</code> version
-3.4.4 <span class="citation" data-cites="policyengine_py">(PolicyEngine
+4.10.0 <span class="citation" data-cites="policyengine_py">(PolicyEngine
 Contributors 2026)</span>, and the checked-in UK reproduction script
 <code>examples/paper_repro_uk.py</code> documents an executable
 population-level workflow using a pinned interpreter
@@ -843,7 +846,7 @@ href="https://pslmodels.org/">https://pslmodels.org/</a>.
 </div>
 <div id="ref-policyengine_py" class="csl-entry" role="listitem">
 PolicyEngine Contributors. 2026. <em><span
-class="nocase">policyengine</span></em>. V. 3.4.4. Released. <a
+class="nocase">policyengine</span></em>. V. 4.10.0. Released. <a
 href="https://github.com/PolicyEngine/policyengine.py">https://github.com/PolicyEngine/policyengine.py</a>.
 </div>
 <div id="ref-sutherland2013euromod" class="csl-entry" role="listitem">

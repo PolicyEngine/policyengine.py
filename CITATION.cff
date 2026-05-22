@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 type: software
 title: policyengine
-version: 3.4.4
+version: 4.10.0
 date-released: "2026-04-13"
 url: "https://github.com/PolicyEngine/policyengine.py"
 abstract: "An open-source Python package that provides a common analysis layer for tax-benefit microsimulation across the US and the UK."
@@ -23,6 +23,9 @@ authors:
   - family-names: Makarchuk
     given-names: Pavel
     orcid: "https://orcid.org/0009-0003-4869-7409"
+    affiliation: PolicyEngine
+  - family-names: Volk
+    given-names: Anthony
     affiliation: PolicyEngine
 keywords:
   - microsimulation
