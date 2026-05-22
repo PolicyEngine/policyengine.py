@@ -317,11 +317,6 @@ def refresh_release_bundle(
             f"'hf://{{owner}}/{{repo}}/{{path}}@{{revision}}'"
         )
     repo_id, dataset_path, _old_revision = repo_id_match.groups()
-    # The data release manifest is the authoritative source of build
-    # metadata. We only fetch it when the data version changes, since
-    # an unchanged data version implies no certification drift. If the
-    # data manifest is later updated in-place (re-certification without
-    # a version bump), run a no-op data refresh to pick it up.
     data_release = (
         _hf_data_release_manifest(current.data_package, new_data)
         if new_data != old_data
@@ -340,11 +335,6 @@ def refresh_release_bundle(
 
     # Only hit HF if the data version actually changed.
     if new_data != old_data:
-        # When the data release manifest publishes a sha256 we trust it
-        # in lieu of re-streaming the dataset bytes. That is consistent
-        # with the rest of the certification chain (the manifest is the
-        # signed source of truth); a corrupt manifest sha256 would
-        # surface as a fingerprint-mismatch on the next runtime guard.
         new_dataset_sha256 = (
             release_artifact.sha256
             if release_artifact is not None and release_artifact.sha256 is not None
@@ -385,26 +375,22 @@ def refresh_release_bundle(
     manifest_json["certified_data_artifact"]["sha256"] = new_dataset_sha256
     manifest_json["certification"]["data_build_id"] = data_build_id
     manifest_json["certification"]["certified_for_model_version"] = new_model
-    # Only rewrite the build-provenance fields when the data release
-    # manifest tells us what to replace them with. Clearing them on a
-    # manifest fetch that lacks ``build.built_with_model_package`` would
-    # silently drop certification info the bundle already had.
-    if built_with_model is not None:
-        manifest_json["certification"]["built_with_model_version"] = (
-            built_with_model.version
-        )
-        if built_with_model.git_sha is not None:
-            manifest_json["certification"]["built_with_model_git_sha"] = (
-                built_with_model.git_sha
+    if data_release is not None:
+        manifest_json["certification"].pop("built_with_model_version", None)
+        manifest_json["certification"].pop("built_with_model_git_sha", None)
+        manifest_json["certification"].pop("data_build_fingerprint", None)
+        if built_with_model is not None:
+            manifest_json["certification"]["built_with_model_version"] = (
+                built_with_model.version
             )
-        else:
-            manifest_json["certification"].pop("built_with_model_git_sha", None)
-        if built_with_model.data_build_fingerprint is not None:
-            manifest_json["certification"]["data_build_fingerprint"] = (
-                built_with_model.data_build_fingerprint
-            )
-        else:
-            manifest_json["certification"].pop("data_build_fingerprint", None)
+            if built_with_model.git_sha is not None:
+                manifest_json["certification"]["built_with_model_git_sha"] = (
+                    built_with_model.git_sha
+                )
+            if built_with_model.data_build_fingerprint is not None:
+                manifest_json["certification"]["data_build_fingerprint"] = (
+                    built_with_model.data_build_fingerprint
+                )
 
     manifest_path.write_text(
         json.dumps(manifest_json, indent=2, sort_keys=False) + "\n"
