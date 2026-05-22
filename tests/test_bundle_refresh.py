@@ -311,6 +311,56 @@ def test__bump_data_with_release_manifest_updates_build_metadata(sandbox) -> Non
     assert written["certification"]["certified_for_model_version"] == "1.653.3"
 
 
+def test__bump_data_with_release_manifest_lacking_build_preserves_certification(
+    sandbox,
+) -> None:
+    """A release manifest that does not publish ``built_with_model_package``
+    must not clobber the build-provenance fields the bundle already has."""
+    hf_bytes = b"manifest without build info"
+    expected_sha256 = hashlib.sha256(hf_bytes).hexdigest()
+    release_manifest = {
+        "schema_version": 1,
+        "data_package": {
+            "name": "policyengine-us-data",
+            "version": "1.83.4",
+        },
+        # No "build" section.
+        "artifacts": {
+            "enhanced_cps_2024": {
+                "kind": "dataset",
+                "path": "enhanced_cps_2024.h5",
+                "repo_id": "policyengine/policyengine-us-data",
+                "revision": "1.83.4",
+                # No sha256 either, so the refresher must stream the dataset.
+            }
+        },
+    }
+
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        if url.endswith("/release_manifest.json"):
+            return io.BytesIO(json.dumps(release_manifest).encode())
+        if "huggingface.co" in url:
+            return _FakeHFResponse(hf_bytes)
+        raise AssertionError(url)
+
+    with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
+        refresh_release_bundle(
+            country="us",
+            data_version="1.83.4",
+            manifest_dir=sandbox["manifest_dir"],
+            pyproject_path=sandbox["pyproject_path"],
+        )
+
+    written = json.loads((sandbox["manifest_dir"] / "us.json").read_text())
+    assert written["certified_data_artifact"]["sha256"] == expected_sha256
+    # Existing certification fields survive because the manifest did
+    # not give us a replacement.
+    assert written["certification"]["built_with_model_version"] == "1.595.0"
+    assert "built_with_model_git_sha" not in written["certification"]
+    assert "data_build_fingerprint" not in written["certification"]
+
+
 def test__update_pyproject_false_leaves_pins_alone(sandbox) -> None:
     def fake_urlopen(*args, **kwargs):
         return _pypi_response("policyengine-us", "1.653.3")
