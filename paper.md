@@ -21,6 +21,9 @@ authors:
   - name: Pavel Makarchuk
     orcid: 0009-0003-4869-7409
     affiliation: '1'
+  - name: Anthony Volk
+    orcid: XXXX-XXXX-XXXX-XXXX
+    affiliation: '1'
 affiliations:
   - name: PolicyEngine, Washington, DC, United States
     index: '1'
