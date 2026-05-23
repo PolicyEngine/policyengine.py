@@ -18,18 +18,18 @@
         "schema:url": "https://policyengine.org"
       },
       "schema:dateCreated": "2026-05-20T19:37:01.417728Z",
-      "schema:description": "TRACE TRO for certified runtime bundle us-4.10.0 covering the bundle manifest, the certified dataset artifact, the country model wheel, and the country data release manifest when it is available.",
+      "schema:description": "TRACE TRO for certified runtime bundle us-4.11.0 covering the bundle manifest, the certified dataset artifact, the country model wheel, and the country data release manifest when it is available.",
       "schema:name": "policyengine us certified bundle TRO",
       "trov:createdWith": {
         "@type": "schema:SoftwareApplication",
         "schema:name": "policyengine",
-        "schema:softwareVersion": "4.10.0"
+        "schema:softwareVersion": "4.11.0"
       },
       "trov:hasArrangement": [
         {
           "@id": "arrangement/1",
           "@type": "trov:ArtifactArrangement",
-          "rdfs:comment": "Certified arrangement for bundle us-4.10.0.",
+          "rdfs:comment": "Certified arrangement for bundle us-4.11.0.",
           "trov:hasArtifactLocation": [
             {
               "@id": "arrangement/1/location/bundle_manifest",
@@ -75,7 +75,7 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine.py bundle manifest for us",
             "trov:mimeType": "application/json",
-            "trov:sha256": "cedb882f8d7a989dfe8bcdf216b8b0d7e139a405905815089e54d8fab6f5749d"
+            "trov:sha256": "df38ceabd42f62be3a0ef150f45c9059768da25090ed9ab999af64b7dd96f289"
           },
           {
             "@id": "composition/1/artifact/data_release_manifest",
@@ -102,7 +102,7 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "5e6547bb6a3446e45707f5daf85ef9ac499594e5a3dedea31d0d024a2eca484a"
+          "trov:sha256": "6086b023114029ad4dbb8de3f64db110e2df4c5c237746140ef497f71b8228dd"
         }
       },
       "trov:hasPerformance": {
@@ -112,8 +112,8 @@
         "pe:certifiedBy": "policyengine-us-data release manifest",
         "pe:certifiedForModelVersion": "1.700.0",
         "pe:ciGitRef": "refs/heads/main",
-        "pe:ciGitSha": "6538ebf21f30baa469842ad3f2bc11e5fc165d06",
-        "pe:ciRunUrl": "https://github.com/PolicyEngine/policyengine.py/actions/runs/26246370614",
+        "pe:ciGitSha": "21144e305c55237063d12084b3644d0d83cfa864",
+        "pe:ciRunUrl": "https://github.com/PolicyEngine/policyengine.py/actions/runs/26332658880",
         "pe:compatibilityBasis": "exact_build_model_version",
         "pe:dataBuildFingerprint": "sha256:b0862de383ffcbe45f4ba0aa9c6aaec286cd4c6688c6ccb33f939bc176f9a8a0",
         "pe:dataBuildId": "policyengine-us-data-1.115.5",

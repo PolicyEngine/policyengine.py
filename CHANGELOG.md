@@ -1,3 +1,14 @@
+## [4.11.0] - 2026-05-23
+
+### Added
+
+- Added JOSS paper (paper.md and paper.bib) for submission to the Journal of Open Source Software.
+
+### Fixed
+
+- Fixed AttributeError in `examples/paper_repro_uk.py` (`programme_statistics` -> `program_statistics`).
+
+
 ## [4.10.0] - 2026-05-21
 
 ### Added
