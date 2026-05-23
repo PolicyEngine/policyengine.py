@@ -205,7 +205,7 @@ composition pins four artifacts by sha256:
   when present, otherwise fetched from the PyPI JSON API at emit time)
 
 TROs use the public TROv vocabulary at
-`https://w3id.org/trace/2023/05/trov#`. Every artifact location in the TRO
+`https://w3id.org/trace/trov/0.1#`. Every artifact location in the TRO
 is a dereferenceable HTTPS URI or a local path relative to the shipped
 wheel. Certification metadata is carried as structured `pe:*` fields on
 the `trov:TransparentResearchPerformance` node so downstream tooling can

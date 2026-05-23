@@ -28,7 +28,7 @@ from importlib.util import find_spec
 
 if find_spec("policyengine_us") is not None:
     from policyengine.core import Dataset
-    from policyengine.outputs import ProgramStatistics
+    from policyengine.outputs import LaborSupplyResponse, ProgramStatistics
 
     from .analysis import economic_impact_analysis
     from .datasets import (
@@ -37,6 +37,9 @@ if find_spec("policyengine_us") is not None:
         create_datasets,
         ensure_datasets,
         load_datasets,
+        load_long_term_datasets,
+        load_managed_long_term_datasets,
+        validate_long_term_dataset_metadata,
     )
     from .household import calculate_household
     from .model import (
@@ -54,13 +57,17 @@ if find_spec("policyengine_us") is not None:
     PolicyEngineUSDataset.model_rebuild()
     PolicyEngineUSLatest.model_rebuild()
     ProgramStatistics.model_rebuild()
+    LaborSupplyResponse.model_rebuild()
 
     __all__ = [
         "USYearData",
         "PolicyEngineUSDataset",
         "create_datasets",
         "load_datasets",
+        "load_long_term_datasets",
+        "load_managed_long_term_datasets",
         "ensure_datasets",
+        "validate_long_term_dataset_metadata",
         "PolicyEngineUS",
         "PolicyEngineUSLatest",
         "managed_microsimulation",
@@ -69,6 +76,7 @@ if find_spec("policyengine_us") is not None:
         "calculate_household",
         "economic_impact_analysis",
         "ProgramStatistics",
+        "LaborSupplyResponse",
     ]
 else:
     __all__ = []

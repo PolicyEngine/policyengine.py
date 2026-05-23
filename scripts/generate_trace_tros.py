@@ -3,14 +3,9 @@
 Writes ``data/release_manifests/{country}.trace.tro.jsonld`` for each
 country whose bundled manifest ships in the wheel. Run this before
 releasing a new ``policyengine.py`` version so the packaged TRO
-matches the pinned bundle. Requires HTTPS access to the data release
-manifest (and ``HUGGING_FACE_TOKEN`` for private country data).
-
-If a country previously had a TRO on disk and the new run cannot
-regenerate it (e.g. a missing secret or an unreachable HF endpoint),
-the script exits non-zero so the release workflow blocks rather than
-silently shipping a stale/missing TRO. If no bundled release manifests
-are found at all, the script exits 0 with a notice (nothing to do).
+matches the pinned bundle. The richer data release manifest is included
+when available; otherwise the TRO still binds the certified dataset
+sha256 and URI pinned in the bundled release manifest.
 """
 
 from __future__ import annotations
@@ -47,14 +42,11 @@ def regenerate_all() -> tuple[list[Path], list[tuple[str, Path, str]]]:
         try:
             data_release_manifest = get_data_release_manifest(country_id)
         except DataReleaseManifestUnavailableError as exc:
-            if tro_path.exists():
-                regressions.append((country_id, tro_path, str(exc)))
-            else:
-                print(
-                    f"skipped {country_id}: {exc}",
-                    file=sys.stderr,
-                )
-            continue
+            data_release_manifest = None
+            print(
+                f"warning: {country_id}: {exc}; writing limited TRO",
+                file=sys.stderr,
+            )
         tro = build_trace_tro_from_release_bundle(
             country_manifest,
             data_release_manifest,

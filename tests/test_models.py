@@ -29,12 +29,12 @@ class TestUKModel:
         assert uk_latest.release_manifest is not None
         assert uk_latest.release_manifest.country_id == "uk"
         assert uk_latest.model_package.name == "policyengine-uk"
-        assert uk_latest.model_package.version == "2.88.0"
+        assert uk_latest.model_package.version == "2.88.20"
         assert uk_latest.data_package.name == "policyengine-uk-data"
-        assert uk_latest.data_package.version == "1.40.4"
+        assert uk_latest.data_package.version == "1.55.10"
         assert (
             uk_latest.default_dataset_uri
-            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.4"
+            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f"
         )
 
     def test_has_hundreds_of_parameters(self):
@@ -113,12 +113,12 @@ class TestUSModel:
         assert us_latest.release_manifest is not None
         assert us_latest.release_manifest.country_id == "us"
         assert us_latest.model_package.name == "policyengine-us"
-        assert us_latest.model_package.version == "1.653.3"
+        assert us_latest.model_package.version == "1.700.0"
         assert us_latest.data_package.name == "policyengine-us-data"
-        assert us_latest.data_package.version == "1.73.0"
+        assert us_latest.data_package.version == "1.115.5"
         assert (
             us_latest.default_dataset_uri
-            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.73.0"
+            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@688f972425f5e858fc52bda2b696e0af74fea920"
         )
 
     def test_has_hundreds_of_parameters(self):
@@ -183,8 +183,8 @@ class TestUSModel:
         found = False
         for p in us_latest.parameters:
             if ".SINGLE" in p.name and p.label and "(" in p.label:
-                assert "(Single)" in p.label, (
-                    f"Label '{p.label}' should contain '(Single)'"
+                assert re.search(r"\([^)]*\bSingle\b[^)]*\)", p.label), (
+                    f"Label '{p.label}' should contain 'Single' in parentheses"
                 )
                 found = True
                 break

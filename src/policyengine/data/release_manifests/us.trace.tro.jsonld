@@ -1,0 +1,138 @@
+{
+  "@context": [
+    {
+      "pe": "https://policyengine.org/trace/0.1#",
+      "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+      "schema": "https://schema.org/",
+      "trov": "https://w3id.org/trace/trov/0.1#"
+    }
+  ],
+  "@graph": [
+    {
+      "@id": "tro",
+      "@type": "trov:TransparentResearchObject",
+      "schema:creator": {
+        "@type": "schema:Organization",
+        "schema:name": "PolicyEngine",
+        "schema:url": "https://policyengine.org"
+      },
+      "schema:dateCreated": "2026-05-20T19:37:01.417728Z",
+      "schema:description": "TRACE TRO for certified runtime bundle us-4.10.0 covering the bundle manifest, the certified dataset artifact, the country model wheel, and the country data release manifest when it is available.",
+      "schema:name": "policyengine us certified bundle TRO",
+      "trov:createdWith": {
+        "@type": "schema:SoftwareApplication",
+        "schema:name": "policyengine",
+        "schema:softwareVersion": "4.10.0"
+      },
+      "trov:hasArrangement": [
+        {
+          "@id": "arrangement/1",
+          "@type": "trov:ArtifactArrangement",
+          "rdfs:comment": "Certified arrangement for bundle us-4.10.0.",
+          "trov:hasArtifactLocation": [
+            {
+              "@id": "arrangement/1/location/bundle_manifest",
+              "@type": "trov:ArtifactLocation",
+              "trov:hasArtifact": {
+                "@id": "composition/1/artifact/bundle_manifest"
+              },
+              "trov:hasLocation": "data/release_manifests/us.json"
+            },
+            {
+              "@id": "arrangement/1/location/data_release_manifest",
+              "@type": "trov:ArtifactLocation",
+              "trov:hasArtifact": {
+                "@id": "composition/1/artifact/data_release_manifest"
+              },
+              "trov:hasLocation": "https://huggingface.co/policyengine/policyengine-us-data/resolve/688f972425f5e858fc52bda2b696e0af74fea920/release_manifest.json"
+            },
+            {
+              "@id": "arrangement/1/location/dataset",
+              "@type": "trov:ArtifactLocation",
+              "trov:hasArtifact": {
+                "@id": "composition/1/artifact/dataset"
+              },
+              "trov:hasLocation": "https://huggingface.co/policyengine/policyengine-us-data/resolve/688f972425f5e858fc52bda2b696e0af74fea920/enhanced_cps_2024.h5"
+            },
+            {
+              "@id": "arrangement/1/location/model_wheel",
+              "@type": "trov:ArtifactLocation",
+              "trov:hasArtifact": {
+                "@id": "composition/1/artifact/model_wheel"
+              },
+              "trov:hasLocation": "https://files.pythonhosted.org/packages/49/e9/2837a0d98e99efaf4d82aade276eee6eeff419df614863f08e3512961d2d/policyengine_us-1.700.0-py3-none-any.whl"
+            }
+          ]
+        }
+      ],
+      "trov:hasComposition": {
+        "@id": "composition/1",
+        "@type": "trov:ArtifactComposition",
+        "trov:hasArtifact": [
+          {
+            "@id": "composition/1/artifact/bundle_manifest",
+            "@type": "trov:ResearchArtifact",
+            "schema:name": "policyengine.py bundle manifest for us",
+            "trov:mimeType": "application/json",
+            "trov:sha256": "cedb882f8d7a989dfe8bcdf216b8b0d7e139a405905815089e54d8fab6f5749d"
+          },
+          {
+            "@id": "composition/1/artifact/data_release_manifest",
+            "@type": "trov:ResearchArtifact",
+            "schema:name": "policyengine-us-data release manifest 1.115.5",
+            "trov:mimeType": "application/json",
+            "trov:sha256": "f5387c6b5acc0507cc965087da5059f59a4c6cb43b3778f13f065355f05d900e"
+          },
+          {
+            "@id": "composition/1/artifact/dataset",
+            "@type": "trov:ResearchArtifact",
+            "schema:name": "enhanced_cps_2024",
+            "trov:mimeType": "application/x-hdf5",
+            "trov:sha256": "0a6b961ad363a421bde99f2c8e5d8f20370bcba45fd303050537a25bdd805b14"
+          },
+          {
+            "@id": "composition/1/artifact/model_wheel",
+            "@type": "trov:ResearchArtifact",
+            "schema:name": "policyengine-us==1.700.0 wheel",
+            "trov:mimeType": "application/zip",
+            "trov:sha256": "7633d8aefcaf02d7628f841bc56750606f1d7fe409ff3ae7b0ef7e364a88e945"
+          }
+        ],
+        "trov:hasFingerprint": {
+          "@id": "composition/1/fingerprint",
+          "@type": "trov:CompositionFingerprint",
+          "trov:sha256": "5e6547bb6a3446e45707f5daf85ef9ac499594e5a3dedea31d0d024a2eca484a"
+        }
+      },
+      "trov:hasPerformance": {
+        "@id": "trp/1",
+        "@type": "trov:TransparentResearchPerformance",
+        "pe:builtWithModelVersion": "1.700.0",
+        "pe:certifiedBy": "policyengine-us-data release manifest",
+        "pe:certifiedForModelVersion": "1.700.0",
+        "pe:ciGitRef": "refs/heads/main",
+        "pe:ciGitSha": "6538ebf21f30baa469842ad3f2bc11e5fc165d06",
+        "pe:ciRunUrl": "https://github.com/PolicyEngine/policyengine.py/actions/runs/26246370614",
+        "pe:compatibilityBasis": "exact_build_model_version",
+        "pe:dataBuildFingerprint": "sha256:b0862de383ffcbe45f4ba0aa9c6aaec286cd4c6688c6ccb33f939bc176f9a8a0",
+        "pe:dataBuildId": "policyengine-us-data-1.115.5",
+        "pe:emittedIn": "github-actions",
+        "rdfs:comment": "Certification of build policyengine-us-data-1.115.5 for policyengine-us 1.700.0.",
+        "trov:accessedArrangement": {
+          "@id": "arrangement/1"
+        },
+        "trov:startedAtTime": "2026-05-20T19:37:01.417728Z",
+        "trov:wasConductedBy": {
+          "@id": "trs"
+        }
+      },
+      "trov:wasAssembledBy": {
+        "@id": "trs",
+        "@type": "trov:TransparentResearchSystem",
+        "rdfs:comment": "PolicyEngine certification workflow that pins a country model version, a country data release, and a specific dataset artifact.",
+        "schema:name": "PolicyEngine release pipeline"
+      }
+    }
+  ]
+}

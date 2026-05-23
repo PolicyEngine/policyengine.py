@@ -6,12 +6,11 @@ Provides two concrete strategies for scoping datasets to sub-national regions:
    a specific value (e.g., UK countries by 'country' field, US places by 'place_fips').
 
 2. WeightReplacementStrategy: Replaces household weights from a pre-computed weight
-   matrix stored in GCS (e.g., UK constituencies and local authorities).
+   matrix resolved locally or from GCS (e.g., UK constituencies and local authorities).
 """
 
 import logging
 from abc import abstractmethod
-from pathlib import Path
 from typing import Annotated, Literal, Optional, Union
 
 import numpy as np
@@ -93,7 +92,7 @@ class WeightReplacementStrategy(RegionScopingStrategy):
 
     Used for UK constituencies and local authorities. Instead of removing
     households, this strategy keeps all households but replaces their weights
-    with region-specific values from a weight matrix stored in GCS.
+    with region-specific values from a locally cached or downloaded weight matrix.
 
     The weight matrix is an HDF5 file with shape (N_regions x N_households),
     where each row contains household weights for a specific region.
@@ -106,6 +105,7 @@ class WeightReplacementStrategy(RegionScopingStrategy):
     lookup_csv_bucket: str
     lookup_csv_key: str
     region_code: str
+    download_missing_assets: bool = True
 
     def apply(
         self,
@@ -113,35 +113,39 @@ class WeightReplacementStrategy(RegionScopingStrategy):
         group_entities: list[str],
         year: int,
     ) -> dict[str, MicroDataFrame]:
-        from policyengine_core.tools.google_cloud import download_gcs_file
-
-        # Download lookup CSV and find region index
-        lookup_path = Path(
-            download_gcs_file(
-                bucket=self.lookup_csv_bucket,
-                file_path=self.lookup_csv_key,
-            )
+        from policyengine.data.uk_geography_assets import (
+            UKGeographyAssetSpec,
+            resolve_uk_geography_asset_paths,
         )
-        lookup_df = pd.read_csv(lookup_path)
+
+        paths = resolve_uk_geography_asset_paths(
+            UKGeographyAssetSpec(
+                geography_type="weight replacement",
+                weight_matrix_filename=self.weight_matrix_key,
+                lookup_csv_filename=self.lookup_csv_key,
+                bucket=self.weight_matrix_bucket,
+                weight_matrix_bucket=self.weight_matrix_bucket,
+                lookup_csv_bucket=self.lookup_csv_bucket,
+            ),
+            download_missing_assets=self.download_missing_assets,
+        )
+
+        lookup_df = pd.read_csv(paths.lookup_csv_path)
 
         region_id = self._find_region_index(lookup_df, self.region_code)
 
-        # Download weight matrix and extract weights for this region.
+        # Load weight matrix and extract weights for this region.
         # h5py is only needed here, so import lazily to keep
         # `from policyengine.core import ...` light.
         import h5py
 
-        weights_path = download_gcs_file(
-            bucket=self.weight_matrix_bucket,
-            file_path=self.weight_matrix_key,
-        )
-        with h5py.File(weights_path, "r") as f:
+        with h5py.File(paths.weight_matrix_path, "r") as f:
             weights = f[str(year)][...]
 
         region_weights = weights[region_id]
 
         # Validate weight row length matches household count
-        household_df = pd.DataFrame(entity_data["household"])
+        household_df = pd.DataFrame(entity_data["household"]).copy()
         if len(region_weights) != len(household_df):
             raise ValueError(
                 f"Weight matrix row length ({len(region_weights)}) does not match "
@@ -152,9 +156,9 @@ class WeightReplacementStrategy(RegionScopingStrategy):
         # Replace household weights
         result = {}
         for entity_name, mdf in entity_data.items():
-            df = pd.DataFrame(mdf)
+            df = pd.DataFrame(mdf).copy()
             if entity_name == "household":
-                df["household_weight"] = region_weights
+                df.loc[:, "household_weight"] = region_weights
                 result[entity_name] = MicroDataFrame(df, weights="household_weight")
             else:
                 weight_col = f"{entity_name}_weight"
@@ -174,7 +178,7 @@ class WeightReplacementStrategy(RegionScopingStrategy):
                                 for hh_id in df[person_hh_col].values
                             ]
                         )
-                        df[weight_col] = new_weights
+                        df.loc[:, weight_col] = new_weights
 
                 result[entity_name] = MicroDataFrame(
                     df,

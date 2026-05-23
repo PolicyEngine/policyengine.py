@@ -3,3 +3,6 @@ _site
 _freeze
 /.quarto/
 **/*.quarto_ipynb
+
+# Generated reference output can be rebuilt from installed country models.
+_generated/

@@ -56,6 +56,12 @@ Parameter paths mirror the country's rule-making structure:
 
 See [Reforms](reforms.md) for how to express changes in either tree.
 
+## Methodology and programs
+
+Country-specific methodology pages explain model structure that is too broad for a generated variable reference. Current US pages include [health coverage and costs](methodology/us-health-costs.md).
+
+Program pages explain eligibility and benefit structure. Current US pages include [CHIP](programs/us-chip.md).
+
 ## Switching countries
 
 Most analysis patterns are identical — swap `pe.us` for `pe.uk`:

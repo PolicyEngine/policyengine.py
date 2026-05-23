@@ -2,7 +2,7 @@
 title: "Impact analysis"
 ---
 
-`economic_impact_analysis` runs a baseline and a reform simulation through a bundled set of outputs — decile impacts, program statistics, poverty, and inequality — and returns a typed `PolicyReformAnalysis`.
+`economic_impact_analysis` runs a baseline and a reform simulation through a bundled set of outputs — decile impacts, program statistics, poverty, and inequality — and returns a typed `PolicyReformAnalysis`. UK analysis also includes wealth-decile impact outputs.
 
 ## Usage
 
@@ -35,6 +35,8 @@ A `PolicyReformAnalysis` with:
 | Attribute | Type | Content |
 |---|---|---|
 | `decile_impacts` | `OutputCollection[DecileImpact]` | Mean baseline / reform / change and winner-loser counts per decile |
+| `wealth_decile_impacts` | `OutputCollection[DecileImpact]` | UK only: household net income impacts grouped by `household_wealth_decile` |
+| `intra_wealth_decile_impacts` | `OutputCollection[IntraDecileImpact]` | UK only: within-wealth-decile distribution of household net income changes |
 | `program_statistics` | `OutputCollection[ProgramStatistics]` | Totals, counts, winners/losers per program |
 | `baseline_poverty` | `OutputCollection[Poverty]` | Baseline rates by measure and demographic group |
 | `reform_poverty` | `OutputCollection[Poverty]` | Reform rates, same schema as baseline |
@@ -49,6 +51,10 @@ for prog in analysis.program_statistics.outputs:
 
 for d in analysis.decile_impacts.outputs:
     print(d.decile, d.absolute_change, d.relative_change)
+
+if hasattr(analysis, "wealth_decile_impacts"):
+    for d in analysis.wealth_decile_impacts.outputs:
+        print(d.decile, d.absolute_change, d.relative_change)
 
 analysis.reform_inequality.gini - analysis.baseline_inequality.gini
 ```

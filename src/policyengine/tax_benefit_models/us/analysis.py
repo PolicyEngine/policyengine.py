@@ -12,7 +12,12 @@ import pandas as pd
 from pydantic import BaseModel
 
 from policyengine.core import OutputCollection, Simulation
-from policyengine.outputs import ProgramStatistics
+from policyengine.outputs import (
+    LaborSupplyResponse,
+    ProgramStatistics,
+    calculate_labor_supply_response,
+    configure_labor_supply_response_variables,
+)
 from policyengine.outputs.decile_impact import (
     DecileImpact,
     calculate_decile_impacts,
@@ -26,6 +31,26 @@ from policyengine.outputs.poverty import (
     Poverty,
     calculate_us_poverty_rates,
 )
+from policyengine.utils.errors import format_conditional_error_detail
+
+# Map of US program-statistics variable name -> program metadata. The
+# entity for each program is derived from the variable's own metadata
+# at runtime (see ``_validate_program_statistics_config`` and
+# ``economic_impact_analysis``), so this list cannot silently drift
+# when policyengine-us moves a variable between entities.
+US_PROGRAMS: dict[str, dict] = {
+    "income_tax": {"is_tax": True},
+    "employee_payroll_tax": {"is_tax": True},
+    "state_income_tax": {"is_tax": True},
+    "snap": {"is_tax": False},
+    "tanf": {"is_tax": False},
+    "ssi": {"is_tax": False},
+    "social_security": {"is_tax": False},
+    "medicare_cost": {"is_tax": False},
+    "medicaid": {"is_tax": False},
+    "eitc": {"is_tax": False},
+    "ctc": {"is_tax": False},
+}
 
 
 class PolicyReformAnalysis(BaseModel):
@@ -37,6 +62,72 @@ class PolicyReformAnalysis(BaseModel):
     reform_poverty: OutputCollection[Poverty]
     baseline_inequality: Inequality
     reform_inequality: Inequality
+    labor_supply_response: LaborSupplyResponse
+
+
+def _format_missing_program_variables(missing_variables: set[str]) -> str | None:
+    """Format the optional missing-variable detail for program statistics."""
+    return format_conditional_error_detail(
+        "Missing model variables",
+        missing_variables,
+    )
+
+
+def _program_statistics_config_error_message(
+    missing_variables: set[str],
+    missing_outputs: set[tuple[str, str]],
+) -> str:
+    lines = ["US program statistics config is invalid:"]
+
+    missing_variables_message = _format_missing_program_variables(missing_variables)
+    if missing_variables_message is not None:
+        lines.append(missing_variables_message)
+
+    if missing_outputs:
+        formatted = ", ".join(
+            f"{program_name} on {entity}"
+            for program_name, entity in sorted(missing_outputs)
+        )
+        lines.append("Variables not materialized in simulation outputs: " + formatted)
+        lines.append(
+            "Add them to the model version's entity_variables or pass them "
+            "via Simulation.extra_variables before running the simulation."
+        )
+
+    return "\n".join(lines)
+
+
+def _validate_program_statistics_config(
+    baseline_simulation: Simulation,
+    reform_simulation: Simulation,
+) -> None:
+    """Validate US program-stat variables before running simulations."""
+    missing_variables: set[str] = set()
+    missing_outputs: set[tuple[str, str]] = set()
+
+    simulations = (baseline_simulation, reform_simulation)
+    for program_name in US_PROGRAMS:
+        for simulation in simulations:
+            model_version = simulation.tax_benefit_model_version
+            try:
+                variable = model_version.get_variable(program_name)
+            except ValueError:
+                missing_variables.add(program_name)
+                continue
+
+            resolved_variables = model_version.resolve_entity_variables(simulation)
+            if program_name not in resolved_variables.get(variable.entity, []):
+                missing_outputs.add((program_name, variable.entity))
+
+    if not missing_variables and not missing_outputs:
+        return
+
+    raise ValueError(
+        _program_statistics_config_error_message(
+            missing_variables,
+            missing_outputs,
+        ),
+    )
 
 
 def economic_impact_analysis(
@@ -55,6 +146,13 @@ def economic_impact_analysis(
         ``PolicyReformAnalysis`` with decile impacts, program
         statistics, baseline and reform poverty, and inequality.
     """
+    configure_labor_supply_response_variables(
+        baseline_simulation,
+        reform_simulation,
+        country_code="us",
+    )
+    _validate_program_statistics_config(baseline_simulation, reform_simulation)
+
     baseline_simulation.ensure()
     reform_simulation.ensure()
 
@@ -71,27 +169,14 @@ def economic_impact_analysis(
         income_variable="household_net_income",
     )
 
-    programs = {
-        "income_tax": {"entity": "tax_unit", "is_tax": True},
-        "payroll_tax": {"entity": "person", "is_tax": True},
-        "state_income_tax": {"entity": "tax_unit", "is_tax": True},
-        "snap": {"entity": "spm_unit", "is_tax": False},
-        "tanf": {"entity": "spm_unit", "is_tax": False},
-        "ssi": {"entity": "person", "is_tax": False},
-        "social_security": {"entity": "person", "is_tax": False},
-        "medicare": {"entity": "person", "is_tax": False},
-        "medicaid": {"entity": "person", "is_tax": False},
-        "eitc": {"entity": "tax_unit", "is_tax": False},
-        "ctc": {"entity": "tax_unit", "is_tax": False},
-    }
-
+    model_version = baseline_simulation.tax_benefit_model_version
     program_statistics = []
-    for program_name, program_info in programs.items():
+    for program_name, program_info in US_PROGRAMS.items():
         stats = ProgramStatistics(
             baseline_simulation=baseline_simulation,
             reform_simulation=reform_simulation,
             program_name=program_name,
-            entity=program_info["entity"],
+            entity=model_version.get_variable(program_name).entity,
             is_tax=program_info["is_tax"],
         )
         stats.run()
@@ -128,6 +213,11 @@ def economic_impact_analysis(
     reform_inequality = calculate_us_inequality(
         reform_simulation, preset=inequality_preset
     )
+    labor_supply_response = calculate_labor_supply_response(
+        baseline_simulation,
+        reform_simulation,
+        country_code="us",
+    )
 
     return PolicyReformAnalysis(
         decile_impacts=decile_impacts,
@@ -136,4 +226,5 @@ def economic_impact_analysis(
         reform_poverty=reform_poverty,
         baseline_inequality=baseline_inequality,
         reform_inequality=reform_inequality,
+        labor_supply_response=labor_supply_response,
     )

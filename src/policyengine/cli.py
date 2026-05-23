@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from policyengine.provenance.manifest import (
+    DataReleaseManifestUnavailableError,
     get_data_release_manifest,
     get_release_manifest,
 )
@@ -69,7 +70,10 @@ def _parser() -> argparse.ArgumentParser:
 
 def _emit_bundle_tro(country_id: str, out: Optional[Path]) -> int:
     country_manifest = get_release_manifest(country_id)
-    data_release_manifest = get_data_release_manifest(country_id)
+    try:
+        data_release_manifest = get_data_release_manifest(country_id)
+    except DataReleaseManifestUnavailableError:
+        data_release_manifest = None
     tro = build_trace_tro_from_release_bundle(
         country_manifest,
         data_release_manifest,

@@ -1,3 +1,149 @@
+## [4.10.0] - 2026-05-21
+
+### Added
+
+- UK constituency and local-authority output helpers can now resolve standard geography files locally or download them from GCS by default.
+
+### Fixed
+
+- Align the pull-request changelog check with Towncrier's post-merge fragment discovery and add model-neutral AI PR guidance.
+
+
+## [4.9.2] - 2026-05-20
+
+### Changed
+
+- Update the bundled UK release to calibrated fuel-duty litres.
+
+
+## [4.9.1] - 2026-05-20
+
+### Changed
+
+- Update the bundled US model and enhanced CPS data release while preserving explicitly versioned dataset entries.
+
+
+## [4.9.0] - 2026-05-19
+
+### Added
+
+- - Add a legacy-compatible labor-supply response output for US and UK macro analyses.
+
+
+## [4.8.1] - 2026-05-19
+
+### Changed
+
+- Add UK program-statistics rows for fuel duty, state pension, employer National Insurance, and tax credits.
+
+
+## [4.8.0] - 2026-05-19
+
+### Added
+
+- Add UK wealth-decile impact outputs and integration coverage for economic impact analysis.
+
+
+## [4.7.0] - 2026-05-18
+
+### Added
+
+- Add ``policyengine.derivations`` for per-variable computation explanations: ``derive(simulation, variable, period)`` returns a structured ``Derivation`` (with pruned trace and top-level contributions); ``narrate(derivation)`` optionally hands it to an LLM for a plain-prose walkthrough.
+
+
+## [4.6.0] - 2026-05-18
+
+### Added
+
+- Added the US long-run managed dataset bundle.
+
+### Fixed
+
+- Refresh US long-term dataset hash pins from data release manifests.
+
+
+## [4.5.1] - 2026-05-16
+
+### Changed
+
+- Updated the bundled US release manifest to policyengine-us 1.691.10 and policyengine-us-data 1.115.3.
+
+
+## [4.5.0] - 2026-05-16
+
+### Added
+
+- Add metadata-aware loading for pre-built long-term US projected datasets.
+
+
+## [4.4.4] - 2026-05-13
+
+### Changed
+
+- Update the bundled US release to policyengine-us 1.691.3 and policyengine-us-data 1.113.1.
+
+
+## [4.4.3] - 2026-05-11
+
+### Changed
+
+- Derive US program-statistics entity from variable metadata instead of duplicating it in the program list.
+- Update the bundled US release to policyengine-us 1.690.7 and refresh data provenance metadata.
+
+
+## [4.4.2] - 2026-05-09
+
+### Fixed
+
+- Point the bundled US data release manifest at a revision that certifies policyengine-core 3.26.1 compatibility.
+
+
+## [4.4.1] - 2026-05-09
+
+### Fixed
+
+- Preserve core-package compatibility metadata when parsing data release manifests, and deploy the Quarto documentation output from the correct `_site` directory.
+
+
+## [4.4.0] - 2026-05-09
+
+### Added
+
+- Extended `DataReleaseManifest` with optional preservation-mirror fields. Added a `PreservationMirror` model (kind, url, optional doi / sha256 / deposited_at), a `preservation_mirrors` list on each `DataReleaseArtifact`, and a top-level `preservation_dois` list on the manifest. Back-compatible: all new fields have defaults, and pre-existing manifests continue to validate. Populated by release pipelines that mirror artifacts to Zenodo or another preservation-grade host; addresses PolicyEngine/policyengine-us-data#810.
+- Added `docs/trace-case-study.md`, a working draft describing the PolicyEngine TRACE use case for Lars Vilhuber (AEA Data Editor) and the TRACE project team. Covers which PolicyEngine surfaces warrant institutional certification, the precise claims a TRO lets us make, UK data as the strongest case, the three concrete workstreams (us-data build TROs, policyengine-api webapp-run TROs, policyengine-app "Cite this result" UI), and open questions we want feedback on.
+
+### Changed
+
+- Updated GitHub Actions workflows for Node 24-compatible action runtimes.
+- Updated the bundled UK release to policyengine-uk 2.88.14 and policyengine-uk-data 1.55.5.
+- Bump the bundled US model pin to policyengine-us 1.687.0.
+
+### Fixed
+
+- Country model imports now work without network access when the bundled release manifest already certifies the installed country package version. Hugging Face release-manifest transport failures fall back to bundled data certification only when the runtime model version and data build fingerprint gates still match.
+- Sync bundled release manifest bundle IDs and `policyengine_version` fields during release version bumps.
+- Two small follow-ups surfaced by the v4 audit:
+
+  - ``Simulation.save()`` now raises a helpful ``ValueError`` when ``output_dataset`` is still ``None`` (run or ensure was never called), instead of the raw ``AttributeError: 'NoneType' object has no attribute 'save'``.
+  - New ``scripts/check_data_staleness.py`` prints a one-line verdict per country comparing the bundled release manifest's pinned model version against the installed country package; exits non-zero when any country is stale. Drop into CI to get automated "bundle is behind" alerts without waiting for a human to notice.
+
+  Also clarified the ``load()`` docstring: ``created_at``/``updated_at`` are filesystem ``ctime``/``mtime`` approximations, not a true round-trip of the original timestamps.
+
+
+## [4.3.1] - 2026-04-21
+
+### Changed
+
+- Migrated TRACE TRO emission from the prerelease TROv namespace `https://w3id.org/trace/2023/05/trov#` to the canonical `https://w3id.org/trace/trov/0.1#`. This aligns policyengine.py with policyengine-us-data (which already uses the canonical namespace per us-data PR #746), so both sides can share SHACL validators and TROs emitted by either side validate against the same vocabulary. Fixes #313.
+
+
+## [4.3.0] - 2026-04-20
+
+### Added
+
+- Added `policyengine.provenance.refresh_release_bundle`. Given a country and optional new model/data versions, the helper fetches the updated PyPI wheel metadata + HF dataset sha256, rewrites `data/release_manifests/{country}.json` and the matching extra pin in `pyproject.toml`, and (optionally) regenerates the bundle's TRACE TRO sidecar. A thin `scripts/refresh_release_bundle.py` wrapper exposes the library function as a CLI for release engineers. Unit-tested offline via mocked PyPI/HF responses.
+
+
 ## [4.2.1] - 2026-04-20
 
 ### Changed

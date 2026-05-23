@@ -19,6 +19,11 @@ from policyengine.core.scoping_strategy import (
     RowFilterStrategy,
     WeightReplacementStrategy,
 )
+from policyengine.data.uk_geography_assets import (
+    CONSTITUENCY_ASSET_SPEC,
+    LOCAL_AUTHORITY_ASSET_SPEC,
+    UK_GEOGRAPHY_BUCKET_URI,
+)
 from policyengine.provenance.manifest import resolve_region_dataset_path
 
 if TYPE_CHECKING:
@@ -26,7 +31,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-UK_DATA_BUCKET = "gs://policyengine-uk-data-private"
+UK_DATA_BUCKET = UK_GEOGRAPHY_BUCKET_URI
 
 # UK countries
 UK_COUNTRIES = {
@@ -54,8 +59,8 @@ def _load_constituencies_from_csv() -> list[dict]:
 
     try:
         csv_path = download(
-            gcs_bucket="policyengine-uk-data-private",
-            gcs_key="constituencies_2024.csv",
+            gcs_bucket=CONSTITUENCY_ASSET_SPEC.bucket,
+            gcs_key=CONSTITUENCY_ASSET_SPEC.lookup_csv_filename,
         )
         import pandas as pd
 
@@ -86,8 +91,8 @@ def _load_local_authorities_from_csv() -> list[dict]:
 
     try:
         csv_path = download(
-            gcs_bucket="policyengine-uk-data-private",
-            gcs_key="local_authorities_2021.csv",
+            gcs_bucket=LOCAL_AUTHORITY_ASSET_SPEC.bucket,
+            gcs_key=LOCAL_AUTHORITY_ASSET_SPEC.lookup_csv_filename,
         )
         import pandas as pd
 
@@ -159,10 +164,10 @@ def build_uk_region_registry(
                     region_type="constituency",
                     parent_code="uk",
                     scoping_strategy=WeightReplacementStrategy(
-                        weight_matrix_bucket="policyengine-uk-data-private",
-                        weight_matrix_key="parliamentary_constituency_weights.h5",
-                        lookup_csv_bucket="policyengine-uk-data-private",
-                        lookup_csv_key="constituencies_2024.csv",
+                        weight_matrix_bucket=CONSTITUENCY_ASSET_SPEC.bucket,
+                        weight_matrix_key=CONSTITUENCY_ASSET_SPEC.weight_matrix_filename,
+                        lookup_csv_bucket=CONSTITUENCY_ASSET_SPEC.bucket,
+                        lookup_csv_key=CONSTITUENCY_ASSET_SPEC.lookup_csv_filename,
                         region_code=const["code"],
                     ),
                 )
@@ -180,10 +185,10 @@ def build_uk_region_registry(
                     region_type="local_authority",
                     parent_code="uk",
                     scoping_strategy=WeightReplacementStrategy(
-                        weight_matrix_bucket="policyengine-uk-data-private",
-                        weight_matrix_key="local_authority_weights.h5",
-                        lookup_csv_bucket="policyengine-uk-data-private",
-                        lookup_csv_key="local_authorities_2021.csv",
+                        weight_matrix_bucket=LOCAL_AUTHORITY_ASSET_SPEC.bucket,
+                        weight_matrix_key=LOCAL_AUTHORITY_ASSET_SPEC.weight_matrix_filename,
+                        lookup_csv_bucket=LOCAL_AUTHORITY_ASSET_SPEC.bucket,
+                        lookup_csv_key=LOCAL_AUTHORITY_ASSET_SPEC.lookup_csv_filename,
                         region_code=la["code"],
                     ),
                 )

@@ -5,13 +5,18 @@ Each constituency has a row in the weight matrix (shape: 650 x N_households)
 that reweights all households to represent that constituency's demographics.
 """
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Sequence
 
 import numpy as np
 import pandas as pd
 from pydantic import ConfigDict
 
 from policyengine.core import Output
+from policyengine.outputs.uk_geography_assets import (
+    CONSTITUENCY_ASSET_SPEC,
+    UKGeographyAssetStrategy,
+    resolve_uk_geography_asset_paths,
+)
 
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
@@ -100,27 +105,42 @@ class ConstituencyImpact(Output):
 def compute_uk_constituency_impacts(
     baseline_simulation: "Simulation",
     reform_simulation: "Simulation",
-    weight_matrix_path: str,
-    constituency_csv_path: str,
+    weight_matrix_path: Optional[str] = None,
+    constituency_csv_path: Optional[str] = None,
     year: str = "2025",
+    asset_strategies: Optional[Sequence[UKGeographyAssetStrategy]] = None,
+    download_missing_assets: bool = True,
 ) -> ConstituencyImpact:
     """Compute per-constituency income changes for UK.
 
     Args:
         baseline_simulation: Completed baseline simulation.
         reform_simulation: Completed reform simulation.
-        weight_matrix_path: Path to parliamentary_constituency_weights.h5.
-        constituency_csv_path: Path to constituencies_2024.csv.
+        weight_matrix_path: Optional path to parliamentary_constituency_weights.h5.
+            If omitted, standard local paths are checked before downloading from GCS.
+        constituency_csv_path: Optional path to constituencies_2024.csv.
+            If omitted, standard local paths are checked before downloading from GCS.
         year: Year key in the H5 file (default "2025").
+        asset_strategies: Optional resolver strategy chain. If omitted, defaults to
+            local lookup, then optional GCS download.
+        download_missing_assets: Whether to download canonical missing assets from GCS.
+            Set to False to require local/cache files.
 
     Returns:
         ConstituencyImpact with constituency_results populated.
     """
+    paths = resolve_uk_geography_asset_paths(
+        CONSTITUENCY_ASSET_SPEC,
+        weight_matrix_path=weight_matrix_path,
+        lookup_csv_path=constituency_csv_path,
+        asset_strategies=asset_strategies,
+        download_missing_assets=download_missing_assets,
+    )
     impact = ConstituencyImpact.model_construct(
         baseline_simulation=baseline_simulation,
         reform_simulation=reform_simulation,
-        weight_matrix_path=weight_matrix_path,
-        constituency_csv_path=constituency_csv_path,
+        weight_matrix_path=paths.weight_matrix_path,
+        constituency_csv_path=paths.lookup_csv_path,
         year=year,
     )
     impact.run()

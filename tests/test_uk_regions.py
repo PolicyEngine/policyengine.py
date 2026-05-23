@@ -1,10 +1,19 @@
 """Tests for UK region definitions."""
 
-from policyengine.core.scoping_strategy import RowFilterStrategy
+from unittest.mock import patch
+
+from policyengine.core.scoping_strategy import (
+    RowFilterStrategy,
+    WeightReplacementStrategy,
+)
 from policyengine.countries.uk.regions import (
     UK_COUNTRIES,
     build_uk_region_registry,
     uk_region_registry,
+)
+from policyengine.data.uk_geography_assets import (
+    CONSTITUENCY_ASSET_SPEC,
+    LOCAL_AUTHORITY_ASSET_SPEC,
 )
 
 
@@ -68,7 +77,7 @@ class TestUKRegionRegistry:
         assert national.region_type == "national"
         assert (
             national.dataset_path
-            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.4"
+            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f"
         )
         assert not national.requires_filter
 
@@ -243,3 +252,75 @@ class TestUKRegionRegistryBuilder:
         # Then
         assert registry is not None
         assert len(registry.get_by_type("local_authority")) == 0
+
+    @patch(
+        "policyengine.countries.uk.regions._load_constituencies_from_csv",
+        return_value=[{"code": "C001", "name": "Constituency A"}],
+    )
+    def test__given_constituencies_included__then_uses_canonical_assets(
+        self,
+        _mock_loader,
+    ):
+        """Given: constituencies are included
+        When: Building the registry
+        Then: Weight replacement strategy uses canonical constituency assets
+        """
+        # When
+        registry = build_uk_region_registry(include_constituencies=True)
+        constituency = registry.get("constituency/C001")
+
+        # Then
+        assert constituency is not None
+        assert isinstance(constituency.scoping_strategy, WeightReplacementStrategy)
+        assert (
+            constituency.scoping_strategy.weight_matrix_bucket
+            == CONSTITUENCY_ASSET_SPEC.bucket
+        )
+        assert (
+            constituency.scoping_strategy.weight_matrix_key
+            == CONSTITUENCY_ASSET_SPEC.weight_matrix_filename
+        )
+        assert (
+            constituency.scoping_strategy.lookup_csv_bucket
+            == CONSTITUENCY_ASSET_SPEC.bucket
+        )
+        assert (
+            constituency.scoping_strategy.lookup_csv_key
+            == CONSTITUENCY_ASSET_SPEC.lookup_csv_filename
+        )
+
+    @patch(
+        "policyengine.countries.uk.regions._load_local_authorities_from_csv",
+        return_value=[{"code": "LA001", "name": "Local Authority A"}],
+    )
+    def test__given_local_authorities_included__then_uses_canonical_assets(
+        self,
+        _mock_loader,
+    ):
+        """Given: local authorities are included
+        When: Building the registry
+        Then: Weight replacement strategy uses canonical local-authority assets
+        """
+        # When
+        registry = build_uk_region_registry(include_local_authorities=True)
+        local_authority = registry.get("local_authority/LA001")
+
+        # Then
+        assert local_authority is not None
+        assert isinstance(local_authority.scoping_strategy, WeightReplacementStrategy)
+        assert (
+            local_authority.scoping_strategy.weight_matrix_bucket
+            == LOCAL_AUTHORITY_ASSET_SPEC.bucket
+        )
+        assert (
+            local_authority.scoping_strategy.weight_matrix_key
+            == LOCAL_AUTHORITY_ASSET_SPEC.weight_matrix_filename
+        )
+        assert (
+            local_authority.scoping_strategy.lookup_csv_bucket
+            == LOCAL_AUTHORITY_ASSET_SPEC.bucket
+        )
+        assert (
+            local_authority.scoping_strategy.lookup_csv_key
+            == LOCAL_AUTHORITY_ASSET_SPEC.lookup_csv_filename
+        )

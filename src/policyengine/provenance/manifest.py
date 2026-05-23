@@ -1,3 +1,4 @@
+import hashlib
 import os
 from functools import lru_cache
 from importlib import import_module
@@ -31,11 +32,15 @@ class DataPackageVersion(PackageVersion):
     repo_id: str
     repo_type: str = "model"
     release_manifest_path: str = "release_manifest.json"
+    release_manifest_revision: Optional[str] = None
 
 
-class CompatibleModelPackage(BaseModel):
+class CompatiblePackage(BaseModel):
     name: str
     specifier: str
+
+
+CompatibleModelPackage = CompatiblePackage
 
 
 class BuiltWithModelPackage(PackageVersion):
@@ -46,11 +51,15 @@ class BuiltWithModelPackage(PackageVersion):
 class DataBuildInfo(BaseModel):
     build_id: Optional[str] = None
     built_at: Optional[str] = None
+    built_with_core_package: Optional[PackageVersion] = None
     built_with_model_package: Optional[BuiltWithModelPackage] = None
 
 
 class ArtifactPathReference(BaseModel):
     path: str
+    revision: Optional[str] = None
+    sha256: Optional[str] = None
+    metadata_sha256: Optional[str] = None
 
 
 class ArtifactPathTemplate(BaseModel):
@@ -60,6 +69,34 @@ class ArtifactPathTemplate(BaseModel):
         return self.path_template.format(**kwargs)
 
 
+class PreservationMirror(BaseModel):
+    """Durable mirror of a data artifact on a preservation-grade host.
+
+    The primary host for PolicyEngine calibrated h5 files is Hugging
+    Face, which is fast and integrated with the Python client but does
+    not publish a preservation commitment. A ``PreservationMirror``
+    records an additional copy on a host that *does* publish one
+    (Zenodo, the Internet Archive, or an institutional archive), so a
+    TRO citation URL can fall back if the primary location is ever
+    unavailable.
+    """
+
+    kind: str
+    """Short identifier for the preservation host: ``zenodo``, ``internet_archive``, ``archival_gcs``, etc."""
+
+    url: str
+    """Dereferenceable HTTPS URL for the mirrored artifact."""
+
+    doi: Optional[str] = None
+    """DOI for the preservation deposit, when the host assigns one (Zenodo always does)."""
+
+    sha256: Optional[str] = None
+    """Content hash of the mirrored bytes. When equal to the primary artifact's ``sha256``, the mirror is byte-identical and the hash can be reused for verification."""
+
+    deposited_at: Optional[str] = None
+    """ISO 8601 timestamp of when the mirror was deposited, if known."""
+
+
 class DataReleaseArtifact(BaseModel):
     kind: str
     path: str
@@ -67,6 +104,10 @@ class DataReleaseArtifact(BaseModel):
     revision: str
     sha256: Optional[str] = None
     size_bytes: Optional[int] = None
+    preservation_mirrors: list[PreservationMirror] = Field(default_factory=list)
+    """Durable secondary locations for this artifact. Populated when the
+    release pipeline mirrors the artifact to a preservation-grade host.
+    Empty when no preservation deposit exists yet."""
 
     @property
     def uri(self) -> str:
@@ -80,12 +121,18 @@ class DataReleaseArtifact(BaseModel):
 class DataReleaseManifest(BaseModel):
     schema_version: int
     data_package: PackageVersion
-    compatible_model_packages: list[CompatibleModelPackage] = Field(
-        default_factory=list
-    )
+    compatible_model_packages: list[CompatiblePackage] = Field(default_factory=list)
+    compatible_core_packages: list[CompatiblePackage] = Field(default_factory=list)
     default_datasets: dict[str, str] = Field(default_factory=dict)
     build: Optional[DataBuildInfo] = None
     artifacts: dict[str, DataReleaseArtifact] = Field(default_factory=dict)
+    preservation_dois: list[str] = Field(default_factory=list)
+    """DOIs covering the release as a whole (Zenodo concept: one DOI
+    can enclose the full set of artifacts published together). Distinct
+    from per-artifact DOIs on ``DataReleaseArtifact.preservation_mirrors``.
+    Populated when the release pipeline mirrors to a DOI-minting host."""
+    source_sha256: Optional[str] = Field(default=None, exclude=True)
+    """Byte sha256 of the fetched manifest before runtime URI rewrites."""
 
 
 class DataCertification(BaseModel):
@@ -139,11 +186,16 @@ def https_dataset_uri(repo_id: str, path_in_repo: str, revision: str) -> str:
     return f"https://huggingface.co/{repo_id}/resolve/{revision}/{path_in_repo}"
 
 
+def _artifact_revision(data_package: "DataPackageVersion") -> str:
+    return data_package.release_manifest_revision or data_package.version
+
+
 def https_release_manifest_uri(data_package: "DataPackageVersion") -> str:
     """Return a dereferenceable HTTPS URI for a data release manifest."""
+    revision = _artifact_revision(data_package)
     return (
         f"https://huggingface.co/{data_package.repo_id}/resolve/"
-        f"{data_package.version}/{data_package.release_manifest_path}"
+        f"{revision}/{data_package.release_manifest_path}"
     )
 
 
@@ -199,11 +251,17 @@ def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
-    response = requests.get(
-        https_release_manifest_uri(country_manifest.data_package),
-        headers=headers,
-        timeout=HF_REQUEST_TIMEOUT_SECONDS,
-    )
+    try:
+        response = requests.get(
+            https_release_manifest_uri(country_manifest.data_package),
+            headers=headers,
+            timeout=HF_REQUEST_TIMEOUT_SECONDS,
+        )
+    except requests.RequestException as exc:
+        raise DataReleaseManifestUnavailableError(
+            "Could not fetch the data release manifest from Hugging Face."
+        ) from exc
+
     if response.status_code in (401, 403):
         raise DataReleaseManifestUnavailableError(
             "Could not fetch the data release manifest from Hugging Face. "
@@ -213,8 +271,26 @@ def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
         raise DataReleaseManifestUnavailableError(
             "No data release manifest was published for this data package."
         )
-    response.raise_for_status()
-    return DataReleaseManifest.model_validate_json(response.text)
+    try:
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        raise DataReleaseManifestUnavailableError(
+            "Could not fetch the data release manifest from Hugging Face."
+        ) from exc
+    data_release_manifest = DataReleaseManifest.model_validate_json(response.text)
+    source_bytes = response.content
+    if not isinstance(source_bytes, bytes):
+        source_bytes = response.text.encode("utf-8")
+    data_release_manifest.source_sha256 = hashlib.sha256(source_bytes).hexdigest()
+    release_revision = country_manifest.data_package.release_manifest_revision
+    if release_revision is not None:
+        for artifact in data_release_manifest.artifacts.values():
+            if (
+                artifact.repo_id == country_manifest.data_package.repo_id
+                and artifact.revision == country_manifest.data_package.version
+            ):
+                artifact.revision = release_revision
+    return data_release_manifest
 
 
 def _specifier_matches(version: str, specifier: str) -> bool:
@@ -351,7 +427,8 @@ def resolve_dataset_reference(country_id: str, dataset: str) -> str:
         return build_hf_uri(
             repo_id=manifest.data_package.repo_id,
             path_in_repo=path_reference.path,
-            revision=manifest.data_package.version,
+            revision=path_reference.revision
+            or _artifact_revision(manifest.data_package),
         )
 
     data_release_manifest = get_data_release_manifest(country_id)
@@ -429,6 +506,23 @@ def resolve_local_managed_dataset_source(
     _, _, path_in_repo = parts
 
     model_module_name, data_repo_name, data_package_name = local_hint
+    explicit_repo_roots = []
+    country_env = f"POLICYENGINE_{country_id.upper()}_DATA_REPO"
+    for env_name in (country_env, "POLICYENGINE_LOCAL_DATA_REPO_ROOT"):
+        env_value = os.environ.get(env_name)
+        if env_value:
+            explicit_repo_roots.extend(
+                [
+                    Path(env_value).expanduser(),
+                    Path(env_value).expanduser() / data_repo_name,
+                ]
+            )
+
+    for candidate_repo_root in explicit_repo_roots:
+        local_path = candidate_repo_root / data_package_name / "storage" / path_in_repo
+        if local_path.exists():
+            return str(local_path)
+
     try:
         model_module = import_module(model_module_name)
     except ImportError:
@@ -472,5 +566,5 @@ def resolve_region_dataset_path(
     return build_hf_uri(
         repo_id=manifest.data_package.repo_id,
         path_in_repo=resolved_path,
-        revision=manifest.data_package.version,
+        revision=_artifact_revision(manifest.data_package),
     )
