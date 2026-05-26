@@ -14,6 +14,7 @@ from policyengine.outputs.aggregate import (
     get_output_entity_data,
     require_output_column,
 )
+from policyengine.outputs.extra_variables import add_extra_variables
 
 CountryCode = Literal["us", "uk"]
 DecileValues = dict[int, float]
@@ -162,22 +163,6 @@ def _active_lsr_variables(country_code: CountryCode) -> dict[str, list[str]]:
     )
 
 
-def _add_extra_variables(
-    simulation: Simulation,
-    variables_by_entity: dict[str, list[str]],
-) -> None:
-    extra_variables = {
-        entity: list(variables)
-        for entity, variables in (simulation.extra_variables or {}).items()
-    }
-    for entity, variables in variables_by_entity.items():
-        existing = extra_variables.setdefault(entity, [])
-        for variable in variables:
-            if variable not in existing:
-                existing.append(variable)
-    simulation.extra_variables = extra_variables
-
-
 def configure_labor_supply_response_variables(
     baseline_simulation: Simulation,
     reform_simulation: Simulation,
@@ -193,8 +178,8 @@ def configure_labor_supply_response_variables(
         return False
 
     active_variables = _active_lsr_variables(country_code)
-    _add_extra_variables(baseline_simulation, active_variables)
-    _add_extra_variables(reform_simulation, active_variables)
+    add_extra_variables(baseline_simulation, active_variables)
+    add_extra_variables(reform_simulation, active_variables)
     return True
 
 
