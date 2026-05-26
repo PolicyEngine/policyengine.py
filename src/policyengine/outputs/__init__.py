@@ -4,6 +4,12 @@ from policyengine.outputs.change_aggregate import (
     ChangeAggregate,
     ChangeAggregateType,
 )
+from policyengine.outputs.cliff_impact import (
+    CliffImpact,
+    CliffImpactInSimulation,
+    calculate_cliff_impact,
+    configure_cliff_impact_variables,
+)
 from policyengine.outputs.congressional_district_impact import (
     CongressionalDistrictImpact,
     compute_us_congressional_district_impacts,
@@ -76,6 +82,10 @@ __all__ = [
     "AggregateType",
     "ChangeAggregate",
     "ChangeAggregateType",
+    "CliffImpact",
+    "CliffImpactInSimulation",
+    "calculate_cliff_impact",
+    "configure_cliff_impact_variables",
     "DecileImpact",
     "calculate_decile_impacts",
     "ProgramStatistics",
