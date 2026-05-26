@@ -13,9 +13,12 @@ from pydantic import BaseModel
 
 from policyengine.core import OutputCollection, Simulation
 from policyengine.outputs import (
+    CliffImpact,
     LaborSupplyResponse,
     ProgramStatistics,
+    calculate_cliff_impact,
     calculate_labor_supply_response,
+    configure_cliff_impact_variables,
     configure_labor_supply_response_variables,
 )
 from policyengine.outputs.decile_impact import (
@@ -63,6 +66,7 @@ class PolicyReformAnalysis(BaseModel):
     baseline_inequality: Inequality
     reform_inequality: Inequality
     labor_supply_response: LaborSupplyResponse
+    cliff_impact: CliffImpact | None = None
 
 
 def _format_missing_program_variables(missing_variables: set[str]) -> str | None:
@@ -134,6 +138,7 @@ def economic_impact_analysis(
     baseline_simulation: Simulation,
     reform_simulation: Simulation,
     inequality_preset: Union[USInequalityPreset, str] = USInequalityPreset.STANDARD,
+    include_cliff_impacts: bool = False,
 ) -> PolicyReformAnalysis:
     """Perform comprehensive analysis of a US policy reform.
 
@@ -151,6 +156,8 @@ def economic_impact_analysis(
         reform_simulation,
         country_code="us",
     )
+    if include_cliff_impacts:
+        configure_cliff_impact_variables(baseline_simulation, reform_simulation)
     _validate_program_statistics_config(baseline_simulation, reform_simulation)
 
     baseline_simulation.ensure()
@@ -218,6 +225,11 @@ def economic_impact_analysis(
         reform_simulation,
         country_code="us",
     )
+    cliff_impact = (
+        calculate_cliff_impact(baseline_simulation, reform_simulation)
+        if include_cliff_impacts
+        else None
+    )
 
     return PolicyReformAnalysis(
         decile_impacts=decile_impacts,
@@ -227,4 +239,5 @@ def economic_impact_analysis(
         baseline_inequality=baseline_inequality,
         reform_inequality=reform_inequality,
         labor_supply_response=labor_supply_response,
+        cliff_impact=cliff_impact,
     )
