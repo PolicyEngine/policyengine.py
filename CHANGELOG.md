@@ -1,3 +1,10 @@
+## [4.12.0] - 2026-05-28
+
+### Added
+
+- Added opt-in macro cliff impact outputs for US and UK reform analyses.
+
+
 ## [4.11.0] - 2026-05-23
 
 ### Added
