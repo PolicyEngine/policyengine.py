@@ -15,6 +15,9 @@ Before making or reviewing repository-wide API, testing, documentation, release,
 or package-boundary changes, read
 `docs/engineering/skills/repository-guidance.md`.
 
+Before updating or reviewing certified release bundles, read
+`docs/engineering/skills/release-bundles.md`.
+
 ## Repository Boundaries
 
 `policyengine.py` is the user-facing analysis package. It wraps

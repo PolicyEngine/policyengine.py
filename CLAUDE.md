@@ -19,3 +19,6 @@ Before opening, replacing, or sharing a PR, read
 Before making or reviewing repository-wide API, testing, documentation, release,
 or package-boundary changes, read
 `docs/engineering/skills/repository-guidance.md`.
+
+Before updating or reviewing certified release bundles, read
+`docs/engineering/skills/release-bundles.md`.
