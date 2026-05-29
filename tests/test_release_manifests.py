@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 from requests import Timeout
@@ -62,6 +63,16 @@ def _response_with_json(payload: dict) -> MagicMock:
     response.content = response.text.encode("utf-8")
     response.raise_for_status.return_value = None
     return response
+
+
+def _country_module_with_microsimulation(
+    name: str,
+    microsimulation: MagicMock,
+) -> ModuleType:
+    module = ModuleType(name)
+    module.Microsimulation = microsimulation
+    module.__file__ = str(Path(__file__).resolve())
+    return module
 
 
 class TestReleaseManifests:
@@ -655,7 +666,12 @@ class TestReleaseManifests:
         with (
             patch.dict(
                 sys.modules,
-                {"policyengine_us": MagicMock(Microsimulation=mock_microsimulation)},
+                {
+                    "policyengine_us": _country_module_with_microsimulation(
+                        "policyengine_us",
+                        mock_microsimulation,
+                    )
+                },
             ),
             patch(
                 "policyengine.tax_benefit_models.us.model.materialize_dataset_source",
@@ -684,7 +700,12 @@ class TestReleaseManifests:
         with (
             patch.dict(
                 sys.modules,
-                {"policyengine_us": MagicMock(Microsimulation=mock_microsimulation)},
+                {
+                    "policyengine_us": _country_module_with_microsimulation(
+                        "policyengine_us",
+                        mock_microsimulation,
+                    )
+                },
             ),
             patch(
                 "policyengine.tax_benefit_models.us.model.materialize_dataset_source",
@@ -707,7 +728,12 @@ class TestReleaseManifests:
         with (
             patch.dict(
                 sys.modules,
-                {"policyengine_uk": MagicMock(Microsimulation=mock_microsimulation)},
+                {
+                    "policyengine_uk": _country_module_with_microsimulation(
+                        "policyengine_uk",
+                        mock_microsimulation,
+                    )
+                },
             ),
             patch(
                 "policyengine.tax_benefit_models.uk.model.materialize_dataset_source",
@@ -735,7 +761,12 @@ class TestReleaseManifests:
         with (
             patch.dict(
                 sys.modules,
-                {"policyengine_uk": MagicMock(Microsimulation=mock_microsimulation)},
+                {
+                    "policyengine_uk": _country_module_with_microsimulation(
+                        "policyengine_uk",
+                        mock_microsimulation,
+                    )
+                },
             ),
             patch(
                 "policyengine.tax_benefit_models.uk.model.materialize_dataset_source",
