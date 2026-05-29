@@ -6,6 +6,7 @@ import pandas as pd
 from microdf import MicroDataFrame
 
 from policyengine.core import TaxBenefitModel
+from policyengine.provenance.dataset_sources import materialize_dataset_source
 from policyengine.provenance.manifest import (
     dataset_logical_name,
     resolve_local_managed_dataset_source,
@@ -288,21 +289,22 @@ def managed_microsimulation(
             allow_unmanaged and dataset is not None and "://" in dataset
         ),
     )
-    runtime_dataset = dataset_source
-    if isinstance(dataset_source, str) and "hf://" not in dataset_source:
+    runtime_dataset_source = materialize_dataset_source(dataset_source)
+    runtime_dataset = runtime_dataset_source
+    if isinstance(runtime_dataset_source, str) and "://" not in runtime_dataset_source:
         from policyengine_uk.data.dataset_schema import (
             UKMultiYearDataset,
             UKSingleYearDataset,
         )
 
-        if UKMultiYearDataset.validate_file_path(dataset_source, False):
-            runtime_dataset = UKMultiYearDataset(dataset_source)
-        elif UKSingleYearDataset.validate_file_path(dataset_source, False):
-            runtime_dataset = UKSingleYearDataset(dataset_source)
+        if UKMultiYearDataset.validate_file_path(runtime_dataset_source, False):
+            runtime_dataset = UKMultiYearDataset(runtime_dataset_source)
+        elif UKSingleYearDataset.validate_file_path(runtime_dataset_source, False):
+            runtime_dataset = UKSingleYearDataset(runtime_dataset_source)
     microsim = Microsimulation(dataset=runtime_dataset, **kwargs)
     microsim.policyengine_bundle = _managed_release_bundle(
         dataset_uri,
-        dataset_source,
+        runtime_dataset_source,
     )
     return microsim
 

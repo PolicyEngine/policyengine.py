@@ -12,6 +12,7 @@ from microdf import MicroDataFrame
 from pydantic import ConfigDict, Field
 
 from policyengine.core import Dataset, YearData
+from policyengine.provenance.dataset_sources import materialize_dataset_source
 from policyengine.provenance.manifest import (
     dataset_logical_name,
     get_release_manifest,
@@ -285,7 +286,8 @@ def create_datasets(
     for dataset in datasets:
         resolved_dataset = resolve_dataset_reference("us", dataset)
         dataset_stem = dataset_logical_name(resolved_dataset)
-        sim = Microsimulation(dataset=resolved_dataset)
+        runtime_dataset = materialize_dataset_source(resolved_dataset)
+        sim = Microsimulation(dataset=runtime_dataset)
 
         for year in years:
             # Get all input variables from the simulation
