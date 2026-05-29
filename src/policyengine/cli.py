@@ -5,6 +5,7 @@ Subcommands:
 - ``trace-tro <country>`` emit a TRACE TRO for a certified bundle
 - ``trace-tro-validate <path>`` validate a TRO against the shipped schema
 - ``release-manifest <country>`` print the bundled country manifest
+- ``refresh-release-bundles`` refresh certified bundle manifests from source
 
 See :mod:`policyengine.provenance.trace` and ``docs/release-bundles.md``.
 """
@@ -65,6 +66,27 @@ def _parser() -> argparse.ArgumentParser:
     )
     bundle.add_argument("country", help="Country id (e.g. us, uk).")
 
+    refresh = subparsers.add_parser(
+        "refresh-release-bundles",
+        help=(
+            "Refresh certified release-bundle manifests from a source checkout. "
+            "Fails unless each data release certifies the target model."
+        ),
+    )
+    refresh.add_argument("--country", required=True, choices=("us", "uk", "all"))
+    refresh.add_argument("--model-version")
+    refresh.add_argument("--data-version")
+    refresh.add_argument("--release-manifest-path")
+    refresh.add_argument("--release-manifest-revision")
+    refresh.add_argument("--us-model-version")
+    refresh.add_argument("--uk-model-version")
+    refresh.add_argument("--us-data-version")
+    refresh.add_argument("--uk-data-version")
+    refresh.add_argument("--us-release-manifest-path")
+    refresh.add_argument("--uk-release-manifest-path")
+    refresh.add_argument("--us-release-manifest-revision")
+    refresh.add_argument("--uk-release-manifest-revision")
+
     return parser
 
 
@@ -119,6 +141,32 @@ def _emit_release_manifest(country_id: str) -> int:
     return 0
 
 
+def _refresh_release_bundles(args: argparse.Namespace) -> int:
+    from policyengine.provenance.bundle_update import refresh_release_bundles
+
+    try:
+        outcome = refresh_release_bundles(
+            country=args.country,
+            model_version=args.model_version,
+            data_version=args.data_version,
+            release_manifest_path=args.release_manifest_path,
+            release_manifest_revision=args.release_manifest_revision,
+            us_model_version=args.us_model_version,
+            uk_model_version=args.uk_model_version,
+            us_data_version=args.us_data_version,
+            uk_data_version=args.uk_data_version,
+            us_release_manifest_path=args.us_release_manifest_path,
+            uk_release_manifest_path=args.uk_release_manifest_path,
+            us_release_manifest_revision=args.us_release_manifest_revision,
+            uk_release_manifest_revision=args.uk_release_manifest_revision,
+        )
+    except Exception as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(outcome.summary())
+    return 0
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = _parser().parse_args(argv)
     if args.command == "trace-tro":
@@ -127,6 +175,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _validate_tro(args.path)
     if args.command == "release-manifest":
         return _emit_release_manifest(args.country)
+    if args.command == "refresh-release-bundles":
+        return _refresh_release_bundles(args)
     return 1
 
 

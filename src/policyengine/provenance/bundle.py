@@ -44,6 +44,7 @@ from urllib.request import Request, urlopen
 
 from policyengine.provenance.manifest import (
     CountryReleaseManifest,
+    DataCertification,
     get_release_manifest,
     https_dataset_uri,
 )
@@ -366,6 +367,7 @@ def refresh_release_bundle(
     data_version: Optional[str] = None,
     release_manifest_path: Optional[str] = None,
     release_manifest_revision: Optional[str] = None,
+    prevalidated_certification: Optional[DataCertification] = None,
     update_pyproject: bool = True,
     manifest_dir: Path = MANIFEST_DIR,
     pyproject_path: Path = PYPROJECT,
@@ -383,6 +385,9 @@ def refresh_release_bundle(
             package version, such as CRFB long-run candidate releases.
         release_manifest_revision: Optional HF revision to fetch the data
             release manifest from before pinning the immutable repo commit.
+        prevalidated_certification: Certification metadata already verified by a
+            caller. Only valid for model-only refreshes that keep the existing
+            data package and release manifest target.
         update_pyproject: When True, also bumps the country extra in
             ``pyproject.toml`` to ``model_version``.
         manifest_dir: Overridable for tests.
@@ -402,6 +407,15 @@ def refresh_release_bundle(
 
     new_model = model_version or old_model
     new_data = data_version or old_data
+    if prevalidated_certification is not None and (
+        new_data != old_data
+        or release_manifest_path is not None
+        or release_manifest_revision is not None
+    ):
+        raise ValueError(
+            "prevalidated_certification is only supported for model-only "
+            "refreshes that keep the existing data release manifest target."
+        )
 
     package_name = current.model_package.name  # "policyengine-us" / "policyengine-uk"
 
@@ -579,6 +593,11 @@ def refresh_release_bundle(
         _refresh_dataset_path_references_from_data_release(
             manifest_json,
             release_manifest_json,
+        )
+    elif prevalidated_certification is not None:
+        manifest_json["certification"] = prevalidated_certification.model_dump(
+            mode="json",
+            exclude_none=True,
         )
 
     manifest_path.write_text(

@@ -22,11 +22,15 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import HTTPError
 
 import pytest
+
+# Bundle tooling tests do not need the runtime country models.
+os.environ.setdefault("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
 
 from policyengine.provenance.bundle import refresh_release_bundle
 

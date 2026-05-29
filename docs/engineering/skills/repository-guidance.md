@@ -36,6 +36,10 @@ Country pins live in `pyproject.toml` under the `[uk]`, `[us]`, and `[dev]`
 extras. Bumping a pin is usually a patch-level change; include the motivation in
 the PR body.
 
+Certified release-bundle updates require the release-bundle skill. Read
+`docs/engineering/skills/release-bundles.md` before changing bundled country
+model pins, country release manifests, or TRACE TRO sidecars.
+
 ## Public Surface
 
 - Prefer the country-model APIs over direct `policyengine-core` calls from
