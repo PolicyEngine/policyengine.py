@@ -6,6 +6,7 @@ import pandas as pd
 from microdf import MicroDataFrame
 
 from policyengine.core import TaxBenefitModel
+from policyengine.provenance.dataset_sources import materialize_dataset_source
 from policyengine.provenance.manifest import (
     dataset_logical_name,
     resolve_local_managed_dataset_source,
@@ -438,10 +439,11 @@ def managed_microsimulation(
             allow_unmanaged and dataset is not None and "://" in dataset
         ),
     )
-    microsim = Microsimulation(dataset=dataset_source, **kwargs)
+    runtime_dataset_source = materialize_dataset_source(dataset_source)
+    microsim = Microsimulation(dataset=runtime_dataset_source, **kwargs)
     microsim.policyengine_bundle = _managed_release_bundle(
         dataset_uri,
-        dataset_source,
+        runtime_dataset_source,
     )
     return microsim
 

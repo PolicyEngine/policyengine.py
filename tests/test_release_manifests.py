@@ -651,7 +651,17 @@ class TestReleaseManifests:
     def test__given_us_managed_microsimulation__then_passes_certified_dataset_and_bundle(
         self,
     ):
-        with patch("policyengine_us.Microsimulation") as mock_microsimulation:
+        mock_microsimulation = MagicMock()
+        with (
+            patch.dict(
+                sys.modules,
+                {"policyengine_us": MagicMock(Microsimulation=mock_microsimulation)},
+            ),
+            patch(
+                "policyengine.tax_benefit_models.us.model.materialize_dataset_source",
+                return_value="/tmp/enhanced_cps_2024.h5",
+            ),
+        ):
             microsim = managed_us_microsimulation()
 
         dataset = mock_microsimulation.call_args.kwargs["dataset"]
@@ -665,37 +675,49 @@ class TestReleaseManifests:
             == us_latest.default_dataset_uri
         )
         dataset_source = microsim.policyengine_bundle["runtime_dataset_source"]
-        assert dataset_source == us_latest.default_dataset_uri or str(
-            dataset_source
-        ).endswith("policyengine_us_data/storage/enhanced_cps_2024.h5")
+        assert dataset_source == "/tmp/enhanced_cps_2024.h5"
 
     def test__given_us_unmanaged_dataset_uri__then_source_is_not_rewritten(self):
         dataset = "hf://policyengine/policyengine-us-data/cps_2023.h5@1.73.0"
 
-        with patch("policyengine_us.Microsimulation") as mock_microsimulation:
+        mock_microsimulation = MagicMock()
+        with (
+            patch.dict(
+                sys.modules,
+                {"policyengine_us": MagicMock(Microsimulation=mock_microsimulation)},
+            ),
+            patch(
+                "policyengine.tax_benefit_models.us.model.materialize_dataset_source",
+                return_value="/tmp/cps_2023.h5",
+            ),
+        ):
             microsim = managed_us_microsimulation(
                 dataset=dataset,
                 allow_unmanaged=True,
             )
 
-        assert mock_microsimulation.call_args.kwargs["dataset"] == dataset
+        assert mock_microsimulation.call_args.kwargs["dataset"] == "/tmp/cps_2023.h5"
         assert microsim.policyengine_bundle["runtime_dataset_uri"] == dataset
-        assert microsim.policyengine_bundle["runtime_dataset_source"] == dataset
+        assert microsim.policyengine_bundle["runtime_dataset_source"] == (
+            "/tmp/cps_2023.h5"
+        )
 
     def test__given_uk_managed_dataset_name__then_resolves_within_bundle(self):
-        with patch("policyengine_uk.Microsimulation") as mock_microsimulation:
+        mock_microsimulation = MagicMock()
+        with (
+            patch.dict(
+                sys.modules,
+                {"policyengine_uk": MagicMock(Microsimulation=mock_microsimulation)},
+            ),
+            patch(
+                "policyengine.tax_benefit_models.uk.model.materialize_dataset_source",
+                return_value="/tmp/enhanced_frs_2023_24.h5",
+            ),
+        ):
             microsim = managed_uk_microsimulation(dataset="enhanced_frs_2023_24")
 
         dataset = mock_microsimulation.call_args.kwargs["dataset"]
-        from policyengine_uk.data.dataset_schema import UKSingleYearDataset
-
-        if isinstance(dataset, UKSingleYearDataset):
-            assert getattr(dataset, "time_period", None) == "2023"
-        else:
-            assert dataset == (
-                "hf://policyengine/policyengine-uk-data-private/"
-                "enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f"
-            )
+        assert dataset == "/tmp/enhanced_frs_2023_24.h5"
         assert (
             microsim.policyengine_bundle["policyengine_version"] == POLICYENGINE_VERSION
         )
@@ -704,23 +726,31 @@ class TestReleaseManifests:
             "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f"
         )
         dataset_source = microsim.policyengine_bundle["runtime_dataset_source"]
-        assert (
-            dataset_source
-            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f"
-            or str(dataset_source).endswith(
-                "policyengine_uk_data/storage/enhanced_frs_2023_24.h5"
-            )
-        )
+        assert dataset_source == "/tmp/enhanced_frs_2023_24.h5"
 
     def test__given_uk_unmanaged_dataset_uri__then_source_is_not_rewritten(self):
         dataset = "hf://policyengine/policyengine-uk-data-private/frs_2022_23.h5@1.40.4"
 
-        with patch("policyengine_uk.Microsimulation") as mock_microsimulation:
+        mock_microsimulation = MagicMock()
+        with (
+            patch.dict(
+                sys.modules,
+                {"policyengine_uk": MagicMock(Microsimulation=mock_microsimulation)},
+            ),
+            patch(
+                "policyengine.tax_benefit_models.uk.model.materialize_dataset_source",
+                return_value="/tmp/frs_2022_23.h5",
+            ),
+        ):
             microsim = managed_uk_microsimulation(
                 dataset=dataset,
                 allow_unmanaged=True,
             )
 
-        assert mock_microsimulation.call_args.kwargs["dataset"] == dataset
+        assert mock_microsimulation.call_args.kwargs["dataset"] == (
+            "/tmp/frs_2022_23.h5"
+        )
         assert microsim.policyengine_bundle["runtime_dataset_uri"] == dataset
-        assert microsim.policyengine_bundle["runtime_dataset_source"] == dataset
+        assert microsim.policyengine_bundle["runtime_dataset_source"] == (
+            "/tmp/frs_2022_23.h5"
+        )
