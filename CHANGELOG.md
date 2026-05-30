@@ -1,3 +1,11 @@
+## [4.12.1] - 2026-05-30
+
+### Fixed
+
+- Restore runtime loading for `gs://` dataset URIs and materialize remote
+  datasets before handing them to country package microsimulations.
+
+
 ## [4.12.0] - 2026-05-28
 
 ### Added
