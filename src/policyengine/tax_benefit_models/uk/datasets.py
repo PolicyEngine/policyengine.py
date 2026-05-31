@@ -102,8 +102,8 @@ class PolicyEngineUKDataset(Dataset):
 
 def create_datasets(
     datasets: list[str] = [
-        "frs_2023_24",
-        "enhanced_frs_2023_24",
+        "frs_2024_25",
+        "enhanced_frs_2024_25",
     ],
     years: list[int] = [2026, 2027, 2028, 2029, 2030],
     data_folder: str = "./data",
@@ -184,8 +184,8 @@ def create_datasets(
 
 def load_datasets(
     datasets: list[str] = [
-        "frs_2023_24",
-        "enhanced_frs_2023_24",
+        "frs_2024_25",
+        "enhanced_frs_2024_25",
     ],
     years: list[int] = [2026, 2027, 2028, 2029, 2030],
     data_folder: str = "./data",
@@ -212,8 +212,8 @@ def load_datasets(
 
 def ensure_datasets(
     datasets: list[str] = [
-        "frs_2023_24",
-        "enhanced_frs_2023_24",
+        "frs_2024_25",
+        "enhanced_frs_2024_25",
     ],
     years: list[int] = [2026, 2027, 2028, 2029, 2030],
     data_folder: str = "./data",

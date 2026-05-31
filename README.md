@@ -36,11 +36,11 @@ from policyengine.core import Simulation
 from policyengine.outputs.aggregate import Aggregate, AggregateType
 
 datasets = pe.uk.ensure_datasets(
-    datasets=["hf://policyengine/policyengine-uk-data/enhanced_frs_2023_24.h5"],
+    datasets=["enhanced_frs_2024_25"],
     years=[2026],
     data_folder="./data",
 )
-dataset = datasets["enhanced_frs_2023_24_2026"]
+dataset = datasets["enhanced_frs_2024_25_2026"]
 
 simulation = Simulation(dataset=dataset, tax_benefit_model_version=pe.uk.model)
 simulation.run()
@@ -170,7 +170,7 @@ Use the pinned interpreter and the UK extra to run the checked-in paper repro:
 uv run --python 3.14 --extra uk python examples/paper_repro_uk.py
 ```
 
-On first run this will create `./data/enhanced_frs_2023_24_year_2026.h5`.
+On first run this will create `./data/enhanced_frs_2024_25_year_2026.h5`.
 
 ## Features
 
@@ -192,7 +192,7 @@ from policyengine.tax_benefit_models.uk import PolicyEngineUKDataset
 
 dataset = PolicyEngineUKDataset(
     name="Representative data",
-    filepath="./data/frs_2023_24_year_2026.h5",
+    filepath="./data/frs_2024_25_year_2026.h5",
     year=2026,
 )
 dataset.load()

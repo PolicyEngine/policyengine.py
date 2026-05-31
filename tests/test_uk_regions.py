@@ -16,6 +16,12 @@ from policyengine.data.uk_geography_assets import (
     LOCAL_AUTHORITY_ASSET_SPEC,
 )
 
+UK_DATA_RELEASE_REVISION = "4e25f9d6b67244340161098e76bb5e67148eb1e7"
+UK_DEFAULT_DATASET_URI = (
+    "hf://policyengine/policyengine-uk-data-private/"
+    f"enhanced_frs_2024_25.h5@{UK_DATA_RELEASE_REVISION}"
+)
+
 
 class TestUKCountries:
     """Tests for UK country definitions."""
@@ -75,10 +81,7 @@ class TestUKRegionRegistry:
         assert national.code == "uk"
         assert national.label == "United Kingdom"
         assert national.region_type == "national"
-        assert (
-            national.dataset_path
-            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f"
-        )
+        assert national.dataset_path == UK_DEFAULT_DATASET_URI
         assert not national.requires_filter
 
     def test__given_uk_registry__then_has_four_country_regions(self):

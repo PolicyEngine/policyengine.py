@@ -5,6 +5,14 @@ import re
 from policyengine.tax_benefit_models.uk import uk_latest
 from policyengine.tax_benefit_models.us import us_latest
 
+UK_MODEL_VERSION = "2.88.23"
+UK_DATA_RELEASE_VERSION = "1.55.12"
+UK_DATA_RELEASE_REVISION = "4e25f9d6b67244340161098e76bb5e67148eb1e7"
+UK_DEFAULT_DATASET_URI = (
+    "hf://policyengine/policyengine-uk-data-private/"
+    f"enhanced_frs_2024_25.h5@{UK_DATA_RELEASE_REVISION}"
+)
+
 
 class TestUKModel:
     """Tests for PolicyEngine UK model."""
@@ -29,13 +37,10 @@ class TestUKModel:
         assert uk_latest.release_manifest is not None
         assert uk_latest.release_manifest.country_id == "uk"
         assert uk_latest.model_package.name == "policyengine-uk"
-        assert uk_latest.model_package.version == "2.88.20"
+        assert uk_latest.model_package.version == UK_MODEL_VERSION
         assert uk_latest.data_package.name == "policyengine-uk-data"
-        assert uk_latest.data_package.version == "1.55.10"
-        assert (
-            uk_latest.default_dataset_uri
-            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f"
-        )
+        assert uk_latest.data_package.version == UK_DATA_RELEASE_VERSION
+        assert uk_latest.default_dataset_uri == UK_DEFAULT_DATASET_URI
 
     def test_has_hundreds_of_parameters(self):
         """UK model should have hundreds of parameters."""

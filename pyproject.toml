@@ -45,7 +45,7 @@ graph = [
 ]
 uk = [
     "policyengine_core>=3.26.1",
-    "policyengine-uk==2.88.20",
+    "policyengine-uk==2.88.23",
 ]
 us = [
     "policyengine_core==3.26.1",
@@ -63,7 +63,7 @@ dev = [
     "pytest-asyncio>=0.26.0",
     "ruff>=0.9.0",
     "policyengine_core==3.26.1",
-    "policyengine-uk==2.88.20",
+    "policyengine-uk==2.88.23",
     "policyengine-us==1.700.0",
     "towncrier>=24.8.0",
     "mypy>=1.11.0",

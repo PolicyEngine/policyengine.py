@@ -54,6 +54,17 @@ US_ENHANCED_CPS_MANAGED_URI = (
     "hf://policyengine/policyengine-us-data/"
     f"enhanced_cps_2024.h5@{US_DATA_RELEASE_REVISION}"
 )
+UK_MODEL_VERSION = "2.88.23"
+UK_DATA_RELEASE_VERSION = "1.55.12"
+UK_DATA_RELEASE_REVISION = "4e25f9d6b67244340161098e76bb5e67148eb1e7"
+UK_DEFAULT_DATASET = "enhanced_frs_2024_25"
+UK_DEFAULT_DATASET_URI = (
+    "hf://policyengine/policyengine-uk-data-private/"
+    f"{UK_DEFAULT_DATASET}.h5@{UK_DATA_RELEASE_REVISION}"
+)
+UK_DATA_BUILD_FINGERPRINT = (
+    "sha256:a9a1afc4f60c4614f2bbec47c318d812601e7bd1757e4121481421ec91815130"
+)
 
 
 def _response_with_json(payload: dict) -> MagicMock:
@@ -120,24 +131,28 @@ class TestReleaseManifests:
         assert manifest.country_id == "uk"
         assert manifest.policyengine_version == POLICYENGINE_VERSION
         assert manifest.model_package.name == "policyengine-uk"
-        assert manifest.model_package.version == "2.88.20"
+        assert manifest.model_package.version == UK_MODEL_VERSION
         assert manifest.data_package.name == "policyengine-uk-data"
-        assert manifest.data_package.version == "1.55.10"
+        assert manifest.data_package.version == UK_DATA_RELEASE_VERSION
         assert (
             manifest.data_package.repo_id == "policyengine/policyengine-uk-data-private"
         )
         assert manifest.certified_data_artifact is not None
         assert (
-            manifest.certified_data_artifact.build_id == "policyengine-uk-data-1.55.10"
+            manifest.certified_data_artifact.build_id
+            == f"policyengine-uk-data-{UK_DATA_RELEASE_VERSION}"
         )
-        assert manifest.certified_data_artifact.dataset == "enhanced_frs_2023_24"
+        assert manifest.certified_data_artifact.dataset == UK_DEFAULT_DATASET
         assert manifest.certification is not None
-        assert manifest.certification.data_build_id == "policyengine-uk-data-1.55.10"
-        assert manifest.certification.built_with_model_version == "2.88.20"
-        assert manifest.certification.certified_for_model_version == "2.88.20"
+        assert (
+            manifest.certification.data_build_id
+            == f"policyengine-uk-data-{UK_DATA_RELEASE_VERSION}"
+        )
+        assert manifest.certification.built_with_model_version == UK_MODEL_VERSION
+        assert manifest.certification.certified_for_model_version == UK_MODEL_VERSION
         assert (
             manifest.certification.data_build_fingerprint
-            == "sha256:77f149725a36055fd89961855230401852b0712d301c6e26d6d16565c6b23809"
+            == UK_DATA_BUILD_FINGERPRINT
         )
 
     def test__given_us_dataset_name__then_resolves_to_versioned_hf_url(self):
@@ -164,12 +179,9 @@ class TestReleaseManifests:
         )
 
     def test__given_uk_dataset_name__then_resolves_to_versioned_hf_url(self):
-        resolved = resolve_dataset_reference("uk", "enhanced_frs_2023_24")
+        resolved = resolve_dataset_reference("uk", UK_DEFAULT_DATASET)
 
-        assert (
-            resolved
-            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f"
-        )
+        assert resolved == UK_DEFAULT_DATASET_URI
 
     def test__given_explicit_url__then_resolution_is_noop(self):
         url = "hf://policyengine/policyengine-us-data/cps_2023.h5@1.73.0"
@@ -621,12 +633,15 @@ class TestReleaseManifests:
         bundle = model_version.release_bundle
 
         assert bundle["bundle_id"] == f"uk-{POLICYENGINE_VERSION}"
-        assert bundle["default_dataset"] == "enhanced_frs_2023_24"
+        assert bundle["default_dataset"] == UK_DEFAULT_DATASET
         assert bundle["default_dataset_uri"] == manifest.default_dataset_uri
-        assert bundle["certified_data_build_id"] == "policyengine-uk-data-1.55.10"
-        assert bundle["data_build_model_version"] == "2.88.20"
+        assert (
+            bundle["certified_data_build_id"]
+            == f"policyengine-uk-data-{UK_DATA_RELEASE_VERSION}"
+        )
+        assert bundle["data_build_model_version"] == UK_MODEL_VERSION
         assert bundle["compatibility_basis"] == "exact_build_model_version"
-        assert bundle["certified_by"] == "policyengine.py bundled manifest"
+        assert bundle["certified_by"] == "policyengine-uk-data release manifest"
 
     def test__given_runtime_certification__then_release_bundle_prefers_runtime_value(
         self,
@@ -737,22 +752,22 @@ class TestReleaseManifests:
             ),
             patch(
                 "policyengine.tax_benefit_models.uk.model.materialize_dataset_source",
-                return_value="/tmp/enhanced_frs_2023_24.h5",
+                return_value=f"/tmp/{UK_DEFAULT_DATASET}.h5",
             ),
         ):
-            microsim = managed_uk_microsimulation(dataset="enhanced_frs_2023_24")
+            microsim = managed_uk_microsimulation(dataset=UK_DEFAULT_DATASET)
 
         dataset = mock_microsimulation.call_args.kwargs["dataset"]
-        assert dataset == "/tmp/enhanced_frs_2023_24.h5"
+        assert dataset == f"/tmp/{UK_DEFAULT_DATASET}.h5"
         assert (
             microsim.policyengine_bundle["policyengine_version"] == POLICYENGINE_VERSION
         )
-        assert microsim.policyengine_bundle["runtime_dataset"] == "enhanced_frs_2023_24"
+        assert microsim.policyengine_bundle["runtime_dataset"] == UK_DEFAULT_DATASET
         assert microsim.policyengine_bundle["runtime_dataset_uri"] == (
-            "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f"
+            UK_DEFAULT_DATASET_URI
         )
         dataset_source = microsim.policyengine_bundle["runtime_dataset_source"]
-        assert dataset_source == "/tmp/enhanced_frs_2023_24.h5"
+        assert dataset_source == f"/tmp/{UK_DEFAULT_DATASET}.h5"
 
     def test__given_uk_unmanaged_dataset_uri__then_source_is_not_rewritten(self):
         dataset = "hf://policyengine/policyengine-uk-data-private/frs_2022_23.h5@1.40.4"
