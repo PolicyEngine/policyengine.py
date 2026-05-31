@@ -151,8 +151,7 @@ class TestReleaseManifests:
         assert manifest.certification.built_with_model_version == UK_MODEL_VERSION
         assert manifest.certification.certified_for_model_version == UK_MODEL_VERSION
         assert (
-            manifest.certification.data_build_fingerprint
-            == UK_DATA_BUILD_FINGERPRINT
+            manifest.certification.data_build_fingerprint == UK_DATA_BUILD_FINGERPRINT
         )
 
     def test__given_us_dataset_name__then_resolves_to_versioned_hf_url(self):
