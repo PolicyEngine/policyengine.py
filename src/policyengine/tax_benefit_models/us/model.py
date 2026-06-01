@@ -187,6 +187,12 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         # leaves the module-level one untouched. Building populations
         # against the module-level system would hide reform-registered
         # variables like ``ctc_minimum_refundable_amount`` at calc time.
+        if microsim.baseline is not None:
+            self._build_simulation_from_dataset(
+                microsim.baseline,
+                dataset,
+                microsim.baseline.tax_benefit_system,
+            )
         self._build_simulation_from_dataset(
             microsim, dataset, microsim.tax_benefit_system
         )
