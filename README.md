@@ -36,7 +36,7 @@ from policyengine.core import Simulation
 from policyengine.outputs.aggregate import Aggregate, AggregateType
 
 datasets = pe.uk.ensure_datasets(
-    datasets=["hf://policyengine/policyengine-uk-data/enhanced_frs_2023_24.h5"],
+    datasets=["enhanced_frs_2023_24"],
     years=[2026],
     data_folder="./data",
 )
@@ -57,6 +57,11 @@ print(f"Total UC spending: £{agg.result / 1e9:.1f}bn")
 
 For baseline-vs-reform comparisons, see `pe.uk.economic_impact_analysis`
 and its US counterpart.
+
+UK population data is stored in a private Hugging Face model repository. Set
+`HUGGING_FACE_TOKEN` to a token from an account with access before running UK
+population examples. To download the raw `.h5` file directly, see
+[Microsimulation](docs/microsim.md#uk-private-data-and-raw-h5-access).
 
 ## Documentation
 
