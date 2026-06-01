@@ -1,3 +1,10 @@
+## [4.13.1] - 2026-06-01
+
+### Changed
+
+- Refresh the bundled US release manifest to policyengine-us 1.715.2 and require explicit data-release compatibility assertions when refreshing bundles across model versions.
+
+
 ## [4.13.0] - 2026-06-01
 
 ### Added
