@@ -9,3 +9,6 @@ from branches in `PolicyEngine/policyengine.py`; never create fork PRs.
 
 For repository-wide API, testing, documentation, release, or package-boundary
 changes, read `docs/engineering/skills/repository-guidance.md`.
+
+For certified release-bundle updates or reviews, read
+`docs/engineering/skills/release-bundles.md`.
