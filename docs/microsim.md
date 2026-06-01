@@ -53,6 +53,62 @@ List datasets already known to the country:
 pe.us.load_datasets()        # or pe.uk.load_datasets()
 ```
 
+### UK private data and raw h5 access
+
+UK population data uses licensed Family Resources Survey inputs. The default
+UK release bundle points to the private
+`policyengine/policyengine-uk-data-private` Hugging Face model repository. Set
+`HUGGING_FACE_TOKEN` to a token from a Hugging Face account with access:
+
+```bash
+export HUGGING_FACE_TOKEN=hf_...
+```
+
+For `policyengine.py` analyses, use the logical dataset name from the release
+bundle. `ensure_datasets` resolves it to the pinned private Hugging Face file,
+downloads it, caches it locally, and creates year-specific uprated datasets:
+
+```python
+import policyengine as pe
+from policyengine.core import Simulation
+
+datasets = pe.uk.ensure_datasets(
+    datasets=["enhanced_frs_2023_24"],
+    years=[2026],
+    data_folder="./data",
+)
+dataset = datasets["enhanced_frs_2023_24_2026"]
+
+simulation = Simulation(
+    dataset=dataset,
+    tax_benefit_model_version=pe.uk.model,
+)
+simulation.run()
+```
+
+To download the raw h5 artifact directly from Hugging Face, use
+`huggingface_hub` and specify `repo_type="model"`:
+
+```python
+import os
+from huggingface_hub import hf_hub_download
+
+path = hf_hub_download(
+    repo_id="policyengine/policyengine-uk-data-private",
+    filename="enhanced_frs_2023_24.h5",
+    repo_type="model",
+    token=os.environ["HUGGING_FACE_TOKEN"],
+)
+
+print(path)
+```
+
+The repository URL is
+<https://huggingface.co/policyengine/policyengine-uk-data-private>. A 404 from
+the website or `RepositoryNotFoundError` from the Hub API usually means the
+browser or token is not authenticated as an account with access, or that the
+Hub call omitted `repo_type="model"`.
+
 ## Simulations
 
 A `Simulation` needs a dataset, a tax-benefit model version, and optionally a policy (reform):
