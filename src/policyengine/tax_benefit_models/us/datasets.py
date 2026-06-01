@@ -567,6 +567,13 @@ def _runtime_policyengine_us_metadata() -> dict[str, Any]:
     return result
 
 
+def _runtime_policyengine_us_version() -> Optional[str]:
+    try:
+        return importlib_metadata.version("policyengine-us")
+    except importlib_metadata.PackageNotFoundError:
+        return None
+
+
 def _runtime_policyengine_us_package_file() -> Optional[Path]:
     spec = importlib.util.find_spec("policyengine_us")
     if spec is None or spec.origin is None:
@@ -627,6 +634,30 @@ def _validate_runtime_policyengine_us_match(
                 f"{label} {metadata_hash!r}, but the installed runtime has "
                 f"{runtime_hash!r}."
             )
+
+
+def _validate_runtime_policyengine_us_version(expected_version: Optional[str]) -> None:
+    if expected_version is None:
+        return
+    runtime_version = _runtime_policyengine_us_version()
+    if runtime_version != expected_version:
+        raise ValueError(
+            "Managed long-term datasets require policyengine-us runtime "
+            f"version {expected_version!r}, but the installed runtime is "
+            f"{runtime_version!r}."
+        )
+
+
+def _managed_long_term_dataset_model_version(manifest: Any) -> Optional[str]:
+    certification = getattr(manifest, "certification", None)
+    built_with_model_version = getattr(
+        certification,
+        "built_with_model_version",
+        None,
+    )
+    if built_with_model_version:
+        return built_with_model_version
+    return manifest.model_package.version
 
 
 def validate_long_term_dataset_metadata(
@@ -1006,7 +1037,14 @@ def load_managed_long_term_datasets(
 
     manifest = get_release_manifest("us")
     if required_policyengine_us_version is None:
-        required_policyengine_us_version = manifest.model_package.version
+        required_policyengine_us_version = _managed_long_term_dataset_model_version(
+            manifest
+        )
+    runtime_policyengine_us_version = manifest.model_package.version
+    require_metadata_runtime_match = (
+        require_runtime_policyengine_us_match
+        and required_policyengine_us_version == runtime_policyengine_us_version
+    )
 
     result = {}
     for year in years:
@@ -1085,8 +1123,10 @@ def load_managed_long_term_datasets(
             required_policyengine_us_version=required_policyengine_us_version,
             required_policyengine_us_git_sha=required_policyengine_us_git_sha,
             require_policyengine_us_clean_build=require_policyengine_us_clean_build,
-            require_runtime_policyengine_us_match=require_runtime_policyengine_us_match,
+            require_runtime_policyengine_us_match=require_metadata_runtime_match,
         )
+        if require_runtime_policyengine_us_match:
+            _validate_runtime_policyengine_us_version(runtime_policyengine_us_version)
         result[key] = _build_long_term_dataset(
             path=path,
             year=year,

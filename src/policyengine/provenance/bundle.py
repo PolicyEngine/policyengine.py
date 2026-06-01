@@ -42,6 +42,9 @@ from pathlib import Path
 from typing import Optional
 from urllib.request import Request, urlopen
 
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import InvalidVersion, Version
+
 from policyengine.provenance.manifest import (
     CountryReleaseManifest,
     get_release_manifest,
@@ -251,6 +254,69 @@ def _release_artifact_by_path(
 
 def _metadata_sidecar_path(path: str) -> str:
     return f"{path}.metadata.json"
+
+
+def _specifier_matches(*, version: str, specifier: str) -> bool:
+    try:
+        return Version(version) in SpecifierSet(specifier)
+    except (InvalidSpecifier, InvalidVersion):
+        return False
+
+
+def _release_manifest_has_compatible_model_package(
+    release_manifest_json: dict,
+    *,
+    package_name: str,
+    model_version: str,
+) -> bool:
+    for compatible_model_package in release_manifest_json.get(
+        "compatible_model_packages",
+        [],
+    ):
+        if compatible_model_package.get("name") != package_name:
+            continue
+        if _specifier_matches(
+            version=model_version,
+            specifier=compatible_model_package.get("specifier", ""),
+        ):
+            return True
+    return False
+
+
+def _release_manifest_compatibility_basis(
+    *,
+    release_manifest_json: dict,
+    current_manifest: CountryReleaseManifest,
+    package_name: str,
+    model_version: str,
+    built_with_model_version: str | None,
+    data_build_fingerprint: str | None,
+) -> str:
+    if built_with_model_version == model_version:
+        return "exact_build_model_version"
+
+    current_certification = current_manifest.certification
+    if (
+        current_certification is not None
+        and current_certification.certified_for_model_version == model_version
+        and current_certification.data_build_fingerprint is not None
+        and current_certification.data_build_fingerprint == data_build_fingerprint
+    ):
+        return "matching_data_build_fingerprint"
+
+    if _release_manifest_has_compatible_model_package(
+        release_manifest_json,
+        package_name=package_name,
+        model_version=model_version,
+    ):
+        return "legacy_compatible_model_package"
+
+    raise ValueError(
+        "Data release manifest is not certified for "
+        f"{package_name}=={model_version}. Publish a data release manifest with "
+        "a matching build model, matching data-build fingerprint, or compatible "
+        "model-package specifier before refreshing the bundle."
+    )
 
 
 def _refresh_dataset_path_references_from_data_release(
@@ -566,16 +632,16 @@ def refresh_release_bundle(
             certification_json["data_build_fingerprint"] = data_build_fingerprint
         else:
             certification_json.pop("data_build_fingerprint", None)
-        if built_with_model_version == new_model:
-            certification_json["compatibility_basis"] = "exact_build_model_version"
-        elif data_build_fingerprint is not None:
-            certification_json["compatibility_basis"] = (
-                "matching_data_build_fingerprint"
+        certification_json["compatibility_basis"] = (
+            _release_manifest_compatibility_basis(
+                release_manifest_json=release_manifest_json,
+                current_manifest=current,
+                package_name=package_name,
+                model_version=new_model,
+                built_with_model_version=built_with_model_version,
+                data_build_fingerprint=data_build_fingerprint,
             )
-        else:
-            certification_json["compatibility_basis"] = (
-                "legacy_compatible_model_package"
-            )
+        )
         _refresh_dataset_path_references_from_data_release(
             manifest_json,
             release_manifest_json,
