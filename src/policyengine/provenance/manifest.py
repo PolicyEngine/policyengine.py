@@ -322,6 +322,8 @@ def certify_data_release_compatibility(
             if (
                 runtime_data_build_fingerprint is not None
                 and bundled_certification.data_build_fingerprint is not None
+                and bundled_certification.compatibility_basis
+                != "legacy_compatible_model_package"
                 and runtime_data_build_fingerprint
                 != bundled_certification.data_build_fingerprint
             ):

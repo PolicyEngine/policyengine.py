@@ -86,6 +86,7 @@ def _data_release_manifest_response(
     data_version: str = "1.83.4",
     dataset_sha256: str = "e" * 64,
     extra_artifacts: dict | None = None,
+    compatible_model_packages: list[dict] | None = None,
     headers: dict | None = None,
 ):
     artifacts = {
@@ -114,6 +115,11 @@ def _data_release_manifest_response(
                 "data_build_fingerprint": "sha256:fingerprint",
             },
         },
+        "compatible_model_packages": (
+            compatible_model_packages
+            if compatible_model_packages is not None
+            else [{"name": "policyengine-us", "specifier": f"=={model_version}"}]
+        ),
         "artifacts": artifacts,
     }
     return _FakeHFResponse(
@@ -168,6 +174,7 @@ def sandbox(tmp_path: Path) -> dict:
             "built_with_model_version": "1.595.0",
             "certified_for_model_version": "1.600.0",
             "certified_by": "test fixture",
+            "data_build_fingerprint": "sha256:fingerprint",
         },
         "default_dataset": "enhanced_cps_2024",
         "datasets": {"enhanced_cps_2024": {"path": "enhanced_cps_2024.h5"}},
@@ -429,6 +436,66 @@ def test__bump_both_uses_data_release_manifest_metadata(sandbox) -> None:
         written["data_package"]["release_manifest_revision"]
         == "release-manifest-commit-sha"
     )
+
+
+def test__model_refresh_uses_compatible_model_package_assertion(sandbox) -> None:
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        if "pypi.org" in url:
+            return _pypi_response("policyengine-us", "1.653.3")
+        if url.endswith("releases/1.70.0/release_manifest.json"):
+            return _data_release_manifest_response(
+                model_version="1.600.0",
+                data_version="1.70.0",
+                compatible_model_packages=[
+                    {"name": "policyengine-us", "specifier": "==1.600.0"},
+                    {"name": "policyengine-us", "specifier": "==1.653.3"},
+                ],
+            )
+        raise AssertionError(f"Unexpected URL fetched: {url}")
+
+    with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
+        refresh_release_bundle(
+            country="us",
+            model_version="1.653.3",
+            release_manifest_revision="release-manifest-commit-sha",
+            manifest_dir=sandbox["manifest_dir"],
+            pyproject_path=sandbox["pyproject_path"],
+        )
+
+    written = json.loads((sandbox["manifest_dir"] / "us.json").read_text())
+    assert (
+        written["certification"]["compatibility_basis"]
+        == "legacy_compatible_model_package"
+    )
+    assert written["certification"]["built_with_model_version"] == "1.600.0"
+    assert written["certification"]["certified_for_model_version"] == "1.653.3"
+
+
+def test__model_refresh_rejects_uncertified_data_release_manifest(sandbox) -> None:
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        if "pypi.org" in url:
+            return _pypi_response("policyengine-us", "1.653.3")
+        if url.endswith("releases/1.70.0/release_manifest.json"):
+            return _data_release_manifest_response(
+                model_version="1.600.0",
+                data_version="1.70.0",
+                compatible_model_packages=[
+                    {"name": "policyengine-us", "specifier": "==1.600.0"},
+                ],
+            )
+        raise AssertionError(f"Unexpected URL fetched: {url}")
+
+    with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
+        with pytest.raises(ValueError, match="not certified"):
+            refresh_release_bundle(
+                country="us",
+                model_version="1.653.3",
+                release_manifest_revision="release-manifest-commit-sha",
+                manifest_dir=sandbox["manifest_dir"],
+                pyproject_path=sandbox["pyproject_path"],
+            )
 
 
 def test__custom_release_manifest_refreshes_long_term_dataset_hashes(

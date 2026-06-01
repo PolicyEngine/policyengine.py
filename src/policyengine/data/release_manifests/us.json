@@ -5,16 +5,16 @@
   "policyengine_version": "4.12.1",
   "model_package": {
     "name": "policyengine-us",
-    "version": "1.700.0",
-    "sha256": "7633d8aefcaf02d7628f841bc56750606f1d7fe409ff3ae7b0ef7e364a88e945",
-    "wheel_url": "https://files.pythonhosted.org/packages/49/e9/2837a0d98e99efaf4d82aade276eee6eeff419df614863f08e3512961d2d/policyengine_us-1.700.0-py3-none-any.whl"
+    "version": "1.715.2",
+    "sha256": "abf079828419762f5c4b0291a70f6e424744200f237e1ae0f06e25f10130c399",
+    "wheel_url": "https://files.pythonhosted.org/packages/45/a1/1d56bdbb69d7ce06bedd3892203a75ac3350a90c0b5fcea2fb50db46670f/policyengine_us-1.715.2-py3-none-any.whl"
   },
   "data_package": {
     "name": "policyengine-us-data",
     "version": "1.115.5",
     "repo_id": "policyengine/policyengine-us-data",
     "release_manifest_path": "release_manifest.json",
-    "release_manifest_revision": "688f972425f5e858fc52bda2b696e0af74fea920"
+    "release_manifest_revision": "d47fb5475144260a75467d2f2e22b2d5d53d4d57"
   },
   "certified_data_artifact": {
     "data_package": {
@@ -23,14 +23,14 @@
     },
     "build_id": "policyengine-us-data-1.115.5",
     "dataset": "enhanced_cps_2024",
-    "uri": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@688f972425f5e858fc52bda2b696e0af74fea920",
+    "uri": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@d47fb5475144260a75467d2f2e22b2d5d53d4d57",
     "sha256": "0a6b961ad363a421bde99f2c8e5d8f20370bcba45fd303050537a25bdd805b14"
   },
   "certification": {
-    "compatibility_basis": "exact_build_model_version",
+    "compatibility_basis": "legacy_compatible_model_package",
     "data_build_id": "policyengine-us-data-1.115.5",
     "built_with_model_version": "1.700.0",
-    "certified_for_model_version": "1.700.0",
+    "certified_for_model_version": "1.715.2",
     "certified_by": "policyengine-us-data release manifest",
     "data_build_fingerprint": "sha256:b0862de383ffcbe45f4ba0aa9c6aaec286cd4c6688c6ccb33f939bc176f9a8a0"
   },

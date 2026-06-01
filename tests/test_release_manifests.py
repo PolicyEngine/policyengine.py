@@ -41,10 +41,11 @@ POLICYENGINE_VERSION = re.search(
     PYPROJECT.read_text(),
     re.MULTILINE,
 ).group(1)
-US_MODEL_VERSION = "1.700.0"
+US_MODEL_VERSION = "1.715.2"
+US_BUILT_WITH_MODEL_VERSION = "1.700.0"
 US_DATA_RELEASE_VERSION = "1.115.5"
 US_DATA_RELEASE_PATH = "release_manifest.json"
-US_DATA_RELEASE_REVISION = "688f972425f5e858fc52bda2b696e0af74fea920"
+US_DATA_RELEASE_REVISION = "d47fb5475144260a75467d2f2e22b2d5d53d4d57"
 US_CERTIFICATION_SOURCE = "policyengine-us-data release manifest"
 US_DEFAULT_DATASET_URI = (
     "hf://policyengine/policyengine-us-data/"
@@ -109,7 +110,14 @@ class TestReleaseManifests:
             manifest.certification.data_build_id
             == f"policyengine-us-data-{US_DATA_RELEASE_VERSION}"
         )
-        assert manifest.certification.built_with_model_version == US_MODEL_VERSION
+        assert (
+            manifest.certification.compatibility_basis
+            == "legacy_compatible_model_package"
+        )
+        assert (
+            manifest.certification.built_with_model_version
+            == US_BUILT_WITH_MODEL_VERSION
+        )
         assert manifest.certification.certified_for_model_version == US_MODEL_VERSION
 
     def test__given_uk_manifest__then_has_pinned_model_and_data_packages(self):
@@ -506,6 +514,34 @@ class TestReleaseManifests:
                 assert "does not match the bundled data certification" in str(error)
             else:
                 raise AssertionError("Expected fingerprint mismatch to fail")
+
+    def test__given_legacy_compatible_certification__then_offline_fingerprint_mismatch_is_allowed(
+        self,
+    ):
+        get_data_release_manifest.cache_clear()
+        bundled_certification = DataCertification(
+            compatibility_basis="legacy_compatible_model_package",
+            certified_for_model_version="1.602.0",
+            data_build_fingerprint="sha256:build",
+        )
+
+        with (
+            patch(
+                "policyengine.provenance.manifest.get_data_release_manifest",
+                side_effect=DataReleaseManifestUnavailableError("private repo"),
+            ),
+            patch(
+                "policyengine.provenance.manifest.get_release_manifest",
+                return_value=MagicMock(certification=bundled_certification),
+            ),
+        ):
+            certification = certify_data_release_compatibility(
+                "us",
+                runtime_model_version="1.602.0",
+                runtime_data_build_fingerprint="sha256:runtime",
+            )
+
+        assert certification == bundled_certification
 
     def test__given_manifest_fetch_failure_and_version_mismatch__then_fallback_fails(
         self,
