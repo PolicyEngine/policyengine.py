@@ -1,3 +1,10 @@
+## [4.13.0] - 2026-06-01
+
+### Added
+
+- Add AI-facing release-bundle guidance for single-country refreshes and compatibility fallbacks.
+
+
 ## [4.12.1] - 2026-05-30
 
 ### Fixed
