@@ -128,7 +128,7 @@ class TestReleaseManifests:
         assert manifest.country_id == "uk"
         assert manifest.policyengine_version == POLICYENGINE_VERSION
         assert manifest.model_package.name == "policyengine-uk"
-        assert manifest.model_package.version == "2.88.20"
+        assert manifest.model_package.version == "2.88.40"
         assert manifest.data_package.name == "policyengine-uk-data"
         assert manifest.data_package.version == "1.55.10"
         assert (
@@ -141,8 +141,12 @@ class TestReleaseManifests:
         assert manifest.certified_data_artifact.dataset == "enhanced_frs_2023_24"
         assert manifest.certification is not None
         assert manifest.certification.data_build_id == "policyengine-uk-data-1.55.10"
+        assert (
+            manifest.certification.compatibility_basis
+            == "legacy_compatible_model_package"
+        )
         assert manifest.certification.built_with_model_version == "2.88.20"
-        assert manifest.certification.certified_for_model_version == "2.88.20"
+        assert manifest.certification.certified_for_model_version == "2.88.40"
         assert (
             manifest.certification.data_build_fingerprint
             == "sha256:77f149725a36055fd89961855230401852b0712d301c6e26d6d16565c6b23809"
@@ -661,7 +665,7 @@ class TestReleaseManifests:
         assert bundle["default_dataset_uri"] == manifest.default_dataset_uri
         assert bundle["certified_data_build_id"] == "policyengine-uk-data-1.55.10"
         assert bundle["data_build_model_version"] == "2.88.20"
-        assert bundle["compatibility_basis"] == "exact_build_model_version"
+        assert bundle["compatibility_basis"] == "legacy_compatible_model_package"
         assert bundle["certified_by"] == "policyengine.py bundled manifest"
 
     def test__given_runtime_certification__then_release_bundle_prefers_runtime_value(

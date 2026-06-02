@@ -70,7 +70,33 @@ Unexpected files are a reason to stop and inspect the diff.
 
 ## Testing
 
-For release-bundle script or manifest changes, run:
+For every real bundle refresh, first run the targeted bundle validator for each
+updated country. Pass the intended versions and certification basis explicitly
+so the check proves the refresh landed on the expected model/data pair:
+
+```bash
+POLICYENGINE_SKIP_COUNTRY_IMPORTS=1 uv run --extra dev python \
+  scripts/validate_release_bundle.py \
+  --country uk \
+  --expected-model-version 2.89.0 \
+  --expected-data-version 1.55.10 \
+  --expected-built-with-model-version 2.88.20 \
+  --expected-compatibility-basis legacy_compatible_model_package
+```
+
+This validator must check the bundled manifest, the `uk_latest` / `us_latest`
+release-bundle metadata exposed by the country wrapper, and the bundled TRACE
+TRO sidecar. Do not substitute the broad pytest modules for this check; those
+modules can spend a long time in country-package import/collection and are a
+lower-signal first pass for ordinary bundle refreshes.
+
+If the validator reports that the TRO is missing `data_release_manifest` or has
+`pe:dataReleaseManifestStatus = unavailable`, stop and fix data-release-manifest
+fetching/authentication before proceeding. Current US and UK bundles are
+release-manifest-backed, so a limited TRO is a regression unless the user has
+explicitly asked for an older/no-manifest data artifact.
+
+For release-bundle script or manifest logic changes, also run:
 
 ```bash
 POLICYENGINE_SKIP_COUNTRY_IMPORTS=1 uv run pytest --noconftest \

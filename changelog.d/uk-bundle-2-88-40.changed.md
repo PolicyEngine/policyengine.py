@@ -1,0 +1,1 @@
+- Refresh the bundled UK release manifest to policyengine-uk 2.88.40 while preserving the policyengine-uk-data 1.55.10 dataset certification.

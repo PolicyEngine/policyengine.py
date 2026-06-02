@@ -5,9 +5,9 @@
   "policyengine_version": "4.13.1",
   "model_package": {
     "name": "policyengine-uk",
-    "version": "2.88.20",
-    "sha256": "8c3dacb868f3fb18296b8ef2475edaf543f57b8056d24a58bca59b108651f272",
-    "wheel_url": "https://files.pythonhosted.org/packages/32/f0/c0e7dbcc049501dc968da0a67de4976f305228328f96fe0ad08c65301c4f/policyengine_uk-2.88.20-py3-none-any.whl"
+    "version": "2.88.40",
+    "sha256": "156212836b5a213af864ac7a5f978ecd480bace848ccb1d2c07d732b15d38ea2",
+    "wheel_url": "https://files.pythonhosted.org/packages/cc/a4/2718ab27eb6c12b4c6857c1e49c7a6e8ad09f5cba74548c797daa425bbf5/policyengine_uk-2.88.40-py3-none-any.whl"
   },
   "data_package": {
     "name": "policyengine-uk-data",
@@ -27,10 +27,10 @@
     "sha256": "584ae33d80ca0431254610a3f8254d132da73477d31966d6446282861ecae50d"
   },
   "certification": {
-    "compatibility_basis": "exact_build_model_version",
+    "compatibility_basis": "legacy_compatible_model_package",
     "data_build_id": "policyengine-uk-data-1.55.10",
     "built_with_model_version": "2.88.20",
-    "certified_for_model_version": "2.88.20",
+    "certified_for_model_version": "2.88.40",
     "data_build_fingerprint": "sha256:77f149725a36055fd89961855230401852b0712d301c6e26d6d16565c6b23809",
     "certified_by": "policyengine.py bundled manifest"
   },
