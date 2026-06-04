@@ -1,3 +1,10 @@
+## [4.14.0] - 2026-06-04
+
+### Added
+
+- Add a verified importer for vendoring release assets from `policyengine-bundles`.
+
+
 ## [4.13.1] - 2026-06-01
 
 ### Changed
