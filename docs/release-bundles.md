@@ -59,6 +59,19 @@ It does not define the final supported runtime bundle exposed to users.
 
 It does not rebuild microdata artifacts.
 
+New multi-country bundles are generated and archived in
+`PolicyEngine/policyengine-bundles`. `policyengine.py` vendors one current
+bundle from that archive under `src/policyengine/data/bundle/`, then generates
+the legacy country release manifests that runtime code still reads. The import
+entrypoint is:
+
+```bash
+python scripts/import_policyengine_bundle.py 4.14.0
+```
+
+The `policyengine-bundles` publish workflow runs this importer automatically
+when it opens the consuming `.py` PR.
+
 ## Two manifest layers
 
 The architecture has two manifest layers with different responsibilities.
