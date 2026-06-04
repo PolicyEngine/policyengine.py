@@ -9,9 +9,30 @@ Open release-bundle implementation work on a fresh branch from current `main`.
 If the checkout is dirty, use a clean worktree instead of overwriting unrelated
 changes.
 
-Do not hand-edit bundled release manifests for normal updates. Use the existing
-single-country refresh script so model wheels, data artifacts, `pyproject.toml`,
-and TRACE TROs move together:
+Do not hand-edit bundled release manifests for normal updates.
+
+For bundle releases produced by `PolicyEngine/policyengine-bundles`, import the
+published release asset into `.py`:
+
+```bash
+python scripts/import_policyengine_bundle.py 4.14.0
+```
+
+For a local publication dry-run that already generated release assets, pass the
+dist directory instead of downloading from GitHub:
+
+```bash
+python scripts/import_policyengine_bundle.py 4.14.0 --dist-dir ../dist
+```
+
+That importer verifies the bundle archive and digest, vendors the single current
+bundle under `src/policyengine/data/bundle/`, regenerates the legacy country
+release manifests that runtime code still reads, exact-pins the country extras
+in `pyproject.toml`, and writes a Towncrier changelog fragment.
+
+Use the existing single-country refresh script only when you are maintaining the
+legacy `.py` manifest path directly, or when debugging a country-specific
+certification issue before producing a bundle in `policyengine-bundles`:
 
 ```bash
 python scripts/refresh_release_bundle.py --country us --model-version 1.715.2
@@ -58,7 +79,14 @@ data release manifest revision if needed.
 
 ## Expected Files
 
-A real `.py` refresh should normally change only:
+A real `.py` bundle import should normally change only:
+
+- `src/policyengine/data/bundle/`
+- `src/policyengine/data/release_manifests/{country}.json`
+- `pyproject.toml`
+- one Towncrier fragment under `changelog.d/`
+
+A legacy single-country `.py` refresh should normally change only:
 
 - `src/policyengine/data/release_manifests/{country}.json`
 - `src/policyengine/data/release_manifests/{country}.trace.tro.jsonld`
@@ -73,6 +101,9 @@ Unexpected files are a reason to stop and inspect the diff.
 For release-bundle script or manifest changes, run:
 
 ```bash
+POLICYENGINE_SKIP_COUNTRY_IMPORTS=1 uv run pytest --noconftest \
+  tests/test_import_policyengine_bundle.py
+
 POLICYENGINE_SKIP_COUNTRY_IMPORTS=1 uv run pytest --noconftest \
   tests/test_bundle_refresh.py
 
