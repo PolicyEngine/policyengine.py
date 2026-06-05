@@ -1,3 +1,10 @@
+## [4.14.1] - 2026-06-05
+
+### Changed
+
+- Update the bundled US release manifest to the MP/eCPS 2024 `enhanced_cps_2024` artifact.
+
+
 ## [4.14.0] - 2026-06-04
 
 ### Added
