@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "bundle_id": "uk-4.14.1",
+  "bundle_id": "uk-4.14.2",
   "country_id": "uk",
-  "policyengine_version": "4.14.1",
+  "policyengine_version": "4.14.2",
   "model_package": {
     "name": "policyengine-uk",
     "version": "2.88.20",
