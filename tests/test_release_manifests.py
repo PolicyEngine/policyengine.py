@@ -41,13 +41,11 @@ POLICYENGINE_VERSION = re.search(
     PYPROJECT.read_text(),
     re.MULTILINE,
 ).group(1)
-US_MODEL_VERSION = "1.715.3"
-US_BUILT_WITH_MODEL_VERSION = "1.715.3"
-US_BUILT_WITH_MODEL_GIT_SHA = "f7458313c86fa580fb1e43a2f18252d67cf76e4a"
-US_DATA_RELEASE_VERSION = "mp-ecps-2024-2cdd45d-20260605"
-US_DATA_BUILD_ID = "microplex-us-2cdd45d-nodeferred-gzip1-20260605"
-US_DATA_RELEASE_PATH = "releases/mp-ecps-2024-2cdd45d-20260605/release_manifest.json"
-US_DATA_RELEASE_REVISION = "a091769a2d5e075762c520950ca8ca7f87017225"
+US_MODEL_VERSION = "1.715.2"
+US_BUILT_WITH_MODEL_VERSION = "1.700.0"
+US_DATA_RELEASE_VERSION = "1.115.5"
+US_DATA_RELEASE_PATH = "release_manifest.json"
+US_DATA_RELEASE_REVISION = "d47fb5475144260a75467d2f2e22b2d5d53d4d57"
 US_CERTIFICATION_SOURCE = "policyengine-us-data release manifest"
 US_DEFAULT_DATASET_URI = (
     "hf://policyengine/policyengine-us-data/"
@@ -102,18 +100,23 @@ class TestReleaseManifests:
             manifest.data_package.release_manifest_revision == US_DATA_RELEASE_REVISION
         )
         assert manifest.certified_data_artifact is not None
-        assert manifest.certified_data_artifact.build_id == US_DATA_BUILD_ID
+        assert (
+            manifest.certified_data_artifact.build_id
+            == f"policyengine-us-data-{US_DATA_RELEASE_VERSION}"
+        )
         assert manifest.certified_data_artifact.dataset == "enhanced_cps_2024"
         assert manifest.certification is not None
-        assert manifest.certification.data_build_id == US_DATA_BUILD_ID
-        assert manifest.certification.compatibility_basis == "exact_build_model_version"
+        assert (
+            manifest.certification.data_build_id
+            == f"policyengine-us-data-{US_DATA_RELEASE_VERSION}"
+        )
+        assert (
+            manifest.certification.compatibility_basis
+            == "legacy_compatible_model_package"
+        )
         assert (
             manifest.certification.built_with_model_version
             == US_BUILT_WITH_MODEL_VERSION
-        )
-        assert (
-            manifest.certification.built_with_model_git_sha
-            == US_BUILT_WITH_MODEL_GIT_SHA
         )
         assert manifest.certification.certified_for_model_version == US_MODEL_VERSION
 
