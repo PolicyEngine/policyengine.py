@@ -1,3 +1,10 @@
+## [4.14.3] - 2026-06-08
+
+### Changed
+
+- Refresh the bundled US release manifest to policyengine-us 1.722.4.
+
+
 ## [4.14.2] - 2026-06-07
 
 ### Changed
