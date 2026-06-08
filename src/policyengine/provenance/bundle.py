@@ -495,13 +495,17 @@ def refresh_release_bundle(
     data_package_json = manifest_json["data_package"]
     release_manifest_json = None
     new_release_manifest_revision = None
+    current_release_manifest_revision = data_package_json.get(
+        "release_manifest_revision"
+    )
+    release_manifest_override = (
+        release_manifest_path is not None or release_manifest_revision is not None
+    )
     new_release_manifest_path = release_manifest_path or data_package_json.get(
         "release_manifest_path"
     )
     should_fetch_release_manifest = new_release_manifest_path is not None and (
-        new_data != old_data
-        or release_manifest_path is not None
-        or release_manifest_revision is not None
+        new_data != old_data or new_model != old_model or release_manifest_override
     )
     if should_fetch_release_manifest:
         if release_manifest_path is None:
@@ -510,7 +514,11 @@ def refresh_release_bundle(
                 old_data=old_data,
                 new_data=new_data,
             )
-        fetch_revision = release_manifest_revision or new_data
+        fetch_revision = release_manifest_revision or (
+            current_release_manifest_revision
+            if release_manifest_path is None and new_data == old_data
+            else new_data
+        )
         release_manifest_fetch = _fetch_data_release_manifest(
             repo_id=repo_id,
             release_manifest_path=new_release_manifest_path,
@@ -560,7 +568,12 @@ def refresh_release_bundle(
             )
     dataset_repo_id = data_artifact_json.get("repo_id", repo_id)
     dataset_path = data_artifact_json.get("path", dataset_path)
-    dataset_revision = data_artifact_json.get("revision", new_data)
+    dataset_revision_default = (
+        _old_revision
+        if new_data == old_data and not release_manifest_override
+        else new_data
+    )
+    dataset_revision = data_artifact_json.get("revision", dataset_revision_default)
     if (
         release_manifest_json is not None
         and new_release_manifest_revision is not None
@@ -568,10 +581,6 @@ def refresh_release_bundle(
         and dataset_revision in {new_data, release_manifest_revision}
     ):
         dataset_revision = new_release_manifest_revision
-
-    release_manifest_override = (
-        release_manifest_path is not None or release_manifest_revision is not None
-    )
 
     # Only hit HF if the data version or release manifest target changed.
     if new_data != old_data or release_manifest_override:
