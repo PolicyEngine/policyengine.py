@@ -41,11 +41,11 @@ POLICYENGINE_VERSION = re.search(
     PYPROJECT.read_text(),
     re.MULTILINE,
 ).group(1)
-US_MODEL_VERSION = "1.715.2"
+US_MODEL_VERSION = "1.722.4"
 US_BUILT_WITH_MODEL_VERSION = "1.700.0"
 US_DATA_RELEASE_VERSION = "1.115.5"
-US_DATA_RELEASE_PATH = "release_manifest.json"
-US_DATA_RELEASE_REVISION = "d47fb5475144260a75467d2f2e22b2d5d53d4d57"
+US_DATA_RELEASE_PATH = "releases/1.115.5/release_manifest.json"
+US_DATA_RELEASE_REVISION = "9531fe1d096244fe7eb45d791d52ef61b8a2a0a5"
 US_CERTIFICATION_SOURCE = "policyengine-us-data release manifest"
 US_DEFAULT_DATASET_URI = (
     "hf://policyengine/policyengine-us-data/"

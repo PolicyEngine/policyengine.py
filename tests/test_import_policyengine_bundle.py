@@ -47,16 +47,16 @@ def test_import_policyengine_bundle_verifies_and_vendors_release(
     us_manifest = json.loads((release_manifest_dir / "us.json").read_text())
     assert us_manifest["bundle_id"] == "us-4.14.0"
     assert us_manifest["policyengine_version"] == "4.14.0"
-    assert us_manifest["model_package"]["version"] == "1.715.2"
+    assert us_manifest["model_package"]["version"] == "1.722.4"
     assert (
         us_manifest["certified_data_artifact"]["uri"]
         == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@data-sha"
     )
-    assert us_manifest["certification"]["certified_for_model_version"] == "1.715.2"
+    assert us_manifest["certification"]["certified_for_model_version"] == "1.722.4"
 
     pyproject = pyproject_path.read_text()
     assert '"policyengine_core==3.26.1"' in pyproject
-    assert '"policyengine-us==1.715.2"' in pyproject
+    assert '"policyengine-us==1.722.4"' in pyproject
     assert '"policyengine-uk==3.0.0"' in pyproject
     assert (changelog_dir / "policyengine-bundle-4.14.0.changed.md").exists()
 
@@ -140,7 +140,7 @@ def _bundle_manifest(version: str) -> dict:
             },
             "policyengine-us": {
                 "name": "policyengine-us",
-                "version": "1.715.2",
+                "version": "1.722.4",
                 "resolution_status": "pinned",
             },
             "policyengine-uk": {
@@ -167,7 +167,7 @@ def _bundle_manifest(version: str) -> dict:
 
 def _country_bundle(country_id: str, version: str) -> dict:
     model_package = "policyengine-us" if country_id == "us" else "policyengine-uk"
-    model_version = "1.715.2" if country_id == "us" else "3.0.0"
+    model_version = "1.722.4" if country_id == "us" else "3.0.0"
     data_package = (
         "policyengine-us-data" if country_id == "us" else "policyengine-uk-data"
     )

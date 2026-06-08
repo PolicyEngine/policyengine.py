@@ -273,7 +273,7 @@ def test__load_managed_long_term_datasets__loads_bundled_local_mirror(
         "get_release_manifest",
         lambda country_id: _manifest_with_long_term_sha(
             _sha256(h5_path),
-            version="1.715.2",
+            version="1.722.4",
             certification=SimpleNamespace(
                 compatibility_basis="legacy_compatible_model_package",
                 built_with_model_version="1.700.0",
@@ -283,7 +283,7 @@ def test__load_managed_long_term_datasets__loads_bundled_local_mirror(
     monkeypatch.setattr(
         us_datasets_module,
         "_runtime_policyengine_us_version",
-        lambda: "1.715.2",
+        lambda: "1.722.4",
     )
     monkeypatch.setattr(
         us_datasets_module,

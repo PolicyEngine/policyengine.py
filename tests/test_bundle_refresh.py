@@ -165,7 +165,7 @@ def sandbox(tmp_path: Path) -> dict:
             },
             "build_id": "policyengine-us-data-1.70.0",
             "dataset": "enhanced_cps_2024",
-            "uri": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.70.0",
+            "uri": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@old-dataset-commit",
             "sha256": "d" * 64,
         },
         "certification": {
@@ -208,6 +208,25 @@ def test__bump_model_only_rewrites_wheel_pins_and_pyproject(sandbox) -> None:
         url = request.full_url
         if "pypi.org" in url:
             return _pypi_response("policyengine-us", "1.653.3")
+        if url.endswith("releases/1.70.0/release_manifest.json"):
+            return _data_release_manifest_response(
+                data_version="1.70.0",
+                dataset_sha256="d" * 64,
+                compatible_model_packages=[
+                    {"name": "policyengine-us", "specifier": "==1.600.0"},
+                    {"name": "policyengine-us", "specifier": "==1.653.3"},
+                ],
+                extra_artifacts={
+                    "enhanced_cps_2024": {
+                        "kind": "microdata",
+                        "path": "enhanced_cps_2024.h5",
+                        "repo_id": "policyengine/policyengine-us-data",
+                        "revision": "old-dataset-commit",
+                        "sha256": "d" * 64,
+                    }
+                },
+                headers={"x-repo-commit": "old-release-manifest-commit"},
+            )
         raise AssertionError(f"Unexpected URL fetched: {url}")
 
     with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
@@ -239,6 +258,41 @@ def test__bump_model_only_rewrites_wheel_pins_and_pyproject(sandbox) -> None:
         == "old-release-manifest-commit"
     )
     assert written["certified_data_artifact"]["sha256"] == "d" * 64
+    assert (
+        written["certified_data_artifact"]["uri"]
+        == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@old-dataset-commit"
+    )
+
+
+def test__bump_model_only_requires_data_release_manifest_compatibility(
+    sandbox,
+) -> None:
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        if "pypi.org" in url:
+            return _pypi_response("policyengine-us", "1.653.3")
+        if url.endswith("releases/1.70.0/release_manifest.json"):
+            return _data_release_manifest_response(
+                data_version="1.70.0",
+                model_version="1.600.0",
+                compatible_model_packages=[
+                    {"name": "policyengine-us", "specifier": "==1.600.0"},
+                ],
+                headers={"x-repo-commit": "old-release-manifest-commit"},
+            )
+        raise AssertionError(f"Unexpected URL fetched: {url}")
+
+    with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
+        with pytest.raises(
+            ValueError,
+            match="Data release manifest is not certified",
+        ):
+            refresh_release_bundle(
+                country="us",
+                model_version="1.653.3",
+                manifest_dir=sandbox["manifest_dir"],
+                pyproject_path=sandbox["pyproject_path"],
+            )
 
 
 def test__bump_data_only_streams_hf_and_updates_uri(sandbox) -> None:
@@ -871,8 +925,30 @@ def test__release_manifest_missing_certified_artifact_raises(sandbox) -> None:
 
 
 def test__update_pyproject_false_leaves_pins_alone(sandbox) -> None:
-    def fake_urlopen(*args, **kwargs):
-        return _pypi_response("policyengine-us", "1.653.3")
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        if "pypi.org" in url:
+            return _pypi_response("policyengine-us", "1.653.3")
+        if url.endswith("releases/1.70.0/release_manifest.json"):
+            return _data_release_manifest_response(
+                data_version="1.70.0",
+                dataset_sha256="d" * 64,
+                compatible_model_packages=[
+                    {"name": "policyengine-us", "specifier": "==1.600.0"},
+                    {"name": "policyengine-us", "specifier": "==1.653.3"},
+                ],
+                extra_artifacts={
+                    "enhanced_cps_2024": {
+                        "kind": "microdata",
+                        "path": "enhanced_cps_2024.h5",
+                        "repo_id": "policyengine/policyengine-us-data",
+                        "revision": "old-dataset-commit",
+                        "sha256": "d" * 64,
+                    }
+                },
+                headers={"x-repo-commit": "old-release-manifest-commit"},
+            )
+        raise AssertionError(f"Unexpected URL fetched: {url}")
 
     with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
         result = refresh_release_bundle(
