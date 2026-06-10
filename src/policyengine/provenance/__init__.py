@@ -21,6 +21,15 @@ from .bundle import regenerate_trace_tro as regenerate_trace_tro
 from .bundle import (
     sync_release_manifest_policyengine_version as sync_release_manifest_policyengine_version,
 )
+from .bundle_import import (
+    BundleImportError as BundleImportError,
+)
+from .bundle_import import (
+    BundleImportResult as BundleImportResult,
+)
+from .bundle_import import (
+    import_policyengine_bundle as import_policyengine_bundle,
+)
 from .manifest import (
     CertifiedDataArtifact as CertifiedDataArtifact,
 )
