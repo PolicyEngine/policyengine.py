@@ -1,3 +1,10 @@
+## [4.15.0] - 2026-06-10
+
+### Added
+
+- Add schema-v2 `policyengine-bundles` archive import support for future bundle-driven release updates.
+
+
 ## [4.14.3] - 2026-06-08
 
 ### Changed
