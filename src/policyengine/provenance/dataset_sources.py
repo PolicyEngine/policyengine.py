@@ -96,10 +96,24 @@ def materialize_dataset_source(
         )
 
         reference = parse_hf_uri(dataset_source)
-        return download_huggingface_dataset(
-            reference.repo_id,
-            reference.path,
-            version=_select_version(reference.version, version),
-        )
+        try:
+            return download_huggingface_dataset(
+                reference.repo_id,
+                reference.path,
+                version=_select_version(reference.version, version),
+            )
+        except Exception:
+            # The core helper assumes a model-type repo; certified data
+            # releases may live in dataset-type repos (e.g.
+            # policyengine/populace-us). Retry with the dataset repo type
+            # before surfacing the original failure.
+            from huggingface_hub import hf_hub_download
+
+            return hf_hub_download(
+                repo_id=reference.repo_id,
+                repo_type="dataset",
+                filename=reference.path,
+                revision=_select_version(reference.version, version),
+            )
 
     return dataset_source
