@@ -1,0 +1,140 @@
+{
+  "bundle_version": "4.16.0",
+  "checks": [
+    {
+      "details": {
+        "bundle_dir": "bundles/4.16.0"
+      },
+      "name": "bundle_directory_contract",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "failures": [],
+        "package": "policyengine",
+        "version": "4.16.0"
+      },
+      "name": "package_pin",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "failures": [],
+        "package": "policyengine-core",
+        "version": "3.27.0"
+      },
+      "name": "package_pin",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "failures": [],
+        "package": "policyengine-us",
+        "version": "1.723.0"
+      },
+      "name": "package_pin",
+      "status": "passed"
+    },
+    {
+      "country": "us",
+      "details": {
+        "basis": "bundle_candidate",
+        "data_package": "populace-data",
+        "data_package_version": "0.1.0",
+        "failures": [],
+        "model_package": "policyengine-us",
+        "model_package_version": "1.723.0"
+      },
+      "name": "compatibility_assertion",
+      "status": "passed"
+    },
+    {
+      "country": "us",
+      "details": {
+        "failures": [],
+        "release_manifest_sha256": "1dd1aa5a7cc3069ee0afc3413593c9a204f4afbc23c337fd7d74e63df7515d21",
+        "release_manifest_uri": "hf://dataset/policyengine/populace-us@populace-us-2024-5da5a95-20260611/releases/populace-us-2024-5da5a95-20260611/release_manifest.json"
+      },
+      "name": "release_manifest_provenance",
+      "status": "passed"
+    },
+    {
+      "country": "us",
+      "details": {
+        "dataset_keys": [
+          "populace_us_2024",
+          "populace_us_2024_calibration",
+          "releases/populace-us-2024-5da5a95-20260611/build_manifest",
+          "releases/populace-us-2024-5da5a95-20260611/sound_ecps_replacement_comparison"
+        ],
+        "default_dataset": "populace_us_2024",
+        "failures": []
+      },
+      "name": "default_dataset",
+      "status": "passed"
+    },
+    {
+      "artifact": "populace_us_2024",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "populace_us_2024_calibration",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "auxiliary",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "releases/populace-us-2024-5da5a95-20260611/build_manifest",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "auxiliary",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "releases/populace-us-2024-5da5a95-20260611/sound_ecps_replacement_comparison",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "auxiliary",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    }
+  ],
+  "generated_at": "2026-06-11T16:24:43Z",
+  "metadata": {
+    "generated_by": "scripts/validate_bundle.py",
+    "validation_kind": "registry"
+  },
+  "schema_version": 2,
+  "status": "passed"
+}
