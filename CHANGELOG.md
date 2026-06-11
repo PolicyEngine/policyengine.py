@@ -1,3 +1,10 @@
+## [4.16.0] - 2026-06-11
+
+### Added
+
+- Support dataset-type Hugging Face repos in dataset materialization (retry with repo_type=dataset before surfacing the original failure).
+
+
 ## [4.15.0] - 2026-06-10
 
 ### Added
