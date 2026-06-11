@@ -1,0 +1,56 @@
+{
+  "bundle_digest": "sha256:b1a968daae85d883dbe0fe07697799cc29522a894de267e1abc58ba4110ad481",
+  "bundle_version": "4.15.0",
+  "countries": {
+    "uk": "countries/uk.json",
+    "us": "countries/us.json"
+  },
+  "created_at": "2026-06-11T13:36:58Z",
+  "metadata": {
+    "generated_by": "scripts/generate_bundle.py",
+    "testing_only": false
+  },
+  "packages": {
+    "policyengine": {
+      "name": "policyengine",
+      "resolution_status": "pinned",
+      "role": "bundle_carrier",
+      "version": "4.15.0"
+    },
+    "policyengine-core": {
+      "name": "policyengine-core",
+      "resolution_status": "pinned",
+      "sdist_url": "https://files.pythonhosted.org/packages/e7/56/666e1e708cbd61078989edc943d5389d45123beb7124a5e3180171656ff6/policyengine_core-3.26.1.tar.gz",
+      "sha256": "185374b3c1fe13dc951637c49a9853211ca61a8a9971eb9cc4c4b07b1477240a",
+      "source": "pypi",
+      "version": "3.26.1",
+      "wheel_url": "https://files.pythonhosted.org/packages/15/2f/9be635fe4dfb2fe65d200c33695f5a96ef98a2921f06ff6d465384b0e551/policyengine_core-3.26.1-py3-none-any.whl"
+    },
+    "policyengine-uk": {
+      "name": "policyengine-uk",
+      "resolution_status": "pinned",
+      "sdist_url": "https://files.pythonhosted.org/packages/fb/11/64c8b0269e68d42ffdc58c74b1975dcb6a67487de526855182ecc2479fb1/policyengine_uk-2.88.20.tar.gz",
+      "sha256": "8c3dacb868f3fb18296b8ef2475edaf543f57b8056d24a58bca59b108651f272",
+      "source": "pypi",
+      "version": "2.88.20",
+      "wheel_url": "https://files.pythonhosted.org/packages/32/f0/c0e7dbcc049501dc968da0a67de4976f305228328f96fe0ad08c65301c4f/policyengine_uk-2.88.20-py3-none-any.whl"
+    },
+    "policyengine-us": {
+      "name": "policyengine-us",
+      "resolution_status": "pinned",
+      "sdist_url": "https://files.pythonhosted.org/packages/5b/21/da9e789e4abc7d2c8e42c6913042e2e371b9054c468f28f2212a0652f13a/policyengine_us-1.722.4.tar.gz",
+      "sha256": "691d4aa9b1512d71d283b0b5805af5ba95ffed798fe471a97cf2195f4950b6e3",
+      "source": "pypi",
+      "version": "1.722.4",
+      "wheel_url": "https://files.pythonhosted.org/packages/20/fc/f6fa4ffbc79129a267d92782aba6889145fabfcb39023423fed1f468af3f/policyengine_us-1.722.4-py3-none-any.whl"
+    }
+  },
+  "policyengine": {
+    "name": "policyengine",
+    "resolution_status": "pinned",
+    "role": "bundle_carrier",
+    "version": "4.15.0"
+  },
+  "schema_version": 2,
+  "validation_report": "validation-report.json"
+}
