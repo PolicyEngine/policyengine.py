@@ -1,0 +1,7608 @@
+{
+  "bundle_version": "4.15.1",
+  "checks": [
+    {
+      "details": {
+        "bundle_dir": ".tmp/generated-bundles/4.15.1"
+      },
+      "name": "bundle_directory_contract",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "failures": [],
+        "package": "policyengine",
+        "version": "4.15.1"
+      },
+      "name": "package_pin",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "failures": [],
+        "package": "policyengine-core",
+        "version": "3.26.1"
+      },
+      "name": "package_pin",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "failures": [],
+        "package": "policyengine-uk",
+        "version": "2.89.0"
+      },
+      "name": "package_pin",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "failures": [],
+        "package": "policyengine-us",
+        "version": "1.722.4"
+      },
+      "name": "package_pin",
+      "status": "passed"
+    },
+    {
+      "country": "uk",
+      "details": {
+        "basis": "bundle_candidate",
+        "data_package": "policyengine-uk-data",
+        "data_package_version": "1.55.10",
+        "failures": [],
+        "model_package": "policyengine-uk",
+        "model_package_version": "2.89.0"
+      },
+      "name": "compatibility_assertion",
+      "status": "passed"
+    },
+    {
+      "country": "uk",
+      "details": {
+        "failures": [],
+        "release_manifest_sha256": "9f41a0f14ca93d20e61d33419173c3fedc1c3ba295b6ca67dd3197a41643d179",
+        "release_manifest_uri": "hf://model/policyengine/policyengine-uk-data-private@655dd07e4bb9c777b00dac044949611f1feb824f/release_manifest.json"
+      },
+      "name": "release_manifest_provenance",
+      "status": "passed"
+    },
+    {
+      "country": "uk",
+      "details": {
+        "dataset_keys": [
+          "enhanced_frs_2023_24",
+          "enhanced_frs_2023_24_tiny",
+          "frs_2023_24",
+          "frs_2023_24_tiny",
+          "local_authority_weights",
+          "parliamentary_constituency_weights"
+        ],
+        "default_dataset": "enhanced_frs_2023_24",
+        "failures": []
+      },
+      "name": "default_dataset",
+      "status": "passed"
+    },
+    {
+      "artifact": "enhanced_frs_2023_24",
+      "country": "uk",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": true,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "enhanced_frs_2023_24_tiny",
+      "country": "uk",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": true,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "frs_2023_24",
+      "country": "uk",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": true,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "frs_2023_24_tiny",
+      "country": "uk",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": true,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "local_authority_weights",
+      "country": "uk",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": true,
+        "kind": "weights",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "parliamentary_constituency_weights",
+      "country": "uk",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": true,
+        "kind": "weights",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "country": "us",
+      "details": {
+        "basis": "bundle_candidate",
+        "data_package": "policyengine-us-data",
+        "data_package_version": "1.115.5",
+        "failures": [],
+        "model_package": "policyengine-us",
+        "model_package_version": "1.722.4"
+      },
+      "name": "compatibility_assertion",
+      "status": "passed"
+    },
+    {
+      "country": "us",
+      "details": {
+        "failures": [],
+        "release_manifest_sha256": "16ba5b9ea74b8f5aa996cc66f6d28f64d2def4ea4ce087aec8d35c04ac706fc2",
+        "release_manifest_uri": "hf://model/policyengine/policyengine-us-data@9531fe1d096244fe7eb45d791d52ef61b8a2a0a5/releases/1.115.5/release_manifest.json"
+      },
+      "name": "release_manifest_provenance",
+      "status": "passed"
+    },
+    {
+      "country": "us",
+      "details": {
+        "dataset_keys": [
+          "cities/NYC",
+          "cps_2024",
+          "districts/AK-01",
+          "districts/AL-01",
+          "districts/AL-02",
+          "districts/AL-03",
+          "districts/AL-04",
+          "districts/AL-05",
+          "districts/AL-06",
+          "districts/AL-07",
+          "districts/AR-01",
+          "districts/AR-02",
+          "districts/AR-03",
+          "districts/AR-04",
+          "districts/AZ-01",
+          "districts/AZ-02",
+          "districts/AZ-03",
+          "districts/AZ-04",
+          "districts/AZ-05",
+          "districts/AZ-06",
+          "districts/AZ-07",
+          "districts/AZ-08",
+          "districts/AZ-09",
+          "districts/CA-01",
+          "districts/CA-02",
+          "districts/CA-03",
+          "districts/CA-04",
+          "districts/CA-05",
+          "districts/CA-06",
+          "districts/CA-07",
+          "districts/CA-08",
+          "districts/CA-09",
+          "districts/CA-10",
+          "districts/CA-11",
+          "districts/CA-12",
+          "districts/CA-13",
+          "districts/CA-14",
+          "districts/CA-15",
+          "districts/CA-16",
+          "districts/CA-17",
+          "districts/CA-18",
+          "districts/CA-19",
+          "districts/CA-20",
+          "districts/CA-21",
+          "districts/CA-22",
+          "districts/CA-23",
+          "districts/CA-24",
+          "districts/CA-25",
+          "districts/CA-26",
+          "districts/CA-27",
+          "districts/CA-28",
+          "districts/CA-29",
+          "districts/CA-30",
+          "districts/CA-31",
+          "districts/CA-32",
+          "districts/CA-33",
+          "districts/CA-34",
+          "districts/CA-35",
+          "districts/CA-36",
+          "districts/CA-37",
+          "districts/CA-38",
+          "districts/CA-39",
+          "districts/CA-40",
+          "districts/CA-41",
+          "districts/CA-42",
+          "districts/CA-43",
+          "districts/CA-44",
+          "districts/CA-45",
+          "districts/CA-46",
+          "districts/CA-47",
+          "districts/CA-48",
+          "districts/CA-49",
+          "districts/CA-50",
+          "districts/CA-51",
+          "districts/CA-52",
+          "districts/CO-01",
+          "districts/CO-02",
+          "districts/CO-03",
+          "districts/CO-04",
+          "districts/CO-05",
+          "districts/CO-06",
+          "districts/CO-07",
+          "districts/CO-08",
+          "districts/CT-01",
+          "districts/CT-02",
+          "districts/CT-03",
+          "districts/CT-04",
+          "districts/CT-05",
+          "districts/DC-01",
+          "districts/DE-01",
+          "districts/FL-01",
+          "districts/FL-02",
+          "districts/FL-03",
+          "districts/FL-04",
+          "districts/FL-05",
+          "districts/FL-06",
+          "districts/FL-07",
+          "districts/FL-08",
+          "districts/FL-09",
+          "districts/FL-10",
+          "districts/FL-11",
+          "districts/FL-12",
+          "districts/FL-13",
+          "districts/FL-14",
+          "districts/FL-15",
+          "districts/FL-16",
+          "districts/FL-17",
+          "districts/FL-18",
+          "districts/FL-19",
+          "districts/FL-20",
+          "districts/FL-21",
+          "districts/FL-22",
+          "districts/FL-23",
+          "districts/FL-24",
+          "districts/FL-25",
+          "districts/FL-26",
+          "districts/FL-27",
+          "districts/FL-28",
+          "districts/GA-01",
+          "districts/GA-02",
+          "districts/GA-03",
+          "districts/GA-04",
+          "districts/GA-05",
+          "districts/GA-06",
+          "districts/GA-07",
+          "districts/GA-08",
+          "districts/GA-09",
+          "districts/GA-10",
+          "districts/GA-11",
+          "districts/GA-12",
+          "districts/GA-13",
+          "districts/GA-14",
+          "districts/HI-01",
+          "districts/HI-02",
+          "districts/IA-01",
+          "districts/IA-02",
+          "districts/IA-03",
+          "districts/IA-04",
+          "districts/ID-01",
+          "districts/ID-02",
+          "districts/IL-01",
+          "districts/IL-02",
+          "districts/IL-03",
+          "districts/IL-04",
+          "districts/IL-05",
+          "districts/IL-06",
+          "districts/IL-07",
+          "districts/IL-08",
+          "districts/IL-09",
+          "districts/IL-10",
+          "districts/IL-11",
+          "districts/IL-12",
+          "districts/IL-13",
+          "districts/IL-14",
+          "districts/IL-15",
+          "districts/IL-16",
+          "districts/IL-17",
+          "districts/IN-01",
+          "districts/IN-02",
+          "districts/IN-03",
+          "districts/IN-04",
+          "districts/IN-05",
+          "districts/IN-06",
+          "districts/IN-07",
+          "districts/IN-08",
+          "districts/IN-09",
+          "districts/KS-01",
+          "districts/KS-02",
+          "districts/KS-03",
+          "districts/KS-04",
+          "districts/KY-01",
+          "districts/KY-02",
+          "districts/KY-03",
+          "districts/KY-04",
+          "districts/KY-05",
+          "districts/KY-06",
+          "districts/LA-01",
+          "districts/LA-02",
+          "districts/LA-03",
+          "districts/LA-04",
+          "districts/LA-05",
+          "districts/LA-06",
+          "districts/MA-01",
+          "districts/MA-02",
+          "districts/MA-03",
+          "districts/MA-04",
+          "districts/MA-05",
+          "districts/MA-06",
+          "districts/MA-07",
+          "districts/MA-08",
+          "districts/MA-09",
+          "districts/MD-01",
+          "districts/MD-02",
+          "districts/MD-03",
+          "districts/MD-04",
+          "districts/MD-05",
+          "districts/MD-06",
+          "districts/MD-07",
+          "districts/MD-08",
+          "districts/ME-01",
+          "districts/ME-02",
+          "districts/MI-01",
+          "districts/MI-02",
+          "districts/MI-03",
+          "districts/MI-04",
+          "districts/MI-05",
+          "districts/MI-06",
+          "districts/MI-07",
+          "districts/MI-08",
+          "districts/MI-09",
+          "districts/MI-10",
+          "districts/MI-11",
+          "districts/MI-12",
+          "districts/MI-13",
+          "districts/MN-01",
+          "districts/MN-02",
+          "districts/MN-03",
+          "districts/MN-04",
+          "districts/MN-05",
+          "districts/MN-06",
+          "districts/MN-07",
+          "districts/MN-08",
+          "districts/MO-01",
+          "districts/MO-02",
+          "districts/MO-03",
+          "districts/MO-04",
+          "districts/MO-05",
+          "districts/MO-06",
+          "districts/MO-07",
+          "districts/MO-08",
+          "districts/MS-01",
+          "districts/MS-02",
+          "districts/MS-03",
+          "districts/MS-04",
+          "districts/MT-01",
+          "districts/MT-02",
+          "districts/NC-01",
+          "districts/NC-02",
+          "districts/NC-03",
+          "districts/NC-04",
+          "districts/NC-05",
+          "districts/NC-06",
+          "districts/NC-07",
+          "districts/NC-08",
+          "districts/NC-09",
+          "districts/NC-10",
+          "districts/NC-11",
+          "districts/NC-12",
+          "districts/NC-13",
+          "districts/NC-14",
+          "districts/ND-01",
+          "districts/NE-01",
+          "districts/NE-02",
+          "districts/NE-03",
+          "districts/NH-01",
+          "districts/NH-02",
+          "districts/NJ-01",
+          "districts/NJ-02",
+          "districts/NJ-03",
+          "districts/NJ-04",
+          "districts/NJ-05",
+          "districts/NJ-06",
+          "districts/NJ-07",
+          "districts/NJ-08",
+          "districts/NJ-09",
+          "districts/NJ-10",
+          "districts/NJ-11",
+          "districts/NJ-12",
+          "districts/NM-01",
+          "districts/NM-02",
+          "districts/NM-03",
+          "districts/NV-01",
+          "districts/NV-02",
+          "districts/NV-03",
+          "districts/NV-04",
+          "districts/NY-01",
+          "districts/NY-02",
+          "districts/NY-03",
+          "districts/NY-04",
+          "districts/NY-05",
+          "districts/NY-06",
+          "districts/NY-07",
+          "districts/NY-08",
+          "districts/NY-09",
+          "districts/NY-10",
+          "districts/NY-11",
+          "districts/NY-12",
+          "districts/NY-13",
+          "districts/NY-14",
+          "districts/NY-15",
+          "districts/NY-16",
+          "districts/NY-17",
+          "districts/NY-18",
+          "districts/NY-19",
+          "districts/NY-20",
+          "districts/NY-21",
+          "districts/NY-22",
+          "districts/NY-23",
+          "districts/NY-24",
+          "districts/NY-25",
+          "districts/NY-26",
+          "districts/OH-01",
+          "districts/OH-02",
+          "districts/OH-03",
+          "districts/OH-04",
+          "districts/OH-05",
+          "districts/OH-06",
+          "districts/OH-07",
+          "districts/OH-08",
+          "districts/OH-09",
+          "districts/OH-10",
+          "districts/OH-11",
+          "districts/OH-12",
+          "districts/OH-13",
+          "districts/OH-14",
+          "districts/OH-15",
+          "districts/OK-01",
+          "districts/OK-02",
+          "districts/OK-03",
+          "districts/OK-04",
+          "districts/OK-05",
+          "districts/OR-01",
+          "districts/OR-02",
+          "districts/OR-03",
+          "districts/OR-04",
+          "districts/OR-05",
+          "districts/OR-06",
+          "districts/PA-01",
+          "districts/PA-02",
+          "districts/PA-03",
+          "districts/PA-04",
+          "districts/PA-05",
+          "districts/PA-06",
+          "districts/PA-07",
+          "districts/PA-08",
+          "districts/PA-09",
+          "districts/PA-10",
+          "districts/PA-11",
+          "districts/PA-12",
+          "districts/PA-13",
+          "districts/PA-14",
+          "districts/PA-15",
+          "districts/PA-16",
+          "districts/PA-17",
+          "districts/RI-01",
+          "districts/RI-02",
+          "districts/SC-01",
+          "districts/SC-02",
+          "districts/SC-03",
+          "districts/SC-04",
+          "districts/SC-05",
+          "districts/SC-06",
+          "districts/SC-07",
+          "districts/SD-01",
+          "districts/TN-01",
+          "districts/TN-02",
+          "districts/TN-03",
+          "districts/TN-04",
+          "districts/TN-05",
+          "districts/TN-06",
+          "districts/TN-07",
+          "districts/TN-08",
+          "districts/TN-09",
+          "districts/TX-01",
+          "districts/TX-02",
+          "districts/TX-03",
+          "districts/TX-04",
+          "districts/TX-05",
+          "districts/TX-06",
+          "districts/TX-07",
+          "districts/TX-08",
+          "districts/TX-09",
+          "districts/TX-10",
+          "districts/TX-11",
+          "districts/TX-12",
+          "districts/TX-13",
+          "districts/TX-14",
+          "districts/TX-15",
+          "districts/TX-16",
+          "districts/TX-17",
+          "districts/TX-18",
+          "districts/TX-19",
+          "districts/TX-20",
+          "districts/TX-21",
+          "districts/TX-22",
+          "districts/TX-23",
+          "districts/TX-24",
+          "districts/TX-25",
+          "districts/TX-26",
+          "districts/TX-27",
+          "districts/TX-28",
+          "districts/TX-29",
+          "districts/TX-30",
+          "districts/TX-31",
+          "districts/TX-32",
+          "districts/TX-33",
+          "districts/TX-34",
+          "districts/TX-35",
+          "districts/TX-36",
+          "districts/TX-37",
+          "districts/TX-38",
+          "districts/UT-01",
+          "districts/UT-02",
+          "districts/UT-03",
+          "districts/UT-04",
+          "districts/VA-01",
+          "districts/VA-02",
+          "districts/VA-03",
+          "districts/VA-04",
+          "districts/VA-05",
+          "districts/VA-06",
+          "districts/VA-07",
+          "districts/VA-08",
+          "districts/VA-09",
+          "districts/VA-10",
+          "districts/VA-11",
+          "districts/VT-01",
+          "districts/WA-01",
+          "districts/WA-02",
+          "districts/WA-03",
+          "districts/WA-04",
+          "districts/WA-05",
+          "districts/WA-06",
+          "districts/WA-07",
+          "districts/WA-08",
+          "districts/WA-09",
+          "districts/WA-10",
+          "districts/WI-01",
+          "districts/WI-02",
+          "districts/WI-03",
+          "districts/WI-04",
+          "districts/WI-05",
+          "districts/WI-06",
+          "districts/WI-07",
+          "districts/WI-08",
+          "districts/WV-01",
+          "districts/WV-02",
+          "districts/WY-01",
+          "enhanced_cps_2024",
+          "national/US",
+          "policy_data",
+          "small_enhanced_cps_2024",
+          "states/AK",
+          "states/AL",
+          "states/AR",
+          "states/AZ",
+          "states/CA",
+          "states/CO",
+          "states/CT",
+          "states/DC",
+          "states/DE",
+          "states/FL",
+          "states/GA",
+          "states/HI",
+          "states/IA",
+          "states/ID",
+          "states/IL",
+          "states/IN",
+          "states/KS",
+          "states/KY",
+          "states/LA",
+          "states/MA",
+          "states/MD",
+          "states/ME",
+          "states/MI",
+          "states/MN",
+          "states/MO",
+          "states/MS",
+          "states/MT",
+          "states/NC",
+          "states/ND",
+          "states/NE",
+          "states/NH",
+          "states/NJ",
+          "states/NM",
+          "states/NV",
+          "states/NY",
+          "states/OH",
+          "states/OK",
+          "states/OR",
+          "states/PA",
+          "states/RI",
+          "states/SC",
+          "states/SD",
+          "states/TN",
+          "states/TX",
+          "states/UT",
+          "states/VA",
+          "states/VT",
+          "states/WA",
+          "states/WI",
+          "states/WV",
+          "states/WY"
+        ],
+        "default_dataset": "enhanced_cps_2024",
+        "failures": []
+      },
+      "name": "default_dataset",
+      "status": "passed"
+    },
+    {
+      "artifact": "cities/NYC",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "cps_2024",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AK-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AL-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AL-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AL-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AL-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AL-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AL-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AL-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AR-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AR-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AR-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AR-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AZ-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AZ-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AZ-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AZ-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AZ-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AZ-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AZ-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AZ-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/AZ-09",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-09",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-10",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-11",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-12",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-13",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-14",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-15",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-16",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-17",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-18",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-19",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-20",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-21",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-22",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-23",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-24",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-25",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-26",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-27",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-28",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-29",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-30",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-31",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-32",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-33",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-34",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-35",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-36",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-37",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-38",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-39",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-40",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-41",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-42",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-43",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-44",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-45",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-46",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-47",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-48",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-49",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-50",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-51",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CA-52",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CO-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CO-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CO-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CO-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CO-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CO-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CO-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CO-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CT-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CT-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CT-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CT-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/CT-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/DC-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/DE-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-09",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-10",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-11",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-12",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-13",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-14",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-15",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-16",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-17",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-18",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-19",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-20",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-21",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-22",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-23",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-24",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-25",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-26",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-27",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/FL-28",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/GA-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/GA-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/GA-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/GA-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/GA-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/GA-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/GA-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/GA-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/GA-09",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/GA-10",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/GA-11",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/GA-12",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/GA-13",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/GA-14",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/HI-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/HI-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IA-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IA-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IA-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IA-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/ID-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/ID-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IL-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IL-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IL-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IL-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IL-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IL-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IL-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IL-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IL-09",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IL-10",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IL-11",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IL-12",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IL-13",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IL-14",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IL-15",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IL-16",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IL-17",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IN-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IN-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IN-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IN-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IN-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IN-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IN-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IN-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/IN-09",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/KS-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/KS-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/KS-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/KS-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/KY-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/KY-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/KY-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/KY-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/KY-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/KY-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/LA-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/LA-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/LA-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/LA-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/LA-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/LA-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MA-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MA-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MA-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MA-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MA-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MA-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MA-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MA-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MA-09",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MD-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MD-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MD-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MD-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MD-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MD-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MD-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MD-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/ME-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/ME-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MI-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MI-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MI-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MI-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MI-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MI-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MI-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MI-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MI-09",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MI-10",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MI-11",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MI-12",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MI-13",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MN-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MN-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MN-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MN-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MN-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MN-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MN-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MN-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MO-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MO-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MO-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MO-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MO-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MO-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MO-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MO-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MS-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MS-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MS-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MS-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MT-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/MT-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NC-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NC-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NC-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NC-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NC-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NC-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NC-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NC-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NC-09",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NC-10",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NC-11",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NC-12",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NC-13",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NC-14",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/ND-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NE-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NE-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NE-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NH-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NH-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NJ-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NJ-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NJ-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NJ-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NJ-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NJ-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NJ-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NJ-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NJ-09",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NJ-10",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NJ-11",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NJ-12",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NM-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NM-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NM-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NV-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NV-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NV-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NV-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-09",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-10",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-11",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-12",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-13",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-14",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-15",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-16",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-17",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-18",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-19",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-20",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-21",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-22",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-23",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-24",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-25",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/NY-26",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OH-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OH-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OH-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OH-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OH-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OH-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OH-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OH-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OH-09",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OH-10",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OH-11",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OH-12",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OH-13",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OH-14",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OH-15",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OK-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OK-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OK-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OK-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OK-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OR-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OR-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OR-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OR-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OR-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/OR-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/PA-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/PA-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/PA-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/PA-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/PA-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/PA-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/PA-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/PA-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/PA-09",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/PA-10",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/PA-11",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/PA-12",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/PA-13",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/PA-14",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/PA-15",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/PA-16",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/PA-17",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/RI-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/RI-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/SC-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/SC-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/SC-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/SC-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/SC-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/SC-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/SC-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/SD-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TN-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TN-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TN-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TN-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TN-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TN-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TN-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TN-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TN-09",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-09",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-10",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-11",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-12",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-13",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-14",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-15",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-16",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-17",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-18",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-19",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-20",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-21",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-22",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-23",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-24",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-25",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-26",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-27",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-28",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-29",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-30",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-31",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-32",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-33",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-34",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-35",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-36",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-37",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/TX-38",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/UT-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/UT-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/UT-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/UT-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/VA-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/VA-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/VA-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/VA-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/VA-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/VA-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/VA-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/VA-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/VA-09",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/VA-10",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/VA-11",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/VT-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WA-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WA-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WA-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WA-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WA-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WA-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WA-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WA-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WA-09",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WA-10",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WI-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WI-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WI-03",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WI-04",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WI-05",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WI-06",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WI-07",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WI-08",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WV-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WV-02",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "districts/WY-01",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "enhanced_cps_2024",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "national/US",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "policy_data",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "database",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "small_enhanced_cps_2024",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/AK",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/AL",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/AR",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/AZ",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/CA",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/CO",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/CT",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/DC",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/DE",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/FL",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/GA",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/HI",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/IA",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/ID",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/IL",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/IN",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/KS",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/KY",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/LA",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/MA",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/MD",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/ME",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/MI",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/MN",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/MO",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/MS",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/MT",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/NC",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/ND",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/NE",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/NH",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/NJ",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/NM",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/NV",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/NY",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/OH",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/OK",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/OR",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/PA",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/RI",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/SC",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/SD",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/TN",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/TX",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/UT",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/VA",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/VT",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/WA",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/WI",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/WV",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    },
+    {
+      "artifact": "states/WY",
+      "country": "us",
+      "details": {
+        "failures": [],
+        "has_path_reference": true,
+        "has_sha256": true,
+        "has_uri": false,
+        "kind": "microdata",
+        "status": "certified"
+      },
+      "name": "data_artifact_metadata",
+      "status": "passed"
+    }
+  ],
+  "generated_at": "2026-06-11T13:44:46Z",
+  "metadata": {
+    "generated_by": "scripts/validate_bundle.py",
+    "validation_kind": "registry"
+  },
+  "schema_version": 2,
+  "status": "passed"
+}

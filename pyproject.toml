@@ -45,10 +45,10 @@ graph = [
 ]
 uk = [
     "policyengine_core>=3.26.1",
-    "policyengine-uk==2.88.20",
+    "policyengine-uk==2.89.0",
 ]
 us = [
-    "policyengine_core==3.26.1",
+    "policyengine_core>=3.26.1",
     "policyengine-us==1.722.4",
 ]
 dev = [
@@ -62,8 +62,8 @@ dev = [
     "plotly>=5.0.0",
     "pytest-asyncio>=0.26.0",
     "ruff>=0.9.0",
-    "policyengine_core==3.26.1",
-    "policyengine-uk==2.88.20",
+    "policyengine_core>=3.26.1",
+    "policyengine-uk==2.89.0",
     "policyengine-us==1.722.4",
     "towncrier>=24.8.0",
     "mypy>=1.11.0",
