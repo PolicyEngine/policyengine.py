@@ -41,19 +41,16 @@ POLICYENGINE_VERSION = re.search(
     PYPROJECT.read_text(),
     re.MULTILINE,
 ).group(1)
-US_MODEL_VERSION = "1.722.4"
-US_BUILT_WITH_MODEL_VERSION = "1.700.0"
-US_DATA_RELEASE_VERSION = "1.115.5"
-US_DATA_RELEASE_PATH = "releases/1.115.5/release_manifest.json"
-US_DATA_RELEASE_REVISION = "9531fe1d096244fe7eb45d791d52ef61b8a2a0a5"
-US_CERTIFICATION_SOURCE = "policyengine-us-data release manifest"
-US_DEFAULT_DATASET_URI = (
-    "hf://policyengine/policyengine-us-data/"
-    f"enhanced_cps_2024.h5@{US_DATA_RELEASE_REVISION}"
+US_MODEL_VERSION = "1.723.0"
+US_BUILT_WITH_MODEL_VERSION = "1.723.0"
+US_DATA_RELEASE_VERSION = "0.1.0"
+US_DATA_RELEASE_PATH = (
+    "releases/populace-us-2024-5da5a95-20260611/release_manifest.json"
 )
-US_ENHANCED_CPS_MANAGED_URI = (
-    "hf://policyengine/policyengine-us-data/"
-    f"enhanced_cps_2024.h5@{US_DATA_RELEASE_REVISION}"
+US_DATA_RELEASE_REVISION = "populace-us-2024-5da5a95-20260611"
+US_CERTIFICATION_SOURCE = "policyengine-bundles"
+US_MANAGED_DATASET_URI = (
+    f"hf://policyengine/populace-us/populace_us_2024.h5@{US_DATA_RELEASE_REVISION}"
 )
 
 
@@ -92,9 +89,9 @@ class TestReleaseManifests:
         assert manifest.policyengine_version == POLICYENGINE_VERSION
         assert manifest.model_package.name == "policyengine-us"
         assert manifest.model_package.version == US_MODEL_VERSION
-        assert manifest.data_package.name == "policyengine-us-data"
+        assert manifest.data_package.name == "populace-data"
         assert manifest.data_package.version == US_DATA_RELEASE_VERSION
-        assert manifest.data_package.repo_id == "policyengine/policyengine-us-data"
+        assert manifest.data_package.repo_id == "policyengine/populace-us"
         assert manifest.data_package.release_manifest_path == US_DATA_RELEASE_PATH
         assert (
             manifest.data_package.release_manifest_revision == US_DATA_RELEASE_REVISION
@@ -102,18 +99,14 @@ class TestReleaseManifests:
         assert manifest.certified_data_artifact is not None
         assert (
             manifest.certified_data_artifact.build_id
-            == f"policyengine-us-data-{US_DATA_RELEASE_VERSION}"
+            == "populace-us-2024-5da5a95-20260611"
         )
-        assert manifest.certified_data_artifact.dataset == "enhanced_cps_2024"
+        assert manifest.certified_data_artifact.dataset == "populace_us_2024"
         assert manifest.certification is not None
         assert (
-            manifest.certification.data_build_id
-            == f"policyengine-us-data-{US_DATA_RELEASE_VERSION}"
+            manifest.certification.data_build_id == "populace-us-2024-5da5a95-20260611"
         )
-        assert (
-            manifest.certification.compatibility_basis
-            == "legacy_compatible_model_package"
-        )
+        assert manifest.certification.compatibility_basis == "bundle_candidate"
         assert (
             manifest.certification.built_with_model_version
             == US_BUILT_WITH_MODEL_VERSION
@@ -149,15 +142,16 @@ class TestReleaseManifests:
         )
 
     def test__given_us_dataset_name__then_resolves_to_versioned_hf_url(self):
-        resolved = resolve_dataset_reference("us", "enhanced_cps_2024")
+        resolved = resolve_dataset_reference("us", "populace_us_2024")
 
-        assert resolved == US_ENHANCED_CPS_MANAGED_URI
+        assert resolved == US_MANAGED_DATASET_URI
 
     def test__given_dataset_explicit_revision__then_resolves_to_that_revision(self):
         manifest = get_release_manifest("us").model_copy(deep=True)
         manifest.datasets["long_term_cps_2100"] = ArtifactPathReference(
             path="long_term/2100.h5",
             revision="crfb-longrun-20260517",
+            repo_id="policyengine/policyengine-us-data",
         )
 
         with patch(
@@ -310,7 +304,7 @@ class TestReleaseManifests:
         )
         mock_get.assert_called_once()
         assert mock_get.call_args.args[0] == (
-            "https://huggingface.co/policyengine/policyengine-us-data/resolve/"
+            "https://huggingface.co/datasets/policyengine/populace-us/resolve/"
             f"{US_DATA_RELEASE_REVISION}/{US_DATA_RELEASE_PATH}"
         )
 
@@ -318,7 +312,7 @@ class TestReleaseManifests:
         manifest = get_release_manifest("us")
 
         assert https_release_manifest_uri(manifest.data_package) == (
-            "https://huggingface.co/policyengine/policyengine-us-data/resolve/"
+            "https://huggingface.co/datasets/policyengine/populace-us/resolve/"
             f"{US_DATA_RELEASE_REVISION}/{US_DATA_RELEASE_PATH}"
         )
 
@@ -329,14 +323,14 @@ class TestReleaseManifests:
         payload = {
             "schema_version": 1,
             "data_package": {
-                "name": "policyengine-us-data",
+                "name": "populace-data",
                 "version": US_DATA_RELEASE_VERSION,
             },
             "artifacts": {
-                "enhanced_cps_2024": {
+                "populace_us_2024": {
                     "kind": "microdata",
-                    "path": "enhanced_cps_2024.h5",
-                    "repo_id": "policyengine/policyengine-us-data",
+                    "path": "populace_us_2024.h5",
+                    "repo_id": "policyengine/populace-us",
                     "revision": US_DATA_RELEASE_VERSION,
                     "sha256": "abc",
                     "size_bytes": 123,
@@ -350,9 +344,7 @@ class TestReleaseManifests:
         ):
             manifest = get_data_release_manifest("us")
 
-        assert (
-            manifest.artifacts["enhanced_cps_2024"].uri == US_ENHANCED_CPS_MANAGED_URI
-        )
+        assert manifest.artifacts["populace_us_2024"].uri == US_MANAGED_DATASET_URI
         assert (
             manifest.source_sha256
             == hashlib.sha256(json.dumps(payload).encode("utf-8")).hexdigest()
@@ -721,7 +713,7 @@ class TestReleaseManifests:
         assert (
             microsim.policyengine_bundle["policyengine_version"] == POLICYENGINE_VERSION
         )
-        assert microsim.policyengine_bundle["runtime_dataset"] == "enhanced_cps_2024"
+        assert microsim.policyengine_bundle["runtime_dataset"] == "populace_us_2024"
         assert (
             microsim.policyengine_bundle["runtime_dataset_uri"]
             == us_latest.default_dataset_uri

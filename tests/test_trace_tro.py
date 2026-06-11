@@ -74,11 +74,11 @@ def _us_data_release_manifest(
         {
             "schema_version": 1,
             "data_package": {
-                "name": "policyengine-us-data",
-                "version": "1.73.0",
+                "name": "populace-data",
+                "version": "0.1.0",
             },
             "build": {
-                "build_id": "policyengine-us-data-1.73.0",
+                "build_id": "populace-us-2024-aaaaaaa-20260101",
                 "built_at": "2026-04-10T12:00:00Z",
                 "built_with_model_package": {
                     "name": "policyengine-us",
@@ -88,13 +88,13 @@ def _us_data_release_manifest(
                 },
             },
             "compatible_model_packages": [],
-            "default_datasets": {"national": "enhanced_cps_2024"},
+            "default_datasets": {"national": "populace_us_2024"},
             "artifacts": {
-                "enhanced_cps_2024": {
+                "populace_us_2024": {
                     "kind": "microdata",
-                    "path": "enhanced_cps_2024.h5",
-                    "repo_id": "policyengine/policyengine-us-data",
-                    "revision": "1.73.0",
+                    "path": "populace_us_2024.h5",
+                    "repo_id": "policyengine/populace-us",
+                    "revision": "populace-us-2024-aaaaaaa-20260101",
                     "sha256": sha256,
                     "size_bytes": 123,
                 }
@@ -288,7 +288,7 @@ class TestBundleTRO:
     ):
         country_manifest = get_release_manifest("us")
         data_manifest = _us_data_release_manifest()
-        data_manifest.artifacts["enhanced_cps_2024"].revision = "1.113.1"
+        data_manifest.artifacts["populace_us_2024"].revision = "1.113.1"
 
         tro = build_trace_tro_from_release_bundle(
             country_manifest,
@@ -317,7 +317,7 @@ class TestBundleTRO:
             canonical_json_bytes(data_manifest.model_dump(mode="json"))
         ).hexdigest()
         data_manifest.source_sha256 = source_sha256
-        data_manifest.artifacts["enhanced_cps_2024"].revision = "1.113.1"
+        data_manifest.artifacts["populace_us_2024"].revision = "1.113.1"
 
         tro = build_trace_tro_from_release_bundle(
             country_manifest,
@@ -338,7 +338,7 @@ class TestBundleTRO:
         self,
     ):
         data_manifest = _us_data_release_manifest()
-        data_manifest.artifacts.pop("enhanced_cps_2024")
+        data_manifest.artifacts.pop("populace_us_2024")
 
         tro = build_trace_tro_from_release_bundle(
             get_release_manifest("us"),
@@ -356,7 +356,7 @@ class TestBundleTRO:
         assert country_manifest.certified_data_artifact is not None
         country_manifest.certified_data_artifact.sha256 = None
         data_manifest = _us_data_release_manifest()
-        data_manifest.artifacts.pop("enhanced_cps_2024")
+        data_manifest.artifacts.pop("populace_us_2024")
 
         with pytest.raises(
             ValueError,

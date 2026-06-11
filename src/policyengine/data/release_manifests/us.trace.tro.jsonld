@@ -17,6 +17,7 @@
         "schema:name": "PolicyEngine",
         "schema:url": "https://policyengine.org"
       },
+      "schema:dateCreated": "2026-06-11T15:30:09.602534Z",
       "schema:description": "TRACE TRO for certified runtime bundle us-4.16.0 covering the bundle manifest, the certified dataset artifact, the country model wheel, and the country data release manifest when it is available.",
       "schema:name": "policyengine us certified bundle TRO",
       "trov:createdWith": {
@@ -37,6 +38,14 @@
                 "@id": "composition/1/artifact/bundle_manifest"
               },
               "trov:hasLocation": "data/release_manifests/us.json"
+            },
+            {
+              "@id": "arrangement/1/location/data_release_manifest",
+              "@type": "trov:ArtifactLocation",
+              "trov:hasArtifact": {
+                "@id": "composition/1/artifact/data_release_manifest"
+              },
+              "trov:hasLocation": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-5da5a95-20260611/releases/populace-us-2024-5da5a95-20260611/release_manifest.json"
             },
             {
               "@id": "arrangement/1/location/dataset",
@@ -66,12 +75,20 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine.py bundle manifest for us",
             "trov:mimeType": "application/json",
-            "trov:sha256": "126695f6e5eaffa1d47c44d319aaca6f19e48fc21a9c6db1f92d05db79f48fa9"
+            "trov:sha256": "2dca8082faed87dd78a5ed2cbbcb879982b4fbc721d3786616c4433e7db699c1"
+          },
+          {
+            "@id": "composition/1/artifact/data_release_manifest",
+            "@type": "trov:ResearchArtifact",
+            "schema:name": "populace-data release manifest 0.1.0",
+            "trov:mimeType": "application/json",
+            "trov:sha256": "c2e51b22d84760923c7750f88f2cc0c0e22620abee54a58c84af93f6cf4a3506"
           },
           {
             "@id": "composition/1/artifact/dataset",
             "@type": "trov:ResearchArtifact",
             "schema:name": "populace_us_2024",
+            "trov:mimeType": "application/x-hdf5",
             "trov:sha256": "f32c2e5e9098bc6540724fdd5debf963af495da4c29b3a7a63fb53c2a4bb5a34"
           },
           {
@@ -85,21 +102,23 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "3d0f93cc002757c616db8d3b2a6fa45c3891248f83f83b6f5706fefdd8b0fe8f"
+          "trov:sha256": "c659d69e4cf5fe2e5db8f2b37ab64cc2082011cea25552ff8c2df4f20a82b7a6"
         }
       },
       "trov:hasPerformance": {
         "@id": "trp/1",
         "@type": "trov:TransparentResearchPerformance",
+        "pe:builtWithModelVersion": "1.723.0",
         "pe:certifiedBy": "policyengine-bundles",
         "pe:certifiedForModelVersion": "1.723.0",
         "pe:compatibilityBasis": "bundle_candidate",
-        "pe:dataReleaseManifestStatus": "unavailable",
+        "pe:dataBuildId": "populace-us-2024-5da5a95-20260611",
         "pe:emittedIn": "local",
-        "rdfs:comment": "Certification of build populace-data-0.1.0 for policyengine-us 1.723.0.",
+        "rdfs:comment": "Certification of build populace-us-2024-5da5a95-20260611 for policyengine-us 1.723.0.",
         "trov:accessedArrangement": {
           "@id": "arrangement/1"
         },
+        "trov:startedAtTime": "2026-06-11T15:30:09.602534Z",
         "trov:wasConductedBy": {
           "@id": "trs"
         }

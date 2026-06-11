@@ -56,6 +56,7 @@ def test_import_policyengine_bundle_imports_schema_v2_archive(
         "revision": "data-sha",
         "sha256": "b" * 64,
         "metadata_sha256": "c" * 64,
+        "repo_id": "policyengine/policyengine-us-data",
     }
     assert (
         us_manifest["certified_data_artifact"]["uri"]

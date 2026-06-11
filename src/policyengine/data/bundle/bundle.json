@@ -1,10 +1,10 @@
 {
-  "bundle_digest": "sha256:bd16c87efdbd2db47228d36e2307ae8e94d2b18f9f1641d8dd0218f5ee072c73",
+  "bundle_digest": "sha256:ef6727a962e02713e015f4e690aa1bccd9c643e6df6982ba5a40db2e99ea25a5",
   "bundle_version": "4.16.0",
   "countries": {
     "us": "countries/us.json"
   },
-  "created_at": "2026-06-11T16:24:42Z",
+  "created_at": "2026-06-11T18:21:06Z",
   "metadata": {
     "generated_by": "scripts/generate_bundle.py",
     "testing_only": false
@@ -19,11 +19,11 @@
     "policyengine-core": {
       "name": "policyengine-core",
       "resolution_status": "pinned",
-      "sdist_url": "https://files.pythonhosted.org/packages/f9/c8/8fe846bb5c176ffbdb901171a0b8589057d22e108f0719596af5eda50ddd/policyengine_core-3.27.0.tar.gz",
-      "sha256": "9371c4cf18b85338513c7ce004b5a6a458347d4a5c791fb2a49cad29f4c9d699",
+      "sdist_url": "https://files.pythonhosted.org/packages/15/28/cbc23d0c61d431cbfdbaea3f7a71b2230187ab2e57f1430a551598b39515/policyengine_core-3.27.1.tar.gz",
+      "sha256": "dac7928b502baa56fd22956f089689faa4d7e04a21aab7f1f29b34961d684ef8",
       "source": "pypi",
-      "version": "3.27.0",
-      "wheel_url": "https://files.pythonhosted.org/packages/8e/62/2318405e648688e826d310e12ff5d40e2aff9cd633dfe4697fcd7a20d51b/policyengine_core-3.27.0-py3-none-any.whl"
+      "version": "3.27.1",
+      "wheel_url": "https://files.pythonhosted.org/packages/30/81/098994e62401e9ce0d799e3f01329ba4a8792599d17ae0ef67fff1ddd3ff/policyengine_core-3.27.1-py3-none-any.whl"
     },
     "policyengine-us": {
       "name": "policyengine-us",
