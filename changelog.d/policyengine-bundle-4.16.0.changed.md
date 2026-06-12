@@ -1,1 +1,0 @@
-Import PolicyEngine bundle 4.16.0: the `populace-data` release manifest (`populace_us_2024` built from primary sources) replaces `policyengine-us-data` as the certified US data release, with policyengine-us 1.723.0 and policyengine-core 3.27.1. Dataset references and region datasets now honor per-artifact repo pins so inherited datasets keep resolving from their original repos.
