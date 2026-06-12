@@ -334,9 +334,7 @@ def certify_data_release(
     )
 
     if output_dir is None:
-        output_dir = Path(
-            str(files("policyengine").joinpath("data", "release_manifests"))
-        )
+        output_dir = Path(str(files("policyengine"))) / "data" / "release_manifests"
     output_path = output_dir / f"{country}.json"
     output_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 

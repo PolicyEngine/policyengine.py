@@ -1,5 +1,15 @@
 # Release Bundles
 
+> **Current process.** Certification now runs inside this repository:
+> `scripts/certify_data_release.py` derives the vendored country manifest
+> directly from a country's data release manifest (see the
+> [data certification](engineering/skills/data-certification.md)
+> engineering skill). The intermediate `policyengine-bundles` repository
+> flow is retired; its published bundles remain the historical record of
+> earlier certifications. The architecture below — country `*-data`
+> repos publish immutable manifests, `policyengine.py` certifies — is
+> unchanged.
+
 This document defines the intended reproducibility boundary for `policyengine.py`.
 
 The key design decision is:
