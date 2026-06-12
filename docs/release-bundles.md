@@ -69,18 +69,19 @@ It does not define the final supported runtime bundle exposed to users.
 
 It does not rebuild microdata artifacts.
 
-New multi-country bundles are generated and archived in
-`PolicyEngine/policyengine-bundles`. `policyengine.py` vendors one current
-bundle from that archive under `src/policyengine/data/bundle/`, then generates
-the legacy country release manifests that runtime code still reads. The import
+Certification runs in this repository: the vendored country release
+manifest under `src/policyengine/data/release_manifests/` is derived
+directly from the country's published data release manifest. The
 entrypoint is:
 
 ```bash
-python scripts/import_policyengine_bundle.py 4.14.0
+python scripts/certify_data_release.py --country us \
+  --manifest-uri "hf://dataset/policyengine/populace-us@<tag>/releases/<tag>/release_manifest.json"
 ```
 
-The `policyengine-bundles` publish workflow runs this importer automatically
-when it opens the consuming `.py` PR.
+Earlier releases (policyengine 4.15.x–4.16.x) were certified through the
+`PolicyEngine/policyengine-bundles` archive flow; those bundles remain the
+historical record of their certifications.
 
 ## Two manifest layers
 

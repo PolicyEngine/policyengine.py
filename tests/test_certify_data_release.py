@@ -86,16 +86,32 @@ class TestParseManifestUri:
 
 
 class TestValidateReleaseManifest:
-    def test__given_certified_pair_in_compat__then_no_warnings(self):
-        warnings = validate_release_manifest(_manifest(), "policyengine-us", "1.723.0")
+    def test__given_built_with_match__then_built_with_basis_no_warnings(self):
+        basis, warnings = validate_release_manifest(
+            _manifest(), "policyengine-us", "1.723.0"
+        )
 
+        assert basis == "built_with_model_package"
         assert warnings == []
 
-    def test__given_model_outside_compat__then_warns_not_raises(self):
-        warnings = validate_release_manifest(_manifest(), "policyengine-us", "1.999.0")
+    def test__given_claim_only_match__then_publisher_basis_with_warning(self):
+        payload = _release_manifest_payload()
+        payload["compatible_model_packages"].append(
+            {"name": "policyengine-us", "specifier": ">=1.724.0,<2"}
+        )
+        basis, warnings = validate_release_manifest(
+            DataReleaseManifest.model_validate(payload),
+            "policyengine-us",
+            "1.730.0",
+        )
 
+        assert basis == "compatible_model_packages"
         assert len(warnings) == 1
-        assert "1.999.0" in warnings[0]
+        assert "built with 1.723.0" in warnings[0]
+
+    def test__given_no_basis__then_certification_refused(self):
+        with pytest.raises(CertificationError, match="neither"):
+            validate_release_manifest(_manifest(), "policyengine-us", "1.999.0")
 
     def test__given_missing_default__then_raises(self):
         payload = _release_manifest_payload()
@@ -125,7 +141,6 @@ class TestBuildCountryManifestPayload:
         return build_country_manifest_payload(
             country="us",
             manifest=_manifest(),
-            manifest_sha256="c" * 64,
             uri_parts=parse_manifest_uri(MANIFEST_URI),
             policyengine_version="9.9.9",
             model_package="policyengine-us",
@@ -166,7 +181,7 @@ class TestBuildCountryManifestPayload:
         payload = self._payload()
 
         certification = payload["certification"]
-        assert certification["compatibility_basis"] == "data_release_manifest"
+        assert certification["compatibility_basis"] == "built_with_model_package"
         assert certification["certified_by"] == "policyengine.py certification"
         assert certification["data_build_id"] == TAG
         assert certification["built_with_model_version"] == "1.723.0"

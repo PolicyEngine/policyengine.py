@@ -106,7 +106,7 @@ class TestReleaseManifests:
         assert (
             manifest.certification.data_build_id == "populace-us-2024-5da5a95-20260611"
         )
-        assert manifest.certification.compatibility_basis == "data_release_manifest"
+        assert manifest.certification.compatibility_basis == "built_with_model_package"
         assert (
             manifest.certification.built_with_model_version
             == US_BUILT_WITH_MODEL_VERSION

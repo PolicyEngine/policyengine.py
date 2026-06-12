@@ -45,6 +45,7 @@ import requests
 from policyengine.provenance.manifest import (
     HF_REQUEST_TIMEOUT_SECONDS,
     DataReleaseManifest,
+    _specifier_matches,
     fetch_pypi_wheel_metadata,
 )
 
@@ -59,7 +60,8 @@ COUNTRY_MODEL_PACKAGES = {
 }
 
 CERTIFIED_BY = "policyengine.py certification"
-COMPATIBILITY_BASIS = "data_release_manifest"
+BASIS_BUILT_WITH = "built_with_model_package"
+BASIS_PUBLISHER_CLAIM = "compatible_model_packages"
 
 
 class CertificationError(ValueError):
@@ -137,8 +139,16 @@ def validate_release_manifest(
     manifest: DataReleaseManifest,
     model_package: str,
     model_version: str,
-) -> list[str]:
-    """Hard checks raise; soft findings are returned as warnings."""
+) -> tuple[str, list[str]]:
+    """Hard checks raise; returns ``(compatibility_basis, warnings)``.
+
+    The certification gate (docs/release-bundles.md): a data release may
+    be certified for a model version only when the model exactly matches
+    the build-time model, or the publisher's ``compatible_model_packages``
+    covers it. The publisher-claim basis is recorded and warned about —
+    it is the data publisher's assertion, made good only by this repo's
+    test suite passing on the pinned pair.
+    """
     warnings: list[str] = []
     if "national" not in manifest.default_datasets:
         raise CertificationError(
@@ -155,19 +165,35 @@ def validate_release_manifest(
         if not artifact.sha256:
             warnings.append(f"artifact {name!r} has no sha256")
 
-    compat = [
+    built_with = None
+    if manifest.build is not None and manifest.build.built_with_model_package:
+        built_with = manifest.build.built_with_model_package.version
+
+    claim_specifiers = [
         package.specifier
         for package in manifest.compatible_model_packages
         if package.name == model_package
     ]
-    pinned = f"=={model_version}"
-    if compat and pinned not in compat:
+    claim_matches = any(
+        _specifier_matches(model_version, specifier) for specifier in claim_specifiers
+    )
+
+    if built_with == model_version:
+        return BASIS_BUILT_WITH, warnings
+    if claim_matches:
         warnings.append(
-            f"{model_package} {model_version} is not among the manifest's "
-            f"compatible versions {compat}; certification asserts the pair "
-            "anyway — the test suite is the arbiter"
+            f"certifying {model_package} {model_version} on the publisher's "
+            f"compatibility claim {claim_specifiers}; the data was built "
+            f"with {built_with or 'an unrecorded model version'} — the test "
+            "suite is the arbiter"
         )
-    return warnings
+        return BASIS_PUBLISHER_CLAIM, warnings
+    raise CertificationError(
+        f"{model_package} {model_version} matches neither the build-time "
+        f"model ({built_with or 'unrecorded'}) nor any publisher "
+        f"compatibility claim {claim_specifiers or '(none declared)'}; "
+        "a new data build or a published compatibility claim is required."
+    )
 
 
 def head_artifact(artifact, token: Optional[str] = None) -> bool:
@@ -197,17 +223,20 @@ def build_country_manifest_payload(
     *,
     country: str,
     manifest: DataReleaseManifest,
-    manifest_sha256: str,
     uri_parts: dict,
     policyengine_version: str,
     model_package: str,
     model_version: str,
     model_wheel: dict,
+    compatibility_basis: str = BASIS_BUILT_WITH,
 ) -> dict:
     """Map the data release manifest to the vendored country manifest."""
     default_dataset = manifest.default_datasets["national"]
     default_artifact = manifest.artifacts[default_dataset]
-    primary_repo_id = default_artifact.repo_id
+    # The data package's repo is where the release manifest itself lives —
+    # runtime re-fetches resolve against it. Artifacts (including the
+    # default) may be inherited from other repos and carry their own pins.
+    primary_repo_id = uri_parts["repo_id"]
     repo_type = uri_parts["repo_type"]
 
     datasets: dict[str, dict] = {}
@@ -227,7 +256,7 @@ def build_country_manifest_payload(
                 region_datasets[region] = {"path_template": template["path_template"]}
 
     certification: dict = {
-        "compatibility_basis": COMPATIBILITY_BASIS,
+        "compatibility_basis": compatibility_basis,
         "certified_for_model_version": model_version,
         "certified_by": CERTIFIED_BY,
     }
@@ -312,7 +341,9 @@ def certify_data_release(
     manifest, manifest_sha256, uri_parts = fetch_release_manifest(
         manifest_uri, token=token
     )
-    warnings = validate_release_manifest(manifest, model_package, model_version)
+    compatibility_basis, warnings = validate_release_manifest(
+        manifest, model_package, model_version
+    )
 
     default_artifact = manifest.artifacts[manifest.default_datasets["national"]]
     if check_artifacts and not head_artifact(default_artifact, token=token):
@@ -325,12 +356,12 @@ def certify_data_release(
     payload = build_country_manifest_payload(
         country=country,
         manifest=manifest,
-        manifest_sha256=manifest_sha256,
         uri_parts=uri_parts,
         policyengine_version=policyengine_version(),
         model_package=model_package,
         model_version=model_version,
         model_wheel=model_wheel or {},
+        compatibility_basis=compatibility_basis,
     )
 
     if output_dir is None:

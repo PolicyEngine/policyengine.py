@@ -39,6 +39,7 @@ def update_country_pins(
             f"got {model_package}."
         )
     text = pyproject_path.read_text()
+    core_version = _max_core_floor(text, core_version)
     text = replace_dependency_in_section(
         text,
         section_name=country,
@@ -104,3 +105,18 @@ def dependency_line_matches(line: str, package_name: str) -> bool:
         re.match(rf'"{re.escape(package_name)}\s*(==|>=|<=|~=|!=|>|<)', line)
         is not None
     )
+
+
+def _max_core_floor(pyproject_text: str, candidate: str) -> str:
+    """Never lower a committed core floor because of a stale local env."""
+    from packaging.version import Version
+
+    floors = re.findall(r"policyengine_core>=([0-9][^\"',]*)", pyproject_text)
+    best = candidate
+    for floor in floors:
+        try:
+            if Version(floor) > Version(best):
+                best = floor
+        except Exception:
+            continue
+    return best

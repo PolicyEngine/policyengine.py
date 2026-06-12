@@ -55,11 +55,16 @@ Hard failures (certification refuses): missing national default dataset,
 default dataset absent from artifacts, any artifact without a revision pin,
 unreachable certified dataset, unknown country.
 
-Warnings (recorded, not blocking): artifacts without sha256, certifying a
-model version outside the manifest's `compatible_model_packages`. The
-warning case is legitimate — the manifest's compatibility list is the data
-publisher's claim, while certification is this repo's claim, arbitrated by
-the test suite.
+Certification gate: the model version must either exactly match the
+build-time model (`compatibility_basis: built_with_model_package`) or be
+covered by the publisher's `compatible_model_packages` claim
+(`compatibility_basis: compatible_model_packages`, recorded with a
+warning — the publisher's claim is made good only by this repo's test
+suite passing on the pinned pair). Neither basis means certification is
+refused: a new data build or a published compatibility claim is required.
+
+Warnings (recorded, not blocking): artifacts without sha256, and the
+publisher-claim basis above.
 
 ## Legacy paths
 

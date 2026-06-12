@@ -4,7 +4,7 @@
     "built_with_model_version": "1.723.0",
     "certified_by": "policyengine.py certification",
     "certified_for_model_version": "1.723.0",
-    "compatibility_basis": "data_release_manifest",
+    "compatibility_basis": "built_with_model_package",
     "data_build_id": "populace-us-2024-5da5a95-20260611"
   },
   "certified_data_artifact": {
