@@ -48,7 +48,7 @@ US_DATA_RELEASE_PATH = (
     "releases/populace-us-2024-5da5a95-20260611/release_manifest.json"
 )
 US_DATA_RELEASE_REVISION = "populace-us-2024-5da5a95-20260611"
-US_CERTIFICATION_SOURCE = "policyengine-bundles"
+US_CERTIFICATION_SOURCE = "policyengine.py certification"
 US_MANAGED_DATASET_URI = (
     f"hf://policyengine/populace-us/populace_us_2024.h5@{US_DATA_RELEASE_REVISION}"
 )
@@ -106,7 +106,7 @@ class TestReleaseManifests:
         assert (
             manifest.certification.data_build_id == "populace-us-2024-5da5a95-20260611"
         )
-        assert manifest.certification.compatibility_basis == "bundle_candidate"
+        assert manifest.certification.compatibility_basis == "data_release_manifest"
         assert (
             manifest.certification.built_with_model_version
             == US_BUILT_WITH_MODEL_VERSION
