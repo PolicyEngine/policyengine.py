@@ -20,5 +20,5 @@ Before making or reviewing repository-wide API, testing, documentation, release,
 or package-boundary changes, read
 `docs/engineering/skills/repository-guidance.md`.
 
-Before updating or reviewing certified release bundles, read
-`docs/engineering/skills/release-bundles.md`.
+Before certifying or reviewing a country data release, read
+`docs/engineering/skills/data-certification.md`.

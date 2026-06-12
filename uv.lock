@@ -2820,7 +2820,7 @@ wheels = [
 
 [[package]]
 name = "policyengine"
-version = "4.16.0"
+version = "4.16.1"
 source = { editable = "." }
 dependencies = [
     { name = "diskcache" },

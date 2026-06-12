@@ -1,5 +1,15 @@
 # Release Bundles
 
+> **Current process.** Certification now runs inside this repository:
+> `scripts/certify_data_release.py` derives the vendored country manifest
+> directly from a country's data release manifest (see the
+> [data certification](engineering/skills/data-certification.md)
+> engineering skill). The intermediate `policyengine-bundles` repository
+> flow is retired; its published bundles remain the historical record of
+> earlier certifications. The architecture below — country `*-data`
+> repos publish immutable manifests, `policyengine.py` certifies — is
+> unchanged.
+
 This document defines the intended reproducibility boundary for `policyengine.py`.
 
 The key design decision is:
@@ -59,18 +69,19 @@ It does not define the final supported runtime bundle exposed to users.
 
 It does not rebuild microdata artifacts.
 
-New multi-country bundles are generated and archived in
-`PolicyEngine/policyengine-bundles`. `policyengine.py` vendors one current
-bundle from that archive under `src/policyengine/data/bundle/`, then generates
-the legacy country release manifests that runtime code still reads. The import
+Certification runs in this repository: the vendored country release
+manifest under `src/policyengine/data/release_manifests/` is derived
+directly from the country's published data release manifest. The
 entrypoint is:
 
 ```bash
-python scripts/import_policyengine_bundle.py 4.14.0
+python scripts/certify_data_release.py --country us \
+  --manifest-uri "hf://dataset/policyengine/populace-us@<tag>/releases/<tag>/release_manifest.json"
 ```
 
-The `policyengine-bundles` publish workflow runs this importer automatically
-when it opens the consuming `.py` PR.
+Earlier releases (policyengine 4.15.x–4.16.x) were certified through the
+`PolicyEngine/policyengine-bundles` archive flow; those bundles remain the
+historical record of their certifications.
 
 ## Two manifest layers
 
@@ -396,11 +407,16 @@ Things that should usually not affect the fingerprint:
 `policyengine.py` may certify a staged data artifact for a model version only if one of the following is true:
 
 1. the model version exactly matches the `built_with_model_package.version`
-2. the model version has the same `data_build_fingerprint` as the build-time model version
+   (`compatibility_basis: built_with_model_package`)
+2. the data publisher's `compatible_model_packages` covers the model version
+   (`compatibility_basis: compatible_model_packages` — the publisher's claim,
+   recorded with a warning and made good by the test suite passing on the
+   pinned pair)
 
-If neither is true, the bundle release must fail and a new data build is required.
-
-This should be a hard failure, not a warning.
+If neither is true, certification fails hard and a new data build or a
+published compatibility claim is required. A `data_build_fingerprint`
+basis (same fingerprint as the build-time model) is a planned third
+basis; it requires fingerprint metadata from the installed model package.
 
 ## Artifact states
 

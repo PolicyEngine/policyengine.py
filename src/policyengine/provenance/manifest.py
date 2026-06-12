@@ -135,6 +135,9 @@ class DataReleaseManifest(BaseModel):
     can enclose the full set of artifacts published together). Distinct
     from per-artifact DOIs on ``DataReleaseArtifact.preservation_mirrors``.
     Populated when the release pipeline mirrors to a DOI-minting host."""
+    metadata: dict = Field(default_factory=dict)
+    """Producer-declared extras (e.g. ``region_datasets`` path templates
+    consumed by certification)."""
     source_sha256: Optional[str] = Field(default=None, exclude=True)
     """Byte sha256 of the fetched manifest before runtime URI rewrites."""
 

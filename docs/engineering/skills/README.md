@@ -13,5 +13,5 @@ Current skills:
   changelog-fragment requirements, PR head verification, and title conventions.
 - `repository-guidance.md`: policyengine.py structure, commands, package
   boundaries, test expectations, and repo-specific anti-patterns.
-- `release-bundles.md`: certified release-bundle refresh workflow, model/data
-  compatibility gates, expected files, and bundle-specific tests.
+- `data-certification.md`: certifying country data releases from their
+  release manifests, validation semantics, expected files, and legacy paths.
