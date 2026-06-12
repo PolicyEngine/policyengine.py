@@ -178,6 +178,13 @@ def dataset_path_references(datasets: dict) -> dict:
             payload["sha256"] = artifact["sha256"]
         if artifact.get("metadata_sha256"):
             payload["metadata_sha256"] = artifact["metadata_sha256"]
+        # Inherited artifacts may live in a different repo than the data
+        # package (e.g. long-term datasets pinned to policyengine-us-data
+        # while populace-data is the package); carry the pin through.
+        if artifact.get("repo_id"):
+            payload["repo_id"] = artifact["repo_id"]
+        if artifact.get("repo_type"):
+            payload["repo_type"] = artifact["repo_type"]
         path_references[dataset] = payload
     return path_references
 

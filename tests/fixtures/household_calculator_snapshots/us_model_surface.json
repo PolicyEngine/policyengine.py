@@ -1,6 +1,6 @@
 {
   "country_id": "us",
-  "data_package_name": "policyengine-us-data",
+  "data_package_name": "populace-data",
   "has_employment_income": true,
   "has_income_tax": true,
   "has_region_registry": true,

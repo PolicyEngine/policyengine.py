@@ -6,6 +6,10 @@ from policyengine.countries.us.regions import (
 )
 from policyengine.provenance.manifest import get_release_manifest
 
+# State and district datasets are inherited artifacts pinned to the
+# policyengine-us-data repo at this revision.
+US_INHERITED_SUBNATIONAL_REVISION = "1.115.5"
+
 
 def _current_us_data_revision() -> str:
     revision = get_release_manifest("us").data_package.release_manifest_revision
@@ -111,8 +115,8 @@ class TestUSRegionRegistry:
         assert national.label == "United States"
         assert national.region_type == "national"
         assert (
-            national.dataset_path == "hf://policyengine/policyengine-us-data/"
-            f"enhanced_cps_2024.h5@{_current_us_data_revision()}"
+            national.dataset_path == "hf://policyengine/populace-us/"
+            f"populace_us_2024.h5@{_current_us_data_revision()}"
         )
 
     def test__given_us_registry__then_has_51_states(self):
@@ -141,7 +145,7 @@ class TestUSRegionRegistry:
         assert ca.parent_code == "us"
         assert (
             ca.dataset_path == "hf://policyengine/policyengine-us-data/"
-            f"states/CA.h5@{_current_us_data_revision()}"
+            f"states/CA.h5@{US_INHERITED_SUBNATIONAL_REVISION}"
         )
         assert ca.state_code == "CA"
         assert ca.state_name == "California"
@@ -174,7 +178,7 @@ class TestUSRegionRegistry:
         assert ca01.parent_code == "state/ca"
         assert (
             ca01.dataset_path == "hf://policyengine/policyengine-us-data/"
-            f"districts/CA-01.h5@{_current_us_data_revision()}"
+            f"districts/CA-01.h5@{US_INHERITED_SUBNATIONAL_REVISION}"
         )
         assert ca01.state_code == "CA"
         assert not ca01.requires_filter

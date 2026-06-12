@@ -1,0 +1,46 @@
+{
+  "bundle_digest": "sha256:ef6727a962e02713e015f4e690aa1bccd9c643e6df6982ba5a40db2e99ea25a5",
+  "bundle_version": "4.16.0",
+  "countries": {
+    "us": "countries/us.json"
+  },
+  "created_at": "2026-06-11T18:21:06Z",
+  "metadata": {
+    "generated_by": "scripts/generate_bundle.py",
+    "testing_only": false
+  },
+  "packages": {
+    "policyengine": {
+      "name": "policyengine",
+      "resolution_status": "pinned",
+      "role": "bundle_carrier",
+      "version": "4.16.0"
+    },
+    "policyengine-core": {
+      "name": "policyengine-core",
+      "resolution_status": "pinned",
+      "sdist_url": "https://files.pythonhosted.org/packages/15/28/cbc23d0c61d431cbfdbaea3f7a71b2230187ab2e57f1430a551598b39515/policyengine_core-3.27.1.tar.gz",
+      "sha256": "dac7928b502baa56fd22956f089689faa4d7e04a21aab7f1f29b34961d684ef8",
+      "source": "pypi",
+      "version": "3.27.1",
+      "wheel_url": "https://files.pythonhosted.org/packages/30/81/098994e62401e9ce0d799e3f01329ba4a8792599d17ae0ef67fff1ddd3ff/policyengine_core-3.27.1-py3-none-any.whl"
+    },
+    "policyengine-us": {
+      "name": "policyengine-us",
+      "resolution_status": "pinned",
+      "sdist_url": "https://files.pythonhosted.org/packages/27/6d/82742b92b9cecdd8fc61ab05347812eb2dcf097d5929c9ec8b7806afa1c4/policyengine_us-1.723.0.tar.gz",
+      "sha256": "d4104858e36ef20fb33a53c7e09e2174a46d1483d1ebe557e2151c95864c7fab",
+      "source": "pypi",
+      "version": "1.723.0",
+      "wheel_url": "https://files.pythonhosted.org/packages/fb/9e/8611bf46cf488981f0450bbfda8df8c9fc3d21e7bb5fc4398da9890b3d3c/policyengine_us-1.723.0-py3-none-any.whl"
+    }
+  },
+  "policyengine": {
+    "name": "policyengine",
+    "resolution_status": "pinned",
+    "role": "bundle_carrier",
+    "version": "4.16.0"
+  },
+  "schema_version": 2,
+  "validation_report": "validation-report.json"
+}

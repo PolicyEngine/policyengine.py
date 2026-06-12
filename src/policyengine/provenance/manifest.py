@@ -60,6 +60,10 @@ class ArtifactPathReference(BaseModel):
     revision: Optional[str] = None
     sha256: Optional[str] = None
     metadata_sha256: Optional[str] = None
+    # Set when the artifact lives outside the data package's repo (inherited
+    # datasets keep their original repo + revision pins).
+    repo_id: Optional[str] = None
+    repo_type: Optional[str] = None
 
 
 class ArtifactPathTemplate(BaseModel):
@@ -193,8 +197,11 @@ def _artifact_revision(data_package: "DataPackageVersion") -> str:
 def https_release_manifest_uri(data_package: "DataPackageVersion") -> str:
     """Return a dereferenceable HTTPS URI for a data release manifest."""
     revision = _artifact_revision(data_package)
+    # Dataset-type repos resolve under /datasets/; model repos at the root.
+    repo_type = getattr(data_package, "repo_type", None) or "model"
+    prefix = "datasets/" if repo_type == "dataset" else ""
     return (
-        f"https://huggingface.co/{data_package.repo_id}/resolve/"
+        f"https://huggingface.co/{prefix}{data_package.repo_id}/resolve/"
         f"{revision}/{data_package.release_manifest_path}"
     )
 
@@ -427,7 +434,7 @@ def resolve_dataset_reference(country_id: str, dataset: str) -> str:
     path_reference = manifest.datasets.get(dataset)
     if path_reference is not None:
         return build_hf_uri(
-            repo_id=manifest.data_package.repo_id,
+            repo_id=path_reference.repo_id or manifest.data_package.repo_id,
             path_in_repo=path_reference.path,
             revision=path_reference.revision
             or _artifact_revision(manifest.data_package),
@@ -564,6 +571,19 @@ def resolve_region_dataset_path(
     resolved_path = template.resolve(**kwargs)
     if "://" in resolved_path:
         return resolved_path
+
+    # Region datasets may be inherited artifacts pinned to a different
+    # repo + revision than the data package; prefer the artifact pin.
+    reference = next(
+        (ref for ref in manifest.datasets.values() if ref.path == resolved_path),
+        None,
+    )
+    if reference is not None:
+        return build_hf_uri(
+            repo_id=reference.repo_id or manifest.data_package.repo_id,
+            path_in_repo=reference.path,
+            revision=reference.revision or _artifact_revision(manifest.data_package),
+        )
 
     return build_hf_uri(
         repo_id=manifest.data_package.repo_id,
