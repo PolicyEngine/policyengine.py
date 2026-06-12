@@ -1,1 +1,0 @@
-Certify country data releases directly from their Hugging Face release manifests (`scripts/certify_data_release.py`), replacing the policyengine-bundles import flow. The vendored US manifest is regenerated through the new path (byte-identical apart from the certification source strings), and the vendored bundle archive copies are no longer shipped.
