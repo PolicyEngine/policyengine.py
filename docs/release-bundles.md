@@ -407,11 +407,16 @@ Things that should usually not affect the fingerprint:
 `policyengine.py` may certify a staged data artifact for a model version only if one of the following is true:
 
 1. the model version exactly matches the `built_with_model_package.version`
-2. the model version has the same `data_build_fingerprint` as the build-time model version
+   (`compatibility_basis: built_with_model_package`)
+2. the data publisher's `compatible_model_packages` covers the model version
+   (`compatibility_basis: compatible_model_packages` — the publisher's claim,
+   recorded with a warning and made good by the test suite passing on the
+   pinned pair)
 
-If neither is true, the bundle release must fail and a new data build is required.
-
-This should be a hard failure, not a warning.
+If neither is true, certification fails hard and a new data build or a
+published compatibility claim is required. A `data_build_fingerprint`
+basis (same fingerprint as the build-time model) is a planned third
+basis; it requires fingerprint metadata from the installed model package.
 
 ## Artifact states
 

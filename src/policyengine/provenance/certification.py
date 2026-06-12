@@ -167,7 +167,9 @@ def validate_release_manifest(
 
     built_with = None
     if manifest.build is not None and manifest.build.built_with_model_package:
-        built_with = manifest.build.built_with_model_package.version
+        build_pkg = manifest.build.built_with_model_package
+        if build_pkg.name == model_package:
+            built_with = build_pkg.version
 
     claim_specifiers = [
         package.specifier

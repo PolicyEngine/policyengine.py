@@ -75,7 +75,7 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine.py bundle manifest for us",
             "trov:mimeType": "application/json",
-            "trov:sha256": "86ba559a62f6d6300e434e82fd6b16b998eeec263b34328c09067837d114d82c"
+            "trov:sha256": "b00e2fb6ee770a27034a9520ba447b32242ed04339f921773fd309443ac51622"
           },
           {
             "@id": "composition/1/artifact/data_release_manifest",
@@ -102,7 +102,7 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "a502c778a27d2ac70fea19f79c747eed1ffb196640c47680e6e7117794dfdf11"
+          "trov:sha256": "f4049fa6b1e40a67d48281568905bcac5e3ee65480092dd277b31af8f7513f17"
         }
       },
       "trov:hasPerformance": {
@@ -111,7 +111,7 @@
         "pe:builtWithModelVersion": "1.723.0",
         "pe:certifiedBy": "policyengine.py certification",
         "pe:certifiedForModelVersion": "1.723.0",
-        "pe:compatibilityBasis": "data_release_manifest",
+        "pe:compatibilityBasis": "built_with_model_package",
         "pe:dataBuildId": "populace-us-2024-5da5a95-20260611",
         "pe:emittedIn": "local",
         "rdfs:comment": "Certification of build populace-us-2024-5da5a95-20260611 for policyengine-us 1.723.0.",
