@@ -1,6 +1,57 @@
 # PolicyEngine as a TRACE case study
 
-_Working draft, April 2026 — prepared after a 2026-04-21 meeting with Lars Vilhuber (AEA Data Editor), Tara Watson (Brookings), John Sabelhaus, Tim Clark, and Casper (TRACE project)._
+_Working draft, April 2026 — prepared after a 2026-04-21 meeting with Lars Vilhuber (AEA Data Editor), Tara Watson (Brookings), John Sabelhaus, Tim Clark, and Casper (TRACE project). Status update appended June 2026._
+
+## Status update (June 2026)
+
+The implementation has moved past several "not yet live" markers in the
+April draft below. As of June 2026:
+
+- **Certified bundle TROs ship in every `policyengine` release.**
+  `data/release_manifests/{us,uk}.trace.tro.jsonld` bind the bundle
+  manifest, the certified dataset sha256, the country model wheel, and
+  the data release manifest. Certification now reads country data
+  release manifests directly from their Hugging Face repos
+  ([#401](https://github.com/PolicyEngine/policyengine.py/pull/401)),
+  with no intermediate bundles package.
+- **The data layer is populace, and its builds emit TROs.** populace
+  replaced the enhanced-CPS pipeline as the US data layer (the
+  June 2026 build derives every layer from primary sources — CPS ASEC,
+  IRS PUF, SCF, SIPP, CPS-ORG, MEPS, ACS). `populace.build.trace`
+  ([populace#16](https://github.com/PolicyEngine/populace/pull/16))
+  emits a build TRO binding output artifacts, restricted inputs (hash
+  in the composition, access URL flagged `pop:accessRestricted` at the
+  location), and content-hashed gate/config/stage payloads. The TRO
+  for build `populace-us-2024-9f1260b-20260611` is published alongside
+  the release on the Hub.
+- **Run records are live as a `policyengine.py` primitive.**
+  `Simulation.write_run_record(directory)`
+  ([#403](https://github.com/PolicyEngine/policyengine.py/pull/403))
+  writes the self-contained, offline-verifiable record this document
+  designs toward — reform, input, results, bundle TRO, and a run TRO
+  whose composition fingerprint is the citable id. Reforms carrying
+  `simulation_modifier` callables are refused rather than
+  under-certified. The webapp/API surfaces remain the open
+  integration work.
+- **Verification is a command, not a procedure.**
+  `policyengine trace-tro-verify <path>` fetches every artifact a TRO
+  claims, rehashes it, and recomputes the composition fingerprint;
+  relative locations resolve inside a record directory so records
+  verify offline, and `--skip` reports knowingly-unfetchable artifacts
+  honestly.
+- **Zenodo preservation mirroring is implemented.**
+  `policyengine zenodo-mirror <country>`
+  ([#405](https://github.com/PolicyEngine/policyengine.py/pull/405))
+  deposits each release's certification record (bundle manifest,
+  bundle TRO, data release manifest) with a hard licence gate: dataset
+  bytes are never deposited from private source repos. This addresses
+  the preservation-grade-archiving gap flagged below; the first
+  published deposits await a Zenodo organization token.
+
+Still open, unchanged from the April analysis: webapp/API emission and
+the "Cite this result" surface, the signing/key-trust model, the
+per-household-frame default, and durable addressing commitments for
+run-record storage.
 
 ## What TRACE is for, in the PolicyEngine case
 
