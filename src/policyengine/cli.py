@@ -4,6 +4,7 @@ Subcommands:
 
 - ``trace-tro <country>`` emit a TRACE TRO for a certified bundle
 - ``trace-tro-validate <path>`` validate a TRO against the shipped schema
+- ``trace-tro-verify <path>`` fetch and rehash every artifact a TRO claims
 - ``release-manifest <country>`` print the bundled country manifest
 
 See :mod:`policyengine.provenance.trace` and ``docs/release-bundles.md``.
@@ -54,6 +55,37 @@ def _parser() -> argparse.ArgumentParser:
         help="Validate a TRO file against the shipped JSON Schema.",
     )
     validate.add_argument("path", type=Path, help="Path to a .trace.tro.jsonld file.")
+
+    verify = subparsers.add_parser(
+        "trace-tro-verify",
+        help=(
+            "Fetch every artifact the TRO claims, rehash it, and check the "
+            "composition fingerprint. Relative locations resolve against the "
+            "TRO file's directory, so a self-contained run record verifies "
+            "offline."
+        ),
+    )
+    verify.add_argument("path", type=Path, help="Path to a .trace.tro.jsonld file.")
+    verify.add_argument(
+        "--base-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Directory for resolving relative artifact locations. Defaults "
+            "to the TRO file's directory."
+        ),
+    )
+    verify.add_argument(
+        "--skip",
+        action="append",
+        default=[],
+        metavar="ARTIFACT_ID",
+        help=(
+            "Short artifact id to skip (e.g. a restricted-access dataset). "
+            "May be repeated. Skipped artifacts are listed but do not fail "
+            "verification."
+        ),
+    )
 
     bundle = subparsers.add_parser(
         "release-manifest",
@@ -113,6 +145,26 @@ def _validate_tro(path: Path) -> int:
     return 0
 
 
+def _verify_tro(path: Path, base_dir: Optional[Path], skip: Sequence[str]) -> int:
+    from policyengine.provenance.verify import verify_trace_tro
+
+    tro = json.loads(path.read_text())
+    report = verify_trace_tro(tro, base_dir=base_dir or path.parent, skip=skip)
+    for check in report.artifacts:
+        if check.status == "ok":
+            print(f"ok: {check.artifact_id} ({check.location})")
+        elif check.status == "skipped":
+            print(f"skipped: {check.artifact_id}")
+        else:
+            print(f"{check.status}: {check.artifact_id} — {check.detail}")
+    print(f"fingerprint: {report.fingerprint_status}")
+    if report.ok:
+        print(f"ok: {path}")
+        return 0
+    print(f"error: {path} failed verification", file=sys.stderr)
+    return 1
+
+
 def _emit_release_manifest(country_id: str) -> int:
     manifest = get_release_manifest(country_id)
     print(json.dumps(manifest.model_dump(mode="json"), indent=2, sort_keys=True))
@@ -125,6 +177,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _emit_bundle_tro(args.country, args.out)
     if args.command == "trace-tro-validate":
         return _validate_tro(args.path)
+    if args.command == "trace-tro-verify":
+        return _verify_tro(args.path, args.base_dir, args.skip)
     if args.command == "release-manifest":
         return _emit_release_manifest(args.country)
     return 1

@@ -162,6 +162,17 @@ class Simulation(BaseModel):
         """Load the simulation's output dataset."""
         self.tax_benefit_model_version.load(self)
 
+    def write_run_record(self, directory, **kwargs):
+        """Write a citable, offline-verifiable run record directory.
+
+        See :func:`policyengine.core.run_record.write_simulation_run_record`
+        for the file layout and options. The returned record's
+        ``composition_fingerprint`` is the citable identifier for this run.
+        """
+        from .run_record import write_simulation_run_record
+
+        return write_simulation_run_record(self, directory, **kwargs)
+
     @property
     def release_bundle(self) -> dict[str, Optional[str]]:
         bundle = (
