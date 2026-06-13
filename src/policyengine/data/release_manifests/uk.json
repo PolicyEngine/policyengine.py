@@ -1,53 +1,57 @@
 {
-  "schema_version": 1,
   "bundle_id": "uk-4.16.2",
-  "country_id": "uk",
-  "policyengine_version": "4.16.2",
-  "model_package": {
-    "name": "policyengine-uk",
-    "version": "2.88.20",
-    "sha256": "8c3dacb868f3fb18296b8ef2475edaf543f57b8056d24a58bca59b108651f272",
-    "wheel_url": "https://files.pythonhosted.org/packages/32/f0/c0e7dbcc049501dc968da0a67de4976f305228328f96fe0ad08c65301c4f/policyengine_uk-2.88.20-py3-none-any.whl"
-  },
-  "data_package": {
-    "name": "policyengine-uk-data",
-    "version": "1.55.10",
-    "repo_id": "policyengine/policyengine-uk-data-private",
-    "release_manifest_path": "release_manifest.json",
-    "release_manifest_revision": "655dd07e4bb9c777b00dac044949611f1feb824f"
+  "certification": {
+    "built_with_model_version": "2.86.0",
+    "certified_by": "policyengine.py certification",
+    "certified_for_model_version": "2.88.20",
+    "compatibility_basis": "compatible_model_packages",
+    "data_build_id": "populace-uk-2023-72aeefc-20260611"
   },
   "certified_data_artifact": {
+    "build_id": "populace-uk-2023-72aeefc-20260611",
     "data_package": {
-      "name": "policyengine-uk-data",
-      "version": "1.55.10"
+      "name": "populace-data",
+      "version": "0.1.0"
     },
-    "build_id": "policyengine-uk-data-1.55.10",
-    "dataset": "enhanced_frs_2023_24",
-    "uri": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f",
-    "sha256": "584ae33d80ca0431254610a3f8254d132da73477d31966d6446282861ecae50d"
+    "dataset": "populace_uk_2023",
+    "sha256": "f489b7ef18b4628d2423338a20da1264a8d197c95a0c95265fc03ac3b6bc5b39",
+    "uri": "hf://policyengine/populace-uk-private/populace_uk_2023.h5@populace-uk-2023-72aeefc-20260611"
   },
-  "certification": {
-    "compatibility_basis": "exact_build_model_version",
-    "data_build_id": "policyengine-uk-data-1.55.10",
-    "built_with_model_version": "2.88.20",
-    "certified_for_model_version": "2.88.20",
-    "data_build_fingerprint": "sha256:77f149725a36055fd89961855230401852b0712d301c6e26d6d16565c6b23809",
-    "certified_by": "policyengine.py bundled manifest"
+  "country_id": "uk",
+  "data_package": {
+    "name": "populace-data",
+    "release_manifest_path": "releases/populace-uk-2023-72aeefc-20260611/release_manifest.json",
+    "release_manifest_revision": "2bab9dfc38e8b28b52e3461510f6862b3557db5f",
+    "repo_id": "policyengine/populace-uk-private",
+    "repo_type": "dataset",
+    "version": "0.1.0"
   },
-  "default_dataset": "enhanced_frs_2023_24",
   "datasets": {
     "frs_2023_24": {
       "path": "frs_2023_24.h5",
+      "repo_id": "policyengine/policyengine-uk-data-private",
+      "revision": "655dd07e4bb9c777b00dac044949611f1feb824f",
       "sha256": "df26d4d7af9d164aa2d064181b39290292d2f62bb26fee6126fc095fc06da292"
     },
-    "enhanced_frs_2023_24": {
-      "path": "enhanced_frs_2023_24.h5",
-      "sha256": "584ae33d80ca0431254610a3f8254d132da73477d31966d6446282861ecae50d"
+    "populace_uk_2023": {
+      "path": "populace_uk_2023.h5",
+      "repo_id": "policyengine/populace-uk-private",
+      "revision": "populace-uk-2023-72aeefc-20260611",
+      "sha256": "f489b7ef18b4628d2423338a20da1264a8d197c95a0c95265fc03ac3b6bc5b39"
     }
   },
+  "default_dataset": "populace_uk_2023",
+  "model_package": {
+    "name": "policyengine-uk",
+    "sha256": "8c3dacb868f3fb18296b8ef2475edaf543f57b8056d24a58bca59b108651f272",
+    "version": "2.88.20",
+    "wheel_url": "https://files.pythonhosted.org/packages/32/f0/c0e7dbcc049501dc968da0a67de4976f305228328f96fe0ad08c65301c4f/policyengine_uk-2.88.20-py3-none-any.whl"
+  },
+  "policyengine_version": "4.16.2",
   "region_datasets": {
     "national": {
-      "path_template": "enhanced_frs_2023_24.h5"
+      "path_template": "populace_uk_2023.h5"
     }
-  }
+  },
+  "schema_version": 1
 }

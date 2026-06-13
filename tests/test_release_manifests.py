@@ -122,24 +122,23 @@ class TestReleaseManifests:
         assert manifest.policyengine_version == POLICYENGINE_VERSION
         assert manifest.model_package.name == "policyengine-uk"
         assert manifest.model_package.version == "2.88.20"
-        assert manifest.data_package.name == "policyengine-uk-data"
-        assert manifest.data_package.version == "1.55.10"
-        assert (
-            manifest.data_package.repo_id == "policyengine/policyengine-uk-data-private"
-        )
+        assert manifest.data_package.name == "populace-data"
+        assert manifest.data_package.version == "0.1.0"
+        assert manifest.data_package.repo_id == "policyengine/populace-uk-private"
         assert manifest.certified_data_artifact is not None
         assert (
-            manifest.certified_data_artifact.build_id == "policyengine-uk-data-1.55.10"
+            manifest.certified_data_artifact.build_id
+            == "populace-uk-2023-72aeefc-20260611"
         )
-        assert manifest.certified_data_artifact.dataset == "enhanced_frs_2023_24"
+        assert manifest.certified_data_artifact.dataset == "populace_uk_2023"
         assert manifest.certification is not None
-        assert manifest.certification.data_build_id == "policyengine-uk-data-1.55.10"
-        assert manifest.certification.built_with_model_version == "2.88.20"
-        assert manifest.certification.certified_for_model_version == "2.88.20"
         assert (
-            manifest.certification.data_build_fingerprint
-            == "sha256:77f149725a36055fd89961855230401852b0712d301c6e26d6d16565c6b23809"
+            manifest.certification.data_build_id == "populace-uk-2023-72aeefc-20260611"
         )
+        assert manifest.certification.built_with_model_version == "2.86.0"
+        assert manifest.certification.certified_for_model_version == "2.88.20"
+        assert manifest.certification.compatibility_basis == "compatible_model_packages"
+        assert manifest.certification.data_build_fingerprint is None
 
     def test__given_us_dataset_name__then_resolves_to_versioned_hf_url(self):
         resolved = resolve_dataset_reference("us", "populace_us_2024")
@@ -166,11 +165,11 @@ class TestReleaseManifests:
         )
 
     def test__given_uk_dataset_name__then_resolves_to_versioned_hf_url(self):
-        resolved = resolve_dataset_reference("uk", "enhanced_frs_2023_24")
+        resolved = resolve_dataset_reference("uk", "populace_uk_2023")
 
         assert (
             resolved
-            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f"
+            == "hf://policyengine/populace-uk-private/populace_uk_2023.h5@populace-uk-2023-72aeefc-20260611"
         )
 
     def test__given_explicit_url__then_resolution_is_noop(self):
@@ -649,12 +648,12 @@ class TestReleaseManifests:
         bundle = model_version.release_bundle
 
         assert bundle["bundle_id"] == f"uk-{POLICYENGINE_VERSION}"
-        assert bundle["default_dataset"] == "enhanced_frs_2023_24"
+        assert bundle["default_dataset"] == "populace_uk_2023"
         assert bundle["default_dataset_uri"] == manifest.default_dataset_uri
-        assert bundle["certified_data_build_id"] == "policyengine-uk-data-1.55.10"
-        assert bundle["data_build_model_version"] == "2.88.20"
-        assert bundle["compatibility_basis"] == "exact_build_model_version"
-        assert bundle["certified_by"] == "policyengine.py bundled manifest"
+        assert bundle["certified_data_build_id"] == "populace-uk-2023-72aeefc-20260611"
+        assert bundle["data_build_model_version"] == "2.86.0"
+        assert bundle["compatibility_basis"] == "compatible_model_packages"
+        assert bundle["certified_by"] == "policyengine.py certification"
 
     def test__given_runtime_certification__then_release_bundle_prefers_runtime_value(
         self,
@@ -765,22 +764,22 @@ class TestReleaseManifests:
             ),
             patch(
                 "policyengine.tax_benefit_models.uk.model.materialize_dataset_source",
-                return_value="/tmp/enhanced_frs_2023_24.h5",
+                return_value="/tmp/populace_uk_2023.h5",
             ),
         ):
-            microsim = managed_uk_microsimulation(dataset="enhanced_frs_2023_24")
+            microsim = managed_uk_microsimulation(dataset="populace_uk_2023")
 
         dataset = mock_microsimulation.call_args.kwargs["dataset"]
-        assert dataset == "/tmp/enhanced_frs_2023_24.h5"
+        assert dataset == "/tmp/populace_uk_2023.h5"
         assert (
             microsim.policyengine_bundle["policyengine_version"] == POLICYENGINE_VERSION
         )
-        assert microsim.policyengine_bundle["runtime_dataset"] == "enhanced_frs_2023_24"
+        assert microsim.policyengine_bundle["runtime_dataset"] == "populace_uk_2023"
         assert microsim.policyengine_bundle["runtime_dataset_uri"] == (
-            "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f"
+            "hf://policyengine/populace-uk-private/populace_uk_2023.h5@populace-uk-2023-72aeefc-20260611"
         )
         dataset_source = microsim.policyengine_bundle["runtime_dataset_source"]
-        assert dataset_source == "/tmp/enhanced_frs_2023_24.h5"
+        assert dataset_source == "/tmp/populace_uk_2023.h5"
 
     def test__given_uk_unmanaged_dataset_uri__then_source_is_not_rewritten(self):
         dataset = "hf://policyengine/policyengine-uk-data-private/frs_2022_23.h5@1.40.4"

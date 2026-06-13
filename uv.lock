@@ -2820,7 +2820,7 @@ wheels = [
 
 [[package]]
 name = "policyengine"
-version = "4.16.1"
+version = "4.16.2"
 source = { editable = "." }
 dependencies = [
     { name = "diskcache" },
@@ -2893,7 +2893,7 @@ requires-dist = [
     { name = "plotly", marker = "extra == 'dev'", specifier = ">=5.0.0" },
     { name = "plotly", marker = "extra == 'plotting'", specifier = ">=5.0.0" },
     { name = "policyengine-core", marker = "extra == 'dev'", specifier = ">=3.27.1" },
-    { name = "policyengine-core", marker = "extra == 'uk'", specifier = ">=3.26.1" },
+    { name = "policyengine-core", marker = "extra == 'uk'", specifier = ">=3.27.1" },
     { name = "policyengine-core", marker = "extra == 'us'", specifier = ">=3.27.1" },
     { name = "policyengine-uk", marker = "extra == 'dev'", specifier = "==2.88.20" },
     { name = "policyengine-uk", marker = "extra == 'uk'", specifier = "==2.88.20" },
