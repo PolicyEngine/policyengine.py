@@ -21,7 +21,7 @@
   "data_package": {
     "name": "populace-data",
     "release_manifest_path": "releases/populace-uk-2023-72aeefc-20260611/release_manifest.json",
-    "release_manifest_revision": "2bab9dfc38e8b28b52e3461510f6862b3557db5f",
+    "release_manifest_revision": "072b4067f3477d51b5023ae5250c9a1ab3b60164",
     "repo_id": "policyengine/populace-uk-private",
     "repo_type": "dataset",
     "version": "0.1.0"

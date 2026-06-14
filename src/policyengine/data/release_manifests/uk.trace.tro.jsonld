@@ -45,7 +45,7 @@
               "trov:hasArtifact": {
                 "@id": "composition/1/artifact/data_release_manifest"
               },
-              "trov:hasLocation": "https://huggingface.co/datasets/policyengine/populace-uk-private/resolve/f9f713e3e9ff3d153097a1f8cf515dd506e3a1da/releases/populace-uk-2023-72aeefc-20260611/release_manifest.json"
+              "trov:hasLocation": "https://huggingface.co/datasets/policyengine/populace-uk-private/resolve/072b4067f3477d51b5023ae5250c9a1ab3b60164/releases/populace-uk-2023-72aeefc-20260611/release_manifest.json"
             },
             {
               "@id": "arrangement/1/location/dataset",
@@ -75,14 +75,14 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine.py bundle manifest for uk",
             "trov:mimeType": "application/json",
-            "trov:sha256": "770c4f0a4064f3383e2dc23c4e21bacd04ff54c4fc7181070fef6a7b1fecc3bc"
+            "trov:sha256": "b722a3d3faa604f0b01e64758cfd2836b1753860aef3abb942f5bad2a72a8763"
           },
           {
             "@id": "composition/1/artifact/data_release_manifest",
             "@type": "trov:ResearchArtifact",
             "schema:name": "populace-data release manifest 0.1.0",
             "trov:mimeType": "application/json",
-            "trov:sha256": "2da838b46af75177a4b0b5e13a1827f5001773781acb3a32d7939adeca3a3e83"
+            "trov:sha256": "ac1e5126109164c90c9a70e29531a53583e7a9047ef6678f31b459c93f48428b"
           },
           {
             "@id": "composition/1/artifact/dataset",
@@ -102,7 +102,7 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "940b77cd761050bb7c84f87515d7a35ed8d8498b37e384116eaae931d71c84a8"
+          "trov:sha256": "a0549aa701b7f6897e51b7a4e4397e75493995bcbc8c17a8420a5063ed0f0ef2"
         }
       },
       "trov:hasPerformance": {
@@ -114,6 +114,9 @@
         "pe:compatibilityBasis": "compatible_model_packages",
         "pe:dataBuildId": "populace-uk-2023-72aeefc-20260611",
         "pe:emittedIn": "local",
+        "pe:preservationDoi": [
+          "10.5281/zenodo.20678518"
+        ],
         "rdfs:comment": "Certification of build populace-uk-2023-72aeefc-20260611 for policyengine-uk 2.88.20.",
         "trov:accessedArrangement": {
           "@id": "arrangement/1"

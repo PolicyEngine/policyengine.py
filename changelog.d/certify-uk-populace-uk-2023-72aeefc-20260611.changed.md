@@ -1,1 +1,1 @@
-Certify the UK data release `populace-uk-2023-72aeefc-20260611` (populace_uk_2023, policyengine-uk 2.88.20) directly from its data release manifest.
+Certify the UK data release `populace-uk-2023-72aeefc-20260611` (populace_uk_2023, policyengine-uk 2.88.20) directly from its data release manifest, and surface its Zenodo preservation DOI (10.5281/zenodo.20678518) on the bundle TRACE TRO.

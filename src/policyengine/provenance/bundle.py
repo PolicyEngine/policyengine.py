@@ -733,6 +733,14 @@ def regenerate_trace_tro(country: str, manifest_dir: Path = MANIFEST_DIR) -> Pat
         serialize_trace_tro,
     )
 
+    # Read the current on-disk country manifest and the live data-release
+    # manifest, not values a caller cached earlier in this process.
+    # Certification rewrites the country manifest immediately before
+    # calling this, so a stale cache would emit a TRO that lags the pin
+    # it just wrote (e.g. missing a freshly recorded preservation DOI).
+    get_release_manifest.cache_clear()
+    get_data_release_manifest.cache_clear()
+
     release = get_release_manifest(country)
     try:
         data_release = get_data_release_manifest(country)
