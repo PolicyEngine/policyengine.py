@@ -1,3 +1,10 @@
+## [4.17.1] - 2026-06-14
+
+### Changed
+
+- Refresh the bundled US model pin to policyengine-us 1.726.0 and teach the release-bundle refresh helper to fetch data-release manifests from Hugging Face dataset repos.
+
+
 ## [4.17.0] - 2026-06-14
 
 ### Added

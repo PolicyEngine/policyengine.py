@@ -1,5 +1,5 @@
 {
-  "bundle_id": "us-4.17.0",
+  "bundle_id": "us-4.17.1",
   "certification": {
     "built_with_model_version": "1.723.0",
     "certified_by": "populace-data release manifest",
@@ -3461,7 +3461,7 @@
     "version": "1.726.0",
     "wheel_url": "https://files.pythonhosted.org/packages/27/dd/a6a62280c6289e6da669410e97c90da99e6585c39d4fa6fe81b9910a1e3c/policyengine_us-1.726.0-py3-none-any.whl"
   },
-  "policyengine_version": "4.17.0",
+  "policyengine_version": "4.17.1",
   "region_datasets": {
     "congressional_district": {
       "path_template": "districts/{district_code}.h5"
