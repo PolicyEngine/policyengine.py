@@ -41,15 +41,19 @@ POLICYENGINE_VERSION = re.search(
     PYPROJECT.read_text(),
     re.MULTILINE,
 ).group(1)
-US_MODEL_VERSION = "1.723.0"
+US_MODEL_VERSION = "1.726.0"
 US_BUILT_WITH_MODEL_VERSION = "1.723.0"
 US_DATA_RELEASE_VERSION = "0.1.0"
 US_DATA_RELEASE_PATH = (
     "releases/populace-us-2024-5da5a95-20260611/release_manifest.json"
 )
-US_DATA_RELEASE_REVISION = "populace-us-2024-5da5a95-20260611"
-US_CERTIFICATION_SOURCE = "policyengine.py certification"
+US_DATA_RELEASE_REVISION = "afa2748b79a139404a1c477e3a7a9ca8729c22ab"
+US_DATA_ARTIFACT_REVISION = "populace-us-2024-5da5a95-20260611"
+US_CERTIFICATION_SOURCE = "populace-data release manifest"
 US_MANAGED_DATASET_URI = (
+    f"hf://policyengine/populace-us/populace_us_2024.h5@{US_DATA_ARTIFACT_REVISION}"
+)
+US_RELEASE_MANIFEST_DATASET_URI = (
     f"hf://policyengine/populace-us/populace_us_2024.h5@{US_DATA_RELEASE_REVISION}"
 )
 
@@ -106,7 +110,10 @@ class TestReleaseManifests:
         assert (
             manifest.certification.data_build_id == "populace-us-2024-5da5a95-20260611"
         )
-        assert manifest.certification.compatibility_basis == "built_with_model_package"
+        assert (
+            manifest.certification.compatibility_basis
+            == "legacy_compatible_model_package"
+        )
         assert (
             manifest.certification.built_with_model_version
             == US_BUILT_WITH_MODEL_VERSION
@@ -344,7 +351,10 @@ class TestReleaseManifests:
         ):
             manifest = get_data_release_manifest("us")
 
-        assert manifest.artifacts["populace_us_2024"].uri == US_MANAGED_DATASET_URI
+        assert (
+            manifest.artifacts["populace_us_2024"].uri
+            == US_RELEASE_MANIFEST_DATASET_URI
+        )
         assert (
             manifest.source_sha256
             == hashlib.sha256(json.dumps(payload).encode("utf-8")).hexdigest()

@@ -2,9 +2,9 @@
   "bundle_id": "us-4.17.0",
   "certification": {
     "built_with_model_version": "1.723.0",
-    "certified_by": "policyengine.py certification",
-    "certified_for_model_version": "1.723.0",
-    "compatibility_basis": "built_with_model_package",
+    "certified_by": "populace-data release manifest",
+    "certified_for_model_version": "1.726.0",
+    "compatibility_basis": "legacy_compatible_model_package",
     "data_build_id": "populace-us-2024-5da5a95-20260611"
   },
   "certified_data_artifact": {
@@ -21,7 +21,7 @@
   "data_package": {
     "name": "populace-data",
     "release_manifest_path": "releases/populace-us-2024-5da5a95-20260611/release_manifest.json",
-    "release_manifest_revision": "populace-us-2024-5da5a95-20260611",
+    "release_manifest_revision": "afa2748b79a139404a1c477e3a7a9ca8729c22ab",
     "repo_id": "policyengine/populace-us",
     "repo_type": "dataset",
     "version": "0.1.0"
@@ -3457,9 +3457,9 @@
   "default_dataset": "populace_us_2024",
   "model_package": {
     "name": "policyengine-us",
-    "sha256": "d4104858e36ef20fb33a53c7e09e2174a46d1483d1ebe557e2151c95864c7fab",
-    "version": "1.723.0",
-    "wheel_url": "https://files.pythonhosted.org/packages/fb/9e/8611bf46cf488981f0450bbfda8df8c9fc3d21e7bb5fc4398da9890b3d3c/policyengine_us-1.723.0-py3-none-any.whl"
+    "sha256": "1acc74d1f5431f7872c5500ad93604455aa7b98bcc87399218bc459b393386be",
+    "version": "1.726.0",
+    "wheel_url": "https://files.pythonhosted.org/packages/27/dd/a6a62280c6289e6da669410e97c90da99e6585c39d4fa6fe81b9910a1e3c/policyengine_us-1.726.0-py3-none-any.whl"
   },
   "policyengine_version": "4.17.0",
   "region_datasets": {

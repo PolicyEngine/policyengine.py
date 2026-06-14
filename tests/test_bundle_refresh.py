@@ -264,6 +264,58 @@ def test__bump_model_only_rewrites_wheel_pins_and_pyproject(sandbox) -> None:
     )
 
 
+def test__bump_model_only_fetches_dataset_repo_release_manifest(sandbox) -> None:
+    manifest_path = sandbox["manifest_dir"] / "us.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["data_package"]["repo_id"] = "policyengine/populace-us"
+    manifest["data_package"]["repo_type"] = "dataset"
+    manifest["data_package"]["release_manifest_path"] = (
+        "releases/1.70.0/release_manifest.json"
+    )
+    manifest["certified_data_artifact"]["uri"] = (
+        "hf://policyengine/populace-us/enhanced_cps_2024.h5@old-dataset-commit"
+    )
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        if "pypi.org" in url:
+            return _pypi_response("policyengine-us", "1.653.3")
+        if (
+            url == "https://huggingface.co/datasets/policyengine/populace-us/resolve/"
+            "old-release-manifest-commit/releases/1.70.0/release_manifest.json"
+        ):
+            return _data_release_manifest_response(
+                data_version="1.70.0",
+                dataset_sha256="d" * 64,
+                compatible_model_packages=[
+                    {"name": "policyengine-us", "specifier": "==1.600.0"},
+                    {"name": "policyengine-us", "specifier": "==1.653.3"},
+                ],
+                extra_artifacts={
+                    "enhanced_cps_2024": {
+                        "kind": "microdata",
+                        "path": "enhanced_cps_2024.h5",
+                        "repo_id": "policyengine/policyengine-us-data",
+                        "revision": "old-dataset-commit",
+                        "sha256": "d" * 64,
+                    }
+                },
+                headers={"x-repo-commit": "old-release-manifest-commit"},
+            )
+        raise AssertionError(f"Unexpected URL fetched: {url}")
+
+    with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
+        result = refresh_release_bundle(
+            country="us",
+            model_version="1.653.3",
+            manifest_dir=sandbox["manifest_dir"],
+            pyproject_path=sandbox["pyproject_path"],
+        )
+
+    assert result.new_model == "1.653.3"
+
+
 def test__bump_model_only_requires_data_release_manifest_compatibility(
     sandbox,
 ) -> None:
