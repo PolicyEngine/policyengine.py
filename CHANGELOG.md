@@ -1,3 +1,14 @@
+## [4.17.0] - 2026-06-14
+
+### Added
+
+- `Simulation.write_run_record(directory)` writes a self-contained, citable run record (reform, input, and results payloads, the certified bundle TRO, and a per-run TRACE TRO binding them by sha256), and `policyengine trace-tro-verify` fetches and rehashes every artifact a TRO claims — offline-capable for run-record directories.
+
+### Changed
+
+- Updated the TRACE case study with a June 2026 status section covering shipped TRO tooling (bundle TROs via #401, populace build TROs, run records #403, trace-tro-verify, Zenodo mirroring #405).
+
+
 ## [4.16.2] - 2026-06-12
 
 ### Changed
