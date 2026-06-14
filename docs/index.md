@@ -45,5 +45,6 @@ result.household.household_net_income
 | Understand US vs UK differences | [Countries](countries.md) |
 | Build publication-ready charts | [Visualisation](visualisation.md) |
 | Pin a reproducible model-plus-data version | [Release bundles](release-bundles.md) |
+| Cite and verify a simulation run | [Run records](run-records.md) |
 | See a full worked script | [Examples](examples.md) |
 | Develop against the source | [Development](dev.md) |
