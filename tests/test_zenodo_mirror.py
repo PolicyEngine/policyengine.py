@@ -51,12 +51,21 @@ class _FakeResponse:
 class _FakeSession:
     """Records every request; serves canned Zenodo + HF API responses."""
 
-    def __init__(self, *, hf_public: bool = True, publish_doi: str = "10.5281/z.1"):
+    def __init__(
+        self,
+        *,
+        hf_public: bool = True,
+        hf_gated: bool = False,
+        hf_status: int = 401,
+        publish_doi: str = "10.5281/z.1",
+    ):
         self.requests: list[tuple[str, str]] = []
         self.uploads: dict[str, bytes] = {}
         self.metadata: dict | None = None
         self.published = False
         self.hf_public = hf_public
+        self.hf_gated = hf_gated
+        self.hf_status = hf_status
         self.publish_doi = publish_doi
 
     def post(self, url, *, json=None, data=None, headers=None, timeout=None):
@@ -98,7 +107,9 @@ class _FakeSession:
     def get(self, url, *, headers=None, timeout=None):
         self.requests.append(("GET", url))
         if "huggingface.co/api/" in url:
-            return _FakeResponse(200 if self.hf_public else 401)
+            if not self.hf_public:
+                return _FakeResponse(self.hf_status)
+            return _FakeResponse(200, {"gated": "auto"} if self.hf_gated else {})
         if url.startswith("https://huggingface.co/datasets/"):
             return _FakeResponse(200)
         return _FakeResponse(404)
@@ -212,6 +223,20 @@ class TestDatasetInclusion:
     def test__given_private_source_repo__then_refuses_even_when_asked(self):
         session = _FakeSession(hf_public=False)
         with pytest.raises(PrivateSourceRepoError, match="private"):
+            _mirror(session, include_dataset=True)
+
+    def test__given_gated_source_repo__then_refuses_even_when_metadata_is_200(self):
+        # HF returns 200 for gated-repo metadata but access-walls the bytes;
+        # a 200 alone must not be treated as public.
+        session = _FakeSession(hf_gated=True)
+        with pytest.raises(PrivateSourceRepoError, match="gated"):
+            _mirror(session, include_dataset=True)
+
+    def test__given_transient_hf_error__then_refuses_as_unverifiable_not_private(self):
+        # A 429/5xx means visibility is unknown; refuse with a retryable
+        # ZenodoDepositError rather than silently treating it as public.
+        session = _FakeSession(hf_public=False, hf_status=429)
+        with pytest.raises(ZenodoDepositError, match="verify"):
             _mirror(session, include_dataset=True)
 
     def test__given_public_source_repo__then_dataset_bytes_deposited(

@@ -181,25 +181,68 @@ def _parse_hf_uri(uri: str) -> Optional[tuple[str, str]]:
 
 
 def _assert_source_repo_public(session: Any, repo_id: str) -> None:
-    """Refuse to proceed unless the Hub repo is readable without auth.
+    """Refuse to proceed unless the Hub repo is openly readable.
 
     Checked against both repo types because the registry hosts datasets
-    in both. This is the licence gate: private repos (UK Data Service
-    microdata) must never be re-deposited, regardless of caller flags.
+    in both. This is the licence gate: private *and gated* repos (UK Data
+    Service microdata) must never have their bytes re-deposited,
+    regardless of caller flags.
+
+    A repo qualifies as openly readable only when the metadata endpoint
+    returns HTTP 200 *and* its ``gated`` flag is falsey. Hugging Face
+    enforces gating at the byte-download layer, so a gated repo's
+    metadata returns 200 while its files are access-walled — treating a
+    200 alone as "public" would let gated bytes through. The ``gated``
+    field is ``false`` for open repos and a truthy string
+    (``"auto"``/``"manual"``) when access is restricted.
+
+    Definitive private/absent signals (401/403/404) refuse. Anything
+    else (429, 5xx, network error) means visibility could not be
+    confirmed: rather than risk depositing restricted data, refuse with
+    a retryable error instead of silently treating it as public.
     """
+    statuses: list[str] = []
     for repo_type in ("datasets", "models"):
-        response = session.get(
-            f"https://huggingface.co/api/{repo_type}/{repo_id}",
-            timeout=_TIMEOUT_SECONDS,
-        )
+        try:
+            response = session.get(
+                f"https://huggingface.co/api/{repo_type}/{repo_id}",
+                timeout=_TIMEOUT_SECONDS,
+            )
+        except Exception as exc:  # network failure: cannot confirm visibility
+            statuses.append(f"{repo_type}:error")
+            last_error = exc
+            continue
+        last_error = None
+        statuses.append(f"{repo_type}:{response.status_code}")
         if response.status_code == 200:
+            try:
+                gated = response.json().get("gated", False)
+            except Exception:
+                gated = False
+            if gated:
+                raise PrivateSourceRepoError(
+                    f"Source repo {repo_id} is gated (gated={gated!r}): its "
+                    "files are access-walled even though metadata is public. "
+                    "Refusing to mirror its dataset bytes; the certification "
+                    "record (manifests and TRO) can still be mirrored without "
+                    "the data."
+                )
             return
-    raise PrivateSourceRepoError(
-        f"Source repo {repo_id} is not publicly readable (private or "
-        "gated). Refusing to mirror its dataset bytes: redistribution "
-        "rights cannot be assumed. The certification record (manifests "
-        "and TRO) can still be mirrored without the data."
-    )
+
+    if any(s.endswith((":401", ":403", ":404")) for s in statuses):
+        raise PrivateSourceRepoError(
+            f"Source repo {repo_id} is not publicly readable (private or "
+            f"not found; saw {statuses}). Refusing to mirror its dataset "
+            "bytes: redistribution rights cannot be assumed. The "
+            "certification record (manifests and TRO) can still be mirrored "
+            "without the data."
+        )
+    raise ZenodoDepositError(
+        f"Could not verify that source repo {repo_id} is openly readable "
+        f"(HF returned {statuses}). Refusing to mirror dataset bytes rather "
+        "than risk depositing restricted data; retry, or omit "
+        "--include-dataset to mirror just the certification record."
+    ) from last_error
 
 
 def _default_dataset_fetcher(session: Any) -> Callable[[str], bytes]:
