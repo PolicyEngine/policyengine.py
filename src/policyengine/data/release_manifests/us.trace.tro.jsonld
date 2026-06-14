@@ -45,7 +45,7 @@
               "trov:hasArtifact": {
                 "@id": "composition/1/artifact/data_release_manifest"
               },
-              "trov:hasLocation": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-5da5a95-20260611/releases/populace-us-2024-5da5a95-20260611/release_manifest.json"
+              "trov:hasLocation": "https://huggingface.co/datasets/policyengine/populace-us/resolve/afa2748b79a139404a1c477e3a7a9ca8729c22ab/releases/populace-us-2024-5da5a95-20260611/release_manifest.json"
             },
             {
               "@id": "arrangement/1/location/dataset",
@@ -61,7 +61,7 @@
               "trov:hasArtifact": {
                 "@id": "composition/1/artifact/model_wheel"
               },
-              "trov:hasLocation": "https://files.pythonhosted.org/packages/fb/9e/8611bf46cf488981f0450bbfda8df8c9fc3d21e7bb5fc4398da9890b3d3c/policyengine_us-1.723.0-py3-none-any.whl"
+              "trov:hasLocation": "https://files.pythonhosted.org/packages/27/dd/a6a62280c6289e6da669410e97c90da99e6585c39d4fa6fe81b9910a1e3c/policyengine_us-1.726.0-py3-none-any.whl"
             }
           ]
         }
@@ -75,14 +75,14 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine.py bundle manifest for us",
             "trov:mimeType": "application/json",
-            "trov:sha256": "3de732f64daf05e2fabb81a4a82a692bd111249417b782b9c3efe0915d799b65"
+            "trov:sha256": "ec431be2dac3d0276756345d506373544c8d1efc2700caadba8142ff1ed2c849"
           },
           {
             "@id": "composition/1/artifact/data_release_manifest",
             "@type": "trov:ResearchArtifact",
             "schema:name": "populace-data release manifest 0.1.0",
             "trov:mimeType": "application/json",
-            "trov:sha256": "c2e51b22d84760923c7750f88f2cc0c0e22620abee54a58c84af93f6cf4a3506"
+            "trov:sha256": "e1870fdef83d0cb5caef38187face74b7335bd6aae56e18d5ab715331e35e744"
           },
           {
             "@id": "composition/1/artifact/dataset",
@@ -94,30 +94,27 @@
           {
             "@id": "composition/1/artifact/model_wheel",
             "@type": "trov:ResearchArtifact",
-            "schema:name": "policyengine-us==1.723.0 wheel",
+            "schema:name": "policyengine-us==1.726.0 wheel",
             "trov:mimeType": "application/zip",
-            "trov:sha256": "d4104858e36ef20fb33a53c7e09e2174a46d1483d1ebe557e2151c95864c7fab"
+            "trov:sha256": "1acc74d1f5431f7872c5500ad93604455aa7b98bcc87399218bc459b393386be"
           }
         ],
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "a395a9fb14a36537f32fb4ae2b6c9325ae24930051d5b223f9c47ef2f3d3ae55"
+          "trov:sha256": "bd16e54a750a9a507538933b4b78febb1f5366ce4c5f32ba47d29daf39e09b91"
         }
       },
       "trov:hasPerformance": {
         "@id": "trp/1",
         "@type": "trov:TransparentResearchPerformance",
         "pe:builtWithModelVersion": "1.723.0",
-        "pe:certifiedBy": "policyengine.py certification",
-        "pe:certifiedForModelVersion": "1.723.0",
-        "pe:ciGitRef": "refs/heads/main",
-        "pe:ciGitSha": "c2c910923620db84dabedc3a36e398ae1c0530bb",
-        "pe:ciRunUrl": "https://github.com/PolicyEngine/policyengine.py/actions/runs/27504864442",
-        "pe:compatibilityBasis": "built_with_model_package",
+        "pe:certifiedBy": "populace-data release manifest",
+        "pe:certifiedForModelVersion": "1.726.0",
+        "pe:compatibilityBasis": "legacy_compatible_model_package",
         "pe:dataBuildId": "populace-us-2024-5da5a95-20260611",
-        "pe:emittedIn": "github-actions",
-        "rdfs:comment": "Certification of build populace-us-2024-5da5a95-20260611 for policyengine-us 1.723.0.",
+        "pe:emittedIn": "local",
+        "rdfs:comment": "Certification of build populace-us-2024-5da5a95-20260611 for policyengine-us 1.726.0.",
         "trov:accessedArrangement": {
           "@id": "arrangement/1"
         },

@@ -188,6 +188,7 @@ def _fetch_data_release_manifest(
     release_manifest_path: str,
     revision: str,
     *,
+    repo_type: str = "model",
     allow_main_fallback: bool = True,
 ) -> Optional[_DataReleaseManifestFetch]:
     """Fetch a data release manifest from HF if one is available.
@@ -213,8 +214,9 @@ def _fetch_data_release_manifest(
         revisions.append("main")
 
     for candidate in revisions:
+        prefix = "datasets/" if repo_type == "dataset" else ""
         url = (
-            f"https://huggingface.co/{repo_id}/resolve/"
+            f"https://huggingface.co/{prefix}{repo_id}/resolve/"
             f"{candidate}/{release_manifest_path}"
         )
         try:
@@ -523,6 +525,7 @@ def refresh_release_bundle(
             repo_id=repo_id,
             release_manifest_path=new_release_manifest_path,
             revision=fetch_revision,
+            repo_type=data_package_json.get("repo_type", "model"),
             allow_main_fallback=release_manifest_revision is None,
         )
         if release_manifest_fetch is None:
