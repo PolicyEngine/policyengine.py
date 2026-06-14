@@ -11,10 +11,8 @@ from policyengine.provenance.manifest import get_release_manifest
 US_INHERITED_SUBNATIONAL_REVISION = "1.115.5"
 
 
-def _current_us_data_revision() -> str:
-    revision = get_release_manifest("us").data_package.release_manifest_revision
-    assert revision is not None
-    return revision
+def _current_us_default_dataset_uri() -> str:
+    return get_release_manifest("us").default_dataset_uri
 
 
 class TestUSStates:
@@ -114,10 +112,7 @@ class TestUSRegionRegistry:
         assert national.code == "us"
         assert national.label == "United States"
         assert national.region_type == "national"
-        assert (
-            national.dataset_path == "hf://policyengine/populace-us/"
-            f"populace_us_2024.h5@{_current_us_data_revision()}"
-        )
+        assert national.dataset_path == _current_us_default_dataset_uri()
 
     def test__given_us_registry__then_has_51_states(self):
         """Given: US region registry
