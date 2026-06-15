@@ -208,6 +208,10 @@ class TestCertifyDataRelease:
                 return_value=True,
             ),
             patch(
+                "policyengine.provenance.certification.head_release_file",
+                return_value=True,
+            ),
+            patch(
                 "policyengine.provenance.certification.fetch_pypi_wheel_metadata",
                 return_value={"sha256": "d" * 64, "url": "https://example"},
             ),
@@ -225,6 +229,29 @@ class TestCertifyDataRelease:
         assert result.dataset_count == 2
         assert result.build_id == TAG
 
+    def test__given_missing_populace_us_source_coverage__then_raises(self, tmp_path):
+        response = MagicMock()
+        response.status_code = 200
+        response.content = json.dumps(_release_manifest_payload()).encode()
+
+        with (
+            patch(
+                "policyengine.provenance.certification.requests.get",
+                return_value=response,
+            ),
+            patch(
+                "policyengine.provenance.certification.head_release_file",
+                return_value=False,
+            ),
+            pytest.raises(CertificationError, match="us_source_coverage.json"),
+        ):
+            certify_data_release(
+                country="us",
+                manifest_uri=MANIFEST_URI,
+                model_version="1.723.0",
+                output_dir=tmp_path,
+            )
+
     def test__given_unreachable_artifact__then_raises(self, tmp_path):
         response = MagicMock()
         response.status_code = 200
@@ -238,6 +265,10 @@ class TestCertifyDataRelease:
             patch(
                 "policyengine.provenance.certification.head_artifact",
                 return_value=False,
+            ),
+            patch(
+                "policyengine.provenance.certification.head_release_file",
+                return_value=True,
             ),
             pytest.raises(CertificationError, match="not reachable"),
         ):

@@ -62,6 +62,7 @@ COUNTRY_MODEL_PACKAGES = {
 CERTIFIED_BY = "policyengine.py certification"
 BASIS_BUILT_WITH = "built_with_model_package"
 BASIS_PUBLISHER_CLAIM = "compatible_model_packages"
+POPULACE_US_SOURCE_COVERAGE_FILE = "us_source_coverage.json"
 
 
 class CertificationError(ValueError):
@@ -111,6 +112,15 @@ def https_manifest_url(parts: dict) -> str:
     return (
         f"https://huggingface.co/{prefix}{parts['repo_id']}/resolve/"
         f"{parts['revision']}/{parts['path']}"
+    )
+
+
+def https_release_file_url(parts: dict, filename: str) -> str:
+    prefix = "datasets/" if parts["repo_type"] == "dataset" else ""
+    release_dir = parts["path"].rsplit("/", 1)[0]
+    return (
+        f"https://huggingface.co/{prefix}{parts['repo_id']}/resolve/"
+        f"{parts['revision']}/{release_dir}/{filename}"
     )
 
 
@@ -219,6 +229,37 @@ def head_artifact(artifact, token: Optional[str] = None) -> bool:
         if response.status_code == 200:
             return True
     return False
+
+
+def head_release_file(
+    uri_parts: dict, filename: str, token: Optional[str] = None
+) -> bool:
+    url = https_release_file_url(uri_parts, filename)
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    try:
+        response = requests.head(
+            url,
+            headers=headers,
+            timeout=HF_REQUEST_TIMEOUT_SECONDS,
+            allow_redirects=True,
+        )
+    except requests.RequestException:
+        return False
+    return response.status_code == 200
+
+
+def required_supplemental_release_files(
+    country: str,
+    manifest: DataReleaseManifest,
+    uri_parts: dict,
+) -> tuple[str, ...]:
+    if (
+        country == "us"
+        and manifest.data_package.name == "populace-data"
+        and uri_parts["repo_id"] == "policyengine/populace-us"
+    ):
+        return (POPULACE_US_SOURCE_COVERAGE_FILE,)
+    return ()
 
 
 def build_country_manifest_payload(
@@ -346,6 +387,13 @@ def certify_data_release(
     compatibility_basis, warnings = validate_release_manifest(
         manifest, model_package, model_version
     )
+
+    for filename in required_supplemental_release_files(country, manifest, uri_parts):
+        if not head_release_file(uri_parts, filename, token=token):
+            raise CertificationError(
+                "Required supplemental release file is not reachable: "
+                f"{filename} at {https_release_file_url(uri_parts, filename)}"
+            )
 
     default_artifact = manifest.artifacts[manifest.default_datasets["national"]]
     if check_artifacts and not head_artifact(default_artifact, token=token):

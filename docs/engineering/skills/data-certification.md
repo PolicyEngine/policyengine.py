@@ -53,7 +53,8 @@ A certification PR should normally change only:
 
 Hard failures (certification refuses): missing national default dataset,
 default dataset absent from artifacts, any artifact without a revision pin,
-unreachable certified dataset, unknown country.
+unreachable certified dataset, missing required supplemental release files
+(for example Populace-US `us_source_coverage.json`), unknown country.
 
 Certification gate: the model version must either exactly match the
 build-time model (`compatibility_basis: built_with_model_package`) or be
