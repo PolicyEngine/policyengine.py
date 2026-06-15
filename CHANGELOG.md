@@ -1,3 +1,10 @@
+## [4.17.2] - 2026-06-15
+
+### Changed
+
+- Require Populace-US data certification to verify the supplemental source-coverage release file before vendoring a release manifest.
+
+
 ## [4.17.1] - 2026-06-14
 
 ### Changed
