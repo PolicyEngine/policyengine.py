@@ -55,6 +55,30 @@ def _release_manifest_payload() -> dict:
                 "sha256": "a" * 64,
                 "size_bytes": 1,
             },
+            "populace_us_2024_calibration": {
+                "kind": "calibration",
+                "path": "populace_us_2024_calibration.npz",
+                "repo_id": "policyengine/populace-us",
+                "revision": TAG,
+                "sha256": "c" * 64,
+                "size_bytes": 1,
+            },
+            "calibration_diagnostics": {
+                "kind": "diagnostics",
+                "path": "calibration_diagnostics.json",
+                "repo_id": "policyengine/populace-us",
+                "revision": TAG,
+                "sha256": "e" * 64,
+                "size_bytes": 1,
+            },
+            "us_source_coverage": {
+                "kind": "diagnostics",
+                "path": "us_source_coverage.json",
+                "repo_id": "policyengine/populace-us",
+                "revision": TAG,
+                "sha256": "f" * 64,
+                "size_bytes": 1,
+            },
             "states/AK": {
                 "kind": "microdata",
                 "path": "states/AK.h5",
@@ -170,6 +194,21 @@ class TestBuildCountryManifestPayload:
             "repo_id": "policyengine/policyengine-us-data",
         }
 
+    def test__given_release_scoped_diagnostics__then_rewrites_paths(self):
+        payload = self._payload()
+
+        assert payload["datasets"]["populace_us_2024"]["path"] == "populace_us_2024.h5"
+        assert (
+            payload["datasets"]["populace_us_2024_calibration"]["path"]
+            == "populace_us_2024_calibration.npz"
+        )
+        assert payload["datasets"]["calibration_diagnostics"]["path"] == (
+            f"releases/{TAG}/calibration_diagnostics.json"
+        )
+        assert payload["datasets"]["us_source_coverage"]["path"] == (
+            f"releases/{TAG}/us_source_coverage.json"
+        )
+
     def test__given_region_templates__then_carried_through(self):
         payload = self._payload()
 
@@ -212,6 +251,10 @@ class TestCertifyDataRelease:
                 return_value=True,
             ),
             patch(
+                "policyengine.provenance.certification.head_artifact_reference",
+                return_value=True,
+            ),
+            patch(
                 "policyengine.provenance.certification.fetch_pypi_wheel_metadata",
                 return_value={"sha256": "d" * 64, "url": "https://example"},
             ),
@@ -226,7 +269,7 @@ class TestCertifyDataRelease:
         written = json.loads((tmp_path / "us.json").read_text())
         assert written["default_dataset"] == "populace_us_2024"
         assert written["certification"]["data_build_id"] == TAG
-        assert result.dataset_count == 2
+        assert result.dataset_count == 5
         assert result.build_id == TAG
 
     def test__given_missing_populace_us_source_coverage__then_raises(self, tmp_path):
@@ -270,7 +313,46 @@ class TestCertifyDataRelease:
                 "policyengine.provenance.certification.head_release_file",
                 return_value=True,
             ),
+            patch(
+                "policyengine.provenance.certification.head_artifact_reference",
+                return_value=True,
+            ),
             pytest.raises(CertificationError, match="not reachable"),
+        ):
+            certify_data_release(
+                country="us",
+                manifest_uri=MANIFEST_URI,
+                model_version="1.723.0",
+                output_dir=tmp_path,
+            )
+
+    def test__given_unreachable_vendored_artifact__then_raises(self, tmp_path):
+        response = MagicMock()
+        response.status_code = 200
+        response.content = json.dumps(_release_manifest_payload()).encode()
+
+        with (
+            patch(
+                "policyengine.provenance.certification.requests.get",
+                return_value=response,
+            ),
+            patch(
+                "policyengine.provenance.certification.head_artifact",
+                return_value=True,
+            ),
+            patch(
+                "policyengine.provenance.certification.head_release_file",
+                return_value=True,
+            ),
+            patch(
+                "policyengine.provenance.certification.fetch_pypi_wheel_metadata",
+                return_value={"sha256": "d" * 64, "url": "https://example"},
+            ),
+            patch(
+                "policyengine.provenance.certification.head_artifact_reference",
+                return_value=False,
+            ),
+            pytest.raises(CertificationError, match="Vendored artifact"),
         ):
             certify_data_release(
                 country="us",

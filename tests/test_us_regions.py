@@ -4,15 +4,6 @@ from policyengine.countries.us.data import DISTRICT_COUNTS, US_STATES
 from policyengine.countries.us.regions import (
     us_region_registry,
 )
-from policyengine.provenance.manifest import get_release_manifest
-
-# State and district datasets are inherited artifacts pinned to the
-# policyengine-us-data repo at this revision.
-US_INHERITED_SUBNATIONAL_REVISION = "1.115.5"
-
-
-def _current_us_default_dataset_uri() -> str:
-    return get_release_manifest("us").default_dataset_uri
 
 
 class TestUSStates:
@@ -102,7 +93,7 @@ class TestUSRegionRegistry:
     def test__given_us_registry__then_has_national_region(self):
         """Given: US region registry
         When: Getting national region
-        Then: Returns US with correct dataset path
+        Then: Returns US without a dedicated region dataset path
         """
         # When
         national = us_region_registry.get_national()
@@ -112,7 +103,7 @@ class TestUSRegionRegistry:
         assert national.code == "us"
         assert national.label == "United States"
         assert national.region_type == "national"
-        assert national.dataset_path == _current_us_default_dataset_uri()
+        assert national.dataset_path is None
 
     def test__given_us_registry__then_has_51_states(self):
         """Given: US region registry
@@ -128,7 +119,7 @@ class TestUSRegionRegistry:
     def test__given_california_region__then_has_correct_format(self):
         """Given: California state region
         When: Checking its properties
-        Then: Has correct code, label, dataset path, and metadata
+        Then: Has correct code, label, and metadata
         """
         # When
         ca = us_region_registry.get("state/ca")
@@ -138,10 +129,7 @@ class TestUSRegionRegistry:
         assert ca.label == "California"
         assert ca.region_type == "state"
         assert ca.parent_code == "us"
-        assert (
-            ca.dataset_path == "hf://policyengine/policyengine-us-data/"
-            f"states/CA.h5@{US_INHERITED_SUBNATIONAL_REVISION}"
-        )
+        assert ca.dataset_path is None
         assert ca.state_code == "CA"
         assert ca.state_name == "California"
         assert not ca.requires_filter
@@ -160,7 +148,7 @@ class TestUSRegionRegistry:
     def test__given_ca_first_district__then_has_correct_format(self):
         """Given: California's 1st congressional district
         When: Checking its properties
-        Then: Has correct code, label, and dataset path
+        Then: Has correct code, label, and metadata
         """
         # When
         ca01 = us_region_registry.get("congressional_district/CA-01")
@@ -171,10 +159,7 @@ class TestUSRegionRegistry:
         assert "1st" in ca01.label.lower() or "1 " in ca01.label
         assert ca01.region_type == "congressional_district"
         assert ca01.parent_code == "state/ca"
-        assert (
-            ca01.dataset_path == "hf://policyengine/policyengine-us-data/"
-            f"districts/CA-01.h5@{US_INHERITED_SUBNATIONAL_REVISION}"
-        )
+        assert ca01.dataset_path is None
         assert ca01.state_code == "CA"
         assert not ca01.requires_filter
 
@@ -240,16 +225,16 @@ class TestUSRegionRegistry:
         assert len(district_children) == DISTRICT_COUNTS["CA"]
         assert len(place_children) >= 10  # CA has many large cities
 
-    def test__given_us_registry__then_dataset_regions_is_488(self):
+    def test__given_us_registry__then_dataset_regions_is_empty(self):
         """Given: US region registry
         When: Getting regions with datasets
-        Then: Returns 1 national + 51 states + 436 districts = 488
+        Then: Current Populace-certified bundle has no subnational datasets
         """
         # When
         dataset_regions = us_region_registry.get_dataset_regions()
 
         # Then
-        assert len(dataset_regions) == 488
+        assert len(dataset_regions) == 0
 
     def test__given_us_registry__then_filter_regions_are_all_places(self):
         """Given: US region registry
@@ -265,7 +250,7 @@ class TestUSRegionRegistry:
     def test__given_us_registry__then_total_exceeds_588(self):
         """Given: US region registry
         When: Counting all regions
-        Then: Total is at least 488 (dataset) + 100 (places)
+        Then: Total is at least 488 US political regions + 100 places
         """
         # When
         total = len(us_region_registry)

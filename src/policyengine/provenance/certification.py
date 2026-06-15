@@ -18,8 +18,9 @@ an assertion the test suite then exercises on the exact pair.
         country="us",
         manifest_uri=(
             "hf://dataset/policyengine/populace-us"
-            "@populace-us-2024-5da5a95-20260611"
-            "/releases/populace-us-2024-5da5a95-20260611/release_manifest.json"
+            "@populace-us-2024-0cdbb27-c239dfe51c11-20260615T201302Z"
+            "/releases/populace-us-2024-0cdbb27-c239dfe51c11-20260615T201302Z"
+            "/release_manifest.json"
         ),
     )
     print(result.summary())
@@ -117,11 +118,15 @@ def https_manifest_url(parts: dict) -> str:
 
 def https_release_file_url(parts: dict, filename: str) -> str:
     prefix = "datasets/" if parts["repo_type"] == "dataset" else ""
-    release_dir = parts["path"].rsplit("/", 1)[0]
+    release_dir = release_manifest_dir(parts)
     return (
         f"https://huggingface.co/{prefix}{parts['repo_id']}/resolve/"
         f"{parts['revision']}/{release_dir}/{filename}"
     )
+
+
+def release_manifest_dir(parts: dict) -> str:
+    return parts["path"].rsplit("/", 1)[0]
 
 
 def fetch_release_manifest(
@@ -248,6 +253,51 @@ def head_release_file(
     return response.status_code == 200
 
 
+def artifact_path_for_country_manifest(artifact, uri_parts: dict) -> str:
+    path = artifact.path
+    release_dir = release_manifest_dir(uri_parts)
+    if (
+        artifact.kind == "diagnostics"
+        and artifact.repo_id == uri_parts["repo_id"]
+        and artifact.revision == uri_parts["revision"]
+        and not path.startswith(f"{release_dir}/")
+    ):
+        return f"{release_dir}/{path}"
+    return path
+
+
+def artifact_reference_url(
+    reference: dict, uri_parts: dict, prefix: str = "datasets/"
+) -> str:
+    repo_id = reference.get("repo_id") or uri_parts["repo_id"]
+    revision = reference.get("revision") or uri_parts["revision"]
+    return (
+        f"https://huggingface.co/{prefix}{repo_id}/resolve/"
+        f"{revision}/{reference['path']}"
+    )
+
+
+def head_artifact_reference(
+    reference: dict,
+    uri_parts: dict,
+    token: Optional[str] = None,
+) -> bool:
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    for prefix in ("datasets/", ""):
+        try:
+            response = requests.head(
+                artifact_reference_url(reference, uri_parts, prefix=prefix),
+                headers=headers,
+                timeout=HF_REQUEST_TIMEOUT_SECONDS,
+                allow_redirects=True,
+            )
+        except requests.RequestException:
+            continue
+        if response.status_code == 200:
+            return True
+    return False
+
+
 def required_supplemental_release_files(
     country: str,
     manifest: DataReleaseManifest,
@@ -260,6 +310,18 @@ def required_supplemental_release_files(
     ):
         return (POPULACE_US_SOURCE_COVERAGE_FILE,)
     return ()
+
+
+def should_validate_vendored_artifacts(
+    country: str,
+    manifest: DataReleaseManifest,
+    uri_parts: dict,
+) -> bool:
+    return (
+        country == "us"
+        and manifest.data_package.name == "populace-data"
+        and uri_parts["repo_id"] == "policyengine/populace-us"
+    )
 
 
 def build_country_manifest_payload(
@@ -284,7 +346,10 @@ def build_country_manifest_payload(
 
     datasets: dict[str, dict] = {}
     for name, artifact in manifest.artifacts.items():
-        payload: dict = {"path": artifact.path, "revision": artifact.revision}
+        payload: dict = {
+            "path": artifact_path_for_country_manifest(artifact, uri_parts),
+            "revision": artifact.revision,
+        }
         if artifact.sha256:
             payload["sha256"] = artifact.sha256
         if artifact.repo_id:
@@ -413,6 +478,15 @@ def certify_data_release(
         model_wheel=model_wheel or {},
         compatibility_basis=compatibility_basis,
     )
+    if check_artifacts and should_validate_vendored_artifacts(
+        country, manifest, uri_parts
+    ):
+        for name, reference in payload["datasets"].items():
+            if not head_artifact_reference(reference, uri_parts, token=token):
+                raise CertificationError(
+                    f"Vendored artifact {name!r} is not reachable at "
+                    f"{artifact_reference_url(reference, uri_parts)}"
+                )
 
     if output_dir is None:
         output_dir = Path(str(files("policyengine"))) / "data" / "release_manifests"
