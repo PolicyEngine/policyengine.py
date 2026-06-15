@@ -41,15 +41,13 @@ POLICYENGINE_VERSION = re.search(
     PYPROJECT.read_text(),
     re.MULTILINE,
 ).group(1)
-US_MODEL_VERSION = "1.726.0"
-US_BUILT_WITH_MODEL_VERSION = "1.723.0"
+US_MODEL_VERSION = "1.729.0"
+US_BUILT_WITH_MODEL_VERSION = "1.729.0"
 US_DATA_RELEASE_VERSION = "0.1.0"
-US_DATA_RELEASE_PATH = (
-    "releases/populace-us-2024-5da5a95-20260611/release_manifest.json"
-)
-US_DATA_RELEASE_REVISION = "afa2748b79a139404a1c477e3a7a9ca8729c22ab"
-US_DATA_ARTIFACT_REVISION = "populace-us-2024-5da5a95-20260611"
-US_CERTIFICATION_SOURCE = "populace-data release manifest"
+US_DATA_RELEASE_PATH = "releases/populace-us-2024-0cdbb27-c239dfe51c11-20260615T201302Z/release_manifest.json"
+US_DATA_RELEASE_REVISION = "populace-us-2024-0cdbb27-c239dfe51c11-20260615T201302Z"
+US_DATA_ARTIFACT_REVISION = US_DATA_RELEASE_REVISION
+US_CERTIFICATION_SOURCE = "policyengine.py certification"
 US_MANAGED_DATASET_URI = (
     f"hf://policyengine/populace-us/populace_us_2024.h5@{US_DATA_ARTIFACT_REVISION}"
 )
@@ -103,17 +101,15 @@ class TestReleaseManifests:
         assert manifest.certified_data_artifact is not None
         assert (
             manifest.certified_data_artifact.build_id
-            == "populace-us-2024-5da5a95-20260611"
+            == "populace-us-2024-0cdbb27-c239dfe51c11-20260615T201302Z"
         )
         assert manifest.certified_data_artifact.dataset == "populace_us_2024"
         assert manifest.certification is not None
         assert (
-            manifest.certification.data_build_id == "populace-us-2024-5da5a95-20260611"
+            manifest.certification.data_build_id
+            == "populace-us-2024-0cdbb27-c239dfe51c11-20260615T201302Z"
         )
-        assert (
-            manifest.certification.compatibility_basis
-            == "legacy_compatible_model_package"
-        )
+        assert manifest.certification.compatibility_basis == "built_with_model_package"
         assert (
             manifest.certification.built_with_model_version
             == US_BUILT_WITH_MODEL_VERSION
