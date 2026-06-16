@@ -1,5 +1,5 @@
 {
-  "bundle_id": "us-4.17.4",
+  "bundle_id": "us-4.17.5",
   "certification": {
     "built_with_model_version": "1.729.0",
     "certified_by": "populace-data release manifest",
@@ -71,7 +71,7 @@
     "version": "1.729.0",
     "wheel_url": "https://files.pythonhosted.org/packages/b9/7d/778f92ae94997b00c3c9ac34b345f6c9333435f905670ee4eeb2f5e19809/policyengine_us-1.729.0-py3-none-any.whl"
   },
-  "policyengine_version": "4.17.4",
+  "policyengine_version": "4.17.5",
   "region_datasets": {},
   "schema_version": 1
 }
