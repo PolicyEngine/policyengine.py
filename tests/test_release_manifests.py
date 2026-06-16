@@ -212,6 +212,35 @@ class TestReleaseManifests:
             == dataset
         )
 
+    def test__given_local_path__then_managed_resolution_requires_opt_in(self, tmp_path):
+        local_dataset = tmp_path / "2026.h5"
+        local_dataset.write_bytes(b"")
+
+        try:
+            resolve_managed_dataset_reference("us", str(local_dataset))
+        except ValueError as error:
+            assert "local file outside the policyengine.py release bundle" in str(error)
+        else:
+            raise AssertionError("Expected local dataset path to require opt-in")
+
+    def test__given_local_path_with_opt_in__then_resolves_to_that_path(self, tmp_path):
+        local_dataset = tmp_path / "2026.h5"
+        local_dataset.write_bytes(b"")
+
+        assert resolve_managed_dataset_reference(
+            "us",
+            str(local_dataset),
+            allow_unmanaged=True,
+        ) == str(local_dataset)
+
+    def test__given_unknown_dataset_name__then_raises_unknown_dataset(self):
+        try:
+            resolve_managed_dataset_reference("us", "not_a_real_dataset_name")
+        except ValueError as error:
+            assert "Unknown dataset" in str(error)
+        else:
+            raise AssertionError("Expected unknown dataset name to be rejected")
+
     def test__given_versioned_dataset_url__then_logical_name_drops_version(self):
         dataset = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.73.0"
 
