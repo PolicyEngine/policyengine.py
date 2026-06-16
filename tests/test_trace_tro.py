@@ -55,7 +55,7 @@ def _fake_fetch_pypi(name: str, version: str) -> dict:
     return {"sha256": FAKE_WHEEL_SHA, "url": FAKE_WHEEL_URL}
 
 
-def _https_location_from_hf_uri(uri: str) -> str:
+def _https_location_from_hf_uri(uri: str, *, repo_type: str = "model") -> str:
     path_without_scheme = uri.removeprefix("hf://")
     path_without_revision, revision = path_without_scheme.rsplit("@", 1)
     repo_owner, repo_name, path_in_repo = path_without_revision.split("/", 2)
@@ -63,6 +63,7 @@ def _https_location_from_hf_uri(uri: str) -> str:
         repo_id=f"{repo_owner}/{repo_name}",
         path_in_repo=path_in_repo,
         revision=revision,
+        repo_type=repo_type,
     )
 
 
@@ -304,7 +305,11 @@ class TestBundleTRO:
         )
         assert country_manifest.certified_data_artifact is not None
         assert dataset_location["trov:hasLocation"] == _https_location_from_hf_uri(
-            country_manifest.certified_data_artifact.uri
+            country_manifest.certified_data_artifact.uri,
+            repo_type=country_manifest.data_package.repo_type,
+        )
+        assert dataset_location["trov:hasLocation"].startswith(
+            "https://huggingface.co/datasets/policyengine/populace-us/"
         )
         assert "/resolve/1.113.1/" not in dataset_location["trov:hasLocation"]
 
