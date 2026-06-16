@@ -1,3 +1,10 @@
+## [4.17.4] - 2026-06-16
+
+### Changed
+
+- Certify the US data release `populace-us-2024-f32c2e5-0c38bc47db89-20260616T124451Z` (populace_us_2024, policyengine-us 1.729.0) directly from its data release manifest.
+
+
 ## [4.17.3] - 2026-06-15
 
 ### Changed
