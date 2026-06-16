@@ -805,6 +805,160 @@ def test__refresh_preserves_dataset_entries_with_explicit_revisions(
     )
 
 
+def test__same_data_version_release_override_refreshes_revisioned_populace_artifacts(
+    sandbox,
+) -> None:
+    manifest_path = sandbox["manifest_dir"] / "us.json"
+    manifest = json.loads(manifest_path.read_text())
+    old_release = "populace-us-2024-old"
+    new_release = "populace-us-2024-new"
+    manifest["data_package"] = {
+        "name": "populace-data",
+        "version": "0.1.0",
+        "repo_id": "policyengine/populace-us",
+        "repo_type": "dataset",
+        "release_manifest_path": f"releases/{old_release}/release_manifest.json",
+        "release_manifest_revision": old_release,
+    }
+    manifest["certified_data_artifact"] = {
+        "data_package": {"name": "populace-data", "version": "0.1.0"},
+        "build_id": old_release,
+        "dataset": "populace_us_2024",
+        "uri": f"hf://policyengine/populace-us/populace_us_2024.h5@{old_release}",
+        "sha256": "1" * 64,
+    }
+    manifest["certification"] = {
+        "compatibility_basis": "exact_build_model_version",
+        "data_build_id": old_release,
+        "built_with_model_version": "1.600.0",
+        "certified_for_model_version": "1.600.0",
+        "certified_by": "test fixture",
+    }
+    manifest["default_dataset"] = "populace_us_2024"
+    manifest["datasets"] = {
+        "populace_us_2024": {
+            "path": "populace_us_2024.h5",
+            "repo_id": "policyengine/populace-us",
+            "revision": old_release,
+            "sha256": "1" * 64,
+        },
+        "populace_us_2024_calibration": {
+            "path": "populace_us_2024_calibration.npz",
+            "repo_id": "policyengine/populace-us",
+            "revision": old_release,
+            "sha256": "2" * 64,
+        },
+        "calibration_diagnostics": {
+            "path": f"releases/{old_release}/calibration_diagnostics.json",
+            "repo_id": "policyengine/populace-us",
+            "revision": old_release,
+            "sha256": "3" * 64,
+        },
+        "external_long_term": {
+            "path": "long_term/2100.h5",
+            "repo_id": "policyengine/policyengine-us-data",
+            "revision": "crfb-longrun-20260517",
+            "sha256": "4" * 64,
+        },
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+
+    payload = {
+        "schema_version": 1,
+        "data_package": {"name": "populace-data", "version": "0.1.0"},
+        "build": {
+            "build_id": new_release,
+            "built_with_model_package": {
+                "name": "policyengine-us",
+                "version": "1.600.0",
+            },
+        },
+        "artifacts": {
+            "populace_us_2024": {
+                "kind": "microdata",
+                "path": "populace_us_2024.h5",
+                "repo_id": "policyengine/populace-us",
+                "revision": new_release,
+                "sha256": "5" * 64,
+            },
+            "populace_us_2024_calibration": {
+                "kind": "calibration",
+                "path": "populace_us_2024_calibration.npz",
+                "repo_id": "policyengine/populace-us",
+                "revision": new_release,
+                "sha256": "6" * 64,
+            },
+            "calibration_diagnostics": {
+                "kind": "diagnostics",
+                "path": "calibration_diagnostics.json",
+                "repo_id": "policyengine/populace-us",
+                "revision": new_release,
+                "sha256": "7" * 64,
+            },
+            "reform_validation": {
+                "kind": "diagnostics",
+                "path": "reform_validation.json",
+                "repo_id": "policyengine/populace-us",
+                "revision": new_release,
+                "sha256": "8" * 64,
+            },
+        },
+    }
+
+    def fake_urlopen(request, *args, **kwargs):
+        url = request.full_url
+        if (
+            f"/resolve/{new_release}/releases/{new_release}/release_manifest.json"
+            in url
+        ):
+            return _FakeHFResponse(
+                json.dumps(payload).encode(),
+                headers={"x-repo-commit": "new-release-manifest-commit"},
+            )
+        raise AssertionError(f"Unexpected URL fetched: {url}")
+
+    with patch("policyengine.provenance.bundle.urlopen", side_effect=fake_urlopen):
+        refresh_release_bundle(
+            country="us",
+            data_version="0.1.0",
+            release_manifest_path=f"releases/{new_release}/release_manifest.json",
+            release_manifest_revision=new_release,
+            manifest_dir=sandbox["manifest_dir"],
+            pyproject_path=sandbox["pyproject_path"],
+        )
+
+    written = json.loads((sandbox["manifest_dir"] / "us.json").read_text())
+    assert written["certified_data_artifact"]["build_id"] == new_release
+    assert (
+        written["certified_data_artifact"]["uri"]
+        == "hf://policyengine/populace-us/populace_us_2024.h5@new-release-manifest-commit"
+    )
+    assert written["datasets"]["populace_us_2024"] == {
+        "path": "populace_us_2024.h5",
+        "repo_id": "policyengine/populace-us",
+        "revision": new_release,
+        "sha256": "5" * 64,
+    }
+    assert written["datasets"]["calibration_diagnostics"] == {
+        "path": f"releases/{new_release}/calibration_diagnostics.json",
+        "repo_id": "policyengine/populace-us",
+        "revision": new_release,
+        "sha256": "7" * 64,
+    }
+    assert written["datasets"]["reform_validation"] == {
+        "path": f"releases/{new_release}/reform_validation.json",
+        "repo_id": "policyengine/populace-us",
+        "revision": new_release,
+        "sha256": "8" * 64,
+    }
+    assert written["datasets"]["external_long_term"] == {
+        "path": "long_term/2100.h5",
+        "repo_id": "policyengine/policyengine-us-data",
+        "revision": "crfb-longrun-20260517",
+        "sha256": "4" * 64,
+    }
+
+
 def test__custom_release_manifest_requires_existing_long_term_dataset_sha(
     sandbox,
 ) -> None:

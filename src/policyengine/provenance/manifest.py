@@ -188,9 +188,16 @@ def build_hf_uri(repo_id: str, path_in_repo: str, revision: str) -> str:
     return f"hf://{repo_id}/{path_in_repo}@{revision}"
 
 
-def https_dataset_uri(repo_id: str, path_in_repo: str, revision: str) -> str:
+def https_dataset_uri(
+    repo_id: str,
+    path_in_repo: str,
+    revision: str,
+    *,
+    repo_type: str = "model",
+) -> str:
     """Return a dereferenceable HTTPS URI for a Hugging Face dataset artifact."""
-    return f"https://huggingface.co/{repo_id}/resolve/{revision}/{path_in_repo}"
+    prefix = "datasets/" if repo_type == "dataset" else ""
+    return f"https://huggingface.co/{prefix}{repo_id}/resolve/{revision}/{path_in_repo}"
 
 
 def _artifact_revision(data_package: "DataPackageVersion") -> str:

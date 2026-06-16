@@ -69,7 +69,7 @@ def _artifact_mime_type(path_or_uri: str) -> Optional[str]:
     return _MIME_TYPES.get(suffix)
 
 
-def _dataset_location_from_uri(uri: str) -> str:
+def _dataset_location_from_uri(uri: str, *, repo_type: str = "model") -> str:
     if not uri.startswith("hf://"):
         return uri
 
@@ -85,6 +85,7 @@ def _dataset_location_from_uri(uri: str) -> str:
         repo_id=repo_id,
         path_in_repo=parts[2],
         revision=revision,
+        repo_type=repo_type,
     )
 
 
@@ -355,7 +356,10 @@ def build_trace_tro_from_release_bundle(
         if data_release_manifest is not None
         else None
     )
-    dataset_location = _dataset_location_from_uri(certified_artifact.uri)
+    dataset_location = _dataset_location_from_uri(
+        certified_artifact.uri,
+        repo_type=country_manifest.data_package.repo_type,
+    )
 
     bundle_manifest_hash = hashlib.sha256(
         canonical_json_bytes(country_manifest.model_dump(mode="json"))

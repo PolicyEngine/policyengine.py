@@ -36,6 +36,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import posixpath
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -258,6 +259,35 @@ def _metadata_sidecar_path(path: str) -> str:
     return f"{path}.metadata.json"
 
 
+def _release_scoped_artifact_path(
+    artifact: dict,
+    *,
+    release_manifest_path: str | None,
+    data_repo_id: str,
+) -> str:
+    """Return the dereferenceable country-manifest path for a release artifact.
+
+    Populace release manifests describe diagnostics relative to the release
+    directory, while the HF files are published under ``releases/{id}/``.
+    Runtime manifests must store the dereferenceable path.
+    """
+    path = artifact.get("path", "")
+    if not path:
+        return path
+    if not release_manifest_path:
+        return path
+    release_dir = posixpath.dirname(release_manifest_path)
+    if (
+        release_dir
+        and release_dir != "."
+        and artifact.get("kind") == "diagnostics"
+        and artifact.get("repo_id") == data_repo_id
+        and not path.startswith(f"{release_dir}/")
+    ):
+        return f"{release_dir}/{path}"
+    return path
+
+
 def _specifier_matches(*, version: str, specifier: str) -> bool:
     try:
         return Version(version) in SpecifierSet(specifier)
@@ -324,6 +354,9 @@ def _release_manifest_compatibility_basis(
 def _refresh_dataset_path_references_from_data_release(
     manifest_json: dict,
     release_manifest_json: dict,
+    *,
+    release_manifest_path: str | None = None,
+    data_repo_id: str,
 ) -> None:
     """Refresh bundled dataset hash pins from a data release manifest.
 
@@ -332,7 +365,66 @@ def _refresh_dataset_path_references_from_data_release(
     ``datasets``; notably the US long-term bundle stores one entry per year with
     both H5 and metadata-sidecar hashes.
     """
-    for path_reference in manifest_json.get("datasets", {}).values():
+    datasets = manifest_json.setdefault("datasets", {})
+    release_artifacts = release_manifest_json.get("artifacts", {})
+
+    def update_reference_from_artifact(path_reference: dict, artifact: dict) -> None:
+        raw_path = artifact.get("path")
+        if raw_path:
+            path_reference["path"] = _release_scoped_artifact_path(
+                artifact,
+                release_manifest_path=release_manifest_path,
+                data_repo_id=data_repo_id,
+            )
+        if artifact.get("revision"):
+            path_reference["revision"] = artifact["revision"]
+        if artifact.get("repo_id"):
+            path_reference["repo_id"] = artifact["repo_id"]
+        if artifact.get("repo_type"):
+            path_reference["repo_type"] = artifact["repo_type"]
+
+        dataset_sha256 = artifact.get("sha256")
+        if dataset_sha256:
+            path_reference["sha256"] = dataset_sha256
+        elif "sha256" in path_reference:
+            raise ValueError(
+                "Data release manifest dataset artifact lacks sha256 "
+                f"for existing pinned path {raw_path!r}; refusing to leave "
+                "stale dataset hash pin in place."
+            )
+
+        if not raw_path:
+            return
+        metadata_artifact = _release_artifact_by_path(
+            release_manifest_json,
+            _metadata_sidecar_path(raw_path),
+        )
+        had_metadata_pin = "metadata_sha256" in path_reference
+        if metadata_artifact is None:
+            if had_metadata_pin:
+                raise ValueError(
+                    "Data release manifest is missing metadata sidecar artifact "
+                    f"for {raw_path!r}; refusing to drop existing metadata hash pin."
+                )
+            path_reference.pop("metadata_sha256", None)
+            return
+        metadata_sha256 = metadata_artifact.get("sha256")
+        if not metadata_sha256:
+            if had_metadata_pin:
+                raise ValueError(
+                    "Data release manifest metadata sidecar artifact lacks sha256 "
+                    f"for {raw_path!r}; refusing to drop existing metadata hash pin."
+                )
+            path_reference.pop("metadata_sha256", None)
+            return
+        path_reference["metadata_sha256"] = metadata_sha256
+
+    for name, path_reference in datasets.items():
+        named_artifact = release_artifacts.get(name)
+        if named_artifact is not None:
+            update_reference_from_artifact(path_reference, named_artifact)
+            continue
+
         path = path_reference.get("path")
         if not path:
             continue
@@ -347,42 +439,14 @@ def _refresh_dataset_path_references_from_data_release(
                     "stale dataset hash pins in place."
                 )
             continue
-        if artifact.get("path"):
-            path_reference["path"] = artifact["path"]
-            path = artifact["path"]
-        dataset_sha256 = artifact.get("sha256")
-        if dataset_sha256:
-            path_reference["sha256"] = dataset_sha256
-        elif "sha256" in path_reference:
-            raise ValueError(
-                "Data release manifest dataset artifact lacks sha256 "
-                f"for existing pinned path {path!r}; refusing to leave "
-                "stale dataset hash pin in place."
-            )
+        update_reference_from_artifact(path_reference, artifact)
 
-        metadata_artifact = _release_artifact_by_path(
-            release_manifest_json,
-            _metadata_sidecar_path(path),
-        )
-        had_metadata_pin = "metadata_sha256" in path_reference
-        if metadata_artifact is None:
-            if had_metadata_pin:
-                raise ValueError(
-                    "Data release manifest is missing metadata sidecar artifact "
-                    f"for {path!r}; refusing to drop existing metadata hash pin."
-                )
-            path_reference.pop("metadata_sha256", None)
+    for name, artifact in release_artifacts.items():
+        if name in datasets:
             continue
-        metadata_sha256 = metadata_artifact.get("sha256")
-        if not metadata_sha256:
-            if had_metadata_pin:
-                raise ValueError(
-                    "Data release manifest metadata sidecar artifact lacks sha256 "
-                    f"for {path!r}; refusing to drop existing metadata hash pin."
-                )
-            path_reference.pop("metadata_sha256", None)
-            continue
-        path_reference["metadata_sha256"] = metadata_sha256
+        path_reference: dict = {}
+        update_reference_from_artifact(path_reference, artifact)
+        datasets[name] = path_reference
 
 
 # ---------------------------------------------------------------------------
@@ -657,6 +721,8 @@ def refresh_release_bundle(
         _refresh_dataset_path_references_from_data_release(
             manifest_json,
             release_manifest_json,
+            release_manifest_path=new_release_manifest_path,
+            data_repo_id=repo_id,
         )
 
     manifest_path.write_text(
