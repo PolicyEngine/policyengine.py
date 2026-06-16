@@ -44,8 +44,8 @@ POLICYENGINE_VERSION = re.search(
 US_MODEL_VERSION = "1.729.0"
 US_BUILT_WITH_MODEL_VERSION = "1.729.0"
 US_DATA_RELEASE_VERSION = "0.1.0"
-US_DATA_RELEASE_PATH = "releases/populace-us-2024-0cdbb27-c239dfe51c11-20260615T201302Z/release_manifest.json"
-US_DATA_RELEASE_REVISION = "populace-us-2024-0cdbb27-c239dfe51c11-20260615T201302Z"
+US_DATA_RELEASE_REVISION = "populace-us-2024-f32c2e5-0c38bc47db89-20260616T124451Z"
+US_DATA_RELEASE_PATH = f"releases/{US_DATA_RELEASE_REVISION}/release_manifest.json"
 US_DATA_ARTIFACT_REVISION = US_DATA_RELEASE_REVISION
 US_CERTIFICATION_SOURCE = "policyengine.py certification"
 US_MANAGED_DATASET_URI = (
@@ -99,16 +99,10 @@ class TestReleaseManifests:
             manifest.data_package.release_manifest_revision == US_DATA_RELEASE_REVISION
         )
         assert manifest.certified_data_artifact is not None
-        assert (
-            manifest.certified_data_artifact.build_id
-            == "populace-us-2024-0cdbb27-c239dfe51c11-20260615T201302Z"
-        )
+        assert manifest.certified_data_artifact.build_id == US_DATA_RELEASE_REVISION
         assert manifest.certified_data_artifact.dataset == "populace_us_2024"
         assert manifest.certification is not None
-        assert (
-            manifest.certification.data_build_id
-            == "populace-us-2024-0cdbb27-c239dfe51c11-20260615T201302Z"
-        )
+        assert manifest.certification.data_build_id == US_DATA_RELEASE_REVISION
         assert manifest.certification.compatibility_basis == "built_with_model_package"
         assert (
             manifest.certification.built_with_model_version
