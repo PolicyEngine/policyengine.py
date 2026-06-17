@@ -119,7 +119,7 @@ class TestUSModel:
         assert (
             us_latest.default_dataset_uri
             == "hf://policyengine/populace-us/populace_us_2024.h5"
-            "@822609aa834528162d530c1c2bfca2cb347a01c2"
+            "@populace-us-2024-a912aea-76666318a202-20260616T175345Z"
         )
 
     def test_has_hundreds_of_parameters(self):
