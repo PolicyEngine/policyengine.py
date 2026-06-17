@@ -1,3 +1,10 @@
+## [4.17.7] - 2026-06-17
+
+### Fixed
+
+- Restore the previous US Populace default dataset and reject Populace releases whose critical fiscal calibration targets miss certification tolerances.
+
+
 ## [4.17.6] - 2026-06-17
 
 ### Changed

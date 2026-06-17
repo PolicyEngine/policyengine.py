@@ -18,18 +18,18 @@
         "schema:url": "https://policyengine.org"
       },
       "schema:dateCreated": "2026-05-20T20:16:50.641086Z",
-      "schema:description": "TRACE TRO for certified runtime bundle uk-4.17.6 covering the bundle manifest, the certified dataset artifact, the country model wheel, and the country data release manifest when it is available.",
+      "schema:description": "TRACE TRO for certified runtime bundle uk-4.17.7 covering the bundle manifest, the certified dataset artifact, the country model wheel, and the country data release manifest when it is available.",
       "schema:name": "policyengine uk certified bundle TRO",
       "trov:createdWith": {
         "@type": "schema:SoftwareApplication",
         "schema:name": "policyengine",
-        "schema:softwareVersion": "4.17.6"
+        "schema:softwareVersion": "4.17.7"
       },
       "trov:hasArrangement": [
         {
           "@id": "arrangement/1",
           "@type": "trov:ArtifactArrangement",
-          "rdfs:comment": "Certified arrangement for bundle uk-4.17.6.",
+          "rdfs:comment": "Certified arrangement for bundle uk-4.17.7.",
           "trov:hasArtifactLocation": [
             {
               "@id": "arrangement/1/location/bundle_manifest",
@@ -75,7 +75,7 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine.py bundle manifest for uk",
             "trov:mimeType": "application/json",
-            "trov:sha256": "e5cc6fea403a7e297a7eeacece1b208860b14c69d2e8a5eb19d6f71200a18e68"
+            "trov:sha256": "e7cae9e3ecce828c33cc4838b5b84d3bd1209d895077aac1e463fc14674357c8"
           },
           {
             "@id": "composition/1/artifact/data_release_manifest",
@@ -102,7 +102,7 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "71e85d59054e86dc8fde346f6d0db48a72e258f4442822440294c5dff1395e14"
+          "trov:sha256": "b32f1dfae00eee1d30166124f50e9a0116c9d91b28940646e5882556a8c5b32c"
         }
       },
       "trov:hasPerformance": {
@@ -112,8 +112,8 @@
         "pe:certifiedBy": "policyengine.py bundled manifest",
         "pe:certifiedForModelVersion": "2.88.20",
         "pe:ciGitRef": "refs/heads/main",
-        "pe:ciGitSha": "f0c8436314a4e3edc75440835e155ab9513be63f",
-        "pe:ciRunUrl": "https://github.com/PolicyEngine/policyengine.py/actions/runs/27664843839",
+        "pe:ciGitSha": "25d4a3d5e99dc1c415d077da9c0728bfebb16f16",
+        "pe:ciRunUrl": "https://github.com/PolicyEngine/policyengine.py/actions/runs/27683656210",
         "pe:compatibilityBasis": "exact_build_model_version",
         "pe:dataBuildFingerprint": "sha256:77f149725a36055fd89961855230401852b0712d301c6e26d6d16565c6b23809",
         "pe:dataBuildId": "policyengine-uk-data-1.55.10",
