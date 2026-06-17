@@ -62,6 +62,28 @@ PYPROJECT = REPO_ROOT / "pyproject.toml"
 SEMVER_PATTERN = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 
 
+@dataclass(frozen=True)
+class _CriticalCalibrationTarget:
+    name: str
+    max_abs_relative_error: float
+
+
+_US_POPULACE_CRITICAL_CALIBRATION_TARGETS = (
+    _CriticalCalibrationTarget(
+        name="irs_soi.ty2022.historic_table_2.us.all.income_tax_liability_amount@2024",
+        max_abs_relative_error=0.05,
+    ),
+    _CriticalCalibrationTarget(
+        name="irs_soi.ty2022.historic_table_2.us.all.income_tax_liability_returns@2024",
+        max_abs_relative_error=0.10,
+    ),
+    _CriticalCalibrationTarget(
+        name="ssa_supplement.cy2024.oasdi_ssi_payments.social_security_benefits.payment_amount@2024",
+        max_abs_relative_error=0.05,
+    ),
+)
+
+
 # ---------------------------------------------------------------------------
 # policyengine.py bundle identity
 # ---------------------------------------------------------------------------
@@ -231,6 +253,130 @@ def _fetch_data_release_manifest(
         except (OSError, ValueError):
             continue
     return None
+
+
+def _fetch_json_release_artifact(
+    artifact: dict,
+    *,
+    release_manifest_path: str | None,
+    data_repo_id: str,
+    data_repo_type: str,
+    default_revision: str,
+) -> dict:
+    path = _release_scoped_artifact_path(
+        artifact,
+        release_manifest_path=release_manifest_path,
+        data_repo_id=data_repo_id,
+    )
+    repo_id = artifact.get("repo_id") or data_repo_id
+    revision = artifact.get("revision") or default_revision
+    repo_type = artifact.get("repo_type")
+    if repo_type is None:
+        repo_type = data_repo_type if repo_id == data_repo_id else "model"
+    url = https_dataset_uri(
+        repo_id=repo_id,
+        path_in_repo=path,
+        revision=revision,
+        repo_type=repo_type,
+    )
+    headers = {"User-Agent": "policyengine.py"}
+    token = os.environ.get("HUGGING_FACE_TOKEN") or os.environ.get("HF_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    with urlopen(Request(url, headers=headers)) as f:
+        content = f.read()
+
+    expected_sha256 = artifact.get("sha256")
+    if expected_sha256:
+        actual_sha256 = hashlib.sha256(content).hexdigest()
+        if actual_sha256 != expected_sha256:
+            raise ValueError(
+                "Data release artifact hash mismatch for "
+                f"{path!r}: expected {expected_sha256}, got {actual_sha256}."
+            )
+
+    try:
+        return json.loads(content)
+    except ValueError as exc:
+        raise ValueError(f"Data release artifact {path!r} is not valid JSON.") from exc
+
+
+def _calibration_relative_error(target: dict) -> float | None:
+    relative_error = target.get("relative_error")
+    if relative_error is not None:
+        return float(relative_error)
+
+    target_value = target.get("target")
+    final_estimate = target.get("final_estimate", target.get("final"))
+    if target_value in (None, 0) or final_estimate is None:
+        return None
+    return (float(final_estimate) - float(target_value)) / float(target_value)
+
+
+def _validate_populace_critical_calibration_targets(
+    *,
+    country: str,
+    release_manifest_json: dict,
+    release_manifest_path: str | None,
+    data_package_name: str,
+    data_repo_id: str,
+    data_repo_type: str,
+    default_revision: str,
+) -> None:
+    if country != "us" or data_package_name != "populace-data":
+        return
+
+    diagnostics_artifact = release_manifest_json.get("artifacts", {}).get(
+        "calibration_diagnostics"
+    )
+    if diagnostics_artifact is None:
+        raise ValueError(
+            "Populace release manifest is missing calibration_diagnostics; "
+            "refusing to certify without critical calibration target gates."
+        )
+
+    diagnostics = _fetch_json_release_artifact(
+        diagnostics_artifact,
+        release_manifest_path=release_manifest_path,
+        data_repo_id=data_repo_id,
+        data_repo_type=data_repo_type,
+        default_revision=default_revision,
+    )
+    targets = diagnostics.get("targets")
+    if not isinstance(targets, list):
+        raise ValueError(
+            "Populace calibration_diagnostics is missing the target list; "
+            "refusing to certify without critical calibration target gates."
+        )
+    targets_by_name = {
+        target.get("name"): target
+        for target in targets
+        if isinstance(target, dict) and target.get("name")
+    }
+
+    failures = []
+    for critical_target in _US_POPULACE_CRITICAL_CALIBRATION_TARGETS:
+        target = targets_by_name.get(critical_target.name)
+        if target is None:
+            failures.append(f"{critical_target.name}: missing")
+            continue
+
+        relative_error = _calibration_relative_error(target)
+        if relative_error is None:
+            failures.append(f"{critical_target.name}: missing relative error")
+            continue
+
+        if abs(relative_error) > critical_target.max_abs_relative_error:
+            failures.append(
+                f"{critical_target.name}: relative_error={relative_error:.6g} "
+                f"exceeds {critical_target.max_abs_relative_error:.6g}"
+            )
+
+    if failures:
+        raise ValueError(
+            "Populace critical calibration target gate failed: " + "; ".join(failures)
+        )
 
 
 def _updated_release_manifest_path(
@@ -615,6 +761,15 @@ def refresh_release_bundle(
                 f"version {release_manifest_data_version!r}, expected {new_data!r}."
             )
         new_release_manifest_revision = release_manifest_fetch.repo_commit
+        _validate_populace_critical_calibration_targets(
+            country=country,
+            release_manifest_json=release_manifest_json,
+            release_manifest_path=new_release_manifest_path,
+            data_package_name=data_package_json.get("name", ""),
+            data_repo_id=repo_id,
+            data_repo_type=data_package_json.get("repo_type", "model"),
+            default_revision=new_release_manifest_revision,
+        )
 
     certified_dataset = (
         current.certified_data_artifact.dataset
