@@ -1,3 +1,10 @@
+## [4.17.6] - 2026-06-17
+
+### Changed
+
+- Refresh the bundled US Populace release manifest to the 2026-06-17 certified build.
+
+
 ## [4.17.5] - 2026-06-16
 
 ### Fixed
