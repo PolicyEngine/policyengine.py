@@ -361,9 +361,12 @@ def build_trace_tro_from_release_bundle(
         repo_type=country_manifest.data_package.repo_type,
     )
 
-    bundle_manifest_hash = hashlib.sha256(
-        canonical_json_bytes(country_manifest.model_dump(mode="json"))
-    ).hexdigest()
+    bundle_manifest_hash = (
+        country_manifest.source_sha256
+        or hashlib.sha256(
+            canonical_json_bytes(country_manifest.model_dump(mode="json"))
+        ).hexdigest()
+    )
     data_release_manifest_hash = (
         data_release_manifest.source_sha256
         or hashlib.sha256(

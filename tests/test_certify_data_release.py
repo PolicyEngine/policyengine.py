@@ -365,18 +365,13 @@ class TestCertifyDataRelease:
 class TestVendoredSidecarBinding:
     def test__given_vendored_us_manifest__then_tro_sidecar_binds_it(self):
         """The shipped TRO must bind the shipped country manifest under the
-        canonical-model convention used by build_trace_tro_from_release_bundle."""
+        same byte-hash convention used by trace-tro-verify."""
         import hashlib
         from importlib.resources import files
 
-        from policyengine.provenance.manifest import CountryReleaseManifest
-        from policyengine.provenance.trace import canonical_json_bytes
-
         manifest_dir = files("policyengine").joinpath("data/release_manifests")
-        manifest_text = manifest_dir.joinpath("us.json").read_text()
-        country_manifest = CountryReleaseManifest.model_validate_json(manifest_text)
         expected = hashlib.sha256(
-            canonical_json_bytes(country_manifest.model_dump(mode="json"))
+            manifest_dir.joinpath("us.json").read_bytes()
         ).hexdigest()
 
         tro = json.loads(manifest_dir.joinpath("us.trace.tro.jsonld").read_text())
