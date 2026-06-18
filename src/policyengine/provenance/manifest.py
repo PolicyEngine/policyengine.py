@@ -173,6 +173,8 @@ class CountryReleaseManifest(BaseModel):
     region_datasets: dict[str, ArtifactPathTemplate] = Field(default_factory=dict)
     certified_data_artifact: Optional[CertifiedDataArtifact] = None
     certification: Optional[DataCertification] = None
+    source_sha256: Optional[str] = Field(default=None, exclude=True)
+    """Byte sha256 of the bundled manifest before Pydantic normalization."""
 
     @property
     def default_dataset_uri(self) -> str:
@@ -256,7 +258,10 @@ def get_release_manifest(country_id: str) -> CountryReleaseManifest:
     if not manifest_path.is_file():
         raise ValueError(f"No bundled release manifest for country '{country_id}'")
 
-    return CountryReleaseManifest.model_validate_json(manifest_path.read_text())
+    source_bytes = manifest_path.read_bytes()
+    manifest = CountryReleaseManifest.model_validate_json(source_bytes)
+    manifest.source_sha256 = hashlib.sha256(source_bytes).hexdigest()
+    return manifest
 
 
 @lru_cache

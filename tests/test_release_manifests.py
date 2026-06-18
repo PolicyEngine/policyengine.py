@@ -44,8 +44,8 @@ POLICYENGINE_VERSION = re.search(
 US_MODEL_VERSION = "1.729.0"
 US_BUILT_WITH_MODEL_VERSION = "1.729.0"
 US_DATA_RELEASE_VERSION = "0.1.0"
-US_DATA_RELEASE_ID = "populace-us-2024-a912aea-76666318a202-20260616T175345Z"
-US_DATA_RELEASE_REVISION = "c4e2fd454ddce0e1889ab77abff178a7bdd72b18"
+US_DATA_RELEASE_ID = "populace-us-2024-incumbent-improved-996401a-20260618"
+US_DATA_RELEASE_REVISION = "c5a9f565aed7eb15e04dbabe0aff563b3b9a3a36"
 US_DATA_RELEASE_PATH = f"releases/{US_DATA_RELEASE_ID}/release_manifest.json"
 US_DATA_ARTIFACT_REVISION = US_DATA_RELEASE_ID
 US_CERTIFICATION_SOURCE = "populace-data release manifest"
@@ -53,7 +53,7 @@ US_MANAGED_DATASET_URI = (
     f"hf://policyengine/populace-us/populace_us_2024.h5@{US_DATA_ARTIFACT_REVISION}"
 )
 US_CERTIFIED_DATASET_URI = (
-    f"hf://policyengine/populace-us/populace_us_2024.h5@{US_DATA_ARTIFACT_REVISION}"
+    f"hf://policyengine/populace-us/populace_us_2024.h5@{US_DATA_RELEASE_REVISION}"
 )
 US_RELEASE_MANIFEST_DATASET_URI = (
     f"hf://policyengine/populace-us/populace_us_2024.h5@{US_DATA_RELEASE_REVISION}"
