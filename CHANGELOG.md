@@ -1,3 +1,10 @@
+## [4.17.8] - 2026-06-18
+
+### Changed
+
+- Update the certified US Populace dataset to the incumbent-improved 2024 release.
+
+
 ## [4.17.7] - 2026-06-17
 
 ### Fixed
