@@ -6,8 +6,11 @@ on:
     paths:
       - src/**
       - tests/**
+      - scripts/**
       - .github/**
       - changelog.d/**
+      - pyproject.toml
+      - policyengine-stack.toml
   workflow_dispatch:
 
 jobs:
@@ -73,6 +76,25 @@ jobs:
         run: uv pip install --system . h5py
       - name: Smoke-import core modules
         run: python -c "import policyengine; from policyengine.core import Dataset, Policy, Simulation; from policyengine.outputs import aggregate, poverty, inequality; print('import OK')"
+  StackVerification:
+    name: Verify stack metadata
+    runs-on: ubuntu-latest
+    env:
+      POLICYENGINE_SKIP_COUNTRY_IMPORTS: "1"
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Check generated stack artifacts
+        run: python scripts/generate_stack_artifacts.py --check
+      - name: Install stack model extra
+        run: uv pip install -e ".[models]" --system
+      - name: Verify stack
+        run: policyengine stack verify --extra models --check-uris
   Test:
     runs-on: macos-latest
     strategy:

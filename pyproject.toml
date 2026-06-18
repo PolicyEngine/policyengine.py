@@ -43,13 +43,41 @@ plotting = [
 graph = [
     "networkx>=3.0",
 ]
-uk = [
+models = [
     "policyengine_core>=3.27.1",
+    "policyengine-us==1.729.0",
     "policyengine-uk==2.89.2",
+]
+data = [
+    "policyengine-us-data==1.78.2; python_version >= '3.12' and python_version < '3.15'",
+]
+full = [
+    "policyengine_core>=3.27.1",
+    "policyengine-us==1.729.0",
+    "policyengine-uk==2.89.2",
+    "policyengine-us-data==1.78.2; python_version >= '3.12' and python_version < '3.15'",
 ]
 us = [
     "policyengine_core>=3.27.1",
     "policyengine-us==1.729.0",
+]
+uk = [
+    "policyengine_core>=3.27.1",
+    "policyengine-uk==2.89.2",
+]
+us-data = [
+    "policyengine-us-data==1.78.2; python_version >= '3.12' and python_version < '3.15'",
+]
+uk-data = [
+]
+us-full = [
+    "policyengine_core>=3.27.1",
+    "policyengine-us==1.729.0",
+    "policyengine-us-data==1.78.2; python_version >= '3.12' and python_version < '3.15'",
+]
+uk-full = [
+    "policyengine_core>=3.27.1",
+    "policyengine-uk==2.89.2",
 ]
 dev = [
     "pytest",

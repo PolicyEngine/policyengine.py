@@ -153,12 +153,51 @@ def sync_release_manifest_versions(manifest_dir: Path, new_version: str):
             print(f"  Updated {manifest_path}")
 
 
+def sync_stack_versions(stack_path: Path, new_version: str):
+    if not stack_path.exists():
+        return
+    text = stack_path.read_text()
+    replacements = [
+        (
+            r'(^stack_version\s*=\s*")([^"]+)(")',
+            rf"\g<1>{new_version}\g<3>",
+        ),
+        (
+            r'(^policyengine_version\s*=\s*")([^"]+)(")',
+            rf"\g<1>{new_version}\g<3>",
+        ),
+        (
+            r'(\[packages\.policyengine\]\s+name\s*=\s*"policyengine"\s+version\s*=\s*")([^"]+)(")',
+            rf"\g<1>{new_version}\g<3>",
+        ),
+    ]
+    updated = text
+    for pattern, replacement in replacements:
+        updated, count = re.subn(
+            pattern,
+            replacement,
+            updated,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        if count == 0:
+            print(
+                f"Could not update {stack_path}: missing stack version field.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    if updated != text:
+        stack_path.write_text(updated)
+        print(f"  Updated {stack_path}")
+
+
 def main():
     root = Path(__file__).resolve().parent.parent
     pyproject = root / "pyproject.toml"
     changelog = root / "CHANGELOG.md"
     changelog_dir = root / "changelog.d"
     manifest_dir = root / "src" / "policyengine" / "data" / "release_manifests"
+    stack_path = root / "policyengine-stack.toml"
 
     current = get_current_version(pyproject, changelog, root)
     bump = infer_bump(changelog_dir)
@@ -168,6 +207,7 @@ def main():
 
     update_file(pyproject, new)
     sync_release_manifest_versions(manifest_dir, new)
+    sync_stack_versions(stack_path, new)
 
 
 if __name__ == "__main__":

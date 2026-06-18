@@ -28,6 +28,11 @@ from policyengine.provenance.trace import (
     build_trace_tro_from_release_bundle,
     serialize_trace_tro,
 )
+from policyengine.stack import (
+    format_stack_citation,
+    get_current_stack,
+    verify_installed_stack,
+)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -96,6 +101,53 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     bundle.add_argument("country", help="Country id (e.g. us, uk).")
+
+    stack = subparsers.add_parser(
+        "stack",
+        help="Inspect or verify the packaged PolicyEngine stack manifest.",
+    )
+    stack_subparsers = stack.add_subparsers(dest="stack_command", required=True)
+
+    stack_show = stack_subparsers.add_parser(
+        "show",
+        help="Print the packaged stack manifest as JSON.",
+    )
+    stack_show.add_argument(
+        "--extra",
+        help="Only include package components used by this extra.",
+    )
+
+    stack_verify = stack_subparsers.add_parser(
+        "verify",
+        help="Verify installed packages against the packaged stack manifest.",
+    )
+    stack_verify.add_argument(
+        "--extra",
+        help=(
+            "Require every component in this extra, e.g. models or full. "
+            "Without this, missing optional components are skipped."
+        ),
+    )
+    stack_verify.add_argument(
+        "--no-imports",
+        action="store_true",
+        help="Check installed versions without importing component modules.",
+    )
+    stack_verify.add_argument(
+        "--check-uris",
+        action="store_true",
+        help="Perform lightweight HEAD/GET checks for stack metadata URIs.",
+    )
+    stack_verify.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the full verification report as JSON.",
+    )
+
+    stack_subparsers.add_parser(
+        "cite",
+        help="Print a concise citation for the packaged stack.",
+    )
 
     return parser
 
@@ -171,6 +223,41 @@ def _emit_release_manifest(country_id: str) -> int:
     return 0
 
 
+def _emit_stack(extra: Optional[str]) -> int:
+    stack = get_current_stack()
+    if extra is not None:
+        package_names = {"policyengine", *stack["extras"][extra]}
+        stack = {
+            **stack,
+            "packages": {
+                name: package
+                for name, package in stack["packages"].items()
+                if name in package_names
+            },
+        }
+    print(json.dumps(stack, indent=2, sort_keys=True))
+    return 0
+
+
+def _verify_stack(args: argparse.Namespace) -> int:
+    report = verify_installed_stack(
+        extra=args.extra,
+        check_imports=not args.no_imports,
+        check_uris=args.check_uris,
+    )
+    if args.json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        status = "ok" if report["passed"] else "failed"
+        print(f"PolicyEngine stack {report['stack_version']}: {status}")
+        for check in report["checks"]:
+            label = check.get("component") or check.get("uri")
+            message = check.get("message")
+            suffix = f" ({message})" if message else ""
+            print(f"- {label}: {check['status']}{suffix}")
+    return 0 if report["passed"] else 1
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = _parser().parse_args(argv)
     if args.command == "trace-tro":
@@ -181,6 +268,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _verify_tro(args.path, args.base_dir, args.skip)
     if args.command == "release-manifest":
         return _emit_release_manifest(args.country)
+    if args.command == "stack":
+        if args.stack_command == "show":
+            return _emit_stack(args.extra)
+        if args.stack_command == "verify":
+            return _verify_stack(args)
+        if args.stack_command == "cite":
+            print(format_stack_citation())
+            return 0
     return 1
 
 
