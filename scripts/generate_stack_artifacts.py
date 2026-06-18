@@ -21,16 +21,6 @@ STACK_MANIFEST = REPO_ROOT / "src" / "policyengine" / "data" / "stack" / "manife
 
 OPTIONAL_DEPENDENCIES_HEADER = "[project.optional-dependencies]"
 NEXT_SECTION_PATTERN = re.compile(r"\n\[tool\.setuptools\]", re.MULTILINE)
-FIRST_PARTY_PACKAGE_NAMES = {
-    "policyengine",
-    "policyengine-core",
-    "policyengine-us",
-    "policyengine-uk",
-    "policyengine-us-data",
-    "policyengine-uk-data",
-}
-
-
 def load_toml(path: Path) -> dict[str, Any]:
     with path.open("rb") as stream:
         return tomllib.load(stream)
@@ -84,10 +74,14 @@ def update_pyproject_text(pyproject_text: str, stack: Mapping[str, Any]) -> str:
         for name, package_names in stack_extras.items()
     }
 
+    first_party_package_names = {
+        normalized_requirement_name(component["name"])
+        for component in stack["packages"].values()
+    }
     dev_dependencies = [
         dependency
         for dependency in optional.get("dev", [])
-        if normalized_requirement_name(dependency) not in FIRST_PARTY_PACKAGE_NAMES
+        if normalized_requirement_name(dependency) not in first_party_package_names
     ]
     for package_name in stack_extras.get("models", []):
         dev_dependencies.append(exact_requirement(stack["packages"][package_name]))
