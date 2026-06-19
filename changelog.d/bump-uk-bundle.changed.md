@@ -1,0 +1,1 @@
+Bumped the bundled UK release to `policyengine-uk` 2.89.2 and `policyengine-uk-data` 1.56.5 (`enhanced_frs_2024_25`), adding the `bus_fare_spending` and `bus_subsidy_spending` variables to the certified UK bundle.
