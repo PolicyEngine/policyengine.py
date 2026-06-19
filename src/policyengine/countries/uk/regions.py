@@ -6,19 +6,17 @@ This module defines all UK geographic regions:
 - Constituencies (loaded from CSV at runtime)
 - Local Authorities (loaded from CSV at runtime)
 
-Note: Constituencies and local authorities use weight adjustment rather than
-data filtering. They modify household_weight based on pre-computed weights
-from H5 files stored in GCS.
+Note: Constituencies and local authorities filter from the national dataset
+using geography columns carried on each household. This keeps subnational
+scoping tied to the dataset rows, not to a separate weight matrix whose
+household dimension can drift from the default dataset.
 """
 
 import logging
 from typing import TYPE_CHECKING
 
 from policyengine.core.region import Region, RegionRegistry
-from policyengine.core.scoping_strategy import (
-    RowFilterStrategy,
-    WeightReplacementStrategy,
-)
+from policyengine.core.scoping_strategy import RowFilterStrategy
 from policyengine.data.uk_geography_assets import (
     CONSTITUENCY_ASSET_SPEC,
     LOCAL_AUTHORITY_ASSET_SPEC,
@@ -153,7 +151,6 @@ def build_uk_region_registry(
         )
 
     # 3. Constituencies (optional, loaded from CSV)
-    # Note: These use weight replacement, not data filtering
     if include_constituencies:
         constituencies = _load_constituencies_from_csv()
         for const in constituencies:
@@ -163,18 +160,14 @@ def build_uk_region_registry(
                     label=const["name"],
                     region_type="constituency",
                     parent_code="uk",
-                    scoping_strategy=WeightReplacementStrategy(
-                        weight_matrix_bucket=CONSTITUENCY_ASSET_SPEC.bucket,
-                        weight_matrix_key=CONSTITUENCY_ASSET_SPEC.weight_matrix_filename,
-                        lookup_csv_bucket=CONSTITUENCY_ASSET_SPEC.bucket,
-                        lookup_csv_key=CONSTITUENCY_ASSET_SPEC.lookup_csv_filename,
-                        region_code=const["code"],
+                    scoping_strategy=RowFilterStrategy(
+                        variable_name="constituency_code_oa",
+                        variable_value=const["code"],
                     ),
                 )
             )
 
     # 4. Local Authorities (optional, loaded from CSV)
-    # Note: These use weight replacement, not data filtering
     if include_local_authorities:
         local_authorities = _load_local_authorities_from_csv()
         for la in local_authorities:
@@ -184,12 +177,9 @@ def build_uk_region_registry(
                     label=la["name"],
                     region_type="local_authority",
                     parent_code="uk",
-                    scoping_strategy=WeightReplacementStrategy(
-                        weight_matrix_bucket=LOCAL_AUTHORITY_ASSET_SPEC.bucket,
-                        weight_matrix_key=LOCAL_AUTHORITY_ASSET_SPEC.weight_matrix_filename,
-                        lookup_csv_bucket=LOCAL_AUTHORITY_ASSET_SPEC.bucket,
-                        lookup_csv_key=LOCAL_AUTHORITY_ASSET_SPEC.lookup_csv_filename,
-                        region_code=la["code"],
+                    scoping_strategy=RowFilterStrategy(
+                        variable_name="la_code_oa",
+                        variable_value=la["code"],
                     ),
                 )
             )

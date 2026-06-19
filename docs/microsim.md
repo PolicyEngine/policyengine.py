@@ -45,7 +45,7 @@ datasets = pe.us.ensure_datasets(
 dataset = datasets["enhanced_cps_2024_2026"]
 ```
 
-The default US dataset is **Enhanced CPS 2024** — CPS ASEC fused with IRS SOI tax-return records and calibrated to IRS, CMS, SNAP, and other administrative totals. The UK default is **Enhanced FRS 2023/24** — the Family Resources Survey fused with tax-return microdata and calibrated to HMRC and DWP totals.
+The default US dataset is **Enhanced CPS 2024** — CPS ASEC fused with IRS SOI tax-return records and calibrated to IRS, CMS, SNAP, and other administrative totals. The UK default is **Populace UK 2023** — a Populace-built Family Resources Survey dataset calibrated to UK administrative targets.
 
 List datasets already known to the country:
 
@@ -57,7 +57,7 @@ pe.us.load_datasets()        # or pe.uk.load_datasets()
 
 UK population data uses licensed Family Resources Survey inputs. The default
 UK release bundle points to the private
-`policyengine/policyengine-uk-data-private` Hugging Face model repository. Set
+`policyengine/populace-uk-private` Hugging Face dataset repository. Set
 `HUGGING_FACE_TOKEN` to a token from a Hugging Face account with access:
 
 ```bash
@@ -73,11 +73,11 @@ import policyengine as pe
 from policyengine.core import Simulation
 
 datasets = pe.uk.ensure_datasets(
-    datasets=["enhanced_frs_2023_24"],
+    datasets=["populace_uk_2023"],
     years=[2026],
     data_folder="./data",
 )
-dataset = datasets["enhanced_frs_2023_24_2026"]
+dataset = datasets["populace_uk_2023_2026"]
 
 simulation = Simulation(
     dataset=dataset,
@@ -87,16 +87,16 @@ simulation.run()
 ```
 
 To download the raw h5 artifact directly from Hugging Face, use
-`huggingface_hub` and specify `repo_type="model"`:
+`huggingface_hub` and specify `repo_type="dataset"`:
 
 ```python
 import os
 from huggingface_hub import hf_hub_download
 
 path = hf_hub_download(
-    repo_id="policyengine/policyengine-uk-data-private",
-    filename="enhanced_frs_2023_24.h5",
-    repo_type="model",
+    repo_id="policyengine/populace-uk-private",
+    filename="populace_uk_2023.h5",
+    repo_type="dataset",
     token=os.environ["HUGGING_FACE_TOKEN"],
 )
 
@@ -104,10 +104,10 @@ print(path)
 ```
 
 The repository URL is
-<https://huggingface.co/policyengine/policyengine-uk-data-private>. A 404 from
+<https://huggingface.co/datasets/policyengine/populace-uk-private>. A 404 from
 the website or `RepositoryNotFoundError` from the Hub API usually means the
 browser or token is not authenticated as an account with access, or that the
-Hub call omitted `repo_type="model"`.
+Hub call omitted `repo_type="dataset"`.
 
 ## Simulations
 

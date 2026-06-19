@@ -148,6 +148,12 @@ def _uk_fixture_dataset(tmp_path):
                 "household_id": [1],
                 "household_weight": [1_000.0],
                 "region": ["LONDON"],
+                "oa_code": ["E00000001"],
+                "lsoa_code": ["E01000001"],
+                "msoa_code": ["E02000001"],
+                "constituency_code_oa": ["E14001234"],
+                "la_code_oa": ["E09000001"],
+                "region_code_oa": ["E12000007"],
                 "tenure_type": ["RENT_PRIVATELY"],
                 "rent": [12_000.0],
                 "council_tax": [1_500.0],
@@ -191,6 +197,13 @@ def test__uk_extra_variables_appear_on_output_dataset(tmp_path) -> None:
         "likely a regression in uk/model.py:run() bypassing "
         "resolve_entity_variables"
     )
+    household = sim.output_dataset.data.household
+    assert household["oa_code"].tolist() == ["E00000001"]
+    assert household["lsoa_code"].tolist() == ["E01000001"]
+    assert household["msoa_code"].tolist() == ["E02000001"]
+    assert household["constituency_code_oa"].tolist() == ["E14001234"]
+    assert household["la_code_oa"].tolist() == ["E09000001"]
+    assert household["region_code_oa"].tolist() == ["E12000007"]
 
 
 def test__uk_resolve_entity_variables_raises_on_unknown_variable() -> None:

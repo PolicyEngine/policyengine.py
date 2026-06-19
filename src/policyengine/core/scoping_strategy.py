@@ -5,8 +5,8 @@ Provides two concrete strategies for scoping datasets to sub-national regions:
 1. RowFilterStrategy: Filters dataset rows where a household variable matches
    a specific value (e.g., UK countries by 'country' field, US places by 'place_fips').
 
-2. WeightReplacementStrategy: Replaces household weights from a pre-computed weight
-   matrix resolved locally or from GCS (e.g., UK constituencies and local authorities).
+2. WeightReplacementStrategy: Legacy strategy that replaces household weights from
+   a pre-computed weight matrix resolved locally or from GCS.
 """
 
 import logging
@@ -90,9 +90,9 @@ class RowFilterStrategy(RegionScopingStrategy):
 class WeightReplacementStrategy(RegionScopingStrategy):
     """Scoping strategy that replaces household weights from a pre-computed matrix.
 
-    Used for UK constituencies and local authorities. Instead of removing
-    households, this strategy keeps all households but replaces their weights
-    with region-specific values from a locally cached or downloaded weight matrix.
+    Instead of removing households, this strategy keeps all households but
+    replaces their weights with region-specific values from a locally cached
+    or downloaded weight matrix.
 
     The weight matrix is an HDF5 file with shape (N_regions x N_households),
     where each row contains household weights for a specific region.

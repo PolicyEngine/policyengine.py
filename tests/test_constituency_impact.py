@@ -1,11 +1,7 @@
 """Unit tests for ConstituencyImpact output class."""
 
-import os
-import tempfile
 from unittest.mock import MagicMock, patch
 
-import h5py
-import numpy as np
 import pandas as pd
 import pytest
 from microdf import MicroDataFrame
@@ -13,9 +9,7 @@ from microdf import MicroDataFrame
 from policyengine.outputs.constituency_impact import (
     compute_uk_constituency_impacts,
 )
-from policyengine.outputs.uk_geography_assets import (
-    CONSTITUENCY_ASSET_SPEC,
-)
+from policyengine.outputs.uk_geography_assets import CONSTITUENCY_ASSET_SPEC
 
 
 def _make_sim(household_data: dict) -> MagicMock:
@@ -30,49 +24,42 @@ def _make_sim(household_data: dict) -> MagicMock:
     return sim
 
 
-def _make_weight_matrix_and_csv(
-    tmpdir, n_constituencies, n_households, weights, csv_rows
-):
-    """Create a temp H5 weight matrix and CSV metadata file."""
-    h5_path = os.path.join(tmpdir, "weights.h5")
-    with h5py.File(h5_path, "w") as f:
-        f.create_dataset("2025", data=np.array(weights, dtype=np.float64))
-
-    csv_path = os.path.join(tmpdir, "constituencies.csv")
-    pd.DataFrame(csv_rows).to_csv(csv_path, index=False)
-
-    return h5_path, csv_path
+def _write_lookup_csv(tmp_path, rows) -> str:
+    csv_path = tmp_path / "constituencies.csv"
+    pd.DataFrame(rows).to_csv(csv_path, index=False)
+    return str(csv_path)
 
 
-def test_basic_constituency_reweighting():
-    """Two constituencies with known weight matrices produce correct metrics."""
-    n_hh = 3
+def test_basic_constituency_longwise_grouping(tmp_path):
+    """Two constituencies with household geography codes produce metrics."""
     baseline = _make_sim(
         {
-            "household_net_income": [50000.0, 60000.0, 40000.0],
-            "household_weight": [1.0, 1.0, 1.0],
+            "constituency_code_oa": ["C001", "C001", b"C002", ""],
+            "household_net_income": [50000.0, 60000.0, 40000.0, 30000.0],
+            "household_weight": [2.0, 1.0, 3.0, 1.0],
         }
     )
     reform = _make_sim(
         {
-            "household_net_income": [52000.0, 62000.0, 42000.0],
-            "household_weight": [1.0, 1.0, 1.0],
+            "constituency_code_oa": ["C001", "C001", b"C002", ""],
+            "household_net_income": [52000.0, 62000.0, 43000.0, 33000.0],
+            "household_weight": [2.0, 1.0, 3.0, 1.0],
         }
     )
+    csv_path = _write_lookup_csv(
+        tmp_path,
+        [
+            {"code": "C001", "name": "Constituency A", "x": 10, "y": 20},
+            {"code": "C002", "name": "Constituency B", "x": 30, "y": 40},
+        ],
+    )
 
-    # Constituency 0 weights: [2, 0, 1] → weighted baseline = 2*50k + 0 + 1*40k = 140k
-    # Constituency 1 weights: [0, 3, 0] → weighted baseline = 0 + 3*60k + 0 = 180k
-    weight_matrix = [[2.0, 0.0, 1.0], [0.0, 3.0, 0.0]]
-    csv_rows = [
-        {"code": "C001", "name": "Constituency A", "x": 10, "y": 20},
-        {"code": "C002", "name": "Constituency B", "x": 30, "y": 40},
-    ]
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        h5_path, csv_path = _make_weight_matrix_and_csv(
-            tmpdir, 2, n_hh, weight_matrix, csv_rows
-        )
-        impact = compute_uk_constituency_impacts(baseline, reform, h5_path, csv_path)
+    impact = compute_uk_constituency_impacts(
+        baseline,
+        reform,
+        constituency_csv_path=csv_path,
+        download_missing_assets=False,
+    )
 
     assert impact.constituency_results is not None
     assert len(impact.constituency_results) == 2
@@ -80,7 +67,6 @@ def test_basic_constituency_reweighting():
     by_code = {r["constituency_code"]: r for r in impact.constituency_results}
 
     c1 = by_code["C001"]
-    # Weighted change: (2*2000 + 0 + 1*2000) / 3 = 2000
     assert abs(c1["average_household_income_change"] - 2000.0) < 1e-6
     assert c1["constituency_name"] == "Constituency A"
     assert c1["x"] == 10
@@ -88,120 +74,161 @@ def test_basic_constituency_reweighting():
     assert c1["population"] == 3.0
 
     c2 = by_code["C002"]
-    # Weighted change: (0 + 3*2000 + 0) / 3 = 2000
-    assert abs(c2["average_household_income_change"] - 2000.0) < 1e-6
+    assert abs(c2["average_household_income_change"] - 3000.0) < 1e-6
+    assert c2["constituency_name"] == "Constituency B"
+    assert c2["population"] == 3.0
 
 
-def test_zero_weight_constituency_skipped():
-    """A constituency with all-zero weights produces no result."""
+def test_zero_weight_constituency_skipped(tmp_path):
+    """A constituency with all-zero household weights produces no result."""
     baseline = _make_sim(
         {
+            "constituency_code_oa": ["C001", "C002"],
             "household_net_income": [50000.0, 60000.0],
-            "household_weight": [1.0, 1.0],
+            "household_weight": [1.0, 0.0],
         }
     )
     reform = _make_sim(
         {
+            "constituency_code_oa": ["C001", "C002"],
             "household_net_income": [55000.0, 65000.0],
-            "household_weight": [1.0, 1.0],
+            "household_weight": [1.0, 0.0],
         }
     )
+    csv_path = _write_lookup_csv(
+        tmp_path,
+        [
+            {"code": "C001", "name": "A", "x": 0, "y": 0},
+            {"code": "C002", "name": "B", "x": 0, "y": 0},
+        ],
+    )
 
-    weight_matrix = [[1.0, 1.0], [0.0, 0.0]]
-    csv_rows = [
-        {"code": "C001", "name": "A", "x": 0, "y": 0},
-        {"code": "C002", "name": "B", "x": 0, "y": 0},
-    ]
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        h5_path, csv_path = _make_weight_matrix_and_csv(
-            tmpdir, 2, 2, weight_matrix, csv_rows
-        )
-        impact = compute_uk_constituency_impacts(baseline, reform, h5_path, csv_path)
+    impact = compute_uk_constituency_impacts(
+        baseline,
+        reform,
+        constituency_csv_path=csv_path,
+        download_missing_assets=False,
+    )
 
     assert len(impact.constituency_results) == 1
     assert impact.constituency_results[0]["constituency_code"] == "C001"
 
 
-def test_relative_change():
+def test_relative_change(tmp_path):
     """Relative household income change is computed correctly."""
     baseline = _make_sim(
         {
+            "constituency_code_oa": ["C001"],
             "household_net_income": [100000.0],
             "household_weight": [1.0],
         }
     )
     reform = _make_sim(
         {
+            "constituency_code_oa": ["C001"],
             "household_net_income": [110000.0],
             "household_weight": [1.0],
         }
     )
+    csv_path = _write_lookup_csv(
+        tmp_path,
+        [{"code": "C001", "name": "A", "x": 0, "y": 0}],
+    )
 
-    weight_matrix = [[1.0]]
-    csv_rows = [{"code": "C001", "name": "A", "x": 0, "y": 0}]
+    impact = compute_uk_constituency_impacts(
+        baseline,
+        reform,
+        constituency_csv_path=csv_path,
+        download_missing_assets=False,
+    )
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        h5_path, csv_path = _make_weight_matrix_and_csv(
-            tmpdir, 1, 1, weight_matrix, csv_rows
-        )
-        impact = compute_uk_constituency_impacts(baseline, reform, h5_path, csv_path)
-
-    # 10% increase
     assert (
         abs(impact.constituency_results[0]["relative_household_income_change"] - 0.1)
         < 1e-6
     )
 
 
-def test_compute_resolves_standard_constituency_assets_from_default_local_dir(
-    monkeypatch,
+def test_compute_uses_local_lookup_csv_without_matrix_or_gcs(
+    tmp_path,
 ):
-    """The helper can run without explicit asset paths when standard files exist."""
+    """The helper can enrich labels from local CSV without matrix assets."""
     baseline = _make_sim(
         {
+            "constituency_code_oa": ["C001", "C002"],
             "household_net_income": [100.0, 200.0],
             "household_weight": [1.0, 1.0],
         }
     )
     reform = _make_sim(
         {
+            "constituency_code_oa": ["C001", "C002"],
             "household_net_income": [110.0, 220.0],
             "household_weight": [1.0, 1.0],
         }
     )
+    csv_path = tmp_path / CONSTITUENCY_ASSET_SPEC.lookup_csv_filename
+    pd.DataFrame(
+        [
+            {"code": "C001", "name": "A", "x": 0, "y": 0},
+            {"code": "C002", "name": "B", "x": 1, "y": 1},
+        ]
+    ).to_csv(csv_path, index=False)
 
-    weight_matrix = [[1.0, 0.0], [0.0, 1.0]]
-    csv_rows = [
-        {"code": "C001", "name": "A", "x": 0, "y": 0},
-        {"code": "C002", "name": "B", "x": 1, "y": 1},
-    ]
+    with patch(
+        "policyengine.outputs.uk_geography_impact.default_local_search_dirs",
+        return_value=[tmp_path],
+    ):
+        impact = compute_uk_constituency_impacts(
+            baseline,
+            reform,
+            download_missing_assets=True,
+        )
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        h5_path = os.path.join(tmpdir, CONSTITUENCY_ASSET_SPEC.weight_matrix_filename)
-        with h5py.File(h5_path, "w") as f:
-            f.create_dataset("2025", data=np.array(weight_matrix, dtype=np.float64))
-
-        csv_path = os.path.join(tmpdir, CONSTITUENCY_ASSET_SPEC.lookup_csv_filename)
-        pd.DataFrame(csv_rows).to_csv(csv_path, index=False)
-
-        monkeypatch.setenv("POLICYENGINE_UK_GEOGRAPHY_DATA_DIR", tmpdir)
-        with patch(
-            "policyengine_core.tools.google_cloud.download_gcs_file"
-        ) as download:
-            impact = compute_uk_constituency_impacts(
-                baseline,
-                reform,
-            )
-
-        download.assert_not_called()
-
-    assert impact.weight_matrix_path == h5_path
-    assert impact.constituency_csv_path == csv_path
+    assert impact.constituency_csv_path == str(csv_path)
     assert len(impact.constituency_results) == 2
+    assert impact.constituency_results[0]["constituency_name"] == "A"
 
 
-def test_compute_constituency_impacts_local_only_does_not_call_gcs(tmp_path):
+def test_compute_constituency_impacts_does_not_require_lookup_csv_or_matrix(
+    tmp_path,
+):
+    baseline = _make_sim(
+        {
+            "constituency_code_oa": ["C001"],
+            "household_net_income": [100.0],
+            "household_weight": [1.0],
+        }
+    )
+    reform = _make_sim(
+        {
+            "constituency_code_oa": ["C001"],
+            "household_net_income": [110.0],
+            "household_weight": [1.0],
+        }
+    )
+
+    legacy_matrix_path = str(tmp_path / "legacy-unused.h5")
+    with patch(
+        "policyengine.outputs.uk_geography_impact.default_local_search_dirs",
+        return_value=[tmp_path / "missing"],
+    ):
+        impact = compute_uk_constituency_impacts(
+            baseline,
+            reform,
+            weight_matrix_path=legacy_matrix_path,
+            download_missing_assets=False,
+        )
+
+    assert impact.weight_matrix_path == legacy_matrix_path
+    assert len(impact.constituency_results) == 1
+    result = impact.constituency_results[0]
+    assert result["constituency_code"] == "C001"
+    assert result["constituency_name"] == "C001"
+    assert result["x"] is None
+    assert result["y"] is None
+
+
+def test_compute_constituency_impacts_requires_longwise_geography_column():
     baseline = _make_sim(
         {
             "household_net_income": [100.0],
@@ -215,21 +242,9 @@ def test_compute_constituency_impacts_local_only_does_not_call_gcs(tmp_path):
         }
     )
 
-    with (
-        patch(
-            "policyengine.data.uk_geography_assets.default_local_search_dirs",
-            return_value=[tmp_path / "missing"],
-        ),
-        patch("policyengine_core.tools.google_cloud.download_gcs_file") as download,
-    ):
-        with pytest.raises(FileNotFoundError) as exc_info:
-            compute_uk_constituency_impacts(
-                baseline,
-                reform,
-                download_missing_assets=False,
-            )
-
-    download.assert_not_called()
-    assert "GCS fallback disabled by download_missing_assets=False" in str(
-        exc_info.value
-    )
+    with pytest.raises(ValueError, match="constituency_code_oa"):
+        compute_uk_constituency_impacts(
+            baseline,
+            reform,
+            download_missing_assets=False,
+        )

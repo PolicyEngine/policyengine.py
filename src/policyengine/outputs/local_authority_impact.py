@@ -1,21 +1,22 @@
 """UK local authority impact output class.
 
-Computes per-local-authority income changes using pre-computed weight matrices.
-Each local authority has a row in the weight matrix (shape: 360 x N_households)
-that reweights all households to represent that local authority's demographics.
+Computes per-local-authority income changes by grouping household output rows
+on longwise geography codes carried by the dataset.
 """
 
 from typing import TYPE_CHECKING, Optional, Sequence
 
-import numpy as np
 import pandas as pd
 from pydantic import ConfigDict
 
 from policyengine.core import Output
+from policyengine.data.uk_geography_assets import LOCAL_AUTHORITY_ASSET_SPEC
 from policyengine.outputs.uk_geography_assets import (
-    LOCAL_AUTHORITY_ASSET_SPEC,
     UKGeographyAssetStrategy,
-    resolve_uk_geography_asset_paths,
+)
+from policyengine.outputs.uk_geography_impact import (
+    compute_longwise_uk_geography_impacts,
+    resolve_uk_geography_lookup_csv_path,
 )
 
 if TYPE_CHECKING:
@@ -25,8 +26,7 @@ if TYPE_CHECKING:
 class LocalAuthorityImpact(Output):
     """Per-local-authority income change from a UK policy reform.
 
-    Uses pre-computed weight matrices from GCS to reweight households
-    for each of 360 local authorities, then computes weighted average and
+    Groups households by ``la_code_oa`` and computes weighted average and
     relative household income changes.
     """
 
@@ -34,71 +34,25 @@ class LocalAuthorityImpact(Output):
 
     baseline_simulation: "Simulation"
     reform_simulation: "Simulation"
-    weight_matrix_path: str
-    local_authority_csv_path: str
+    weight_matrix_path: Optional[str] = None
+    local_authority_csv_path: Optional[str] = None
     year: str = "2025"
 
     # Results populated by run()
     local_authority_results: Optional[list[dict]] = None
 
     def run(self) -> None:
-        """Load weight matrix and compute per-local-authority metrics."""
-        # Load local authority metadata (code, x, y, name)
-        la_df = pd.read_csv(self.local_authority_csv_path)
-
-        # Load weight matrix: shape (N_local_authorities, N_households)
-        import h5py
-
-        with h5py.File(self.weight_matrix_path, "r") as f:
-            weight_matrix = f[self.year][...]
-
-        # Get household income arrays from output datasets
+        """Group household output rows and compute per-local-authority metrics."""
         baseline_hh = self.baseline_simulation.output_dataset.data.household
         reform_hh = self.reform_simulation.output_dataset.data.household
 
-        baseline_income = baseline_hh["household_net_income"].values
-        reform_income = reform_hh["household_net_income"].values
-
-        results: list[dict] = []
-        for i in range(len(la_df)):
-            row = la_df.iloc[i]
-            code = str(row["code"])
-            name = str(row["name"])
-            x = int(row["x"])
-            y = int(row["y"])
-            w = weight_matrix[i]
-
-            total_weight = float(np.sum(w))
-            if total_weight == 0:
-                continue
-
-            weighted_baseline = float(np.sum(baseline_income * w))
-            weighted_reform = float(np.sum(reform_income * w))
-
-            count = float(np.sum(w > 0))
-            if count == 0:
-                continue
-
-            avg_change = (weighted_reform - weighted_baseline) / total_weight
-            rel_change = (
-                (weighted_reform / weighted_baseline - 1.0)
-                if weighted_baseline != 0
-                else 0.0
-            )
-
-            results.append(
-                {
-                    "local_authority_code": code,
-                    "local_authority_name": name,
-                    "x": x,
-                    "y": y,
-                    "average_household_income_change": float(avg_change),
-                    "relative_household_income_change": float(rel_change),
-                    "population": total_weight,
-                }
-            )
-
-        self.local_authority_results = results
+        self.local_authority_results = compute_longwise_uk_geography_impacts(
+            baseline_household=pd.DataFrame(baseline_hh),
+            reform_household=pd.DataFrame(reform_hh),
+            geography_column="la_code_oa",
+            result_key_prefix="local_authority",
+            lookup_csv_path=self.local_authority_csv_path,
+        )
 
 
 def compute_uk_local_authority_impacts(
@@ -115,31 +69,29 @@ def compute_uk_local_authority_impacts(
     Args:
         baseline_simulation: Completed baseline simulation.
         reform_simulation: Completed reform simulation.
-        weight_matrix_path: Optional path to local_authority_weights.h5.
-            If omitted, standard local paths are checked before downloading from GCS.
+        weight_matrix_path: Deprecated and ignored. Local-authority outputs
+            now group by ``la_code_oa`` on the household output.
         local_authority_csv_path: Optional path to local_authorities_2021.csv.
-            If omitted, standard local paths are checked before downloading from GCS.
-        year: Year key in the H5 file (default "2025").
-        asset_strategies: Optional resolver strategy chain. If omitted, defaults to
-            local lookup, then optional GCS download.
-        download_missing_assets: Whether to download canonical missing assets from GCS.
-            Set to False to require local/cache files.
+            If omitted, standard local paths are checked before downloading
+            from GCS. If still unavailable, results use geography codes as names.
+        year: Deprecated and ignored.
+        asset_strategies: Deprecated and ignored.
+        download_missing_assets: Whether to download the optional lookup CSV
+            from GCS when no local CSV is found.
 
     Returns:
         LocalAuthorityImpact with local_authority_results populated.
     """
-    paths = resolve_uk_geography_asset_paths(
+    lookup_csv_path = resolve_uk_geography_lookup_csv_path(
         LOCAL_AUTHORITY_ASSET_SPEC,
-        weight_matrix_path=weight_matrix_path,
         lookup_csv_path=local_authority_csv_path,
-        asset_strategies=asset_strategies,
         download_missing_assets=download_missing_assets,
     )
     impact = LocalAuthorityImpact.model_construct(
         baseline_simulation=baseline_simulation,
         reform_simulation=reform_simulation,
-        weight_matrix_path=paths.weight_matrix_path,
-        local_authority_csv_path=paths.lookup_csv_path,
+        weight_matrix_path=weight_matrix_path,
+        local_authority_csv_path=lookup_csv_path,
         year=year,
     )
     impact.run()

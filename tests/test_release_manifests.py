@@ -197,8 +197,7 @@ class TestReleaseManifests:
 
     def test__given_uk_legacy_dataset_names__then_resolves_bundled_aliases(self):
         assert (
-            resolve_dataset_reference("uk", "frs_2023_24")
-            == UK_LEGACY_FRS_DATASET_URI
+            resolve_dataset_reference("uk", "frs_2023_24") == UK_LEGACY_FRS_DATASET_URI
         )
         assert (
             resolve_dataset_reference("uk", "enhanced_frs_2023_24")

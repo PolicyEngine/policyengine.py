@@ -1,11 +1,7 @@
 """Unit tests for LocalAuthorityImpact output class."""
 
-import os
-import tempfile
 from unittest.mock import MagicMock, patch
 
-import h5py
-import numpy as np
 import pandas as pd
 import pytest
 from microdf import MicroDataFrame
@@ -13,9 +9,7 @@ from microdf import MicroDataFrame
 from policyengine.outputs.local_authority_impact import (
     compute_uk_local_authority_impacts,
 )
-from policyengine.outputs.uk_geography_assets import (
-    LOCAL_AUTHORITY_ASSET_SPEC,
-)
+from policyengine.outputs.uk_geography_assets import LOCAL_AUTHORITY_ASSET_SPEC
 
 
 def _make_sim(household_data: dict) -> MagicMock:
@@ -30,42 +24,42 @@ def _make_sim(household_data: dict) -> MagicMock:
     return sim
 
 
-def _make_weight_matrix_and_csv(tmpdir, weights, csv_rows):
-    """Create a temp H5 weight matrix and CSV metadata file."""
-    h5_path = os.path.join(tmpdir, "la_weights.h5")
-    with h5py.File(h5_path, "w") as f:
-        f.create_dataset("2025", data=np.array(weights, dtype=np.float64))
-
-    csv_path = os.path.join(tmpdir, "local_authorities.csv")
-    pd.DataFrame(csv_rows).to_csv(csv_path, index=False)
-
-    return h5_path, csv_path
+def _write_lookup_csv(tmp_path, rows) -> str:
+    csv_path = tmp_path / "local_authorities.csv"
+    pd.DataFrame(rows).to_csv(csv_path, index=False)
+    return str(csv_path)
 
 
-def test_basic_local_authority_reweighting():
-    """Two LAs with known weight matrices produce correct metrics."""
+def test_basic_local_authority_longwise_grouping(tmp_path):
+    """Two local authorities with household geography codes produce metrics."""
     baseline = _make_sim(
         {
-            "household_net_income": [50000.0, 60000.0, 40000.0],
-            "household_weight": [1.0, 1.0, 1.0],
+            "la_code_oa": ["LA001", "LA001", b"LA002", ""],
+            "household_net_income": [50000.0, 60000.0, 40000.0, 30000.0],
+            "household_weight": [2.0, 1.0, 3.0, 1.0],
         }
     )
     reform = _make_sim(
         {
-            "household_net_income": [53000.0, 63000.0, 43000.0],
-            "household_weight": [1.0, 1.0, 1.0],
+            "la_code_oa": ["LA001", "LA001", b"LA002", ""],
+            "household_net_income": [53000.0, 63000.0, 43000.0, 33000.0],
+            "household_weight": [2.0, 1.0, 3.0, 1.0],
         }
     )
+    csv_path = _write_lookup_csv(
+        tmp_path,
+        [
+            {"code": "LA001", "name": "Authority A", "x": 5, "y": 15},
+            {"code": "LA002", "name": "Authority B", "x": 25, "y": 35},
+        ],
+    )
 
-    weight_matrix = [[1.0, 1.0, 0.0], [0.0, 1.0, 2.0]]
-    csv_rows = [
-        {"code": "LA001", "name": "Authority A", "x": 5, "y": 15},
-        {"code": "LA002", "name": "Authority B", "x": 25, "y": 35},
-    ]
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        h5_path, csv_path = _make_weight_matrix_and_csv(tmpdir, weight_matrix, csv_rows)
-        impact = compute_uk_local_authority_impacts(baseline, reform, h5_path, csv_path)
+    impact = compute_uk_local_authority_impacts(
+        baseline,
+        reform,
+        local_authority_csv_path=csv_path,
+        download_missing_assets=False,
+    )
 
     assert impact.local_authority_results is not None
     assert len(impact.local_authority_results) == 2
@@ -73,96 +67,170 @@ def test_basic_local_authority_reweighting():
     by_code = {r["local_authority_code"]: r for r in impact.local_authority_results}
 
     la1 = by_code["LA001"]
-    # Weighted change: (1*3000 + 1*3000) / 2 = 3000
     assert abs(la1["average_household_income_change"] - 3000.0) < 1e-6
     assert la1["local_authority_name"] == "Authority A"
-    assert la1["population"] == 2.0
+    assert la1["x"] == 5
+    assert la1["y"] == 15
+    assert la1["population"] == 3.0
 
     la2 = by_code["LA002"]
-    # Weighted change: (0 + 1*3000 + 2*3000) / 3 = 3000
     assert abs(la2["average_household_income_change"] - 3000.0) < 1e-6
+    assert la2["local_authority_name"] == "Authority B"
+    assert la2["population"] == 3.0
 
 
-def test_zero_weight_la_skipped():
-    """A local authority with all-zero weights produces no result."""
+def test_zero_weight_la_skipped(tmp_path):
+    """A local authority with all-zero household weights produces no result."""
     baseline = _make_sim(
         {
-            "household_net_income": [50000.0],
-            "household_weight": [1.0],
+            "la_code_oa": ["LA001", "LA002"],
+            "household_net_income": [50000.0, 60000.0],
+            "household_weight": [1.0, 0.0],
         }
     )
     reform = _make_sim(
         {
-            "household_net_income": [55000.0],
-            "household_weight": [1.0],
+            "la_code_oa": ["LA001", "LA002"],
+            "household_net_income": [55000.0, 65000.0],
+            "household_weight": [1.0, 0.0],
         }
     )
+    csv_path = _write_lookup_csv(
+        tmp_path,
+        [
+            {"code": "LA001", "name": "A", "x": 0, "y": 0},
+            {"code": "LA002", "name": "B", "x": 0, "y": 0},
+        ],
+    )
 
-    weight_matrix = [[1.0], [0.0]]
-    csv_rows = [
-        {"code": "LA001", "name": "A", "x": 0, "y": 0},
-        {"code": "LA002", "name": "B", "x": 0, "y": 0},
-    ]
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        h5_path, csv_path = _make_weight_matrix_and_csv(tmpdir, weight_matrix, csv_rows)
-        impact = compute_uk_local_authority_impacts(baseline, reform, h5_path, csv_path)
+    impact = compute_uk_local_authority_impacts(
+        baseline,
+        reform,
+        local_authority_csv_path=csv_path,
+        download_missing_assets=False,
+    )
 
     assert len(impact.local_authority_results) == 1
     assert impact.local_authority_results[0]["local_authority_code"] == "LA001"
 
 
-def test_compute_resolves_standard_local_authority_assets_from_default_local_dir(
-    monkeypatch,
-):
-    """The helper can run without explicit asset paths when standard files exist."""
+def test_relative_change(tmp_path):
+    """Relative household income change is computed correctly."""
     baseline = _make_sim(
         {
+            "la_code_oa": ["LA001"],
+            "household_net_income": [100000.0],
+            "household_weight": [1.0],
+        }
+    )
+    reform = _make_sim(
+        {
+            "la_code_oa": ["LA001"],
+            "household_net_income": [115000.0],
+            "household_weight": [1.0],
+        }
+    )
+    csv_path = _write_lookup_csv(
+        tmp_path,
+        [{"code": "LA001", "name": "A", "x": 0, "y": 0}],
+    )
+
+    impact = compute_uk_local_authority_impacts(
+        baseline,
+        reform,
+        local_authority_csv_path=csv_path,
+        download_missing_assets=False,
+    )
+
+    assert (
+        abs(
+            impact.local_authority_results[0]["relative_household_income_change"] - 0.15
+        )
+        < 1e-6
+    )
+
+
+def test_compute_uses_local_lookup_csv_without_matrix_or_gcs(
+    tmp_path,
+):
+    """The helper can enrich labels from local CSV without matrix assets."""
+    baseline = _make_sim(
+        {
+            "la_code_oa": ["LA001", "LA002"],
             "household_net_income": [100.0, 200.0],
             "household_weight": [1.0, 1.0],
         }
     )
     reform = _make_sim(
         {
+            "la_code_oa": ["LA001", "LA002"],
             "household_net_income": [115.0, 230.0],
             "household_weight": [1.0, 1.0],
         }
     )
+    csv_path = tmp_path / LOCAL_AUTHORITY_ASSET_SPEC.lookup_csv_filename
+    pd.DataFrame(
+        [
+            {"code": "LA001", "name": "A", "x": 0, "y": 0},
+            {"code": "LA002", "name": "B", "x": 1, "y": 1},
+        ]
+    ).to_csv(csv_path, index=False)
 
-    weight_matrix = [[1.0, 0.0], [0.0, 1.0]]
-    csv_rows = [
-        {"code": "LA001", "name": "A", "x": 0, "y": 0},
-        {"code": "LA002", "name": "B", "x": 1, "y": 1},
-    ]
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        h5_path = os.path.join(
-            tmpdir,
-            LOCAL_AUTHORITY_ASSET_SPEC.weight_matrix_filename,
+    with patch(
+        "policyengine.outputs.uk_geography_impact.default_local_search_dirs",
+        return_value=[tmp_path],
+    ):
+        impact = compute_uk_local_authority_impacts(
+            baseline,
+            reform,
+            download_missing_assets=True,
         )
-        with h5py.File(h5_path, "w") as f:
-            f.create_dataset("2025", data=np.array(weight_matrix, dtype=np.float64))
 
-        csv_path = os.path.join(tmpdir, LOCAL_AUTHORITY_ASSET_SPEC.lookup_csv_filename)
-        pd.DataFrame(csv_rows).to_csv(csv_path, index=False)
-
-        monkeypatch.setenv("POLICYENGINE_UK_GEOGRAPHY_DATA_DIR", tmpdir)
-        with patch(
-            "policyengine_core.tools.google_cloud.download_gcs_file"
-        ) as download:
-            impact = compute_uk_local_authority_impacts(
-                baseline,
-                reform,
-            )
-
-        download.assert_not_called()
-
-    assert impact.weight_matrix_path == h5_path
-    assert impact.local_authority_csv_path == csv_path
+    assert impact.local_authority_csv_path == str(csv_path)
     assert len(impact.local_authority_results) == 2
+    assert impact.local_authority_results[0]["local_authority_name"] == "A"
 
 
-def test_compute_local_authority_impacts_local_only_does_not_call_gcs(tmp_path):
+def test_compute_local_authority_impacts_does_not_require_lookup_csv_or_matrix(
+    tmp_path,
+):
+    baseline = _make_sim(
+        {
+            "la_code_oa": ["LA001"],
+            "household_net_income": [100.0],
+            "household_weight": [1.0],
+        }
+    )
+    reform = _make_sim(
+        {
+            "la_code_oa": ["LA001"],
+            "household_net_income": [115.0],
+            "household_weight": [1.0],
+        }
+    )
+
+    legacy_matrix_path = str(tmp_path / "legacy-unused.h5")
+    with patch(
+        "policyengine.outputs.uk_geography_impact.default_local_search_dirs",
+        return_value=[tmp_path / "missing"],
+    ):
+        impact = compute_uk_local_authority_impacts(
+            baseline,
+            reform,
+            weight_matrix_path=legacy_matrix_path,
+            download_missing_assets=False,
+        )
+
+    assert impact.weight_matrix_path == legacy_matrix_path
+    assert len(impact.local_authority_results) == 1
+    result = impact.local_authority_results[0]
+    assert result["local_authority_code"] == "LA001"
+    assert result["local_authority_name"] == "LA001"
+    assert result["x"] is None
+    assert result["y"] is None
+
+
+def test_compute_local_authority_impacts_requires_longwise_geography_column():
     baseline = _make_sim(
         {
             "household_net_income": [100.0],
@@ -176,21 +244,9 @@ def test_compute_local_authority_impacts_local_only_does_not_call_gcs(tmp_path):
         }
     )
 
-    with (
-        patch(
-            "policyengine.data.uk_geography_assets.default_local_search_dirs",
-            return_value=[tmp_path / "missing"],
-        ),
-        patch("policyengine_core.tools.google_cloud.download_gcs_file") as download,
-    ):
-        with pytest.raises(FileNotFoundError) as exc_info:
-            compute_uk_local_authority_impacts(
-                baseline,
-                reform,
-                download_missing_assets=False,
-            )
-
-    download.assert_not_called()
-    assert "GCS fallback disabled by download_missing_assets=False" in str(
-        exc_info.value
-    )
+    with pytest.raises(ValueError, match="la_code_oa"):
+        compute_uk_local_authority_impacts(
+            baseline,
+            reform,
+            download_missing_assets=False,
+        )
