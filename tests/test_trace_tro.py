@@ -395,6 +395,25 @@ class TestBundleTRO:
             == country_manifest.certification.data_build_id
         )
 
+    def test__given_no_preservation_dois__then_performance_omits_the_field(
+        self, us_bundle_tro
+    ):
+        performance = us_bundle_tro["@graph"][0]["trov:hasPerformance"]
+        assert "pe:preservationDoi" not in performance
+
+    def test__given_preservation_dois__then_performance_records_them(self, monkeypatch):
+        monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+        manifest = _us_data_release_manifest().model_copy(
+            update={"preservation_dois": ["10.5281/zenodo.20678516"]}
+        )
+        tro = build_trace_tro_from_release_bundle(
+            get_release_manifest("us"),
+            manifest,
+            fetch_pypi=_fake_fetch_pypi,
+        )
+        performance = tro["@graph"][0]["trov:hasPerformance"]
+        assert performance["pe:preservationDoi"] == ["10.5281/zenodo.20678516"]
+
     def test__given_github_actions_env__then_emitted_in_is_ci(self, monkeypatch):
         monkeypatch.setenv("GITHUB_ACTIONS", "true")
         monkeypatch.setenv("GITHUB_SERVER_URL", "https://github.com")

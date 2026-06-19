@@ -464,6 +464,14 @@ def build_trace_tro_from_release_bundle(
     )
     if data_release_manifest is None:
         performance["pe:dataReleaseManifestStatus"] = "unavailable"
+    elif data_release_manifest.preservation_dois:
+        # The release was mirrored to a DOI-minting preservation host
+        # (e.g. Zenodo). Surface the record-level DOI so a reader who
+        # has only this TRO can find and cite the preserved copy if the
+        # primary host ever becomes unavailable.
+        performance["pe:preservationDoi"] = list(
+            data_release_manifest.preservation_dois
+        )
 
     tro_node = _assemble_tro_node(
         tro_name=f"policyengine {country_manifest.country_id} certified bundle TRO",

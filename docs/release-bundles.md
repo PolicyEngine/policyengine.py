@@ -353,6 +353,42 @@ fail step 3.
   countries whose data release manifest is unreachable so a partial run
   does not block other countries.
 
+### Preservation mirroring (Zenodo)
+
+Hugging Face hosts the primary artifacts but publishes no preservation
+commitment — its DOIs are short URLs that are deleted with the repo.
+Zenodo publishes a preservation policy and mints real DOIs, so every
+certified release's *certification record* (the bundle manifest, the
+bundle TRO, and the data release manifest) should also live there:
+
+```bash
+ZENODO_TOKEN=... policyengine zenodo-mirror us            # draft deposit
+ZENODO_TOKEN=... policyengine zenodo-mirror us --publish  # mint the DOI
+policyengine zenodo-mirror us --sandbox                   # rehearsal
+```
+
+The deposit output includes `PreservationMirror` entries (host, URL,
+DOI, sha256, timestamp) ready to merge into the data release manifest's
+`preservation_mirrors`/`preservation_dois` fields, which the bundle TRO
+then naturally carries on the next regeneration.
+
+Two deliberate safety properties:
+
+- **Licence gate.** `--include-dataset` deposits the dataset bytes too,
+  but only when the source Hugging Face repo is publicly readable. A
+  private source repo (the UK microdata, under UK Data Service licence)
+  is refused unconditionally — the certification record still mirrors,
+  because the manifests and TRO contain only hashes and version pins,
+  which is exactly what makes a future copy of restricted data
+  verifiable without redistributing it.
+- **Deliberate publishing.** Deposits are drafts by default and carry
+  no licence unless `--license` is passed; minting the DOI is an
+  explicit `--publish`.
+
+Tokens come from `ZENODO_TOKEN` (create one under Zenodo →
+Applications → Personal access tokens, with `deposit:write` and
+`deposit:actions` scopes).
+
 ### What TRACE does not replace
 
 TRACE is not the source of truth for compatibility policy.
