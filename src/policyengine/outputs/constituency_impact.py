@@ -1,21 +1,22 @@
 """UK parliamentary constituency impact output class.
 
-Computes per-constituency income changes using pre-computed weight matrices.
-Each constituency has a row in the weight matrix (shape: 650 x N_households)
-that reweights all households to represent that constituency's demographics.
+Computes per-constituency income changes by grouping household output rows
+on longwise geography codes carried by the dataset.
 """
 
 from typing import TYPE_CHECKING, Optional, Sequence
 
-import numpy as np
 import pandas as pd
 from pydantic import ConfigDict
 
 from policyengine.core import Output
+from policyengine.data.uk_geography_assets import CONSTITUENCY_ASSET_SPEC
 from policyengine.outputs.uk_geography_assets import (
-    CONSTITUENCY_ASSET_SPEC,
     UKGeographyAssetStrategy,
-    resolve_uk_geography_asset_paths,
+)
+from policyengine.outputs.uk_geography_impact import (
+    compute_longwise_uk_geography_impacts,
+    resolve_uk_geography_lookup_csv_path,
 )
 
 if TYPE_CHECKING:
@@ -25,81 +26,33 @@ if TYPE_CHECKING:
 class ConstituencyImpact(Output):
     """Per-parliamentary-constituency income change from a UK policy reform.
 
-    Uses pre-computed weight matrices from GCS to reweight households
-    for each of 650 constituencies, then computes weighted average and
-    relative household income changes.
+    Groups households by ``constituency_code_oa`` and computes weighted
+    average and relative household income changes.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     baseline_simulation: "Simulation"
     reform_simulation: "Simulation"
-    weight_matrix_path: str
-    constituency_csv_path: str
+    weight_matrix_path: Optional[str] = None
+    constituency_csv_path: Optional[str] = None
     year: str = "2025"
 
     # Results populated by run()
     constituency_results: Optional[list[dict]] = None
 
     def run(self) -> None:
-        """Load weight matrix and compute per-constituency metrics."""
-        # Load constituency metadata (code, name, x, y)
-        constituency_df = pd.read_csv(self.constituency_csv_path)
-
-        # Load weight matrix: shape (N_constituencies, N_households)
-        import h5py
-
-        with h5py.File(self.weight_matrix_path, "r") as f:
-            weight_matrix = f[self.year][...]
-
-        # Get household income arrays from output datasets
+        """Group household output rows and compute per-constituency metrics."""
         baseline_hh = self.baseline_simulation.output_dataset.data.household
         reform_hh = self.reform_simulation.output_dataset.data.household
 
-        baseline_income = baseline_hh["household_net_income"].values
-        reform_income = reform_hh["household_net_income"].values
-
-        results: list[dict] = []
-        for i in range(len(constituency_df)):
-            row = constituency_df.iloc[i]
-            code = str(row["code"])
-            name = str(row["name"])
-            x = int(row["x"])
-            y = int(row["y"])
-            w = weight_matrix[i]
-
-            total_weight = float(np.sum(w))
-            if total_weight == 0:
-                continue
-
-            weighted_baseline = float(np.sum(baseline_income * w))
-            weighted_reform = float(np.sum(reform_income * w))
-
-            # Count of weighted households
-            count = float(np.sum(w > 0))
-            if count == 0:
-                continue
-
-            avg_change = (weighted_reform - weighted_baseline) / total_weight
-            rel_change = (
-                (weighted_reform / weighted_baseline - 1.0)
-                if weighted_baseline != 0
-                else 0.0
-            )
-
-            results.append(
-                {
-                    "constituency_code": code,
-                    "constituency_name": name,
-                    "x": x,
-                    "y": y,
-                    "average_household_income_change": float(avg_change),
-                    "relative_household_income_change": float(rel_change),
-                    "population": total_weight,
-                }
-            )
-
-        self.constituency_results = results
+        self.constituency_results = compute_longwise_uk_geography_impacts(
+            baseline_household=pd.DataFrame(baseline_hh),
+            reform_household=pd.DataFrame(reform_hh),
+            geography_column="constituency_code_oa",
+            result_key_prefix="constituency",
+            lookup_csv_path=self.constituency_csv_path,
+        )
 
 
 def compute_uk_constituency_impacts(
@@ -116,31 +69,29 @@ def compute_uk_constituency_impacts(
     Args:
         baseline_simulation: Completed baseline simulation.
         reform_simulation: Completed reform simulation.
-        weight_matrix_path: Optional path to parliamentary_constituency_weights.h5.
-            If omitted, standard local paths are checked before downloading from GCS.
+        weight_matrix_path: Deprecated and ignored. Constituency outputs now
+            group by ``constituency_code_oa`` on the household output.
         constituency_csv_path: Optional path to constituencies_2024.csv.
-            If omitted, standard local paths are checked before downloading from GCS.
-        year: Year key in the H5 file (default "2025").
-        asset_strategies: Optional resolver strategy chain. If omitted, defaults to
-            local lookup, then optional GCS download.
-        download_missing_assets: Whether to download canonical missing assets from GCS.
-            Set to False to require local/cache files.
+            If omitted, standard local paths are checked before downloading
+            from GCS. If still unavailable, results use geography codes as names.
+        year: Deprecated and ignored.
+        asset_strategies: Deprecated and ignored.
+        download_missing_assets: Whether to download the optional lookup CSV
+            from GCS when no local CSV is found.
 
     Returns:
         ConstituencyImpact with constituency_results populated.
     """
-    paths = resolve_uk_geography_asset_paths(
+    lookup_csv_path = resolve_uk_geography_lookup_csv_path(
         CONSTITUENCY_ASSET_SPEC,
-        weight_matrix_path=weight_matrix_path,
         lookup_csv_path=constituency_csv_path,
-        asset_strategies=asset_strategies,
         download_missing_assets=download_missing_assets,
     )
     impact = ConstituencyImpact.model_construct(
         baseline_simulation=baseline_simulation,
         reform_simulation=reform_simulation,
-        weight_matrix_path=paths.weight_matrix_path,
-        constituency_csv_path=paths.lookup_csv_path,
+        weight_matrix_path=weight_matrix_path,
+        constituency_csv_path=lookup_csv_path,
         year=year,
     )
     impact.run()

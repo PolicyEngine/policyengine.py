@@ -29,12 +29,13 @@ class TestUKModel:
         assert uk_latest.release_manifest is not None
         assert uk_latest.release_manifest.country_id == "uk"
         assert uk_latest.model_package.name == "policyengine-uk"
-        assert uk_latest.model_package.version == "2.88.20"
-        assert uk_latest.data_package.name == "policyengine-uk-data"
-        assert uk_latest.data_package.version == "1.55.10"
+        assert uk_latest.model_package.version == "2.89.2"
+        assert uk_latest.data_package.name == "populace-data"
+        assert uk_latest.data_package.version == "0.1.0"
         assert (
             uk_latest.default_dataset_uri
-            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f"
+            == "hf://policyengine/populace-uk-private/populace_uk_2023.h5"
+            "@populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z"
         )
 
     def test_has_hundreds_of_parameters(self):

@@ -20,6 +20,14 @@ if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
 
 UK_GROUP_ENTITIES = ["benunit", "household"]
+UK_HOUSEHOLD_PASSTHROUGH_COLUMNS = [
+    "oa_code",
+    "lsoa_code",
+    "msoa_code",
+    "constituency_code_oa",
+    "la_code_oa",
+    "region_code_oa",
+]
 
 
 class PolicyEngineUK(TaxBenefitModel):
@@ -219,6 +227,11 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
                 data[entity][var] = microsim.calculate(
                     var, period=simulation.dataset.year, map_to=entity
                 ).values
+
+        household_input_df = pd.DataFrame(dataset.data.household)
+        for column in UK_HOUSEHOLD_PASSTHROUGH_COLUMNS:
+            if column in household_input_df.columns and column not in data["household"]:
+                data["household"][column] = household_input_df[column].values
 
         data["person"] = MicroDataFrame(data["person"], weights="person_weight")
         data["benunit"] = MicroDataFrame(data["benunit"], weights="benunit_weight")

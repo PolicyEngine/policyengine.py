@@ -4,16 +4,11 @@ from unittest.mock import patch
 
 from policyengine.core.scoping_strategy import (
     RowFilterStrategy,
-    WeightReplacementStrategy,
 )
 from policyengine.countries.uk.regions import (
     UK_COUNTRIES,
     build_uk_region_registry,
     uk_region_registry,
-)
-from policyengine.data.uk_geography_assets import (
-    CONSTITUENCY_ASSET_SPEC,
-    LOCAL_AUTHORITY_ASSET_SPEC,
 )
 
 
@@ -77,7 +72,8 @@ class TestUKRegionRegistry:
         assert national.region_type == "national"
         assert (
             national.dataset_path
-            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f"
+            == "hf://policyengine/populace-uk-private/populace_uk_2023.h5"
+            "@populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z"
         )
         assert not national.requires_filter
 
@@ -257,13 +253,13 @@ class TestUKRegionRegistryBuilder:
         "policyengine.countries.uk.regions._load_constituencies_from_csv",
         return_value=[{"code": "C001", "name": "Constituency A"}],
     )
-    def test__given_constituencies_included__then_uses_canonical_assets(
+    def test__given_constituencies_included__then_filters_on_dataset_geography(
         self,
         _mock_loader,
     ):
         """Given: constituencies are included
         When: Building the registry
-        Then: Weight replacement strategy uses canonical constituency assets
+        Then: They filter on the dataset's longwise constituency code
         """
         # When
         registry = build_uk_region_registry(include_constituencies=True)
@@ -271,35 +267,21 @@ class TestUKRegionRegistryBuilder:
 
         # Then
         assert constituency is not None
-        assert isinstance(constituency.scoping_strategy, WeightReplacementStrategy)
-        assert (
-            constituency.scoping_strategy.weight_matrix_bucket
-            == CONSTITUENCY_ASSET_SPEC.bucket
-        )
-        assert (
-            constituency.scoping_strategy.weight_matrix_key
-            == CONSTITUENCY_ASSET_SPEC.weight_matrix_filename
-        )
-        assert (
-            constituency.scoping_strategy.lookup_csv_bucket
-            == CONSTITUENCY_ASSET_SPEC.bucket
-        )
-        assert (
-            constituency.scoping_strategy.lookup_csv_key
-            == CONSTITUENCY_ASSET_SPEC.lookup_csv_filename
-        )
+        assert isinstance(constituency.scoping_strategy, RowFilterStrategy)
+        assert constituency.scoping_strategy.variable_name == "constituency_code_oa"
+        assert constituency.scoping_strategy.variable_value == "C001"
 
     @patch(
         "policyengine.countries.uk.regions._load_local_authorities_from_csv",
         return_value=[{"code": "LA001", "name": "Local Authority A"}],
     )
-    def test__given_local_authorities_included__then_uses_canonical_assets(
+    def test__given_local_authorities_included__then_filters_on_dataset_geography(
         self,
         _mock_loader,
     ):
         """Given: local authorities are included
         When: Building the registry
-        Then: Weight replacement strategy uses canonical local-authority assets
+        Then: They filter on the dataset's longwise local-authority code
         """
         # When
         registry = build_uk_region_registry(include_local_authorities=True)
@@ -307,20 +289,6 @@ class TestUKRegionRegistryBuilder:
 
         # Then
         assert local_authority is not None
-        assert isinstance(local_authority.scoping_strategy, WeightReplacementStrategy)
-        assert (
-            local_authority.scoping_strategy.weight_matrix_bucket
-            == LOCAL_AUTHORITY_ASSET_SPEC.bucket
-        )
-        assert (
-            local_authority.scoping_strategy.weight_matrix_key
-            == LOCAL_AUTHORITY_ASSET_SPEC.weight_matrix_filename
-        )
-        assert (
-            local_authority.scoping_strategy.lookup_csv_bucket
-            == LOCAL_AUTHORITY_ASSET_SPEC.bucket
-        )
-        assert (
-            local_authority.scoping_strategy.lookup_csv_key
-            == LOCAL_AUTHORITY_ASSET_SPEC.lookup_csv_filename
-        )
+        assert isinstance(local_authority.scoping_strategy, RowFilterStrategy)
+        assert local_authority.scoping_strategy.variable_name == "la_code_oa"
+        assert local_authority.scoping_strategy.variable_value == "LA001"

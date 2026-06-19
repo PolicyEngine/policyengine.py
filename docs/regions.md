@@ -48,7 +48,11 @@ for row in impacts.district_results:
 
 ## UK parliamentary constituencies
 
-Constituency-level impacts reweight every household to each constituency's demographic profile using a pre-computed weight matrix. By default, PolicyEngine looks for the standard constituency files locally and downloads them from the PolicyEngine UK GCS bucket if they are not present:
+Constituency-level impacts group household output rows by the longwise
+`constituency_code_oa` column carried by the dataset. If the constituency CSV is
+available locally or from the PolicyEngine UK GCS bucket, PolicyEngine uses it
+to attach names and map coordinates; otherwise results still compute and use
+the code as the label.
 
 ```python
 from policyengine.outputs import compute_uk_constituency_impacts
@@ -56,12 +60,14 @@ from policyengine.outputs import compute_uk_constituency_impacts
 impacts = compute_uk_constituency_impacts(
     baseline_simulation=baseline,
     reform_simulation=reform,
-    year="2025",
 )
 impacts.constituency_results
 ```
 
-To force specific local files, pass `weight_matrix_path` and `constituency_csv_path`. If either provided path is missing, the helper raises `FileNotFoundError` and does not fall back to GCS. To require the canonical files to be available locally or in the cache, pass `download_missing_assets=False`. To set a reusable local data directory and download cache, set `POLICYENGINE_UK_GEOGRAPHY_DATA_DIR`.
+To force a specific metadata file, pass `constituency_csv_path`. To avoid
+downloading metadata and fall back to code-only labels, pass
+`download_missing_assets=False`. The legacy `weight_matrix_path` and `year`
+arguments are accepted for backward compatibility but ignored.
 
 ## UK local authorities
 
@@ -71,12 +77,15 @@ from policyengine.outputs import compute_uk_local_authority_impacts
 impacts = compute_uk_local_authority_impacts(
     baseline_simulation=baseline,
     reform_simulation=reform,
-    year="2025",
 )
 impacts.local_authority_results
 ```
 
-`compute_uk_local_authority_impacts` accepts explicit paths with `weight_matrix_path` and `local_authority_csv_path` when callers need to use specific local files instead of the default local/GCS lookup. It also accepts `download_missing_assets=False` for local-only canonical asset resolution.
+Local-authority impacts follow the same longwise pattern using `la_code_oa`.
+Pass `local_authority_csv_path` to use a specific metadata CSV, or
+`download_missing_assets=False` to skip metadata download and use code-only
+labels. The legacy `weight_matrix_path` and `year` arguments are accepted for
+backward compatibility but ignored.
 
 ## Region registries
 
@@ -118,7 +127,7 @@ df.groupby("geo").apply(lambda g: (g["change"] * g["weight"]).sum() / g["weight"
 
 ## Scoping datasets to a region
 
-For reforms defined only over a sub-national slice, pass a scoping strategy to `Simulation`. `RowFilterStrategy` keeps only matching households; `WeightReplacementStrategy` reweights the full sample to represent the region.
+For reforms defined only over a sub-national slice, pass a scoping strategy to `Simulation`. `RowFilterStrategy` keeps only matching households. `WeightReplacementStrategy` is legacy matrix infrastructure and is not used by the UK Populace constituency or local-authority registry.
 
 ```python
 from policyengine.core.scoping_strategy import RowFilterStrategy
