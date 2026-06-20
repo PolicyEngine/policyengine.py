@@ -381,3 +381,55 @@ class TestVendoredSidecarBinding:
         )
 
         assert bundle_manifest["trov:sha256"] == expected
+
+
+class TestTraceTroRegeneration:
+    def test__given_cached_manifest_readers__then_clears_before_regeneration(
+        self, monkeypatch, tmp_path
+    ):
+        """Certification writes the manifest then regenerates the sidecar in
+        the same process, so stale manifest caches must be invalidated first."""
+        from policyengine.provenance import bundle, trace
+        from policyengine.provenance import manifest as manifest_module
+
+        calls = []
+
+        class FakeCachedReader:
+            def __init__(self, name, result):
+                self.name = name
+                self.result = result
+
+            def cache_clear(self):
+                calls.append(f"{self.name}.cache_clear")
+
+            def __call__(self, country):
+                calls.append(f"{self.name}({country})")
+                return self.result
+
+        monkeypatch.setattr(
+            manifest_module,
+            "get_release_manifest",
+            FakeCachedReader("release", object()),
+        )
+        monkeypatch.setattr(
+            manifest_module,
+            "get_data_release_manifest",
+            FakeCachedReader("data_release", object()),
+        )
+        monkeypatch.setattr(
+            trace,
+            "build_trace_tro_from_release_bundle",
+            lambda release, data_release: {"ok": True},
+        )
+        monkeypatch.setattr(trace, "serialize_trace_tro", lambda tro: b"{}\n")
+
+        out_path = bundle.regenerate_trace_tro("us", tmp_path)
+
+        assert out_path == tmp_path / "us.trace.tro.jsonld"
+        assert out_path.read_bytes() == b"{}\n"
+        assert calls == [
+            "release.cache_clear",
+            "data_release.cache_clear",
+            "release(us)",
+            "data_release(us)",
+        ]
