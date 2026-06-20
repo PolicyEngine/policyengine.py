@@ -1,5 +1,5 @@
 {
-  "bundle_id": "uk-4.17.10",
+  "bundle_id": "uk-4.17.11",
   "certification": {
     "built_with_model_version": "2.89.2",
     "certified_by": "policyengine.py certification",
@@ -65,7 +65,7 @@
     "version": "2.89.2",
     "wheel_url": "https://files.pythonhosted.org/packages/83/db/ce3154ba69b6fcd1e9e922ceee705ef4ddb1f81553da1e63b9296e74a4dc/policyengine_uk-2.89.2-py3-none-any.whl"
   },
-  "policyengine_version": "4.17.10",
+  "policyengine_version": "4.17.11",
   "region_datasets": {
     "national": {
       "path_template": "populace_uk_2023.h5"
