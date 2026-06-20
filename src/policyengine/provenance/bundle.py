@@ -951,12 +951,15 @@ def regenerate_trace_tro(country: str, manifest_dir: Path = MANIFEST_DIR) -> Pat
     from policyengine.provenance.manifest import (
         DataReleaseManifestUnavailableError,
         get_data_release_manifest,
+        get_release_manifest,
     )
     from policyengine.provenance.trace import (
         build_trace_tro_from_release_bundle,
         serialize_trace_tro,
     )
 
+    get_release_manifest.cache_clear()
+    get_data_release_manifest.cache_clear()
     release = get_release_manifest(country)
     try:
         data_release = get_data_release_manifest(country)
