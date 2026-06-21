@@ -32,10 +32,9 @@ This updates stack metadata and creates a patch changelog fragment. Do not bump
 the `policyengine` version manually in the PR; the existing release workflow
 bumps the package and stack versions together after merge.
 
-CI checks generated artifacts, installs `.[models]`, and verifies the packaged
-stack metadata with lightweight URI checks. Full data
-package installation is available through `policyengine[full]`; this includes
-both `policyengine-us-data` and `policyengine-uk-data` when their package
-versions are installable for the target Python/platform. Dataset artifact
-versions and release manifest URIs are recorded separately in the stack manifest
-for citation and verification.
+CI checks generated artifacts, installs `.[models]`, runs `pip check`, and
+verifies the packaged stack metadata with lightweight URI checks. Full data
+package installation remains available through `policyengine[full]` for data
+packages published to a Python package index. The current UK data artifact is
+cited in the stack manifest, but `policyengine-uk-data` is not yet published to
+PyPI, so the `uk-data` extra is intentionally empty until that changes.
