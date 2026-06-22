@@ -1,5 +1,6 @@
 """Infer semver bump from towncrier fragment types and update version."""
 
+import json
 import re
 import subprocess
 import sys
@@ -116,79 +117,34 @@ def update_file(path: Path, new_version: str):
         print(f"  Updated {path}")
 
 
-def sync_release_manifest_versions(manifest_dir: Path, new_version: str):
-    if not manifest_dir.exists():
+def sync_bundle_versions(bundle_path: Path, new_version: str):
+    if not bundle_path.exists():
         return
-
-    for manifest_path in sorted(manifest_dir.glob("*.json")):
-        country_id = manifest_path.stem
-        text = manifest_path.read_text()
-        updated = text
-        updated, bundle_id_replacements = re.subn(
-            r'("bundle_id"\s*:\s*")[^"]+(")',
-            rf"\g<1>{country_id}-{new_version}\g<2>",
-            updated,
-            count=1,
+    bundle = json.loads(bundle_path.read_text())
+    required = ["bundle_version", "policyengine_version", "packages"]
+    missing = [field for field in required if field not in bundle]
+    if missing:
+        print(
+            f"Could not update {bundle_path}: missing fields {', '.join(missing)}",
+            file=sys.stderr,
         )
-        updated, policyengine_version_replacements = re.subn(
-            r'("policyengine_version"\s*:\s*")[^"]+(")',
-            rf"\g<1>{new_version}\g<2>",
-            updated,
-            count=1,
+        sys.exit(1)
+    bundle["bundle_version"] = new_version
+    bundle["policyengine_version"] = new_version
+    try:
+        bundle["packages"]["policyengine"]["version"] = new_version
+    except KeyError:
+        print(
+            f"Could not update {bundle_path}: missing packages.policyengine.version",
+            file=sys.stderr,
         )
-        missing_fields = []
-        if bundle_id_replacements == 0:
-            missing_fields.append("bundle_id")
-        if policyengine_version_replacements == 0:
-            missing_fields.append("policyengine_version")
-        if missing_fields:
-            print(
-                f"Could not update {manifest_path}: missing fields "
-                f"{', '.join(missing_fields)}",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        if updated != text:
-            manifest_path.write_text(updated)
-            print(f"  Updated {manifest_path}")
-
-
-def sync_stack_versions(stack_path: Path, new_version: str):
-    if not stack_path.exists():
-        return
-    text = stack_path.read_text()
-    replacements = [
-        (
-            r'(^stack_version\s*=\s*")([^"]+)(")',
-            rf"\g<1>{new_version}\g<3>",
-        ),
-        (
-            r'(^policyengine_version\s*=\s*")([^"]+)(")',
-            rf"\g<1>{new_version}\g<3>",
-        ),
-        (
-            r'(\[packages\.policyengine\]\s+name\s*=\s*"policyengine"\s+version\s*=\s*")([^"]+)(")',
-            rf"\g<1>{new_version}\g<3>",
-        ),
-    ]
-    updated = text
-    for pattern, replacement in replacements:
-        updated, count = re.subn(
-            pattern,
-            replacement,
-            updated,
-            count=1,
-            flags=re.MULTILINE,
-        )
-        if count == 0:
-            print(
-                f"Could not update {stack_path}: missing stack version field.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-    if updated != text:
-        stack_path.write_text(updated)
-        print(f"  Updated {stack_path}")
+        sys.exit(1)
+    for country_id, data_release in bundle.get("data_releases", {}).items():
+        if isinstance(data_release, dict):
+            data_release["policyengine_version"] = new_version
+            data_release["bundle_id"] = f"{country_id}-{new_version}"
+    bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n")
+    print(f"  Updated {bundle_path}")
 
 
 def main():
@@ -196,8 +152,7 @@ def main():
     pyproject = root / "pyproject.toml"
     changelog = root / "CHANGELOG.md"
     changelog_dir = root / "changelog.d"
-    manifest_dir = root / "src" / "policyengine" / "data" / "release_manifests"
-    stack_path = root / "policyengine-stack.toml"
+    bundle_path = root / "policyengine-bundle.json"
 
     current = get_current_version(pyproject, changelog, root)
     bump = infer_bump(changelog_dir)
@@ -206,8 +161,7 @@ def main():
     print(f"Version: {current} -> {new} ({bump})")
 
     update_file(pyproject, new)
-    sync_release_manifest_versions(manifest_dir, new)
-    sync_stack_versions(stack_path, new)
+    sync_bundle_versions(bundle_path, new)
 
 
 if __name__ == "__main__":

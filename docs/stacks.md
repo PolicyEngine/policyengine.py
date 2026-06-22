@@ -40,10 +40,11 @@ uvx --from policyengine policyengine bundle install --venv .venv --no-datasets
 
 Use `--yes` for CI/CD. Without `--yes`, dataset downloads ask for confirmation.
 
-The bundle source of truth is `policyengine-stack.toml`. Generated artifacts are:
+The bundle source of truth is `policyengine-bundle.json`. Generated artifacts are:
 
 - `pyproject.toml` extras
-- `src/policyengine/data/stack/manifest.json`
+- `src/policyengine/data/bundle/manifest.json`
+- `src/policyengine/data/bundle/{country}.trace.tro.jsonld`
 - GitHub release assets exported from the packaged manifest
 
 Inspect or verify a local setup with:
@@ -54,17 +55,25 @@ policyengine bundle verify 4.19.1 --data-dir ./data
 policyengine bundle manifest 4.19.1
 ```
 
-## Stack-only PRs
+## Bundle-only PRs
 
 Run:
 
 ```bash
-python scripts/prepare_stack_update.py \
+python scripts/prepare_bundle_update.py \
   --core 3.27.0 \
   --us 1.730.0 \
   --uk 2.91.0 \
-  --us-data 1.118.0 \
-  --uk-data 1.45.0
+  --us-data 1.118.0
+```
+
+To certify a new data release from a data-producer manifest, run:
+
+```bash
+python scripts/certify_data_release.py \
+  --country uk \
+  --data-producer populace \
+  --manifest-uri hf://dataset/policyengine/populace-uk-private@<release>/releases/<release>/release_manifest.json
 ```
 
 This updates bundle metadata and creates a patch changelog fragment. Do not bump

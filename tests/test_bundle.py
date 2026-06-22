@@ -12,10 +12,12 @@ def test_bundle_manifest_exposes_data_releases():
     manifest = bundle.get_current_bundle()
 
     assert manifest["bundle_version"] == manifest["policyengine_version"]
-    assert manifest["data_releases"]["us"]["version"] == "1.78.2"
-    assert manifest["data_releases"]["uk"]["version"] == "1.55.5"
+    assert manifest["data_releases"]["us"]["data_producer"] == "populace"
+    assert manifest["data_releases"]["us"]["version"].startswith("populace-us-2024-")
+    assert manifest["data_releases"]["uk"]["data_producer"] == "populace"
+    assert manifest["data_releases"]["uk"]["version"].startswith("populace-uk-2023-")
     assert manifest["data_releases"]["uk"]["default_dataset_uri"].startswith(
-        "hf://policyengine/policyengine-uk-data-private/"
+        "hf://policyengine/populace-uk-private/"
     )
 
 
@@ -45,8 +47,10 @@ def test_dataset_plans_use_certified_release_metadata(tmp_path):
 
     assert len(plans) == 1
     assert plans[0].country == "uk"
-    assert plans[0].data_version == "1.55.5"
-    assert plans[0].destination == tmp_path / "enhanced_frs_2023_24.h5"
+    assert plans[0].data_version.startswith("populace-uk-2023-")
+    assert plans[0].data_producer == "populace"
+    assert plans[0].repo_type == "dataset"
+    assert plans[0].destination == tmp_path / "populace_uk_2023.h5"
 
 
 def test_install_bundle_package_only_uses_explicit_python(monkeypatch, tmp_path):
@@ -107,7 +111,7 @@ class FakeSession:
 
 
 def test_install_datasets_downloads_then_backs_up_existing_file(tmp_path):
-    existing = tmp_path / "enhanced_cps_2024.h5"
+    existing = tmp_path / "populace_us_2024.h5"
     existing.write_bytes(b"old-data")
 
     installed = bundle.install_datasets(
@@ -120,7 +124,7 @@ def test_install_datasets_downloads_then_backs_up_existing_file(tmp_path):
 
     assert installed[0]["country"] == "us"
     assert existing.read_bytes() == b"new-data"
-    backups = list((tmp_path / bundle.BACKUP_DIR_NAME).glob("*/enhanced_cps_2024.h5"))
+    backups = list((tmp_path / bundle.BACKUP_DIR_NAME).glob("*/populace_us_2024.h5"))
     assert len(backups) == 1
     assert backups[0].read_bytes() == b"old-data"
 
@@ -130,13 +134,13 @@ def test_status_matches_receipt_and_packages(monkeypatch, tmp_path):
     datasets = [
         {
             "country": "uk",
-            "dataset": "enhanced_frs_2023_24",
-            "version": "1.55.5",
-            "uri": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.55.5",
-            "path": str(tmp_path / "enhanced_frs_2023_24.h5"),
+            "dataset": "populace_uk_2023",
+            "version": manifest["data_releases"]["uk"]["version"],
+            "uri": manifest["data_releases"]["uk"]["default_dataset_uri"],
+            "path": str(tmp_path / "populace_uk_2023.h5"),
         }
     ]
-    (tmp_path / "enhanced_frs_2023_24.h5").write_bytes(b"data")
+    (tmp_path / "populace_uk_2023.h5").write_bytes(b"data")
     bundle.write_receipt(
         manifest,
         data_dir=tmp_path,

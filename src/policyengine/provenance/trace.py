@@ -348,7 +348,7 @@ def build_trace_tro_from_release_bundle(
 
     bundle_manifest_location = (
         bundle_manifest_path
-        or f"data/release_manifests/{country_manifest.country_id}.json"
+        or "data/bundle/manifest.json"
     )
     data_manifest_location = (
         data_release_manifest_path

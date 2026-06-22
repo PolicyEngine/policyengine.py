@@ -24,7 +24,7 @@ from urllib.parse import quote
 
 import requests
 
-BUNDLE_MANIFEST_RESOURCE = ("data", "stack", "manifest.json")
+BUNDLE_MANIFEST_RESOURCE = ("data", "bundle", "manifest.json")
 BUNDLE_HISTORY_RESOURCE = ("data", "bundles")
 DEFAULT_COUNTRIES = ("us", "uk")
 DEFAULT_DATA_DIR = Path("./data")
@@ -45,7 +45,8 @@ class DatasetPlan:
     filename: str
     data_version: Optional[str]
     release_manifest_uri: Optional[str]
-    provider: str
+    data_producer: str
+    repo_type: str
     destination: Path
 
 
@@ -67,13 +68,11 @@ def _normalise_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
     payload = dict(manifest)
     bundle_version = (
         payload.get("bundle_version")
-        or payload.get("stack_version")
         or payload.get("policyengine_version")
     )
     if not bundle_version:
         raise BundleError("Bundle manifest is missing a bundle version.")
     payload["bundle_version"] = str(bundle_version)
-    payload.setdefault("stack_version", str(bundle_version))
     payload.setdefault("policyengine_version", str(bundle_version))
     payload.setdefault("countries", {})
     payload.setdefault("packages", {})
@@ -100,7 +99,7 @@ def _data_releases_from_countries(manifest: Mapping[str, Any]) -> dict[str, Any]
             or data_package.get("version")
         )
         releases[str(country)] = {
-            "provider": country_meta.get("data_provider", "legacy"),
+            "data_producer": country_meta.get("data_producer", "legacy"),
             "data_package": data_package_name,
             "version": data_version,
             "default_dataset": country_meta.get("default_dataset"),
@@ -191,12 +190,10 @@ def _include_component(
         return False
     role = component.get("role")
     country = component.get("country")
-    if role in {"stack_carrier", "bundle_carrier", "runtime_dependency"}:
+    if role in {"bundle_carrier", "runtime_dependency"}:
         return True
     if isinstance(country, str):
         return country in countries
-    if role in {"data_provider", "dataset_provider"}:
-        return True
     return key == "policyengine"
 
 
@@ -282,6 +279,12 @@ def dataset_plans(
         dataset = release.get("default_dataset")
         if not uri or not dataset:
             continue
+        data_package = release.get("data_package", {})
+        repo_type = (
+            data_package.get("repo_type", "model")
+            if isinstance(data_package, Mapping)
+            else "model"
+        )
         filename = _filename_from_uri(str(uri))
         plans.append(
             DatasetPlan(
@@ -299,7 +302,8 @@ def dataset_plans(
                     if release.get("release_manifest_uri")
                     else None
                 ),
-                provider=str(release.get("provider") or "legacy"),
+                data_producer=str(release.get("data_producer") or "legacy"),
+                repo_type=str(repo_type),
                 destination=data_dir / filename,
             )
         )
@@ -375,7 +379,7 @@ def _confirm_dataset_install(
 
 def _download_to_temp(plan: DatasetPlan, *, data_dir: Path, session=requests) -> Path:
     data_dir.mkdir(parents=True, exist_ok=True)
-    url = _download_url(plan.uri)
+    url = _download_url(plan.uri, repo_type=plan.repo_type)
     headers = _auth_headers(plan.uri)
     suffix = Path(plan.filename).suffix or ".download"
     fd, temp_name = tempfile.mkstemp(
@@ -407,7 +411,7 @@ def _download_to_temp(plan: DatasetPlan, *, data_dir: Path, session=requests) ->
     return temp_path
 
 
-def _download_url(uri: str) -> str:
+def _download_url(uri: str, *, repo_type: str = "model") -> str:
     without_revision, revision = _split_revision(uri)
     if without_revision.startswith("hf://"):
         parts = without_revision.removeprefix("hf://").split("/", 2)
@@ -417,7 +421,11 @@ def _download_url(uri: str) -> str:
         path = parts[2]
         if not revision:
             raise BundleError(f"Hugging Face dataset URI must pin a revision: {uri}")
-        return f"https://huggingface.co/{repo_id}/resolve/{quote(revision)}/{path}"
+        prefix = "datasets/" if repo_type == "dataset" else ""
+        return (
+            f"https://huggingface.co/{prefix}{repo_id}/resolve/"
+            f"{quote(revision)}/{path}"
+        )
     if without_revision.startswith("gs://"):
         bucket_and_path = without_revision.removeprefix("gs://")
         bucket, _, path = bucket_and_path.partition("/")
@@ -462,7 +470,8 @@ def _receipt_dataset(plan: DatasetPlan) -> dict[str, Any]:
         "uri": plan.uri,
         "path": str(plan.destination),
         "release_manifest_uri": plan.release_manifest_uri,
-        "provider": plan.provider,
+        "data_producer": plan.data_producer,
+        "repo_type": plan.repo_type,
     }
 
 
@@ -547,6 +556,7 @@ def inspect_bundle_status(
     manifest_ref: Optional[str] = None,
     countries: Optional[Sequence[str]] = None,
     data_dir: Path = DEFAULT_DATA_DIR,
+    packages_only: bool = False,
 ) -> dict[str, Any]:
     manifest = load_bundle_manifest(version, manifest_ref=manifest_ref)
     selected_countries = normalise_countries(countries, manifest)
@@ -555,7 +565,11 @@ def inspect_bundle_status(
         for component in _selected_components(manifest, selected_countries)
     ]
     receipt = read_receipt(data_dir)
-    dataset_checks = _dataset_checks(manifest, selected_countries, data_dir, receipt)
+    dataset_checks = (
+        []
+        if packages_only
+        else _dataset_checks(manifest, selected_countries, data_dir, receipt)
+    )
     passed = all(
         check["status"] == "ok" for check in [*package_checks, *dataset_checks]
     )

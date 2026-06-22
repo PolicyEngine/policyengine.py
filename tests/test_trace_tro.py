@@ -280,7 +280,7 @@ class TestBundleTRO:
             "trov:hasArtifactLocation"
         ]
         paths = [location["trov:hasLocation"] for location in locations]
-        assert paths[0].startswith("data/release_manifests/")
+        assert paths[0] == "data/bundle/manifest.json"
         for path in paths[1:]:
             assert path.startswith("https://"), path
 
@@ -471,7 +471,7 @@ class TestBundleTRO:
     def test__given_self_url__then_tro_records_it(self):
         self_url = (
             "https://raw.githubusercontent.com/PolicyEngine/policyengine.py/"
-            "v3.4.5/src/policyengine/data/release_manifests/us.trace.tro.jsonld"
+            "v3.4.5/src/policyengine/data/bundle/us.trace.tro.jsonld"
         )
         tro = build_trace_tro_from_release_bundle(
             get_release_manifest("us"),
@@ -763,7 +763,7 @@ class TestSimulationTRO:
         tro = build_results_trace_tro(
             self._results(),
             bundle_tro=us_bundle_tro,
-            bundle_tro_url="https://raw.githubusercontent.com/PolicyEngine/policyengine.py/v3.4.5/src/policyengine/data/release_manifests/us.trace.tro.jsonld",
+            bundle_tro_url="https://raw.githubusercontent.com/PolicyEngine/policyengine.py/v3.4.5/src/policyengine/data/bundle/us.trace.tro.jsonld",
         )
 
         performance = tro["@graph"][0]["trov:hasPerformance"]
@@ -803,7 +803,7 @@ class TestSimulationTRO:
     ):
         bundle_url = (
             "https://raw.githubusercontent.com/PolicyEngine/policyengine.py/"
-            "v3.4.5/src/policyengine/data/release_manifests/us.trace.tro.jsonld"
+            "v3.4.5/src/policyengine/data/bundle/us.trace.tro.jsonld"
         )
         written = write_results_with_trace_tro(
             self._results(),

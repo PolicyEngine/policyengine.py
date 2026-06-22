@@ -1,13 +1,15 @@
 """Tests for bundled compatibility manifests and data release manifests."""
 
 import hashlib
+import importlib
 import json
 import os
 import re
 import subprocess
 import sys
+from importlib.machinery import ModuleSpec
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from requests import Timeout
@@ -27,13 +29,6 @@ from policyengine.provenance.manifest import (
     resolve_local_managed_dataset_source,
     resolve_managed_dataset_reference,
 )
-from policyengine.tax_benefit_models.uk import (
-    managed_microsimulation as managed_uk_microsimulation,
-)
-from policyengine.tax_benefit_models.us import (
-    managed_microsimulation as managed_us_microsimulation,
-)
-from policyengine.tax_benefit_models.us import us_latest
 
 PYPROJECT = Path(__file__).resolve().parents[1] / "pyproject.toml"
 POLICYENGINE_VERSION = re.search(
@@ -48,7 +43,7 @@ US_DATA_RELEASE_ID = "populace-us-2024-f0af251-703bd81a565c-20260620T201958Z"
 US_DATA_RELEASE_REVISION = US_DATA_RELEASE_ID
 US_DATA_RELEASE_PATH = f"releases/{US_DATA_RELEASE_ID}/release_manifest.json"
 US_DATA_ARTIFACT_REVISION = US_DATA_RELEASE_ID
-US_CERTIFICATION_SOURCE = "policyengine.py certification"
+US_CERTIFICATION_SOURCE = "policyengine.py bundle certification"
 US_MANAGED_DATASET_URI = (
     f"hf://policyengine/populace-us/populace_us_2024.h5@{US_DATA_ARTIFACT_REVISION}"
 )
@@ -64,7 +59,7 @@ UK_DATA_RELEASE_VERSION = "0.1.0"
 UK_DATA_RELEASE_ID = "populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z"
 UK_DATA_RELEASE_REVISION = UK_DATA_RELEASE_ID
 UK_DATA_RELEASE_PATH = f"releases/{UK_DATA_RELEASE_ID}/release_manifest.json"
-UK_CERTIFICATION_SOURCE = "policyengine.py certification"
+UK_CERTIFICATION_SOURCE = "policyengine.py bundle certification"
 UK_CERTIFIED_DATASET_URI = (
     f"hf://policyengine/populace-uk-private/populace_uk_2023.h5"
     f"@{UK_DATA_RELEASE_REVISION}"
@@ -89,14 +84,48 @@ def _response_with_json(payload: dict) -> MagicMock:
     return response
 
 
-def _country_module_with_microsimulation(
+def _country_modules_with_microsimulation(
     name: str,
     microsimulation: MagicMock,
-) -> ModuleType:
+) -> dict[str, ModuleType]:
     module = ModuleType(name)
     module.Microsimulation = microsimulation
     module.__file__ = str(Path(__file__).resolve())
-    return module
+    module.__path__ = []
+    module.__spec__ = ModuleSpec(name, loader=None, is_package=True)
+    module.__spec__.submodule_search_locations = []
+
+    parameters = MagicMock()
+    parameters.get_descendants.return_value = []
+    system_module = ModuleType(f"{name}.system")
+    system_module.system = SimpleNamespace(variables={}, parameters=parameters)
+    system_module.__spec__ = ModuleSpec(f"{name}.system", loader=None)
+
+    data_module = ModuleType(f"{name}.data")
+    data_module.__path__ = []
+    data_module.__spec__ = ModuleSpec(
+        f"{name}.data", loader=None, is_package=True
+    )
+    data_module.__spec__.submodule_search_locations = []
+
+    class FakeDataset:
+        @staticmethod
+        def validate_file_path(_path, _raise_if_invalid=True):
+            return False
+
+    schema_module = ModuleType(f"{name}.data.dataset_schema")
+    schema_module.UKMultiYearDataset = FakeDataset
+    schema_module.UKSingleYearDataset = FakeDataset
+    schema_module.__spec__ = ModuleSpec(
+        f"{name}.data.dataset_schema", loader=None
+    )
+
+    return {
+        name: module,
+        f"{name}.system": system_module,
+        f"{name}.data": data_module,
+        f"{name}.data.dataset_schema": schema_module,
+    }
 
 
 class TestReleaseManifests:
@@ -569,7 +598,7 @@ class TestReleaseManifests:
 
         assert certification == bundled_certification
 
-    def test__given_manifest_fetch_failure_and_version_mismatch__then_fallback_fails(
+    def test__given_manifest_fetch_failure_and_version_mismatch__then_fallback_is_unverified(
         self,
     ):
         get_data_release_manifest.cache_clear()
@@ -578,15 +607,17 @@ class TestReleaseManifests:
             "policyengine.provenance.manifest.requests.get",
             side_effect=Timeout("network timeout"),
         ):
-            try:
-                certify_data_release_compatibility(
-                    "us",
-                    runtime_model_version="1.602.0",
-                )
-            except DataReleaseManifestUnavailableError as error:
-                assert "Could not fetch" in str(error)
-            else:
-                raise AssertionError("Expected offline mismatched version to fail")
+            certification = certify_data_release_compatibility(
+                "us",
+                runtime_model_version="1.602.0",
+            )
+
+        assert (
+            certification.compatibility_basis
+            == "unverified_data_release_manifest_unavailable"
+        )
+        assert certification.certified_for_model_version == "1.602.0"
+        assert certification.certified_by == US_CERTIFICATION_SOURCE
 
     def test__given_offline_hf__then_us_import_uses_bundled_certification(
         self,
@@ -728,19 +759,25 @@ class TestReleaseManifests:
         with (
             patch.dict(
                 sys.modules,
-                {
-                    "policyengine_us": _country_module_with_microsimulation(
-                        "policyengine_us",
-                        mock_microsimulation,
-                    )
-                },
+                _country_modules_with_microsimulation(
+                    "policyengine_us",
+                    mock_microsimulation,
+                ),
             ),
             patch(
-                "policyengine.tax_benefit_models.us.model.materialize_dataset_source",
-                return_value="/tmp/enhanced_cps_2024.h5",
+                "policyengine.tax_benefit_models.common.model_version.certify_data_release_compatibility",
+                return_value=get_release_manifest("us").certification,
             ),
         ):
-            microsim = managed_us_microsimulation()
+            us_model = importlib.import_module(
+                "policyengine.tax_benefit_models.us.model"
+            )
+            with patch.object(
+                us_model,
+                "materialize_dataset_source",
+                return_value="/tmp/enhanced_cps_2024.h5",
+            ):
+                microsim = us_model.managed_microsimulation()
 
         dataset = mock_microsimulation.call_args.kwargs["dataset"]
         assert dataset == microsim.policyengine_bundle["runtime_dataset_source"]
@@ -750,7 +787,7 @@ class TestReleaseManifests:
         assert microsim.policyengine_bundle["runtime_dataset"] == "populace_us_2024"
         assert (
             microsim.policyengine_bundle["runtime_dataset_uri"]
-            == us_latest.default_dataset_uri
+            == us_model.us_latest.default_dataset_uri
         )
         dataset_source = microsim.policyengine_bundle["runtime_dataset_source"]
         assert dataset_source == "/tmp/enhanced_cps_2024.h5"
@@ -762,22 +799,28 @@ class TestReleaseManifests:
         with (
             patch.dict(
                 sys.modules,
-                {
-                    "policyengine_us": _country_module_with_microsimulation(
-                        "policyengine_us",
-                        mock_microsimulation,
-                    )
-                },
+                _country_modules_with_microsimulation(
+                    "policyengine_us",
+                    mock_microsimulation,
+                ),
             ),
             patch(
-                "policyengine.tax_benefit_models.us.model.materialize_dataset_source",
-                return_value="/tmp/cps_2023.h5",
+                "policyengine.tax_benefit_models.common.model_version.certify_data_release_compatibility",
+                return_value=get_release_manifest("us").certification,
             ),
         ):
-            microsim = managed_us_microsimulation(
-                dataset=dataset,
-                allow_unmanaged=True,
+            us_model = importlib.import_module(
+                "policyengine.tax_benefit_models.us.model"
             )
+            with patch.object(
+                us_model,
+                "materialize_dataset_source",
+                return_value="/tmp/cps_2023.h5",
+            ):
+                microsim = us_model.managed_microsimulation(
+                    dataset=dataset,
+                    allow_unmanaged=True,
+                )
 
         assert mock_microsimulation.call_args.kwargs["dataset"] == "/tmp/cps_2023.h5"
         assert microsim.policyengine_bundle["runtime_dataset_uri"] == dataset
@@ -790,19 +833,27 @@ class TestReleaseManifests:
         with (
             patch.dict(
                 sys.modules,
-                {
-                    "policyengine_uk": _country_module_with_microsimulation(
-                        "policyengine_uk",
-                        mock_microsimulation,
-                    )
-                },
+                _country_modules_with_microsimulation(
+                    "policyengine_uk",
+                    mock_microsimulation,
+                ),
             ),
             patch(
-                "policyengine.tax_benefit_models.uk.model.materialize_dataset_source",
-                return_value="/tmp/populace_uk_2023.h5",
+                "policyengine.tax_benefit_models.common.model_version.certify_data_release_compatibility",
+                return_value=get_release_manifest("uk").certification,
             ),
         ):
-            microsim = managed_uk_microsimulation(dataset="populace_uk_2023")
+            uk_model = importlib.import_module(
+                "policyengine.tax_benefit_models.uk.model"
+            )
+            with patch.object(
+                uk_model,
+                "materialize_dataset_source",
+                return_value="/tmp/populace_uk_2023.h5",
+            ):
+                microsim = uk_model.managed_microsimulation(
+                    dataset="populace_uk_2023"
+                )
 
         dataset = mock_microsimulation.call_args.kwargs["dataset"]
         assert dataset == "/tmp/populace_uk_2023.h5"
@@ -823,22 +874,28 @@ class TestReleaseManifests:
         with (
             patch.dict(
                 sys.modules,
-                {
-                    "policyengine_uk": _country_module_with_microsimulation(
-                        "policyengine_uk",
-                        mock_microsimulation,
-                    )
-                },
+                _country_modules_with_microsimulation(
+                    "policyengine_uk",
+                    mock_microsimulation,
+                ),
             ),
             patch(
-                "policyengine.tax_benefit_models.uk.model.materialize_dataset_source",
-                return_value="/tmp/frs_2022_23.h5",
+                "policyengine.tax_benefit_models.common.model_version.certify_data_release_compatibility",
+                return_value=get_release_manifest("uk").certification,
             ),
         ):
-            microsim = managed_uk_microsimulation(
-                dataset=dataset,
-                allow_unmanaged=True,
+            uk_model = importlib.import_module(
+                "policyengine.tax_benefit_models.uk.model"
             )
+            with patch.object(
+                uk_model,
+                "materialize_dataset_source",
+                return_value="/tmp/frs_2022_23.h5",
+            ):
+                microsim = uk_model.managed_microsimulation(
+                    dataset=dataset,
+                    allow_unmanaged=True,
+                )
 
         assert mock_microsimulation.call_args.kwargs["dataset"] == (
             "/tmp/frs_2022_23.h5"

@@ -8,7 +8,7 @@ The implementation has moved past several "not yet live" markers in the
 April draft below. As of June 2026:
 
 - **Certified bundle TROs ship in every `policyengine` release.**
-  `data/release_manifests/{us,uk}.trace.tro.jsonld` bind the bundle
+  `data/bundle/{us,uk}.trace.tro.jsonld` bind the bundle
   manifest, the certified dataset sha256, the country model wheel, and
   the data release manifest. Certification now reads country data
   release manifests directly from their Hugging Face repos

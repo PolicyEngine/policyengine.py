@@ -10,7 +10,7 @@ on:
       - .github/**
       - changelog.d/**
       - pyproject.toml
-      - policyengine-stack.toml
+      - policyengine-bundle.json
   workflow_dispatch:
 
 jobs:
@@ -76,8 +76,8 @@ jobs:
         run: uv pip install --system . h5py
       - name: Smoke-import core modules
         run: python -c "import policyengine; from policyengine.core import Dataset, Policy, Simulation; from policyengine.outputs import aggregate, poverty, inequality; print('import OK')"
-  StackVerification:
-    name: Verify stack metadata
+  BundleVerification:
+    name: Verify bundle metadata
     runs-on: ubuntu-latest
     env:
       POLICYENGINE_SKIP_COUNTRY_IMPORTS: "1"
@@ -89,12 +89,12 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.13'
-      - name: Check generated stack artifacts
-        run: python scripts/generate_stack_artifacts.py --check
-      - name: Install stack model extra
+      - name: Check generated bundle artifacts
+        run: python scripts/generate_bundle_artifacts.py --check
+      - name: Install bundle model extra
         run: uv pip install -e ".[models]" --system
-      - name: Verify stack
-        run: policyengine stack verify --extra models --check-uris
+      - name: Verify bundle packages
+        run: policyengine bundle verify --country us --country uk --packages-only
   Test:
     runs-on: macos-latest
     strategy:

@@ -37,7 +37,7 @@
               "trov:hasArtifact": {
                 "@id": "composition/1/artifact/bundle_manifest"
               },
-              "trov:hasLocation": "data/release_manifests/us.json"
+              "trov:hasLocation": "data/bundle/manifest.json"
             },
             {
               "@id": "arrangement/1/location/data_release_manifest",
@@ -75,7 +75,7 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine.py bundle manifest for us",
             "trov:mimeType": "application/json",
-            "trov:sha256": "d29cfd6a4b8e4af57f13963ce1884e3da832aba650674871db23fa7f3a1d82f0"
+            "trov:sha256": "c5f2a6320019539c8afdbce63ae36d8ea6b87c2ad540cfe0436f36543c3b86e4"
           },
           {
             "@id": "composition/1/artifact/data_release_manifest",
@@ -102,21 +102,18 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "18fcf6abf4eab6d367335a11b33ca2b218171973c32a1cd6b70c5f4ca34b745a"
+          "trov:sha256": "620f64816a6878467c898332a5eb0ecad0d54bde11b528c1e064fdc2d9c7f7e8"
         }
       },
       "trov:hasPerformance": {
         "@id": "trp/1",
         "@type": "trov:TransparentResearchPerformance",
         "pe:builtWithModelVersion": "1.729.0",
-        "pe:certifiedBy": "policyengine.py certification",
+        "pe:certifiedBy": "policyengine.py bundle certification",
         "pe:certifiedForModelVersion": "1.729.0",
-        "pe:ciGitRef": "refs/heads/main",
-        "pe:ciGitSha": "59509f48da0d5884b7b6c6dc9c6ab3321e8115ea",
-        "pe:ciRunUrl": "https://github.com/PolicyEngine/policyengine.py/actions/runs/27883888353",
         "pe:compatibilityBasis": "built_with_model_package",
         "pe:dataBuildId": "populace-us-2024-f0af251-703bd81a565c-20260620T201958Z",
-        "pe:emittedIn": "github-actions",
+        "pe:emittedIn": "local",
         "rdfs:comment": "Certification of build populace-us-2024-f0af251-703bd81a565c-20260620T201958Z for policyengine-us 1.729.0.",
         "trov:accessedArrangement": {
           "@id": "arrangement/1"

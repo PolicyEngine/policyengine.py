@@ -1,8 +1,9 @@
-"""Generate pip extras and packaged stack metadata from policyengine-stack.toml."""
+"""Generate pip extras and packaged bundle metadata from policyengine-bundle.json."""
 
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import re
 import sys
@@ -15,104 +16,76 @@ except ModuleNotFoundError:  # pragma: no cover - for local Python 3.10 users.
     import tomli as tomllib  # type: ignore[no-redef]
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-STACK_SOURCE = REPO_ROOT / "policyengine-stack.toml"
+BUNDLE_SOURCE = REPO_ROOT / "policyengine-bundle.json"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
-STACK_MANIFEST = REPO_ROOT / "src" / "policyengine" / "data" / "stack" / "manifest.json"
+BUNDLE_MANIFEST = REPO_ROOT / "src" / "policyengine" / "data" / "bundle" / "manifest.json"
 
 OPTIONAL_DEPENDENCIES_HEADER = "[project.optional-dependencies]"
 NEXT_SECTION_PATTERN = re.compile(r"\n\[tool\.setuptools\]", re.MULTILINE)
 
 
-def load_toml(path: Path) -> dict[str, Any]:
-    with path.open("rb") as stream:
-        return tomllib.load(stream)
+def load_bundle_source(path: Path = BUNDLE_SOURCE) -> dict[str, Any]:
+    return json.loads(path.read_text())
 
 
-def generated_manifest(stack: Mapping[str, Any]) -> dict[str, Any]:
+def write_bundle_source(bundle: Mapping[str, Any], path: Path = BUNDLE_SOURCE) -> None:
+    path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n")
+
+
+def generated_manifest(bundle: Mapping[str, Any]) -> dict[str, Any]:
     packages = {
         key: {
             **value,
             "install_requirement": exact_requirement(value),
         }
-        for key, value in stack["packages"].items()
+        for key, value in bundle["packages"].items()
     }
-    return {
-        "schema_version": int(stack["schema_version"]),
-        "bundle_version": stack["stack_version"],
-        "stack_version": stack["stack_version"],
-        "policyengine_version": stack["policyengine_version"],
-        "source": "policyengine-stack.toml",
-        "packages": packages,
-        "extras": stack["extras"],
-        "countries": stack.get("countries", {}),
-        "data_releases": data_releases(stack, packages),
-        "citation": {
-            "title": f"PolicyEngine bundle {stack['stack_version']}",
-            "version": stack["stack_version"],
-            "type": "software-stack",
-            "publisher": "PolicyEngine",
-        },
+    manifest = copy.deepcopy(dict(bundle))
+    manifest["packages"] = packages
+    manifest["source"] = "policyengine-bundle.json"
+    manifest["citation"] = {
+        "title": f"PolicyEngine bundle {bundle['bundle_version']}",
+        "version": bundle["bundle_version"],
+        "type": "software-bundle",
+        "publisher": "PolicyEngine",
     }
+    return manifest
 
 
-def data_releases(
-    stack: Mapping[str, Any],
-    packages: Mapping[str, Mapping[str, Any]],
-) -> dict[str, dict[str, Any]]:
-    releases: dict[str, dict[str, Any]] = {}
-    for country, country_metadata in stack.get("countries", {}).items():
-        data_package_name = country_metadata.get("data_package")
-        data_package = packages.get(data_package_name, {})
-        data_version = (
-            country_metadata.get("data_artifact_version")
-            or country_metadata.get("data_version")
-            or data_package.get("version")
-        )
-        releases[country] = {
-            "provider": country_metadata.get("data_provider", "legacy"),
-            "data_package": data_package_name,
-            "version": data_version,
-            "default_dataset": country_metadata.get("default_dataset"),
-            "default_dataset_uri": country_metadata.get("default_dataset_uri"),
-            "release_manifest_uri": country_metadata.get("release_manifest_uri"),
-        }
-    return releases
+def manifest_text(bundle: Mapping[str, Any]) -> str:
+    return json.dumps(generated_manifest(bundle), indent=2, sort_keys=True) + "\n"
 
 
-def manifest_text(stack: Mapping[str, Any]) -> str:
-    return json.dumps(generated_manifest(stack), indent=2, sort_keys=True) + "\n"
-
-
-def update_pyproject_text(pyproject_text: str, stack: Mapping[str, Any]) -> str:
+def update_pyproject_text(pyproject_text: str, bundle: Mapping[str, Any]) -> str:
     pyproject = tomllib.loads(pyproject_text)
     optional = pyproject["project"].get("optional-dependencies", {})
-    stack_extras = stack["extras"]
+    bundle_extras = bundle["extras"]
 
     kept_extras: dict[str, list[str]] = {}
     for name, dependencies in optional.items():
-        if name == "dev" or name in stack_extras:
+        if name == "dev" or name in bundle_extras:
             continue
         kept_extras[name] = list(dependencies)
 
     generated_extras = {
         name: [
-            exact_requirement(stack["packages"][package_name])
+            exact_requirement(bundle["packages"][package_name])
             for package_name in package_names
         ]
-        for name, package_names in stack_extras.items()
+        for name, package_names in bundle_extras.items()
     }
 
     first_party_package_names = {
         normalized_requirement_name(component["name"])
-        for component in stack["packages"].values()
+        for component in bundle["packages"].values()
     }
     dev_dependencies = [
         dependency
         for dependency in optional.get("dev", [])
         if normalized_requirement_name(dependency) not in first_party_package_names
     ]
-    for package_name in stack_extras.get("models", []):
-        dev_dependencies.append(exact_requirement(stack["packages"][package_name]))
+    for package_name in bundle_extras.get("models", []):
+        dev_dependencies.append(exact_requirement(bundle["packages"][package_name]))
 
     replacement = format_optional_dependencies(
         {
@@ -170,12 +143,12 @@ def write_or_check(path: Path, content: str, *, check: bool) -> bool:
 
 
 def generate(*, check: bool = False) -> int:
-    stack = load_toml(STACK_SOURCE)
+    bundle = load_bundle_source(BUNDLE_SOURCE)
     changed = False
-    changed |= write_or_check(STACK_MANIFEST, manifest_text(stack), check=check)
+    changed |= write_or_check(BUNDLE_MANIFEST, manifest_text(bundle), check=check)
     changed |= write_or_check(
         PYPROJECT,
-        update_pyproject_text(PYPROJECT.read_text(), stack),
+        update_pyproject_text(PYPROJECT.read_text(), bundle),
         check=check,
     )
     return 1 if check and changed else 0

@@ -106,10 +106,9 @@ It does not define the final supported runtime bundle exposed to users.
 
 It does not rebuild microdata artifacts.
 
-Certification runs in this repository: the vendored country release
-manifest under `src/policyengine/data/release_manifests/` is derived
-directly from the country's published data release manifest. The
-entrypoint is:
+Certification runs in this repository: `policyengine-bundle.json` carries the
+certified `data_releases.{country}` entry derived directly from the country's
+published data release manifest. The entrypoint is:
 
 ```bash
 python scripts/certify_data_release.py --country us \
@@ -300,7 +299,7 @@ policyengine trace-tro us --out us.trace.tro.jsonld
 ```
 
 At release time, `scripts/generate_trace_tros.py` regenerates the bundled
-`data/release_manifests/{country}.trace.tro.jsonld` files, and the
+`data/bundle/{country}.trace.tro.jsonld` files, and the
 `Versioning` CI job commits them alongside the changelog so every published
 wheel ships with the matching TRO.
 
@@ -316,7 +315,7 @@ write_results_with_trace_tro(
     reform_payload={"salt_cap": 0},
     bundle_tro_url=(
         "https://raw.githubusercontent.com/PolicyEngine/policyengine.py/"
-        "v3.4.5/src/policyengine/data/release_manifests/us.trace.tro.jsonld"
+        "v3.4.5/src/policyengine/data/bundle/us.trace.tro.jsonld"
     ),
 )
 ```

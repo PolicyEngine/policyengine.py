@@ -18,6 +18,11 @@ TAG = "populace-us-2024-aaaaaaa-20260101"
 MANIFEST_URI = (
     f"hf://dataset/policyengine/populace-us@{TAG}/releases/{TAG}/release_manifest.json"
 )
+UK_TAG = "populace-uk-2023-bbbbbbb-20260101"
+UK_MANIFEST_URI = (
+    "hf://dataset/policyengine/populace-uk-private"
+    f"@{UK_TAG}/releases/{UK_TAG}/release_manifest.json"
+)
 
 
 def _release_manifest_payload() -> dict:
@@ -93,6 +98,40 @@ def _release_manifest_payload() -> dict:
 
 def _manifest() -> DataReleaseManifest:
     return DataReleaseManifest.model_validate(_release_manifest_payload())
+
+
+def _uk_release_manifest_payload() -> dict:
+    payload = _release_manifest_payload()
+    payload["compatible_model_packages"] = [
+        {"name": "policyengine-uk", "specifier": "==2.89.2"}
+    ]
+    payload["build"]["build_id"] = UK_TAG
+    payload["build"]["built_with_model_package"] = {
+        "name": "policyengine-uk",
+        "version": "2.89.2",
+        "git_sha": "deadbeef",
+    }
+    for artifact in payload["artifacts"].values():
+        if artifact["repo_id"] == "policyengine/populace-us":
+            artifact["repo_id"] = "policyengine/populace-uk-private"
+            artifact["revision"] = UK_TAG
+    payload["artifacts"].pop("us_source_coverage")
+    return payload
+
+
+def _bundle_source_payload() -> dict:
+    return {
+        "schema_version": 2,
+        "bundle_version": "9.9.9",
+        "policyengine_version": "9.9.9",
+        "packages": {
+            "policyengine": {"name": "policyengine", "version": "9.9.9"},
+            "policyengine-uk": {"name": "policyengine-uk", "version": "2.0.0"},
+        },
+        "extras": {},
+        "countries": {"uk": {"model_package": "policyengine-uk"}},
+        "data_releases": {},
+    }
 
 
 class TestParseManifestUri:
@@ -221,7 +260,7 @@ class TestBuildCountryManifestPayload:
 
         certification = payload["certification"]
         assert certification["compatibility_basis"] == "built_with_model_package"
-        assert certification["certified_by"] == "policyengine.py certification"
+        assert certification["certified_by"] == "policyengine.py bundle certification"
         assert certification["data_build_id"] == TAG
         assert certification["built_with_model_version"] == "1.723.0"
         assert certification["built_with_model_git_sha"] == "deadbeef"
@@ -232,10 +271,14 @@ class TestBuildCountryManifestPayload:
 
 
 class TestCertifyDataRelease:
-    def test__given_fetched_manifest__then_writes_country_manifest(self, tmp_path):
+    def test__given_fetched_populace_manifest__then_updates_bundle_source(
+        self, tmp_path
+    ):
+        bundle_path = tmp_path / "policyengine-bundle.json"
+        bundle_path.write_text(json.dumps(_bundle_source_payload()) + "\n")
         response = MagicMock()
         response.status_code = 200
-        response.content = json.dumps(_release_manifest_payload()).encode()
+        response.content = json.dumps(_uk_release_manifest_payload()).encode()
 
         with (
             patch(
@@ -258,19 +301,45 @@ class TestCertifyDataRelease:
                 "policyengine.provenance.certification.fetch_pypi_wheel_metadata",
                 return_value={"sha256": "d" * 64, "url": "https://example"},
             ),
+            patch(
+                "policyengine.provenance.certification.policyengine_version",
+                return_value="9.9.9",
+            ),
         ):
             result = certify_data_release(
+                country="uk",
+                data_producer="populace",
+                manifest_uri=UK_MANIFEST_URI,
+                model_version="2.89.2",
+                bundle_path=bundle_path,
+            )
+
+        written = json.loads(bundle_path.read_text())
+        release = written["data_releases"]["uk"]
+        assert release["data_producer"] == "populace"
+        assert release["default_dataset"] == "populace_us_2024"
+        assert release["certification"]["data_build_id"] == UK_TAG
+        assert release["version"] == UK_TAG
+        assert release["source_manifest_uri"] == UK_MANIFEST_URI
+        assert written["packages"]["policyengine-uk"]["version"] == "2.89.2"
+        assert result.data_producer == "populace"
+        assert result.dataset_count == 4
+        assert result.build_id == UK_TAG
+        assert result.bundle_path == bundle_path
+
+    def test__given_us_without_data_producer__then_legacy_update_is_explicitly_unsupported(
+        self, tmp_path
+    ):
+        bundle_path = tmp_path / "policyengine-bundle.json"
+        bundle_path.write_text(json.dumps(_bundle_source_payload()) + "\n")
+
+        with pytest.raises(CertificationError, match="Legacy data-producer"):
+            certify_data_release(
                 country="us",
                 manifest_uri=MANIFEST_URI,
                 model_version="1.723.0",
-                output_dir=tmp_path,
+                bundle_path=bundle_path,
             )
-
-        written = json.loads((tmp_path / "us.json").read_text())
-        assert written["default_dataset"] == "populace_us_2024"
-        assert written["certification"]["data_build_id"] == TAG
-        assert result.dataset_count == 5
-        assert result.build_id == TAG
 
     def test__given_missing_populace_us_source_coverage__then_raises(self, tmp_path):
         response = MagicMock()
@@ -290,9 +359,9 @@ class TestCertifyDataRelease:
         ):
             certify_data_release(
                 country="us",
+                data_producer="populace",
                 manifest_uri=MANIFEST_URI,
                 model_version="1.723.0",
-                output_dir=tmp_path,
             )
 
     def test__given_unreachable_artifact__then_raises(self, tmp_path):
@@ -321,9 +390,9 @@ class TestCertifyDataRelease:
         ):
             certify_data_release(
                 country="us",
+                data_producer="populace",
                 manifest_uri=MANIFEST_URI,
                 model_version="1.723.0",
-                output_dir=tmp_path,
             )
 
     def test__given_unreachable_vendored_artifact__then_raises(self, tmp_path):
@@ -356,80 +425,28 @@ class TestCertifyDataRelease:
         ):
             certify_data_release(
                 country="us",
+                data_producer="populace",
                 manifest_uri=MANIFEST_URI,
                 model_version="1.723.0",
-                output_dir=tmp_path,
             )
 
 
 class TestVendoredSidecarBinding:
-    def test__given_vendored_us_manifest__then_tro_sidecar_binds_it(self):
-        """The shipped TRO must bind the shipped country manifest under the
-        same byte-hash convention used by trace-tro-verify."""
+    def test__given_vendored_bundle_manifest__then_tro_sidecar_binds_it(self):
+        """The shipped TRO must bind the certified country payload embedded in
+        the bundle manifest."""
         import hashlib
         from importlib.resources import files
 
-        manifest_dir = files("policyengine").joinpath("data/release_manifests")
+        bundle_dir = files("policyengine").joinpath("data", "bundle")
         expected = hashlib.sha256(
-            manifest_dir.joinpath("us.json").read_bytes()
+            bundle_dir.joinpath("manifest.json").read_bytes()
         ).hexdigest()
 
-        tro = json.loads(manifest_dir.joinpath("us.trace.tro.jsonld").read_text())
+        tro = json.loads(bundle_dir.joinpath("us.trace.tro.jsonld").read_text())
         artifacts = tro["@graph"][0]["trov:hasComposition"]["trov:hasArtifact"]
         bundle_manifest = next(
             a for a in artifacts if a["@id"].endswith("bundle_manifest")
         )
 
         assert bundle_manifest["trov:sha256"] == expected
-
-
-class TestTraceTroRegeneration:
-    def test__given_cached_manifest_readers__then_clears_before_regeneration(
-        self, monkeypatch, tmp_path
-    ):
-        """Certification writes the manifest then regenerates the sidecar in
-        the same process, so stale manifest caches must be invalidated first."""
-        from policyengine.provenance import bundle, trace
-        from policyengine.provenance import manifest as manifest_module
-
-        calls = []
-
-        class FakeCachedReader:
-            def __init__(self, name, result):
-                self.name = name
-                self.result = result
-
-            def cache_clear(self):
-                calls.append(f"{self.name}.cache_clear")
-
-            def __call__(self, country):
-                calls.append(f"{self.name}({country})")
-                return self.result
-
-        monkeypatch.setattr(
-            manifest_module,
-            "get_release_manifest",
-            FakeCachedReader("release", object()),
-        )
-        monkeypatch.setattr(
-            manifest_module,
-            "get_data_release_manifest",
-            FakeCachedReader("data_release", object()),
-        )
-        monkeypatch.setattr(
-            trace,
-            "build_trace_tro_from_release_bundle",
-            lambda release, data_release: {"ok": True},
-        )
-        monkeypatch.setattr(trace, "serialize_trace_tro", lambda tro: b"{}\n")
-
-        out_path = bundle.regenerate_trace_tro("us", tmp_path)
-
-        assert out_path == tmp_path / "us.trace.tro.jsonld"
-        assert out_path.read_bytes() == b"{}\n"
-        assert calls == [
-            "release.cache_clear",
-            "data_release.cache_clear",
-            "release(us)",
-            "data_release(us)",
-        ]

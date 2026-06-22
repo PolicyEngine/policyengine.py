@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 from functools import lru_cache
 from importlib import import_module
@@ -252,14 +253,20 @@ def fetch_pypi_wheel_metadata(name: str, version: str) -> dict[str, Optional[str
 
 @lru_cache
 def get_release_manifest(country_id: str) -> CountryReleaseManifest:
-    manifest_path = files("policyengine").joinpath(
-        "data", "release_manifests", f"{country_id}.json"
-    )
+    manifest_path = files("policyengine").joinpath("data", "bundle", "manifest.json")
     if not manifest_path.is_file():
-        raise ValueError(f"No bundled release manifest for country '{country_id}'")
+        raise ValueError("No bundled PolicyEngine bundle manifest found.")
 
-    source_bytes = manifest_path.read_bytes()
-    manifest = CountryReleaseManifest.model_validate_json(source_bytes)
+    source_bytes = manifest_path.read_text().encode()
+    bundle = json.loads(source_bytes)
+    try:
+        release_payload = bundle["data_releases"][country_id]
+    except KeyError as exc:
+        raise ValueError(
+            f"No bundled data release for country '{country_id}'"
+        ) from exc
+
+    manifest = CountryReleaseManifest.model_validate(release_payload)
     manifest.source_sha256 = hashlib.sha256(source_bytes).hexdigest()
     return manifest
 
@@ -336,11 +343,7 @@ def certify_data_release_compatibility(
         data_release_manifest = get_data_release_manifest(country_id)
     except DataReleaseManifestUnavailableError as exc:
         bundled_certification = country_manifest.certification
-        if (
-            bundled_certification is not None
-            and bundled_certification.certified_for_model_version
-            == runtime_model_version
-        ):
+        if bundled_certification is not None:
             if (
                 runtime_data_build_fingerprint is not None
                 and bundled_certification.data_build_fingerprint is not None
@@ -353,7 +356,23 @@ def certify_data_release_compatibility(
                     "Runtime data build fingerprint does not match the bundled "
                     "data certification."
                 )
-            return bundled_certification
+            if bundled_certification.certified_for_model_version == runtime_model_version:
+                return bundled_certification
+            return DataCertification(
+                compatibility_basis="unverified_data_release_manifest_unavailable",
+                certified_for_model_version=runtime_model_version,
+                data_build_id=bundled_certification.data_build_id,
+                built_with_model_version=(
+                    bundled_certification.built_with_model_version
+                ),
+                built_with_model_git_sha=(
+                    bundled_certification.built_with_model_git_sha
+                ),
+                data_build_fingerprint=(
+                    bundled_certification.data_build_fingerprint
+                ),
+                certified_by=bundled_certification.certified_by,
+            )
         raise exc
     built_with_model = (
         data_release_manifest.build.built_with_model_package
