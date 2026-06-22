@@ -16,26 +16,28 @@ For a certified model-plus-data install, run the bundle installer as the single
 setup command:
 
 ```bash
-uvx --from policyengine==4.19.1 policyengine bundle install 4.19.1 --venv .venv
+uvx --from policyengine==4.19.1 policyengine bundle install 4.19.1
 ```
 
 With no version pin, `uvx` uses the newest published `policyengine` release:
 
 ```bash
-uvx --from policyengine policyengine bundle install --venv .venv
+uvx --from policyengine policyengine bundle install
 ```
 
-The installer creates or reuses the target virtual environment, installs the
+When run from `uvx` or `pipx`, the installer creates or reuses `./.venv`.
+Inside an existing virtualenv or conda environment, it installs into that active
+environment. The installer then installs the
 exact bundled package scaffold with pip, downloads certified US and UK datasets
 into `./data`, moves replaced dataset files into
 `./data/.policyengine-bundle-backups/<timestamp>/`, and writes a
-`./data/.policyengine-bundle.json` receipt.
+`./data/.policyengine-bundle.json` receipt that records the target Python.
 
 Country-specific and package-only installs are supported:
 
 ```bash
-uvx --from policyengine policyengine bundle install --venv .venv --country uk
-uvx --from policyengine policyengine bundle install --venv .venv --no-datasets
+uvx --from policyengine policyengine bundle install --country uk
+uvx --from policyengine policyengine bundle install --no-datasets
 ```
 
 Use `--yes` for CI/CD. Without `--yes`, dataset downloads ask for confirmation.
@@ -50,10 +52,14 @@ The bundle source of truth is `policyengine-bundle.json`. Generated artifacts ar
 Inspect or verify a local setup with:
 
 ```bash
-policyengine bundle status --data-dir ./data
-policyengine bundle verify 4.19.1 --data-dir ./data
+uvx --from policyengine policyengine bundle status --data-dir ./data
+uvx --from policyengine policyengine bundle verify 4.19.1 --data-dir ./data
 policyengine bundle manifest 4.19.1
 ```
+
+`status` and `verify` read the receipt and inspect the Python environment that
+`install` targeted. Use `--venv` or `--python` only to inspect a different
+target explicitly.
 
 ## Bundle-only PRs
 

@@ -69,7 +69,10 @@ def test_install_bundle_package_only_uses_explicit_python(monkeypatch, tmp_path)
     )
 
     assert result["countries"] == ["uk"]
-    assert calls[0][0] == Path(sys.executable)
+    assert calls[0][0] == Path(sys.executable).resolve()
+    receipt = bundle.read_receipt(tmp_path)
+    assert receipt is not None
+    assert receipt["target_python"] == str(Path(sys.executable).resolve())
     assert calls[0][1] == [
         f"policyengine=={result['bundle_version']}",
         bundle.get_current_bundle()["packages"]["policyengine-core"][
@@ -87,6 +90,28 @@ def test_resolve_target_python_accepts_path_executable(monkeypatch, tmp_path):
     monkeypatch.setattr(bundle.shutil, "which", lambda name: str(python_path))
 
     assert bundle.resolve_target_python(python="python") == python_path
+
+
+def test_resolve_target_python_defaults_to_local_venv(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("VIRTUAL_ENV", raising=False)
+    monkeypatch.delenv("CONDA_PREFIX", raising=False)
+
+    assert bundle.resolve_target_python(create_venv=False) == (
+        tmp_path / ".venv" / "bin" / "python"
+    )
+    assert not (tmp_path / ".venv").exists()
+
+
+def test_resolve_target_python_uses_local_venv_from_runner_env(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("VIRTUAL_ENV", str(tmp_path / "uvx-runner"))
+    monkeypatch.delenv("CONDA_PREFIX", raising=False)
+
+    assert bundle.resolve_target_python(create_venv=False) == (
+        tmp_path / ".venv" / "bin" / "python"
+    )
+    assert not (tmp_path / ".venv").exists()
 
 
 class FakeResponse:
@@ -158,6 +183,70 @@ def test_status_matches_receipt_and_packages(monkeypatch, tmp_path):
     assert report["matched"] is True
     assert {check["status"] for check in report["packages"]} == {"ok"}
     assert {check["status"] for check in report["datasets"]} == {"ok"}
+
+
+def test_status_uses_receipt_target_python(monkeypatch, tmp_path):
+    manifest = bundle.get_current_bundle()
+    target_python = tmp_path / ".venv" / "bin" / "python"
+    target_python.parent.mkdir(parents=True)
+    target_python.write_text("")
+    datasets = [
+        {
+            "country": "uk",
+            "dataset": "populace_uk_2023",
+            "version": manifest["data_releases"]["uk"]["version"],
+            "uri": manifest["data_releases"]["uk"]["default_dataset_uri"],
+            "path": str(tmp_path / "populace_uk_2023.h5"),
+        }
+    ]
+    (tmp_path / "populace_uk_2023.h5").write_bytes(b"data")
+    bundle.write_receipt(
+        manifest,
+        data_dir=tmp_path,
+        countries=["uk"],
+        datasets=datasets,
+        target_python=target_python,
+    )
+    versions = {
+        component["name"]: component["version"]
+        for component in manifest["packages"].values()
+    }
+    calls = []
+
+    def fake_versions(python_path, components):
+        calls.append(python_path)
+        return versions, None
+
+    monkeypatch.setattr(bundle, "_package_versions_from_python", fake_versions)
+
+    report = bundle.inspect_bundle_status(countries=["uk"], data_dir=tmp_path)
+
+    assert report["matched"] is True
+    assert calls == [target_python.resolve()]
+    assert report["target_python"] == str(target_python.resolve())
+
+
+def test_status_reports_missing_receipt_target_python(tmp_path):
+    manifest = bundle.get_current_bundle()
+    missing_python = tmp_path / ".venv" / "bin" / "python"
+    bundle.write_receipt(
+        manifest,
+        data_dir=tmp_path,
+        countries=["uk"],
+        datasets=[],
+        target_python=missing_python,
+    )
+
+    report = bundle.inspect_bundle_status(
+        countries=["uk"],
+        data_dir=tmp_path,
+        packages_only=True,
+    )
+
+    assert report["matched"] is False
+    assert {check["status"] for check in report["packages"]} == {
+        "target_python_missing"
+    }
 
 
 def test_status_treats_corrupt_receipt_as_missing(monkeypatch, tmp_path):

@@ -28,6 +28,7 @@ BUNDLE_MANIFEST_RESOURCE = ("data", "bundle", "manifest.json")
 BUNDLE_HISTORY_RESOURCE = ("data", "bundles")
 DEFAULT_COUNTRIES = ("us", "uk")
 DEFAULT_DATA_DIR = Path("./data")
+DEFAULT_VENV = Path(".venv")
 RECEIPT_FILENAME = ".policyengine-bundle.json"
 BACKUP_DIR_NAME = ".policyengine-bundle-backups"
 DOWNLOAD_TIMEOUT_SECONDS = 60
@@ -66,9 +67,8 @@ def _bundle_history_path(version: str):
 
 def _normalise_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
     payload = dict(manifest)
-    bundle_version = (
-        payload.get("bundle_version")
-        or payload.get("policyengine_version")
+    bundle_version = payload.get("bundle_version") or payload.get(
+        "policyengine_version"
     )
     if not bundle_version:
         raise BundleError("Bundle manifest is missing a bundle version.")
@@ -209,15 +209,16 @@ def resolve_target_python(
     *,
     python: Optional[str] = None,
     venv: Optional[Path] = None,
+    create_venv: bool = True,
 ) -> Path:
     """Resolve the Python interpreter that package installation should target."""
 
     if python and venv:
         raise BundleError("Pass either --python or --venv, not both.")
     if venv is not None:
-        return _ensure_venv(venv)
+        return _resolve_venv_python(venv, create_venv=create_venv)
     if python:
-        candidate = Path(shutil.which(python) or python)
+        candidate = Path(shutil.which(python) or python).expanduser().resolve()
         if not candidate.exists():
             raise BundleError(f"Python interpreter not found: {python}")
         return candidate
@@ -228,22 +229,32 @@ def resolve_target_python(
             "Scripts/python.exe" if os.name == "nt" else "bin/python"
         )
         if _looks_like_runner_env(candidate):
-            raise BundleError(
-                "The active Python appears to be a uvx/pipx runner environment. "
-                "Pass --venv or --python to choose the installation target."
-            )
+            return _resolve_venv_python(DEFAULT_VENV, create_venv=create_venv)
         if candidate.exists():
             return candidate
-    raise BundleError("Pass --venv or --python to choose the installation target.")
+    return _resolve_venv_python(DEFAULT_VENV, create_venv=create_venv)
+
+
+def _resolve_venv_python(path: Path, *, create_venv: bool) -> Path:
+    path = path.expanduser()
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    if create_venv:
+        return _ensure_venv(path)
+    return _venv_python(path)
 
 
 def _ensure_venv(path: Path) -> Path:
     if not path.exists():
         venv_module.EnvBuilder(with_pip=True).create(str(path))
-    python = path / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    python = _venv_python(path)
     if not python.exists():
         raise BundleError(f"Virtualenv at {path} does not contain Python.")
     return python
+
+
+def _venv_python(path: Path) -> Path:
+    return path / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
 
 def _looks_like_runner_env(python: Path) -> bool:
@@ -423,8 +434,7 @@ def _download_url(uri: str, *, repo_type: str = "model") -> str:
             raise BundleError(f"Hugging Face dataset URI must pin a revision: {uri}")
         prefix = "datasets/" if repo_type == "dataset" else ""
         return (
-            f"https://huggingface.co/{prefix}{repo_id}/resolve/"
-            f"{quote(revision)}/{path}"
+            f"https://huggingface.co/{prefix}{repo_id}/resolve/{quote(revision)}/{path}"
         )
     if without_revision.startswith("gs://"):
         bucket_and_path = without_revision.removeprefix("gs://")
@@ -481,6 +491,7 @@ def write_receipt(
     data_dir: Path,
     countries: Sequence[str],
     datasets: Sequence[Mapping[str, Any]],
+    target_python: Optional[Path] = None,
 ) -> Path:
     receipt = {
         "schema_version": 1,
@@ -491,6 +502,8 @@ def write_receipt(
         "packages": manifest.get("packages", {}),
         "datasets": list(datasets),
     }
+    if target_python is not None:
+        receipt["target_python"] = str(target_python.resolve())
     data_dir.mkdir(parents=True, exist_ok=True)
     path = data_dir / RECEIPT_FILENAME
     path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
@@ -523,7 +536,11 @@ def install_bundle(
     manifest = load_bundle_manifest(version, manifest_ref=manifest_ref)
     selected_countries = normalise_countries(countries, manifest)
     requirements = bundle_install_requirements(manifest, countries=selected_countries)
-    target_python = resolve_target_python(python=python, venv=venv)
+    target_python = resolve_target_python(
+        python=python,
+        venv=venv,
+        create_venv=not dry_run,
+    )
     install_package_scaffold(target_python, requirements, dry_run=dry_run)
     installed_datasets: list[dict[str, Any]] = []
     if not no_datasets:
@@ -534,19 +551,21 @@ def install_bundle(
             yes=yes,
             dry_run=dry_run,
         )
-        if not dry_run:
-            write_receipt(
-                manifest,
-                data_dir=data_dir,
-                countries=selected_countries,
-                datasets=installed_datasets,
-            )
+    if not dry_run:
+        write_receipt(
+            manifest,
+            data_dir=data_dir,
+            countries=selected_countries,
+            datasets=installed_datasets,
+            target_python=target_python,
+        )
     return {
         "bundle_version": manifest["bundle_version"],
         "requirements": requirements,
         "countries": selected_countries,
         "datasets": installed_datasets,
         "data_dir": str(data_dir),
+        "target_python": str(target_python),
     }
 
 
@@ -554,17 +573,20 @@ def inspect_bundle_status(
     version: Optional[str] = None,
     *,
     manifest_ref: Optional[str] = None,
+    python: Optional[str] = None,
+    venv: Optional[Path] = None,
     countries: Optional[Sequence[str]] = None,
     data_dir: Path = DEFAULT_DATA_DIR,
     packages_only: bool = False,
 ) -> dict[str, Any]:
     manifest = load_bundle_manifest(version, manifest_ref=manifest_ref)
     selected_countries = normalise_countries(countries, manifest)
-    package_checks = [
-        _package_check(component)
-        for component in _selected_components(manifest, selected_countries)
-    ]
     receipt = read_receipt(data_dir)
+    target_python = _resolve_status_python(python=python, venv=venv, receipt=receipt)
+    package_checks = _package_checks(
+        list(_selected_components(manifest, selected_countries)),
+        target_python=target_python,
+    )
     dataset_checks = (
         []
         if packages_only
@@ -579,10 +601,26 @@ def inspect_bundle_status(
         "policyengine_version": manifest["policyengine_version"],
         "countries": selected_countries,
         "matched": passed,
+        "target_python": str(target_python) if target_python is not None else None,
         "packages": package_checks,
         "datasets": dataset_checks,
         "receipt": receipt,
     }
+
+
+def _resolve_status_python(
+    *,
+    python: Optional[str],
+    venv: Optional[Path],
+    receipt: Optional[Mapping[str, Any]],
+) -> Optional[Path]:
+    if python or venv:
+        return resolve_target_python(python=python, venv=venv, create_venv=False)
+    if isinstance(receipt, Mapping):
+        target = receipt.get("target_python")
+        if isinstance(target, str) and target:
+            return Path(target)
+    return None
 
 
 def _selected_components(
@@ -594,18 +632,113 @@ def _selected_components(
             yield component
 
 
-def _package_check(component: Mapping[str, Any]) -> dict[str, Any]:
+def _package_checks(
+    components: Sequence[Mapping[str, Any]],
+    *,
+    target_python: Optional[Path],
+) -> list[dict[str, Any]]:
+    if target_python is not None:
+        if not target_python.exists():
+            return [
+                _package_target_error_check(
+                    component,
+                    target_python=target_python,
+                    status="target_python_missing",
+                    detail=f"Target Python does not exist: {target_python}",
+                )
+                for component in components
+            ]
+        versions, error = _package_versions_from_python(target_python, components)
+        if error is not None:
+            return [
+                _package_target_error_check(
+                    component,
+                    target_python=target_python,
+                    status="target_python_error",
+                    detail=error,
+                )
+                for component in components
+            ]
+        return [
+            _package_check(component, installed_versions=versions)
+            for component in components
+        ]
+    return [_package_check(component) for component in components]
+
+
+def _package_versions_from_python(
+    target_python: Path,
+    components: Sequence[Mapping[str, Any]],
+) -> tuple[dict[str, Optional[str]], Optional[str]]:
+    package_names = sorted({str(component["name"]) for component in components})
+    script = """
+import importlib.metadata as metadata
+import json
+import sys
+
+versions = {}
+for package_name in json.loads(sys.argv[1]):
+    try:
+        versions[package_name] = metadata.version(package_name)
+    except metadata.PackageNotFoundError:
+        versions[package_name] = None
+print(json.dumps(versions, sort_keys=True))
+"""
+    result = subprocess.run(
+        [str(target_python), "-c", script, json.dumps(package_names)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        return {}, detail or f"{target_python} exited with {result.returncode}"
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return {}, f"{target_python} returned invalid package metadata JSON"
+    if not isinstance(payload, dict):
+        return {}, f"{target_python} returned invalid package metadata"
+    return {str(key): value for key, value in payload.items()}, None
+
+
+def _package_target_error_check(
+    component: Mapping[str, Any],
+    *,
+    target_python: Path,
+    status: str,
+    detail: str,
+) -> dict[str, Any]:
+    return {
+        "package": str(component["name"]),
+        "expected_version": str(component["version"]),
+        "target_python": str(target_python),
+        "status": status,
+        "detail": detail,
+    }
+
+
+def _package_check(
+    component: Mapping[str, Any],
+    installed_versions: Optional[Mapping[str, Optional[str]]] = None,
+) -> dict[str, Any]:
     package_name = str(component["name"])
     expected = str(component["version"])
     check: dict[str, Any] = {
         "package": package_name,
         "expected_version": expected,
     }
-    try:
-        installed = metadata.version(package_name)
-    except metadata.PackageNotFoundError:
-        check["status"] = "missing"
-        return check
+    if installed_versions is None:
+        try:
+            installed = metadata.version(package_name)
+        except metadata.PackageNotFoundError:
+            check["status"] = "missing"
+            return check
+    else:
+        installed = installed_versions.get(package_name)
+        if installed is None:
+            check["status"] = "missing"
+            return check
     check["installed_version"] = installed
     check["status"] = "ok" if installed == expected else "mismatch"
     return check

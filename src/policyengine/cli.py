@@ -127,12 +127,18 @@ def _parser() -> argparse.ArgumentParser:
     )
     bundle_install.add_argument(
         "--python",
-        help="Python interpreter to install the package scaffold into.",
+        help=(
+            "Python interpreter to install the package scaffold into. Defaults "
+            "to the active environment, or ./.venv when run from uvx/pipx."
+        ),
     )
     bundle_install.add_argument(
         "--venv",
         type=Path,
-        help="Virtual environment to create or reuse as the installation target.",
+        help=(
+            "Virtual environment to create or reuse as the installation target. "
+            "Defaults to ./.venv when run from uvx/pipx."
+        ),
     )
     bundle_install.add_argument(
         "--country",
@@ -169,6 +175,21 @@ def _parser() -> argparse.ArgumentParser:
     bundle_status.add_argument("version", nargs="?", help="Bundle version to compare.")
     bundle_status.add_argument("--manifest", help="Custom bundle manifest path or URL.")
     bundle_status.add_argument(
+        "--python",
+        help=(
+            "Python interpreter to inspect. Defaults to the receipt target, "
+            "then the current process."
+        ),
+    )
+    bundle_status.add_argument(
+        "--venv",
+        type=Path,
+        help=(
+            "Virtual environment to inspect. Defaults to the receipt target, "
+            "then the current process."
+        ),
+    )
+    bundle_status.add_argument(
         "--country",
         action="append",
         choices=("us", "uk"),
@@ -197,6 +218,21 @@ def _parser() -> argparse.ArgumentParser:
     )
     bundle_verify.add_argument("version", nargs="?", help="Bundle version to verify.")
     bundle_verify.add_argument("--manifest", help="Custom bundle manifest path or URL.")
+    bundle_verify.add_argument(
+        "--python",
+        help=(
+            "Python interpreter to inspect. Defaults to the receipt target, "
+            "then the current process."
+        ),
+    )
+    bundle_verify.add_argument(
+        "--venv",
+        type=Path,
+        help=(
+            "Virtual environment to inspect. Defaults to the receipt target, "
+            "then the current process."
+        ),
+    )
     bundle_verify.add_argument(
         "--country",
         action="append",
@@ -328,6 +364,8 @@ def _bundle_status(args: argparse.Namespace) -> int:
         report = inspect_bundle_status(
             args.version,
             manifest_ref=args.manifest,
+            python=args.python,
+            venv=args.venv,
             countries=args.country,
             data_dir=args.data_dir,
             packages_only=args.packages_only,
@@ -340,6 +378,8 @@ def _bundle_status(args: argparse.Namespace) -> int:
     else:
         status = "matched" if report["matched"] else "mismatch"
         print(f"PolicyEngine bundle {report['bundle_version']}: {status}")
+        if report["target_python"]:
+            print(f"target Python: {report['target_python']}")
         for check in report["packages"]:
             installed = check.get("installed_version", "missing")
             print(
@@ -361,6 +401,8 @@ def _bundle_verify(args: argparse.Namespace) -> int:
         report = inspect_bundle_status(
             args.version,
             manifest_ref=args.manifest,
+            python=args.python,
+            venv=args.venv,
             countries=args.country,
             data_dir=args.data_dir,
             packages_only=args.packages_only,

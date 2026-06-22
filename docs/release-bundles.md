@@ -32,30 +32,36 @@ Use the bundle installer when you want the certified package scaffold and the
 certified datasets for a cited `policyengine` version:
 
 ```bash
-uvx --from policyengine==4.19.1 policyengine bundle install 4.19.1 --venv .venv
+uvx --from policyengine==4.19.1 policyengine bundle install 4.19.1
 ```
 
-The command creates or reuses `.venv`, installs the bundled Python packages with
-pip, downloads the certified US and UK datasets into `./data`, and writes a
-`./data/.policyengine-bundle.json` receipt. Existing dataset files with the same
-filename are moved to `./data/.policyengine-bundle-backups/<timestamp>/`.
+When run from `uvx` or `pipx`, the command creates or reuses `.venv`. Inside an
+existing virtualenv or conda environment, it installs into that active
+environment. It installs the bundled Python packages with pip, downloads the
+certified US and UK datasets into `./data`, and writes a
+`./data/.policyengine-bundle.json` receipt that records the target Python.
+Existing dataset files with the same filename are moved to
+`./data/.policyengine-bundle-backups/<timestamp>/`.
 
 Useful variants:
 
 ```bash
-uvx --from policyengine policyengine bundle install --venv .venv
-uvx --from policyengine policyengine bundle install --venv .venv --country uk
-uvx --from policyengine policyengine bundle install --venv .venv --no-datasets
-uvx --from policyengine policyengine bundle install --venv .venv --yes
+uvx --from policyengine policyengine bundle install
+uvx --from policyengine policyengine bundle install --country uk
+uvx --from policyengine policyengine bundle install --no-datasets
+uvx --from policyengine policyengine bundle install --yes
 ```
 
 Check a local environment against a bundle:
 
 ```bash
-policyengine bundle status --data-dir ./data
-policyengine bundle verify 4.19.1 --data-dir ./data
+uvx --from policyengine policyengine bundle status --data-dir ./data
+uvx --from policyengine policyengine bundle verify 4.19.1 --data-dir ./data
 policyengine bundle manifest 4.19.1
 ```
+
+`status` and `verify` use the receipt's recorded target Python by default. Pass
+`--venv` or `--python` only to inspect a different environment explicitly.
 
 ## Why this boundary exists
 

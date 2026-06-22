@@ -98,12 +98,14 @@ For a certified package-plus-dataset bundle, use the bundle installer as the
 single setup command:
 
 ```bash
-uvx --from policyengine policyengine bundle install --venv .venv
+uvx --from policyengine policyengine bundle install
 ```
 
 This installs the bundled package scaffold with pip, downloads the certified US
 and UK datasets into `./data`, and writes a local receipt that can be checked
-with `policyengine bundle status`.
+with `policyengine bundle status`. When run from `uvx` or `pipx`, the installer
+creates or reuses `./.venv`; inside an existing virtualenv or conda environment,
+it installs into the active environment.
 
 ### For development
 
@@ -122,7 +124,7 @@ uv pip install -e .[dev]        # install with dev dependencies (pytest, ruff, m
 | **Library user** | `pip install policyengine` | Using the package in your own code |
 | **UK only** | `pip install policyengine[uk]` | Only need UK simulations |
 | **US only** | `pip install policyengine[us]` | Only need US simulations |
-| **Certified bundle** | `uvx --from policyengine policyengine bundle install --venv .venv` | Reproducible model-plus-data setup |
+| **Certified bundle** | `uvx --from policyengine policyengine bundle install` | Reproducible model-plus-data setup |
 | **Developer** | `uv pip install -e .[dev]` | Contributing to the package |
 
 ### Common commands
