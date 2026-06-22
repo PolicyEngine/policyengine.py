@@ -1,1 +1,1 @@
-Add a pip-native PolicyEngine stack manifest, generated extras, stack CLI, and fast stack verification workflow.
+Add PolicyEngine bundle metadata and CLI support for installing, inspecting, and verifying a cited package-plus-dataset release.

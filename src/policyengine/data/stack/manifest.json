@@ -1,7 +1,8 @@
 {
+  "bundle_version": "4.4.2",
   "citation": {
     "publisher": "PolicyEngine",
-    "title": "PolicyEngine stack 4.4.2",
+    "title": "PolicyEngine bundle 4.4.2",
     "type": "software-stack",
     "version": "4.4.2"
   },
@@ -20,6 +21,24 @@
       "default_dataset_uri": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.78.2",
       "model_package": "policyengine-us",
       "release_manifest_uri": "https://huggingface.co/policyengine/policyengine-us-data/resolve/9cb665df0a546f9c3d79b496f8eb2dd55859d38d/releases/1.78.2/release_manifest.json"
+    }
+  },
+  "data_releases": {
+    "uk": {
+      "data_package": "policyengine-uk-data",
+      "default_dataset": "enhanced_frs_2023_24",
+      "default_dataset_uri": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.55.5",
+      "provider": "legacy",
+      "release_manifest_uri": "https://huggingface.co/policyengine/policyengine-uk-data-private/resolve/1.55.5/release_manifest.json",
+      "version": "1.55.5"
+    },
+    "us": {
+      "data_package": "policyengine-us-data",
+      "default_dataset": "enhanced_cps_2024",
+      "default_dataset_uri": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.78.2",
+      "provider": "legacy",
+      "release_manifest_uri": "https://huggingface.co/policyengine/policyengine-us-data/resolve/9cb665df0a546f9c3d79b496f8eb2dd55859d38d/releases/1.78.2/release_manifest.json",
+      "version": "1.78.2"
     }
   },
   "extras": {

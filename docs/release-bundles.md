@@ -20,6 +20,43 @@ The key design decision is:
 
 This keeps country-specific data construction in the country data repos while still giving users a single top-level version to cite and pin.
 
+## Installing a certified bundle
+
+Use pip for ordinary library installs:
+
+```bash
+pip install policyengine
+```
+
+Use the bundle installer when you want the certified package scaffold and the
+certified datasets for a cited `policyengine` version:
+
+```bash
+uvx --from policyengine==4.19.1 policyengine bundle install 4.19.1 --venv .venv
+```
+
+The command creates or reuses `.venv`, installs the bundled Python packages with
+pip, downloads the certified US and UK datasets into `./data`, and writes a
+`./data/.policyengine-bundle.json` receipt. Existing dataset files with the same
+filename are moved to `./data/.policyengine-bundle-backups/<timestamp>/`.
+
+Useful variants:
+
+```bash
+uvx --from policyengine policyengine bundle install --venv .venv
+uvx --from policyengine policyengine bundle install --venv .venv --country uk
+uvx --from policyengine policyengine bundle install --venv .venv --no-datasets
+uvx --from policyengine policyengine bundle install --venv .venv --yes
+```
+
+Check a local environment against a bundle:
+
+```bash
+policyengine bundle status --data-dir ./data
+policyengine bundle verify 4.19.1 --data-dir ./data
+policyengine bundle manifest 4.19.1
+```
+
 ## Why this boundary exists
 
 For countries like the UK, the data package is not model-independent. Dataset construction, imputations, and calibration steps call the country model directly. That means a published dataset artifact depends on:

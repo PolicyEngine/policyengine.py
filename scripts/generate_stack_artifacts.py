@@ -21,6 +21,8 @@ STACK_MANIFEST = REPO_ROOT / "src" / "policyengine" / "data" / "stack" / "manife
 
 OPTIONAL_DEPENDENCIES_HEADER = "[project.optional-dependencies]"
 NEXT_SECTION_PATTERN = re.compile(r"\n\[tool\.setuptools\]", re.MULTILINE)
+
+
 def load_toml(path: Path) -> dict[str, Any]:
     with path.open("rb") as stream:
         return tomllib.load(stream)
@@ -36,19 +38,45 @@ def generated_manifest(stack: Mapping[str, Any]) -> dict[str, Any]:
     }
     return {
         "schema_version": int(stack["schema_version"]),
+        "bundle_version": stack["stack_version"],
         "stack_version": stack["stack_version"],
         "policyengine_version": stack["policyengine_version"],
         "source": "policyengine-stack.toml",
         "packages": packages,
         "extras": stack["extras"],
         "countries": stack.get("countries", {}),
+        "data_releases": data_releases(stack, packages),
         "citation": {
-            "title": f"PolicyEngine stack {stack['stack_version']}",
+            "title": f"PolicyEngine bundle {stack['stack_version']}",
             "version": stack["stack_version"],
             "type": "software-stack",
             "publisher": "PolicyEngine",
         },
     }
+
+
+def data_releases(
+    stack: Mapping[str, Any],
+    packages: Mapping[str, Mapping[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    releases: dict[str, dict[str, Any]] = {}
+    for country, country_metadata in stack.get("countries", {}).items():
+        data_package_name = country_metadata.get("data_package")
+        data_package = packages.get(data_package_name, {})
+        data_version = (
+            country_metadata.get("data_artifact_version")
+            or country_metadata.get("data_version")
+            or data_package.get("version")
+        )
+        releases[country] = {
+            "provider": country_metadata.get("data_provider", "legacy"),
+            "data_package": data_package_name,
+            "version": data_version,
+            "default_dataset": country_metadata.get("default_dataset"),
+            "default_dataset_uri": country_metadata.get("default_dataset_uri"),
+            "release_manifest_uri": country_metadata.get("release_manifest_uri"),
+        }
+    return releases
 
 
 def manifest_text(stack: Mapping[str, Any]) -> str:

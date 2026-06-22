@@ -156,15 +156,15 @@ jobs:
         run: ".github/publish-git-tag.sh"
       - name: Build package
         run: python -m build
-      - name: Export stack release assets
+      - name: Export bundle release assets
         run: python scripts/export_stack_release_assets.py --dist-dir dist
-      - name: Verify stack release metadata
+      - name: Verify bundle package metadata
         env:
           POLICYENGINE_SKIP_COUNTRY_IMPORTS: "1"
         run: |
           VERSION=$(python .github/fetch_version.py)
           policyengine stack verify --extra models --check-uris --json \
-            > "dist/policyengine-stack-$VERSION.verification.json"
+            > "dist/policyengine-bundle-$VERSION.verification.json"
       - name: Publish a Python distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
@@ -178,7 +178,7 @@ jobs:
             --title "v$VERSION" \
             --notes "See [CHANGELOG.md](https://github.com/PolicyEngine/policyengine.py/blob/main/CHANGELOG.md) for details." \
             --latest \
-            "dist/policyengine-stack-$VERSION.json" \
-            "dist/policyengine-stack-$VERSION.constraints.txt" \
-            "dist/policyengine-stack-$VERSION.citation.txt" \
-            "dist/policyengine-stack-$VERSION.verification.json"
+            "dist/policyengine-bundle-$VERSION.json" \
+            "dist/policyengine-bundle-$VERSION.constraints.txt" \
+            "dist/policyengine-bundle-$VERSION.citation.txt" \
+            "dist/policyengine-bundle-$VERSION.verification.json"

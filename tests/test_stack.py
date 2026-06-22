@@ -1,9 +1,25 @@
+import importlib.util
 import json
+import sys
+from pathlib import Path
 
 import pytest
 
 from policyengine import stack
 from policyengine.cli import main as cli_main
+
+
+def _load_export_script(monkeypatch):
+    scripts_dir = Path(__file__).resolve().parents[1] / "scripts"
+    monkeypatch.syspath_prepend(str(scripts_dir))
+    spec = importlib.util.spec_from_file_location(
+        "export_stack_release_assets",
+        scripts_dir / "export_stack_release_assets.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_stack_manifest_exposes_full_and_slice_extras():
@@ -101,6 +117,38 @@ def test_stack_verify_cli_outputs_json(monkeypatch, capsys):
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["passed"] is True
+
+
+def test_export_release_assets_writes_bundle_assets_and_stack_aliases(
+    monkeypatch,
+    tmp_path,
+):
+    export_script = _load_export_script(monkeypatch)
+    manifest = stack.get_current_stack()
+    version = manifest["stack_version"]
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["export_stack_release_assets", "--dist-dir", str(tmp_path)],
+    )
+
+    assert export_script.main() == 0
+
+    bundle_manifest = tmp_path / f"policyengine-bundle-{version}.json"
+    stack_manifest = tmp_path / f"policyengine-stack-{version}.json"
+    assert bundle_manifest.exists()
+    assert stack_manifest.exists()
+    assert json.loads(bundle_manifest.read_text()) == json.loads(
+        stack_manifest.read_text()
+    )
+    assert (
+        f"policyengine=={manifest['policyengine_version']}"
+        in (tmp_path / f"policyengine-bundle-{version}.constraints.txt").read_text()
+    )
+    assert (
+        "PolicyEngine bundle"
+        in (tmp_path / f"policyengine-bundle-{version}.citation.txt").read_text()
+    )
 
 
 def test_unknown_extra_is_named():
