@@ -50,8 +50,8 @@ def test_stack_install_requirements_are_exact_pins():
 
     assert stack.stack_install_requirements("us") == [
         f"policyengine=={manifest['policyengine_version']}",
-        "policyengine-core==3.26.1",
-        "policyengine-us==1.687.0",
+        manifest["packages"]["policyengine-core"]["install_requirement"],
+        manifest["packages"]["policyengine-us"]["install_requirement"],
     ]
 
 

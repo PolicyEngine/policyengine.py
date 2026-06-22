@@ -1,10 +1,10 @@
 {
-  "bundle_version": "4.4.2",
+  "bundle_version": "4.17.11",
   "citation": {
     "publisher": "PolicyEngine",
-    "title": "PolicyEngine bundle 4.4.2",
+    "title": "PolicyEngine bundle 4.17.11",
     "type": "software-stack",
-    "version": "4.4.2"
+    "version": "4.17.11"
   },
   "countries": {
     "uk": {
@@ -81,25 +81,25 @@
   "packages": {
     "policyengine": {
       "import_name": "policyengine",
-      "install_requirement": "policyengine==4.4.2",
+      "install_requirement": "policyengine==4.17.11",
       "name": "policyengine",
       "role": "stack_carrier",
-      "version": "4.4.2"
+      "version": "4.17.11"
     },
     "policyengine-core": {
       "import_name": "policyengine_core",
-      "install_requirement": "policyengine-core==3.26.1",
+      "install_requirement": "policyengine-core==3.27.1",
       "name": "policyengine-core",
       "role": "runtime_dependency",
-      "version": "3.26.1"
+      "version": "3.27.1"
     },
     "policyengine-uk": {
       "country": "uk",
       "import_name": "policyengine_uk",
-      "install_requirement": "policyengine-uk==2.88.14",
+      "install_requirement": "policyengine-uk==2.89.2",
       "name": "policyengine-uk",
       "role": "country_model",
-      "version": "2.88.14"
+      "version": "2.89.2"
     },
     "policyengine-uk-data": {
       "country": "uk",
@@ -114,10 +114,10 @@
     "policyengine-us": {
       "country": "us",
       "import_name": "policyengine_us",
-      "install_requirement": "policyengine-us==1.687.0",
+      "install_requirement": "policyengine-us==1.729.0",
       "name": "policyengine-us",
       "role": "country_model",
-      "version": "1.687.0"
+      "version": "1.729.0"
     },
     "policyengine-us-data": {
       "country": "us",
@@ -130,8 +130,8 @@
       "version": "1.78.2"
     }
   },
-  "policyengine_version": "4.4.2",
+  "policyengine_version": "4.17.11",
   "schema_version": 1,
   "source": "policyengine-stack.toml",
-  "stack_version": "4.4.2"
+  "stack_version": "4.17.11"
 }

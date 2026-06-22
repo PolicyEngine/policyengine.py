@@ -1,29 +1,29 @@
 schema_version = 1
-stack_version = "4.4.2"
-policyengine_version = "4.4.2"
+stack_version = "4.17.11"
+policyengine_version = "4.17.11"
 
 [packages.policyengine]
 name = "policyengine"
-version = "4.4.2"
+version = "4.17.11"
 import_name = "policyengine"
 role = "stack_carrier"
 
 [packages.policyengine-core]
 name = "policyengine-core"
-version = "3.26.1"
+version = "3.27.1"
 import_name = "policyengine_core"
 role = "runtime_dependency"
 
 [packages.policyengine-us]
 name = "policyengine-us"
-version = "1.687.0"
+version = "1.729.0"
 import_name = "policyengine_us"
 role = "country_model"
 country = "us"
 
 [packages.policyengine-uk]
 name = "policyengine-uk"
-version = "2.88.14"
+version = "2.89.2"
 import_name = "policyengine_uk"
 role = "country_model"
 country = "uk"

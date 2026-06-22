@@ -24,8 +24,8 @@ def test_bundle_install_requirements_are_country_scoped():
 
     assert bundle.bundle_install_requirements(manifest, countries=["uk"]) == [
         f"policyengine=={manifest['policyengine_version']}",
-        "policyengine-core==3.26.1",
-        "policyengine-uk==2.88.14",
+        manifest["packages"]["policyengine-core"]["install_requirement"],
+        manifest["packages"]["policyengine-uk"]["install_requirement"],
     ]
     assert (
         "policyengine-us-data==1.78.2; python_version >= '3.12' and python_version < '3.15'"
@@ -68,8 +68,12 @@ def test_install_bundle_package_only_uses_explicit_python(monkeypatch, tmp_path)
     assert calls[0][0] == Path(sys.executable)
     assert calls[0][1] == [
         f"policyengine=={result['bundle_version']}",
-        "policyengine-core==3.26.1",
-        "policyengine-uk==2.88.14",
+        bundle.get_current_bundle()["packages"]["policyengine-core"][
+            "install_requirement"
+        ],
+        bundle.get_current_bundle()["packages"]["policyengine-uk"][
+            "install_requirement"
+        ],
     ]
 
 
@@ -193,7 +197,12 @@ def test_bundle_install_dry_run_cli_uses_standard_flags(capsys):
     assert exit_code == 0
     output = capsys.readouterr().out
     assert "pip install" in output
-    assert "policyengine-uk==2.88.14" in output
+    assert (
+        bundle.get_current_bundle()["packages"]["policyengine-uk"][
+            "install_requirement"
+        ]
+        in output
+    )
 
 
 def test_bundle_verify_cli_handles_unknown_bundle(capsys):
