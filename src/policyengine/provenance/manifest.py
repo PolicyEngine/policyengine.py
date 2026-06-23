@@ -262,9 +262,7 @@ def get_release_manifest(country_id: str) -> CountryReleaseManifest:
     try:
         release_payload = bundle["data_releases"][country_id]
     except KeyError as exc:
-        raise ValueError(
-            f"No bundled data release for country '{country_id}'"
-        ) from exc
+        raise ValueError(f"No bundled data release for country '{country_id}'") from exc
 
     manifest = CountryReleaseManifest.model_validate(release_payload)
     manifest.source_sha256 = hashlib.sha256(source_bytes).hexdigest()
@@ -356,7 +354,10 @@ def certify_data_release_compatibility(
                     "Runtime data build fingerprint does not match the bundled "
                     "data certification."
                 )
-            if bundled_certification.certified_for_model_version == runtime_model_version:
+            if (
+                bundled_certification.certified_for_model_version
+                == runtime_model_version
+            ):
                 return bundled_certification
             return DataCertification(
                 compatibility_basis="unverified_data_release_manifest_unavailable",
@@ -368,9 +369,7 @@ def certify_data_release_compatibility(
                 built_with_model_git_sha=(
                     bundled_certification.built_with_model_git_sha
                 ),
-                data_build_fingerprint=(
-                    bundled_certification.data_build_fingerprint
-                ),
+                data_build_fingerprint=(bundled_certification.data_build_fingerprint),
                 certified_by=bundled_certification.certified_by,
             )
         raise exc

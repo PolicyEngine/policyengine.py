@@ -103,9 +103,7 @@ def _country_modules_with_microsimulation(
 
     data_module = ModuleType(f"{name}.data")
     data_module.__path__ = []
-    data_module.__spec__ = ModuleSpec(
-        f"{name}.data", loader=None, is_package=True
-    )
+    data_module.__spec__ = ModuleSpec(f"{name}.data", loader=None, is_package=True)
     data_module.__spec__.submodule_search_locations = []
 
     class FakeDataset:
@@ -116,9 +114,7 @@ def _country_modules_with_microsimulation(
     schema_module = ModuleType(f"{name}.data.dataset_schema")
     schema_module.UKMultiYearDataset = FakeDataset
     schema_module.UKSingleYearDataset = FakeDataset
-    schema_module.__spec__ = ModuleSpec(
-        f"{name}.data.dataset_schema", loader=None
-    )
+    schema_module.__spec__ = ModuleSpec(f"{name}.data.dataset_schema", loader=None)
 
     return {
         name: module,
@@ -851,9 +847,7 @@ class TestReleaseManifests:
                 "materialize_dataset_source",
                 return_value="/tmp/populace_uk_2023.h5",
             ):
-                microsim = uk_model.managed_microsimulation(
-                    dataset="populace_uk_2023"
-                )
+                microsim = uk_model.managed_microsimulation(dataset="populace_uk_2023")
 
         dataset = mock_microsimulation.call_args.kwargs["dataset"]
         assert dataset == "/tmp/populace_uk_2023.h5"

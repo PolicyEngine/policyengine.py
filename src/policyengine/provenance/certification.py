@@ -601,9 +601,9 @@ def certify_data_release(
     bundle_path = bundle_path or default_bundle_source_path()
     bundle = json.loads(bundle_path.read_text())
     bundle.setdefault("data_releases", {})[country] = data_release
-    bundle.setdefault("countries", {}).setdefault(country, {})[
-        "model_package"
-    ] = model_package
+    bundle.setdefault("countries", {}).setdefault(country, {})["model_package"] = (
+        model_package
+    )
     if model_package in bundle.get("packages", {}):
         bundle["packages"][model_package]["version"] = model_version
     bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n")

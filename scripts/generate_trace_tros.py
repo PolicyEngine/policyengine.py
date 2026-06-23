@@ -26,11 +26,7 @@ from policyengine.provenance.trace import (
 
 BUNDLE_SOURCE = Path(__file__).resolve().parent.parent / "policyengine-bundle.json"
 BUNDLE_TRO_DIR = (
-    Path(__file__).resolve().parent.parent
-    / "src"
-    / "policyengine"
-    / "data"
-    / "bundle"
+    Path(__file__).resolve().parent.parent / "src" / "policyengine" / "data" / "bundle"
 )
 
 

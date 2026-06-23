@@ -18,7 +18,9 @@ except ModuleNotFoundError:  # pragma: no cover - for local Python 3.10 users.
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_SOURCE = REPO_ROOT / "policyengine-bundle.json"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
-BUNDLE_MANIFEST = REPO_ROOT / "src" / "policyengine" / "data" / "bundle" / "manifest.json"
+BUNDLE_MANIFEST = (
+    REPO_ROOT / "src" / "policyengine" / "data" / "bundle" / "manifest.json"
+)
 
 OPTIONAL_DEPENDENCIES_HEADER = "[project.optional-dependencies]"
 NEXT_SECTION_PATTERN = re.compile(r"\n\[tool\.setuptools\]", re.MULTILINE)

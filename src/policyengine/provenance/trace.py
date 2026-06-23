@@ -346,10 +346,7 @@ def build_trace_tro_from_release_bundle(
             f"provides a SHA256 for dataset '{certified_artifact.dataset}'."
         )
 
-    bundle_manifest_location = (
-        bundle_manifest_path
-        or "data/bundle/manifest.json"
-    )
+    bundle_manifest_location = bundle_manifest_path or "data/bundle/manifest.json"
     data_manifest_location = (
         data_release_manifest_path
         or https_release_manifest_uri(country_manifest.data_package)
