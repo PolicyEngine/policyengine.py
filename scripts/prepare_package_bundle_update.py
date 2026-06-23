@@ -1,4 +1,4 @@
-"""Prepare a PR that only updates the PolicyEngine bundle package pins."""
+"""Prepare a PR that only updates package pins in the PolicyEngine bundle."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ def update_package_pins(bundle: Mapping[str, Any], args: argparse.Namespace) -> 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Prepare a bundle-only PolicyEngine PR."
+        description="Prepare a package-pin-only PolicyEngine bundle PR."
     )
     for arg_name, package_key in PACKAGE_ARGS.items():
         parser.add_argument(

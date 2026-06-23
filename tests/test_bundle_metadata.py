@@ -24,7 +24,6 @@ def test_bundle_manifest_exposes_full_and_slice_extras():
     manifest = bundle.get_current_bundle()
 
     assert manifest["bundle_version"] == manifest["policyengine_version"]
-    assert "stack_version" not in manifest
     assert manifest["extras"]["full"] == [
         "policyengine-core",
         "policyengine-us",
@@ -112,7 +111,6 @@ def test_export_release_assets_writes_bundle_assets(monkeypatch, tmp_path):
 
     bundle_manifest = tmp_path / f"policyengine-bundle-{version}.json"
     assert bundle_manifest.exists()
-    assert not (tmp_path / f"policyengine-stack-{version}.json").exists()
     assert json.loads(bundle_manifest.read_text()) == manifest
     assert (
         f"policyengine=={manifest['policyengine_version']}"

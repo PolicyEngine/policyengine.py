@@ -66,7 +66,7 @@ target explicitly.
 Run:
 
 ```bash
-python scripts/prepare_bundle_update.py \
+python scripts/prepare_package_bundle_update.py \
   --core 3.27.0 \
   --us 1.730.0 \
   --uk 2.91.0 \
