@@ -1,20 +1,20 @@
-"""Certify a country data release into policyengine-bundle.json.
+"""Certify a country data release into the PolicyEngine bundle manifest.
 
 Fetches the data release manifest, validates it with the selected
-data-producer strategy, writes the certified data release into the bundle JSON
-source, regenerates packaged bundle artifacts, and writes a Towncrier changelog
-fragment.
+data-producer strategy, writes the certified data release into the canonical
+bundle manifest, regenerates derived bundle metadata, and writes a Towncrier
+changelog fragment.
 
 Usage::
 
-    python scripts/certify_data_release.py --country uk --data-producer populace \\
+    python scripts/bundle.py certify-data --country uk --data-producer populace \\
         --manifest-uri "hf://dataset/policyengine/populace-uk-private@<tag>/releases/<tag>/release_manifest.json"
 
 Private data (UK) requires ``HUGGING_FACE_TOKEN`` or ``HF_TOKEN`` in the
-environment. After running: commit the changed bundle JSON / generated bundle
-manifest / pyproject.toml / changelog fragment, re-lock if pins moved, and run
-the test suite. Certification is only asserted once the suite passes on the
-exact pinned pair.
+environment. After running: commit the changed bundle manifest, pyproject.toml,
+changelog fragment, and any regenerated TRO sidecars, re-lock if pins moved,
+and run the test suite. Certification is only asserted once the suite passes on
+the exact pinned pair.
 """
 
 from __future__ import annotations
@@ -71,7 +71,12 @@ def main(argv=None) -> int:
         manifest_uri=args.manifest_uri,
         model_version=args.model_version,
         token=token,
-        bundle_path=REPO_ROOT / "policyengine-bundle.json",
+        bundle_path=REPO_ROOT
+        / "src"
+        / "policyengine"
+        / "data"
+        / "bundle"
+        / "manifest.json",
         check_artifacts=not args.skip_artifact_check,
     )
     print(result.summary())

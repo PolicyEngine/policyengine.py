@@ -260,6 +260,5 @@
     }
   },
   "policyengine_version": "4.17.11",
-  "schema_version": 2,
-  "source": "policyengine-bundle.json"
+  "schema_version": 2
 }

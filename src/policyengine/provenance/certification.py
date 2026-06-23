@@ -7,8 +7,9 @@ the source of truth, and certification derives the vendored country
 manifest from it in one step.
 
 The certification asserts that *this* policyengine bundle, with the
-model package pinned in ``policyengine-bundle.json``, serves the data
-release — an assertion the test suite then exercises on the exact pair.
+model package pinned in ``src/policyengine/data/bundle/manifest.json``,
+serves the data release — an assertion the test suite then exercises on the
+exact pair.
 
 .. code-block:: python
 
@@ -26,10 +27,10 @@ release — an assertion the test suite then exercises on the exact pair.
     )
     print(result.summary())
 
-``scripts/certify_data_release.py`` is the argparse wrapper. Network
-access is required (HF manifest fetch + PyPI wheel metadata). Countries
-whose data release predates release manifests need a dedicated
-data-producer strategy before they can be updated through this path.
+``scripts/bundle.py certify-data`` is the operator-facing wrapper. Network
+access is required (HF manifest fetch + PyPI wheel metadata). Countries whose
+data release predates release manifests need a dedicated data-producer strategy
+before they can be updated through this path.
 """
 
 from __future__ import annotations
@@ -120,7 +121,7 @@ def https_manifest_url(parts: dict) -> str:
 
 
 def default_bundle_source_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "policyengine-bundle.json"
+    return Path(__file__).resolve().parents[1] / "data" / "bundle" / "manifest.json"
 
 
 def https_release_file_url(parts: dict, filename: str) -> str:
@@ -479,7 +480,7 @@ class LegacyDataProducerCertificationStrategy(DataProducerCertificationStrategy)
     ) -> tuple[dict, str, list[str]]:
         raise CertificationError(
             "Legacy data-producer certification updates are not implemented in "
-            "the bundle JSON workflow yet."
+            "the bundle manifest workflow yet."
         )
 
 

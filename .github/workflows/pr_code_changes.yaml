@@ -10,7 +10,7 @@ on:
       - .github/**
       - changelog.d/**
       - pyproject.toml
-      - policyengine-bundle.json
+      - src/policyengine/data/bundle/manifest.json
   workflow_dispatch:
 
 jobs:
@@ -89,8 +89,8 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.13'
-      - name: Check generated bundle artifacts
-        run: python scripts/generate_bundle_artifacts.py --check
+      - name: Check derived bundle metadata
+        run: python scripts/bundle.py check
       - name: Install full bundle package scaffold
         run: uv pip install -e ".[full]" --system
       - name: Verify bundle packages

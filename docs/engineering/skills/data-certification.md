@@ -13,7 +13,8 @@ and region dataset templates. Certification asserts that *this*
 good by the test suite passing on the exact pinned pair.
 
 There is no intermediate bundle repo. The `data_releases.{country}` entry in
-`policyengine-bundle.json` is derived directly from the data release manifest.
+`src/policyengine/data/bundle/manifest.json` is derived directly from the data
+release manifest.
 
 ## Certifying a release
 
@@ -21,30 +22,27 @@ Open the work on a fresh branch from current `main` (use a clean worktree if
 the checkout is dirty).
 
 ```bash
-python scripts/certify_data_release.py --country uk --data-producer populace \
+python scripts/bundle.py certify-data --country uk --data-producer populace \
   --manifest-uri "hf://dataset/policyengine/populace-uk-private@<tag>/releases/<tag>/release_manifest.json"
 ```
 
 The script fetches and validates the manifest (every artifact must carry a
-revision pin; the certified dataset must be reachable), writes the bundle JSON,
-exact-pins the country model package in the bundle source, regenerates the
-packaged bundle manifest, and writes a
-Towncrier changelog fragment.
+revision pin; the certified dataset must be reachable), writes the canonical
+bundle manifest, exact-pins the country model package in that same manifest,
+regenerates derived bundle metadata, and writes a Towncrier changelog fragment.
 
 Private data (UK) requires `HUGGING_FACE_TOKEN` or `HF_TOKEN`.
 
 After running:
 
-- run `python scripts/generate_bundle_artifacts.py --check`,
+- run `python scripts/bundle.py check`,
 - run the full test suite — snapshot drift from a model bump is refreshed
   with `PE_UPDATE_SNAPSHOTS=1 pytest tests/test_household_calculator_snapshot.py`,
-- commit `policyengine-bundle.json`, generated bundle artifacts, `pyproject.toml`,
-  and the fragment
-  together.
+- commit `src/policyengine/data/bundle/manifest.json`, `pyproject.toml`, the
+  Towncrier fragment, and any regenerated TRO sidecars together.
 
 A certification PR should normally change only:
 
-- `policyengine-bundle.json`
 - `src/policyengine/data/bundle/manifest.json` (+ `{country}.trace.tro.jsonld`)
 - `pyproject.toml`
 - one Towncrier fragment under `changelog.d/`

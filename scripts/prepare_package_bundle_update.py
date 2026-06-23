@@ -6,10 +6,11 @@ import argparse
 from typing import Any, Mapping
 
 from generate_bundle_artifacts import (
-    BUNDLE_SOURCE,
+    BUNDLE_MANIFEST,
+    REPO_ROOT,
     generate,
-    load_bundle_source,
-    write_bundle_source,
+    load_bundle_manifest,
+    write_bundle_manifest,
 )
 
 PACKAGE_ARGS = {
@@ -21,11 +22,11 @@ PACKAGE_ARGS = {
 
 
 def write_changelog(message: str, fragment_name: str) -> None:
-    changelog_dir = BUNDLE_SOURCE.parent / "changelog.d"
+    changelog_dir = REPO_ROOT / "changelog.d"
     changelog_dir.mkdir(exist_ok=True)
     path = changelog_dir / fragment_name
     path.write_text(message.strip() + "\n")
-    print(f"Updated {path.relative_to(BUNDLE_SOURCE.parent)}")
+    print(f"Updated {path.relative_to(REPO_ROOT)}")
 
 
 def update_package_pins(bundle: Mapping[str, Any], args: argparse.Namespace) -> dict:
@@ -61,9 +62,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    bundle = update_package_pins(load_bundle_source(), args)
-    write_bundle_source(bundle)
-    print(f"Updated {BUNDLE_SOURCE.relative_to(BUNDLE_SOURCE.parent)}")
+    bundle = update_package_pins(load_bundle_manifest(), args)
+    write_bundle_manifest(bundle)
+    print(f"Updated {BUNDLE_MANIFEST.relative_to(REPO_ROOT)}")
     generate(check=False)
     write_changelog(args.changelog, args.fragment_name)
     return 0

@@ -31,7 +31,8 @@ environment. The installer then installs the
 exact bundled package scaffold with pip, downloads certified US and UK datasets
 into `./data`, moves replaced dataset files into
 `./data/.policyengine-bundle-backups/<timestamp>/`, and writes a
-`./data/.policyengine-bundle.json` receipt that records the target Python.
+`./data/.policyengine-bundle-receipt.json` receipt that records the target
+Python.
 
 Country-specific and package-only installs are supported:
 
@@ -42,12 +43,12 @@ uvx --from policyengine policyengine bundle install --no-datasets
 
 Use `--yes` for CI/CD. Without `--yes`, dataset downloads ask for confirmation.
 
-The bundle source of truth is `policyengine-bundle.json`. Generated artifacts are:
+The canonical bundle manifest is `src/policyengine/data/bundle/manifest.json`.
+Derived artifacts are:
 
 - `pyproject.toml` extras
-- `src/policyengine/data/bundle/manifest.json`
 - `src/policyengine/data/bundle/{country}.trace.tro.jsonld`
-- GitHub release assets exported from the packaged manifest
+- GitHub release assets exported from the bundle manifest
 
 Inspect or verify a local setup with:
 
@@ -91,7 +92,7 @@ This updates bundle metadata and creates a patch changelog fragment. Do not bump
 the `policyengine` version manually in the PR; the existing release workflow
 bumps the package and bundle versions together after merge.
 
-CI checks generated artifacts, installs `.[full]`, runs `pip check`, and
+CI checks derived bundle metadata, installs `.[full]`, runs `pip check`, and
 verifies the packaged bundle metadata with lightweight URI checks. Dataset
 downloads are handled by `policyengine bundle install`, so certified UK data can
 be pinned by manifest version and downloaded from Hugging Face even when the

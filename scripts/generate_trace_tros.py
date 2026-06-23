@@ -24,10 +24,11 @@ from policyengine.provenance.trace import (
     serialize_trace_tro,
 )
 
-BUNDLE_SOURCE = Path(__file__).resolve().parent.parent / "policyengine-bundle.json"
-BUNDLE_TRO_DIR = (
-    Path(__file__).resolve().parent.parent / "src" / "policyengine" / "data" / "bundle"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+BUNDLE_MANIFEST = (
+    REPO_ROOT / "src" / "policyengine" / "data" / "bundle" / "manifest.json"
 )
+BUNDLE_TRO_DIR = REPO_ROOT / "src" / "policyengine" / "data" / "bundle"
 
 
 def regenerate_all() -> tuple[list[Path], list[tuple[str, Path, str]]]:
@@ -41,7 +42,7 @@ def regenerate_all() -> tuple[list[Path], list[tuple[str, Path, str]]]:
 
 def generated_tros() -> list[tuple[Path, bytes]]:
     payloads: list[tuple[Path, bytes]] = []
-    bundle = json.loads(BUNDLE_SOURCE.read_text())
+    bundle = json.loads(BUNDLE_MANIFEST.read_text())
     BUNDLE_TRO_DIR.mkdir(parents=True, exist_ok=True)
     for country_id in sorted(bundle.get("data_releases", {})):
         tro_path = BUNDLE_TRO_DIR / f"{country_id}.trace.tro.jsonld"
@@ -66,8 +67,8 @@ def generated_tros() -> list[tuple[Path, bytes]]:
 
 
 def main() -> int:
-    if not BUNDLE_SOURCE.is_file():
-        print(f"no bundle source at {BUNDLE_SOURCE}", file=sys.stderr)
+    if not BUNDLE_MANIFEST.is_file():
+        print(f"no bundle manifest at {BUNDLE_MANIFEST}", file=sys.stderr)
         return 1
     written, regressions = regenerate_all()
     for path in written:

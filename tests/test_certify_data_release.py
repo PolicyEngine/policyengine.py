@@ -271,10 +271,10 @@ class TestBuildCountryManifestPayload:
 
 
 class TestCertifyDataRelease:
-    def test__given_fetched_populace_manifest__then_updates_bundle_source(
+    def test__given_fetched_populace_manifest__then_updates_bundle_manifest(
         self, tmp_path
     ):
-        bundle_path = tmp_path / "policyengine-bundle.json"
+        bundle_path = tmp_path / "manifest.json"
         bundle_path.write_text(json.dumps(_bundle_source_payload()) + "\n")
         response = MagicMock()
         response.status_code = 200
@@ -330,7 +330,7 @@ class TestCertifyDataRelease:
     def test__given_us_without_data_producer__then_legacy_update_is_explicitly_unsupported(
         self, tmp_path
     ):
-        bundle_path = tmp_path / "policyengine-bundle.json"
+        bundle_path = tmp_path / "manifest.json"
         bundle_path.write_text(json.dumps(_bundle_source_payload()) + "\n")
 
         with pytest.raises(CertificationError, match="Legacy data-producer"):

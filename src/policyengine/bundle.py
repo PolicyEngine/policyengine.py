@@ -30,7 +30,7 @@ BUNDLE_HISTORY_RESOURCE = ("data", "bundles")
 DEFAULT_COUNTRIES = ("us", "uk")
 DEFAULT_DATA_DIR = Path("./data")
 DEFAULT_VENV = Path(".venv")
-RECEIPT_FILENAME = ".policyengine-bundle.json"
+RECEIPT_FILENAME = ".policyengine-bundle-receipt.json"
 BACKUP_DIR_NAME = ".policyengine-bundle-backups"
 DOWNLOAD_TIMEOUT_SECONDS = 60
 

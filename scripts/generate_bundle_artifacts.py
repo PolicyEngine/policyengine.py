@@ -1,4 +1,4 @@
-"""Generate pip extras and packaged bundle metadata from policyengine-bundle.json."""
+"""Generate pip extras from the canonical PolicyEngine bundle manifest."""
 
 from __future__ import annotations
 
@@ -16,7 +16,6 @@ except ModuleNotFoundError:  # pragma: no cover - for local Python 3.10 users.
     import tomli as tomllib  # type: ignore[no-redef]
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-BUNDLE_SOURCE = REPO_ROOT / "policyengine-bundle.json"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 BUNDLE_MANIFEST = (
     REPO_ROOT / "src" / "policyengine" / "data" / "bundle" / "manifest.json"
@@ -26,15 +25,24 @@ OPTIONAL_DEPENDENCIES_HEADER = "[project.optional-dependencies]"
 NEXT_SECTION_PATTERN = re.compile(r"\n\[tool\.setuptools\]", re.MULTILINE)
 
 
-def load_bundle_source(path: Path = BUNDLE_SOURCE) -> dict[str, Any]:
+def load_bundle_manifest(path: Path = BUNDLE_MANIFEST) -> dict[str, Any]:
     return json.loads(path.read_text())
 
 
-def write_bundle_source(bundle: Mapping[str, Any], path: Path = BUNDLE_SOURCE) -> None:
+def write_bundle_manifest(
+    bundle: Mapping[str, Any], path: Path = BUNDLE_MANIFEST
+) -> None:
     path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n")
 
 
-def generated_manifest(bundle: Mapping[str, Any]) -> dict[str, Any]:
+def normalized_manifest(bundle: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the canonical on-disk manifest with derived convenience fields.
+
+    ``manifest.json`` is the single editable/runtime manifest. We still
+    normalize redundant convenience fields such as package install requirements
+    so release assets and runtime commands can consume one stable shape.
+    """
+
     packages = {
         key: {
             **value,
@@ -44,7 +52,7 @@ def generated_manifest(bundle: Mapping[str, Any]) -> dict[str, Any]:
     }
     manifest = copy.deepcopy(dict(bundle))
     manifest["packages"] = packages
-    manifest["source"] = "policyengine-bundle.json"
+    manifest.pop("source", None)
     manifest["citation"] = {
         "title": f"PolicyEngine bundle {bundle['bundle_version']}",
         "version": bundle["bundle_version"],
@@ -55,7 +63,7 @@ def generated_manifest(bundle: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def manifest_text(bundle: Mapping[str, Any]) -> str:
-    return json.dumps(generated_manifest(bundle), indent=2, sort_keys=True) + "\n"
+    return json.dumps(normalized_manifest(bundle), indent=2, sort_keys=True) + "\n"
 
 
 def update_pyproject_text(pyproject_text: str, bundle: Mapping[str, Any]) -> str:
@@ -145,7 +153,7 @@ def write_or_check(path: Path, content: str, *, check: bool) -> bool:
 
 
 def generate(*, check: bool = False) -> int:
-    bundle = load_bundle_source(BUNDLE_SOURCE)
+    bundle = load_bundle_manifest(BUNDLE_MANIFEST)
     changed = False
     changed |= write_or_check(BUNDLE_MANIFEST, manifest_text(bundle), check=check)
     changed |= write_or_check(

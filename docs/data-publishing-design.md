@@ -145,9 +145,9 @@ different things to four different audiences.
 
 - The certification process (who signs off, what validations, what
   compatibility checks) — unchanged.
-- `policyengine-bundle.json` remains the source record of what a given
-  `policyengine.py` release guarantees; the packaged
-  `src/policyengine/data/bundle/manifest.json` is generated from it.
+- `src/policyengine/data/bundle/manifest.json` remains the source record of
+  what a given `policyengine.py` release guarantees and is packaged directly
+  into the wheel.
 - The staged `provisional → certified → retired` lifecycle —
   unchanged.
 - `*.trace.tro.jsonld` sidecars — unchanged (shorter to build

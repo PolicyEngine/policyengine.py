@@ -91,7 +91,7 @@ def test_update_file_replaces_stale_version_field(tmp_path):
 
 
 def test_sync_bundle_versions_rewrites_bundle_identity(tmp_path):
-    bundle_path = tmp_path / "policyengine-bundle.json"
+    bundle_path = tmp_path / "manifest.json"
     bundle_path.write_text(
         json.dumps(
             {
@@ -125,7 +125,7 @@ def test_sync_bundle_versions_rewrites_bundle_identity(tmp_path):
 
 
 def test_sync_bundle_versions_fails_when_required_field_missing(tmp_path):
-    bundle_path = tmp_path / "policyengine-bundle.json"
+    bundle_path = tmp_path / "manifest.json"
     bundle_path.write_text(
         json.dumps(
             {

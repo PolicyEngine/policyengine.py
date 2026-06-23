@@ -152,7 +152,7 @@ def main():
     pyproject = root / "pyproject.toml"
     changelog = root / "CHANGELOG.md"
     changelog_dir = root / "changelog.d"
-    bundle_path = root / "policyengine-bundle.json"
+    bundle_path = root / "src" / "policyengine" / "data" / "bundle" / "manifest.json"
 
     current = get_current_version(pyproject, changelog, root)
     bump = infer_bump(changelog_dir)

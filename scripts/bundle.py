@@ -118,13 +118,13 @@ def _check_tros() -> int:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Maintain PolicyEngine bundle metadata and generated artifacts."
+        description="Maintain PolicyEngine bundle metadata and derived artifacts."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     certify = subparsers.add_parser(
         "certify-data",
-        help="Certify a country data release into policyengine-bundle.json.",
+        help="Certify a country data release into the bundle manifest.",
     )
     certify.add_argument("--country", required=True, choices=["us", "uk"])
     certify.add_argument(
@@ -144,7 +144,7 @@ def _parser() -> argparse.ArgumentParser:
     certify.add_argument(
         "--no-generate",
         action="store_true",
-        help="Do not regenerate pyproject.toml and packaged bundle metadata.",
+        help="Do not regenerate pyproject.toml and derived bundle metadata.",
     )
     certify.add_argument(
         "--no-changelog",
@@ -160,7 +160,7 @@ def _parser() -> argparse.ArgumentParser:
 
     packages = subparsers.add_parser(
         "update-packages",
-        help="Update package pins in policyengine-bundle.json.",
+        help="Update package pins in the bundle manifest.",
     )
     packages.add_argument("--core", help="Exact version for policyengine-core.")
     packages.add_argument("--us", help="Exact version for policyengine-us.")
@@ -198,7 +198,7 @@ def _parser() -> argparse.ArgumentParser:
 
     check = subparsers.add_parser(
         "check",
-        help="Check generated bundle artifacts.",
+        help="Check derived bundle metadata.",
     )
     check.add_argument(
         "--include-tros",

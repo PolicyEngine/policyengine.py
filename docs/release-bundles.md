@@ -1,7 +1,7 @@
 # Release Bundles
 
 > **Current process.** Certification now runs inside this repository:
-> `scripts/certify_data_release.py` derives the vendored country manifest
+> `scripts/bundle.py certify-data` derives the vendored country manifest
 > directly from a country's data release manifest (see the
 > [data certification](engineering/skills/data-certification.md)
 > engineering skill). The intermediate `policyengine-bundles` repository
@@ -39,7 +39,8 @@ When run from `uvx` or `pipx`, the command creates or reuses `.venv`. Inside an
 existing virtualenv or conda environment, it installs into that active
 environment. It installs the bundled Python packages with pip, downloads the
 certified US and UK datasets into `./data`, and writes a
-`./data/.policyengine-bundle.json` receipt that records the target Python.
+`./data/.policyengine-bundle-receipt.json` receipt that records the target
+Python.
 Existing dataset files with the same filename are moved to
 `./data/.policyengine-bundle-backups/<timestamp>/`.
 
@@ -112,12 +113,13 @@ It does not define the final supported runtime bundle exposed to users.
 
 It does not rebuild microdata artifacts.
 
-Certification runs in this repository: `policyengine-bundle.json` carries the
-certified `data_releases.{country}` entry derived directly from the country's
-published data release manifest. The entrypoint is:
+Certification runs in this repository:
+`src/policyengine/data/bundle/manifest.json` carries the certified
+`data_releases.{country}` entry derived directly from the country's published
+data release manifest. The entrypoint is:
 
 ```bash
-python scripts/certify_data_release.py --country us \
+python scripts/bundle.py certify-data --country us \
   --manifest-uri "hf://dataset/policyengine/populace-us@<tag>/releases/<tag>/release_manifest.json"
 ```
 
