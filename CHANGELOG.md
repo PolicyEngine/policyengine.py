@@ -1,3 +1,10 @@
+## [4.18.1] - 2026-06-23
+
+### Fixed
+
+- Stop treating `policyengine-us-data` as an installable package in the certified bundle scaffold.
+
+
 ## [4.18.0] - 2026-06-23
 
 ### Added
