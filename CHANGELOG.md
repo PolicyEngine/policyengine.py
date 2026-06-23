@@ -1,3 +1,10 @@
+## [4.18.0] - 2026-06-23
+
+### Added
+
+- Add PolicyEngine bundle metadata and CLI support for installing, inspecting, and verifying a cited package-plus-dataset release.
+
+
 ## [4.17.11] - 2026-06-20
 
 ### Changed
