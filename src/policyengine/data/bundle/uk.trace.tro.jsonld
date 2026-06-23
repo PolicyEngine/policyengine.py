@@ -37,7 +37,7 @@
               "trov:hasArtifact": {
                 "@id": "composition/1/artifact/bundle_manifest"
               },
-              "trov:hasLocation": "data/release_manifests/uk.json"
+              "trov:hasLocation": "data/bundle/manifest.json"
             },
             {
               "@id": "arrangement/1/location/data_release_manifest",
@@ -75,7 +75,7 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine.py bundle manifest for uk",
             "trov:mimeType": "application/json",
-            "trov:sha256": "eac8716c73d87fd1843589f0c768c9e0036d0af3cb35b6413ca373d906b5f0ba"
+            "trov:sha256": "dacd2f935270948e290bf0e8233c05463231f91ae5cbabee08f3f6b3b7337a3a"
           },
           {
             "@id": "composition/1/artifact/data_release_manifest",
@@ -102,21 +102,18 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "4a40448670ab27e857b38dd77eacde14655b313b644d964e4f33829d13f31857"
+          "trov:sha256": "27396616f0b473bd88ea80c543030ee0efde87e93bf9d8372e3f83f1c09ee209"
         }
       },
       "trov:hasPerformance": {
         "@id": "trp/1",
         "@type": "trov:TransparentResearchPerformance",
         "pe:builtWithModelVersion": "2.89.2",
-        "pe:certifiedBy": "policyengine.py certification",
+        "pe:certifiedBy": "policyengine.py bundle certification",
         "pe:certifiedForModelVersion": "2.89.2",
-        "pe:ciGitRef": "refs/heads/main",
-        "pe:ciGitSha": "59509f48da0d5884b7b6c6dc9c6ab3321e8115ea",
-        "pe:ciRunUrl": "https://github.com/PolicyEngine/policyengine.py/actions/runs/27883888353",
         "pe:compatibilityBasis": "built_with_model_package",
         "pe:dataBuildId": "populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z",
-        "pe:emittedIn": "github-actions",
+        "pe:emittedIn": "local",
         "rdfs:comment": "Certification of build populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z for policyengine-uk 2.89.2.",
         "trov:accessedArrangement": {
           "@id": "arrangement/1"

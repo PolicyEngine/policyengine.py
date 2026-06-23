@@ -12,9 +12,9 @@ and region dataset templates. Certification asserts that *this*
 `pyproject.toml`, serves that data release — and the assertion is only made
 good by the test suite passing on the exact pinned pair.
 
-There is no intermediate bundle repo. The vendored country manifest at
-`src/policyengine/data/release_manifests/{country}.json` is derived directly
-from the data release manifest.
+There is no intermediate bundle repo. The `data_releases.{country}` entry in
+`src/policyengine/data/bundle/manifest.json` is derived directly from the data
+release manifest.
 
 ## Certifying a release
 
@@ -22,30 +22,29 @@ Open the work on a fresh branch from current `main` (use a clean worktree if
 the checkout is dirty).
 
 ```bash
-python scripts/certify_data_release.py --country us \
-  --manifest-uri "hf://dataset/policyengine/populace-us@<tag>/releases/<tag>/release_manifest.json"
+python scripts/bundle.py certify-data --country uk --data-producer populace \
+  --manifest-uri "hf://dataset/policyengine/populace-uk-private@<tag>/releases/<tag>/release_manifest.json"
 ```
 
 The script fetches and validates the manifest (every artifact must carry a
-revision pin; the certified dataset must be reachable), writes the vendored
-country manifest, exact-pins the country model package and raises the core
-floor in `pyproject.toml`, regenerates the TRACE TRO sidecar, and writes a
-Towncrier changelog fragment.
+revision pin; the certified dataset must be reachable), writes the canonical
+bundle manifest, exact-pins the country model package in that same manifest,
+regenerates derived bundle metadata, and writes a Towncrier changelog fragment.
 
 Private data (UK) requires `HUGGING_FACE_TOKEN` or `HF_TOKEN`.
 
 After running:
 
-- `uv lock` if pins moved, then `uv sync --all-extras`,
+- run `python scripts/bundle.py check`,
 - run the full test suite — snapshot drift from a model bump is refreshed
   with `PE_UPDATE_SNAPSHOTS=1 pytest tests/test_household_calculator_snapshot.py`,
-- commit the manifest, TRO, `pyproject.toml`, `uv.lock`, and fragment
-  together.
+- commit `src/policyengine/data/bundle/manifest.json`, `pyproject.toml`, the
+  Towncrier fragment, and any regenerated TRO sidecars together.
 
 A certification PR should normally change only:
 
-- `src/policyengine/data/release_manifests/{country}.json` (+ `.trace.tro.jsonld`)
-- `pyproject.toml` / `uv.lock`
+- `src/policyengine/data/bundle/manifest.json` (+ `{country}.trace.tro.jsonld`)
+- `pyproject.toml`
 - one Towncrier fragment under `changelog.d/`
 - test constants/snapshots that pin certified versions
 
@@ -69,15 +68,9 @@ publisher-claim basis above.
 
 ## Legacy paths
 
-Countries whose current data release predates release manifests (the UK
-enhanced FRS) are refreshed with the legacy single-country tool until their
-next release certifies through a manifest:
-
-```bash
-python scripts/refresh_release_bundle.py --country uk --model-version 2.89.0
-```
-
-Do not hand-edit vendored country manifests for normal updates.
+Do not hand-edit bundle data releases for normal updates. Countries whose
+current data release predates release manifests need a data-producer strategy
+before they can be updated through this path.
 
 The retired `policyengine-bundles` flow (candidates → generated bundle →
 archive import) is preserved read-only in that repo's history; bundles

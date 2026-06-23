@@ -6,38 +6,40 @@ pins, build provenance, compatibility claims, and region templates) is
 the source of truth, and certification derives the vendored country
 manifest from it in one step.
 
-The certification asserts that *this* policyengine release, with the
-model package pinned in ``pyproject.toml``, serves the data release —
-an assertion the test suite then exercises on the exact pair.
+The certification asserts that *this* policyengine bundle, with the
+model package pinned in ``src/policyengine/data/bundle/manifest.json``,
+serves the data release — an assertion the test suite then exercises on the
+exact pair.
 
 .. code-block:: python
 
     from policyengine.provenance.certification import certify_data_release
 
     result = certify_data_release(
-        country="us",
+        country="uk",
+        data_producer="populace",
         manifest_uri=(
-            "hf://dataset/policyengine/populace-us"
-            "@populace-us-2024-0cdbb27-c239dfe51c11-20260615T201302Z"
-            "/releases/populace-us-2024-0cdbb27-c239dfe51c11-20260615T201302Z"
+            "hf://dataset/policyengine/populace-uk-private"
+            "@populace-uk-2023-0cdbb27-c239dfe51c11-20260615T201302Z"
+            "/releases/populace-uk-2023-0cdbb27-c239dfe51c11-20260615T201302Z"
             "/release_manifest.json"
         ),
     )
     print(result.summary())
 
-``scripts/certify_data_release.py`` is the argparse wrapper. Network
-access is required (HF manifest fetch + PyPI wheel metadata). Countries
-whose data release predates release manifests (UK's enhanced FRS) keep
-using :mod:`policyengine.provenance.bundle` until their next release.
+``scripts/bundle.py certify-data`` is the operator-facing wrapper. Network
+access is required (HF manifest fetch + PyPI wheel metadata). Countries whose
+data release predates release manifests need a dedicated data-producer strategy
+before they can be updated through this path.
 """
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import re
 from dataclasses import dataclass, field
-from importlib.resources import files
 from pathlib import Path
 from typing import Optional
 
@@ -60,7 +62,7 @@ COUNTRY_MODEL_PACKAGES = {
     "uk": "policyengine-uk",
 }
 
-CERTIFIED_BY = "policyengine.py certification"
+CERTIFIED_BY = "policyengine.py bundle certification"
 BASIS_BUILT_WITH = "built_with_model_package"
 BASIS_PUBLISHER_CLAIM = "compatible_model_packages"
 POPULACE_US_SOURCE_COVERAGE_FILE = "us_source_coverage.json"
@@ -73,9 +75,10 @@ class CertificationError(ValueError):
 @dataclass
 class CertificationResult:
     country: str
+    data_producer: str
     manifest_uri: str
     manifest_sha256: str
-    country_manifest_path: Path
+    bundle_path: Path
     dataset_count: int
     default_dataset: str
     build_id: Optional[str]
@@ -90,7 +93,8 @@ class CertificationResult:
             f"  manifest: {self.manifest_uri}",
             f"  manifest sha256: {self.manifest_sha256}",
             f"  model: {self.model_package}=={self.model_version}",
-            f"  wrote: {self.country_manifest_path}",
+            f"  data-producer: {self.data_producer}",
+            f"  wrote: {self.bundle_path}",
         ]
         for warning in self.warnings:
             lines.append(f"  WARNING: {warning}")
@@ -114,6 +118,10 @@ def https_manifest_url(parts: dict) -> str:
         f"https://huggingface.co/{prefix}{parts['repo_id']}/resolve/"
         f"{parts['revision']}/{parts['path']}"
     )
+
+
+def default_bundle_source_path() -> Path:
+    return Path(__file__).resolve().parents[1] / "data" / "bundle" / "manifest.json"
 
 
 def https_release_file_url(parts: dict, filename: str) -> str:
@@ -420,6 +428,141 @@ def build_country_manifest_payload(
     }
 
 
+def build_bundle_data_release_payload(
+    *,
+    country_payload: dict,
+    data_producer: str,
+    manifest_uri: str,
+    uri_parts: dict,
+) -> dict:
+    """Map the country certification payload into bundle ``data_releases``."""
+    payload = copy.deepcopy(country_payload)
+    certified_artifact = payload.get("certified_data_artifact") or {}
+    data_package = payload.get("data_package") or {}
+    build_id = certified_artifact.get("build_id") or data_package.get("version")
+    payload["data_producer"] = data_producer
+    payload["version"] = build_id
+    payload["build_id"] = build_id
+    payload["source_manifest_uri"] = manifest_uri
+    payload["release_manifest_uri"] = https_manifest_url(uri_parts)
+    payload["default_dataset_uri"] = certified_artifact.get("uri")
+    return payload
+
+
+class DataProducerCertificationStrategy:
+    data_producer: str
+
+    def certify(
+        self,
+        *,
+        country: str,
+        manifest_uri: str,
+        model_package: str,
+        model_version: str,
+        token: Optional[str],
+        check_artifacts: bool,
+    ) -> tuple[dict, str, list[str]]:
+        raise NotImplementedError
+
+
+class LegacyDataProducerCertificationStrategy(DataProducerCertificationStrategy):
+    data_producer = "legacy"
+
+    def certify(
+        self,
+        *,
+        country: str,
+        manifest_uri: str,
+        model_package: str,
+        model_version: str,
+        token: Optional[str],
+        check_artifacts: bool,
+    ) -> tuple[dict, str, list[str]]:
+        raise CertificationError(
+            "Legacy data-producer certification updates are not implemented in "
+            "the bundle manifest workflow yet."
+        )
+
+
+class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrategy):
+    data_producer = "populace"
+
+    def certify(
+        self,
+        *,
+        country: str,
+        manifest_uri: str,
+        model_package: str,
+        model_version: str,
+        token: Optional[str],
+        check_artifacts: bool,
+    ) -> tuple[dict, str, list[str]]:
+        manifest, manifest_sha256, uri_parts = fetch_release_manifest(
+            manifest_uri, token=token
+        )
+        compatibility_basis, warnings = validate_release_manifest(
+            manifest, model_package, model_version
+        )
+
+        for filename in required_supplemental_release_files(
+            country, manifest, uri_parts
+        ):
+            if not head_release_file(uri_parts, filename, token=token):
+                raise CertificationError(
+                    "Required supplemental release file is not reachable: "
+                    f"{filename} at {https_release_file_url(uri_parts, filename)}"
+                )
+
+        default_artifact = manifest.artifacts[manifest.default_datasets["national"]]
+        if check_artifacts and not head_artifact(default_artifact, token=token):
+            raise CertificationError(
+                f"Certified dataset artifact is not reachable: {default_artifact.uri}"
+            )
+
+        model_wheel = fetch_pypi_wheel_metadata(model_package, model_version)
+        country_payload = build_country_manifest_payload(
+            country=country,
+            manifest=manifest,
+            uri_parts=uri_parts,
+            policyengine_version=policyengine_version(),
+            model_package=model_package,
+            model_version=model_version,
+            model_wheel=model_wheel or {},
+            compatibility_basis=compatibility_basis,
+        )
+        if check_artifacts and should_validate_vendored_artifacts(
+            country, manifest, uri_parts
+        ):
+            for name, reference in country_payload["datasets"].items():
+                if not head_artifact_reference(reference, uri_parts, token=token):
+                    raise CertificationError(
+                        f"Vendored artifact {name!r} is not reachable at "
+                        f"{artifact_reference_url(reference, uri_parts)}"
+                    )
+
+        return (
+            build_bundle_data_release_payload(
+                country_payload=country_payload,
+                data_producer=self.data_producer,
+                manifest_uri=manifest_uri,
+                uri_parts=uri_parts,
+            ),
+            manifest_sha256,
+            warnings,
+        )
+
+
+def certification_strategy(
+    country: str, data_producer: Optional[str] = None
+) -> DataProducerCertificationStrategy:
+    producer = data_producer or ("populace" if country == "uk" else "legacy")
+    if producer == "populace":
+        return PopulaceDataProducerCertificationStrategy()
+    if producer == "legacy":
+        return LegacyDataProducerCertificationStrategy()
+    raise CertificationError(f"Unknown data-producer {producer!r}.")
+
+
 def installed_model_version(model_package: str) -> str:
     from importlib.metadata import version
 
@@ -436,71 +579,45 @@ def certify_data_release(
     *,
     country: str,
     manifest_uri: str,
+    data_producer: Optional[str] = None,
     model_version: Optional[str] = None,
     token: Optional[str] = None,
-    output_dir: Optional[Path] = None,
+    bundle_path: Optional[Path] = None,
     check_artifacts: bool = True,
 ) -> CertificationResult:
     if country not in COUNTRY_MODEL_PACKAGES:
         raise CertificationError(f"Unknown country {country!r}.")
     model_package = COUNTRY_MODEL_PACKAGES[country]
     model_version = model_version or installed_model_version(model_package)
+    strategy = certification_strategy(country, data_producer)
 
-    manifest, manifest_sha256, uri_parts = fetch_release_manifest(
-        manifest_uri, token=token
-    )
-    compatibility_basis, warnings = validate_release_manifest(
-        manifest, model_package, model_version
-    )
-
-    for filename in required_supplemental_release_files(country, manifest, uri_parts):
-        if not head_release_file(uri_parts, filename, token=token):
-            raise CertificationError(
-                "Required supplemental release file is not reachable: "
-                f"{filename} at {https_release_file_url(uri_parts, filename)}"
-            )
-
-    default_artifact = manifest.artifacts[manifest.default_datasets["national"]]
-    if check_artifacts and not head_artifact(default_artifact, token=token):
-        raise CertificationError(
-            f"Certified dataset artifact is not reachable: {default_artifact.uri}"
-        )
-
-    model_wheel = fetch_pypi_wheel_metadata(model_package, model_version)
-
-    payload = build_country_manifest_payload(
+    data_release, manifest_sha256, warnings = strategy.certify(
         country=country,
-        manifest=manifest,
-        uri_parts=uri_parts,
-        policyengine_version=policyengine_version(),
+        manifest_uri=manifest_uri,
         model_package=model_package,
         model_version=model_version,
-        model_wheel=model_wheel or {},
-        compatibility_basis=compatibility_basis,
+        token=token,
+        check_artifacts=check_artifacts,
     )
-    if check_artifacts and should_validate_vendored_artifacts(
-        country, manifest, uri_parts
-    ):
-        for name, reference in payload["datasets"].items():
-            if not head_artifact_reference(reference, uri_parts, token=token):
-                raise CertificationError(
-                    f"Vendored artifact {name!r} is not reachable at "
-                    f"{artifact_reference_url(reference, uri_parts)}"
-                )
-
-    if output_dir is None:
-        output_dir = Path(str(files("policyengine"))) / "data" / "release_manifests"
-    output_path = output_dir / f"{country}.json"
-    output_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    bundle_path = bundle_path or default_bundle_source_path()
+    bundle = json.loads(bundle_path.read_text())
+    bundle.setdefault("data_releases", {})[country] = data_release
+    bundle.setdefault("countries", {}).setdefault(country, {})["model_package"] = (
+        model_package
+    )
+    if model_package in bundle.get("packages", {}):
+        bundle["packages"][model_package]["version"] = model_version
+    bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n")
 
     return CertificationResult(
         country=country,
+        data_producer=strategy.data_producer,
         manifest_uri=manifest_uri,
         manifest_sha256=manifest_sha256,
-        country_manifest_path=output_path,
-        dataset_count=len(payload["datasets"]),
-        default_dataset=payload["default_dataset"],
-        build_id=payload["certified_data_artifact"].get("build_id"),
+        bundle_path=bundle_path,
+        dataset_count=len(data_release["datasets"]),
+        default_dataset=data_release["default_dataset"],
+        build_id=data_release["certified_data_artifact"].get("build_id"),
         model_package=model_package,
         model_version=model_version,
         warnings=warnings,

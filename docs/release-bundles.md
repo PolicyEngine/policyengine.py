@@ -1,7 +1,7 @@
 # Release Bundles
 
 > **Current process.** Certification now runs inside this repository:
-> `scripts/certify_data_release.py` derives the vendored country manifest
+> `scripts/bundle.py certify-data` derives the vendored country manifest
 > directly from a country's data release manifest (see the
 > [data certification](engineering/skills/data-certification.md)
 > engineering skill). The intermediate `policyengine-bundles` repository
@@ -19,6 +19,50 @@ The key design decision is:
 - `policyengine.py` does not rebuild country data itself
 
 This keeps country-specific data construction in the country data repos while still giving users a single top-level version to cite and pin.
+
+## Installing a certified bundle
+
+Use pip for ordinary library installs:
+
+```bash
+pip install policyengine
+```
+
+Use the bundle installer when you want the certified package scaffold and the
+certified datasets for a cited `policyengine` version:
+
+```bash
+uvx --from policyengine==4.19.1 policyengine bundle install 4.19.1
+```
+
+When run from `uvx` or `pipx`, the command creates or reuses `.venv`. Inside an
+existing virtualenv or conda environment, it installs into that active
+environment. It installs the bundled Python packages with pip, downloads the
+certified US and UK datasets into `./data`, and writes a
+`./data/.policyengine-bundle-receipt.json` receipt that records the target
+Python.
+Existing dataset files with the same filename are moved to
+`./data/.policyengine-bundle-backups/<timestamp>/`.
+
+Useful variants:
+
+```bash
+uvx --from policyengine policyengine bundle install
+uvx --from policyengine policyengine bundle install --country uk
+uvx --from policyengine policyengine bundle install --no-datasets
+uvx --from policyengine policyengine bundle install --yes
+```
+
+Check a local environment against a bundle:
+
+```bash
+uvx --from policyengine policyengine bundle status --data-dir ./data
+uvx --from policyengine policyengine bundle verify 4.19.1 --data-dir ./data
+policyengine bundle manifest 4.19.1
+```
+
+`status` and `verify` use the receipt's recorded target Python by default. Pass
+`--venv` or `--python` only to inspect a different environment explicitly.
 
 ## Why this boundary exists
 
@@ -69,13 +113,13 @@ It does not define the final supported runtime bundle exposed to users.
 
 It does not rebuild microdata artifacts.
 
-Certification runs in this repository: the vendored country release
-manifest under `src/policyengine/data/release_manifests/` is derived
-directly from the country's published data release manifest. The
-entrypoint is:
+Certification runs in this repository:
+`src/policyengine/data/bundle/manifest.json` carries the certified
+`data_releases.{country}` entry derived directly from the country's published
+data release manifest. The entrypoint is:
 
 ```bash
-python scripts/certify_data_release.py --country us \
+python scripts/bundle.py certify-data --country us \
   --manifest-uri "hf://dataset/policyengine/populace-us@<tag>/releases/<tag>/release_manifest.json"
 ```
 
@@ -263,7 +307,7 @@ policyengine trace-tro us --out us.trace.tro.jsonld
 ```
 
 At release time, `scripts/generate_trace_tros.py` regenerates the bundled
-`data/release_manifests/{country}.trace.tro.jsonld` files, and the
+`data/bundle/{country}.trace.tro.jsonld` files, and the
 `Versioning` CI job commits them alongside the changelog so every published
 wheel ships with the matching TRO.
 
@@ -279,7 +323,7 @@ write_results_with_trace_tro(
     reform_payload={"salt_cap": 0},
     bundle_tro_url=(
         "https://raw.githubusercontent.com/PolicyEngine/policyengine.py/"
-        "v3.4.5/src/policyengine/data/release_manifests/us.trace.tro.jsonld"
+        "v3.4.5/src/policyengine/data/bundle/us.trace.tro.jsonld"
     ),
 )
 ```

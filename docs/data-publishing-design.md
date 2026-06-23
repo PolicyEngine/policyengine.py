@@ -75,9 +75,9 @@ pairing does not:
    `policyengine.py` release. **These are operational aliases, not
    a scientific citation surface** — release bundles remain the
    thing papers cite.
-4. **Simpler refresh mechanics.** `refresh_release_bundle(country,
-   ...)` becomes "fetch channel → read manifest → write the
-   certified release manifest" with no sha256 juggling.
+4. **Simpler certification mechanics.** `certify_data_release(country,
+   data_producer=...)` becomes "fetch producer manifest → validate → write
+   the certified bundle data release" with no sha256 juggling.
 
 Notably absent from that list compared to earlier drafts: **no
 claim of org-independent build identity**, **no claim of
@@ -145,9 +145,9 @@ different things to four different audiences.
 
 - The certification process (who signs off, what validations, what
   compatibility checks) — unchanged.
-- `src/policyengine/data/release_manifests/{country}.json` remains
-  the shipped record of what a given `policyengine.py` release
-  guarantees.
+- `src/policyengine/data/bundle/manifest.json` remains the source record of
+  what a given `policyengine.py` release guarantees and is packaged directly
+  into the wheel.
 - The staged `provisional → certified → retired` lifecycle —
   unchanged.
 - `*.trace.tro.jsonld` sidecars — unchanged (shorter to build

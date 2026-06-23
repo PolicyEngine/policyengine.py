@@ -117,6 +117,8 @@ jobs:
           python-version: '3.13'
       - name: Build changelog
         run: pip install yaml-changelog towncrier && make changelog
+      - name: Generate derived bundle metadata
+        run: python scripts/bundle.py generate
       - name: Preview changelog update
         run: ".github/get-changelog-diff.sh"
       - name: Install package for TRO regeneration
@@ -124,8 +126,8 @@ jobs:
       - name: Regenerate bundled TRACE TROs
         env:
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
-        run: python scripts/generate_trace_tros.py
-      - name: Update changelog and TROs
+        run: python scripts/bundle.py generate --include-tros
+      - name: Update changelog, bundle metadata, and TROs
         uses: EndBug/add-and-commit@v9
         with:
           add: "."
@@ -154,6 +156,15 @@ jobs:
         run: ".github/publish-git-tag.sh"
       - name: Build package
         run: python -m build
+      - name: Export bundle release assets
+        run: python scripts/export_bundle_release_assets.py --dist-dir dist
+      - name: Verify bundle package metadata
+        env:
+          POLICYENGINE_SKIP_COUNTRY_IMPORTS: "1"
+        run: |
+          VERSION=$(python .github/fetch_version.py)
+          policyengine bundle verify --country us --country uk --packages-only --json \
+            > "dist/policyengine-bundle-$VERSION.verification.json"
       - name: Publish a Python distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
@@ -166,4 +177,8 @@ jobs:
           gh release create "$VERSION" \
             --title "v$VERSION" \
             --notes "See [CHANGELOG.md](https://github.com/PolicyEngine/policyengine.py/blob/main/CHANGELOG.md) for details." \
-            --latest
+            --latest \
+            "dist/policyengine-bundle-$VERSION.json" \
+            "dist/policyengine-bundle-$VERSION.constraints.txt" \
+            "dist/policyengine-bundle-$VERSION.citation.txt" \
+            "dist/policyengine-bundle-$VERSION.verification.json"

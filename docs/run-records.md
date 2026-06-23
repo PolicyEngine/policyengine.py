@@ -32,7 +32,7 @@ record = simulation.write_run_record(
     "./record",
     bundle_tro_url=(
         "https://raw.githubusercontent.com/PolicyEngine/policyengine.py/"
-        "main/src/policyengine/data/release_manifests/us.trace.tro.jsonld"
+        "main/src/policyengine/data/bundle/us.trace.tro.jsonld"
     ),
 )
 print(record.composition_fingerprint)  # the citable id

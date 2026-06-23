@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -89,40 +90,54 @@ def test_update_file_replaces_stale_version_field(tmp_path):
     assert 'version = "3.4.3"' in pyproject.read_text()
 
 
-def test_sync_release_manifest_versions_rewrites_bundle_identity(tmp_path):
-    manifest_dir = tmp_path / "release_manifests"
-    manifest_dir.mkdir()
-    manifest_path = manifest_dir / "uk.json"
-    manifest_path.write_text(
-        "{\n"
-        '  "schema_version": 1,\n'
-        '  "bundle_id": "uk-4.0.0",\n'
-        '  "country_id": "uk",\n'
-        '  "policyengine_version": "4.0.0"\n'
-        "}\n"
+def test_sync_bundle_versions_rewrites_bundle_identity(tmp_path):
+    bundle_path = tmp_path / "manifest.json"
+    bundle_path.write_text(
+        json.dumps(
+            {
+                "bundle_version": "4.0.0",
+                "policyengine_version": "4.0.0",
+                "packages": {
+                    "policyengine": {
+                        "name": "policyengine",
+                        "version": "4.0.0",
+                    }
+                },
+                "data_releases": {
+                    "uk": {
+                        "bundle_id": "uk-4.0.0",
+                        "policyengine_version": "4.0.0",
+                    }
+                },
+            }
+        )
+        + "\n"
     )
 
-    bump_version.sync_release_manifest_versions(manifest_dir, "4.3.2")
+    bump_version.sync_bundle_versions(bundle_path, "4.3.2")
 
-    text = manifest_path.read_text()
-    assert '"bundle_id": "uk-4.3.2"' in text
-    assert '"policyengine_version": "4.3.2"' in text
+    bundle = json.loads(bundle_path.read_text())
+    assert bundle["bundle_version"] == "4.3.2"
+    assert bundle["policyengine_version"] == "4.3.2"
+    assert bundle["packages"]["policyengine"]["version"] == "4.3.2"
+    assert bundle["data_releases"]["uk"]["bundle_id"] == "uk-4.3.2"
+    assert bundle["data_releases"]["uk"]["policyengine_version"] == "4.3.2"
 
 
-def test_sync_release_manifest_versions_fails_when_required_field_missing(tmp_path):
-    manifest_dir = tmp_path / "release_manifests"
-    manifest_dir.mkdir()
-    manifest_path = manifest_dir / "uk.json"
-    manifest_path.write_text(
-        "{\n"
-        '  "schema_version": 1,\n'
-        '  "bundle_id": "uk-4.0.0",\n'
-        '  "country_id": "uk"\n'
-        "}\n"
+def test_sync_bundle_versions_fails_when_required_field_missing(tmp_path):
+    bundle_path = tmp_path / "manifest.json"
+    bundle_path.write_text(
+        json.dumps(
+            {
+                "bundle_version": "4.0.0",
+                "policyengine_version": "4.0.0",
+            }
+        )
+        + "\n"
     )
-    original = manifest_path.read_text()
+    original = bundle_path.read_text()
 
     with pytest.raises(SystemExit):
-        bump_version.sync_release_manifest_versions(manifest_dir, "4.3.2")
+        bump_version.sync_bundle_versions(bundle_path, "4.3.2")
 
-    assert manifest_path.read_text() == original
+    assert bundle_path.read_text() == original
