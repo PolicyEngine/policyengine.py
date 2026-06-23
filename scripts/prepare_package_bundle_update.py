@@ -39,7 +39,7 @@ def update_package_pins(bundle: Mapping[str, Any], args: argparse.Namespace) -> 
     return updated
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Prepare a package-pin-only PolicyEngine bundle PR."
     )
@@ -59,7 +59,7 @@ def main() -> int:
         default="bundle-update.fixed.md",
         help="Changelog fragment filename under changelog.d/.",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     bundle = update_package_pins(load_bundle_source(), args)
     write_bundle_source(bundle)

@@ -33,6 +33,14 @@ BUNDLE_TRO_DIR = (
 def regenerate_all() -> tuple[list[Path], list[tuple[str, Path, str]]]:
     written: list[Path] = []
     regressions: list[tuple[str, Path, str]] = []
+    for tro_path, payload in generated_tros():
+        tro_path.write_bytes(payload)
+        written.append(tro_path)
+    return written, regressions
+
+
+def generated_tros() -> list[tuple[Path, bytes]]:
+    payloads: list[tuple[Path, bytes]] = []
     bundle = json.loads(BUNDLE_SOURCE.read_text())
     BUNDLE_TRO_DIR.mkdir(parents=True, exist_ok=True)
     for country_id in sorted(bundle.get("data_releases", {})):
@@ -53,9 +61,8 @@ def regenerate_all() -> tuple[list[Path], list[tuple[str, Path, str]]]:
             model_wheel_sha256=country_manifest.model_package.sha256,
             model_wheel_url=country_manifest.model_package.wheel_url,
         )
-        tro_path.write_bytes(serialize_trace_tro(tro))
-        written.append(tro_path)
-    return written, regressions
+        payloads.append((tro_path, serialize_trace_tro(tro)))
+    return payloads
 
 
 def main() -> int:

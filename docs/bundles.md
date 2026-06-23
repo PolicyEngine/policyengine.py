@@ -66,7 +66,7 @@ target explicitly.
 Run:
 
 ```bash
-python scripts/prepare_package_bundle_update.py \
+python scripts/bundle.py update-packages \
   --core 3.27.0 \
   --us 1.730.0 \
   --uk 2.91.0 \
@@ -76,17 +76,22 @@ python scripts/prepare_package_bundle_update.py \
 To certify a new data release from a data-producer manifest, run:
 
 ```bash
-python scripts/certify_data_release.py \
+python scripts/bundle.py certify-data \
   --country uk \
   --data-producer populace \
   --manifest-uri hf://dataset/policyengine/populace-uk-private@<release>/releases/<release>/release_manifest.json
 ```
 
+Use `python scripts/bundle.py generate` to regenerate derived bundle metadata,
+and `python scripts/bundle.py generate --include-tros` when TRACE TRO sidecars
+should also be regenerated. Private data releases require `HUGGING_FACE_TOKEN`
+or `HF_TOKEN` for TRO regeneration.
+
 This updates bundle metadata and creates a patch changelog fragment. Do not bump
 the `policyengine` version manually in the PR; the existing release workflow
 bumps the package and bundle versions together after merge.
 
-CI checks generated artifacts, installs `.[models]`, runs `pip check`, and
+CI checks generated artifacts, installs `.[full]`, runs `pip check`, and
 verifies the packaged bundle metadata with lightweight URI checks. Dataset
 downloads are handled by `policyengine bundle install`, so certified UK data can
 be pinned by manifest version and downloaded from Hugging Face even when the
