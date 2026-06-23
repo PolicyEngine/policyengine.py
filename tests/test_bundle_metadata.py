@@ -39,6 +39,7 @@ def test_bundle_manifest_exposes_model_and_country_extras():
         "policyengine-uk",
     ]
     assert "policyengine-uk-data" not in manifest["packages"]
+    assert "policyengine-us-data" not in manifest["packages"]
 
 
 def test_bundle_manifest_carries_populace_uk_data_release():

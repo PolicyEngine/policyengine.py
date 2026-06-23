@@ -51,7 +51,7 @@ def _update_packages(args: argparse.Namespace) -> int:
     from prepare_package_bundle_update import main as prepare_package_bundle_update_main
 
     argv: list[str] = []
-    for option in ("core", "us", "uk", "us_data"):
+    for option in ("core", "us", "uk"):
         value = getattr(args, option)
         if value:
             argv.extend([f"--{option.replace('_', '-')}", value])
@@ -165,11 +165,6 @@ def _parser() -> argparse.ArgumentParser:
     packages.add_argument("--core", help="Exact version for policyengine-core.")
     packages.add_argument("--us", help="Exact version for policyengine-us.")
     packages.add_argument("--uk", help="Exact version for policyengine-uk.")
-    packages.add_argument(
-        "--us-data",
-        dest="us_data",
-        help="Exact version for policyengine-us-data.",
-    )
     packages.add_argument(
         "--changelog",
         default="Update the certified PolicyEngine bundle pins.",

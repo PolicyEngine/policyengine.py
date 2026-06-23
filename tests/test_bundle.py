@@ -49,13 +49,16 @@ def test_bundle_install_requirements_are_country_scoped():
         manifest["packages"]["policyengine-core"]["install_requirement"],
         manifest["packages"]["policyengine-uk"]["install_requirement"],
     ]
-    assert (
-        "policyengine-us-data==1.78.2; python_version >= '3.12' and python_version < '3.15'"
-        in bundle.bundle_install_requirements(
-            manifest,
-            countries=["us"],
-        )
+    us_requirements = bundle.bundle_install_requirements(
+        manifest,
+        countries=["us"],
     )
+    assert us_requirements == [
+        f"policyengine=={manifest['policyengine_version']}",
+        manifest["packages"]["policyengine-core"]["install_requirement"],
+        manifest["packages"]["policyengine-us"]["install_requirement"],
+    ]
+    assert not any("policyengine-us-data" in req for req in us_requirements)
 
 
 def test_dataset_plans_use_certified_release_metadata(tmp_path):

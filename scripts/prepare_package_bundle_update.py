@@ -17,7 +17,6 @@ PACKAGE_ARGS = {
     "core": "policyengine-core",
     "us": "policyengine-us",
     "uk": "policyengine-uk",
-    "us_data": "policyengine-us-data",
 }
 
 
