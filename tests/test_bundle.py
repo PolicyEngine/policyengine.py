@@ -1,3 +1,4 @@
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -6,6 +7,25 @@ import pytest
 
 from policyengine import bundle
 from policyengine.cli import main as cli_main
+
+
+def _sha256(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _manifest_with_dataset_sha(country: str, sha256: str) -> dict:
+    manifest = json.loads(json.dumps(bundle.get_current_bundle()))
+    release = manifest["data_releases"][country]
+    dataset = release["default_dataset"]
+    release["datasets"][dataset]["sha256"] = sha256
+    release["certified_data_artifact"]["sha256"] = sha256
+    return manifest
+
+
+def _write_manifest(tmp_path, manifest: dict) -> str:
+    path = tmp_path / "bundle-manifest.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    return str(path)
 
 
 def test_bundle_manifest_exposes_data_releases():
@@ -51,6 +71,30 @@ def test_dataset_plans_use_certified_release_metadata(tmp_path):
     assert plans[0].data_producer == "populace"
     assert plans[0].repo_type == "dataset"
     assert plans[0].destination == tmp_path / "populace_uk_2023.h5"
+    assert (
+        plans[0].expected_sha256
+        == bundle.get_current_bundle()["data_releases"]["uk"]["datasets"][
+            "populace_uk_2023"
+        ]["sha256"]
+    )
+
+
+def test_runtime_strategy_selects_populace():
+    assert isinstance(
+        bundle.runtime_strategy("populace"),
+        bundle.PopulaceDataProducerRuntimeStrategy,
+    )
+
+
+def test_populace_runtime_strategy_requires_certified_hash():
+    manifest = json.loads(json.dumps(bundle.get_current_bundle()))
+    release = manifest["data_releases"]["uk"]
+    dataset = release["default_dataset"]
+    del release["datasets"][dataset]["sha256"]
+    del release["certified_data_artifact"]["sha256"]
+
+    with pytest.raises(bundle.BundleError, match="certified sha256"):
+        bundle.dataset_plans(manifest, countries=["uk"])
 
 
 def test_install_bundle_package_only_uses_explicit_python(monkeypatch, tmp_path):
@@ -136,11 +180,12 @@ class FakeSession:
 
 
 def test_install_datasets_downloads_then_backs_up_existing_file(tmp_path):
+    manifest = _manifest_with_dataset_sha("us", _sha256(b"new-data"))
     existing = tmp_path / "populace_us_2024.h5"
     existing.write_bytes(b"old-data")
 
     installed = bundle.install_datasets(
-        bundle.get_current_bundle(),
+        manifest,
         countries=["us"],
         data_dir=tmp_path,
         yes=True,
@@ -148,14 +193,35 @@ def test_install_datasets_downloads_then_backs_up_existing_file(tmp_path):
     )
 
     assert installed[0]["country"] == "us"
+    assert installed[0]["expected_sha256"] == _sha256(b"new-data")
+    assert installed[0]["installed_sha256"] == _sha256(b"new-data")
+    assert installed[0]["build_id"] == manifest["data_releases"]["us"]["build_id"]
     assert existing.read_bytes() == b"new-data"
     backups = list((tmp_path / bundle.BACKUP_DIR_NAME).glob("*/populace_us_2024.h5"))
     assert len(backups) == 1
     assert backups[0].read_bytes() == b"old-data"
 
 
+def test_install_datasets_rejects_downloaded_hash_mismatch(tmp_path):
+    manifest = _manifest_with_dataset_sha("us", _sha256(b"expected-data"))
+    existing = tmp_path / "populace_us_2024.h5"
+    existing.write_bytes(b"old-data")
+
+    with pytest.raises(bundle.BundleError, match="sha256"):
+        bundle.install_datasets(
+            manifest,
+            countries=["us"],
+            data_dir=tmp_path,
+            yes=True,
+            session=FakeSession(),
+        )
+
+    assert existing.read_bytes() == b"old-data"
+    assert not (tmp_path / bundle.BACKUP_DIR_NAME).exists()
+
+
 def test_status_matches_receipt_and_packages(monkeypatch, tmp_path):
-    manifest = bundle.get_current_bundle()
+    manifest = _manifest_with_dataset_sha("uk", _sha256(b"data"))
     datasets = [
         {
             "country": "uk",
@@ -163,6 +229,8 @@ def test_status_matches_receipt_and_packages(monkeypatch, tmp_path):
             "version": manifest["data_releases"]["uk"]["version"],
             "uri": manifest["data_releases"]["uk"]["default_dataset_uri"],
             "path": str(tmp_path / "populace_uk_2023.h5"),
+            "expected_sha256": _sha256(b"data"),
+            "installed_sha256": _sha256(b"data"),
         }
     ]
     (tmp_path / "populace_uk_2023.h5").write_bytes(b"data")
@@ -178,15 +246,20 @@ def test_status_matches_receipt_and_packages(monkeypatch, tmp_path):
     }
     monkeypatch.setattr(bundle.metadata, "version", lambda name: versions[name])
 
-    report = bundle.inspect_bundle_status(countries=["uk"], data_dir=tmp_path)
+    report = bundle.inspect_bundle_status(
+        manifest_ref=_write_manifest(tmp_path, manifest),
+        countries=["uk"],
+        data_dir=tmp_path,
+    )
 
     assert report["matched"] is True
     assert {check["status"] for check in report["packages"]} == {"ok"}
     assert {check["status"] for check in report["datasets"]} == {"ok"}
+    assert report["datasets"][0]["installed_sha256"] == _sha256(b"data")
 
 
 def test_status_uses_receipt_target_python(monkeypatch, tmp_path):
-    manifest = bundle.get_current_bundle()
+    manifest = _manifest_with_dataset_sha("uk", _sha256(b"data"))
     target_python = tmp_path / ".venv" / "bin" / "python"
     target_python.parent.mkdir(parents=True)
     target_python.write_text("")
@@ -197,6 +270,8 @@ def test_status_uses_receipt_target_python(monkeypatch, tmp_path):
             "version": manifest["data_releases"]["uk"]["version"],
             "uri": manifest["data_releases"]["uk"]["default_dataset_uri"],
             "path": str(tmp_path / "populace_uk_2023.h5"),
+            "expected_sha256": _sha256(b"data"),
+            "installed_sha256": _sha256(b"data"),
         }
     ]
     (tmp_path / "populace_uk_2023.h5").write_bytes(b"data")
@@ -219,11 +294,53 @@ def test_status_uses_receipt_target_python(monkeypatch, tmp_path):
 
     monkeypatch.setattr(bundle, "_package_versions_from_python", fake_versions)
 
-    report = bundle.inspect_bundle_status(countries=["uk"], data_dir=tmp_path)
+    report = bundle.inspect_bundle_status(
+        manifest_ref=_write_manifest(tmp_path, manifest),
+        countries=["uk"],
+        data_dir=tmp_path,
+    )
 
     assert report["matched"] is True
     assert calls == [target_python.resolve()]
     assert report["target_python"] == str(target_python.resolve())
+
+
+def test_status_reports_dataset_hash_mismatch(monkeypatch, tmp_path):
+    manifest = _manifest_with_dataset_sha("uk", _sha256(b"certified-data"))
+    dataset_path = tmp_path / "populace_uk_2023.h5"
+    dataset_path.write_bytes(b"tampered-data")
+    bundle.write_receipt(
+        manifest,
+        data_dir=tmp_path,
+        countries=["uk"],
+        datasets=[
+            {
+                "country": "uk",
+                "dataset": "populace_uk_2023",
+                "version": manifest["data_releases"]["uk"]["version"],
+                "uri": manifest["data_releases"]["uk"]["default_dataset_uri"],
+                "path": str(dataset_path),
+                "expected_sha256": _sha256(b"certified-data"),
+                "installed_sha256": _sha256(b"certified-data"),
+            }
+        ],
+    )
+    versions = {
+        component["name"]: component["version"]
+        for component in manifest["packages"].values()
+    }
+    monkeypatch.setattr(bundle.metadata, "version", lambda name: versions[name])
+
+    report = bundle.inspect_bundle_status(
+        manifest_ref=_write_manifest(tmp_path, manifest),
+        countries=["uk"],
+        data_dir=tmp_path,
+    )
+
+    assert report["matched"] is False
+    assert report["datasets"][0]["status"] == "sha256_mismatch"
+    assert report["datasets"][0]["expected_sha256"] == _sha256(b"certified-data")
+    assert report["datasets"][0]["installed_sha256"] == _sha256(b"tampered-data")
 
 
 def test_status_reports_missing_receipt_target_python(tmp_path):
