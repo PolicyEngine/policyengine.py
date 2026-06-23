@@ -70,8 +70,7 @@ Run:
 python scripts/bundle.py update-packages \
   --core 3.27.0 \
   --us 1.730.0 \
-  --uk 2.91.0 \
-  --us-data 1.118.0
+  --uk 2.91.0
 ```
 
 To certify a new data release from a data-producer manifest, run:
