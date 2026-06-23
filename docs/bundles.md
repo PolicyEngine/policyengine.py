@@ -92,8 +92,9 @@ This updates bundle metadata and creates a patch changelog fragment. Do not bump
 the `policyengine` version manually in the PR; the existing release workflow
 bumps the package and bundle versions together after merge.
 
-CI checks derived bundle metadata, installs `.[full]`, runs `pip check`, and
-verifies the packaged bundle metadata with lightweight URI checks. Dataset
-downloads are handled by `policyengine bundle install`, so certified UK data can
-be pinned by manifest version and downloaded from Hugging Face even when the
-matching `policyengine-uk-data` package is not published to PyPI.
+CI checks derived bundle metadata, installs the package scaffold from the
+bundle manifest, runs `pip check`, and verifies the packaged bundle metadata
+with lightweight URI checks. Dataset downloads are handled by
+`policyengine bundle install`, so certified UK data can be pinned by manifest
+version and downloaded from Hugging Face even when the matching
+`policyengine-uk-data` package is not published to PyPI.

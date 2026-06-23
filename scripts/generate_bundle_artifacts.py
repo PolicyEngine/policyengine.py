@@ -23,6 +23,14 @@ BUNDLE_MANIFEST = (
 
 OPTIONAL_DEPENDENCIES_HEADER = "[project.optional-dependencies]"
 NEXT_SECTION_PATTERN = re.compile(r"\n\[tool\.setuptools\]", re.MULTILINE)
+RETIRED_BUNDLE_EXTRAS = {
+    "data",
+    "full",
+    "uk-data",
+    "uk-full",
+    "us-data",
+    "us-full",
+}
 
 
 def load_bundle_manifest(path: Path = BUNDLE_MANIFEST) -> dict[str, Any]:
@@ -73,7 +81,7 @@ def update_pyproject_text(pyproject_text: str, bundle: Mapping[str, Any]) -> str
 
     kept_extras: dict[str, list[str]] = {}
     for name, dependencies in optional.items():
-        if name == "dev" or name in bundle_extras:
+        if name == "dev" or name in bundle_extras or name in RETIRED_BUNDLE_EXTRAS:
             continue
         kept_extras[name] = list(dependencies)
 

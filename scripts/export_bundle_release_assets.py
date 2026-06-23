@@ -36,9 +36,14 @@ def main() -> int:
         bundle,
     )
 
-    full_packages = ["policyengine", *bundle["extras"]["full"]]
+    constraint_packages = [
+        name
+        for name, component in bundle["packages"].items()
+        if component.get("installable") is not False
+    ]
     constraints = [
-        bundle["packages"][package]["install_requirement"] for package in full_packages
+        bundle["packages"][package]["install_requirement"]
+        for package in constraint_packages
     ]
     constraints_path = _write_text(
         args.dist_dir,

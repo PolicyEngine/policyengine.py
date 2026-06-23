@@ -91,8 +91,28 @@ jobs:
           python-version: '3.13'
       - name: Check derived bundle metadata
         run: python scripts/bundle.py check
-      - name: Install full bundle package scaffold
-        run: uv pip install -e ".[full]" --system
+      - name: Install bundle package scaffold
+        run: |
+          uv pip install -e ".[models]" --system
+          python - <<'PY'
+          import subprocess
+          import sys
+
+          from policyengine import bundle
+
+          requirements = [
+              requirement
+              for requirement in bundle.bundle_install_requirements(
+                  countries=["us", "uk"]
+              )
+              if not requirement.startswith("policyengine==")
+          ]
+          subprocess.check_call(
+              [sys.executable, "-m", "pip", "install", *requirements]
+          )
+          PY
+      - name: Check installed package consistency
+        run: python -m pip check
       - name: Verify bundle packages
         run: policyengine bundle verify --country us --country uk --packages-only --json
   Test:

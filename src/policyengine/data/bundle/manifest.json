@@ -181,15 +181,6 @@
     }
   },
   "extras": {
-    "data": [
-      "policyengine-us-data"
-    ],
-    "full": [
-      "policyengine-core",
-      "policyengine-us",
-      "policyengine-uk",
-      "policyengine-us-data"
-    ],
     "models": [
       "policyengine-core",
       "policyengine-us",
@@ -199,22 +190,9 @@
       "policyengine-core",
       "policyengine-uk"
     ],
-    "uk-data": [],
-    "uk-full": [
-      "policyengine-core",
-      "policyengine-uk"
-    ],
     "us": [
       "policyengine-core",
       "policyengine-us"
-    ],
-    "us-data": [
-      "policyengine-us-data"
-    ],
-    "us-full": [
-      "policyengine-core",
-      "policyengine-us",
-      "policyengine-us-data"
     ]
   },
   "packages": {

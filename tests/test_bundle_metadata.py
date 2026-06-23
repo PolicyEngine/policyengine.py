@@ -20,27 +20,25 @@ def _load_export_script(monkeypatch):
     return module
 
 
-def test_bundle_manifest_exposes_full_and_slice_extras():
+def test_bundle_manifest_exposes_model_and_country_extras():
     manifest = bundle.get_current_bundle()
 
     assert manifest["bundle_version"] == manifest["policyengine_version"]
-    assert manifest["extras"]["full"] == [
-        "policyengine-core",
-        "policyengine-us",
-        "policyengine-uk",
-        "policyengine-us-data",
-    ]
-    assert "policyengine-uk-data" not in manifest["packages"]
+    assert set(manifest["extras"]) == {"models", "uk", "us"}
     assert manifest["extras"]["models"] == [
         "policyengine-core",
         "policyengine-us",
         "policyengine-uk",
     ]
-    assert manifest["extras"]["us-full"] == [
+    assert manifest["extras"]["us"] == [
         "policyengine-core",
         "policyengine-us",
-        "policyengine-us-data",
     ]
+    assert manifest["extras"]["uk"] == [
+        "policyengine-core",
+        "policyengine-uk",
+    ]
+    assert "policyengine-uk-data" not in manifest["packages"]
 
 
 def test_bundle_manifest_carries_populace_uk_data_release():
