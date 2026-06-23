@@ -157,20 +157,21 @@ jobs:
       - name: Build package
         run: python -m build
       - name: Export bundle release assets
-        run: python scripts/export_bundle_release_assets.py --dist-dir dist
+        run: python scripts/export_bundle_release_assets.py --dist-dir release-assets
       - name: Verify bundle package metadata
         env:
           POLICYENGINE_SKIP_COUNTRY_IMPORTS: "1"
         run: |
           VERSION=$(python .github/fetch_version.py)
           policyengine bundle verify --country us --country uk --packages-only --json \
-            > "dist/policyengine-bundle-$VERSION.verification.json"
+            > "release-assets/policyengine-bundle-$VERSION.verification.json"
       - name: Publish a Python distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
           password: ${{ secrets.PYPI }}
-          skip_existing: true
+          skip-existing: true
+          packages-dir: dist
       - name: Create GitHub Release
         run: |
           VERSION=$(python .github/fetch_version.py)
@@ -178,7 +179,7 @@ jobs:
             --title "v$VERSION" \
             --notes "See [CHANGELOG.md](https://github.com/PolicyEngine/policyengine.py/blob/main/CHANGELOG.md) for details." \
             --latest \
-            "dist/policyengine-bundle-$VERSION.json" \
-            "dist/policyengine-bundle-$VERSION.constraints.txt" \
-            "dist/policyengine-bundle-$VERSION.citation.txt" \
-            "dist/policyengine-bundle-$VERSION.verification.json"
+            "release-assets/policyengine-bundle-$VERSION.json" \
+            "release-assets/policyengine-bundle-$VERSION.constraints.txt" \
+            "release-assets/policyengine-bundle-$VERSION.citation.txt" \
+            "release-assets/policyengine-bundle-$VERSION.verification.json"
