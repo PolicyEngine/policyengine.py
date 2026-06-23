@@ -1,3 +1,10 @@
+## [4.18.2] - 2026-06-23
+
+### Fixed
+
+- Keep bundle release sidecar files out of the PyPI upload directory during publication.
+
+
 ## [4.18.1] - 2026-06-23
 
 ### Fixed
