@@ -91,10 +91,10 @@ jobs:
           python-version: '3.13'
       - name: Check generated bundle artifacts
         run: python scripts/generate_bundle_artifacts.py --check
-      - name: Install bundle model extra
-        run: uv pip install -e ".[models]" --system
+      - name: Install full bundle package scaffold
+        run: uv pip install -e ".[full]" --system
       - name: Verify bundle packages
-        run: policyengine bundle verify --country us --country uk --packages-only
+        run: policyengine bundle verify --country us --country uk --packages-only --json
   Test:
     runs-on: macos-latest
     strategy:
