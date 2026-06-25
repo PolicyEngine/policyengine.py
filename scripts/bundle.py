@@ -38,6 +38,12 @@ def _certify_data(args: argparse.Namespace) -> int:
         argv.extend(["--data-producer", args.data_producer])
     if args.model_version:
         argv.extend(["--model-version", args.model_version])
+    if args.regional_manifest_uri:
+        argv.extend(["--regional-manifest-uri", args.regional_manifest_uri])
+    if args.regional_artifact_prefix:
+        argv.extend(["--regional-artifact-prefix", args.regional_artifact_prefix])
+    if args.regional_path_template:
+        argv.extend(["--regional-path-template", args.regional_path_template])
     if args.no_generate:
         argv.append("--no-generate")
     if args.no_changelog:
@@ -140,6 +146,21 @@ def _parser() -> argparse.ArgumentParser:
     certify.add_argument(
         "--model-version",
         help="Model package version to certify for. Defaults to installed metadata.",
+    )
+    certify.add_argument(
+        "--regional-manifest-uri",
+        help=(
+            "Optional regional release_manifest.json URI to merge into US "
+            "Populace certification."
+        ),
+    )
+    certify.add_argument(
+        "--regional-artifact-prefix",
+        help="Regional artifact prefix to import. Defaults to states/.",
+    )
+    certify.add_argument(
+        "--regional-path-template",
+        help="Region dataset path template to certify.",
     )
     certify.add_argument(
         "--no-generate",

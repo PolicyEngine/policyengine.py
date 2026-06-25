@@ -66,6 +66,59 @@ CERTIFIED_BY = "policyengine.py bundle certification"
 BASIS_BUILT_WITH = "built_with_model_package"
 BASIS_PUBLISHER_CLAIM = "compatible_model_packages"
 POPULACE_US_SOURCE_COVERAGE_FILE = "us_source_coverage.json"
+US_STATE_CODES = (
+    "AL",
+    "AK",
+    "AZ",
+    "AR",
+    "CA",
+    "CO",
+    "CT",
+    "DE",
+    "DC",
+    "FL",
+    "GA",
+    "HI",
+    "ID",
+    "IL",
+    "IN",
+    "IA",
+    "KS",
+    "KY",
+    "LA",
+    "ME",
+    "MD",
+    "MA",
+    "MI",
+    "MN",
+    "MS",
+    "MO",
+    "MT",
+    "NE",
+    "NV",
+    "NH",
+    "NJ",
+    "NM",
+    "NY",
+    "NC",
+    "ND",
+    "OH",
+    "OK",
+    "OR",
+    "PA",
+    "RI",
+    "SC",
+    "SD",
+    "TN",
+    "TX",
+    "UT",
+    "VT",
+    "VA",
+    "WA",
+    "WV",
+    "WI",
+    "WY",
+)
 
 
 class CertificationError(ValueError):
@@ -332,6 +385,73 @@ def should_validate_vendored_artifacts(
     )
 
 
+def _state_code_from_path(path: str, artifact_prefix: str) -> Optional[str]:
+    prefix = artifact_prefix.rstrip("/") + "/"
+    if not path.startswith(prefix):
+        return None
+    remainder = path.removeprefix(prefix)
+    if "/" in remainder or not remainder.endswith(".h5"):
+        return None
+    state_code = remainder.removesuffix(".h5")
+    if state_code not in US_STATE_CODES:
+        return None
+    return state_code
+
+
+def merge_us_state_release_manifest(
+    primary_manifest: DataReleaseManifest,
+    state_manifest: DataReleaseManifest,
+    *,
+    artifact_prefix: str = "states/",
+    path_template: str = "states/{state_code}.h5",
+) -> DataReleaseManifest:
+    """Add legacy US state artifacts to a primary Populace release manifest."""
+
+    primary_payload = primary_manifest.model_dump(mode="json", exclude_none=True)
+    merged_artifacts = primary_payload.setdefault("artifacts", {})
+    found_states: dict[str, str] = {}
+    prefix = artifact_prefix.rstrip("/") + "/"
+
+    for name, artifact in state_manifest.artifacts.items():
+        if not name.startswith(prefix) and not artifact.path.startswith(prefix):
+            continue
+        state_code = _state_code_from_path(artifact.path, artifact_prefix)
+        if state_code is None:
+            raise CertificationError(
+                "US state artifact path must match "
+                f"{artifact_prefix}<STATE>.h5; got {artifact.path!r}."
+            )
+        if not artifact.sha256:
+            raise CertificationError(f"US state artifact {name!r} has no sha256.")
+        if name in merged_artifacts:
+            raise CertificationError(
+                f"Regional artifact {name!r} conflicts with the primary manifest."
+            )
+        merged_artifacts[name] = artifact.model_dump(
+            mode="json",
+            exclude_none=True,
+        )
+        found_states[state_code] = name
+
+    missing_states = sorted(set(US_STATE_CODES) - set(found_states))
+    if missing_states:
+        raise CertificationError(
+            "Missing US state artifacts: " + ", ".join(missing_states)
+        )
+
+    metadata = primary_payload.setdefault("metadata", {})
+    region_datasets = metadata.setdefault("region_datasets", {})
+    default_dataset = primary_manifest.default_datasets["national"]
+    default_artifact = primary_manifest.artifacts[default_dataset]
+    region_datasets.setdefault(
+        "national",
+        {"path_template": default_artifact.path},
+    )
+    region_datasets["state"] = {"path_template": path_template}
+
+    return DataReleaseManifest.model_validate(primary_payload)
+
+
 def build_country_manifest_payload(
     *,
     country: str,
@@ -434,6 +554,8 @@ def build_bundle_data_release_payload(
     data_producer: str,
     manifest_uri: str,
     uri_parts: dict,
+    regional_manifest_uri: Optional[str] = None,
+    regional_uri_parts: Optional[dict] = None,
 ) -> dict:
     """Map the country certification payload into bundle ``data_releases``."""
     payload = copy.deepcopy(country_payload)
@@ -445,6 +567,12 @@ def build_bundle_data_release_payload(
     payload["build_id"] = build_id
     payload["source_manifest_uri"] = manifest_uri
     payload["release_manifest_uri"] = https_manifest_url(uri_parts)
+    if regional_manifest_uri is not None:
+        payload["regional_source_manifest_uri"] = regional_manifest_uri
+    if regional_uri_parts is not None:
+        payload["regional_release_manifest_uri"] = https_manifest_url(
+            regional_uri_parts
+        )
     payload["default_dataset_uri"] = certified_artifact.get("uri")
     return payload
 
@@ -461,6 +589,9 @@ class DataProducerCertificationStrategy:
         model_version: str,
         token: Optional[str],
         check_artifacts: bool,
+        regional_manifest_uri: Optional[str] = None,
+        regional_artifact_prefix: str = "states/",
+        regional_path_template: str = "states/{state_code}.h5",
     ) -> tuple[dict, str, list[str]]:
         raise NotImplementedError
 
@@ -477,6 +608,9 @@ class LegacyDataProducerCertificationStrategy(DataProducerCertificationStrategy)
         model_version: str,
         token: Optional[str],
         check_artifacts: bool,
+        regional_manifest_uri: Optional[str] = None,
+        regional_artifact_prefix: str = "states/",
+        regional_path_template: str = "states/{state_code}.h5",
     ) -> tuple[dict, str, list[str]]:
         raise CertificationError(
             "Legacy data-producer certification updates are not implemented in "
@@ -496,10 +630,29 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
         model_version: str,
         token: Optional[str],
         check_artifacts: bool,
+        regional_manifest_uri: Optional[str] = None,
+        regional_artifact_prefix: str = "states/",
+        regional_path_template: str = "states/{state_code}.h5",
     ) -> tuple[dict, str, list[str]]:
         manifest, manifest_sha256, uri_parts = fetch_release_manifest(
             manifest_uri, token=token
         )
+        regional_uri_parts = None
+        if regional_manifest_uri is not None:
+            if country != "us":
+                raise CertificationError(
+                    "Regional data release overlays are only supported for US "
+                    "Populace certification."
+                )
+            state_manifest, _, regional_uri_parts = fetch_release_manifest(
+                regional_manifest_uri, token=token
+            )
+            manifest = merge_us_state_release_manifest(
+                manifest,
+                state_manifest,
+                artifact_prefix=regional_artifact_prefix,
+                path_template=regional_path_template,
+            )
         compatibility_basis, warnings = validate_release_manifest(
             manifest, model_package, model_version
         )
@@ -546,6 +699,8 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
                 data_producer=self.data_producer,
                 manifest_uri=manifest_uri,
                 uri_parts=uri_parts,
+                regional_manifest_uri=regional_manifest_uri,
+                regional_uri_parts=regional_uri_parts,
             ),
             manifest_sha256,
             warnings,
@@ -584,6 +739,9 @@ def certify_data_release(
     token: Optional[str] = None,
     bundle_path: Optional[Path] = None,
     check_artifacts: bool = True,
+    regional_manifest_uri: Optional[str] = None,
+    regional_artifact_prefix: str = "states/",
+    regional_path_template: str = "states/{state_code}.h5",
 ) -> CertificationResult:
     if country not in COUNTRY_MODEL_PACKAGES:
         raise CertificationError(f"Unknown country {country!r}.")
@@ -598,6 +756,9 @@ def certify_data_release(
         model_version=model_version,
         token=token,
         check_artifacts=check_artifacts,
+        regional_manifest_uri=regional_manifest_uri,
+        regional_artifact_prefix=regional_artifact_prefix,
+        regional_path_template=regional_path_template,
     )
     bundle_path = bundle_path or default_bundle_source_path()
     bundle = json.loads(bundle_path.read_text())

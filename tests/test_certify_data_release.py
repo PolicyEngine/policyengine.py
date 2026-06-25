@@ -6,9 +6,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from policyengine.provenance.certification import (
+    US_STATE_CODES,
     CertificationError,
     build_country_manifest_payload,
     certify_data_release,
+    merge_us_state_release_manifest,
     parse_manifest_uri,
     validate_release_manifest,
 )
@@ -22,6 +24,11 @@ UK_TAG = "populace-uk-2023-bbbbbbb-20260101"
 UK_MANIFEST_URI = (
     "hf://dataset/policyengine/populace-uk-private"
     f"@{UK_TAG}/releases/{UK_TAG}/release_manifest.json"
+)
+US_DATA_VERSION = "1.115.5"
+US_DATA_MANIFEST_URI = (
+    "hf://model/policyengine/policyengine-us-data"
+    f"@{US_DATA_VERSION}/releases/{US_DATA_VERSION}/release_manifest.json"
 )
 
 
@@ -96,6 +103,45 @@ def _release_manifest_payload() -> dict:
     }
 
 
+def _populace_manifest_payload_without_regions() -> dict:
+    payload = _release_manifest_payload()
+    payload["metadata"] = {}
+    payload["artifacts"].pop("states/AK")
+    return payload
+
+
+def _state_release_manifest_payload(
+    *,
+    missing: set[str] | None = None,
+    malformed: dict[str, str] | None = None,
+    without_hash: set[str] | None = None,
+) -> dict:
+    missing = missing or set()
+    malformed = malformed or {}
+    without_hash = without_hash or set()
+    artifacts = {}
+    for index, state_code in enumerate(US_STATE_CODES):
+        if state_code in missing:
+            continue
+        path = malformed.get(state_code, f"states/{state_code}.h5")
+        artifact = {
+            "kind": "microdata",
+            "path": path,
+            "repo_id": "policyengine/policyengine-us-data",
+            "revision": US_DATA_VERSION,
+            "sha256": f"{index + 1:064x}",
+            "size_bytes": 1,
+        }
+        if state_code in without_hash:
+            artifact.pop("sha256")
+        artifacts[f"states/{state_code}"] = artifact
+    return {
+        "schema_version": 1,
+        "data_package": {"name": "policyengine-us-data", "version": US_DATA_VERSION},
+        "artifacts": artifacts,
+    }
+
+
 def _manifest() -> DataReleaseManifest:
     return DataReleaseManifest.model_validate(_release_manifest_payload())
 
@@ -127,9 +173,13 @@ def _bundle_source_payload() -> dict:
         "packages": {
             "policyengine": {"name": "policyengine", "version": "9.9.9"},
             "policyengine-uk": {"name": "policyengine-uk", "version": "2.0.0"},
+            "policyengine-us": {"name": "policyengine-us", "version": "1.0.0"},
         },
         "extras": {},
-        "countries": {"uk": {"model_package": "policyengine-uk"}},
+        "countries": {
+            "uk": {"model_package": "policyengine-uk"},
+            "us": {"model_package": "policyengine-us"},
+        },
         "data_releases": {},
     }
 
@@ -270,6 +320,69 @@ class TestBuildCountryManifestPayload:
         )
 
 
+class TestMergeUSStateReleaseManifest:
+    def test__given_state_manifest__then_adds_state_region_artifacts(self):
+        primary = DataReleaseManifest.model_validate(
+            _populace_manifest_payload_without_regions()
+        )
+        states = DataReleaseManifest.model_validate(_state_release_manifest_payload())
+
+        merged = merge_us_state_release_manifest(primary, states)
+        payload = build_country_manifest_payload(
+            country="us",
+            manifest=merged,
+            uri_parts=parse_manifest_uri(MANIFEST_URI),
+            policyengine_version="9.9.9",
+            model_package="policyengine-us",
+            model_version="1.723.0",
+            model_wheel={},
+        )
+
+        assert payload["datasets"]["states/CA"] == {
+            "path": "states/CA.h5",
+            "revision": US_DATA_VERSION,
+            "sha256": f"{US_STATE_CODES.index('CA') + 1:064x}",
+            "repo_id": "policyengine/policyengine-us-data",
+        }
+        assert payload["region_datasets"] == {
+            "national": {"path_template": "populace_us_2024.h5"},
+            "state": {"path_template": "states/{state_code}.h5"},
+        }
+
+    def test__given_missing_state_artifact__then_raises(self):
+        primary = DataReleaseManifest.model_validate(
+            _populace_manifest_payload_without_regions()
+        )
+        states = DataReleaseManifest.model_validate(
+            _state_release_manifest_payload(missing={"CA"})
+        )
+
+        with pytest.raises(CertificationError, match="Missing US state artifacts: CA"):
+            merge_us_state_release_manifest(primary, states)
+
+    def test__given_malformed_state_path__then_raises(self):
+        primary = DataReleaseManifest.model_validate(
+            _populace_manifest_payload_without_regions()
+        )
+        states = DataReleaseManifest.model_validate(
+            _state_release_manifest_payload(malformed={"CA": "state/CA.h5"})
+        )
+
+        with pytest.raises(CertificationError, match="states/<STATE>.h5"):
+            merge_us_state_release_manifest(primary, states)
+
+    def test__given_state_without_hash__then_raises(self):
+        primary = DataReleaseManifest.model_validate(
+            _populace_manifest_payload_without_regions()
+        )
+        states = DataReleaseManifest.model_validate(
+            _state_release_manifest_payload(without_hash={"CA"})
+        )
+
+        with pytest.raises(CertificationError, match="states/CA"):
+            merge_us_state_release_manifest(primary, states)
+
+
 class TestCertifyDataRelease:
     def test__given_fetched_populace_manifest__then_updates_bundle_manifest(
         self, tmp_path
@@ -326,6 +439,70 @@ class TestCertifyDataRelease:
         assert result.dataset_count == 4
         assert result.build_id == UK_TAG
         assert result.bundle_path == bundle_path
+
+    def test__given_us_regional_manifest__then_certifies_state_artifacts(
+        self, tmp_path
+    ):
+        bundle_path = tmp_path / "manifest.json"
+        bundle_path.write_text(json.dumps(_bundle_source_payload()) + "\n")
+        primary_response = MagicMock()
+        primary_response.status_code = 200
+        primary_response.content = json.dumps(
+            _populace_manifest_payload_without_regions()
+        ).encode()
+        regional_response = MagicMock()
+        regional_response.status_code = 200
+        regional_response.content = json.dumps(
+            _state_release_manifest_payload()
+        ).encode()
+
+        with (
+            patch(
+                "policyengine.provenance.certification.requests.get",
+                side_effect=[primary_response, regional_response],
+            ),
+            patch(
+                "policyengine.provenance.certification.head_artifact",
+                return_value=True,
+            ),
+            patch(
+                "policyengine.provenance.certification.head_release_file",
+                return_value=True,
+            ),
+            patch(
+                "policyengine.provenance.certification.head_artifact_reference",
+                return_value=True,
+            ),
+            patch(
+                "policyengine.provenance.certification.fetch_pypi_wheel_metadata",
+                return_value={"sha256": "d" * 64, "url": "https://example"},
+            ),
+            patch(
+                "policyengine.provenance.certification.policyengine_version",
+                return_value="9.9.9",
+            ),
+        ):
+            result = certify_data_release(
+                country="us",
+                data_producer="populace",
+                manifest_uri=MANIFEST_URI,
+                regional_manifest_uri=US_DATA_MANIFEST_URI,
+                model_version="1.723.0",
+                bundle_path=bundle_path,
+            )
+
+        written = json.loads(bundle_path.read_text())
+        release = written["data_releases"]["us"]
+        assert release["source_manifest_uri"] == MANIFEST_URI
+        assert release["regional_source_manifest_uri"] == US_DATA_MANIFEST_URI
+        assert release["region_datasets"]["state"] == {
+            "path_template": "states/{state_code}.h5"
+        }
+        assert release["datasets"]["states/CA"]["repo_id"] == (
+            "policyengine/policyengine-us-data"
+        )
+        assert release["datasets"]["states/CA"]["revision"] == US_DATA_VERSION
+        assert result.dataset_count == 4 + len(US_STATE_CODES)
 
     def test__given_us_without_data_producer__then_legacy_update_is_explicitly_unsupported(
         self, tmp_path
