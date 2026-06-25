@@ -53,6 +53,10 @@ Do not move or rewrite state artifacts into the Populace repo. The certified
 bundle is intentionally hybrid: Populace owns the national default dataset, and
 `policyengine-us-data` owns the inherited state datasets until that path is
 migrated.
+The regional manifest URI is recorded for traceability, but the bundle does not
+currently record the regional manifest's own sha256. Treat the copied
+artifact-level repo, revision, and sha256 pins in `data_releases.us.datasets`
+as the citable state dataset certification.
 
 The script fetches and validates the manifest (every artifact must carry a
 revision pin; the certified dataset must be reachable), writes the canonical

@@ -1,6 +1,10 @@
 """Tests for direct data-release certification."""
 
+import importlib.util
 import json
+import sys
+from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -144,6 +148,19 @@ def _state_release_manifest_payload(
 
 def _manifest() -> DataReleaseManifest:
     return DataReleaseManifest.model_validate(_release_manifest_payload())
+
+
+def _load_bundle_script(monkeypatch):
+    scripts_dir = Path(__file__).resolve().parents[1] / "scripts"
+    monkeypatch.syspath_prepend(str(scripts_dir))
+    spec = importlib.util.spec_from_file_location(
+        "bundle_script",
+        scripts_dir / "bundle.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
 
 
 def _uk_release_manifest_payload() -> dict:
@@ -382,6 +399,26 @@ class TestMergeUSStateReleaseManifest:
         with pytest.raises(CertificationError, match="states/CA"):
             merge_us_state_release_manifest(primary, states)
 
+    def test__given_duplicate_state_artifact__then_warns_and_ignores_duplicate(self):
+        primary = DataReleaseManifest.model_validate(
+            _populace_manifest_payload_without_regions()
+        )
+        state_payload = _state_release_manifest_payload()
+        state_payload["artifacts"]["states/CA_duplicate"] = {
+            **state_payload["artifacts"]["states/CA"],
+            "sha256": "f" * 64,
+        }
+        states = DataReleaseManifest.model_validate(state_payload)
+
+        with pytest.warns(RuntimeWarning, match="Duplicate US state artifact for CA"):
+            merged = merge_us_state_release_manifest(primary, states)
+
+        assert "states/CA_duplicate" not in merged.artifacts
+        assert (
+            merged.artifacts["states/CA"].sha256
+            == (state_payload["artifacts"]["states/CA"]["sha256"])
+        )
+
 
 class TestCertifyDataRelease:
     def test__given_fetched_populace_manifest__then_updates_bundle_manifest(
@@ -517,6 +554,62 @@ class TestCertifyDataRelease:
                 model_version="1.723.0",
                 bundle_path=bundle_path,
             )
+
+    def test__given_bundle_wrapper_regional_args__then_forwards_to_certifier(
+        self, monkeypatch
+    ):
+        bundle_script = _load_bundle_script(monkeypatch)
+        captured: dict[str, list[str]] = {}
+        fake_certifier = ModuleType("certify_data_release")
+
+        def fake_main(argv: list[str]) -> int:
+            captured["argv"] = argv
+            return 0
+
+        fake_certifier.main = fake_main
+        monkeypatch.setitem(sys.modules, "certify_data_release", fake_certifier)
+
+        result = bundle_script.main(
+            [
+                "certify-data",
+                "--country",
+                "us",
+                "--data-producer",
+                "populace",
+                "--manifest-uri",
+                MANIFEST_URI,
+                "--regional-manifest-uri",
+                US_DATA_MANIFEST_URI,
+                "--regional-artifact-prefix",
+                "states/",
+                "--regional-path-template",
+                "states/{state_code}.h5",
+                "--model-version",
+                "1.723.0",
+                "--no-generate",
+                "--skip-artifact-check",
+            ]
+        )
+
+        assert result == 0
+        assert captured["argv"] == [
+            "--country",
+            "us",
+            "--manifest-uri",
+            MANIFEST_URI,
+            "--data-producer",
+            "populace",
+            "--model-version",
+            "1.723.0",
+            "--regional-manifest-uri",
+            US_DATA_MANIFEST_URI,
+            "--regional-artifact-prefix",
+            "states/",
+            "--regional-path-template",
+            "states/{state_code}.h5",
+            "--no-generate",
+            "--skip-artifact-check",
+        ]
 
     def test__given_missing_populace_us_source_coverage__then_raises(self, tmp_path):
         response = MagicMock()

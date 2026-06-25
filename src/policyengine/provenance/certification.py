@@ -39,6 +39,7 @@ import copy
 import hashlib
 import json
 import re
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -427,6 +428,15 @@ def merge_us_state_release_manifest(
             raise CertificationError(
                 f"Regional artifact {name!r} conflicts with the primary manifest."
             )
+        if state_code in found_states:
+            warnings.warn(
+                "Duplicate US state artifact for "
+                f"{state_code}: ignoring {name!r}; already using "
+                f"{found_states[state_code]!r}.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            continue
         merged_artifacts[name] = artifact.model_dump(
             mode="json",
             exclude_none=True,

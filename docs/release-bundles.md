@@ -142,6 +142,10 @@ That produces one US bundle manifest entry containing the Populace national
 default dataset plus all 51 `states/{STATE}.h5` artifacts pinned to
 `policyengine-us-data`. The resulting `region_datasets.state` template lets
 runtime code resolve a state region to the exact certified state artifact.
+The regional manifest URI is retained for traceability, but the bundle does not
+currently store the regional manifest's own sha256. For inherited state data,
+the citable pins are the copied artifact-level repo, revision, and sha256
+values in `data_releases.us.datasets`.
 
 Earlier releases (policyengine 4.15.x–4.16.x) were certified through the
 `PolicyEngine/policyengine-bundles` archive flow; those bundles remain the

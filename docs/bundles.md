@@ -104,6 +104,10 @@ The regional manifest must include all 51 `states/{STATE}.h5` artifacts with
 their original repo, revision, and sha256 pins. The resulting bundle manifest
 certifies Populace as the US national default dataset and
 `policyengine-us-data` as the state dataset source.
+The regional manifest URI is recorded for traceability; the bundle does not
+currently record the regional manifest's own sha256. The citable pins are the
+artifact-level repo, revision, and sha256 values copied into
+`data_releases.us.datasets`.
 
 Use `python scripts/bundle.py generate` to regenerate derived bundle metadata,
 and `python scripts/bundle.py generate --include-tros` when TRACE TRO sidecars

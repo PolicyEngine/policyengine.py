@@ -175,7 +175,10 @@ def _parser() -> argparse.ArgumentParser:
     certify.add_argument(
         "--skip-artifact-check",
         action="store_true",
-        help="Skip the certified dataset reachability check.",
+        help=(
+            "Skip reachability checks for the certified dataset and any "
+            "vendored/regional artifacts."
+        ),
     )
     certify.set_defaults(func=_certify_data)
 

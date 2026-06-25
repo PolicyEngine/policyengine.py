@@ -77,7 +77,10 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--skip-artifact-check",
         action="store_true",
-        help="Skip the reachability HEAD on the certified dataset.",
+        help=(
+            "Skip reachability HEAD checks for the certified dataset and any "
+            "vendored/regional artifacts."
+        ),
     )
     args = parser.parse_args(argv)
 
