@@ -2,8 +2,10 @@
 
 from policyengine.countries.us.data import DISTRICT_COUNTS, US_STATES
 from policyengine.countries.us.regions import (
+    build_us_region_registry,
     us_region_registry,
 )
+from policyengine.provenance.manifest import CountryReleaseManifest
 
 
 class TestUSStates:
@@ -93,7 +95,7 @@ class TestUSRegionRegistry:
     def test__given_us_registry__then_has_national_region(self):
         """Given: US region registry
         When: Getting national region
-        Then: Returns US without a dedicated region dataset path
+        Then: Returns US with the certified national dataset path
         """
         # When
         national = us_region_registry.get_national()
@@ -103,7 +105,10 @@ class TestUSRegionRegistry:
         assert national.code == "us"
         assert national.label == "United States"
         assert national.region_type == "national"
-        assert national.dataset_path is None
+        assert national.dataset_path == (
+            "hf://policyengine/populace-us/populace_us_2024.h5"
+            "@populace-us-2024-f0af251-703bd81a565c-20260620T201958Z"
+        )
 
     def test__given_us_registry__then_has_51_states(self):
         """Given: US region registry
@@ -129,7 +134,9 @@ class TestUSRegionRegistry:
         assert ca.label == "California"
         assert ca.region_type == "state"
         assert ca.parent_code == "us"
-        assert ca.dataset_path is None
+        assert ca.dataset_path == (
+            "hf://policyengine/policyengine-us-data/states/CA.h5@1.115.5"
+        )
         assert ca.state_code == "CA"
         assert ca.state_name == "California"
         assert not ca.requires_filter
@@ -225,16 +232,74 @@ class TestUSRegionRegistry:
         assert len(district_children) == DISTRICT_COUNTS["CA"]
         assert len(place_children) >= 10  # CA has many large cities
 
-    def test__given_us_registry__then_dataset_regions_is_empty(self):
+    def test__given_us_registry__then_dataset_regions_are_national_and_states(self):
         """Given: US region registry
         When: Getting regions with datasets
-        Then: Current Populace-certified bundle has no subnational datasets
+        Then: Current certified bundle has national and state datasets
         """
         # When
         dataset_regions = us_region_registry.get_dataset_regions()
 
         # Then
-        assert len(dataset_regions) == 0
+        assert len(dataset_regions) == 52
+        assert {region.region_type for region in dataset_regions} == {
+            "national",
+            "state",
+        }
+
+    def test__given_certified_state_template__then_states_have_dataset_paths(
+        self, monkeypatch
+    ):
+        """Given: US bundle manifest with a certified state template
+        When: Building the region registry
+        Then: State regions resolve to pinned state dataset artifacts
+        """
+        manifest = CountryReleaseManifest.model_validate(
+            {
+                "country_id": "us",
+                "policyengine_version": "9.9.9",
+                "model_package": {
+                    "name": "policyengine-us",
+                    "version": "1.723.0",
+                },
+                "data_package": {
+                    "name": "populace-data",
+                    "version": "0.1.0",
+                    "repo_id": "policyengine/populace-us",
+                    "repo_type": "dataset",
+                    "release_manifest_revision": "populace-us-tag",
+                },
+                "default_dataset": "populace_us_2024",
+                "datasets": {
+                    "populace_us_2024": {
+                        "path": "populace_us_2024.h5",
+                        "repo_id": "policyengine/populace-us",
+                        "revision": "populace-us-tag",
+                    },
+                    "states/CA": {
+                        "path": "states/CA.h5",
+                        "repo_id": "policyengine/policyengine-us-data",
+                        "revision": "1.115.5",
+                    },
+                },
+                "region_datasets": {
+                    "national": {"path_template": "populace_us_2024.h5"},
+                    "state": {"path_template": "states/{state_code}.h5"},
+                },
+            }
+        )
+        monkeypatch.setattr(
+            "policyengine.provenance.manifest.get_release_manifest",
+            lambda country_id: manifest,
+        )
+
+        registry = build_us_region_registry()
+        ca = registry.get("state/ca")
+
+        assert ca is not None
+        assert ca.dataset_path == (
+            "hf://policyengine/policyengine-us-data/states/CA.h5@1.115.5"
+        )
 
     def test__given_us_registry__then_filter_regions_are_all_places(self):
         """Given: US region registry

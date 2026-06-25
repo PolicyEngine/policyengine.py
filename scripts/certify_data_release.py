@@ -50,6 +50,24 @@ def main(argv=None) -> int:
         help="hf://dataset/<repo_id>@<revision>/<path-to-release_manifest.json>",
     )
     parser.add_argument(
+        "--regional-manifest-uri",
+        default=None,
+        help=(
+            "Optional regional data release manifest to merge into US Populace "
+            "certification."
+        ),
+    )
+    parser.add_argument(
+        "--regional-artifact-prefix",
+        default="states/",
+        help="Regional artifact path prefix to import. Defaults to states/.",
+    )
+    parser.add_argument(
+        "--regional-path-template",
+        default="states/{state_code}.h5",
+        help="Region dataset path template to certify into the bundle manifest.",
+    )
+    parser.add_argument(
         "--model-version",
         default=None,
         help="Model package version to certify for (default: installed).",
@@ -59,7 +77,10 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--skip-artifact-check",
         action="store_true",
-        help="Skip the reachability HEAD on the certified dataset.",
+        help=(
+            "Skip reachability HEAD checks for the certified dataset and any "
+            "vendored/regional artifacts."
+        ),
     )
     args = parser.parse_args(argv)
 
@@ -78,6 +99,9 @@ def main(argv=None) -> int:
         / "bundle"
         / "manifest.json",
         check_artifacts=not args.skip_artifact_check,
+        regional_manifest_uri=args.regional_manifest_uri,
+        regional_artifact_prefix=args.regional_artifact_prefix,
+        regional_path_template=args.regional_path_template,
     )
     print(result.summary())
 

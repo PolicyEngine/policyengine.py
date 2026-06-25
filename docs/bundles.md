@@ -28,11 +28,17 @@ uvx --from policyengine policyengine bundle install
 When run from `uvx` or `pipx`, the installer creates or reuses `./.venv`.
 Inside an existing virtualenv or conda environment, it installs into that active
 environment. The installer then installs the
-exact bundled package scaffold with pip, downloads certified US and UK datasets
-into `./data`, moves replaced dataset files into
+exact bundled package scaffold with pip, downloads certified default US and UK
+datasets into `./data`, moves replaced dataset files into
 `./data/.policyengine-bundle-backups/<timestamp>/`, and writes a
 `./data/.policyengine-bundle-receipt.json` receipt that records the target
 Python.
+
+The bundle manifest can certify additional regional datasets, such as US state
+datasets. Those artifacts are part of the citable bundle manifest, but
+`policyengine bundle install` does not eagerly download every regional file.
+Runtime callers should use the manifest's regional dataset URI when a regional
+simulation needs one.
 
 Country-specific and package-only installs are supported:
 
@@ -81,6 +87,27 @@ python scripts/bundle.py certify-data \
   --data-producer populace \
   --manifest-uri hf://dataset/policyengine/populace-uk-private@<release>/releases/<release>/release_manifest.json
 ```
+
+For US Populace releases, include the inherited state datasets from
+`policyengine-us-data`:
+
+```bash
+python scripts/bundle.py certify-data \
+  --country us \
+  --data-producer populace \
+  --manifest-uri hf://dataset/policyengine/populace-us@<release>/releases/<release>/release_manifest.json \
+  --regional-manifest-uri hf://model/policyengine/policyengine-us-data@<version>/releases/<version>/release_manifest.json \
+  --model-version <policyengine-us-version>
+```
+
+The regional manifest must include all 51 `states/{STATE}.h5` artifacts with
+their original repo, revision, and sha256 pins. The resulting bundle manifest
+certifies Populace as the US national default dataset and
+`policyengine-us-data` as the state dataset source.
+The regional manifest URI is recorded for traceability; the bundle does not
+currently record the regional manifest's own sha256. The citable pins are the
+artifact-level repo, revision, and sha256 values copied into
+`data_releases.us.datasets`.
 
 Use `python scripts/bundle.py generate` to regenerate derived bundle metadata,
 and `python scripts/bundle.py generate --include-tros` when TRACE TRO sidecars

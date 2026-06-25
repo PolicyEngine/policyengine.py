@@ -26,6 +26,38 @@ python scripts/bundle.py certify-data --country uk --data-producer populace \
   --manifest-uri "hf://dataset/policyengine/populace-uk-private@<tag>/releases/<tag>/release_manifest.json"
 ```
 
+For US Populace certification, include the inherited state datasets from the
+certified `policyengine-us-data` release manifest:
+
+```bash
+python scripts/bundle.py certify-data --country us --data-producer populace \
+  --manifest-uri "hf://dataset/policyengine/populace-us@<tag>/releases/<tag>/release_manifest.json" \
+  --regional-manifest-uri "hf://model/policyengine/policyengine-us-data@<version>/releases/<version>/release_manifest.json" \
+  --model-version "<policyengine-us-version>"
+```
+
+The regional manifest is required for US while the stack still serves
+state-level datasets from `policyengine-us-data`. It must contain all 51
+`states/{STATE}.h5` artifacts, including DC, and each state artifact must carry
+its original `repo_id`, `revision`, and `sha256`. Certification preserves those
+per-artifact pins in `data_releases.us.datasets` and writes:
+
+```json
+"region_datasets": {
+  "national": {"path_template": "populace_us_2024.h5"},
+  "state": {"path_template": "states/{state_code}.h5"}
+}
+```
+
+Do not move or rewrite state artifacts into the Populace repo. The certified
+bundle is intentionally hybrid: Populace owns the national default dataset, and
+`policyengine-us-data` owns the inherited state datasets until that path is
+migrated.
+The regional manifest URI is recorded for traceability, but the bundle does not
+currently record the regional manifest's own sha256. Treat the copied
+artifact-level repo, revision, and sha256 pins in `data_releases.us.datasets`
+as the citable state dataset certification.
+
 The script fetches and validates the manifest (every artifact must carry a
 revision pin; the certified dataset must be reachable), writes the canonical
 bundle manifest, exact-pins the country model package in that same manifest,
@@ -53,7 +85,8 @@ A certification PR should normally change only:
 Hard failures (certification refuses): missing national default dataset,
 default dataset absent from artifacts, any artifact without a revision pin,
 unreachable certified dataset, missing required supplemental release files
-(for example Populace-US `us_source_coverage.json`), unknown country.
+(for example Populace-US `us_source_coverage.json`), missing or malformed US
+state overlay artifacts when `--regional-manifest-uri` is used, unknown country.
 
 Certification gate: the model version must either exactly match the
 build-time model (`compatibility_basis: built_with_model_package`) or be

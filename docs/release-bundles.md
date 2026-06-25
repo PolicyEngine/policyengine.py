@@ -38,11 +38,16 @@ uvx --from policyengine==4.19.1 policyengine bundle install 4.19.1
 When run from `uvx` or `pipx`, the command creates or reuses `.venv`. Inside an
 existing virtualenv or conda environment, it installs into that active
 environment. It installs the bundled Python packages with pip, downloads the
-certified US and UK datasets into `./data`, and writes a
+certified default US and UK datasets into `./data`, and writes a
 `./data/.policyengine-bundle-receipt.json` receipt that records the target
 Python.
 Existing dataset files with the same filename are moved to
 `./data/.policyengine-bundle-backups/<timestamp>/`.
+
+Regional datasets may also be certified in the bundle manifest. They are not
+eagerly downloaded by `policyengine bundle install`; callers should materialize
+the certified regional URI from the manifest when they run a regional
+simulation.
 
 Useful variants:
 
@@ -122,6 +127,25 @@ data release manifest. The entrypoint is:
 python scripts/bundle.py certify-data --country us \
   --manifest-uri "hf://dataset/policyengine/populace-us@<tag>/releases/<tag>/release_manifest.json"
 ```
+
+US Populace certification currently also needs the inherited state-level
+datasets from the certified `policyengine-us-data` release manifest:
+
+```bash
+python scripts/bundle.py certify-data --country us --data-producer populace \
+  --manifest-uri "hf://dataset/policyengine/populace-us@<tag>/releases/<tag>/release_manifest.json" \
+  --regional-manifest-uri "hf://model/policyengine/policyengine-us-data@<version>/releases/<version>/release_manifest.json" \
+  --model-version "<policyengine-us-version>"
+```
+
+That produces one US bundle manifest entry containing the Populace national
+default dataset plus all 51 `states/{STATE}.h5` artifacts pinned to
+`policyengine-us-data`. The resulting `region_datasets.state` template lets
+runtime code resolve a state region to the exact certified state artifact.
+The regional manifest URI is retained for traceability, but the bundle does not
+currently store the regional manifest's own sha256. For inherited state data,
+the citable pins are the copied artifact-level repo, revision, and sha256
+values in `data_releases.us.datasets`.
 
 Earlier releases (policyengine 4.15.x–4.16.x) were certified through the
 `PolicyEngine/policyengine-bundles` archive flow; those bundles remain the
