@@ -44,17 +44,17 @@ graph = [
     "networkx>=3.0",
 ]
 models = [
-    "policyengine-core==3.27.1",
-    "policyengine-us==1.729.0",
+    "policyengine-core==3.28.0",
+    "policyengine-us==1.745.0",
     "policyengine-uk==2.89.2",
 ]
 uk = [
-    "policyengine-core==3.27.1",
+    "policyengine-core==3.28.0",
     "policyengine-uk==2.89.2",
 ]
 us = [
-    "policyengine-core==3.27.1",
-    "policyengine-us==1.729.0",
+    "policyengine-core==3.28.0",
+    "policyengine-us==1.745.0",
 ]
 dev = [
     "pytest",
@@ -70,8 +70,8 @@ dev = [
     "towncrier>=24.8.0",
     "mypy>=1.11.0",
     "pytest-cov>=5.0.0",
-    "policyengine-core==3.27.1",
-    "policyengine-us==1.729.0",
+    "policyengine-core==3.28.0",
+    "policyengine-us==1.745.0",
     "policyengine-uk==2.89.2",
 ]
 

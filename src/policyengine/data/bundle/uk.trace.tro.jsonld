@@ -75,7 +75,7 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine.py bundle manifest for uk",
             "trov:mimeType": "application/json",
-            "trov:sha256": "20485054c9c1ff4cc273fe334c959c9eec9a387fcab9211c5265e3783bef13e7"
+            "trov:sha256": "c67502a8d156d0ad29b8a8a3046c24cd6004242891fd0c17dee0d7f36c156dae"
           },
           {
             "@id": "composition/1/artifact/data_release_manifest",
@@ -102,7 +102,7 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "c20ccb2a12e9815e0bafc37a1ad0208890405ed5a0315745b5fe6c6a89a83d98"
+          "trov:sha256": "dcdfb1ee378e74512fb00e3f41ea7061425f9a014cfda24518a4c6559234a6e2"
         }
       },
       "trov:hasPerformance": {
@@ -111,12 +111,9 @@
         "pe:builtWithModelVersion": "2.89.2",
         "pe:certifiedBy": "policyengine.py bundle certification",
         "pe:certifiedForModelVersion": "2.89.2",
-        "pe:ciGitRef": "refs/heads/main",
-        "pe:ciGitSha": "0a8f38b2b71796001b29e2782007c58bebe2087b",
-        "pe:ciRunUrl": "https://github.com/PolicyEngine/policyengine.py/actions/runs/28192468047",
         "pe:compatibilityBasis": "built_with_model_package",
         "pe:dataBuildId": "populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z",
-        "pe:emittedIn": "github-actions",
+        "pe:emittedIn": "local",
         "rdfs:comment": "Certification of build populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z for policyengine-uk 2.89.2.",
         "trov:accessedArrangement": {
           "@id": "arrangement/1"
