@@ -1,1 +1,0 @@
-Certify the US populace data release `populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z` into the PolicyEngine bundle manifest and pin US runtime dependencies to `policyengine-us==1.745.0` and `policyengine-core==3.28.0`.
