@@ -497,9 +497,12 @@ def resolve_managed_dataset_reference(
 
     - omit `dataset` to use the certified default dataset for the bundle
     - pass a logical dataset name present in the bundled/data-release manifests
+    - pass a local filesystem path with `allow_unmanaged=True` to run on a
+      build artifact the caller owns (e.g. a downstream pipeline's Stage-output
+      H5 that is not part of any release manifest)
 
-    Direct URLs or raw Hugging Face references are treated as unmanaged unless
-    `allow_unmanaged=True` is set explicitly.
+    Direct URLs, raw Hugging Face references, and local filesystem paths are
+    treated as unmanaged unless `allow_unmanaged=True` is set explicitly.
     """
 
     manifest = get_release_manifest(country_id)
@@ -518,7 +521,24 @@ def resolve_managed_dataset_reference(
             "bypass bundle enforcement."
         )
 
-    return resolve_dataset_reference(country_id, dataset)
+    try:
+        return resolve_dataset_reference(country_id, dataset)
+    except ValueError:
+        # Not a managed dataset name. A local build artifact (e.g. a
+        # Stage-output H5 from a downstream pipeline) is unmanaged but
+        # legitimate; accept it under the same explicit opt-in as remote URIs
+        # so local build-and-score workflows need not bypass this wrapper.
+        candidate = Path(dataset).expanduser()
+        if candidate.is_file():
+            if allow_unmanaged:
+                return str(candidate)
+            raise ValueError(
+                f"Dataset {dataset!r} is a local file outside the "
+                "policyengine.py release bundle. Pass `allow_unmanaged=True` to "
+                "run a simulation on a local build artifact; its model-version "
+                "pairing is then the caller's responsibility."
+            ) from None
+        raise
 
 
 def resolve_local_managed_dataset_source(
