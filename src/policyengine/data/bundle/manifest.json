@@ -97,30 +97,30 @@
       "version": "populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z"
     },
     "us": {
-      "build_id": "populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z",
+      "build_id": "populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z",
       "bundle_id": "us-4.18.4",
       "certification": {
         "built_with_model_version": "1.745.0",
         "certified_by": "policyengine.py bundle certification",
         "certified_for_model_version": "1.745.0",
         "compatibility_basis": "built_with_model_package",
-        "data_build_id": "populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z"
+        "data_build_id": "populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z"
       },
       "certified_data_artifact": {
-        "build_id": "populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z",
+        "build_id": "populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z",
         "data_package": {
           "name": "populace-data",
           "version": "0.1.0"
         },
         "dataset": "populace_us_2024",
-        "sha256": "ff9df33c820bc9014ed6028f7e2a2cd91ce9315eb1c35f9412769d7bdcadb334",
-        "uri": "hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z"
+        "sha256": "32fcf6b23e96d27d59cf4eca618bd21bd5a689d6099db6655e9e8d955442b41d",
+        "uri": "hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z"
       },
       "country_id": "us",
       "data_package": {
         "name": "populace-data",
-        "release_manifest_path": "releases/populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z/release_manifest.json",
-        "release_manifest_revision": "populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z",
+        "release_manifest_path": "releases/populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z/release_manifest.json",
+        "release_manifest_revision": "populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z",
         "repo_id": "policyengine/populace-us",
         "repo_type": "dataset",
         "version": "0.1.0"
@@ -128,22 +128,34 @@
       "data_producer": "populace",
       "datasets": {
         "calibration_diagnostics": {
-          "path": "releases/populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z/calibration_diagnostics.json",
+          "path": "releases/populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z/calibration_diagnostics.json",
           "repo_id": "policyengine/populace-us",
-          "revision": "populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z",
-          "sha256": "332dc2f88de65f4c93a3a66b9a5ca6e6900135b9899fceef120c20127e6c256a"
+          "revision": "populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z",
+          "sha256": "19610f0dea6c1b92f2efe9466d06b510be6247e1ab4e536f082a61498b775c7f"
+        },
+        "demographics": {
+          "path": "releases/populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z/demographics.json",
+          "repo_id": "policyengine/populace-us",
+          "revision": "populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z",
+          "sha256": "394fc6c9b22a5aa804b7bd9e12e721065dcc345222fae315b9e6ac240fa21949"
         },
         "populace_us_2024": {
           "path": "populace_us_2024.h5",
           "repo_id": "policyengine/populace-us",
-          "revision": "populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z",
-          "sha256": "ff9df33c820bc9014ed6028f7e2a2cd91ce9315eb1c35f9412769d7bdcadb334"
+          "revision": "populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z",
+          "sha256": "32fcf6b23e96d27d59cf4eca618bd21bd5a689d6099db6655e9e8d955442b41d"
         },
         "populace_us_2024_calibration": {
           "path": "populace_us_2024_calibration.npz",
           "repo_id": "policyengine/populace-us",
-          "revision": "populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z",
-          "sha256": "6d4f5662c54b4b0e26becbae6f6e63336237105e7e3c82d4e1d635aa60cf67a3"
+          "revision": "populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z",
+          "sha256": "bdb1eb728652bc9bea9f2033201e9e241412616ce6e83e5b8c6f7c79d57b7d41"
+        },
+        "reform_validation": {
+          "path": "releases/populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z/reform_validation.json",
+          "repo_id": "policyengine/populace-us",
+          "revision": "populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z",
+          "sha256": "f6360c3668f38dd9c3bfe600170fdaf1a9a631a0c2accc5ecab03adb7ddfd8d6"
         },
         "states/AK": {
           "path": "states/AK.h5",
@@ -452,14 +464,14 @@
           "sha256": "731d83ae37863ff994df2f953740ddb10b36910f43af01b38d36ffb55a88d4b5"
         },
         "us_source_coverage": {
-          "path": "releases/populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z/us_source_coverage.json",
+          "path": "releases/populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z/us_source_coverage.json",
           "repo_id": "policyengine/populace-us",
-          "revision": "populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z",
-          "sha256": "af4c465a1a5982a10d8d5404e3917b11e190b35a1da3336e606db6ee1a1740fe"
+          "revision": "populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z",
+          "sha256": "094240968ce3b617ecd214525f46649b9586f6d6a66e136833d261a413553ab6"
         }
       },
       "default_dataset": "populace_us_2024",
-      "default_dataset_uri": "hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z",
+      "default_dataset_uri": "hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z",
       "model_package": {
         "name": "policyengine-us",
         "sha256": "2af30b694b681adca7c2e2bd695bbeb41c03769d9ae908f82f671f8502ce32d9",
@@ -477,10 +489,10 @@
       },
       "regional_release_manifest_uri": "https://huggingface.co/policyengine/policyengine-us-data/resolve/1.115.5/releases/1.115.5/release_manifest.json",
       "regional_source_manifest_uri": "hf://model/policyengine/policyengine-us-data@1.115.5/releases/1.115.5/release_manifest.json",
-      "release_manifest_uri": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z/releases/populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z/release_manifest.json",
+      "release_manifest_uri": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z/releases/populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z/release_manifest.json",
       "schema_version": 1,
-      "source_manifest_uri": "hf://dataset/policyengine/populace-us@populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z/releases/populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z/release_manifest.json",
-      "version": "populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z"
+      "source_manifest_uri": "hf://dataset/policyengine/populace-us@populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z/releases/populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z/release_manifest.json",
+      "version": "populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z"
     }
   },
   "extras": {
