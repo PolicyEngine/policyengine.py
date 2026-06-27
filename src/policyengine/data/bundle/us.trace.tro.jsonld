@@ -17,7 +17,7 @@
         "schema:name": "PolicyEngine",
         "schema:url": "https://policyengine.org"
       },
-      "schema:dateCreated": "2026-06-26T12:26:36+00:00",
+      "schema:dateCreated": "2026-06-27T04:55:05.133582+00:00",
       "schema:description": "TRACE TRO for certified runtime bundle us-4.18.4 covering the bundle manifest, the certified dataset artifact, the country model wheel, and the country data release manifest when it is available.",
       "schema:name": "policyengine us certified bundle TRO",
       "trov:createdWith": {
@@ -45,7 +45,7 @@
               "trov:hasArtifact": {
                 "@id": "composition/1/artifact/data_release_manifest"
               },
-              "trov:hasLocation": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z/releases/populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z/release_manifest.json"
+              "trov:hasLocation": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z/releases/populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z/release_manifest.json"
             },
             {
               "@id": "arrangement/1/location/dataset",
@@ -53,7 +53,7 @@
               "trov:hasArtifact": {
                 "@id": "composition/1/artifact/dataset"
               },
-              "trov:hasLocation": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z/populace_us_2024.h5"
+              "trov:hasLocation": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z/populace_us_2024.h5"
             },
             {
               "@id": "arrangement/1/location/model_wheel",
@@ -75,21 +75,21 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine.py bundle manifest for us",
             "trov:mimeType": "application/json",
-            "trov:sha256": "9a4ee3e810600b42725bda9e21474306ba29118d43171c93aa754d95f1132cc1"
+            "trov:sha256": "e248fb66e8e4872acccc61442868d6d1e6f11b37903ab87e3fcd3c8212fb6a8f"
           },
           {
             "@id": "composition/1/artifact/data_release_manifest",
             "@type": "trov:ResearchArtifact",
             "schema:name": "populace-data release manifest 0.1.0",
             "trov:mimeType": "application/json",
-            "trov:sha256": "c445118fdce40cbe5137957d18509c420b9e2146417a50371c461b20679f8b3f"
+            "trov:sha256": "ab08312a309f17e76299df17acef0816f300dfe4d2ca2fba7793b1b37edc3a26"
           },
           {
             "@id": "composition/1/artifact/dataset",
             "@type": "trov:ResearchArtifact",
             "schema:name": "populace_us_2024",
             "trov:mimeType": "application/x-hdf5",
-            "trov:sha256": "ff9df33c820bc9014ed6028f7e2a2cd91ce9315eb1c35f9412769d7bdcadb334"
+            "trov:sha256": "32fcf6b23e96d27d59cf4eca618bd21bd5a689d6099db6655e9e8d955442b41d"
           },
           {
             "@id": "composition/1/artifact/model_wheel",
@@ -102,7 +102,7 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "c1ce3ae57d66a144072b2c30a635ff51af2eba8d43a2f285ce2cfbeff7f7260a"
+          "trov:sha256": "71bac8bc42dcf96814ca9e7854aff80ec64fb5602ba9b8eb001ebe7956af9533"
         }
       },
       "trov:hasPerformance": {
@@ -111,17 +111,14 @@
         "pe:builtWithModelVersion": "1.745.0",
         "pe:certifiedBy": "policyengine.py bundle certification",
         "pe:certifiedForModelVersion": "1.745.0",
-        "pe:ciGitRef": "refs/heads/main",
-        "pe:ciGitSha": "657c118c58542db7cffba9971fb221db79abb2f7",
-        "pe:ciRunUrl": "https://github.com/PolicyEngine/policyengine.py/actions/runs/28262886605",
         "pe:compatibilityBasis": "built_with_model_package",
-        "pe:dataBuildId": "populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z",
-        "pe:emittedIn": "github-actions",
-        "rdfs:comment": "Certification of build populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z for policyengine-us 1.745.0.",
+        "pe:dataBuildId": "populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z",
+        "pe:emittedIn": "local",
+        "rdfs:comment": "Certification of build populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z for policyengine-us 1.745.0.",
         "trov:accessedArrangement": {
           "@id": "arrangement/1"
         },
-        "trov:startedAtTime": "2026-06-26T12:26:36+00:00",
+        "trov:startedAtTime": "2026-06-27T04:55:05.133582+00:00",
         "trov:wasConductedBy": {
           "@id": "trs"
         }

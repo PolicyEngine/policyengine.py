@@ -40,7 +40,7 @@ US_MODEL_VERSION = "1.745.0"
 US_BUILT_WITH_MODEL_VERSION = "1.745.0"
 US_DATA_RELEASE_VERSION = "0.1.0"
 US_DATA_RELEASE_ID = (
-    "populace-us-2024-formula-owned-fix-a56aefd-capgains-b2500-20260626T122636Z"
+    "populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z"
 )
 US_DATA_RELEASE_REVISION = US_DATA_RELEASE_ID
 US_DATA_RELEASE_PATH = f"releases/{US_DATA_RELEASE_ID}/release_manifest.json"
