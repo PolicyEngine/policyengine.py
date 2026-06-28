@@ -264,9 +264,7 @@ def _load_policyengine_core_h5(path: Path, year: int) -> USYearData:
 
 
 def create_datasets(
-    datasets: list[str] = [
-        "enhanced_cps_2024",
-    ],
+    datasets: Optional[list[str]] = None,
     years: list[int] = [2024, 2025, 2026, 2027, 2028],
     data_folder: str = "./data",
 ) -> dict[str, PolicyEngineUSDataset]:
@@ -278,10 +276,11 @@ def create_datasets(
         data_folder: Directory to save the dataset files
 
     Returns:
-        Dictionary mapping dataset keys (e.g., "enhanced_cps_2024") to PolicyEngineUSDataset objects
+        Dictionary mapping dataset keys (e.g., "populace_us_2024") to PolicyEngineUSDataset objects
     """
     from policyengine_us import Microsimulation
 
+    datasets = datasets or [get_release_manifest("us").default_dataset]
     result = {}
     for dataset in datasets:
         resolved_dataset = resolve_dataset_reference("us", dataset)
@@ -451,9 +450,7 @@ def create_datasets(
 
 
 def load_datasets(
-    datasets: list[str] = [
-        "enhanced_cps_2024",
-    ],
+    datasets: Optional[list[str]] = None,
     years: list[int] = [2024, 2025, 2026, 2027, 2028],
     data_folder: str = "./data",
 ) -> dict[str, PolicyEngineUSDataset]:
@@ -465,8 +462,9 @@ def load_datasets(
         data_folder: Directory containing the dataset files
 
     Returns:
-        Dictionary mapping dataset keys (e.g., "enhanced_cps_2024") to PolicyEngineUSDataset objects
+        Dictionary mapping dataset keys (e.g., "populace_us_2024") to PolicyEngineUSDataset objects
     """
+    datasets = datasets or [get_release_manifest("us").default_dataset]
     result = {}
     for dataset in datasets:
         resolved_dataset = resolve_dataset_reference("us", dataset)
@@ -1140,9 +1138,7 @@ def load_managed_long_term_datasets(
 
 
 def ensure_datasets(
-    datasets: list[str] = [
-        "enhanced_cps_2024",
-    ],
+    datasets: Optional[list[str]] = None,
     years: list[int] = [2024, 2025, 2026, 2027, 2028],
     data_folder: str = "./data",
 ) -> dict[str, PolicyEngineUSDataset]:
@@ -1156,6 +1152,8 @@ def ensure_datasets(
     Returns:
         Dictionary mapping dataset keys to PolicyEngineUSDataset objects
     """
+    datasets = datasets or [get_release_manifest("us").default_dataset]
+
     # Check if all dataset files exist
     all_exist = True
     for dataset in datasets:

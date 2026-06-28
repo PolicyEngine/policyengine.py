@@ -473,6 +473,10 @@ def resolve_dataset_reference(country_id: str, dataset: str) -> str:
             or _artifact_revision(manifest.data_package),
         )
 
+    local_path = Path(dataset).expanduser()
+    if local_path.exists():
+        return str(local_path)
+
     data_release_manifest = get_data_release_manifest(country_id)
     artifact = data_release_manifest.artifacts.get(dataset)
     if artifact is None:
@@ -505,6 +509,20 @@ def resolve_managed_dataset_reference(
     manifest = get_release_manifest(country_id)
     if dataset is None:
         return manifest.default_dataset_uri
+
+    if dataset in manifest.datasets:
+        return resolve_dataset_reference(country_id, dataset)
+
+    local_path = Path(dataset).expanduser()
+    if local_path.exists():
+        if allow_unmanaged:
+            return str(local_path)
+        raise ValueError(
+            "Explicit local dataset paths bypass the policyengine.py release "
+            "bundle. Pass a manifest dataset name or omit `dataset` to use the "
+            "certified default dataset. Set `allow_unmanaged=True` only if you "
+            "intend to bypass bundle enforcement."
+        )
 
     if "://" in dataset:
         if dataset == manifest.default_dataset_uri:

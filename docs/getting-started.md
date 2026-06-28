@@ -76,11 +76,8 @@ For population estimates — budget cost, distributional impact, poverty — mov
 ```python
 from policyengine.core import Simulation
 
-datasets = pe.us.ensure_datasets(
-    datasets=["hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"],
-    years=[2026],
-)
-dataset = datasets["enhanced_cps_2024_2026"]
+datasets = pe.us.ensure_datasets(years=[2026])
+dataset = next(iter(datasets.values()))
 
 baseline = Simulation(
     dataset=dataset,

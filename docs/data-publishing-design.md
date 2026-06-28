@@ -168,7 +168,7 @@ Minimal. The existing `pe.us.ensure_datasets` takes a URI today:
 
 ```python
 pe.us.ensure_datasets(
-    datasets=["hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"],
+    datasets=["hf://policyengine/populace-us/populace_us_2024.h5@<release>"],
     years=[2026],
 )
 ```
@@ -178,13 +178,13 @@ Under the substrate, the URI scheme gains a new prefix:
 ```python
 # The release manifest pins a specific artifact:
 pe.us.ensure_datasets(
-    datasets=["pe-data://us/enhanced_cps_2024@sha256:4e92b340…"],
+    datasets=["pe-data://us/populace_us_2024@sha256:4e92b340…"],
     years=[2026],
 )
 
 # A developer asking for operational newest:
 pe.us.ensure_datasets(
-    datasets=["pe-data://us/enhanced_cps_2024@latest"],  # resolves via channel
+    datasets=["pe-data://us/populace_us_2024@latest"],  # resolves via channel
     years=[2026],
 )
 ```

@@ -61,6 +61,7 @@ def generated_tros() -> list[tuple[Path, bytes]]:
             certification=country_manifest.certification,
             model_wheel_sha256=country_manifest.model_package.sha256,
             model_wheel_url=country_manifest.model_package.wheel_url,
+            emission_context={"pe:emittedIn": "repository-bundle"},
         )
         payloads.append((tro_path, serialize_trace_tro(tro)))
     return payloads

@@ -11,11 +11,8 @@ import policyengine as pe
 from policyengine.core import Simulation
 from policyengine.outputs import Aggregate, AggregateType
 
-datasets = pe.us.ensure_datasets(
-    datasets=["hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"],
-    years=[2026],
-)
-dataset = datasets["enhanced_cps_2024_2026"]
+datasets = pe.us.ensure_datasets(years=[2026])
+dataset = next(iter(datasets.values()))
 
 baseline = Simulation(dataset=dataset, tax_benefit_model_version=pe.us.model)
 baseline.ensure()
@@ -37,15 +34,13 @@ Microdata is stored as HDF5 on Hugging Face. `ensure_datasets` downloads, caches
 
 ```python
 datasets = pe.us.ensure_datasets(
-    datasets=["hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"],
     years=[2024, 2026],
     data_folder="./data",        # local cache directory
 )
-# Keys are "<dataset_stem>_<year>":
-dataset = datasets["enhanced_cps_2024_2026"]
+dataset = datasets["populace_us_2024_2026"]
 ```
 
-The default US dataset is **Enhanced CPS 2024** — CPS ASEC fused with IRS SOI tax-return records and calibrated to IRS, CMS, SNAP, and other administrative totals. The UK default is **Populace UK 2023** — a Populace-built Family Resources Survey dataset calibrated to UK administrative targets.
+The default US dataset is **Populace US 2024** — a Populace-built dataset calibrated to IRS, CMS, SNAP, Census, and other administrative totals. The UK default is **Populace UK 2023** — a Populace-built Family Resources Survey dataset calibrated to UK administrative targets.
 
 List datasets already known to the country:
 
@@ -158,7 +153,7 @@ See [Outputs](outputs.md) for the full catalog.
 
 ## Memory and performance
 
-A full Enhanced CPS microsimulation uses roughly 4 GB of memory and takes 15–30 seconds on a laptop. For parameter sweeps, reuse the baseline:
+A full Populace US microsimulation uses roughly 4 GB of memory and takes 15-30 seconds on a laptop. For parameter sweeps, reuse the baseline:
 
 ```python
 baseline = Simulation(dataset=dataset, tax_benefit_model_version=pe.us.model)
@@ -171,11 +166,11 @@ for amount in [0, 1_000, 2_000, 3_000]:
     # each iteration runs only the reform
 ```
 
-Downsampled datasets are available for testing:
+Smaller custom H5 datasets can be passed explicitly for testing:
 
 ```python
 datasets = pe.us.ensure_datasets(
-    datasets=["hf://policyengine/policyengine-us-data/cps_small_2024.h5"],
+    datasets=["/path/to/smoke_test_populace_us_2024.h5"],
     years=[2026],
 )
 ```

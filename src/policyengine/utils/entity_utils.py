@@ -1,6 +1,7 @@
 """Shared utilities for entity relationship building and dataset filtering."""
 
 import logging
+from typing import Optional, Union
 
 import pandas as pd
 from microdf import MicroDataFrame
@@ -55,9 +56,10 @@ def filter_dataset_by_household_variable(
     entity_data: dict[str, MicroDataFrame],
     group_entities: list[str],
     variable_name: str,
-    variable_value: str,
+    variable_value: Union[str, int, float],
+    additional_filters: Optional[dict[str, Union[str, int, float]]] = None,
 ) -> dict[str, MicroDataFrame]:
-    """Filter dataset entities to only include households where a variable matches.
+    """Filter dataset entities to only include households matching variables.
 
     Uses an entity relationship approach: builds an explicit map of all
     entity relationships, filters at the household level, and keeps all
@@ -69,6 +71,8 @@ def filter_dataset_by_household_variable(
         group_entities: List of group entity names for this country.
         variable_name: The household-level variable to filter on.
         variable_value: The value to match. Handles both str and bytes encoding.
+        additional_filters: Optional household-level filters that must also
+                            match, keyed by variable name.
 
     Returns:
         A dict mapping entity names to filtered MicroDataFrames.
@@ -84,18 +88,23 @@ def filter_dataset_by_household_variable(
             f"Variable '{variable_name}' not found in household data. "
             f"Available columns: {list(household_data.columns)}"
         )
+    additional_filters = additional_filters or {}
+    for extra_variable in additional_filters:
+        if extra_variable not in household_data.columns:
+            raise ValueError(
+                f"Variable '{extra_variable}' not found in household data. "
+                f"Available columns: {list(household_data.columns)}"
+            )
 
     # Build entity relationships
     entity_rel = build_entity_relationships(person_data, group_entities)
 
     # Find matching household IDs
-    hh_values = household_data[variable_name].values
     hh_ids = household_data["household_id"].values
 
-    if isinstance(variable_value, str):
-        hh_mask = (hh_values == variable_value) | (hh_values == variable_value.encode())
-    else:
-        hh_mask = hh_values == variable_value
+    hh_mask = _values_match(household_data[variable_name].values, variable_value)
+    for extra_variable, extra_value in additional_filters.items():
+        hh_mask &= _values_match(household_data[extra_variable].values, extra_value)
 
     matching_hh_ids = set(hh_ids[hh_mask])
 
@@ -138,3 +147,9 @@ def filter_dataset_by_household_variable(
         )
 
     return result
+
+
+def _values_match(values, expected: Union[str, int, float]):
+    if isinstance(expected, str):
+        return (values == expected) | (values == expected.encode())
+    return values == expected

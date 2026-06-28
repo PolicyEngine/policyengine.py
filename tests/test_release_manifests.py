@@ -26,8 +26,10 @@ from policyengine.provenance.manifest import (
     get_release_manifest,
     https_release_manifest_uri,
     resolve_dataset_reference,
+    resolve_default_datasets,
     resolve_local_managed_dataset_source,
     resolve_managed_dataset_reference,
+    resolve_region_dataset_path,
 )
 
 PYPROJECT = Path(__file__).resolve().parents[1] / "pyproject.toml"
@@ -236,6 +238,12 @@ class TestReleaseManifests:
 
         assert resolve_dataset_reference("us", url) == url
 
+    def test__given_existing_local_path__then_resolution_is_noop(self, tmp_path):
+        dataset = tmp_path / "smoke_test_populace_us_2024.h5"
+        dataset.write_bytes(b"")
+
+        assert resolve_dataset_reference("us", str(dataset)) == str(dataset)
+
     def test__given_default_dataset__then_prefers_certified_data_artifact_uri(self):
         manifest = get_release_manifest("us")
 
@@ -246,6 +254,49 @@ class TestReleaseManifests:
         assert (
             resolve_managed_dataset_reference("us")
             == get_release_manifest("us").default_dataset_uri
+        )
+
+    def test__given_us_manifest__then_has_no_inherited_area_artifacts(self):
+        manifest = get_release_manifest("us")
+
+        assert "state" not in manifest.region_datasets
+        assert "congressional_district" not in manifest.region_datasets
+        assert resolve_region_dataset_path("us", "state", state_code="CA") is None
+        assert (
+            resolve_region_dataset_path(
+                "us",
+                "congressional_district",
+                district_code="CA-01",
+            )
+            is None
+        )
+        assert not any(
+            key.startswith(("states/", "districts/"))
+            for key in resolve_default_datasets("us")
+        )
+
+    def test__given_us_ensure_datasets_without_dataset__then_uses_certified_default(
+        self,
+    ):
+        us_datasets = importlib.import_module(
+            "policyengine.tax_benefit_models.us.datasets"
+        )
+
+        with (
+            patch.object(us_datasets.Path, "exists", return_value=False),
+            patch.object(
+                us_datasets,
+                "create_datasets",
+                return_value={"populace_us_2024_2026": object()},
+            ) as create_datasets,
+        ):
+            result = us_datasets.ensure_datasets(years=[2026])
+
+        assert list(result) == ["populace_us_2024_2026"]
+        create_datasets.assert_called_once_with(
+            datasets=["populace_us_2024"],
+            years=[2026],
+            data_folder="./data",
         )
 
     def test__given_explicit_uri__then_managed_resolution_requires_opt_in(self):
@@ -265,6 +316,41 @@ class TestReleaseManifests:
                 allow_unmanaged=True,
             )
             == dataset
+        )
+
+    def test__given_local_path__then_managed_resolution_requires_opt_in(self, tmp_path):
+        dataset = tmp_path / "smoke_test_populace_us_2024.h5"
+        dataset.write_bytes(b"")
+
+        try:
+            resolve_managed_dataset_reference("us", str(dataset))
+        except ValueError as error:
+            assert "bypass the policyengine.py release bundle" in str(error)
+        else:
+            raise AssertionError("Expected explicit local path to be rejected")
+
+        assert resolve_managed_dataset_reference(
+            "us",
+            str(dataset),
+            allow_unmanaged=True,
+        ) == str(dataset)
+
+    def test__given_local_file_named_like_logical_dataset__then_manifest_wins(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        dataset = "populace_us_2024"
+        (tmp_path / dataset).write_bytes(b"")
+        monkeypatch.chdir(tmp_path)
+
+        assert (
+            resolve_dataset_reference("us", dataset)
+            == get_release_manifest("us").default_dataset_uri
+        )
+        assert (
+            resolve_managed_dataset_reference("us", dataset)
+            == get_release_manifest("us").default_dataset_uri
         )
 
     def test__given_versioned_dataset_url__then_logical_name_drops_version(self):
@@ -773,7 +859,7 @@ class TestReleaseManifests:
             with patch.object(
                 us_model,
                 "materialize_dataset_source",
-                return_value="/tmp/enhanced_cps_2024.h5",
+                return_value="/tmp/populace_us_2024.h5",
             ):
                 microsim = us_model.managed_microsimulation()
 
@@ -788,7 +874,7 @@ class TestReleaseManifests:
             == us_model.us_latest.default_dataset_uri
         )
         dataset_source = microsim.policyengine_bundle["runtime_dataset_source"]
-        assert dataset_source == "/tmp/enhanced_cps_2024.h5"
+        assert dataset_source == "/tmp/populace_us_2024.h5"
 
     def test__given_us_unmanaged_dataset_uri__then_source_is_not_rewritten(self):
         dataset = "hf://policyengine/policyengine-us-data/cps_2023.h5@1.73.0"

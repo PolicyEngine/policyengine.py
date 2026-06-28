@@ -3,7 +3,8 @@
 Provides two concrete strategies for scoping datasets to sub-national regions:
 
 1. RowFilterStrategy: Filters dataset rows where a household variable matches
-   a specific value (e.g., UK countries by 'country' field, US places by 'place_fips').
+   a specific value (e.g., US states by 'state_fips', US congressional districts
+   by 'congressional_district_geoid').
 
 2. WeightReplacementStrategy: Legacy strategy that replaces household weights from
    a pre-computed weight matrix resolved locally or from GCS.
@@ -16,7 +17,7 @@ from typing import Annotated, Literal, Optional, Union
 import numpy as np
 import pandas as pd
 from microdf import MicroDataFrame
-from pydantic import BaseModel, Discriminator
+from pydantic import BaseModel, Discriminator, Field
 
 from policyengine.utils.entity_utils import (
     filter_dataset_by_household_variable,
@@ -62,12 +63,13 @@ class RowFilterStrategy(RegionScopingStrategy):
     """Scoping strategy that filters dataset rows by a household variable.
 
     Used for regions where we want to keep only households matching a
-    specific variable value (e.g., UK countries, US places/cities).
+    specific variable value (e.g., US states or congressional districts).
     """
 
     strategy_type: Literal["row_filter"] = "row_filter"
     variable_name: str
     variable_value: Union[str, int, float]
+    additional_filters: dict[str, Union[str, int, float]] = Field(default_factory=dict)
 
     def apply(
         self,
@@ -80,11 +82,17 @@ class RowFilterStrategy(RegionScopingStrategy):
             group_entities=group_entities,
             variable_name=self.variable_name,
             variable_value=self.variable_value,
+            additional_filters=self.additional_filters,
         )
 
     @property
     def cache_key(self) -> str:
-        return f"row_filter:{self.variable_name}={self.variable_value}"
+        filters = [
+            (self.variable_name, self.variable_value),
+            *self.additional_filters.items(),
+        ]
+        filter_key = ",".join(f"{name}={value}" for name, value in sorted(filters))
+        return f"row_filter:{filter_key}"
 
 
 class WeightReplacementStrategy(RegionScopingStrategy):

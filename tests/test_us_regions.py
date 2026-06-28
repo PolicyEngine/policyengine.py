@@ -1,6 +1,6 @@
 """Tests for US region definitions."""
 
-from policyengine.countries.us.data import DISTRICT_COUNTS, US_STATES
+from policyengine.countries.us.data import DISTRICT_COUNTS, US_STATE_FIPS, US_STATES
 from policyengine.countries.us.regions import (
     build_us_region_registry,
     us_region_registry,
@@ -135,12 +135,13 @@ class TestUSRegionRegistry:
         assert ca.label == "California"
         assert ca.region_type == "state"
         assert ca.parent_code == "us"
-        assert ca.dataset_path == (
-            "hf://policyengine/policyengine-us-data/states/CA.h5@1.115.5"
-        )
+        assert ca.dataset_path is None
+        assert ca.requires_filter
+        assert ca.scoping_strategy is not None
+        assert ca.scoping_strategy.variable_name == "state_fips"
+        assert ca.scoping_strategy.variable_value == US_STATE_FIPS["CA"]
         assert ca.state_code == "CA"
         assert ca.state_name == "California"
-        assert not ca.requires_filter
 
     def test__given_us_registry__then_has_436_congressional_districts(self):
         """Given: US region registry
@@ -168,8 +169,25 @@ class TestUSRegionRegistry:
         assert ca01.region_type == "congressional_district"
         assert ca01.parent_code == "state/ca"
         assert ca01.dataset_path is None
+        assert ca01.requires_filter
+        assert ca01.scoping_strategy is not None
+        assert ca01.scoping_strategy.variable_name == "congressional_district_geoid"
+        assert ca01.scoping_strategy.variable_value == US_STATE_FIPS["CA"] * 100 + 1
         assert ca01.state_code == "CA"
-        assert not ca01.requires_filter
+
+    def test__given_at_large_district__then_filter_uses_zero_district_geoid(self):
+        """Given: an at-large congressional district
+        When: Checking its row filter
+        Then: It uses the Populace/Census SS00 district GEOID convention
+        """
+        # When
+        ak_al = us_region_registry.get("congressional_district/AK-01")
+
+        # Then
+        assert ak_al is not None
+        assert ak_al.scoping_strategy is not None
+        assert ak_al.scoping_strategy.variable_name == "congressional_district_geoid"
+        assert ak_al.scoping_strategy.variable_value == US_STATE_FIPS["AK"] * 100
 
     def test__given_dc_district__then_is_at_large(self):
         """Given: DC's congressional district
@@ -183,6 +201,8 @@ class TestUSRegionRegistry:
         assert dc_al is not None
         assert dc_al.label == "District of Columbia's at-large congressional district"
         assert dc_al.parent_code == "state/dc"
+        assert dc_al.scoping_strategy is not None
+        assert dc_al.scoping_strategy.variable_value == US_STATE_FIPS["DC"] * 100
 
     def test__given_us_registry__then_has_places(self):
         """Given: US region registry
@@ -198,7 +218,7 @@ class TestUSRegionRegistry:
     def test__given_los_angeles_region__then_has_correct_format(self):
         """Given: Los Angeles place region
         When: Checking its properties
-        Then: Requires filter with place_fips field
+        Then: Exists as hierarchy metadata but does not claim runtime scoping
         """
         # When
         la = us_region_registry.get("place/CA-44000")
@@ -208,10 +228,8 @@ class TestUSRegionRegistry:
         assert "Los Angeles" in la.label
         assert la.region_type == "place"
         assert la.parent_code == "state/ca"
-        assert la.requires_filter
-        assert la.scoping_strategy is not None
-        assert la.scoping_strategy.variable_name == "place_fips"
-        assert la.scoping_strategy.variable_value == "44000"
+        assert not la.requires_filter
+        assert la.scoping_strategy is None
         assert la.state_code == "CA"
         assert la.dataset_path is None  # No dedicated dataset
 
@@ -233,27 +251,24 @@ class TestUSRegionRegistry:
         assert len(district_children) == DISTRICT_COUNTS["CA"]
         assert len(place_children) >= 10  # CA has many large cities
 
-    def test__given_us_registry__then_dataset_regions_are_national_and_states(self):
+    def test__given_us_registry__then_dataset_regions_are_national_only(self):
         """Given: US region registry
         When: Getting regions with datasets
-        Then: Current certified bundle has national and state datasets
+        Then: Only the national canonical Populace dataset is dedicated
         """
         # When
         dataset_regions = us_region_registry.get_dataset_regions()
 
         # Then
-        assert len(dataset_regions) == 52
-        assert {region.region_type for region in dataset_regions} == {
-            "national",
-            "state",
-        }
+        assert len(dataset_regions) == 1
+        assert dataset_regions[0].region_type == "national"
 
-    def test__given_certified_state_template__then_states_have_dataset_paths(
+    def test__given_certified_state_template__then_state_filters_national_dataset(
         self, monkeypatch
     ):
         """Given: US bundle manifest with a certified state template
         When: Building the region registry
-        Then: State regions resolve to pinned state dataset artifacts
+        Then: State regions still filter the national certified dataset
         """
         manifest = CountryReleaseManifest.model_validate(
             {
@@ -298,20 +313,31 @@ class TestUSRegionRegistry:
         ca = registry.get("state/ca")
 
         assert ca is not None
-        assert ca.dataset_path == (
-            "hf://policyengine/policyengine-us-data/states/CA.h5@1.115.5"
-        )
+        assert ca.dataset_path is None
+        assert ca.requires_filter
+        assert ca.scoping_strategy is not None
+        assert ca.scoping_strategy.variable_name == "state_fips"
+        assert ca.scoping_strategy.variable_value == US_STATE_FIPS["CA"]
 
-    def test__given_us_registry__then_filter_regions_are_all_places(self):
+    def test__given_us_registry__then_filter_regions_include_states_and_districts(self):
         """Given: US region registry
         When: Getting regions requiring filter
-        Then: All are place regions
+        Then: State and congressional district regions filter the national data
         """
         # When
         filter_regions = us_region_registry.get_filter_regions()
 
         # Then
-        assert all(r.region_type == "place" for r in filter_regions)
+        region_types = {r.region_type for r in filter_regions}
+        assert {"state", "congressional_district"} <= region_types
+        assert "place" not in region_types
+        assert len([r for r in filter_regions if r.region_type == "state"]) == 51
+        assert (
+            len(
+                [r for r in filter_regions if r.region_type == "congressional_district"]
+            )
+            == 436
+        )
 
     def test__given_us_registry__then_total_exceeds_588(self):
         """Given: US region registry

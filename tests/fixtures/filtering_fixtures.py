@@ -20,7 +20,7 @@ def create_us_test_dataset() -> PolicyEngineUSDataset:
     Creates a dataset with 6 persons across 3 households:
     - Household 1 (place_fips="44000"): 2 persons
     - Household 2 (place_fips="44000"): 2 persons
-    - Household 3 (place_fips="57000"): 2 persons
+    - Household 3 (place_fips="44000", state_fips=34): 2 persons
     """
     # Person data - 6 persons across 3 households
     person_data = pd.DataFrame(
@@ -36,13 +36,14 @@ def create_us_test_dataset() -> PolicyEngineUSDataset:
         }
     )
 
-    # Household data - 3 households, 2 in place 44000, 1 in place 57000
+    # Household data - place_fips is only unique within state.
     household_data = pd.DataFrame(
         {
             "household_id": [1, 2, 3],
             "household_weight": [1000.0, 1000.0, 1000.0],
-            "place_fips": ["44000", "44000", "57000"],
+            "place_fips": ["44000", "44000", "44000"],
             "state_fips": [6, 6, 34],  # CA, CA, NJ
+            "congressional_district_geoid": [601, 602, 3401],
         }
     )
 
