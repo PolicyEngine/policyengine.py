@@ -484,6 +484,16 @@ def build_country_manifest_payload(
 
     datasets: dict[str, dict] = {}
     for name, artifact in manifest.artifacts.items():
+        if (
+            country == "us"
+            and manifest.data_package.name == "populace-data"
+            and artifact.path.endswith(".h5")
+            and (
+                artifact.path.startswith("states/")
+                or artifact.path.startswith("districts/")
+            )
+        ):
+            continue
         payload: dict = {
             "path": artifact_path_for_country_manifest(artifact, uri_parts),
             "revision": artifact.revision,
@@ -498,6 +508,12 @@ def build_country_manifest_payload(
     raw_regions = manifest.metadata.get("region_datasets")
     if isinstance(raw_regions, dict):
         for region, template in sorted(raw_regions.items()):
+            if (
+                country == "us"
+                and manifest.data_package.name == "populace-data"
+                and region in {"state", "congressional_district"}
+            ):
+                continue
             if isinstance(template, dict) and "path_template" in template:
                 region_datasets[region] = {"path_template": template["path_template"]}
 

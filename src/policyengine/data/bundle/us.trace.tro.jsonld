@@ -75,7 +75,7 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine.py bundle manifest for us",
             "trov:mimeType": "application/json",
-            "trov:sha256": "48f8a3946d96a8da9493709b3c681196aada942e313ddd4cb44840416cd13978"
+            "trov:sha256": "86bfa279db3a6f416e85f5e093db41de2ef7e5aa30d1d1ef76c30c9361ef0c1e"
           },
           {
             "@id": "composition/1/artifact/data_release_manifest",
@@ -102,7 +102,7 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "a516bc0d555b6e648bb027a85d837def92c76b7e3c4dd2e5256bbc01ac900534"
+          "trov:sha256": "16263eeda537c28d24fde6f8e39b4ebe21ef72728e8021c14c728632c0e1cd3d"
         }
       },
       "trov:hasPerformance": {
@@ -111,12 +111,9 @@
         "pe:builtWithModelVersion": "1.745.0",
         "pe:certifiedBy": "policyengine.py bundle certification",
         "pe:certifiedForModelVersion": "1.745.0",
-        "pe:ciGitRef": "refs/heads/main",
-        "pe:ciGitSha": "44a7cac06f506d34f7565b203ca9c948f4585a43",
-        "pe:ciRunUrl": "https://github.com/PolicyEngine/policyengine.py/actions/runs/28281042856",
         "pe:compatibilityBasis": "built_with_model_package",
         "pe:dataBuildId": "populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z",
-        "pe:emittedIn": "github-actions",
+        "pe:emittedIn": "repository-bundle",
         "rdfs:comment": "Certification of build populace-us-2024-cd-concept-budget-dbbdcec-512e-b2500-r2-20260627T022640Z for policyengine-us 1.745.0.",
         "trov:accessedArrangement": {
           "@id": "arrangement/1"

@@ -8,10 +8,11 @@ This module provides static data for US geographic regions:
 
 from .districts import AT_LARGE_STATES, DISTRICT_COUNTS
 from .places import US_PLACES
-from .states import US_STATES
+from .states import US_STATE_FIPS, US_STATES
 
 __all__ = [
     "US_STATES",
+    "US_STATE_FIPS",
     "DISTRICT_COUNTS",
     "AT_LARGE_STATES",
     "US_PLACES",

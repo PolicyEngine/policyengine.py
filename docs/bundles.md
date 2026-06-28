@@ -88,26 +88,21 @@ python scripts/bundle.py certify-data \
   --manifest-uri hf://dataset/policyengine/populace-uk-private@<release>/releases/<release>/release_manifest.json
 ```
 
-For US Populace releases, include the inherited state datasets from
-`policyengine-us-data`:
+For US Populace releases, certify the Populace release manifest directly:
 
 ```bash
 python scripts/bundle.py certify-data \
   --country us \
   --data-producer populace \
   --manifest-uri hf://dataset/policyengine/populace-us@<release>/releases/<release>/release_manifest.json \
-  --regional-manifest-uri hf://model/policyengine/policyengine-us-data@<version>/releases/<version>/release_manifest.json \
   --model-version <policyengine-us-version>
 ```
 
-The regional manifest must include all 51 `states/{STATE}.h5` artifacts with
-their original repo, revision, and sha256 pins. The resulting bundle manifest
-certifies Populace as the US national default dataset and
-`policyengine-us-data` as the state dataset source.
-The regional manifest URI is recorded for traceability; the bundle does not
-currently record the regional manifest's own sha256. The citable pins are the
-artifact-level repo, revision, and sha256 values copied into
-`data_releases.us.datasets`.
+US state and congressional-district regions scope the certified national
+Populace dataset with row filters. If a Populace release also publishes derived
+`states/*.h5` or `districts/*.h5` area slices, the bundle certification omits
+those slices from `data_releases.us.datasets`; they are not runtime dataset
+dependencies.
 
 Use `python scripts/bundle.py generate` to regenerate derived bundle metadata,
 and `python scripts/bundle.py generate --include-tros` when TRACE TRO sidecars

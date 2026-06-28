@@ -4,8 +4,8 @@ Source: US Census Bureau Population Estimates 2023
 Synced with policyengine-app-v2 main branch.
 """
 
-# US cities/places with population over 100K (from Census data)
-# These filter from their parent state's dataset using place_fips
+# US cities/places with population over 100K (from Census data).
+# These are registry metadata until Populace emits place-level row keys.
 # Total: 333 places
 US_PLACES: list[dict[str, str]] = [
     {

@@ -27,11 +27,8 @@ class Simulation(BaseModel):
         import policyengine as pe
         from policyengine.core import Simulation
 
-        datasets = pe.us.ensure_datasets(
-            datasets=["hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"],
-            years=[2026], data_folder="./data",
-        )
-        dataset = datasets["enhanced_cps_2024_2026"]
+        datasets = pe.us.ensure_datasets(years=[2026], data_folder="./data")
+        dataset = next(iter(datasets.values()))
 
         # Baseline
         baseline = Simulation(dataset=dataset, tax_benefit_model_version=pe.us.model)

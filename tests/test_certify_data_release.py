@@ -103,6 +103,14 @@ def _release_manifest_payload() -> dict:
                 "sha256": "b" * 64,
                 "size_bytes": 1,
             },
+            "districts/CA-01": {
+                "kind": "microdata",
+                "path": "districts/CA-01.h5",
+                "repo_id": "policyengine/populace-us",
+                "revision": TAG,
+                "sha256": "1" * 64,
+                "size_bytes": 1,
+            },
         },
     }
 
@@ -111,6 +119,7 @@ def _populace_manifest_payload_without_regions() -> dict:
     payload = _release_manifest_payload()
     payload["metadata"] = {}
     payload["artifacts"].pop("states/AK")
+    payload["artifacts"].pop("districts/CA-01")
     return payload
 
 
@@ -179,6 +188,8 @@ def _uk_release_manifest_payload() -> dict:
             artifact["repo_id"] = "policyengine/populace-uk-private"
             artifact["revision"] = UK_TAG
     payload["artifacts"].pop("us_source_coverage")
+    payload["artifacts"].pop("states/AK")
+    payload["artifacts"].pop("districts/CA-01")
     return payload
 
 
@@ -290,15 +301,11 @@ class TestBuildCountryManifestPayload:
         assert payload["model_package"]["sha256"] == "d" * 64
         assert payload["model_package"]["wheel_url"] == "https://example/wheel"
 
-    def test__given_inherited_artifact__then_keeps_its_repo_pin(self):
+    def test__given_populace_area_h5_artifact__then_omits_it_from_runtime_bundle(self):
         payload = self._payload()
 
-        assert payload["datasets"]["states/AK"] == {
-            "path": "states/AK.h5",
-            "revision": "1.115.5",
-            "sha256": "b" * 64,
-            "repo_id": "policyengine/policyengine-us-data",
-        }
+        assert "states/AK" not in payload["datasets"]
+        assert "districts/CA-01" not in payload["datasets"]
 
     def test__given_release_scoped_diagnostics__then_rewrites_paths(self):
         payload = self._payload()
@@ -315,11 +322,13 @@ class TestBuildCountryManifestPayload:
             f"releases/{TAG}/us_source_coverage.json"
         )
 
-    def test__given_region_templates__then_carried_through(self):
+    def test__given_populace_region_templates__then_only_national_is_carried_through(
+        self,
+    ):
         payload = self._payload()
 
-        assert payload["region_datasets"]["state"] == {
-            "path_template": "states/{state_code}.h5"
+        assert payload["region_datasets"] == {
+            "national": {"path_template": "populace_us_2024.h5"}
         }
 
     def test__given_build_provenance__then_certification_carries_it(self):
@@ -338,7 +347,7 @@ class TestBuildCountryManifestPayload:
 
 
 class TestMergeUSStateReleaseManifest:
-    def test__given_state_manifest__then_adds_state_region_artifacts(self):
+    def test__given_state_manifest__then_does_not_vendor_state_region_artifacts(self):
         primary = DataReleaseManifest.model_validate(
             _populace_manifest_payload_without_regions()
         )
@@ -355,15 +364,9 @@ class TestMergeUSStateReleaseManifest:
             model_wheel={},
         )
 
-        assert payload["datasets"]["states/CA"] == {
-            "path": "states/CA.h5",
-            "revision": US_DATA_VERSION,
-            "sha256": f"{US_STATE_CODES.index('CA') + 1:064x}",
-            "repo_id": "policyengine/policyengine-us-data",
-        }
+        assert "states/CA" not in payload["datasets"]
         assert payload["region_datasets"] == {
             "national": {"path_template": "populace_us_2024.h5"},
-            "state": {"path_template": "states/{state_code}.h5"},
         }
 
     def test__given_missing_state_artifact__then_raises(self):
@@ -473,11 +476,11 @@ class TestCertifyDataRelease:
         assert release["source_manifest_uri"] == UK_MANIFEST_URI
         assert written["packages"]["policyengine-uk"]["version"] == "2.89.2"
         assert result.data_producer == "populace"
-        assert result.dataset_count == 4
+        assert result.dataset_count == 3
         assert result.build_id == UK_TAG
         assert result.bundle_path == bundle_path
 
-    def test__given_us_regional_manifest__then_certifies_state_artifacts(
+    def test__given_us_regional_manifest__then_validates_but_does_not_vendor_state_artifacts(
         self, tmp_path
     ):
         bundle_path = tmp_path / "manifest.json"
@@ -532,14 +535,11 @@ class TestCertifyDataRelease:
         release = written["data_releases"]["us"]
         assert release["source_manifest_uri"] == MANIFEST_URI
         assert release["regional_source_manifest_uri"] == US_DATA_MANIFEST_URI
-        assert release["region_datasets"]["state"] == {
-            "path_template": "states/{state_code}.h5"
+        assert release["region_datasets"] == {
+            "national": {"path_template": "populace_us_2024.h5"}
         }
-        assert release["datasets"]["states/CA"]["repo_id"] == (
-            "policyengine/policyengine-us-data"
-        )
-        assert release["datasets"]["states/CA"]["revision"] == US_DATA_VERSION
-        assert result.dataset_count == 4 + len(US_STATE_CODES)
+        assert "states/CA" not in release["datasets"]
+        assert result.dataset_count == 4
 
     def test__given_us_without_data_producer__then_legacy_update_is_explicitly_unsupported(
         self, tmp_path
@@ -720,3 +720,5 @@ class TestVendoredSidecarBinding:
         )
 
         assert bundle_manifest["trov:sha256"] == expected
+        performance = tro["@graph"][0]["trov:hasPerformance"]
+        assert performance["pe:emittedIn"] == "repository-bundle"

@@ -32,12 +32,13 @@ Override in any output with `income_variable=`.
 
 | | Dataset |
 |---|---|
-| US | Enhanced CPS 2024 (`enhanced_cps_2024.h5`) |
+| US | Populace US 2024 (`populace_us_2024.h5`) |
 | UK | Populace UK 2023 (`populace_uk_2023.h5`) |
 
 ## State / regional breakdown
 
-US: `state_code` and `congressional_district` on every household.
+US: Populace row scoping uses `state_fips` and `congressional_district_geoid`.
+`state_code` remains the human-readable input for custom households.
 
 UK: constituency code and local authority code on every household where available.
 

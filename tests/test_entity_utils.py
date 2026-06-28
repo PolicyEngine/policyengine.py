@@ -158,6 +158,69 @@ class TestFilterDatasetByHouseholdVariable:
         assert len(pd.DataFrame(result["person"])) == 2
         assert len(pd.DataFrame(result["household"])) == 1
 
+    def test__given_us_numeric_geography__then_filters_state_and_district(
+        self, us_test_dataset
+    ):
+        """Given: US data with Populace geography columns
+        When: Filtering by state FIPS and congressional district GEOID
+        Then: Related entities are preserved for matching households only
+        """
+        state_result = filter_dataset_by_household_variable(
+            entity_data=us_test_dataset.data.entity_data,
+            group_entities=[
+                "household",
+                "tax_unit",
+                "spm_unit",
+                "family",
+                "marital_unit",
+            ],
+            variable_name="state_fips",
+            variable_value=6,
+        )
+        district_result = filter_dataset_by_household_variable(
+            entity_data=us_test_dataset.data.entity_data,
+            group_entities=[
+                "household",
+                "tax_unit",
+                "spm_unit",
+                "family",
+                "marital_unit",
+            ],
+            variable_name="congressional_district_geoid",
+            variable_value=601,
+        )
+
+        assert len(pd.DataFrame(state_result["household"])) == 2
+        assert len(pd.DataFrame(state_result["person"])) == 4
+        assert len(pd.DataFrame(district_result["household"])) == 1
+        assert len(pd.DataFrame(district_result["person"])) == 2
+
+    def test__given_place_fips_collision__then_additional_state_filter_disambiguates(
+        self, us_test_dataset
+    ):
+        """Given: Two states with the same place FIPS code
+        When: Filtering by place FIPS plus state FIPS
+        Then: Only households from the requested state are included
+        """
+        result = filter_dataset_by_household_variable(
+            entity_data=us_test_dataset.data.entity_data,
+            group_entities=[
+                "household",
+                "tax_unit",
+                "spm_unit",
+                "family",
+                "marital_unit",
+            ],
+            variable_name="place_fips",
+            variable_value="44000",
+            additional_filters={"state_fips": 6},
+        )
+
+        households = pd.DataFrame(result["household"])
+        assert len(households) == 2
+        assert set(households["state_fips"]) == {6}
+        assert len(pd.DataFrame(result["person"])) == 4
+
     def test__given_no_match__then_raises_value_error(self):
         """Given: Dataset with no matching households
         When: Filtering

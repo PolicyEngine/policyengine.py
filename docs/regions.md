@@ -6,7 +6,9 @@ Sub-national breakdowns: state / district filters on any output, plus dedicated 
 
 ## US states
 
-`state_code` is an Enum variable on every household (values `"CA"`, `"TX"`, ...). Pass it as a filter on any `Aggregate` or `ChangeAggregate`:
+For custom households, `state_code` remains the public input (values `"CA"`,
+`"TX"`, ...). Pass it as a filter on any `Aggregate` or `ChangeAggregate` when
+working with simulated outputs that expose that variable:
 
 ```python
 from policyengine.outputs import Aggregate, AggregateType
@@ -21,15 +23,18 @@ ca_snap = Aggregate(
 ca_snap.run()
 ```
 
-Each state is a region in the US registry, with its own dataset:
+Each state is a region in the US registry. State regions scope the certified
+national Populace dataset by `state_fips`; they do not require separate state
+H5 files:
 
 ```python
 states = pe.us.model.region_registry.get_by_type("state")
 for region in states:
-    print(region.code, region.label, region.dataset_path)
+    print(region.code, region.label, region.scoping_strategy)
 ```
 
-For state-specific datasets (rather than filtering a national one), pass `scoping_strategy=region.scoping_strategy` or resolve the dataset path directly.
+For state-specific simulations, pass `scoping_strategy=region.scoping_strategy`
+with the certified national dataset.
 
 ## US congressional districts
 
@@ -44,7 +49,7 @@ for row in impacts.district_results:
     print(row["district_geoid"], row["avg_change"], row["winner_percentage"])
 ```
 
-`district_geoid` is the SSDD integer (state FIPS × 100 + district number). Requires a dataset with `congressional_district_geoid` populated — the default enhanced CPS does.
+`district_geoid` is the SSDD integer (state FIPS × 100 + district number; at-large districts use `00`). Congressional district regions scope the certified national Populace dataset by `congressional_district_geoid`.
 
 ## UK parliamentary constituencies
 
@@ -136,21 +141,19 @@ baseline = Simulation(
     dataset=dataset,
     tax_benefit_model_version=pe.us.model,
     scoping_strategy=RowFilterStrategy(
-        variable_name="state_code",
-        variable_value="CA",
+        variable_name="state_fips",
+        variable_value=6,
     ),
 )
 ```
 
-Regions that filter (US places, UK countries, and any region with `region.requires_filter == True`) carry their own `scoping_strategy`. Pull it off the region object rather than reconstructing it:
+Regions that filter (US states and congressional districts, UK countries, and any region with `region.requires_filter == True`) carry their own `scoping_strategy`. Pull it off the region object rather than reconstructing it. US place regions are present as hierarchy metadata, but current Populace datasets do not carry `place_fips`, so they do not expose runtime scoping yet:
 
 ```python
-nyc = pe.us.model.region_registry.get("place/NY-51000")
+ca = pe.us.model.region_registry.get("state/ca")
 baseline = Simulation(
     dataset=dataset,
     tax_benefit_model_version=pe.us.model,
-    scoping_strategy=nyc.scoping_strategy,
+    scoping_strategy=ca.scoping_strategy,
 )
 ```
-
-US states and congressional districts don't use a scoping strategy — they point to dedicated state- or district-specific datasets via `region.dataset_path`. Pass that dataset to `Simulation` instead.

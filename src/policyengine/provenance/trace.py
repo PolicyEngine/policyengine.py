@@ -297,6 +297,7 @@ def build_trace_tro_from_release_bundle(
     model_wheel_url: Optional[str] = None,
     fetch_pypi: Any = fetch_pypi_wheel_metadata,
     self_url: Optional[str] = None,
+    emission_context: Optional[Mapping[str, str]] = None,
 ) -> dict:
     """Build a TRACE TRO for a certified runtime bundle.
 
@@ -449,6 +450,7 @@ def build_trace_tro_from_release_bundle(
             f"{country_manifest.data_package.version}"
         ),
         certification=effective_certification,
+        emission_context=emission_context,
         started_at=(
             data_release_manifest.build.built_at
             if (
@@ -500,6 +502,7 @@ def _build_bundle_performance(
     *,
     certified_data_build_id: str,
     certification: Optional[DataCertification],
+    emission_context: Optional[Mapping[str, str]],
     started_at: Optional[str],
     ended_at: Optional[str],
 ) -> dict[str, Any]:
@@ -539,7 +542,7 @@ def _build_bundle_performance(
             performance["pe:dataBuildId"] = certification.data_build_id
         if certification.certified_by is not None:
             performance["pe:certifiedBy"] = certification.certified_by
-    performance.update(_emission_context())
+    performance.update(dict(emission_context or _emission_context()))
     return performance
 
 

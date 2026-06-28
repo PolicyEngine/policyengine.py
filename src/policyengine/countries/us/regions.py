@@ -11,9 +11,7 @@ from policyengine.core.region import Region, RegionRegistry
 from policyengine.core.scoping_strategy import RowFilterStrategy
 from policyengine.provenance.manifest import resolve_region_dataset_path
 
-from .data import AT_LARGE_STATES, DISTRICT_COUNTS, US_PLACES, US_STATES
-
-US_DATA_BUCKET = "gs://policyengine-us-data"
+from .data import AT_LARGE_STATES, DISTRICT_COUNTS, US_PLACES, US_STATE_FIPS, US_STATES
 
 
 def _ordinal(n: int) -> str:
@@ -45,7 +43,7 @@ def build_us_region_registry() -> RegionRegistry:
         )
     )
 
-    # 2. State regions (each has dedicated dataset)
+    # 2. State regions (filtered from the certified national dataset)
     for abbrev, name in US_STATES.items():
         regions.append(
             Region(
@@ -53,21 +51,23 @@ def build_us_region_registry() -> RegionRegistry:
                 label=name,
                 region_type="state",
                 parent_code="us",
-                dataset_path=resolve_region_dataset_path(
-                    "us",
-                    "state",
-                    state_code=abbrev,
+                scoping_strategy=RowFilterStrategy(
+                    variable_name="state_fips",
+                    variable_value=US_STATE_FIPS[abbrev],
                 ),
                 state_code=abbrev,
                 state_name=name,
             )
         )
 
-    # 3. Congressional district regions (each has dedicated dataset)
+    # 3. Congressional district regions (filtered from the national dataset)
     for state_abbrev, count in DISTRICT_COUNTS.items():
         state_name = US_STATES[state_abbrev]
+        state_fips = US_STATE_FIPS[state_abbrev]
         for i in range(1, count + 1):
             district_code = f"{state_abbrev}-{i:02d}"
+            district_number = 0 if state_abbrev in AT_LARGE_STATES else i
+            district_geoid = state_fips * 100 + district_number
 
             # Create appropriate label
             if state_abbrev in AT_LARGE_STATES:
@@ -81,17 +81,16 @@ def build_us_region_registry() -> RegionRegistry:
                     label=label,
                     region_type="congressional_district",
                     parent_code=f"state/{state_abbrev.lower()}",
-                    dataset_path=resolve_region_dataset_path(
-                        "us",
-                        "congressional_district",
-                        district_code=district_code,
+                    scoping_strategy=RowFilterStrategy(
+                        variable_name="congressional_district_geoid",
+                        variable_value=district_geoid,
                     ),
                     state_code=state_abbrev,
                     state_name=state_name,
                 )
             )
 
-    # 4. Place/city regions (filter from state datasets)
+    # 4. Place/city regions (hierarchy metadata only until Populace emits place_fips)
     for place in US_PLACES:
         state_abbrev = place["state"]
         fips = place["fips"]
@@ -103,10 +102,6 @@ def build_us_region_registry() -> RegionRegistry:
                 parent_code=f"state/{state_abbrev.lower()}",
                 state_code=state_abbrev,
                 state_name=place["state_name"],
-                scoping_strategy=RowFilterStrategy(
-                    variable_name="place_fips",
-                    variable_value=fips,
-                ),
             )
         )
 

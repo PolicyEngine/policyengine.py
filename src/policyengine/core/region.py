@@ -2,9 +2,9 @@
 
 This module provides the Region and RegionRegistry classes for defining
 geographic regions that a tax-benefit model supports. Regions can have:
-1. A dedicated dataset (e.g., US states, congressional districts)
+1. A dedicated dataset, usually for the national default.
 2. A scoping strategy that derives the region from a parent dataset
-   (row filter or weight replacement)
+   (row filter or weight replacement).
 """
 
 from typing import Literal, Optional, Union
@@ -56,7 +56,7 @@ class Region(BaseModel):
     # Dataset configuration
     dataset_path: Optional[str] = Field(
         default=None,
-        description="GCS path to dedicated dataset (e.g., 'gs://policyengine-us-data/states/CA.h5')",
+        description="URI to a dedicated dataset when the region has one.",
     )
 
     # Scoping strategy for regions that derive from a parent dataset
