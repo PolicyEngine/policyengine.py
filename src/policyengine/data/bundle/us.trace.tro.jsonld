@@ -18,18 +18,18 @@
         "schema:url": "https://policyengine.org"
       },
       "schema:dateCreated": "2026-06-20T20:33:09.794848+00:00",
-      "schema:description": "TRACE TRO for certified runtime bundle us-4.18.6 covering the bundle manifest, the certified dataset artifact, the country model wheel, and the country data release manifest when it is available.",
+      "schema:description": "TRACE TRO for certified runtime bundle us-4.18.7 covering the bundle manifest, the certified dataset artifact, the country model wheel, and the country data release manifest when it is available.",
       "schema:name": "policyengine us certified bundle TRO",
       "trov:createdWith": {
         "@type": "schema:SoftwareApplication",
         "schema:name": "policyengine",
-        "schema:softwareVersion": "4.18.6"
+        "schema:softwareVersion": "4.18.7"
       },
       "trov:hasArrangement": [
         {
           "@id": "arrangement/1",
           "@type": "trov:ArtifactArrangement",
-          "rdfs:comment": "Certified arrangement for bundle us-4.18.6.",
+          "rdfs:comment": "Certified arrangement for bundle us-4.18.7.",
           "trov:hasArtifactLocation": [
             {
               "@id": "arrangement/1/location/bundle_manifest",
@@ -75,7 +75,7 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine.py bundle manifest for us",
             "trov:mimeType": "application/json",
-            "trov:sha256": "a0c1beb011d2020d5e7def59e61bdd4f2a1a0362969ed974398653b0dc0835af"
+            "trov:sha256": "d88067279f6276b64e507cd3b12dc54c4056243c08e8b6adb9cf8fbf9379ef01"
           },
           {
             "@id": "composition/1/artifact/data_release_manifest",
@@ -102,7 +102,7 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "79bf31052a6597c0dd319824ca863051c08980cf29d6c7485f46ae99282b40b7"
+          "trov:sha256": "d71a8bb799ff4d4b4d3a1e72e259abc758acc969bb200cf5ea5df709e9055600"
         }
       },
       "trov:hasPerformance": {

@@ -1,3 +1,14 @@
+## [4.18.7] - 2026-06-30
+
+### Changed
+
+- Certify the US populace data release `populace-us-2024-f0af251-703bd81a565c-20260620T201958Z` (populace_us_2024, policyengine-us 1.729.0) into the PolicyEngine bundle manifest.
+
+### Fixed
+
+- Update the US model surface snapshot for the smaller default Populace bundle.
+
+
 ## [4.18.6] - 2026-06-28
 
 ### Changed
