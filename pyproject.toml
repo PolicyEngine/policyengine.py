@@ -45,7 +45,7 @@ graph = [
 ]
 models = [
     "policyengine-core==3.28.0",
-    "policyengine-us==1.745.0",
+    "policyengine-us==1.729.0",
     "policyengine-uk==2.89.2",
 ]
 uk = [
@@ -54,7 +54,7 @@ uk = [
 ]
 us = [
     "policyengine-core==3.28.0",
-    "policyengine-us==1.745.0",
+    "policyengine-us==1.729.0",
 ]
 dev = [
     "pytest",
@@ -71,7 +71,7 @@ dev = [
     "mypy>=1.11.0",
     "pytest-cov>=5.0.0",
     "policyengine-core==3.28.0",
-    "policyengine-us==1.745.0",
+    "policyengine-us==1.729.0",
     "policyengine-uk==2.89.2",
 ]
 

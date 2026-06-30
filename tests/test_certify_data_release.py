@@ -331,6 +331,25 @@ class TestBuildCountryManifestPayload:
             "national": {"path_template": "populace_us_2024.h5"}
         }
 
+    def test__given_populace_manifest_without_regions__then_adds_national_template(
+        self,
+    ):
+        payload = build_country_manifest_payload(
+            country="us",
+            manifest=DataReleaseManifest.model_validate(
+                _populace_manifest_payload_without_regions()
+            ),
+            uri_parts=parse_manifest_uri(MANIFEST_URI),
+            policyengine_version="9.9.9",
+            model_package="policyengine-us",
+            model_version="1.723.0",
+            model_wheel={},
+        )
+
+        assert payload["region_datasets"] == {
+            "national": {"path_template": "populace_us_2024.h5"}
+        }
+
     def test__given_build_provenance__then_certification_carries_it(self):
         payload = self._payload()
 
