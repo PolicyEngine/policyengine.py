@@ -516,6 +516,10 @@ def build_country_manifest_payload(
                 continue
             if isinstance(template, dict) and "path_template" in template:
                 region_datasets[region] = {"path_template": template["path_template"]}
+    region_datasets.setdefault(
+        "national",
+        {"path_template": default_artifact.path},
+    )
 
     certification: dict = {
         "compatibility_basis": compatibility_basis,
