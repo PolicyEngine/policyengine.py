@@ -2820,7 +2820,7 @@ wheels = [
 
 [[package]]
 name = "policyengine"
-version = "4.18.6"
+version = "4.18.7"
 source = { editable = "." }
 dependencies = [
     { name = "diskcache" },
@@ -2904,9 +2904,9 @@ requires-dist = [
     { name = "policyengine-uk", marker = "extra == 'dev'", specifier = "==2.89.2" },
     { name = "policyengine-uk", marker = "extra == 'models'", specifier = "==2.89.2" },
     { name = "policyengine-uk", marker = "extra == 'uk'", specifier = "==2.89.2" },
-    { name = "policyengine-us", marker = "extra == 'dev'", specifier = "==1.729.0" },
-    { name = "policyengine-us", marker = "extra == 'models'", specifier = "==1.729.0" },
-    { name = "policyengine-us", marker = "extra == 'us'", specifier = "==1.729.0" },
+    { name = "policyengine-us", marker = "extra == 'dev'", specifier = "==1.752.2" },
+    { name = "policyengine-us", marker = "extra == 'models'", specifier = "==1.752.2" },
+    { name = "policyengine-us", marker = "extra == 'us'", specifier = "==1.752.2" },
     { name = "psutil", specifier = ">=5.9.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pytest", marker = "extra == 'dev'" },
@@ -2969,7 +2969,7 @@ wheels = [
 
 [[package]]
 name = "policyengine-us"
-version = "1.729.0"
+version = "1.752.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "microdf-python" },
@@ -2981,9 +2981,9 @@ dependencies = [
     { name = "tables", version = "3.11.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/69/cb/b2efba2094a708cd71890d98d72b99394fabc5894a4cceec14381e03fa35/policyengine_us-1.729.0.tar.gz", hash = "sha256:ac05c4d621c7f848b0806effc14e913160d5d47d777eadced6bc18edf392d75c", size = 10373862, upload-time = "2026-06-14T18:05:25.747Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/12/c0/5adc314e94f6b1063c4bb697b9ebe9d6777998b571c9fce166603ac9a408/policyengine_us-1.752.2.tar.gz", hash = "sha256:caf536ad9bef345379f664146798c17f51813403255b5c57a36d4d9b98b4f1db", size = 10648079, upload-time = "2026-07-01T14:50:55.523Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b9/7d/778f92ae94997b00c3c9ac34b345f6c9333435f905670ee4eeb2f5e19809/policyengine_us-1.729.0-py3-none-any.whl", hash = "sha256:8d21d3f7c0e82a9415edffe8ea53939330a63d9c8f6bd334299bddb697cf2c00", size = 11905076, upload-time = "2026-06-14T18:05:21.806Z" },
+    { url = "https://files.pythonhosted.org/packages/7f/85/bbee92f747a382779bae41a67da39fa5a8592d068853a64226279e6c32a7/policyengine_us-1.752.2-py3-none-any.whl", hash = "sha256:7e30468ae369ddd14e5d834c12cacbc5b5159c809b0990caf204c0747ef4c096", size = 12524440, upload-time = "2026-07-01T14:50:52.432Z" },
 ]
 
 [[package]]
