@@ -84,7 +84,9 @@ class Dataset(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
     description: str
-    filepath: str
+    # Optional so in-memory / derived datasets (e.g. a region-scoped copy)
+    # can exist without a disk destination. save() raises if it is None.
+    filepath: Optional[str] = None
     is_output_dataset: bool = False
     tax_benefit_model: Optional[TaxBenefitModel] = None
     year: int

@@ -1,5 +1,4 @@
 import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import pandas as pd
@@ -13,6 +12,9 @@ from policyengine.provenance.manifest import (
     resolve_managed_dataset_reference,
 )
 from policyengine.tax_benefit_models.common import MicrosimulationModelVersion
+from policyengine.tax_benefit_models.common.model_version import (
+    output_dataset_filepath as _output_dataset_filepath,
+)
 
 from .datasets import PolicyEngineUKDataset, UKYearData
 
@@ -166,7 +168,12 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
         assert isinstance(simulation.dataset, PolicyEngineUKDataset)
 
         dataset = simulation.dataset
-        dataset.load()
+        # Load from disk only when the caller did not already supply data.
+        # An unconditional reload discards caller-provided in-memory data
+        # and forced construction to persist datasets to disk (see the
+        # autosave removal in datasets.py).
+        if dataset.data is None:
+            dataset.load()
 
         # Apply regional scoping if specified
         if simulation.scoping_strategy:
@@ -179,7 +186,10 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
                 id=dataset.id + "_scoped",
                 name=dataset.name,
                 description=dataset.description,
-                filepath=dataset.filepath,
+                # Derived in-memory copy: no filepath, so it can never be
+                # persisted back over the shared source file it was filtered
+                # from.
+                filepath=None,
                 year=dataset.year,
                 is_output_dataset=dataset.is_output_dataset,
                 data=UKYearData(
@@ -243,9 +253,7 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
             id=simulation.id,
             name=dataset.name,
             description=dataset.description,
-            filepath=str(
-                Path(simulation.dataset.filepath).parent / (simulation.id + ".h5")
-            ),
+            filepath=str(_output_dataset_filepath(simulation)),
             year=simulation.dataset.year,
             is_output_dataset=True,
             data=UKYearData(
