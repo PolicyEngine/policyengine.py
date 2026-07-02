@@ -38,11 +38,17 @@ class PolicyEngineUKDataset(Dataset):
     data: Optional[UKYearData] = None
 
     def model_post_init(self, __context):
-        """Called after Pydantic initialization."""
-        # Make sure we are synchronised between in-memory and storage, at least on initialisation
-        if self.data is not None:
-            self.save()
-        elif self.filepath and not self.data:
+        """Called after Pydantic initialization.
+
+        Constructing with only a ``filepath`` hydrates ``data`` from disk.
+        Construction never *writes*: persistence is always explicit via
+        ``save()``. Auto-saving on construction (the previous behaviour)
+        made an in-memory, region-scoped copy that reused its source's
+        ``filepath`` silently truncate the shared dataset file it was
+        derived from. See run() in model.py, which now builds scoped
+        copies with ``filepath=None``.
+        """
+        if self.data is None and self.filepath:
             self.load()
 
     def save(self) -> None:
@@ -50,6 +56,12 @@ class PolicyEngineUKDataset(Dataset):
 
         Converts object columns to categorical dtype to avoid slow pickle serialization.
         """
+        if not self.filepath:
+            raise ValueError(
+                "Cannot save a PolicyEngineUKDataset with no filepath. This "
+                "is an in-memory dataset (e.g. a region-scoped copy); set "
+                "`.filepath` to a destination before calling save()."
+            )
         filepath = Path(self.filepath)
         if not filepath.parent.exists():
             filepath.parent.mkdir(parents=True, exist_ok=True)

@@ -63,7 +63,7 @@ def _write_us_h5(path: Path, year: int) -> None:
             family=_simple_entity("family"),
             marital_unit=_simple_entity("marital_unit"),
         ),
-    )
+    ).save()  # construction no longer auto-persists; write the fixture file explicitly
 
 
 def _write_core_h5(path: Path, year: int) -> None:

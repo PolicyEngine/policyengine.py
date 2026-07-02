@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime
 import os
+import tempfile
 import warnings
 from difflib import get_close_matches
 from importlib import metadata
@@ -44,6 +45,20 @@ from policyengine.utils.parameter_labels import (
 
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
+
+
+def output_dataset_filepath(simulation: Simulation) -> Path:
+    """Destination path for a simulation's output dataset.
+
+    Sits beside the input dataset's file when it has one. An in-memory input
+    dataset (``filepath is None``) has no such directory, so fall back to the
+    OS temp dir rather than ``Path(None)``.
+    """
+    input_filepath = getattr(simulation.dataset, "filepath", None)
+    parent = (
+        Path(input_filepath).parent if input_filepath else Path(tempfile.gettempdir())
+    )
+    return parent / (simulation.id + ".h5")
 
 
 class MicrosimulationModelVersion(TaxBenefitModelVersion):
