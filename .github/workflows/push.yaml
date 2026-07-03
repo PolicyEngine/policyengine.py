@@ -6,6 +6,9 @@
 #
 # Phase 2 (sentinel commit): Publish to PyPI + GitHub Release
 #   Skips Lint + Test since the code is identical to Phase 1.
+#   After Publish, NotifyConsumers waits for the release to be visible on
+#   PyPI and sends a policyengine-release repository dispatch to consumer
+#   repos so they open version-bump PRs.
 
 name: Push to main
 
@@ -139,6 +142,8 @@ jobs:
     if: github.event.head_commit.message == 'Update package version'
     env:
       GH_TOKEN: ${{ github.token }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -152,6 +157,9 @@ jobs:
         run: uv pip install -e .[dev] --system
       - name: Install policyengine
         run: uv pip install policyengine --system
+      - name: Capture published version
+        id: version
+        run: bash .github/capture-version.sh
       - name: Publish a git tag
         run: ".github/publish-git-tag.sh"
       - name: Build package
@@ -183,3 +191,29 @@ jobs:
             "release-assets/policyengine-bundle-$VERSION.constraints.txt" \
             "release-assets/policyengine-bundle-$VERSION.citation.txt" \
             "release-assets/policyengine-bundle-$VERSION.verification.json"
+
+  # ── Phase 2: Open consumer update PRs (after Publish) ─────
+  NotifyConsumers:
+    name: Open consumer update PRs
+    runs-on: ubuntu-latest
+    needs: [Publish]
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+      - name: Wait for release to be visible on PyPI
+        env:
+          VERSION: ${{ needs.Publish.outputs.version }}
+        run: bash .github/wait-for-pypi.sh
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: PolicyEngine
+          repositories: policyengine-api,policyengine-api-v2
+      - name: Dispatch policyengine-release to consumer repos
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ needs.Publish.outputs.version }}
+        run: bash .github/dispatch-policyengine-release.sh
