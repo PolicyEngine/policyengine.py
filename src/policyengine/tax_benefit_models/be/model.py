@@ -43,12 +43,13 @@ PIT_BEFORE_WITHHOLDING = "belgium_pit_pilot_federal_and_local_tax_before_withhol
 
 #: Pipeline inputs the pilot supplies as scalars when the dataset does not
 #: carry them (rulespec stage boundaries are supplied inputs by convention).
+#: The work-bonus reference wage bridges 0 -> worker remuneration inside the
+#: pipeline, so the scalar default keeps the statutory low-wage bonus active.
 SUPPLIED_DEFAULTS: dict[str, Union[float, bool]] = {
     "belgium_pit_article_466_tax_share_on_nonprofessional_movable_income": 0.0,
     "belgium_pit_article_466bis_hypothetical_total_tax_if_treaty_exempt_foreign_professional_income_were_belgian": 0.0,
     "belgium_pit_article_466bis_treaty_exempt_foreign_professional_income_base_applies": False,
-    "belgium_pit_pilot_article_289ter1_work_bonus_a_amount": 0.0,
-    "belgium_pit_pilot_article_289ter1_work_bonus_b_amount": 0.0,
+    "belgium_worker_work_bonus_supplied_reference_annual_remuneration": 0.0,
     "belgium_pit_communal_additional_tax_rate": 0.0,
     "belgium_pit_agglomeration_additional_tax_rate": 0.0,
 }
