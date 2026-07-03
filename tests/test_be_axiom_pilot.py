@@ -29,6 +29,10 @@ requires_axiom = pytest.mark.skipif(
 )
 
 ORDINARY_WORKER_SSC_RATE = 0.1307  # arrete royal 28.11.1969, art. 19
+# incomes chosen around the 2025 work-bonus phase-out: the low-wage bonus
+# wipes the employee contribution at 20k, partially reduces it at 30k, and
+# is exhausted well before 60k (ONSS DMFA 2025 tables, as encoded).
+INCOMES = [0.0, 20_000.0, 30_000.0, 60_000.0]
 
 
 @pytest.fixture
@@ -37,12 +41,12 @@ def pilot_dataset(tmp_path):
 
     person = pd.DataFrame(
         {
-            "person_id": [1, 2, 3],
-            "person_household_id": [1, 1, 2],
-            "age": [40.0, 38.0, 30.0],
-            "is_male": [True, False, False],
-            "belgium_pit_article_23_worker_remuneration": [0.0, 30_000.0, 60_000.0],
-            "person_weight": [1.0, 1.0, 1.0],
+            "person_id": [1, 2, 3, 4],
+            "person_household_id": [1, 1, 2, 2],
+            "age": [40.0, 38.0, 30.0, 52.0],
+            "is_male": [True, False, False, True],
+            "belgium_pit_article_23_worker_remuneration": INCOMES,
+            "person_weight": [1.0, 1.0, 1.0, 1.0],
         }
     )
     household = pd.DataFrame({"household_id": [1, 2], "household_weight": [1.0, 1.0]})
@@ -51,46 +55,57 @@ def pilot_dataset(tmp_path):
     household.to_hdf(path, key="household")
     return PopulaceBelgiumDataset(
         name="populace-be-test",
-        description="three-person fixture",
+        description="four-person fixture around the work-bonus phase-out",
         filepath=str(path),
         year=2026,
     )
 
 
-@requires_axiom
-def test_pilot_run_computes_statutory_ssc_and_progressive_pit(pilot_dataset):
+def _run(pilot_dataset):
     from policyengine.core.simulation import Simulation
-    from policyengine.tax_benefit_models.be import (
-        EMPLOYEE_SSC,
-        PIT_BEFORE_WITHHOLDING,
-        REMUNERATION,
-        AxiomBelgiumPilot,
-    )
+    from policyengine.tax_benefit_models.be import AxiomBelgiumPilot
 
     version = AxiomBelgiumPilot(rulespec_root=str(RULESPEC_ROOT), period=2025)
     simulation = Simulation(dataset=pilot_dataset, tax_benefit_model_version=version)
     simulation.run()
+    return simulation
 
+
+@requires_axiom
+def test_pilot_run_computes_ssc_with_work_bonus_and_progressive_pit(pilot_dataset):
+    from policyengine.tax_benefit_models.be import (
+        EMPLOYEE_SSC,
+        PIT_BEFORE_WITHHOLDING,
+        REMUNERATION,
+    )
+
+    simulation = _run(pilot_dataset)
     person = pd.DataFrame(simulation.output_dataset.data.person)
     gross = person[REMUNERATION].to_numpy()
     ssc = person[EMPLOYEE_SSC].to_numpy()
     pit = person[PIT_BEFORE_WITHHOLDING].to_numpy()
 
-    np.testing.assert_allclose(ssc, gross * ORDINARY_WORKER_SSC_RATE, rtol=1e-9)
+    statutory = gross * ORDINARY_WORKER_SSC_RATE
+    assert ssc[0] == 0.0
+    assert ssc[1] == 0.0  # work bonus wipes the contribution at 20k
+    assert 0.0 < ssc[2] < statutory[2]  # partial bonus at 30k
+    np.testing.assert_allclose(ssc[3], statutory[3], rtol=1e-9)  # exhausted
+
     assert pit[0] == 0.0
-    assert 0.0 < pit[1] < pit[2]
+    assert 0.0 <= pit[1] <= pit[2] < pit[3]
     assert simulation.output_dataset.is_output_dataset
 
 
 @requires_axiom
 def test_pilot_weighted_aggregates_use_calibrated_weights(pilot_dataset):
-    from policyengine.core.simulation import Simulation
-    from policyengine.tax_benefit_models.be import EMPLOYEE_SSC, AxiomBelgiumPilot
+    from policyengine.tax_benefit_models.be import EMPLOYEE_SSC
 
-    version = AxiomBelgiumPilot(rulespec_root=str(RULESPEC_ROOT), period=2025)
-    simulation = Simulation(dataset=pilot_dataset, tax_benefit_model_version=version)
-    simulation.run()
-
+    simulation = _run(pilot_dataset)
     person = simulation.output_dataset.data.person
-    expected = 90_000.0 * ORDINARY_WORKER_SSC_RATE
-    assert float(person[EMPLOYEE_SSC].sum()) == pytest.approx(expected, rel=1e-9)
+    total = float(person[EMPLOYEE_SSC].sum())
+    # 0 + 0 (bonus-wiped) + partial at 30k + full 13.07% at 60k
+    assert (
+        60_000.0 * ORDINARY_WORKER_SSC_RATE
+        < total
+        < 90_000.0 * ORDINARY_WORKER_SSC_RATE
+    )
