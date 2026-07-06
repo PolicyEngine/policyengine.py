@@ -1,3 +1,10 @@
+## [4.18.10] - 2026-07-06
+
+### Changed
+
+- Notify consumer repositories (policyengine-api, policyengine-api-v2) after each PyPI release via a policyengine-release repository dispatch, so they open version-bump PRs without polling PyPI.
+
+
 ## [4.18.9] - 2026-07-02
 
 ### Fixed
