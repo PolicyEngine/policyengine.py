@@ -10,6 +10,7 @@ from policyengine.outputs import (
     LaborSupplyResponse,
     ProgramStatistics,
 )
+from policyengine.outputs import program_statistics as program_statistics_module
 from policyengine.outputs.inequality import Inequality
 from policyengine.tax_benefit_models.uk import analysis as uk_analysis
 from policyengine.tax_benefit_models.us import analysis as us_analysis
@@ -70,7 +71,9 @@ def _patch_analysis_dependencies(
         "_validate_program_statistics_config",
         lambda baseline_simulation, reform_simulation: None,
     )
-    monkeypatch.setattr(analysis_module, "ProgramStatistics", fake_program_statistics)
+    monkeypatch.setattr(
+        program_statistics_module, "ProgramStatistics", fake_program_statistics
+    )
     monkeypatch.setattr(
         analysis_module,
         "configure_labor_supply_response_variables",

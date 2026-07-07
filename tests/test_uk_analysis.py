@@ -4,6 +4,7 @@ import pandas as pd
 
 from policyengine.core import OutputCollection
 from policyengine.outputs import LaborSupplyResponse, ProgramStatistics
+from policyengine.outputs import program_statistics as program_statistics_module
 from policyengine.outputs.inequality import Inequality
 from policyengine.tax_benefit_models.uk import analysis as uk_analysis
 
@@ -90,7 +91,9 @@ def test_uk_economic_impact_analysis_includes_wealth_decile_outputs(monkeypatch)
         "_validate_program_statistics_config",
         lambda baseline_simulation, reform_simulation: None,
     )
-    monkeypatch.setattr(uk_analysis, "ProgramStatistics", fake_program_statistics)
+    monkeypatch.setattr(
+        program_statistics_module, "ProgramStatistics", fake_program_statistics
+    )
     monkeypatch.setattr(uk_analysis, "calculate_uk_poverty_rates", fake_poverty_rates)
     monkeypatch.setattr(uk_analysis, "calculate_uk_inequality", fake_inequality)
     monkeypatch.setattr(
