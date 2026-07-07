@@ -6,6 +6,7 @@ Subcommands:
 - ``trace-tro-validate <path>`` validate a TRO against the shipped schema
 - ``trace-tro-verify <path>`` fetch and rehash every artifact a TRO claims
 - ``release-manifest <country>`` print the bundled country manifest
+- ``zenodo-mirror <country>`` deposit the certification record on Zenodo
 
 See :mod:`policyengine.provenance.trace` and ``docs/release-bundles.md``.
 """
@@ -265,6 +266,43 @@ def _parser() -> argparse.ArgumentParser:
         "--manifest", help="Custom bundle manifest path or URL."
     )
 
+    zenodo = subparsers.add_parser(
+        "zenodo-mirror",
+        help=(
+            "Deposit a certified release's certification record (bundle "
+            "manifest, bundle TRO, data release manifest) on Zenodo for "
+            "preservation. Draft by default; --publish mints the DOI."
+        ),
+    )
+    zenodo.add_argument("country", help="Country id (e.g. us, uk).")
+    zenodo.add_argument(
+        "--publish",
+        action="store_true",
+        help="Publish the deposit and mint its DOI (default: leave a draft).",
+    )
+    zenodo.add_argument(
+        "--include-dataset",
+        action="store_true",
+        help=(
+            "Also deposit the certified dataset bytes. Refused when the "
+            "source Hugging Face repo is not publicly readable."
+        ),
+    )
+    zenodo.add_argument(
+        "--sandbox",
+        action="store_true",
+        help="Target sandbox.zenodo.org instead of zenodo.org.",
+    )
+    zenodo.add_argument(
+        "--license",
+        dest="license_id",
+        default=None,
+        help=(
+            "Zenodo license identifier (e.g. cc-zero) for the deposit. Set "
+            "deliberately before publishing."
+        ),
+    )
+
     return parser
 
 
@@ -430,6 +468,38 @@ def _emit_bundle_manifest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _zenodo_mirror(
+    country_id: str,
+    *,
+    publish: bool,
+    include_dataset: bool,
+    sandbox: bool,
+    license_id: Optional[str],
+) -> int:
+    from policyengine.provenance import zenodo
+
+    base_url = zenodo.ZENODO_SANDBOX_API if sandbox else zenodo.ZENODO_API
+    try:
+        deposit = zenodo.mirror_release_to_zenodo(
+            country_id,
+            base_url=base_url,
+            publish=publish,
+            include_dataset=include_dataset,
+            license_id=license_id,
+        )
+    except (
+        zenodo.ZenodoDepositError,
+        zenodo.PrivateSourceRepoError,
+        ValueError,
+    ) as exc:
+        # ValueError covers an unknown country id (get_release_manifest
+        # raises it) so the CLI exits cleanly instead of dumping a traceback.
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(deposit.to_json(), indent=2, sort_keys=True))
+    return 0
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = _parser().parse_args(argv)
     if args.command == "trace-tro":
@@ -440,6 +510,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _verify_tro(args.path, args.base_dir, args.skip)
     if args.command == "release-manifest":
         return _emit_release_manifest(args.country)
+    if args.command == "zenodo-mirror":
+        return _zenodo_mirror(
+            args.country,
+            publish=args.publish,
+            include_dataset=args.include_dataset,
+            sandbox=args.sandbox,
+            license_id=args.license_id,
+        )
     if args.command == "bundle":
         if args.bundle_command == "install":
             return _install_bundle(args)
