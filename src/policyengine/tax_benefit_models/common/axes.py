@@ -60,8 +60,29 @@ def normalize_axes(
                 if required_key not in axis_dict:
                     raise ValueError(f"axis '{name}' must include '{required_key}'.")
 
+            count = axis_dict["count"]
+            if isinstance(count, bool) or not isinstance(count, int) or count < 1:
+                raise ValueError(
+                    f"axis '{name}' 'count' must be a positive integer, got {count!r}."
+                )
+            for bound_key in ("min", "max"):
+                bound = axis_dict[bound_key]
+                if isinstance(bound, bool) or not isinstance(bound, (int, float)):
+                    raise ValueError(
+                        f"axis '{name}' '{bound_key}' must be a number, got {bound!r}."
+                    )
+
             axis_dict.setdefault("period", year)
             normalized_group.append(axis_dict)
+
+        counts = {axis["count"] for axis in normalized_group}
+        if len(counts) > 1:
+            names = ", ".join(f"'{axis['name']}'" for axis in normalized_group)
+            raise ValueError(
+                "axes in the same group vary in lockstep and must share "
+                f"'count'; got {sorted(counts)} across {names}. Use nested "
+                "groups ([[axis_a], [axis_b]]) for independent sweeps."
+            )
 
         normalized.append(normalized_group)
 

@@ -224,6 +224,42 @@ class TestUSCalculateHousehold:
         )
         assert result.person[0].employment_income == [0, 10000]
 
+    def test__axes_nonpositive_count__then_raises_before_calculation(self):
+        with pytest.raises(ValueError, match="'count' must be a positive integer"):
+            pe.us.calculate_household(
+                people=[{"age": 35, "is_tax_unit_head": True}],
+                year=2026,
+                axes=[
+                    {
+                        "name": "employment_income",
+                        "min": 0,
+                        "max": 10000,
+                        "count": 0,
+                    }
+                ],
+            )
+
+    def test__axes_mismatched_group_counts__then_raises_before_calculation(self):
+        with pytest.raises(ValueError, match="must share 'count'"):
+            pe.us.calculate_household(
+                people=[{"age": 35, "is_tax_unit_head": True}],
+                year=2026,
+                axes=[
+                    {
+                        "name": "employment_income",
+                        "min": 0,
+                        "max": 10000,
+                        "count": 3,
+                    },
+                    {
+                        "name": "charitable_cash_donations",
+                        "min": 0,
+                        "max": 8000,
+                        "count": 5,
+                    },
+                ],
+            )
+
     def test__reform_compiles_effective_date_form(self):
         result = pe.us.calculate_household(
             people=[{"age": 30, "is_tax_unit_head": True}],
