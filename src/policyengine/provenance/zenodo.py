@@ -163,7 +163,9 @@ def _bundled_tro_bytes(country_id: str) -> bytes:
     )
     try:
         return resource.read_bytes()
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, KeyError) as exc:
+        # FileNotFoundError from a filesystem loader; KeyError from a
+        # zipimport loader when the resource is absent from the archive.
         raise ZenodoDepositError(
             f"No bundled TRACE TRO for '{country_id}'. Run "
             "scripts/generate_trace_tros.py before mirroring."
@@ -191,18 +193,28 @@ def _assert_source_repo_public(session: Any, repo_id: str) -> None:
     Service microdata) must never have their bytes re-deposited,
     regardless of caller flags.
 
-    A repo qualifies as openly readable only when the metadata endpoint
-    returns HTTP 200 *and* its ``gated`` flag is falsey. Hugging Face
-    enforces gating at the byte-download layer, so a gated repo's
-    metadata returns 200 while its files are access-walled — treating a
-    200 alone as "public" would let gated bytes through. The ``gated``
-    field is ``false`` for open repos and a truthy string
-    (``"auto"``/``"manual"``) when access is restricted.
+    This gate uses *positive confirmation only*: it proceeds solely when
+    the metadata endpoint returns HTTP 200 with a JSON object that
+    explicitly reports the repo as open — ``private`` is ``False`` and
+    ``gated`` is falsey. Any weaker signal fails closed.
+
+    - A 200 whose body is not a JSON object (e.g. a Cloudflare challenge
+      or interstitial HTML page) is *not* confirmation and must not be
+      read as "public"; it falls through to the unverifiable refusal.
+    - ``gated`` is ``false`` for open repos and a truthy string
+      (``"auto"``/``"manual"``) when access is restricted. Hugging Face
+      enforces gating at the byte-download layer, so a gated repo's
+      metadata returns 200 while its files are access-walled.
+    - ``private`` is ``true`` for a private repo. An authenticated
+      session (one carrying a token) reads a private repo's metadata as
+      200 ``{"private": true}``; checking ``gated`` alone would let those
+      bytes through, so ``private`` is checked explicitly.
 
     Definitive private/absent signals (401/403/404) refuse. Anything
-    else (429, 5xx, network error) means visibility could not be
-    confirmed: rather than risk depositing restricted data, refuse with
-    a retryable error instead of silently treating it as public.
+    else (429, 5xx, non-JSON 200, network error) means visibility could
+    not be confirmed: rather than risk depositing restricted data,
+    refuse with a retryable error instead of silently treating it as
+    public.
     """
     statuses: list[str] = []
     last_error: Optional[Exception] = None
@@ -220,9 +232,17 @@ def _assert_source_repo_public(session: Any, repo_id: str) -> None:
         statuses.append(f"{repo_type}:{response.status_code}")
         if response.status_code == 200:
             try:
-                gated = response.json().get("gated", False)
+                payload = response.json()
             except Exception:
-                gated = False
+                # A 200 with a non-JSON body is not positive confirmation
+                # of a public repo. Record it as unverifiable and fall
+                # through rather than treating it as open.
+                statuses[-1] = f"{repo_type}:200-non-json"
+                continue
+            if not isinstance(payload, dict):
+                statuses[-1] = f"{repo_type}:200-non-object"
+                continue
+            gated = payload.get("gated", False)
             if gated:
                 raise PrivateSourceRepoError(
                     f"Source repo {repo_id} is gated (gated={gated!r}): its "
@@ -230,6 +250,14 @@ def _assert_source_repo_public(session: Any, repo_id: str) -> None:
                     "Refusing to mirror its dataset bytes; the certification "
                     "record (manifests and TRO) can still be mirrored without "
                     "the data."
+                )
+            if payload.get("private", False):
+                raise PrivateSourceRepoError(
+                    f"Source repo {repo_id} is private (private=true): an "
+                    "authenticated session can read it, but redistribution "
+                    "rights cannot be assumed. Refusing to mirror its dataset "
+                    "bytes; the certification record (manifests and TRO) can "
+                    "still be mirrored without the data."
                 )
             return
 
@@ -294,9 +322,16 @@ def mirror_release_to_zenodo(
     readable; :class:`PrivateSourceRepoError` is raised otherwise.
 
     The deposit is left as a draft unless ``publish=True``, which mints
-    the DOI recorded on every returned :class:`PreservationMirror`.
+    the DOI recorded on every returned :class:`PreservationMirror` and
+    gives each mirror a stable, dereferenceable per-file record URL. A
+    draft has no published per-file URL yet, so its mirrors carry the
+    draft deposit URL as a provisional handle until it is published.
     ``base_url=ZENODO_SANDBOX_API`` targets the Zenodo sandbox for
     rehearsals. The token comes from the argument or ``ZENODO_TOKEN``.
+
+    If a step after the deposition is created fails, the raised
+    :class:`ZenodoDepositError` carries the deposit id and URL so the
+    orphaned draft can be deleted or resumed rather than lost.
     """
     token = token or os.environ.get("ZENODO_TOKEN")
     if not token:
@@ -351,17 +386,22 @@ def mirror_release_to_zenodo(
         from .trace import _dataset_location_from_uri
 
         fetch = dataset_fetcher or _default_dataset_fetcher(session)
-        files.append(
-            (
-                filename,
-                fetch(
-                    _dataset_location_from_uri(
-                        certified.uri,
-                        repo_type=country_manifest.data_package.repo_type,
-                    )
-                ),
+        dataset_bytes = fetch(
+            _dataset_location_from_uri(
+                certified.uri,
+                repo_type=country_manifest.data_package.repo_type,
             )
         )
+        if certified.sha256 is not None:
+            fetched_sha256 = hashlib.sha256(dataset_bytes).hexdigest()
+            if fetched_sha256 != certified.sha256:
+                raise ZenodoDepositError(
+                    f"Fetched dataset bytes for '{filename}' hash "
+                    f"{fetched_sha256}, but the certified artifact pins "
+                    f"{certified.sha256}. Refusing to deposit dataset bytes "
+                    "that do not match the certified release."
+                )
+        files.append((filename, dataset_bytes))
 
     created = _expect(
         session.post(
@@ -377,58 +417,77 @@ def mirror_release_to_zenodo(
     links = created.get("links") or {}
     bucket = links.get("bucket")
     deposit_url = links.get("html")
-    if not bucket:
-        raise ZenodoDepositError("Zenodo deposition response has no bucket link.")
-
-    for name, content in files:
-        _expect(
-            session.put(
-                f"{bucket}/{name}",
-                data=content,
-                headers=headers,
-                timeout=_TIMEOUT_SECONDS,
-            ),
-            (200, 201),
-            f"upload of {name}",
-        )
-
-    metadata = deposition_metadata(
-        country_manifest, data_release_manifest, license_id=license_id
-    )
-    _expect(
-        session.put(
-            f"{base_url}/deposit/depositions/{deposit_id}",
-            json={"metadata": metadata},
-            headers=headers,
-            timeout=_TIMEOUT_SECONDS,
-        ),
-        (200,),
-        "metadata update",
-    )
+    deposit_ref = deposit_url or f"{base_url}/deposit/{deposit_id}"
 
     doi: Optional[str] = None
     concept_doi: Optional[str] = None
     record_url: Optional[str] = None
-    if publish:
-        published_payload = _expect(
-            session.post(
-                f"{base_url}/deposit/depositions/{deposit_id}/actions/publish",
+    # The deposition draft now exists on Zenodo. Any failure from here on
+    # (missing bucket, upload, metadata, publish — e.g. the common
+    # deposit:actions-scope 403 on publish) would otherwise raise without
+    # the deposit handle, orphaning a staged draft the caller cannot find;
+    # retries would pile up more. Re-raise with the id and URL plus a
+    # resolution note instead.
+    try:
+        if not bucket:
+            raise ZenodoDepositError("Zenodo deposition response has no bucket link.")
+        for name, content in files:
+            _expect(
+                session.put(
+                    f"{bucket}/{name}",
+                    data=content,
+                    headers=headers,
+                    timeout=_TIMEOUT_SECONDS,
+                ),
+                (200, 201),
+                f"upload of {name}",
+            )
+
+        metadata = deposition_metadata(
+            country_manifest, data_release_manifest, license_id=license_id
+        )
+        _expect(
+            session.put(
+                f"{base_url}/deposit/depositions/{deposit_id}",
+                json={"metadata": metadata},
                 headers=headers,
                 timeout=_TIMEOUT_SECONDS,
             ),
-            (200, 202),
-            "publish",
+            (200,),
+            "metadata update",
         )
-        doi = published_payload.get("doi")
-        concept_doi = published_payload.get("conceptdoi")
-        record_url = (published_payload.get("links") or {}).get("record_html")
+
+        if publish:
+            published_payload = _expect(
+                session.post(
+                    f"{base_url}/deposit/depositions/{deposit_id}/actions/publish",
+                    headers=headers,
+                    timeout=_TIMEOUT_SECONDS,
+                ),
+                (200, 202),
+                "publish",
+            )
+            doi = published_payload.get("doi")
+            concept_doi = published_payload.get("conceptdoi")
+            record_url = (published_payload.get("links") or {}).get("record_html")
+    except ZenodoDepositError as exc:
+        raise ZenodoDepositError(
+            f"{exc} A draft deposit was already created on Zenodo "
+            f"(deposit_id={deposit_id}, deposit_url={deposit_ref}); delete or "
+            "resume it manually before retrying, to avoid orphaned drafts."
+        ) from exc
 
     deposited_at = datetime.now(timezone.utc).isoformat()
-    file_base = record_url or deposit_url or f"{base_url}/deposit/{deposit_id}"
     mirrors = [
         PreservationMirror(
             kind="zenodo",
-            url=f"{file_base}/files/{name}",
+            # A published record exposes stable, dereferenceable per-file
+            # download URLs. A draft has none yet, so every mirror points at
+            # the draft deposit itself as a provisional handle; the per-file
+            # URLs materialize on publish.
+            url=(
+                f"{record_url}/files/{name}" if record_url is not None else deposit_ref
+            ),
             doi=doi,
             sha256=hashlib.sha256(content).hexdigest(),
             deposited_at=deposited_at,

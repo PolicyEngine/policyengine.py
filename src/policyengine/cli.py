@@ -487,7 +487,13 @@ def _zenodo_mirror(
             include_dataset=include_dataset,
             license_id=license_id,
         )
-    except (zenodo.ZenodoDepositError, zenodo.PrivateSourceRepoError) as exc:
+    except (
+        zenodo.ZenodoDepositError,
+        zenodo.PrivateSourceRepoError,
+        ValueError,
+    ) as exc:
+        # ValueError covers an unknown country id (get_release_manifest
+        # raises it) so the CLI exits cleanly instead of dumping a traceback.
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(deposit.to_json(), indent=2, sort_keys=True))
