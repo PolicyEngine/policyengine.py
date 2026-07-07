@@ -655,7 +655,12 @@ def test_us_economic_impact_analysis_configures_lsr_extras_before_ensure(
         pass
 
     def fake_ensure(self):
-        assert self.extra_variables["person"] == US_EXPECTED_LSR_EXTRA_VARIABLES
+        # economic_impact_analysis also configures budgetary-impact extras on
+        # the person entity, so assert the LSR extras are present rather than
+        # requiring them to be the exact person extra-variable list.
+        assert set(US_EXPECTED_LSR_EXTRA_VARIABLES).issubset(
+            self.extra_variables["person"]
+        )
         ensure_calls.append(self.id)
         if len(ensure_calls) == 2:
             raise StopAfterEnsure

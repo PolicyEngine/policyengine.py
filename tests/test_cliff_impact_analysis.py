@@ -119,6 +119,20 @@ def _patch_analysis_dependencies(
             "calculate_us_inequality",
             lambda simulation, preset: _empty_inequality(simulation),
         )
+        monkeypatch.setattr(
+            analysis_module,
+            "configure_budgetary_impact_variables",
+            lambda baseline_simulation, reform_simulation: None,
+        )
+        monkeypatch.setattr(
+            analysis_module,
+            "calculate_budgetary_impact",
+            lambda baseline_simulation, reform_simulation: (
+                analysis_module.BudgetaryImpact(
+                    federal=0.0, state=0.0, unattributed=0.0
+                )
+            ),
+        )
 
     if fail_on_cliff:
 
