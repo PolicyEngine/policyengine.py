@@ -324,7 +324,7 @@ class TestBuildReformDict:
 
         result = build_reform_dict(obj)
 
-        assert result == {"gov.test.param": {"2024-01-01": 1000}}
+        assert result == {"gov.test.param": {"2024-01-01.2100-12-31": 1000}}
 
 
 class TestMergeReformDicts:

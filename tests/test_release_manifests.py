@@ -912,6 +912,41 @@ class TestReleaseManifests:
             "/tmp/cps_2023.h5"
         )
 
+    def test__given_us_unmanaged_local_path__then_dataset_reaches_microsimulation(
+        self, tmp_path
+    ):
+        dataset_path = tmp_path / "local_build_2100.h5"
+        dataset_path.write_bytes(b"not a real h5; source plumbing only")
+
+        mock_microsimulation = MagicMock()
+        with (
+            patch.dict(
+                sys.modules,
+                _country_modules_with_microsimulation(
+                    "policyengine_us",
+                    mock_microsimulation,
+                ),
+            ),
+            patch(
+                "policyengine.tax_benefit_models.common.model_version.certify_data_release_compatibility",
+                return_value=get_release_manifest("us").certification,
+            ),
+        ):
+            us_model = importlib.import_module(
+                "policyengine.tax_benefit_models.us.model"
+            )
+            microsim = us_model.managed_microsimulation(
+                dataset=str(dataset_path),
+                allow_unmanaged=True,
+            )
+
+        assert mock_microsimulation.call_args.kwargs["dataset"] == str(dataset_path)
+        assert microsim.policyengine_bundle["runtime_dataset"] == "local_build_2100"
+        assert microsim.policyengine_bundle["runtime_dataset_uri"] == str(dataset_path)
+        assert microsim.policyengine_bundle["runtime_dataset_source"] == str(
+            dataset_path
+        )
+
     def test__given_uk_managed_dataset_name__then_resolves_within_bundle(self):
         mock_microsimulation = MagicMock()
         with (
