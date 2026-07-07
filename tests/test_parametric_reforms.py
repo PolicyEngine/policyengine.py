@@ -66,8 +66,8 @@ class TestReformDictFromParameterValues:
         # Then
         assert result is not None
         assert MOCK_PARAM_SINGLE.name in result
-        assert "2024-01-01" in result[MOCK_PARAM_SINGLE.name]
-        assert result[MOCK_PARAM_SINGLE.name]["2024-01-01"] == 29200
+        assert "2024-01-01.2100-12-31" in result[MOCK_PARAM_SINGLE.name]
+        assert result[MOCK_PARAM_SINGLE.name]["2024-01-01.2100-12-31"] == 29200
 
     def test__given_parameter_value_with_end_date__then_uses_period_range_format(
         self,
@@ -93,9 +93,9 @@ class TestReformDictFromParameterValues:
     def test__given_multiple_periods_same_parameter__then_includes_all_periods(
         self,
     ):
-        """Given: Multiple parameter values for same parameter (different periods)
+        """Given: Multiple open-ended values for same parameter (different periods)
         When: Calling reform_dict_from_parameter_values
-        Then: Returns dict with all periods for that parameter
+        Then: Each value runs until the next-later value starts
         """
         # Given
         param_values = MULTI_PERIOD_PARAM_VALUES
@@ -108,8 +108,8 @@ class TestReformDictFromParameterValues:
         param_name = MOCK_PARAM_SINGLE.name
         assert param_name in result
         assert len(result[param_name]) == 2
-        assert result[param_name]["2024-01-01"] == 29200
-        assert result[param_name]["2025-01-01"] == 30000
+        assert result[param_name]["2024-01-01.2024-12-31"] == 29200
+        assert result[param_name]["2025-01-01.2100-12-31"] == 30000
 
     def test__given_multiple_different_parameters__then_includes_all_parameters(
         self,
@@ -130,9 +130,9 @@ class TestReformDictFromParameterValues:
         assert MOCK_PARAM_SINGLE.name in result
         assert MOCK_PARAM_JOINT.name in result
         assert MOCK_PARAM_TAX_RATE.name in result
-        assert result[MOCK_PARAM_SINGLE.name]["2024-01-01"] == 29200
-        assert result[MOCK_PARAM_JOINT.name]["2024-01-01"] == 58400
-        assert result[MOCK_PARAM_TAX_RATE.name]["2024-01-01"] == 0.10
+        assert result[MOCK_PARAM_SINGLE.name]["2024-01-01.2100-12-31"] == 29200
+        assert result[MOCK_PARAM_JOINT.name]["2024-01-01.2100-12-31"] == 58400
+        assert result[MOCK_PARAM_TAX_RATE.name]["2024-01-01.2100-12-31"] == 0.10
 
     def test__given_parameter_value__then_preserves_value_type(self):
         """Given: Parameter values with different types (int, float)
@@ -151,8 +151,80 @@ class TestReformDictFromParameterValues:
         result = reform_dict_from_parameter_values([pv_float])
 
         # Then
-        assert result["gov.test.rate"]["2024-01-01"] == 0.15
-        assert isinstance(result["gov.test.rate"]["2024-01-01"], float)
+        assert result["gov.test.rate"]["2024-01-01.2100-12-31"] == 0.15
+        assert isinstance(result["gov.test.rate"]["2024-01-01.2100-12-31"], float)
+
+    def test__given_open_ended_value__then_period_stops_far_future(self):
+        """Given: Parameter value with no end date (open-ended)
+        When: Calling reform_dict_from_parameter_values
+        Then: Emits an explicit far-future stop instead of a bare start
+        date, which policyengine-core Reform.from_dict would apply for a
+        single instant only (issue #453)
+        """
+        # Given
+        pv = SINGLE_PARAM_VALUE
+
+        # When
+        result = reform_dict_from_parameter_values([pv])
+
+        # Then
+        (period_key,) = result[MOCK_PARAM_SINGLE.name]
+        assert period_key == "2024-01-01.2100-12-31"
+
+    def test__given_open_ended_values_in_reverse_order__then_clips_at_next_start(
+        self,
+    ):
+        """Given: Two open-ended values for one parameter, listed latest-first
+        When: Calling reform_dict_from_parameter_values
+        Then: The earlier value stops the day before the later one starts,
+        regardless of list order
+        """
+        # Given
+        param = create_mock_parameter("gov.test.step")
+        later = create_parameter_value(
+            parameter=param, value=2_000, start_date=date(2028, 1, 1)
+        )
+        earlier = create_parameter_value(
+            parameter=param, value=1_000, start_date=date(2026, 1, 1)
+        )
+
+        # When
+        result = reform_dict_from_parameter_values([later, earlier])
+
+        # Then
+        assert result["gov.test.step"] == {
+            "2028-01-01.2100-12-31": 2_000,
+            "2026-01-01.2027-12-31": 1_000,
+        }
+
+    def test__given_open_ended_and_explicit_end_values__then_open_ended_clips_at_next_start(
+        self,
+    ):
+        """Given: An open-ended value followed by a later value with an explicit end
+        When: Calling reform_dict_from_parameter_values
+        Then: The open-ended value stops the day before the later value
+        starts; the explicit end is preserved verbatim
+        """
+        # Given
+        param = create_mock_parameter("gov.test.mixed")
+        open_ended = create_parameter_value(
+            parameter=param, value=100, start_date=date(2024, 1, 1)
+        )
+        bounded = create_parameter_value(
+            parameter=param,
+            value=200,
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 12, 31),
+        )
+
+        # When
+        result = reform_dict_from_parameter_values([open_ended, bounded])
+
+        # Then
+        assert result["gov.test.mixed"] == {
+            "2024-01-01.2025-12-31": 100,
+            "2026-01-01.2026-12-31": 200,
+        }
 
 
 class TestSimulationModifierFromParameterValues:
