@@ -97,6 +97,30 @@ class TestUKCalculateHousehold:
                 year=2026,
             )
 
+    def test__axes__then_result_values_are_axis_series(self):
+        result = pe.uk.calculate_household(
+            people=[
+                {
+                    "age": 35,
+                    "employment_income": 50000,
+                    "gift_aid": 0,
+                }
+            ],
+            year=2026,
+            axes=[
+                {
+                    "name": "gift_aid",
+                    "min": 0,
+                    "max": 10000,
+                    "count": 3,
+                }
+            ],
+            extra_variables=["gift_aid"],
+        )
+        assert result.person[0].gift_aid == [0, 5000, 10000]
+        assert len(result.person[0].income_tax) == 3
+        assert len(result.household.household_tax) == 3
+
 
 class TestUSCalculateHousehold:
     def test__single_adult__then_returns_result_with_net_income(self):
@@ -142,6 +166,99 @@ class TestUSCalculateHousehold:
         )
         assert "adjusted_gross_income" in result.tax_unit
         assert result.tax_unit.adjusted_gross_income > 0
+
+    def test__axes__then_result_values_are_axis_series(self):
+        result = pe.us.calculate_household(
+            people=[
+                {
+                    "age": 35,
+                    "employment_income": 60000,
+                    "is_tax_unit_head": True,
+                    "charitable_cash_donations": 0,
+                }
+            ],
+            tax_unit={"filing_status": "SINGLE"},
+            household={"state_code": "CA"},
+            year=2026,
+            axes=[
+                {
+                    "name": "charitable_cash_donations",
+                    "min": 0,
+                    "max": 10000,
+                    "count": 3,
+                }
+            ],
+            extra_variables=["charitable_cash_donations"],
+        )
+        assert result.person[0].charitable_cash_donations == [0, 5000, 10000]
+        # Donations reduce income tax via the charitable deduction; assert
+        # the relationship rather than exact liabilities so country-data
+        # bumps don't break the test.
+        income_tax = result.tax_unit.income_tax
+        assert len(income_tax) == 3
+        assert income_tax[0] > income_tax[-1]
+        assert all(a >= b for a, b in zip(income_tax, income_tax[1:]))
+        assert len(result.household.household_net_income) == 3
+
+    def test__nested_axes_shape__then_supported(self):
+        result = pe.us.calculate_household(
+            people=[
+                {
+                    "age": 35,
+                    "employment_income": 0,
+                    "is_tax_unit_head": True,
+                }
+            ],
+            tax_unit={"filing_status": "SINGLE"},
+            year=2026,
+            axes=[
+                [
+                    {
+                        "name": "employment_income",
+                        "min": 0,
+                        "max": 10000,
+                        "count": 2,
+                    }
+                ]
+            ],
+        )
+        assert result.person[0].employment_income == [0, 10000]
+
+    def test__axes_nonpositive_count__then_raises_before_calculation(self):
+        with pytest.raises(ValueError, match="'count' must be a positive integer"):
+            pe.us.calculate_household(
+                people=[{"age": 35, "is_tax_unit_head": True}],
+                year=2026,
+                axes=[
+                    {
+                        "name": "employment_income",
+                        "min": 0,
+                        "max": 10000,
+                        "count": 0,
+                    }
+                ],
+            )
+
+    def test__axes_mismatched_group_counts__then_raises_before_calculation(self):
+        with pytest.raises(ValueError, match="must share 'count'"):
+            pe.us.calculate_household(
+                people=[{"age": 35, "is_tax_unit_head": True}],
+                year=2026,
+                axes=[
+                    {
+                        "name": "employment_income",
+                        "min": 0,
+                        "max": 10000,
+                        "count": 3,
+                    },
+                    {
+                        "name": "charitable_cash_donations",
+                        "min": 0,
+                        "max": 8000,
+                        "count": 5,
+                    },
+                ],
+            )
 
     def test__reform_compiles_effective_date_form(self):
         result = pe.us.calculate_household(
@@ -242,6 +359,21 @@ class TestHouseholdInputValidation:
                 people=[{"age": 35, "is_tax_unit_head": True}],
                 year=2026,
                 reform={"gov.irs.not_a_real_parameter": 0},
+            )
+
+    def test__unknown_axis_variable__then_raises_with_suggestion(self):
+        with pytest.raises(ValueError, match="axis variable"):
+            pe.us.calculate_household(
+                people=[{"age": 35, "is_tax_unit_head": True}],
+                year=2026,
+                axes=[
+                    {
+                        "name": "employment_incme",
+                        "min": 0,
+                        "max": 10000,
+                        "count": 3,
+                    }
+                ],
             )
 
     def test__us_kwarg_on_uk__then_raises_with_uk_hint(self):
