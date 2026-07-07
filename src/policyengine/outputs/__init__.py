@@ -62,7 +62,11 @@ from policyengine.outputs.poverty import (
     calculate_us_poverty_by_race,
     calculate_us_poverty_rates,
 )
-from policyengine.outputs.program_statistics import ProgramStatistics
+from policyengine.outputs.program_statistics import (
+    ProgramStatistics,
+    build_program_statistics,
+    validate_program_statistics_config,
+)
 from policyengine.outputs.uk_geography_assets import (
     CONSTITUENCY_ASSET_SPEC,
     LOCAL_AUTHORITY_ASSET_SPEC,
@@ -89,6 +93,8 @@ __all__ = [
     "DecileImpact",
     "calculate_decile_impacts",
     "ProgramStatistics",
+    "build_program_statistics",
+    "validate_program_statistics_config",
     "IntraDecileImpact",
     "compute_intra_decile_impacts",
     "HoursResponse",
