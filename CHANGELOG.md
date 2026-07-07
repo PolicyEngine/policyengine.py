@@ -1,3 +1,15 @@
+## [4.18.11] - 2026-07-07
+
+### Changed
+
+- Extracted the duplicated US and UK program-statistics validation and build logic into shared `validate_program_statistics_config` and `build_program_statistics` helpers in `policyengine.outputs.program_statistics`.
+
+### Fixed
+
+- Add a full-wrapper regression test covering `managed_microsimulation` with a plain local dataset path and `allow_unmanaged=True` (the #415 scenario, resolved by #442).
+- Open-ended parametric reforms (`end_date=None`, including all flat-dict reforms) now apply from their start date onward in microsimulation runs instead of only within the start year. Open-ended values are serialised with explicit period stops, each clipped at the next-later value of the same parameter.
+
+
 ## [4.18.10] - 2026-07-06
 
 ### Changed
