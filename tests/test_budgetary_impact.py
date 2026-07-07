@@ -49,10 +49,19 @@ def _fake_sum_change_factory(variable_to_delta: dict[str, float]):
     return fake_sum_change
 
 
-def _budgetary_impact_from_deltas(deltas: dict[str, float]) -> BudgetaryImpact:
-    with patch(
-        "policyengine.tax_benefit_models.us.analysis._sum_change",
-        side_effect=_fake_sum_change_factory(deltas),
+def _budgetary_impact_from_deltas(
+    deltas: dict[str, float], *, include_health_benefits: bool = False
+) -> BudgetaryImpact:
+    with (
+        patch(
+            "policyengine.tax_benefit_models.us.analysis._sum_change",
+            side_effect=_fake_sum_change_factory(deltas),
+        ),
+        patch(
+            "policyengine.tax_benefit_models.us.analysis."
+            "_include_health_benefits_in_net_income",
+            return_value=include_health_benefits,
+        ),
     ):
         return calculate_budgetary_impact(None, None)
 
@@ -87,8 +96,10 @@ def test_shared_benefit_rollback_splits_federal_and_state():
             # Federal share of Medicaid cost drops $90B, state share $10B.
             "federal_benefit_cost": -90e9,
             "state_benefit_cost": -10e9,
-            # household_benefits falls by the full $100B program cost.
-            "household_benefits": -100e9,
+            # household_benefits stays 0: Medicaid/CHIP/MSP are excluded from
+            # household_benefits by default, so a health reform does not move
+            # it. The cost drop is captured only by the cost aggregates, which
+            # calculate_budgetary_impact adds into total.
         }
     )
 
@@ -96,6 +107,29 @@ def test_shared_benefit_rollback_splits_federal_and_state():
     assert result.federal == 90e9
     assert result.state == 10e9
     assert result.unattributed == 0
+    # total = 0 - 0 - (-90B) - (-10B) = +100B, fully split into fed/state.
+    assert result.total == 100e9
+
+
+def test_health_inclusive_config_avoids_double_count():
+    """With gov.simulation.include_health_benefits_in_net_income true,
+    household_benefits already carries Medicaid/CHIP/MSP, so the cost
+    aggregates must not be subtracted from total a second time."""
+    result = _budgetary_impact_from_deltas(
+        {
+            "federal_benefit_cost": -90e9,
+            "state_benefit_cost": -10e9,
+            # household_benefits carries the full $100B cut because the
+            # parameter folds the health programs into it.
+            "household_benefits": -100e9,
+        },
+        include_health_benefits=True,
+    )
+
+    assert result.federal == 90e9
+    assert result.state == 10e9
+    assert result.unattributed == 0
+    # total = 0 - (-100B), with no extra cost subtraction.
     assert result.total == 100e9
 
 
@@ -133,9 +167,10 @@ def test_mixed_reform_partitions_with_nonzero_residual():
             "state_benefit_cost": -2e9,
             # household_tax falls by the three tax cuts: 50 + 10 + 20.
             "household_tax": -80e9,
-            # household_benefits nets a $7B shared-program cut and an $8B SSI
-            # rise: -7 + 8 = +1.
-            "household_benefits": 1e9,
+            # household_benefits carries only the $8B SSI rise: the $7B
+            # shared health-program cut is excluded from household_benefits
+            # by default and enters total via the cost aggregates.
+            "household_benefits": 8e9,
         }
     )
 
@@ -143,7 +178,7 @@ def test_mixed_reform_partitions_with_nonzero_residual():
     assert result.federal == -55e9
     # State = -20 - (-2) = -18.
     assert result.state == -18e9
-    # Total = -80 - 1 = -81.
+    # Total = -80 - 8 - (-5 + -2) = -81.
     assert result.total == -81e9
     # Residual = -81 - (-55) - (-18) = -8, i.e. the $8B SSI spending rise.
     assert result.unattributed == -8e9
@@ -333,7 +368,8 @@ def test_calculate_budgetary_impact_runs_against_real_output_simulation(tmp_path
     assert result.federal == -100.0
     # state = Δstate_income_tax - Δstate_benefit_cost = -20 - (-5) = -15
     assert result.state == -15.0
-    # total = Δhousehold_tax - Δhousehold_benefits = -140 - (-15) = -125
-    assert result.total == -125.0
-    # unattributed = total - federal - state = -125 - (-100) - (-15) = -10
-    assert result.unattributed == -10.0
+    # total = Δhousehold_tax - Δhousehold_benefits - Δhealth cost
+    #       = -140 - (-15) - (-20 + -5) = -100
+    assert result.total == -100.0
+    # unattributed = total - federal - state = -100 - (-100) - (-15) = 15
+    assert result.unattributed == 15.0
