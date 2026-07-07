@@ -1,3 +1,11 @@
+## [4.19.0] - 2026-07-07
+
+### Added
+
+- Expose axes in the US and UK household calculator helpers.
+- Add `policyengine zenodo-mirror <country>`, which deposits a certified release's certification record (bundle manifest, bundle TRACE TRO, data release manifest) on Zenodo for preservation and returns `PreservationMirror` entries, refusing dataset bytes from private source repos; the bundle TRO now surfaces a release's preservation DOI as `pe:preservationDoi` when the data release manifest records one.
+
+
 ## [4.18.11] - 2026-07-07
 
 ### Changed
