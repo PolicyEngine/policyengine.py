@@ -1,3 +1,10 @@
+## [4.20.0] - 2026-07-07
+
+### Added
+
+- Partition US policy reform budgetary impact into federal, state, and unattributed shares via `BudgetaryImpact` on `PolicyReformAnalysis` and the standalone `calculate_budgetary_impact` helper. `total` combines the change in `household_tax` and `household_benefits` with the change in the shared-funding health-program government cost (Medicaid FMAP, CHIP eFMAP, and Medicare Savings Programs), which `household_benefits` excludes by default — guarded against double-counting when `gov.simulation.include_health_benefits_in_net_income` is enabled. `federal` and `state` attribute the cleanly-assignable pieces (`income_tax` + `employee_payroll_tax` − `federal_benefit_cost`; `state_income_tax` − `state_benefit_cost`), and `unattributed` carries the residual so reforms to 100%-federal programs such as SSI or SNAP and to shared-funding health programs both surface instead of silently reading as near-zero totals. `economic_impact_analysis` materializes the `federal_benefit_cost` / `state_benefit_cost` aggregates automatically.
+
+
 ## [4.19.0] - 2026-07-07
 
 ### Added

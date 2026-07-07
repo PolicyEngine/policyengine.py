@@ -18,18 +18,18 @@
         "schema:url": "https://policyengine.org"
       },
       "schema:dateCreated": "2026-06-19T02:38:00Z",
-      "schema:description": "TRACE TRO for certified runtime bundle uk-4.19.0 covering the bundle manifest, the certified dataset artifact, the country model wheel, and the country data release manifest when it is available.",
+      "schema:description": "TRACE TRO for certified runtime bundle uk-4.20.0 covering the bundle manifest, the certified dataset artifact, the country model wheel, and the country data release manifest when it is available.",
       "schema:name": "policyengine uk certified bundle TRO",
       "trov:createdWith": {
         "@type": "schema:SoftwareApplication",
         "schema:name": "policyengine",
-        "schema:softwareVersion": "4.19.0"
+        "schema:softwareVersion": "4.20.0"
       },
       "trov:hasArrangement": [
         {
           "@id": "arrangement/1",
           "@type": "trov:ArtifactArrangement",
-          "rdfs:comment": "Certified arrangement for bundle uk-4.19.0.",
+          "rdfs:comment": "Certified arrangement for bundle uk-4.20.0.",
           "trov:hasArtifactLocation": [
             {
               "@id": "arrangement/1/location/bundle_manifest",
@@ -75,7 +75,7 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine.py bundle manifest for uk",
             "trov:mimeType": "application/json",
-            "trov:sha256": "bbe25f2d3aa115371d11113d047d4057efb5b333ffa3509f53fda86bcf4a47e9"
+            "trov:sha256": "965b8b3775f76010fc68c5f93ebc1b4a174474598fcbd9ed61a052406e56764d"
           },
           {
             "@id": "composition/1/artifact/data_release_manifest",
@@ -102,7 +102,7 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "298a99b0b709750771940c4f6613b5d46163f7b12654f161b33353502e94c4ed"
+          "trov:sha256": "463ac98af598f87ab8f418ad80b83f5b432876b1bae590852e2e6074b14054e5"
         }
       },
       "trov:hasPerformance": {
