@@ -1,3 +1,10 @@
+## [4.20.3] - 2026-07-09
+
+### Fixed
+
+- Point the post-release consumer dispatch at the renamed `policyengine-sim-api` repository (formerly `policyengine-api-v2`). The stale name made `create-github-app-token` fail with a 422 ("repository does not exist or is not accessible"), so the `Open consumer update PRs` job died before dispatching `policyengine-release` and no downstream version-bump PRs were opened.
+
+
 ## [4.20.2] - 2026-07-09
 
 ### Fixed
