@@ -1,10 +1,10 @@
 {
-  "bundle_version": "4.20.0",
+  "bundle_version": "4.20.1",
   "citation": {
     "publisher": "PolicyEngine",
-    "title": "PolicyEngine bundle 4.20.0",
+    "title": "PolicyEngine bundle 4.20.1",
     "type": "software-bundle",
-    "version": "4.20.0"
+    "version": "4.20.1"
   },
   "countries": {
     "uk": {
@@ -17,7 +17,7 @@
   "data_releases": {
     "uk": {
       "build_id": "populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z",
-      "bundle_id": "uk-4.20.0",
+      "bundle_id": "uk-4.20.1",
       "certification": {
         "built_with_model_version": "2.89.2",
         "certified_by": "policyengine.py bundle certification",
@@ -85,7 +85,7 @@
         "version": "2.89.2",
         "wheel_url": "https://files.pythonhosted.org/packages/83/db/ce3154ba69b6fcd1e9e922ceee705ef4ddb1f81553da1e63b9296e74a4dc/policyengine_uk-2.89.2-py3-none-any.whl"
       },
-      "policyengine_version": "4.20.0",
+      "policyengine_version": "4.20.1",
       "region_datasets": {
         "national": {
           "path_template": "populace_uk_2023.h5"
@@ -98,7 +98,7 @@
     },
     "us": {
       "build_id": "populace-us-2024-buildi-sparse-rmloss100-6e8e929-20260709T034135Z",
-      "bundle_id": "us-4.20.0",
+      "bundle_id": "us-4.20.1",
       "certification": {
         "built_with_model_version": "1.764.6",
         "certified_by": "policyengine.py bundle certification",
@@ -166,7 +166,7 @@
         "version": "1.764.6",
         "wheel_url": "https://files.pythonhosted.org/packages/e2/5a/0566666f30ad06e416f0cf25b24bdee73acd71897fb2de3c0ac43b59e3e3/policyengine_us-1.764.6-py3-none-any.whl"
       },
-      "policyengine_version": "4.20.0",
+      "policyengine_version": "4.20.1",
       "region_datasets": {
         "national": {
           "path_template": "populace_us_2024.h5"
@@ -196,10 +196,10 @@
   "packages": {
     "policyengine": {
       "import_name": "policyengine",
-      "install_requirement": "policyengine==4.20.0",
+      "install_requirement": "policyengine==4.20.1",
       "name": "policyengine",
       "role": "bundle_carrier",
-      "version": "4.20.0"
+      "version": "4.20.1"
     },
     "policyengine-core": {
       "import_name": "policyengine_core",
@@ -225,6 +225,6 @@
       "version": "1.764.6"
     }
   },
-  "policyengine_version": "4.20.0",
+  "policyengine_version": "4.20.1",
   "schema_version": 2
 }
