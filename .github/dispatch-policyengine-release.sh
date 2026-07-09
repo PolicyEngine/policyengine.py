@@ -17,7 +17,7 @@ fi
 
 CONSUMER_REPOS=(
   policyengine-api
-  policyengine-api-v2
+  policyengine-sim-api
 )
 
 for repo in "${CONSUMER_REPOS[@]}"; do

@@ -211,7 +211,7 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
           owner: PolicyEngine
-          repositories: policyengine-api,policyengine-api-v2
+          repositories: policyengine-api,policyengine-sim-api
       - name: Dispatch policyengine-release to consumer repos
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
