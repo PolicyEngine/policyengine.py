@@ -1,3 +1,10 @@
+## [4.20.2] - 2026-07-09
+
+### Fixed
+
+- Upgrade `policyengine-core` to 3.30.0. This enforces formula-time determinism with a static check at variable registration instead of a runtime monkeypatch of the process-global `numpy.random`, fixing intermittent, misattributed `NonDeterministicFormulaError`s that could be raised when building or running many simulations concurrently in one process (policyengine-core#518). It also corrects `Reform.from_dict` bare-date period semantics (policyengine-core#510). The pinned country packages already allow `policyengine-core>=3.26.0` and are randomness-clean, so no country-package bump is required.
+
+
 ## [4.20.1] - 2026-07-09
 
 ### Changed
