@@ -1,3 +1,10 @@
+## [4.20.4] - 2026-07-10
+
+### Changed
+
+- Certify the US populace data release `populace-us-2024-buildj-sparse-rmloss100-75d5add-20260710T094201Z` (populace_us_2024, policyengine-us 1.764.6) into the PolicyEngine bundle manifest.
+
+
 ## [4.20.3] - 2026-07-09
 
 ### Fixed
