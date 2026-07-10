@@ -33,6 +33,28 @@ from importlib.util import find_spec
 
 from policyengine import outputs as outputs
 from policyengine.core import Simulation as Simulation
+from policyengine.execution import (
+    EXECUTION_RECEIPT_CANONICALIZATION as EXECUTION_RECEIPT_CANONICALIZATION,
+)
+from policyengine.execution import (
+    EXECUTION_RECEIPT_SCHEMA_VERSION as EXECUTION_RECEIPT_SCHEMA_VERSION,
+)
+from policyengine.execution import ArtifactIdentity as ArtifactIdentity
+from policyengine.execution import (
+    CertifiedReleaseManifest as CertifiedReleaseManifest,
+)
+from policyengine.execution import ExecutionReceipt as ExecutionReceipt
+from policyengine.execution import PackageResolution as PackageResolution
+from policyengine.execution import PackageVersion as PackageVersion
+from policyengine.execution import (
+    RequestedExecutionAliases as RequestedExecutionAliases,
+)
+from policyengine.execution import (
+    ResolvedExecutionBundle as ResolvedExecutionBundle,
+)
+from policyengine.execution import RuntimeIdentity as RuntimeIdentity
+from policyengine.execution import TraceReference as TraceReference
+from policyengine.execution import canonical_content_hash as canonical_content_hash
 
 _SKIP_COUNTRY_IMPORTS = os.environ.get("POLICYENGINE_SKIP_COUNTRY_IMPORTS") == "1"
 
@@ -46,4 +68,21 @@ if not _SKIP_COUNTRY_IMPORTS and find_spec("policyengine_uk") is not None:
 else:  # pragma: no cover
     uk = None  # type: ignore[assignment]
 
-__all__ = ["Simulation", "outputs", "uk", "us"]
+__all__ = [
+    "ArtifactIdentity",
+    "CertifiedReleaseManifest",
+    "EXECUTION_RECEIPT_CANONICALIZATION",
+    "EXECUTION_RECEIPT_SCHEMA_VERSION",
+    "ExecutionReceipt",
+    "PackageResolution",
+    "PackageVersion",
+    "RequestedExecutionAliases",
+    "ResolvedExecutionBundle",
+    "RuntimeIdentity",
+    "Simulation",
+    "TraceReference",
+    "canonical_content_hash",
+    "outputs",
+    "uk",
+    "us",
+]
