@@ -251,6 +251,54 @@ def fetch_pypi_wheel_metadata(name: str, version: str) -> dict[str, Optional[str
     return {"sha256": None, "url": None}
 
 
+DATASET_OVERLAYS_KEY = "dataset_overlays"
+
+
+def _apply_dataset_overlays(
+    country_id: str,
+    release_payload: dict,
+    bundle: dict,
+) -> dict:
+    """Merge hand-curated ``dataset_overlays`` into the certified datasets.
+
+    ``data_releases.{country}`` is regenerated wholesale by
+    ``certify_data_release`` every time a release is certified, so a
+    certified dataset always originates from the certified release
+    manifest. ``dataset_overlays.{country}`` is a sibling, hand-maintained
+    registry of *additional* named datasets that resolution should expose
+    without ever certifying them as the default — for example a staged
+    artifact published in its own immutable release (see
+    ``docs/release-bundles.md``). Because certification only rewrites
+    ``data_releases``, overlays survive re-certification untouched.
+
+    Overlays are strictly additive: an overlay may not shadow the certified
+    default dataset or any certified dataset entry, so it can never alter
+    default resolution.
+    """
+    overlays = (bundle.get(DATASET_OVERLAYS_KEY) or {}).get(country_id) or {}
+    if not overlays:
+        return release_payload
+
+    certified_datasets = dict(release_payload.get("datasets") or {})
+    default_dataset = release_payload.get("default_dataset")
+    for overlay_name, overlay_reference in overlays.items():
+        if overlay_name == default_dataset:
+            raise ValueError(
+                f"Dataset overlay '{overlay_name}' for country '{country_id}' "
+                "shadows the certified default dataset. Overlays must never "
+                "change default resolution."
+            )
+        if overlay_name in certified_datasets:
+            raise ValueError(
+                f"Dataset overlay '{overlay_name}' for country '{country_id}' "
+                "collides with a certified dataset entry. Overlays must be "
+                "additive, not overrides."
+            )
+        certified_datasets[overlay_name] = overlay_reference
+
+    return {**release_payload, "datasets": certified_datasets}
+
+
 @lru_cache
 def get_release_manifest(country_id: str) -> CountryReleaseManifest:
     manifest_path = files("policyengine").joinpath("data", "bundle", "manifest.json")
@@ -264,6 +312,7 @@ def get_release_manifest(country_id: str) -> CountryReleaseManifest:
     except KeyError as exc:
         raise ValueError(f"No bundled data release for country '{country_id}'") from exc
 
+    release_payload = _apply_dataset_overlays(country_id, release_payload, bundle)
     manifest = CountryReleaseManifest.model_validate(release_payload)
     manifest.source_sha256 = hashlib.sha256(source_bytes).hexdigest()
     return manifest

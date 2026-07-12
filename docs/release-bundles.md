@@ -141,6 +141,35 @@ default dataset. State and congressional-district regions are runtime row
 filters over that national dataset, so derived `states/*.h5` or
 `districts/*.h5` files are not vendored into `data_releases.us.datasets`.
 
+### Non-default dataset overlays
+
+`certify_data_release` rewrites `data_releases.{country}` wholesale from the
+certified release manifest, so that block only ever holds datasets from the
+certified release. A staged artifact published in its own release — one that is
+deliberately not the certified default — is registered instead under the
+sibling `dataset_overlays.{country}` map:
+
+```json
+"dataset_overlays": {
+  "us": {
+    "populace_us_2024_acs_local": {
+      "path": "populace_us_2024_acs_local.h5",
+      "repo_id": "policyengine/populace-us",
+      "revision": "populace-us-2024-buildl-acs-local-...",
+      "sha256": "..."
+    }
+  }
+}
+```
+
+`get_release_manifest` merges overlays into the resolvable dataset registry, so
+`resolve_dataset_reference` and `managed_microsimulation` load them by name at
+their own pinned, sha-verified revision. Overlays are strictly additive: an
+overlay may not shadow the certified default or any certified dataset, so
+default resolution is untouched. Because certification only rewrites
+`data_releases`, overlays survive re-certification without any manual
+re-add step.
+
 Earlier releases (policyengine 4.15.x–4.16.x) were certified through the
 `PolicyEngine/policyengine-bundles` archive flow; those bundles remain the
 historical record of their certifications.

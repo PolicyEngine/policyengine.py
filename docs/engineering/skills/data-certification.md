@@ -88,6 +88,13 @@ refused: a new data build or a published compatibility claim is required.
 Warnings (recorded, not blocking): artifacts without sha256, and the
 publisher-claim basis above.
 
+## Release runbooks
+
+Concrete, fill-in-the-id runbooks that replay a specific certification live
+under `docs/engineering/runbooks/`. See
+`runbooks/build-m-us-populace-certification.md` for the next US Populace
+`sparse-rmloss100` default.
+
 ## Legacy paths
 
 Do not hand-edit bundle data releases for normal updates. Countries whose
