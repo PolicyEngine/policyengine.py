@@ -18,8 +18,10 @@ from policyengine.core.tax_benefit_model import TaxBenefitModel
 from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
 from policyengine.provenance.manifest import (
     ArtifactPathReference,
+    CountryReleaseManifest,
     DataCertification,
     DataReleaseManifestUnavailableError,
+    _apply_dataset_overlays,
     certify_data_release_compatibility,
     dataset_logical_name,
     get_data_release_manifest,
@@ -54,6 +56,17 @@ US_CERTIFIED_DATASET_URI = (
 )
 US_RELEASE_MANIFEST_DATASET_URI = (
     f"hf://policyengine/populace-us/populace_us_2024.h5@{US_DATA_RELEASE_REVISION}"
+)
+# Non-default local-area overlay: a staged Populace US artifact published in its
+# own immutable release (Build L), loadable by name but never the default.
+US_LOCAL_AREA_DATASET = "populace_us_2024_acs_local"
+US_LOCAL_AREA_RELEASE_ID = "populace-us-2024-buildl-acs-local-36de5d9a-20260712T104640Z"
+US_LOCAL_AREA_SHA256 = (
+    "36de5d9aa69fa932cd42b1b9c08ef72b20176414118997de6240a588fab30a6b"
+)
+US_LOCAL_AREA_DATASET_URI = (
+    "hf://policyengine/populace-us/populace_us_2024_acs_local.h5"
+    f"@{US_LOCAL_AREA_RELEASE_ID}"
 )
 UK_MODEL_VERSION = "2.89.2"
 UK_BUILT_WITH_MODEL_VERSION = "2.89.2"
@@ -253,6 +266,47 @@ class TestReleaseManifests:
             resolve_managed_dataset_reference("us")
             == get_release_manifest("us").default_dataset_uri
         )
+
+    def test__given_local_area_overlay__then_default_resolution_is_unchanged(self):
+        """Regression: the non-default local-area overlay never changes defaults.
+
+        The overlay adds a loadable name; it must never become the certified
+        default, and default resolution must keep pointing at the certified
+        national Populace artifact.
+        """
+        manifest = get_release_manifest("us")
+
+        assert manifest.default_dataset == "populace_us_2024"
+        assert manifest.default_dataset_uri == US_CERTIFIED_DATASET_URI
+        assert resolve_managed_dataset_reference("us") == US_CERTIFIED_DATASET_URI
+        assert resolve_managed_dataset_reference("us") != US_LOCAL_AREA_DATASET_URI
+        assert manifest.region_datasets["national"].path_template == (
+            "populace_us_2024.h5"
+        )
+
+    def test__given_local_area_name__then_resolves_to_its_immutable_tag(self):
+        """The local-area overlay resolves to its own Build L release tag."""
+        assert (
+            resolve_dataset_reference("us", US_LOCAL_AREA_DATASET)
+            == US_LOCAL_AREA_DATASET_URI
+        )
+        # It is a first-class managed dataset name, so managed resolution
+        # accepts it without allow_unmanaged.
+        assert (
+            resolve_managed_dataset_reference("us", US_LOCAL_AREA_DATASET)
+            == US_LOCAL_AREA_DATASET_URI
+        )
+
+    def test__given_local_area_overlay__then_registered_with_sha_but_not_default(self):
+        manifest = get_release_manifest("us")
+
+        reference = manifest.datasets[US_LOCAL_AREA_DATASET]
+        assert reference.path == "populace_us_2024_acs_local.h5"
+        assert reference.repo_id == "policyengine/populace-us"
+        assert reference.revision == US_LOCAL_AREA_RELEASE_ID
+        assert reference.sha256 == US_LOCAL_AREA_SHA256
+        assert US_LOCAL_AREA_DATASET in resolve_default_datasets("us")
+        assert US_LOCAL_AREA_DATASET != manifest.default_dataset
 
     def test__given_us_manifest__then_has_no_inherited_area_artifacts(self):
         manifest = get_release_manifest("us")
@@ -1019,3 +1073,112 @@ class TestReleaseManifests:
         assert microsim.policyengine_bundle["runtime_dataset_source"] == (
             "/tmp/frs_2022_23.h5"
         )
+
+
+class TestDatasetOverlays:
+    """Unit tests for the ``dataset_overlays`` merge layer.
+
+    ``dataset_overlays`` is the hand-maintained sibling of ``data_releases``.
+    ``certify_data_release`` rewrites ``data_releases.{country}`` wholesale, so
+    these tests pin the invariant that overlays are additive, survive
+    re-certification, and can never hijack default resolution.
+    """
+
+    def teardown_method(self):
+        get_release_manifest.cache_clear()
+
+    def _recertified_us_payload(self) -> dict:
+        """A freshly certified ``data_releases.us`` payload (no overlay).
+
+        This is the shape ``certify_data_release`` writes: it carries only the
+        certified release's own datasets and never the overlay.
+        """
+        return {
+            "country_id": "us",
+            "policyengine_version": "9.9.9",
+            "model_package": {"name": "policyengine-us", "version": "1.999.0"},
+            "data_package": {
+                "name": "populace-data",
+                "version": "0.1.0",
+                "repo_id": "policyengine/populace-us",
+                "repo_type": "dataset",
+                "release_manifest_revision": "populace-us-buildm",
+            },
+            "default_dataset": "populace_us_2024",
+            "datasets": {
+                "populace_us_2024": {
+                    "path": "populace_us_2024.h5",
+                    "repo_id": "policyengine/populace-us",
+                    "revision": "populace-us-buildm",
+                },
+            },
+            "region_datasets": {"national": {"path_template": "populace_us_2024.h5"}},
+        }
+
+    def _local_area_overlay(self) -> dict:
+        return {
+            US_LOCAL_AREA_DATASET: {
+                "path": "populace_us_2024_acs_local.h5",
+                "repo_id": "policyengine/populace-us",
+                "revision": US_LOCAL_AREA_RELEASE_ID,
+                "sha256": US_LOCAL_AREA_SHA256,
+            }
+        }
+
+    def test__given_recertified_release__then_overlay_survives(self):
+        """The overlay lives outside ``data_releases``, so a re-certified
+        payload that never mentions it still resolves it by name."""
+        payload = self._recertified_us_payload()
+        bundle = {
+            "data_releases": {"us": payload},
+            "dataset_overlays": {"us": self._local_area_overlay()},
+        }
+
+        merged = _apply_dataset_overlays("us", payload, bundle)
+        manifest = CountryReleaseManifest.model_validate(merged)
+
+        assert manifest.default_dataset == "populace_us_2024"
+        assert US_LOCAL_AREA_DATASET in manifest.datasets
+        reference = manifest.datasets[US_LOCAL_AREA_DATASET]
+        assert reference.revision == US_LOCAL_AREA_RELEASE_ID
+        assert reference.sha256 == US_LOCAL_AREA_SHA256
+
+    def test__given_no_overlays__then_payload_is_returned_unchanged(self):
+        payload = self._recertified_us_payload()
+
+        assert _apply_dataset_overlays("us", payload, {"data_releases": {}}) is payload
+
+    def test__given_overlay_shadowing_default__then_raises(self):
+        payload = self._recertified_us_payload()
+        bundle = {
+            "data_releases": {"us": payload},
+            "dataset_overlays": {
+                "us": {"populace_us_2024": {"path": "other.h5"}},
+            },
+        }
+
+        try:
+            _apply_dataset_overlays("us", payload, bundle)
+        except ValueError as error:
+            assert "shadows the certified default" in str(error)
+        else:
+            raise AssertionError("Expected overlay shadowing the default to fail")
+
+    def test__given_overlay_colliding_with_certified_dataset__then_raises(self):
+        payload = self._recertified_us_payload()
+        payload["datasets"]["demographics"] = {
+            "path": "releases/populace-us-buildm/demographics.json",
+            "repo_id": "policyengine/populace-us",
+            "revision": "populace-us-buildm",
+        }
+        bundle = {
+            "data_releases": {"us": payload},
+            "dataset_overlays": {"us": {"demographics": {"path": "other.json"}}},
+        }
+
+        try:
+            _apply_dataset_overlays("us", payload, bundle)
+        except ValueError as error:
+            assert "collides with a certified dataset" in str(error)
+        else:
+            raise AssertionError("Expected overlay colliding with a dataset to fail")

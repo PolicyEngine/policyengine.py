@@ -48,6 +48,50 @@ List datasets already known to the country:
 pe.us.load_datasets()        # or pe.uk.load_datasets()
 ```
 
+### US local-area dataset
+
+Alongside the certified national default, the bundle registers a **non-default**
+US dataset for finer geographic work: `populace_us_2024_acs_local`. It is a
+Populace US 2024 build of roughly **1.6 million households** on an **ACS 2024
+multispine**, with each household **PUMA-assigned** to a 119th-Congress
+congressional district, county, and state, and calibrated to **state
+administrative totals and state and congressional-district population**. Its
+release gate summary records **four reviewed limitations**, so read that gate
+summary before relying on it. It ships in its own immutable release and is never
+selected implicitly — you load it by name.
+
+Two-line load:
+
+```python
+import policyengine as pe
+sim = pe.us.managed_microsimulation(dataset="populace_us_2024_acs_local")
+```
+
+Or materialize it as a `PolicyEngineUSDataset` for `Simulation`:
+
+```python
+datasets = pe.us.ensure_datasets(datasets=["populace_us_2024_acs_local"], years=[2024])
+dataset = datasets["populace_us_2024_acs_local_2024"]
+```
+
+Because this file carries PUMA-assigned district, county, and state identifiers
+calibrated to state and congressional-district population, **state and
+congressional-district breakdowns should filter this dataset** rather than the
+national default. Filter it with the same `state_fips` /
+`congressional_district_geoid` row filters used elsewhere (see
+[Regional analysis](regions.md)):
+
+```python
+from policyengine.core import Simulation
+from policyengine.core.scoping_strategy import RowFilterStrategy
+
+ca = Simulation(
+    dataset=dataset,
+    tax_benefit_model_version=pe.us.model,
+    scoping_strategy=RowFilterStrategy(variable_name="state_fips", variable_value=6),
+)
+```
+
 ### UK private data and raw h5 access
 
 UK population data uses licensed Family Resources Survey inputs. The default
