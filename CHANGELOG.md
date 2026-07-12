@@ -1,3 +1,10 @@
+## [4.21.0] - 2026-07-12
+
+### Added
+
+- Add named, non-default access to the US Populace local-area dataset (`populace_us_2024_acs_local`) through a `dataset_overlays` bundle-manifest section that resolves by name to its own pinned, sha-verified release revision, never changes default resolution, and survives re-certification. Includes a Build M US Populace certification runbook.
+
+
 ## [4.20.4] - 2026-07-10
 
 ### Changed
