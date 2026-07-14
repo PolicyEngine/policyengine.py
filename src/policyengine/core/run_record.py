@@ -25,6 +25,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
 
+from policyengine.execution import (
+    ExecutionReceipt,
+    TraceReference,
+    canonical_content_hash,
+)
 from policyengine.provenance.trace import (
     build_simulation_trace_tro,
     canonical_json_bytes,
@@ -186,6 +191,61 @@ def build_simulation_run_record_payloads(
     return {"reform": reform, "input": input_payload, "results": results_payload}
 
 
+def _validate_execution_receipt_bindings(
+    receipt: ExecutionReceipt,
+    *,
+    simulation: Simulation,
+    bundle_tro: Mapping,
+    bundle_tro_url: Optional[str],
+    request_payload: Optional[Mapping],
+    results_payload: Mapping,
+) -> None:
+    """Reject a receipt whose cross-references contradict this run record."""
+
+    if receipt.run_id is not None and receipt.run_id != str(simulation.id):
+        raise ValueError(
+            "Execution receipt run_id does not match the simulation being recorded."
+        )
+
+    if receipt.request_sha256 is not None:
+        if request_payload is None:
+            raise ValueError(
+                "Execution receipt has request_sha256 but no request_payload was "
+                "supplied to the run record."
+            )
+        if receipt.request_sha256 != canonical_content_hash(request_payload):
+            raise ValueError(
+                "Execution receipt request_sha256 does not match request_payload."
+            )
+
+    if (
+        receipt.result_sha256 is not None
+        and receipt.result_sha256 != canonical_content_hash(results_payload)
+    ):
+        raise ValueError(
+            "Execution receipt result_sha256 does not match results_payload."
+        )
+
+    claimed_trace = receipt.resolved.bundle_trace
+    if claimed_trace is None:
+        raise ValueError(
+            "Execution receipt is missing a bundle trace reference for bundle_tro."
+        )
+
+    actual_trace = TraceReference.from_trace_tro(
+        bundle_tro,
+        url=bundle_tro_url,
+    )
+    if claimed_trace.composition_fingerprint != actual_trace.composition_fingerprint:
+        raise ValueError(
+            "Execution receipt bundle trace fingerprint does not match bundle_tro."
+        )
+    if claimed_trace.sha256 is not None and claimed_trace.sha256 != actual_trace.sha256:
+        raise ValueError(
+            "Execution receipt bundle trace sha256 does not match bundle_tro."
+        )
+
+
 def write_simulation_run_record(
     simulation: Simulation,
     directory: Union[str, Path],
@@ -193,21 +253,24 @@ def write_simulation_run_record(
     bundle_tro: Optional[Mapping] = None,
     bundle_tro_url: Optional[str] = None,
     request_payload: Optional[Mapping] = None,
+    execution_receipt: Optional[ExecutionReceipt] = None,
     runtime_environment: Optional[Mapping[str, Any]] = None,
     created_at: Optional[str] = None,
 ) -> SimulationRunRecord:
     """Write a self-contained, offline-verifiable run record directory.
 
-    Files written: ``bundle.trace.tro.jsonld`` (the certified bundle
-    TRO), ``reform.json`` (when the simulation has a policy),
-    ``input.json``, ``results.json``, ``request.json`` (when an API
-    request payload is supplied), and ``run.trace.tro.jsonld`` binding
-    them all. Pass ``bundle_tro_url`` whenever a canonical published
-    location for the bundle TRO exists — it lets a verifier cross-check
-    the local copy against independently fetched bytes.
+    Files written: ``bundle.trace.tro.jsonld`` (the certified bundle TRO),
+    ``reform.json`` (when the simulation has a policy), ``input.json``,
+    ``results.json``, ``request.json`` (when an API request payload is supplied),
+    ``execution-receipt.json`` (when a receipt is supplied), and
+    ``run.trace.tro.jsonld`` binding them all. Pass ``bundle_tro_url`` whenever a
+    canonical published location for the bundle TRO exists — it lets a verifier
+    cross-check the local copy against independently fetched bytes.
 
-    ``created_at`` defaults to the simulation's creation time; pass an
-    explicit ISO 8601 string to make record bytes reproducible.
+    ``execution_receipt`` is written as ``execution-receipt.json`` and bound
+    into the run TRO as its runtime artifact. ``created_at`` defaults to the
+    simulation's creation time; pass an explicit ISO 8601 string to make
+    record bytes reproducible.
     """
     if bundle_tro is None:
         if simulation.tax_benefit_model_version is None:
@@ -219,6 +282,23 @@ def write_simulation_run_record(
 
     # Build payloads (and surface refusals) before touching the filesystem.
     payloads = build_simulation_run_record_payloads(simulation)
+    results_payload = payloads["results"]
+    if results_payload is None:  # Defensive; the builder always returns results.
+        raise ValueError("Simulation run record results payload is missing.")
+    if execution_receipt is not None:
+        _validate_execution_receipt_bindings(
+            execution_receipt,
+            simulation=simulation,
+            bundle_tro=bundle_tro,
+            bundle_tro_url=bundle_tro_url,
+            request_payload=request_payload,
+            results_payload=results_payload,
+        )
+    receipt_payload = (
+        execution_receipt.model_dump(mode="json")
+        if execution_receipt is not None
+        else None
+    )
     if created_at is None:
         created_at = simulation.created_at.isoformat()
 
@@ -246,6 +326,10 @@ def write_simulation_run_record(
         path = directory / "request.json"
         path.write_bytes(canonical_json_bytes(request_payload))
         paths["request"] = path
+    if receipt_payload is not None:
+        path = directory / "execution-receipt.json"
+        path.write_bytes(canonical_json_bytes(receipt_payload))
+        paths["execution_receipt"] = path
 
     tro = build_simulation_trace_tro(
         bundle_tro=bundle_tro,
@@ -253,6 +337,7 @@ def write_simulation_run_record(
         reform_payload=payloads["reform"],
         input_payload=payloads["input"],
         request_payload=request_payload,
+        runtime_payload=receipt_payload,
         runtime_environment=runtime_environment,
         simulation_id=simulation.id,
         created_at=created_at,
@@ -260,6 +345,7 @@ def write_simulation_run_record(
         reform_location="reform.json",
         input_location="input.json",
         request_location="request.json",
+        runtime_location="execution-receipt.json",
         bundle_tro_location="bundle.trace.tro.jsonld",
         bundle_tro_url=bundle_tro_url,
     )

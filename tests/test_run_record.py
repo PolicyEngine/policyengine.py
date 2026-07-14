@@ -30,6 +30,7 @@ from policyengine.core.run_record import (
     write_simulation_run_record,
 )
 from policyengine.core.simulation import Simulation
+from policyengine.execution import TraceReference, canonical_content_hash
 from policyengine.provenance.manifest import (
     get_data_release_manifest,
     get_release_manifest,
@@ -40,9 +41,26 @@ from policyengine.provenance.trace import (
 )
 from policyengine.provenance.verify import verify_trace_tro_path
 
+from .fixtures.execution_fixtures import make_execution_receipt
 from .test_trace_tro import _fake_fetch_pypi, _us_data_release_manifest
 
 FIXED_CREATED_AT = "2026-06-12T00:00:00Z"
+
+
+def _bound_execution_receipt(simulation, bundle_tro, request_payload):
+    payloads = build_simulation_run_record_payloads(simulation)
+    assert payloads["results"] is not None
+    receipt = make_execution_receipt(run_id=str(simulation.id))
+    resolved = receipt.resolved.model_copy(
+        update={"bundle_trace": TraceReference.from_trace_tro(bundle_tro)}
+    )
+    return receipt.model_copy(
+        update={
+            "resolved": resolved,
+            "request_sha256": canonical_content_hash(request_payload),
+            "result_sha256": canonical_content_hash(payloads["results"]),
+        }
+    )
 
 
 class _StubYearData(BaseModel):
@@ -253,6 +271,147 @@ class TestWriteRunRecord:
         report = verify_trace_tro_path(record.paths["tro"])
         assert report.fingerprint_status == "ok"
         assert report.ok
+
+    def test__given_execution_receipt__then_trace_binds_canonical_receipt(
+        self, simulation, bundle_tro, tmp_path
+    ):
+        # Given
+        request_payload = {"country_id": "us", "request": {"period": "2026"}}
+        receipt = _bound_execution_receipt(
+            simulation,
+            bundle_tro,
+            request_payload,
+        )
+
+        # When
+        record = write_simulation_run_record(
+            simulation,
+            tmp_path / "record",
+            bundle_tro=bundle_tro,
+            request_payload=request_payload,
+            execution_receipt=receipt,
+            created_at=FIXED_CREATED_AT,
+        )
+
+        # Then
+        receipt_path = record.paths["execution_receipt"]
+        assert receipt_path.name == "execution-receipt.json"
+        assert receipt_path.read_bytes() == canonical_json_bytes(
+            receipt.model_dump(mode="json")
+        )
+        report = verify_trace_tro_path(record.paths["tro"])
+        statuses = {check.artifact_id: check.status for check in report.artifacts}
+        assert statuses["runtime"] == "ok"
+        assert report.ok
+
+    @pytest.mark.parametrize(
+        "mismatch",
+        ["run_id", "request_sha256", "result_sha256", "bundle_trace"],
+    )
+    def test__given_receipt_cross_reference_mismatch__then_write_refuses_before_io(
+        self, simulation, bundle_tro, tmp_path, mismatch
+    ):
+        # Given
+        request_payload = {"country_id": "us", "request": {"period": "2026"}}
+        receipt = _bound_execution_receipt(
+            simulation,
+            bundle_tro,
+            request_payload,
+        )
+        if mismatch == "bundle_trace":
+            assert receipt.resolved.bundle_trace is not None
+            receipt = receipt.model_copy(
+                update={
+                    "resolved": receipt.resolved.model_copy(
+                        update={
+                            "bundle_trace": receipt.resolved.bundle_trace.model_copy(
+                                update={"composition_fingerprint": "f" * 64}
+                            )
+                        }
+                    )
+                }
+            )
+        else:
+            receipt = receipt.model_copy(update={mismatch: "f" * 64})
+        directory = tmp_path / "record"
+
+        # When / Then
+        expected_message = "bundle trace" if mismatch == "bundle_trace" else mismatch
+        with pytest.raises(ValueError, match=expected_message):
+            write_simulation_run_record(
+                simulation,
+                directory,
+                bundle_tro=bundle_tro,
+                request_payload=request_payload,
+                execution_receipt=receipt,
+                created_at=FIXED_CREATED_AT,
+            )
+        assert not directory.exists()
+
+    def test__given_receipt_missing_bundle_trace__then_write_refuses_before_io(
+        self, simulation, bundle_tro, tmp_path
+    ):
+        # Given
+        request_payload = {"country_id": "us", "request": {"period": "2026"}}
+        receipt = _bound_execution_receipt(
+            simulation,
+            bundle_tro,
+            request_payload,
+        )
+        receipt = receipt.model_copy(
+            update={
+                "resolved": receipt.resolved.model_copy(update={"bundle_trace": None})
+            }
+        )
+        directory = tmp_path / "record"
+
+        # When / Then
+        with pytest.raises(ValueError, match="missing a bundle trace"):
+            write_simulation_run_record(
+                simulation,
+                directory,
+                bundle_tro=bundle_tro,
+                request_payload=request_payload,
+                execution_receipt=receipt,
+                created_at=FIXED_CREATED_AT,
+            )
+        assert not directory.exists()
+
+    def test__given_receipt_bundle_trace_sha_mismatch__then_write_refuses_before_io(
+        self, simulation, bundle_tro, tmp_path
+    ):
+        # Given
+        request_payload = {"country_id": "us", "request": {"period": "2026"}}
+        receipt = _bound_execution_receipt(
+            simulation,
+            bundle_tro,
+            request_payload,
+        )
+        assert receipt.resolved.bundle_trace is not None
+        receipt = receipt.model_copy(
+            update={
+                "resolved": receipt.resolved.model_copy(
+                    update={
+                        "bundle_trace": receipt.resolved.bundle_trace.model_copy(
+                            update={"sha256": "f" * 64}
+                        )
+                    }
+                )
+            }
+        )
+        directory = tmp_path / "record"
+
+        # When / Then
+        with pytest.raises(ValueError, match="bundle trace sha256"):
+            write_simulation_run_record(
+                simulation,
+                directory,
+                bundle_tro=bundle_tro,
+                request_payload=request_payload,
+                execution_receipt=receipt,
+                created_at=FIXED_CREATED_AT,
+            )
+        assert not directory.exists()
 
     def test__given_tampered_results__then_verifier_reports_mismatch(
         self, simulation, bundle_tro, tmp_path
