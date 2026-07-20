@@ -1,6 +1,6 @@
 """Region scoping strategies for geographic simulations.
 
-Provides two concrete strategies for scoping datasets to sub-national regions:
+Provides three concrete strategies for scoping datasets to sub-national regions:
 
 1. RowFilterStrategy: Filters dataset rows where a household variable matches
    a specific value (e.g., US states by 'state_fips', US congressional districts
@@ -8,6 +8,10 @@ Provides two concrete strategies for scoping datasets to sub-national regions:
 
 2. WeightReplacementStrategy: Legacy strategy that replaces household weights from
    a pre-computed weight matrix resolved locally or from GCS.
+
+3. RegionGroupStrategy: Scopes to the union of several RowFilterStrategy regions
+   (e.g. multiple whole states) so one simulation covers the whole group. Used to
+   segment a national run into parallel region-group runs.
 """
 
 import logging
@@ -20,7 +24,9 @@ from microdf import MicroDataFrame
 from pydantic import BaseModel, Discriminator, Field
 
 from policyengine.utils.entity_utils import (
+    filter_dataset_by_household_ids,
     filter_dataset_by_household_variable,
+    matching_household_ids,
 )
 
 logger = logging.getLogger(__name__)
@@ -233,7 +239,45 @@ class WeightReplacementStrategy(RegionScopingStrategy):
         return f"weight_replacement:{self.weight_matrix_key}:{self.region_code}"
 
 
+class RegionGroupStrategy(RegionScopingStrategy):
+    """Scope to the UNION of several row-filter regions in one simulation.
+
+    Members are ordinary ``RowFilterStrategy`` regions (e.g. several whole
+    states); their households are unioned at the household level and the sim
+    runs once over that union. Because member regions never share households,
+    the union is a disjoint concatenation — no household is counted twice.
+    """
+
+    strategy_type: Literal["region_group"] = "region_group"
+    members: list[RowFilterStrategy] = Field(min_length=1)
+
+    def apply(
+        self,
+        entity_data: dict[str, MicroDataFrame],
+        group_entities: list[str],
+        year: int,
+    ) -> dict[str, MicroDataFrame]:
+        keep_household_ids: set = set()
+        for member in self.members:
+            keep_household_ids |= matching_household_ids(
+                entity_data,
+                member.variable_name,
+                member.variable_value,
+                member.additional_filters,
+            )
+        return filter_dataset_by_household_ids(
+            entity_data, group_entities, keep_household_ids
+        )
+
+    @property
+    def cache_key(self) -> str:
+        # Sorted so the key is independent of member order (deterministic
+        # simulation-ID hashing).
+        member_keys = sorted(member.cache_key for member in self.members)
+        return "region_group:" + "|".join(member_keys)
+
+
 ScopingStrategy = Annotated[
-    Union[RowFilterStrategy, WeightReplacementStrategy],
+    Union[RowFilterStrategy, WeightReplacementStrategy, RegionGroupStrategy],
     Discriminator("strategy_type"),
 ]
