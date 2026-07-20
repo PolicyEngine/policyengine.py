@@ -1,3 +1,10 @@
+## [4.22.0] - 2026-07-20
+
+### Added
+
+- Add `RegionGroupStrategy`, a scoping strategy that runs one simulation over the union of several row-filter regions (e.g. multiple whole states), and refactor the household filter into a reusable `matching_household_ids` / `filter_dataset_by_household_ids` pair keyed on the stable `household_id`. This enables map-reduce national simulations that reconstruct exact whole-population results from parallel region-group runs.
+
+
 ## [4.21.1] - 2026-07-17
 
 ### Changed
