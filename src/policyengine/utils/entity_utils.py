@@ -1,7 +1,7 @@
 """Shared utilities for entity relationship building and dataset filtering."""
 
 import logging
-from typing import Optional, Union
+from typing import Iterable, Optional, Union
 
 import pandas as pd
 from microdf import MicroDataFrame
@@ -52,37 +52,17 @@ def build_entity_relationships(
     return pd.DataFrame(columns)
 
 
-def filter_dataset_by_household_variable(
-    entity_data: dict[str, MicroDataFrame],
-    group_entities: list[str],
+def _household_mask(
+    household_data: pd.DataFrame,
     variable_name: str,
     variable_value: Union[str, int, float],
     additional_filters: Optional[dict[str, Union[str, int, float]]] = None,
-) -> dict[str, MicroDataFrame]:
-    """Filter dataset entities to only include households matching variables.
+):
+    """Boolean mask over the household table for a single-value filter.
 
-    Uses an entity relationship approach: builds an explicit map of all
-    entity relationships, filters at the household level, and keeps all
-    persons in matching households to preserve entity integrity.
-
-    Args:
-        entity_data: Dict mapping entity names to their MicroDataFrames
-                     (from YearData.entity_data).
-        group_entities: List of group entity names for this country.
-        variable_name: The household-level variable to filter on.
-        variable_value: The value to match. Handles both str and bytes encoding.
-        additional_filters: Optional household-level filters that must also
-                            match, keyed by variable name.
-
-    Returns:
-        A dict mapping entity names to filtered MicroDataFrames.
-
-    Raises:
-        ValueError: If variable_name is not found or no households match.
+    Local intermediate only — never crosses a function boundary — so no
+    positional-alignment invariant leaks out (callers key on household_id).
     """
-    person_data = pd.DataFrame(entity_data["person"])
-    household_data = pd.DataFrame(entity_data["household"])
-
     if variable_name not in household_data.columns:
         raise ValueError(
             f"Variable '{variable_name}' not found in household data. "
@@ -96,33 +76,60 @@ def filter_dataset_by_household_variable(
                 f"Available columns: {list(household_data.columns)}"
             )
 
-    # Build entity relationships
+    mask = _values_match(household_data[variable_name].values, variable_value)
+    for extra_variable, extra_value in additional_filters.items():
+        mask &= _values_match(household_data[extra_variable].values, extra_value)
+    return mask
+
+
+def matching_household_ids(
+    entity_data: dict[str, MicroDataFrame],
+    variable_name: str,
+    variable_value: Union[str, int, float],
+    additional_filters: Optional[dict[str, Union[str, int, float]]] = None,
+) -> set:
+    """Return the set of ``household_id`` values matching a household filter.
+
+    This is the stable, order-proof boundary between "which households" and the
+    entity cascade: the household selection is expressed as a set of household
+    IDs, never a positional mask.
+    """
+    household_data = pd.DataFrame(entity_data["household"])
+    mask = _household_mask(
+        household_data, variable_name, variable_value, additional_filters
+    )
+    return set(household_data["household_id"].values[mask])
+
+
+def filter_dataset_by_household_ids(
+    entity_data: dict[str, MicroDataFrame],
+    group_entities: list[str],
+    keep_household_ids: Iterable,
+) -> dict[str, MicroDataFrame]:
+    """Filter every entity to the given households, cascading to persons and
+    all group entities.
+
+    The selection is keyed on the stable ``household_id`` value (a household
+    table primary key), so it is independent of row order. Both the single-value
+    filter and the multi-region (union) group strategy funnel through here, so
+    the cascade lives in exactly one place.
+    """
+    keep_household_ids = set(keep_household_ids)
+    if len(keep_household_ids) == 0:
+        raise ValueError("No households match the requested household id set.")
+
+    person_data = pd.DataFrame(entity_data["person"])
     entity_rel = build_entity_relationships(person_data, group_entities)
 
-    # Find matching household IDs
-    hh_ids = household_data["household_id"].values
-
-    hh_mask = _values_match(household_data[variable_name].values, variable_value)
-    for extra_variable, extra_value in additional_filters.items():
-        hh_mask &= _values_match(household_data[extra_variable].values, extra_value)
-
-    matching_hh_ids = set(hh_ids[hh_mask])
-
-    if len(matching_hh_ids) == 0:
-        raise ValueError(
-            f"No households found matching {variable_name}={variable_value}"
-        )
-
-    # Filter persons to those in matching households
-    person_mask = entity_rel["household_id"].isin(matching_hh_ids)
+    # Keep persons whose household is selected, then collect the entity IDs
+    # those persons carry (household included, since it is a group entity).
+    person_mask = entity_rel["household_id"].isin(keep_household_ids)
     filtered_rel = entity_rel[person_mask]
 
-    # Collect filtered IDs for each entity
     filtered_ids = {"person": set(filtered_rel["person_id"])}
     for entity in group_entities:
         filtered_ids[entity] = set(filtered_rel[f"{entity}_id"])
 
-    # Filter each entity DataFrame
     result = {}
     for entity_name, mdf in entity_data.items():
         df = pd.DataFrame(mdf)
@@ -147,6 +154,46 @@ def filter_dataset_by_household_variable(
         )
 
     return result
+
+
+def filter_dataset_by_household_variable(
+    entity_data: dict[str, MicroDataFrame],
+    group_entities: list[str],
+    variable_name: str,
+    variable_value: Union[str, int, float],
+    additional_filters: Optional[dict[str, Union[str, int, float]]] = None,
+) -> dict[str, MicroDataFrame]:
+    """Filter dataset entities to only include households matching variables.
+
+    Thin wrapper composing :func:`matching_household_ids` (which households) with
+    :func:`filter_dataset_by_household_ids` (the entity cascade). Public behavior
+    is unchanged.
+
+    Args:
+        entity_data: Dict mapping entity names to their MicroDataFrames
+                     (from YearData.entity_data).
+        group_entities: List of group entity names for this country.
+        variable_name: The household-level variable to filter on.
+        variable_value: The value to match. Handles both str and bytes encoding.
+        additional_filters: Optional household-level filters that must also
+                            match, keyed by variable name.
+
+    Returns:
+        A dict mapping entity names to filtered MicroDataFrames.
+
+    Raises:
+        ValueError: If variable_name is not found or no households match.
+    """
+    keep_household_ids = matching_household_ids(
+        entity_data, variable_name, variable_value, additional_filters
+    )
+    if len(keep_household_ids) == 0:
+        raise ValueError(
+            f"No households found matching {variable_name}={variable_value}"
+        )
+    return filter_dataset_by_household_ids(
+        entity_data, group_entities, keep_household_ids
+    )
 
 
 def _values_match(values, expected: Union[str, int, float]):
