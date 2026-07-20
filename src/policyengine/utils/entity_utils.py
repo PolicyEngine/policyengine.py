@@ -115,6 +115,9 @@ def filter_dataset_by_household_ids(
     the cascade lives in exactly one place.
     """
     keep_household_ids = set(keep_household_ids)
+    # Guard the id-set entry point (direct callers and RegionGroupStrategy). The
+    # single-variable wrapper guards earlier with a variable-specific message, so
+    # this generic message is only surfaced when a caller passes an empty set.
     if len(keep_household_ids) == 0:
         raise ValueError("No households match the requested household id set.")
 
@@ -187,6 +190,8 @@ def filter_dataset_by_household_variable(
     keep_household_ids = matching_household_ids(
         entity_data, variable_name, variable_value, additional_filters
     )
+    # Variable-specific message (asserted by tests and referenced by a documented
+    # incident); raised here before the generic id-set guard is ever reached.
     if len(keep_household_ids) == 0:
         raise ValueError(
             f"No households found matching {variable_name}={variable_value}"

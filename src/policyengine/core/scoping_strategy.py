@@ -1,6 +1,6 @@
 """Region scoping strategies for geographic simulations.
 
-Provides two concrete strategies for scoping datasets to sub-national regions:
+Provides three concrete strategies for scoping datasets to sub-national regions:
 
 1. RowFilterStrategy: Filters dataset rows where a household variable matches
    a specific value (e.g., US states by 'state_fips', US congressional districts
@@ -8,6 +8,10 @@ Provides two concrete strategies for scoping datasets to sub-national regions:
 
 2. WeightReplacementStrategy: Legacy strategy that replaces household weights from
    a pre-computed weight matrix resolved locally or from GCS.
+
+3. RegionGroupStrategy: Scopes to the union of several RowFilterStrategy regions
+   (e.g. multiple whole states) so one simulation covers the whole group. Used to
+   segment a national run into parallel region-group runs.
 """
 
 import logging
