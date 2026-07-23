@@ -96,7 +96,7 @@ Or on a relative change — `relative_change_geq=0.05` selects households with a
 
 One decile's baseline mean, reform mean, and mean change. For all ten at once, use `calculate_decile_impacts`.
 
-By default, `calculate_decile_impacts` measures `household_net_income` and ranks units into deciles using that variable. Pass another `income_variable`, such as `equiv_hbai_household_net_income`, to select a different income concept explicitly. To measure changes in one variable while grouping by an existing decile variable, pass `decile_variable`. For example, UK wealth-decile impacts measure changes in household net income grouped by `household_wealth_decile`.
+By default, `calculate_decile_impacts` measures `household_net_income` and ranks units into deciles using that variable. Household groups are person-weighted: their survey weights are multiplied by `household_count_people` before ranking. Pass another `income_variable`, such as `equiv_hbai_household_net_income`, to select a different income concept explicitly. To measure changes in one variable while grouping by an existing decile variable, pass `decile_variable`. For example, UK wealth-decile impacts measure changes in household net income grouped by `household_wealth_decile`.
 
 ```python
 from policyengine.outputs import calculate_decile_impacts
@@ -123,7 +123,7 @@ impacts.dataframe                        # includes the decile_variable column
 
 ## IntraDecileImpact
 
-Distribution of household-level impact within each decile (five bucket categories summing to 1.0). Use `compute_intra_decile_impacts` for the full set. Like `calculate_decile_impacts`, this helper accepts `decile_variable` when the grouping variable is already present in the simulation output.
+Distribution of household-level impact within each decile (five bucket categories summing to 1.0). Use `compute_intra_decile_impacts` for the full set. Its computed household groups use the same person-weighted ranking as `calculate_decile_impacts`, and its category proportions are also person-weighted. This helper accepts `decile_variable` when the grouping variable is already present in the simulation output.
 
 ```python
 from policyengine.outputs import compute_intra_decile_impacts

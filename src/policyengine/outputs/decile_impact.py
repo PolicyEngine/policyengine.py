@@ -8,6 +8,7 @@ from policyengine.core.dataset import Dataset
 from policyengine.core.dynamic import Dynamic
 from policyengine.core.policy import Policy
 from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
+from policyengine.outputs.decile_grouping import calculate_decile_groups
 
 
 class DecileImpact(Output):
@@ -67,19 +68,13 @@ class DecileImpact(Output):
             baseline_income = baseline_data[self.income_variable]
             reform_income = reform_data[self.income_variable]
 
-        # Calculate deciles: use pre-computed variable or qcut
-        if self.decile_variable:
-            decile_series = baseline_data[self.decile_variable]
-        else:
-            decile_series = (
-                pd.qcut(
-                    baseline_income,
-                    self.quantiles,
-                    labels=False,
-                    duplicates="drop",
-                )
-                + 1
-            )
+        decile_series = calculate_decile_groups(
+            baseline_data,
+            baseline_income,
+            decile_variable=self.decile_variable,
+            entity=target_entity,
+            quantiles=self.quantiles,
+        )
 
         # Calculate changes
         absolute_change = reform_income - baseline_income
@@ -113,10 +108,11 @@ def calculate_decile_impacts(
 ) -> OutputCollection[DecileImpact]:
     """Calculate decile-by-decile impact of a reform.
 
-    By default, changes are measured in ``household_net_income`` and deciles
-    are computed from that variable. Pass ``decile_variable`` to group by a
-    pre-computed decile variable while still measuring changes in
-    ``income_variable``; for example, UK wealth deciles use
+    By default, changes are measured in ``household_net_income`` and household
+    deciles are computed from that variable using survey weights multiplied by
+    household size. Pass ``decile_variable`` to group by a pre-computed decile
+    variable while still measuring changes in ``income_variable``; for example,
+    UK wealth deciles use
     ``income_variable="household_net_income"`` with
     ``decile_variable="household_wealth_decile"``.
 

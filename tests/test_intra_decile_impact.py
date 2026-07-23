@@ -329,8 +329,8 @@ def test_calculate_decile_impacts_with_decile_variable(monkeypatch):
     ]
 
 
-def test_decile_impact_qcut_default():
-    """Without decile_variable, DecileImpact uses qcut (default behavior)."""
+def test_decile_impact_weighted_grouping_default():
+    """Without decile_variable, DecileImpact computes weighted groups."""
     n = 100
     incomes = np.linspace(10000, 100000, n)
     reform_incomes = incomes + 1000
@@ -340,6 +340,7 @@ def test_decile_impact_qcut_default():
         {
             "household_net_income": incomes,
             "household_weight": np.ones(n),
+            "household_count_people": np.ones(n),
         },
         variables=variables,
     )
@@ -347,6 +348,7 @@ def test_decile_impact_qcut_default():
         {
             "household_net_income": reform_incomes,
             "household_weight": np.ones(n),
+            "household_count_people": np.ones(n),
         },
         variables=variables,
     )
@@ -395,6 +397,7 @@ def test_calculate_decile_impacts_uses_supplied_simulations(monkeypatch):
                                 100000.0,
                             ],
                             "household_weight": [1.0, 1.0, 1.0, 1.0],
+                            "household_count_people": [1.0, 1.0, 1.0, 1.0],
                         }
                     ),
                     weights="household_weight",
@@ -416,6 +419,7 @@ def test_calculate_decile_impacts_uses_supplied_simulations(monkeypatch):
                                 101000.0,
                             ],
                             "household_weight": [1.0, 1.0, 1.0, 1.0],
+                            "household_count_people": [1.0, 1.0, 1.0, 1.0],
                         }
                     ),
                     weights="household_weight",
@@ -463,6 +467,7 @@ def test_calculate_decile_impacts_accepts_explicit_equiv_hbai_income(monkeypatch
                         {
                             variable: [10000.0, 20000.0, 30000.0, 40000.0],
                             "household_weight": [1.0, 1.0, 1.0, 1.0],
+                            "household_count_people": [1.0, 1.0, 1.0, 1.0],
                         }
                     ),
                     weights="household_weight",
@@ -479,6 +484,7 @@ def test_calculate_decile_impacts_accepts_explicit_equiv_hbai_income(monkeypatch
                         {
                             variable: [10500.0, 20500.0, 30500.0, 40500.0],
                             "household_weight": [1.0, 1.0, 1.0, 1.0],
+                            "household_count_people": [1.0, 1.0, 1.0, 1.0],
                         }
                     ),
                     weights="household_weight",
@@ -514,6 +520,7 @@ def test_calculate_decile_impacts_ensures_constructed_simulations(
         20000.0,
         30000.0,
     ]
+    household_df["household_count_people"] = [2.0, 2.0, 2.0]
     uk_test_dataset.data.household = MicroDataFrame(
         household_df,
         weights="household_weight",

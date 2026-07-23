@@ -22,6 +22,7 @@ import pandas as pd
 from pydantic import ConfigDict
 
 from policyengine.core import Output, OutputCollection, Simulation
+from policyengine.outputs.decile_grouping import calculate_decile_groups
 
 # The 5-category thresholds
 BOUNDS = [-np.inf, -0.05, -1e-3, 1e-3, 0.05, np.inf]
@@ -62,27 +63,24 @@ class IntraDecileImpact(Output):
         )
         reform_data = getattr(self.reform_simulation.output_dataset.data, self.entity)
 
-        baseline_income = baseline_data[self.income_variable].values
-        reform_income = reform_data[self.income_variable].values
-
-        # Determine decile grouping
-        if self.decile_variable:
-            decile_series = baseline_data[self.decile_variable].values
-        else:
-            decile_series = (
-                pd.qcut(
-                    baseline_income,
-                    self.quantiles,
-                    labels=False,
-                    duplicates="drop",
-                )
-                + 1
+        baseline_income_series = baseline_data[self.income_variable]
+        reform_income_series = reform_data[self.income_variable]
+        decile_series = np.asarray(
+            calculate_decile_groups(
+                baseline_data,
+                baseline_income_series,
+                decile_variable=self.decile_variable,
+                entity=self.entity,
+                quantiles=self.quantiles,
             )
+        )
+        baseline_income = np.asarray(baseline_income_series)
+        reform_income = np.asarray(reform_income_series)
 
         # People-weighted counts
-        weights = baseline_data[f"{self.entity}_weight"].values
+        weights = np.asarray(baseline_data[f"{self.entity}_weight"])
         if self.entity == "household":
-            people_count = baseline_data["household_count_people"].values
+            people_count = np.asarray(baseline_data["household_count_people"])
             people = people_count * weights
         else:
             people = weights
