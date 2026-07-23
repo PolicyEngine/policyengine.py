@@ -96,7 +96,7 @@ Or on a relative change — `relative_change_geq=0.05` selects households with a
 
 One decile's baseline mean, reform mean, and mean change. For all ten at once, use `calculate_decile_impacts`.
 
-By default, `calculate_decile_impacts` ranks units into deciles using `income_variable`. To measure changes in one variable while grouping by an existing decile variable, pass `decile_variable`. For example, UK wealth-decile impacts measure changes in household net income grouped by `household_wealth_decile`.
+By default, `calculate_decile_impacts` measures `household_net_income` and ranks units into deciles using that variable. Pass another `income_variable`, such as `equiv_hbai_household_net_income`, to select a different income concept explicitly. To measure changes in one variable while grouping by an existing decile variable, pass `decile_variable`. For example, UK wealth-decile impacts measure changes in household net income grouped by `household_wealth_decile`.
 
 ```python
 from policyengine.outputs import calculate_decile_impacts

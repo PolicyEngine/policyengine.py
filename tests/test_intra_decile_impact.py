@@ -367,8 +367,19 @@ def test_decile_impact_qcut_default():
     assert abs(di.absolute_change - 1000.0) < 1e-6
 
 
+def test_decile_impact_defaults_to_household_net_income():
+    """DecileImpact measures household net income unless configured otherwise."""
+    impact = DecileImpact.model_construct(
+        baseline_simulation=MagicMock(),
+        reform_simulation=MagicMock(),
+        decile=1,
+    )
+
+    assert impact.income_variable == "household_net_income"
+
+
 def test_calculate_decile_impacts_uses_supplied_simulations(monkeypatch):
-    """calculate_decile_impacts can reuse simulations that already have outputs."""
+    """The helper reuses simulations and defaults to household net income."""
     version = _make_version("household_net_income", "household")
     baseline = Simulation.model_construct(
         tax_benefit_model_version=version,
@@ -425,7 +436,6 @@ def test_calculate_decile_impacts_uses_supplied_simulations(monkeypatch):
     results = calculate_decile_impacts(
         baseline_simulation=baseline,
         reform_simulation=reform,
-        income_variable="household_net_income",
         entity="household",
         quantiles=2,
     )
@@ -433,8 +443,65 @@ def test_calculate_decile_impacts_uses_supplied_simulations(monkeypatch):
     assert len(ensure_calls) == 2
     assert len(results.outputs) == 2
     assert all(
+        result.income_variable == "household_net_income" for result in results.outputs
+    )
+    assert all(
         abs(result.absolute_change - 1000.0) < 1e-6 for result in results.outputs
     )
+
+
+def test_calculate_decile_impacts_accepts_explicit_equiv_hbai_income(monkeypatch):
+    """Callers can explicitly select equivalised HBAI net income."""
+    variable = "equiv_hbai_household_net_income"
+    version = _make_version(variable, "household")
+    baseline = Simulation.model_construct(
+        tax_benefit_model_version=version,
+        output_dataset=MagicMock(
+            data=MagicMock(
+                household=MicroDataFrame(
+                    pd.DataFrame(
+                        {
+                            variable: [10000.0, 20000.0, 30000.0, 40000.0],
+                            "household_weight": [1.0, 1.0, 1.0, 1.0],
+                        }
+                    ),
+                    weights="household_weight",
+                )
+            )
+        ),
+    )
+    reform = Simulation.model_construct(
+        tax_benefit_model_version=version,
+        output_dataset=MagicMock(
+            data=MagicMock(
+                household=MicroDataFrame(
+                    pd.DataFrame(
+                        {
+                            variable: [10500.0, 20500.0, 30500.0, 40500.0],
+                            "household_weight": [1.0, 1.0, 1.0, 1.0],
+                        }
+                    ),
+                    weights="household_weight",
+                )
+            )
+        ),
+    )
+
+    monkeypatch.setattr(
+        "policyengine.outputs.decile_impact.Simulation.ensure",
+        lambda self: None,
+    )
+
+    results = calculate_decile_impacts(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable=variable,
+        entity="household",
+        quantiles=2,
+    )
+
+    assert all(result.income_variable == variable for result in results.outputs)
+    assert all(result.absolute_change == 500.0 for result in results.outputs)
 
 
 def test_calculate_decile_impacts_ensures_constructed_simulations(
@@ -442,7 +509,7 @@ def test_calculate_decile_impacts_ensures_constructed_simulations(
 ):
     """calculate_decile_impacts populates outputs when constructing simulations internally."""
     household_df = pd.DataFrame(uk_test_dataset.data.household)
-    household_df["equiv_hbai_household_net_income"] = [
+    household_df["household_net_income"] = [
         10000.0,
         20000.0,
         30000.0,
@@ -466,7 +533,7 @@ def test_calculate_decile_impacts_ensures_constructed_simulations(
     results = calculate_decile_impacts(
         dataset=uk_test_dataset,
         tax_benefit_model_version=_make_version(
-            "equiv_hbai_household_net_income",
+            "household_net_income",
             "household",
         ),
         quantiles=3,
@@ -474,4 +541,7 @@ def test_calculate_decile_impacts_ensures_constructed_simulations(
 
     assert len(ensure_calls) == 2
     assert len(results.outputs) == 3
+    assert all(
+        result.income_variable == "household_net_income" for result in results.outputs
+    )
     assert all(abs(result.absolute_change) < 1e-9 for result in results.outputs)

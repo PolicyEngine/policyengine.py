@@ -115,9 +115,12 @@ def economic_impact_analysis(
         "Reform simulation must have more than 100 households"
     )
 
+    # Keep both UK decile configurations explicit so changes to shared output
+    # defaults do not silently alter the country analysis bundle.
     decile_impacts = calculate_decile_impacts(
         baseline_simulation=baseline_simulation,
         reform_simulation=reform_simulation,
+        income_variable="household_net_income",
     )
     wealth_decile_impacts = calculate_decile_impacts(
         baseline_simulation=baseline_simulation,

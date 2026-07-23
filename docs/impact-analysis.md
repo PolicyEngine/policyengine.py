@@ -31,7 +31,7 @@ A `PolicyReformAnalysis` with:
 
 | Attribute | Type | Content |
 |---|---|---|
-| `decile_impacts` | `OutputCollection[DecileImpact]` | Mean baseline / reform / change and winner-loser counts per decile |
+| `decile_impacts` | `OutputCollection[DecileImpact]` | Household net income baseline / reform / change and winner-loser counts per income decile |
 | `wealth_decile_impacts` | `OutputCollection[DecileImpact]` | UK only: household net income impacts grouped by `household_wealth_decile` |
 | `intra_wealth_decile_impacts` | `OutputCollection[IntraDecileImpact]` | UK only: within-wealth-decile distribution of household net income changes |
 | `program_statistics` | `OutputCollection[ProgramStatistics]` | Totals, counts, winners/losers per program |
