@@ -1,3 +1,10 @@
+## [4.22.3] - 2026-07-24
+
+### Changed
+
+- Repin the US local-area overlay (`populace_us_2024_acs_local`) to the buildo-acs-local release built on the certified Build O lineage: consumer-loadable bytes, 4,461-target local surface, immutable tag, default resolution unchanged.
+
+
 ## [4.22.2] - 2026-07-23
 
 ### Changed
