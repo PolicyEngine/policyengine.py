@@ -110,9 +110,12 @@ def calculate_decile_impacts(
 
     By default, changes are measured in ``household_net_income`` and household
     deciles are computed from that variable using survey weights multiplied by
-    household size. Pass ``decile_variable`` to group by a pre-computed decile
-    variable while still measuring changes in ``income_variable``; for example,
-    UK wealth deciles use
+    household size. Households with negative values of the computed income
+    concept are excluded from the reported deciles, matching country-package
+    income-decile outputs. Pass ``decile_variable`` to group by a pre-computed
+    decile variable while still measuring changes in ``income_variable``;
+    values outside ``1..quantiles`` are excluded from the reported groups. For
+    example, UK wealth deciles use
     ``income_variable="household_net_income"`` with
     ``decile_variable="household_wealth_decile"``.
 

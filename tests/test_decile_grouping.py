@@ -64,6 +64,42 @@ def test_household_groups_keep_tied_incomes_together():
     assert groups.tolist() == [8, 8, 10]
 
 
+def test_computed_groups_clamp_zero_weight_rows_to_first_group():
+    household = _household_frame(
+        [10, 20, 30],
+        [0, 1, 1],
+        [1, 1, 1],
+    )
+
+    groups = calculate_decile_groups(
+        household,
+        household["household_net_income"],
+        decile_variable=None,
+        entity="household",
+        quantiles=10,
+    )
+
+    assert groups.tolist() == [1, 5, 10]
+
+
+def test_computed_groups_exclude_negative_ranking_values():
+    household = _household_frame(
+        [-10, 20, 30],
+        [1, 1, 1],
+        [1, 1, 1],
+    )
+
+    groups = calculate_decile_groups(
+        household,
+        household["household_net_income"],
+        decile_variable=None,
+        entity="household",
+        quantiles=10,
+    )
+
+    assert groups.tolist() == [-1, 7, 10]
+
+
 def test_precomputed_groups_bypass_weighted_ranking_requirements():
     household = _household_frame(
         [10, 20],
@@ -80,6 +116,24 @@ def test_precomputed_groups_bypass_weighted_ranking_requirements():
     )
 
     assert groups.tolist() == [2, 1]
+
+
+def test_precomputed_groups_preserve_exclusion_sentinel():
+    household = _household_frame(
+        [10, 20],
+        [1, 1],
+    )
+    household["household_income_decile"] = [-1, 2]
+
+    groups = calculate_decile_groups(
+        household,
+        household["household_net_income"],
+        decile_variable="household_income_decile",
+        entity="household",
+        quantiles=10,
+    )
+
+    assert groups.tolist() == [-1, 2]
 
 
 def test_computed_household_groups_require_people_counts():
