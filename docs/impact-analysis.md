@@ -83,7 +83,8 @@ for amount in [0, 1_000, 2_000, 3_000]:
 
 ```python
 from policyengine.outputs import (
-    ChangeAggregate, ChangeAggregateType,
+    ChangeAggregate,
+    ChangeAggregateType,
     calculate_decile_impacts,
     calculate_us_poverty_rates,
     calculate_us_inequality,
@@ -97,7 +98,9 @@ budget = ChangeAggregate(
 )
 budget.run()
 
-deciles = calculate_decile_impacts(baseline_simulation=baseline, reform_simulation=reformed)
+deciles = calculate_decile_impacts(
+    baseline_simulation=baseline, reform_simulation=reformed
+)
 
 baseline_poverty = calculate_us_poverty_rates(simulation=baseline)
 reform_poverty = calculate_us_poverty_rates(simulation=reformed)

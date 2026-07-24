@@ -21,7 +21,7 @@ format_fig(
     xaxis_title="X axis",
     yaxis_title="Y axis",
     height=600,
-    width=800
+    width=800,
 )
 
 fig.show()
@@ -36,11 +36,7 @@ The formatting applies these principles automatically:
 ```python
 from policyengine.utils import COLORS
 
-fig.add_trace(go.Scatter(
-    x=x_data,
-    y=y_data,
-    line=dict(color=COLORS["primary"])
-))
+fig.add_trace(go.Scatter(x=x_data, y=y_data, line=dict(color=COLORS["primary"])))
 ```
 
 **Typography**: Inter font family with appropriate sizing (12px for labels, 14px for body text, 16px for titles).
@@ -53,13 +49,13 @@ fig.add_trace(go.Scatter(
 
 ```python
 COLORS = {
-    "primary": "#319795",         # Teal (main brand colour)
+    "primary": "#319795",  # Teal (main brand colour)
     "primary_light": "#E6FFFA",
     "primary_dark": "#1D4044",
-    "success": "#22C55E",         # Green (positive changes)
-    "warning": "#FEC601",         # Yellow (cautions)
-    "error": "#EF4444",           # Red (negative changes)
-    "info": "#1890FF",            # Blue (neutral information)
+    "success": "#22C55E",  # Green (positive changes)
+    "warning": "#FEC601",  # Yellow (cautions)
+    "error": "#EF4444",  # Red (negative changes)
+    "info": "#1890FF",  # Blue (neutral information)
     "gray_light": "#F2F4F7",
     "gray": "#667085",
     "gray_dark": "#101828",

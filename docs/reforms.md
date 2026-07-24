@@ -49,8 +49,8 @@ Scale parameters (brackets with thresholds and amounts) are addressed by bracket
 
 ```python
 reform = {
-    "gov.irs.income.tax.rate[0]": 0.12,               # first bracket rate
-    "gov.irs.income.tax.threshold[1]": 50_000,        # second bracket threshold
+    "gov.irs.income.tax.rate[0]": 0.12,  # first bracket rate
+    "gov.irs.income.tax.threshold[1]": 50_000,  # second bracket threshold
     "gov.irs.credits.ctc.amount.base[0].amount": 3_000,
 }
 ```
@@ -87,9 +87,11 @@ For rule changes that can't be expressed as a parameter change — swapping a fo
 from policyengine_us import Microsimulation
 from policyengine_us.model_api import Reform
 
+
 class NeutralizeEITC(Reform):
     def apply(self):
         self.neutralize_variable("eitc")
+
 
 sim = Microsimulation(reform=NeutralizeEITC)
 ```

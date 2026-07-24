@@ -339,8 +339,14 @@ That is a country-data concern and lives in those repos.
 From Python:
 
 ```python
-from policyengine.provenance.manifest import get_data_release_manifest, get_release_manifest
-from policyengine.provenance.trace import build_trace_tro_from_release_bundle, serialize_trace_tro
+from policyengine.provenance.manifest import (
+    get_data_release_manifest,
+    get_release_manifest,
+)
+from policyengine.provenance.trace import (
+    build_trace_tro_from_release_bundle,
+    serialize_trace_tro,
+)
 
 country = get_release_manifest("us")
 tro = build_trace_tro_from_release_bundle(country, get_data_release_manifest("us"))
@@ -364,9 +370,9 @@ wheel ships with the matching TRO.
 from policyengine.results import write_results_with_trace_tro
 
 write_results_with_trace_tro(
-    results,                                # ResultsJson instance
-    "results.json",                         # where to write results
-    bundle_tro=bundle_tro,                  # loaded from the shipped bundle
+    results,  # ResultsJson instance
+    "results.json",  # where to write results
+    bundle_tro=bundle_tro,  # loaded from the shipped bundle
     reform_payload={"salt_cap": 0},
     bundle_tro_url=(
         "https://raw.githubusercontent.com/PolicyEngine/policyengine.py/"
@@ -421,7 +427,9 @@ assert bundle_hash == recorded, "bundle_tro_url content does not match sim TRO"
 # 3. Confirm the fingerprint recorded on the performance matches the
 #    fingerprint inside the fetched bundle.
 bundle = json.loads(bundle_bytes)
-bundle_fp = bundle["@graph"][0]["trov:hasComposition"]["trov:hasFingerprint"]["trov:sha256"]
+bundle_fp = bundle["@graph"][0]["trov:hasComposition"]["trov:hasFingerprint"][
+    "trov:sha256"
+]
 assert perf["pe:bundleFingerprint"] == bundle_fp
 ```
 

@@ -119,12 +119,14 @@ reform.run()
 baseline_hh = baseline.output_dataset.data.household
 reform_hh = reform.output_dataset.data.household
 
-df = pd.DataFrame({
-    "baseline": baseline_hh["household_net_income"].values,
-    "reform": reform_hh["household_net_income"].values,
-    "geo": baseline_hh["custom_geography_id"].values,
-    "weight": baseline_hh["household_weight"].values,
-})
+df = pd.DataFrame(
+    {
+        "baseline": baseline_hh["household_net_income"].values,
+        "reform": reform_hh["household_net_income"].values,
+        "geo": baseline_hh["custom_geography_id"].values,
+        "weight": baseline_hh["household_weight"].values,
+    }
+)
 
 df["change"] = df["reform"] - df["baseline"]
 df.groupby("geo").apply(lambda g: (g["change"] * g["weight"]).sum() / g["weight"].sum())

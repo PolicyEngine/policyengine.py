@@ -35,7 +35,7 @@ Microdata is stored as HDF5 on Hugging Face. `ensure_datasets` downloads, caches
 ```python
 datasets = pe.us.ensure_datasets(
     years=[2024, 2026],
-    data_folder="./data",        # local cache directory
+    data_folder="./data",  # local cache directory
 )
 dataset = datasets["populace_us_2024_2026"]
 ```
@@ -45,7 +45,7 @@ The default US dataset is **Populace US 2024** — a Populace-built dataset cali
 List datasets already known to the country:
 
 ```python
-pe.us.load_datasets()        # or pe.uk.load_datasets()
+pe.us.load_datasets()  # or pe.uk.load_datasets()
 ```
 
 ### US local-area dataset
@@ -64,6 +64,7 @@ Two-line load:
 
 ```python
 import policyengine as pe
+
 sim = pe.us.managed_microsimulation(dataset="populace_us_2024_acs_local")
 ```
 
@@ -173,8 +174,10 @@ Every output has the same lifecycle: instantiate with the simulation(s) and conf
 
 ```python
 from policyengine.outputs import (
-    Aggregate, AggregateType,
-    ChangeAggregate, ChangeAggregateType,
+    Aggregate,
+    AggregateType,
+    ChangeAggregate,
+    ChangeAggregateType,
 )
 
 snap_cost = Aggregate(
