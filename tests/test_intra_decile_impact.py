@@ -1,10 +1,11 @@
-"""Unit tests for IntraDecileImpact and DecileImpact with decile_variable."""
+"""Unit tests for DecileImpact and IntraDecileImpact."""
 
 from typing import Optional
 from unittest.mock import MagicMock
 
 import numpy as np
 import pandas as pd
+import pytest
 from microdf import MicroDataFrame
 
 from policyengine.core import Simulation, TaxBenefitModel, TaxBenefitModelVersion
@@ -41,10 +42,15 @@ def _make_version(variable_name: str, entity: str) -> TaxBenefitModelVersion:
     return version
 
 
-def _make_sim(household_data: dict, variables: Optional[list] = None) -> MagicMock:
+def _make_sim(
+    household_data: dict,
+    variables: Optional[list] = None,
+    *,
+    index=None,
+) -> MagicMock:
     """Create a mock Simulation with household-level data."""
     hh_df = MicroDataFrame(
-        pd.DataFrame(household_data),
+        pd.DataFrame(household_data, index=index),
         weights="household_weight",
     )
     sim = MagicMock()
@@ -127,24 +133,22 @@ def test_intra_decile_all_large_gain():
         assert r.no_change == 0.0 or abs(r.no_change) < 1e-9
 
 
-def test_intra_decile_overall_is_mean_of_deciles():
-    """The overall row (decile=0) is the arithmetic mean of deciles 1-10."""
-    n = 100
-    incomes = np.linspace(10000, 100000, n)
-    # Give a small gain so results aren't trivially all in one bucket
-    reform_incomes = incomes * 1.02  # 2% gain (falls in gain_less_than_5pct)
+def test_intra_decile_overall_uses_included_population_weights():
+    """Overall proportions are calculated directly, not averaged by decile."""
     baseline = _make_sim(
         {
-            "household_net_income": incomes,
-            "household_weight": np.ones(n),
-            "household_count_people": np.ones(n),
+            "household_net_income": [100.0, 100.0],
+            "household_weight": [1.0, 1.0],
+            "household_count_people": [1.0, 9.0],
+            "household_income_decile": [1, 2],
         }
     )
     reform = _make_sim(
         {
-            "household_net_income": reform_incomes,
-            "household_weight": np.ones(n),
-            "household_count_people": np.ones(n),
+            "household_net_income": [110.0, 100.0],
+            "household_weight": [1.0, 1.0],
+            "household_count_people": [1.0, 9.0],
+            "household_income_decile": [1, 2],
         }
     )
 
@@ -152,19 +156,316 @@ def test_intra_decile_overall_is_mean_of_deciles():
         baseline_simulation=baseline,
         reform_simulation=reform,
         income_variable="household_net_income",
+        decile_variable="household_income_decile",
         entity="household",
+        quantiles=2,
     )
 
-    decile_rows = [r for r in results.outputs if r.decile != 0]
     overall = next(r for r in results.outputs if r.decile == 0)
 
-    assert len(decile_rows) == 10
+    assert overall.gain_more_than_5pct == pytest.approx(0.1)
+    assert overall.no_change == pytest.approx(0.9)
+    assert overall.lose_more_than_5pct == pytest.approx(0.0)
 
-    expected_gain = sum(r.gain_less_than_5pct for r in decile_rows) / 10
-    assert abs(overall.gain_less_than_5pct - expected_gain) < 1e-9
 
-    expected_no_change = sum(r.no_change for r in decile_rows) / 10
-    assert abs(overall.no_change - expected_no_change) < 1e-9
+def test_intra_decile_category_boundaries_are_inclusive_on_the_upper_bound():
+    baseline = _make_sim(
+        {
+            "household_net_income": [1000.0] * 5,
+            "household_weight": [1.0] * 5,
+            "household_count_people": [1.0] * 5,
+            "household_income_decile": [1] * 5,
+        }
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [950.0, 999.0, 1001.0, 1050.0, 1060.0],
+            "household_weight": [1.0] * 5,
+            "household_count_people": [1.0] * 5,
+            "household_income_decile": [1] * 5,
+        }
+    )
+
+    results = compute_intra_decile_impacts(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable="household_net_income",
+        decile_variable="household_income_decile",
+        entity="household",
+        quantiles=1,
+    )
+
+    group = next(result for result in results.outputs if result.decile == 1)
+    assert group.lose_more_than_5pct == pytest.approx(0.2)
+    assert group.lose_less_than_5pct == pytest.approx(0.2)
+    assert group.no_change == pytest.approx(0.2)
+    assert group.gain_less_than_5pct == pytest.approx(0.2)
+    assert group.gain_more_than_5pct == pytest.approx(0.2)
+
+
+def test_intra_decile_uses_person_weights_within_each_group():
+    baseline = _make_sim(
+        {
+            "household_net_income": [100.0, 100.0],
+            "household_weight": [1.0, 1.0],
+            "household_count_people": [1.0, 9.0],
+            "household_income_decile": [1, 1],
+        }
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [110.0, 100.0],
+            "household_weight": [1.0, 1.0],
+            "household_count_people": [1.0, 9.0],
+            "household_income_decile": [1, 1],
+        }
+    )
+
+    results = compute_intra_decile_impacts(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable="household_net_income",
+        decile_variable="household_income_decile",
+        entity="household",
+        quantiles=1,
+    )
+
+    group = next(result for result in results.outputs if result.decile == 1)
+    assert group.gain_more_than_5pct == pytest.approx(0.1)
+    assert group.no_change == pytest.approx(0.9)
+    assert sum(
+        [
+            group.lose_more_than_5pct,
+            group.lose_less_than_5pct,
+            group.no_change,
+            group.gain_less_than_5pct,
+            group.gain_more_than_5pct,
+        ]
+    ) == pytest.approx(1.0)
+
+
+def test_intra_decile_percentage_change_floors_baseline_income_at_one():
+    baseline = _make_sim(
+        {
+            "household_net_income": [0.0, -10.0],
+            "household_weight": [1.0, 1.0],
+            "household_count_people": [1.0, 1.0],
+            "household_wealth_decile": [1, 1],
+        }
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [0.04, -9.96],
+            "household_weight": [1.0, 1.0],
+            "household_count_people": [1.0, 1.0],
+            "household_wealth_decile": [1, 1],
+        }
+    )
+
+    results = compute_intra_decile_impacts(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable="household_net_income",
+        decile_variable="household_wealth_decile",
+        entity="household",
+        quantiles=1,
+    )
+
+    group = next(result for result in results.outputs if result.decile == 1)
+    assert group.gain_less_than_5pct == pytest.approx(1.0)
+
+
+def test_intra_decile_empty_groups_are_null():
+    baseline = _make_sim(
+        {
+            "household_net_income": [100.0],
+            "household_weight": [1.0],
+            "household_count_people": [1.0],
+            "household_income_decile": [1],
+        }
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [100.0],
+            "household_weight": [1.0],
+            "household_count_people": [1.0],
+            "household_income_decile": [1],
+        }
+    )
+
+    results = compute_intra_decile_impacts(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable="household_net_income",
+        decile_variable="household_income_decile",
+        entity="household",
+        quantiles=2,
+    )
+
+    empty_group = next(result for result in results.outputs if result.decile == 2)
+    assert empty_group.lose_more_than_5pct is None
+    assert empty_group.lose_less_than_5pct is None
+    assert empty_group.no_change is None
+    assert empty_group.gain_less_than_5pct is None
+    assert empty_group.gain_more_than_5pct is None
+
+
+def test_intra_decile_overall_excludes_invalid_precomputed_groups():
+    baseline = _make_sim(
+        {
+            "household_net_income": [100.0, 100.0, 100.0, 100.0],
+            "household_weight": [1.0, 99.0, 99.0, 99.0],
+            "household_count_people": [1.0, 1.0, 1.0, 1.0],
+            "household_income_decile": [1, -1, 0, 2],
+        }
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [110.0, 0.0, 0.0, 0.0],
+            "household_weight": [1.0, 99.0, 99.0, 99.0],
+            "household_count_people": [1.0, 1.0, 1.0, 1.0],
+            "household_income_decile": [1, -1, 0, 2],
+        }
+    )
+
+    results = compute_intra_decile_impacts(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable="household_net_income",
+        decile_variable="household_income_decile",
+        entity="household",
+        quantiles=1,
+    )
+
+    overall = next(result for result in results.outputs if result.decile == 0)
+    assert overall.gain_more_than_5pct == pytest.approx(1.0)
+    assert overall.lose_more_than_5pct == pytest.approx(0.0)
+
+
+def test_intra_decile_overall_is_null_without_included_positive_weight():
+    baseline = _make_sim(
+        {
+            "household_net_income": [100.0, 200.0],
+            "household_weight": [1.0, 1.0],
+            "household_count_people": [1.0, 1.0],
+            "household_income_decile": [-1, 3],
+        }
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [110.0, 220.0],
+            "household_weight": [1.0, 1.0],
+            "household_count_people": [1.0, 1.0],
+            "household_income_decile": [-1, 3],
+        }
+    )
+
+    results = compute_intra_decile_impacts(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable="household_net_income",
+        decile_variable="household_income_decile",
+        entity="household",
+        quantiles=2,
+    )
+
+    overall = next(result for result in results.outputs if result.decile == 0)
+    assert overall.lose_more_than_5pct is None
+    assert overall.lose_less_than_5pct is None
+    assert overall.no_change is None
+    assert overall.gain_less_than_5pct is None
+    assert overall.gain_more_than_5pct is None
+
+
+def test_intra_decile_rejects_missing_reform_income_for_included_household():
+    baseline = _make_sim(
+        {
+            "household_net_income": [100.0, 200.0],
+            "household_weight": [1.0, 1.0],
+            "household_count_people": [1.0, 1.0],
+            "household_income_decile": [1, 1],
+        }
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [110.0, np.nan],
+            "household_weight": [1.0, 1.0],
+            "household_count_people": [1.0, 1.0],
+            "household_income_decile": [1, 1],
+        }
+    )
+
+    with pytest.raises(ValueError):
+        compute_intra_decile_impacts(
+            baseline_simulation=baseline,
+            reform_simulation=reform,
+            income_variable="household_net_income",
+            decile_variable="household_income_decile",
+            entity="household",
+            quantiles=1,
+        )
+
+
+def test_intra_decile_allows_missing_reform_income_for_excluded_household():
+    baseline = _make_sim(
+        {
+            "household_net_income": [100.0, 200.0],
+            "household_weight": [1.0, 100.0],
+            "household_count_people": [1.0, 1.0],
+            "household_income_decile": [1, -1],
+        }
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [110.0, np.nan],
+            "household_weight": [1.0, 100.0],
+            "household_count_people": [1.0, 1.0],
+            "household_income_decile": [1, -1],
+        }
+    )
+
+    results = compute_intra_decile_impacts(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable="household_net_income",
+        decile_variable="household_income_decile",
+        entity="household",
+        quantiles=1,
+    )
+
+    overall = next(result for result in results.outputs if result.decile == 0)
+    assert overall.gain_more_than_5pct == pytest.approx(1.0)
+
+
+def test_intra_decile_rejects_misaligned_simulation_observations():
+    baseline = _make_sim(
+        {
+            "household_net_income": [100.0, 200.0],
+            "household_weight": [1.0, 1.0],
+            "household_count_people": [1.0, 1.0],
+            "household_income_decile": [1, 1],
+        },
+        index=["a", "b"],
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [110.0, 220.0],
+            "household_weight": [1.0, 1.0],
+            "household_count_people": [1.0, 1.0],
+            "household_income_decile": [1, 1],
+        },
+        index=["a", "c"],
+    )
+
+    with pytest.raises(ValueError):
+        compute_intra_decile_impacts(
+            baseline_simulation=baseline,
+            reform_simulation=reform,
+            income_variable="household_net_income",
+            decile_variable="household_income_decile",
+            entity="household",
+            quantiles=1,
+        )
 
 
 def test_intra_decile_with_decile_variable():
@@ -261,6 +562,391 @@ def test_decile_impact_with_decile_variable():
     assert abs(di.absolute_change - 2000.0) < 1e-6
 
 
+def test_decile_impact_uses_household_weights_after_person_weighted_grouping():
+    """Group statistics describe households, not people in those households."""
+    variables = [_make_variable_mock("household_net_income", "household")]
+    baseline = _make_sim(
+        {
+            "household_net_income": [10.0, 30.0],
+            "household_weight": [1.0, 3.0],
+            "household_count_people": [100.0, 1.0],
+            "household_income_decile": [1, 1],
+        },
+        variables=variables,
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [20.0, 50.0],
+            "household_weight": [1.0, 3.0],
+            "household_count_people": [100.0, 1.0],
+            "household_income_decile": [1, 1],
+        },
+        variables=variables,
+    )
+
+    impact = DecileImpact.model_construct(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable="household_net_income",
+        decile_variable="household_income_decile",
+        entity="household",
+        decile=1,
+        quantiles=1,
+    )
+    impact.run()
+
+    assert impact.baseline_mean == pytest.approx(25.0)
+    assert impact.reform_mean == pytest.approx(42.5)
+    assert impact.absolute_change == pytest.approx(17.5)
+    assert impact.relative_change == pytest.approx(70.0)
+    assert impact.count_better_off == pytest.approx(4.0)
+    assert impact.count_worse_off == pytest.approx(0.0)
+    assert impact.count_no_change == pytest.approx(0.0)
+
+
+def test_decile_impact_counts_better_worse_and_no_change_separately():
+    variables = [_make_variable_mock("household_net_income", "household")]
+    baseline = _make_sim(
+        {
+            "household_net_income": [10.0, 20.0, 30.0],
+            "household_weight": [2.0, 3.0, 5.0],
+            "household_count_people": [1.0, 1.0, 1.0],
+            "household_income_decile": [1, 1, 1],
+        },
+        variables=variables,
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [11.0, 19.0, 30.0],
+            "household_weight": [2.0, 3.0, 5.0],
+            "household_count_people": [1.0, 1.0, 1.0],
+            "household_income_decile": [1, 1, 1],
+        },
+        variables=variables,
+    )
+
+    impact = DecileImpact.model_construct(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable="household_net_income",
+        decile_variable="household_income_decile",
+        entity="household",
+        decile=1,
+        quantiles=1,
+    )
+    impact.run()
+
+    assert impact.count_better_off == pytest.approx(2.0)
+    assert impact.count_worse_off == pytest.approx(3.0)
+    assert impact.count_no_change == pytest.approx(5.0)
+
+
+def test_decile_impact_relative_change_is_null_for_zero_group_baseline():
+    """Negative measured income remains included in a valid wealth group."""
+    variables = [_make_variable_mock("household_net_income", "household")]
+    baseline = _make_sim(
+        {
+            "household_net_income": [-10.0, 10.0],
+            "household_weight": [1.0, 1.0],
+            "household_count_people": [1.0, 1.0],
+            "household_wealth_decile": [1, 1],
+        },
+        variables=variables,
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [-5.0, 15.0],
+            "household_weight": [1.0, 1.0],
+            "household_count_people": [1.0, 1.0],
+            "household_wealth_decile": [1, 1],
+        },
+        variables=variables,
+    )
+
+    impact = DecileImpact.model_construct(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable="household_net_income",
+        decile_variable="household_wealth_decile",
+        entity="household",
+        decile=1,
+        quantiles=1,
+    )
+    impact.run()
+
+    assert impact.baseline_mean == pytest.approx(0.0)
+    assert impact.reform_mean == pytest.approx(5.0)
+    assert impact.absolute_change == pytest.approx(5.0)
+    assert impact.relative_change is None
+    assert impact.count_better_off == pytest.approx(2.0)
+
+
+def test_decile_impact_empty_group_has_null_statistics_and_zero_counts():
+    variables = [_make_variable_mock("household_net_income", "household")]
+    baseline = _make_sim(
+        {
+            "household_net_income": [100.0],
+            "household_weight": [1.0],
+            "household_count_people": [1.0],
+            "household_income_decile": [1],
+        },
+        variables=variables,
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [110.0],
+            "household_weight": [1.0],
+            "household_count_people": [1.0],
+            "household_income_decile": [1],
+        },
+        variables=variables,
+    )
+
+    impact = DecileImpact.model_construct(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable="household_net_income",
+        decile_variable="household_income_decile",
+        entity="household",
+        decile=2,
+        quantiles=2,
+    )
+    impact.run()
+
+    assert impact.baseline_mean is None
+    assert impact.reform_mean is None
+    assert impact.absolute_change is None
+    assert impact.relative_change is None
+    assert impact.count_better_off == pytest.approx(0.0)
+    assert impact.count_worse_off == pytest.approx(0.0)
+    assert impact.count_no_change == pytest.approx(0.0)
+
+
+def test_decile_impact_zero_weight_household_does_not_affect_results():
+    variables = [_make_variable_mock("household_net_income", "household")]
+    baseline = _make_sim(
+        {
+            "household_net_income": [10.0, 1000.0],
+            "household_weight": [1.0, 0.0],
+            "household_count_people": [1.0, 1.0],
+            "household_income_decile": [1, 1],
+        },
+        variables=variables,
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [20.0, 0.0],
+            "household_weight": [1.0, 0.0],
+            "household_count_people": [1.0, 1.0],
+            "household_income_decile": [1, 1],
+        },
+        variables=variables,
+    )
+
+    impact = DecileImpact.model_construct(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable="household_net_income",
+        decile_variable="household_income_decile",
+        entity="household",
+        decile=1,
+        quantiles=1,
+    )
+    impact.run()
+
+    assert impact.baseline_mean == pytest.approx(10.0)
+    assert impact.reform_mean == pytest.approx(20.0)
+    assert impact.absolute_change == pytest.approx(10.0)
+    assert impact.relative_change == pytest.approx(100.0)
+    assert impact.count_better_off == pytest.approx(1.0)
+    assert impact.count_worse_off == pytest.approx(0.0)
+
+
+def test_decile_impact_uses_baseline_group_membership():
+    variables = [_make_variable_mock("household_net_income", "household")]
+    baseline = _make_sim(
+        {
+            "household_net_income": [10.0, 20.0],
+            "household_weight": [1.0, 1.0],
+            "household_count_people": [1.0, 1.0],
+        },
+        variables=variables,
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [1000.0, -1000.0],
+            "household_weight": [1.0, 1.0],
+            "household_count_people": [1.0, 1.0],
+        },
+        variables=variables,
+    )
+
+    impact = DecileImpact.model_construct(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable="household_net_income",
+        entity="household",
+        decile=1,
+        quantiles=2,
+    )
+    impact.run()
+
+    assert impact.baseline_mean == pytest.approx(10.0)
+    assert impact.reform_mean == pytest.approx(1000.0)
+
+
+def test_decile_impact_excludes_invalid_precomputed_groups():
+    variables = [_make_variable_mock("household_net_income", "household")]
+    baseline = _make_sim(
+        {
+            "household_net_income": [10.0, 20.0, 1000.0, 1000.0, 1000.0, 1000.0],
+            "household_weight": [1.0] * 6,
+            "household_count_people": [1.0] * 6,
+            "household_income_decile": [1, 2, -1, 0, 3, np.nan],
+        },
+        variables=variables,
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [11.0, 22.0, 0.0, 0.0, 0.0, 0.0],
+            "household_weight": [1.0] * 6,
+            "household_count_people": [1.0] * 6,
+            "household_income_decile": [1, 2, -1, 0, 3, np.nan],
+        },
+        variables=variables,
+    )
+
+    impacts = []
+    for decile in (1, 2):
+        impact = DecileImpact.model_construct(
+            baseline_simulation=baseline,
+            reform_simulation=reform,
+            income_variable="household_net_income",
+            decile_variable="household_income_decile",
+            entity="household",
+            decile=decile,
+            quantiles=2,
+        )
+        impact.run()
+        impacts.append(impact)
+
+    assert impacts[0].baseline_mean == pytest.approx(10.0)
+    assert impacts[0].absolute_change == pytest.approx(1.0)
+    assert impacts[0].count_better_off == pytest.approx(1.0)
+    assert impacts[1].baseline_mean == pytest.approx(20.0)
+    assert impacts[1].absolute_change == pytest.approx(2.0)
+    assert impacts[1].count_better_off == pytest.approx(1.0)
+
+
+def test_decile_impact_rejects_missing_reform_income_for_included_household():
+    variables = [_make_variable_mock("household_net_income", "household")]
+    baseline = _make_sim(
+        {
+            "household_net_income": [10.0, 20.0],
+            "household_weight": [1.0, 1.0],
+            "household_count_people": [1.0, 1.0],
+            "household_income_decile": [1, 1],
+        },
+        variables=variables,
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [11.0, np.nan],
+            "household_weight": [1.0, 1.0],
+            "household_count_people": [1.0, 1.0],
+            "household_income_decile": [1, 1],
+        },
+        variables=variables,
+    )
+
+    impact = DecileImpact.model_construct(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable="household_net_income",
+        decile_variable="household_income_decile",
+        entity="household",
+        decile=1,
+        quantiles=1,
+    )
+
+    with pytest.raises(ValueError):
+        impact.run()
+
+
+def test_decile_impact_allows_missing_reform_income_for_excluded_household():
+    variables = [_make_variable_mock("household_net_income", "household")]
+    baseline = _make_sim(
+        {
+            "household_net_income": [10.0, 20.0],
+            "household_weight": [1.0, 100.0],
+            "household_count_people": [1.0, 1.0],
+            "household_income_decile": [1, -1],
+        },
+        variables=variables,
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [11.0, np.nan],
+            "household_weight": [1.0, 100.0],
+            "household_count_people": [1.0, 1.0],
+            "household_income_decile": [1, -1],
+        },
+        variables=variables,
+    )
+
+    impact = DecileImpact.model_construct(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable="household_net_income",
+        decile_variable="household_income_decile",
+        entity="household",
+        decile=1,
+        quantiles=1,
+    )
+    impact.run()
+
+    assert impact.baseline_mean == pytest.approx(10.0)
+    assert impact.reform_mean == pytest.approx(11.0)
+    assert impact.absolute_change == pytest.approx(1.0)
+
+
+def test_decile_impact_rejects_misaligned_simulation_observations():
+    variables = [_make_variable_mock("household_net_income", "household")]
+    baseline = _make_sim(
+        {
+            "household_net_income": [10.0, 20.0],
+            "household_weight": [1.0, 1.0],
+            "household_count_people": [1.0, 1.0],
+            "household_income_decile": [1, 1],
+        },
+        variables=variables,
+        index=["a", "b"],
+    )
+    reform = _make_sim(
+        {
+            "household_net_income": [11.0, 21.0],
+            "household_weight": [1.0, 1.0],
+            "household_count_people": [1.0, 1.0],
+            "household_income_decile": [1, 1],
+        },
+        variables=variables,
+        index=["a", "c"],
+    )
+
+    impact = DecileImpact.model_construct(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable="household_net_income",
+        decile_variable="household_income_decile",
+        entity="household",
+        decile=1,
+        quantiles=1,
+    )
+
+    with pytest.raises(ValueError):
+        impact.run()
+
+
 def test_calculate_decile_impacts_with_decile_variable(monkeypatch):
     """calculate_decile_impacts passes pre-computed grouping through."""
     version = _make_version("household_net_income", "household")
@@ -329,8 +1015,8 @@ def test_calculate_decile_impacts_with_decile_variable(monkeypatch):
     ]
 
 
-def test_decile_impact_qcut_default():
-    """Without decile_variable, DecileImpact uses qcut (default behavior)."""
+def test_decile_impact_weighted_grouping_default():
+    """Without decile_variable, DecileImpact computes weighted groups."""
     n = 100
     incomes = np.linspace(10000, 100000, n)
     reform_incomes = incomes + 1000
@@ -340,6 +1026,7 @@ def test_decile_impact_qcut_default():
         {
             "household_net_income": incomes,
             "household_weight": np.ones(n),
+            "household_count_people": np.ones(n),
         },
         variables=variables,
     )
@@ -347,6 +1034,7 @@ def test_decile_impact_qcut_default():
         {
             "household_net_income": reform_incomes,
             "household_weight": np.ones(n),
+            "household_count_people": np.ones(n),
         },
         variables=variables,
     )
@@ -367,8 +1055,19 @@ def test_decile_impact_qcut_default():
     assert abs(di.absolute_change - 1000.0) < 1e-6
 
 
+def test_decile_impact_defaults_to_household_net_income():
+    """DecileImpact measures household net income unless configured otherwise."""
+    impact = DecileImpact.model_construct(
+        baseline_simulation=MagicMock(),
+        reform_simulation=MagicMock(),
+        decile=1,
+    )
+
+    assert impact.income_variable == "household_net_income"
+
+
 def test_calculate_decile_impacts_uses_supplied_simulations(monkeypatch):
-    """calculate_decile_impacts can reuse simulations that already have outputs."""
+    """The helper reuses simulations and defaults to household net income."""
     version = _make_version("household_net_income", "household")
     baseline = Simulation.model_construct(
         tax_benefit_model_version=version,
@@ -384,6 +1083,7 @@ def test_calculate_decile_impacts_uses_supplied_simulations(monkeypatch):
                                 100000.0,
                             ],
                             "household_weight": [1.0, 1.0, 1.0, 1.0],
+                            "household_count_people": [1.0, 1.0, 1.0, 1.0],
                         }
                     ),
                     weights="household_weight",
@@ -405,6 +1105,7 @@ def test_calculate_decile_impacts_uses_supplied_simulations(monkeypatch):
                                 101000.0,
                             ],
                             "household_weight": [1.0, 1.0, 1.0, 1.0],
+                            "household_count_people": [1.0, 1.0, 1.0, 1.0],
                         }
                     ),
                     weights="household_weight",
@@ -425,7 +1126,6 @@ def test_calculate_decile_impacts_uses_supplied_simulations(monkeypatch):
     results = calculate_decile_impacts(
         baseline_simulation=baseline,
         reform_simulation=reform,
-        income_variable="household_net_income",
         entity="household",
         quantiles=2,
     )
@@ -433,8 +1133,67 @@ def test_calculate_decile_impacts_uses_supplied_simulations(monkeypatch):
     assert len(ensure_calls) == 2
     assert len(results.outputs) == 2
     assert all(
+        result.income_variable == "household_net_income" for result in results.outputs
+    )
+    assert all(
         abs(result.absolute_change - 1000.0) < 1e-6 for result in results.outputs
     )
+
+
+def test_calculate_decile_impacts_accepts_explicit_equiv_hbai_income(monkeypatch):
+    """Callers can explicitly select equivalised HBAI net income."""
+    variable = "equiv_hbai_household_net_income"
+    version = _make_version(variable, "household")
+    baseline = Simulation.model_construct(
+        tax_benefit_model_version=version,
+        output_dataset=MagicMock(
+            data=MagicMock(
+                household=MicroDataFrame(
+                    pd.DataFrame(
+                        {
+                            variable: [10000.0, 20000.0, 30000.0, 40000.0],
+                            "household_weight": [1.0, 1.0, 1.0, 1.0],
+                            "household_count_people": [1.0, 1.0, 1.0, 1.0],
+                        }
+                    ),
+                    weights="household_weight",
+                )
+            )
+        ),
+    )
+    reform = Simulation.model_construct(
+        tax_benefit_model_version=version,
+        output_dataset=MagicMock(
+            data=MagicMock(
+                household=MicroDataFrame(
+                    pd.DataFrame(
+                        {
+                            variable: [10500.0, 20500.0, 30500.0, 40500.0],
+                            "household_weight": [1.0, 1.0, 1.0, 1.0],
+                            "household_count_people": [1.0, 1.0, 1.0, 1.0],
+                        }
+                    ),
+                    weights="household_weight",
+                )
+            )
+        ),
+    )
+
+    monkeypatch.setattr(
+        "policyengine.outputs.decile_impact.Simulation.ensure",
+        lambda self: None,
+    )
+
+    results = calculate_decile_impacts(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable=variable,
+        entity="household",
+        quantiles=2,
+    )
+
+    assert all(result.income_variable == variable for result in results.outputs)
+    assert all(result.absolute_change == 500.0 for result in results.outputs)
 
 
 def test_calculate_decile_impacts_ensures_constructed_simulations(
@@ -442,11 +1201,12 @@ def test_calculate_decile_impacts_ensures_constructed_simulations(
 ):
     """calculate_decile_impacts populates outputs when constructing simulations internally."""
     household_df = pd.DataFrame(uk_test_dataset.data.household)
-    household_df["equiv_hbai_household_net_income"] = [
+    household_df["household_net_income"] = [
         10000.0,
         20000.0,
         30000.0,
     ]
+    household_df["household_count_people"] = [2.0, 2.0, 2.0]
     uk_test_dataset.data.household = MicroDataFrame(
         household_df,
         weights="household_weight",
@@ -466,7 +1226,7 @@ def test_calculate_decile_impacts_ensures_constructed_simulations(
     results = calculate_decile_impacts(
         dataset=uk_test_dataset,
         tax_benefit_model_version=_make_version(
-            "equiv_hbai_household_net_income",
+            "household_net_income",
             "household",
         ),
         quantiles=3,
@@ -474,4 +1234,7 @@ def test_calculate_decile_impacts_ensures_constructed_simulations(
 
     assert len(ensure_calls) == 2
     assert len(results.outputs) == 3
+    assert all(
+        result.income_variable == "household_net_income" for result in results.outputs
+    )
     assert all(abs(result.absolute_change) < 1e-9 for result in results.outputs)

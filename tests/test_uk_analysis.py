@@ -121,6 +121,7 @@ def test_uk_economic_impact_analysis_includes_wealth_decile_outputs(monkeypatch)
     standard_call = decile_calls[0]
     assert standard_call["baseline_simulation"] is baseline
     assert standard_call["reform_simulation"] is reform
+    assert standard_call["income_variable"] == "household_net_income"
 
     wealth_call = decile_calls[1]
     assert wealth_call["baseline_simulation"] is baseline

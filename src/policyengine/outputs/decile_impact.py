@@ -8,6 +8,7 @@ from policyengine.core.dataset import Dataset
 from policyengine.core.dynamic import Dynamic
 from policyengine.core.policy import Policy
 from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
+from policyengine.outputs.decile_grouping import calculate_decile_groups
 
 
 class DecileImpact(Output):
@@ -17,7 +18,7 @@ class DecileImpact(Output):
 
     baseline_simulation: Simulation
     reform_simulation: Simulation
-    income_variable: str = "equiv_hbai_household_net_income"
+    income_variable: str = "household_net_income"
     decile_variable: Optional[str] = None  # If set, use pre-computed grouping variable
     entity: Optional[str] = None
     decile: int
@@ -67,19 +68,13 @@ class DecileImpact(Output):
             baseline_income = baseline_data[self.income_variable]
             reform_income = reform_data[self.income_variable]
 
-        # Calculate deciles: use pre-computed variable or qcut
-        if self.decile_variable:
-            decile_series = baseline_data[self.decile_variable]
-        else:
-            decile_series = (
-                pd.qcut(
-                    baseline_income,
-                    self.quantiles,
-                    labels=False,
-                    duplicates="drop",
-                )
-                + 1
-            )
+        decile_series = calculate_decile_groups(
+            baseline_data,
+            baseline_income,
+            decile_variable=self.decile_variable,
+            entity=target_entity,
+            quantiles=self.quantiles,
+        )
 
         # Calculate changes
         absolute_change = reform_income - baseline_income
@@ -104,7 +99,7 @@ def calculate_decile_impacts(
     baseline_policy: Optional[Policy] = None,
     reform_policy: Optional[Policy] = None,
     dynamic: Optional[Dynamic] = None,
-    income_variable: str = "equiv_hbai_household_net_income",
+    income_variable: str = "household_net_income",
     decile_variable: Optional[str] = None,
     entity: Optional[str] = None,
     quantiles: int = 10,
@@ -113,10 +108,15 @@ def calculate_decile_impacts(
 ) -> OutputCollection[DecileImpact]:
     """Calculate decile-by-decile impact of a reform.
 
-    By default, deciles are computed from ``income_variable``. Pass
-    ``decile_variable`` to group by a pre-computed decile variable while
-    still measuring changes in ``income_variable``; for example, UK wealth
-    deciles use ``income_variable="household_net_income"`` with
+    By default, changes are measured in ``household_net_income`` and household
+    deciles are computed from that variable using survey weights multiplied by
+    household size. Households with negative values of the computed income
+    concept are excluded from the reported deciles, matching country-package
+    income-decile outputs. Pass ``decile_variable`` to group by a pre-computed
+    decile variable while still measuring changes in ``income_variable``;
+    values outside ``1..quantiles`` are excluded from the reported groups. For
+    example, UK wealth deciles use
+    ``income_variable="household_net_income"`` with
     ``decile_variable="household_wealth_decile"``.
 
     Returns:
