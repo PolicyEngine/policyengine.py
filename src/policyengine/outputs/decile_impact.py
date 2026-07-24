@@ -1,5 +1,7 @@
+from dataclasses import dataclass
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 from pydantic import ConfigDict
 
@@ -8,7 +10,71 @@ from policyengine.core.dataset import Dataset
 from policyengine.core.dynamic import Dynamic
 from policyengine.core.policy import Policy
 from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
-from policyengine.outputs.decile_grouping import calculate_decile_groups
+from policyengine.outputs.decile_analysis import (
+    _prepare_decile_analysis,
+    _PreparedDecileAnalysis,
+    _weighted_mean,
+)
+
+
+@dataclass(frozen=True)
+class _DecileImpactValues:
+    """Calculated values for one reported decile."""
+
+    baseline_mean: Optional[float]
+    reform_mean: Optional[float]
+    absolute_change: Optional[float]
+    relative_change: Optional[float]
+    count_better_off: float
+    count_worse_off: float
+    count_no_change: float
+
+
+def _calculate_decile_impact_values(
+    analysis: _PreparedDecileAnalysis,
+    *,
+    decile: int,
+) -> _DecileImpactValues:
+    """Calculate household-weighted statistics for one decile."""
+    in_decile = analysis.included & analysis.groups.eq(decile).fillna(False).to_numpy(
+        dtype=bool
+    )
+    weights = analysis.analysis_weight[in_decile]
+    baseline_mean = _weighted_mean(
+        analysis.baseline_income[in_decile],
+        weights,
+    )
+    reform_mean = _weighted_mean(
+        analysis.reform_income[in_decile],
+        weights,
+    )
+    if baseline_mean is None or reform_mean is None:
+        return _DecileImpactValues(
+            baseline_mean=None,
+            reform_mean=None,
+            absolute_change=None,
+            relative_change=None,
+            count_better_off=0.0,
+            count_worse_off=0.0,
+            count_no_change=0.0,
+        )
+
+    income_change = (
+        analysis.reform_income[in_decile] - analysis.baseline_income[in_decile]
+    )
+    absolute_change = reform_mean - baseline_mean
+    relative_change = (
+        None if baseline_mean == 0 else float(100 * absolute_change / baseline_mean)
+    )
+    return _DecileImpactValues(
+        baseline_mean=baseline_mean,
+        reform_mean=reform_mean,
+        absolute_change=absolute_change,
+        relative_change=relative_change,
+        count_better_off=float(np.sum(weights[income_change > 0])),
+        count_worse_off=float(np.sum(weights[income_change < 0])),
+        count_no_change=float(np.sum(weights[income_change == 0])),
+    )
 
 
 class DecileImpact(Output):
@@ -33,64 +99,34 @@ class DecileImpact(Output):
     count_worse_off: Optional[float] = None
     count_no_change: Optional[float] = None
 
-    def run(self):
+    def run(self) -> None:
         """Calculate impact for this specific decile."""
-        # Get variable object to determine entity
-        var_obj = next(
-            v
-            for v in self.baseline_simulation.tax_benefit_model_version.variables
-            if v.name == self.income_variable
-        )
-
-        # Get target entity
-        target_entity = self.entity or var_obj.entity
-
-        # Get data from both simulations
-        baseline_data = getattr(
-            self.baseline_simulation.output_dataset.data, target_entity
-        )
-        reform_data = getattr(self.reform_simulation.output_dataset.data, target_entity)
-
-        # Map income variable to target entity if needed
-        if var_obj.entity != target_entity:
-            baseline_mapped = (
-                self.baseline_simulation.output_dataset.data.map_to_entity(
-                    var_obj.entity, target_entity
-                )
-            )
-            baseline_income = baseline_mapped[self.income_variable]
-
-            reform_mapped = self.reform_simulation.output_dataset.data.map_to_entity(
-                var_obj.entity, target_entity
-            )
-            reform_income = reform_mapped[self.income_variable]
-        else:
-            baseline_income = baseline_data[self.income_variable]
-            reform_income = reform_data[self.income_variable]
-
-        decile_series = calculate_decile_groups(
-            baseline_data,
-            baseline_income,
+        analysis = _prepare_decile_analysis(
+            self.baseline_simulation,
+            self.reform_simulation,
+            income_variable=self.income_variable,
             decile_variable=self.decile_variable,
-            entity=target_entity,
+            entity=self.entity,
             quantiles=self.quantiles,
         )
+        self._run_from_prepared(analysis)
 
-        # Calculate changes
-        absolute_change = reform_income - baseline_income
-        relative_change = (absolute_change / baseline_income) * 100
-
-        # Filter to this decile
-        mask = decile_series == self.decile
-
-        # Populate results
-        self.baseline_mean = float(baseline_income[mask].mean())
-        self.reform_mean = float(reform_income[mask].mean())
-        self.absolute_change = float(absolute_change[mask].mean())
-        self.relative_change = float(relative_change[mask].mean())
-        self.count_better_off = float((absolute_change[mask] > 0).sum())
-        self.count_worse_off = float((absolute_change[mask] < 0).sum())
-        self.count_no_change = float((absolute_change[mask] == 0).sum())
+    def _run_from_prepared(
+        self,
+        analysis: _PreparedDecileAnalysis,
+    ) -> None:
+        """Populate this output from already validated shared inputs."""
+        values = _calculate_decile_impact_values(
+            analysis,
+            decile=self.decile,
+        )
+        self.baseline_mean = values.baseline_mean
+        self.reform_mean = values.reform_mean
+        self.absolute_change = values.absolute_change
+        self.relative_change = values.relative_change
+        self.count_better_off = values.count_better_off
+        self.count_worse_off = values.count_worse_off
+        self.count_no_change = values.count_no_change
 
 
 def calculate_decile_impacts(
@@ -148,9 +184,19 @@ def calculate_decile_impacts(
             dynamic=dynamic,
         )
 
+    assert baseline_simulation is not None
+    assert reform_simulation is not None
     baseline_simulation.ensure()
     reform_simulation.ensure()
 
+    analysis = _prepare_decile_analysis(
+        baseline_simulation,
+        reform_simulation,
+        income_variable=income_variable,
+        decile_variable=decile_variable,
+        entity=entity,
+        quantiles=quantiles,
+    )
     results = []
     for decile in range(1, quantiles + 1):
         impact = DecileImpact(
@@ -162,7 +208,7 @@ def calculate_decile_impacts(
             decile=decile,
             quantiles=quantiles,
         )
-        impact.run()
+        impact._run_from_prepared(analysis)
         results.append(impact)
 
     # Create DataFrame

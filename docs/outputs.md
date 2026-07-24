@@ -96,7 +96,11 @@ Or on a relative change — `relative_change_geq=0.05` selects households with a
 
 One decile's baseline mean, reform mean, and mean change. For all ten at once, use `calculate_decile_impacts`.
 
-By default, `calculate_decile_impacts` measures `household_net_income` and ranks units into deciles using that variable. Household groups are person-weighted: their survey weights are multiplied by `household_count_people` before ranking. Rows with negative values of the computed income concept receive the conventional `-1` group and are excluded from the reported decile results. Pass another `income_variable`, such as `equiv_hbai_household_net_income`, to select a different income concept explicitly. To measure changes in one variable while grouping by an existing decile variable, pass `decile_variable`. Precomputed group values outside `1..quantiles` are excluded, which preserves country-package sentinel values such as `-1` for negative income or wealth. For example, UK wealth-decile impacts measure changes in household net income grouped by `household_wealth_decile`.
+By default, `calculate_decile_impacts` measures `household_net_income` and ranks units into deciles using that variable. Household groups are person-weighted: their survey weights are multiplied by `household_count_people` before ranking. Rows with negative values of the computed income concept receive the conventional `-1` group and are excluded from the reported decile results. Missing and non-finite ranking values are also excluded and do not affect group boundaries.
+
+The statistics reported after grouping use the entity survey weight. For household analysis, this means the decile boundaries are person-weighted while baseline and reform means and better-off, worse-off, and no-change counts are household-weighted. `relative_change` is the percentage change between the two reported group means, not the mean of household-level percentage changes. Empty groups have null means and changes and zero outcome counts.
+
+Pass another `income_variable`, such as `equiv_hbai_household_net_income`, to select a different income concept explicitly. To measure changes in one variable while grouping by an existing decile variable, pass `decile_variable`. Precomputed group values outside `1..quantiles` are excluded, which preserves country-package sentinel values such as `-1` for negative income or wealth. For example, UK wealth-decile impacts measure changes in household net income grouped by `household_wealth_decile`.
 
 ```python
 from policyengine.outputs import calculate_decile_impacts
@@ -123,7 +127,11 @@ impacts.dataframe                        # includes the decile_variable column
 
 ## IntraDecileImpact
 
-Distribution of household-level impact within each decile (five bucket categories summing to 1.0). Use `compute_intra_decile_impacts` for the full set. Its computed household groups use the same person-weighted ranking as `calculate_decile_impacts`, and its category proportions are also person-weighted. This helper accepts `decile_variable` when the grouping variable is already present in the simulation output.
+Distribution of household-level impact within each decile (five bucket categories summing to 1.0 for populated groups). Use `compute_intra_decile_impacts` for the full set. Its computed household groups use the same person-weighted ranking as `calculate_decile_impacts`, and its category proportions are also person-weighted. Empty groups have null proportions.
+
+The `decile=0` row is calculated directly from all included people. It is not the arithmetic mean of the individual decile proportions, so it remains valid when tied values, large survey observations, exclusions, or empty groups make decile populations unequal.
+
+This helper accepts `decile_variable` when the grouping variable is already present in the simulation output.
 
 ```python
 from policyengine.outputs import compute_intra_decile_impacts

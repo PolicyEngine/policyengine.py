@@ -1,7 +1,7 @@
 """Intra-decile impact output.
 
 Computes the distribution of income change categories within each decile.
-Each row represents one decile (1-10) or the overall average (decile=0),
+Each row represents one decile (1-10) or the overall result (decile=0),
 with five proportion columns summing to ~1.0.
 
 The five categories classify households by their percentage income change:
@@ -15,6 +15,7 @@ Proportions are people-weighted (using household_count_people *
 household_weight) so they reflect the share of people, not households.
 """
 
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -22,7 +23,10 @@ import pandas as pd
 from pydantic import ConfigDict
 
 from policyengine.core import Output, OutputCollection, Simulation
-from policyengine.outputs.decile_grouping import calculate_decile_groups
+from policyengine.outputs.decile_analysis import (
+    _prepare_decile_analysis,
+    _PreparedDecileAnalysis,
+)
 
 # The 5-category thresholds
 BOUNDS = [-np.inf, -0.05, -1e-3, 1e-3, 0.05, np.inf]
@@ -33,6 +37,58 @@ CATEGORY_NAMES = [
     "gain_less_than_5pct",
     "gain_more_than_5pct",
 ]
+
+
+@dataclass(frozen=True)
+class _IntraDecileImpactValues:
+    """People-weighted category proportions for one selected population."""
+
+    lose_more_than_5pct: Optional[float]
+    lose_less_than_5pct: Optional[float]
+    no_change: Optional[float]
+    gain_less_than_5pct: Optional[float]
+    gain_more_than_5pct: Optional[float]
+
+
+def _calculate_intra_decile_values(
+    analysis: _PreparedDecileAnalysis,
+    *,
+    decile: Optional[int],
+) -> _IntraDecileImpactValues:
+    """Calculate category proportions for a decile or the full population."""
+    selected = analysis.included.copy()
+    if decile is not None:
+        selected &= analysis.groups.eq(decile).fillna(False).to_numpy(dtype=bool)
+
+    selected_weights = analysis.effective_weight[selected]
+    total_weight = float(np.sum(selected_weights))
+    if total_weight == 0:
+        return _IntraDecileImpactValues(
+            lose_more_than_5pct=None,
+            lose_less_than_5pct=None,
+            no_change=None,
+            gain_less_than_5pct=None,
+            gain_more_than_5pct=None,
+        )
+
+    baseline_income = analysis.baseline_income[selected]
+    reform_income = analysis.reform_income[selected]
+    income_change = (reform_income - baseline_income) / np.maximum(
+        baseline_income,
+        1.0,
+    )
+    proportions = []
+    for lower, upper in zip(BOUNDS[:-1], BOUNDS[1:]):
+        in_category = (income_change > lower) & (income_change <= upper)
+        proportions.append(float(np.sum(selected_weights[in_category]) / total_weight))
+
+    return _IntraDecileImpactValues(
+        lose_more_than_5pct=proportions[0],
+        lose_less_than_5pct=proportions[1],
+        no_change=proportions[2],
+        gain_less_than_5pct=proportions[3],
+        gain_more_than_5pct=proportions[4],
+    )
 
 
 class IntraDecileImpact(Output):
@@ -56,61 +112,33 @@ class IntraDecileImpact(Output):
     gain_less_than_5pct: Optional[float] = None
     gain_more_than_5pct: Optional[float] = None
 
-    def run(self):
+    def run(self) -> None:
         """Calculate intra-decile proportions for this specific decile."""
-        baseline_data = getattr(
-            self.baseline_simulation.output_dataset.data, self.entity
+        analysis = _prepare_decile_analysis(
+            self.baseline_simulation,
+            self.reform_simulation,
+            income_variable=self.income_variable,
+            decile_variable=self.decile_variable,
+            entity=self.entity,
+            quantiles=self.quantiles,
+            require_effective_weight=True,
         )
-        reform_data = getattr(self.reform_simulation.output_dataset.data, self.entity)
+        self._run_from_prepared(analysis)
 
-        baseline_income_series = baseline_data[self.income_variable]
-        reform_income_series = reform_data[self.income_variable]
-        decile_series = np.asarray(
-            calculate_decile_groups(
-                baseline_data,
-                baseline_income_series,
-                decile_variable=self.decile_variable,
-                entity=self.entity,
-                quantiles=self.quantiles,
-            )
+    def _run_from_prepared(
+        self,
+        analysis: _PreparedDecileAnalysis,
+    ) -> None:
+        """Populate this output from already validated shared inputs."""
+        values = _calculate_intra_decile_values(
+            analysis,
+            decile=None if self.decile == 0 else self.decile,
         )
-        baseline_income = np.asarray(baseline_income_series)
-        reform_income = np.asarray(reform_income_series)
-
-        # People-weighted counts
-        weights = np.asarray(baseline_data[f"{self.entity}_weight"])
-        if self.entity == "household":
-            people_count = np.asarray(baseline_data["household_count_people"])
-            people = people_count * weights
-        else:
-            people = weights
-
-        # Compute percentage income change
-        capped_baseline = np.maximum(baseline_income, 1.0)
-        income_change = (reform_income - baseline_income) / capped_baseline
-
-        in_decile = decile_series == self.decile
-        people_in_decile = float(np.sum(people[in_decile]))
-
-        if people_in_decile == 0:
-            self.lose_more_than_5pct = 0.0
-            self.lose_less_than_5pct = 0.0
-            self.no_change = 1.0
-            self.gain_less_than_5pct = 0.0
-            self.gain_more_than_5pct = 0.0
-            return
-
-        proportions = []
-        for lower, upper in zip(BOUNDS[:-1], BOUNDS[1:]):
-            in_category = (income_change > lower) & (income_change <= upper)
-            in_both = in_decile & in_category
-            proportions.append(float(np.sum(people[in_both]) / people_in_decile))
-
-        self.lose_more_than_5pct = proportions[0]
-        self.lose_less_than_5pct = proportions[1]
-        self.no_change = proportions[2]
-        self.gain_less_than_5pct = proportions[3]
-        self.gain_more_than_5pct = proportions[4]
+        self.lose_more_than_5pct = values.lose_more_than_5pct
+        self.lose_less_than_5pct = values.lose_less_than_5pct
+        self.no_change = values.no_change
+        self.gain_less_than_5pct = values.gain_less_than_5pct
+        self.gain_more_than_5pct = values.gain_more_than_5pct
 
 
 def compute_intra_decile_impacts(
@@ -121,12 +149,21 @@ def compute_intra_decile_impacts(
     entity: str = "household",
     quantiles: int = 10,
 ) -> OutputCollection[IntraDecileImpact]:
-    """Compute intra-decile proportions for all deciles + overall average.
+    """Compute intra-decile proportions for all deciles and the population.
 
     Returns:
         OutputCollection containing list of IntraDecileImpact objects
-        (deciles 1-N plus overall average at decile=0) and DataFrame.
+        (deciles 1-N plus the direct overall result at decile=0) and DataFrame.
     """
+    analysis = _prepare_decile_analysis(
+        baseline_simulation,
+        reform_simulation,
+        income_variable=income_variable,
+        decile_variable=decile_variable,
+        entity=entity,
+        quantiles=quantiles,
+        require_effective_weight=True,
+    )
     results = []
     for decile in range(1, quantiles + 1):
         impact = IntraDecileImpact.model_construct(
@@ -138,10 +175,9 @@ def compute_intra_decile_impacts(
             decile=decile,
             quantiles=quantiles,
         )
-        impact.run()
+        impact._run_from_prepared(analysis)
         results.append(impact)
 
-    # Overall average (decile=0): arithmetic mean of decile proportions
     overall = IntraDecileImpact.model_construct(
         baseline_simulation=baseline_simulation,
         reform_simulation=reform_simulation,
@@ -150,12 +186,8 @@ def compute_intra_decile_impacts(
         entity=entity,
         decile=0,
         quantiles=quantiles,
-        lose_more_than_5pct=sum(r.lose_more_than_5pct for r in results) / quantiles,
-        lose_less_than_5pct=sum(r.lose_less_than_5pct for r in results) / quantiles,
-        no_change=sum(r.no_change for r in results) / quantiles,
-        gain_less_than_5pct=sum(r.gain_less_than_5pct for r in results) / quantiles,
-        gain_more_than_5pct=sum(r.gain_more_than_5pct for r in results) / quantiles,
     )
+    overall._run_from_prepared(analysis)
     results.append(overall)
 
     # Create DataFrame
