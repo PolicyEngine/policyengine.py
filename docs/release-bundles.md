@@ -155,7 +155,7 @@ sibling `dataset_overlays.{country}` map:
     "populace_us_2024_acs_local": {
       "path": "populace_us_2024_acs_local.h5",
       "repo_id": "policyengine/populace-us",
-      "revision": "populace-us-2024-buildl-acs-local-...",
+      "revision": "populace-us-2024-buildo-acs-local-...",
       "sha256": "..."
     }
   }
