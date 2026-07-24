@@ -10,14 +10,14 @@ from policyengine.core import Simulation, Policy, Parameter, ParameterValue
 from policyengine.tax_benefit_models.uk import (
     PolicyEngineUKDataset,
     UKYearData,
-    uk_latest
+    uk_latest,
 )
 
 # US
 from policyengine.tax_benefit_models.us import (
     PolicyEngineUSDataset,
     USYearData,
-    us_latest
+    us_latest,
 )
 
 # Outputs
@@ -37,41 +37,58 @@ import numpy as np
 import pandas as pd
 from microdf import MicroDataFrame
 from policyengine.tax_benefit_models.uk import (
-    PolicyEngineUKDataset, UKYearData, uk_latest
+    PolicyEngineUKDataset,
+    UKYearData,
+    uk_latest,
 )
 from policyengine.core import Simulation
 
 # Person data
-person_df = MicroDataFrame(pd.DataFrame({
-    "person_id": [0],
-    "person_household_id": [0],
-    "person_benunit_id": [0],
-    "age": [30],
-    "employment_income": [30000],
-    "person_weight": [1.0],
-}), weights="person_weight")
+person_df = MicroDataFrame(
+    pd.DataFrame(
+        {
+            "person_id": [0],
+            "person_household_id": [0],
+            "person_benunit_id": [0],
+            "age": [30],
+            "employment_income": [30000],
+            "person_weight": [1.0],
+        }
+    ),
+    weights="person_weight",
+)
 
 # Household data
-household_df = MicroDataFrame(pd.DataFrame({
-    "household_id": [0],
-    "region": ["LONDON"],
-    "rent": [12000],
-    "household_weight": [1.0],
-}), weights="household_weight")
+household_df = MicroDataFrame(
+    pd.DataFrame(
+        {
+            "household_id": [0],
+            "region": ["LONDON"],
+            "rent": [12000],
+            "household_weight": [1.0],
+        }
+    ),
+    weights="household_weight",
+)
 
 # Benunit data
-benunit_df = MicroDataFrame(pd.DataFrame({
-    "benunit_id": [0],
-    "would_claim_uc": [True],
-    "benunit_weight": [1.0],
-}), weights="benunit_weight")
+benunit_df = MicroDataFrame(
+    pd.DataFrame(
+        {
+            "benunit_id": [0],
+            "would_claim_uc": [True],
+            "benunit_weight": [1.0],
+        }
+    ),
+    weights="benunit_weight",
+)
 
 # Create dataset
 dataset = PolicyEngineUKDataset(
     name="Example",
     filepath="./temp.h5",
     year=2026,
-    data=UKYearData(person=person_df, household=household_df, benunit=benunit_df)
+    data=UKYearData(person=person_df, household=household_df, benunit=benunit_df),
 )
 
 # Run simulation
@@ -89,36 +106,53 @@ print(output.household[["household_net_income"]])
 import pandas as pd
 from microdf import MicroDataFrame
 from policyengine.tax_benefit_models.us import (
-    PolicyEngineUSDataset, USYearData, us_latest
+    PolicyEngineUSDataset,
+    USYearData,
+    us_latest,
 )
 from policyengine.core import Simulation
 
 # Person data (US requires more entity links)
-person_df = MicroDataFrame(pd.DataFrame({
-    "person_id": [0, 1],
-    "person_household_id": [0, 0],
-    "person_tax_unit_id": [0, 0],
-    "person_spm_unit_id": [0, 0],
-    "person_family_id": [0, 0],
-    "person_marital_unit_id": [0, 0],
-    "age": [35, 33],
-    "employment_income": [60000, 40000],
-    "person_weight": [1.0, 1.0],
-}), weights="person_weight")
+person_df = MicroDataFrame(
+    pd.DataFrame(
+        {
+            "person_id": [0, 1],
+            "person_household_id": [0, 0],
+            "person_tax_unit_id": [0, 0],
+            "person_spm_unit_id": [0, 0],
+            "person_family_id": [0, 0],
+            "person_marital_unit_id": [0, 0],
+            "age": [35, 33],
+            "employment_income": [60000, 40000],
+            "person_weight": [1.0, 1.0],
+        }
+    ),
+    weights="person_weight",
+)
 
 # Create minimal entity dataframes
 entities = {}
 for entity in ["tax_unit", "spm_unit", "family", "marital_unit"]:
-    entities[entity] = MicroDataFrame(pd.DataFrame({
-        f"{entity}_id": [0],
-        f"{entity}_weight": [1.0],
-    }), weights=f"{entity}_weight")
+    entities[entity] = MicroDataFrame(
+        pd.DataFrame(
+            {
+                f"{entity}_id": [0],
+                f"{entity}_weight": [1.0],
+            }
+        ),
+        weights=f"{entity}_weight",
+    )
 
-household_df = MicroDataFrame(pd.DataFrame({
-    "household_id": [0],
-    "state_code": ["CA"],
-    "household_weight": [1.0],
-}), weights="household_weight")
+household_df = MicroDataFrame(
+    pd.DataFrame(
+        {
+            "household_id": [0],
+            "state_code": ["CA"],
+            "household_weight": [1.0],
+        }
+    ),
+    weights="household_weight",
+)
 
 # Create dataset
 dataset = PolicyEngineUSDataset(
@@ -132,7 +166,7 @@ dataset = PolicyEngineUSDataset(
         family=entities["family"],
         marital_unit=entities["marital_unit"],
         household=household_df,
-    )
+    ),
 )
 
 # Run simulation
@@ -150,14 +184,19 @@ print(sim.output_dataset.data.household[["household_net_income"]])
 n = 50
 incomes = np.linspace(0, 100000, n)
 
-person_df = MicroDataFrame(pd.DataFrame({
-    "person_id": range(n),
-    "person_household_id": range(n),
-    "person_benunit_id": range(n),
-    "age": [30] * n,
-    "employment_income": incomes,
-    "person_weight": [1.0] * n,
-}), weights="person_weight")
+person_df = MicroDataFrame(
+    pd.DataFrame(
+        {
+            "person_id": range(n),
+            "person_household_id": range(n),
+            "person_benunit_id": range(n),
+            "age": [30] * n,
+            "employment_income": incomes,
+            "person_weight": [1.0] * n,
+        }
+    ),
+    weights="person_weight",
+)
 
 # Create matching household/benunit data with n rows
 # ... then run simulation once for all scenarios
@@ -178,16 +217,20 @@ parameter = Parameter(
 policy = Policy(
     name="Reform",
     description="Change PA",
-    parameter_values=[ParameterValue(
-        parameter=parameter,
-        start_date=datetime.date(2026, 1, 1),
-        end_date=datetime.date(2026, 12, 31),
-        value=15000,
-    )]
+    parameter_values=[
+        ParameterValue(
+            parameter=parameter,
+            start_date=datetime.date(2026, 1, 1),
+            end_date=datetime.date(2026, 12, 31),
+            value=15000,
+        )
+    ],
 )
 
 # Run with policy
-reform_sim = Simulation(dataset=dataset, tax_benefit_model_version=uk_latest, policy=policy)
+reform_sim = Simulation(
+    dataset=dataset, tax_benefit_model_version=uk_latest, policy=policy
+)
 ```
 
 ### Extract aggregate statistics
@@ -253,15 +296,12 @@ household_income = dataset.data.map_to_entity(
     source_entity="person",
     target_entity="household",
     columns=["employment_income"],
-    how="sum"
+    how="sum",
 )
 
 # Broadcast household rent to persons
 person_rent = dataset.data.map_to_entity(
-    source_entity="household",
-    target_entity="person",
-    columns=["rent"],
-    how="project"
+    source_entity="household", target_entity="person", columns=["rent"], how="project"
 )
 
 # Divide household value equally per person
@@ -269,15 +309,12 @@ per_person = dataset.data.map_to_entity(
     source_entity="household",
     target_entity="person",
     columns=["total_savings"],
-    how="divide"
+    how="divide",
 )
 
 # Map custom values
 custom_totals = dataset.data.map_to_entity(
-    source_entity="person",
-    target_entity="household",
-    values=custom_array,
-    how="sum"
+    source_entity="person", target_entity="household", values=custom_array, how="sum"
 )
 ```
 
@@ -295,9 +332,20 @@ custom_totals = dataset.data.map_to_entity(
 
 ## Common UK regions
 ```python
-["LONDON", "SOUTH_EAST", "SOUTH_WEST", "EAST_OF_ENGLAND",
- "WEST_MIDLANDS", "EAST_MIDLANDS", "YORKSHIRE",
- "NORTH_WEST", "NORTH_EAST", "WALES", "SCOTLAND", "NORTHERN_IRELAND"]
+[
+    "LONDON",
+    "SOUTH_EAST",
+    "SOUTH_WEST",
+    "EAST_OF_ENGLAND",
+    "WEST_MIDLANDS",
+    "EAST_MIDLANDS",
+    "YORKSHIRE",
+    "NORTH_WEST",
+    "NORTH_EAST",
+    "WALES",
+    "SCOTLAND",
+    "NORTHERN_IRELAND",
+]
 ```
 
 ## Common US state codes
@@ -308,19 +356,19 @@ custom_totals = dataset.data.map_to_entity(
 ## Aggregate filter options
 ```python
 # Exact match
-filter_eq=value
+filter_eq = value
 
 # Greater than/equal
-filter_geq=value
+filter_geq = value
 
 # Less than/equal
-filter_leq=value
+filter_leq = value
 
 # Quantile filtering (deciles)
-quantile=10          # Split into 10 groups
-quantile_eq=1        # First decile only
-quantile_geq=9       # Top two deciles
-quantile_leq=2       # Bottom two deciles
+quantile = 10  # Split into 10 groups
+quantile_eq = 1  # First decile only
+quantile_geq = 9  # Top two deciles
+quantile_leq = 2  # Bottom two deciles
 ```
 
 ## Common parameters

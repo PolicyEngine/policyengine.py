@@ -134,7 +134,7 @@ result = pe.us.calculate_household(
 )
 
 result.person[0].charitable_cash_donations  # [0, 5000, 10000]
-result.tax_unit.income_tax                  # one value per axis point
+result.tax_unit.income_tax  # one value per axis point
 ```
 
 When axes are present, result values are lists ordered by the axis grid instead
@@ -144,10 +144,10 @@ each variable on that person is its own axis series.
 ## Accessing the result
 
 ```python
-result.person[0].income_tax                  # first person
-result.person[2].age                         # third person
-result.tax_unit.income_tax                   # single tax unit
-result.household.household_net_income        # single household
+result.person[0].income_tax  # first person
+result.person[2].age  # third person
+result.tax_unit.income_tax  # single tax unit
+result.household.household_net_income  # single household
 ```
 
 The result is a Pydantic model — `.model_dump()` gives you a dict, individual sections are regular attribute lookups.

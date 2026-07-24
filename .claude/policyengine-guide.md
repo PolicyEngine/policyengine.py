@@ -40,42 +40,48 @@ from microdf import MicroDataFrame
 from policyengine.tax_benefit_models.uk import (
     PolicyEngineUKDataset,
     UKYearData,
-    uk_latest
+    uk_latest,
 )
 from policyengine.core import Simulation
 
 # Create synthetic person data
 person_df = MicroDataFrame(
-    pd.DataFrame({
-        "person_id": [0, 1, 2],
-        "person_household_id": [0, 0, 1],
-        "person_benunit_id": [0, 0, 1],
-        "age": [35, 8, 40],
-        "employment_income": [30000, 0, 50000],
-        "person_weight": [1.0, 1.0, 1.0],
-    }),
-    weights="person_weight"
+    pd.DataFrame(
+        {
+            "person_id": [0, 1, 2],
+            "person_household_id": [0, 0, 1],
+            "person_benunit_id": [0, 0, 1],
+            "age": [35, 8, 40],
+            "employment_income": [30000, 0, 50000],
+            "person_weight": [1.0, 1.0, 1.0],
+        }
+    ),
+    weights="person_weight",
 )
 
 # Create household data
 household_df = MicroDataFrame(
-    pd.DataFrame({
-        "household_id": [0, 1],
-        "region": ["LONDON", "SOUTH_EAST"],
-        "rent": [15000, 12000],
-        "household_weight": [1.0, 1.0],
-    }),
-    weights="household_weight"
+    pd.DataFrame(
+        {
+            "household_id": [0, 1],
+            "region": ["LONDON", "SOUTH_EAST"],
+            "rent": [15000, 12000],
+            "household_weight": [1.0, 1.0],
+        }
+    ),
+    weights="household_weight",
 )
 
 # Create benunit data (UK only)
 benunit_df = MicroDataFrame(
-    pd.DataFrame({
-        "benunit_id": [0, 1],
-        "would_claim_uc": [True, True],
-        "benunit_weight": [1.0, 1.0],
-    }),
-    weights="benunit_weight"
+    pd.DataFrame(
+        {
+            "benunit_id": [0, 1],
+            "would_claim_uc": [True, True],
+            "benunit_weight": [1.0, 1.0],
+        }
+    ),
+    weights="benunit_weight",
 )
 
 # Package into dataset
@@ -88,7 +94,7 @@ dataset = PolicyEngineUKDataset(
         person=person_df,
         household=household_df,
         benunit=benunit_df,
-    )
+    ),
 )
 
 # Run simulation
@@ -109,23 +115,25 @@ print(output.household[["household_id", "household_net_income"]])
 from policyengine.tax_benefit_models.us import (
     PolicyEngineUSDataset,
     USYearData,
-    us_latest
+    us_latest,
 )
 
 # Create person data (note: US has more entity types)
 person_df = MicroDataFrame(
-    pd.DataFrame({
-        "person_id": [0, 1, 2, 3],
-        "person_household_id": [0, 0, 0, 0],
-        "person_tax_unit_id": [0, 0, 0, 0],
-        "person_spm_unit_id": [0, 0, 0, 0],
-        "person_family_id": [0, 0, 0, 0],
-        "person_marital_unit_id": [0, 0, 1, 2],
-        "age": [35, 33, 8, 5],
-        "employment_income": [60000, 40000, 0, 0],
-        "person_weight": [1.0, 1.0, 1.0, 1.0],
-    }),
-    weights="person_weight"
+    pd.DataFrame(
+        {
+            "person_id": [0, 1, 2, 3],
+            "person_household_id": [0, 0, 0, 0],
+            "person_tax_unit_id": [0, 0, 0, 0],
+            "person_spm_unit_id": [0, 0, 0, 0],
+            "person_family_id": [0, 0, 0, 0],
+            "person_marital_unit_id": [0, 0, 1, 2],
+            "age": [35, 33, 8, 5],
+            "employment_income": [60000, 40000, 0, 0],
+            "person_weight": [1.0, 1.0, 1.0, 1.0],
+        }
+    ),
+    weights="person_weight",
 )
 
 # Create entity dataframes (tax_unit, spm_unit, family, marital_unit, household)
@@ -142,7 +150,7 @@ dataset = PolicyEngineUSDataset(
         family=family_df,
         marital_unit=marital_unit_df,
         household=household_df,
-    )
+    ),
 )
 ```
 
@@ -159,26 +167,30 @@ income_values = np.linspace(0, 100000, n_scenarios)
 
 # Create person data with all scenarios
 person_df = MicroDataFrame(
-    pd.DataFrame({
-        "person_id": range(n_scenarios),
-        "person_household_id": range(n_scenarios),
-        "person_benunit_id": range(n_scenarios),
-        "age": [35] * n_scenarios,
-        "employment_income": income_values,
-        "person_weight": [1.0] * n_scenarios,
-    }),
-    weights="person_weight"
+    pd.DataFrame(
+        {
+            "person_id": range(n_scenarios),
+            "person_household_id": range(n_scenarios),
+            "person_benunit_id": range(n_scenarios),
+            "age": [35] * n_scenarios,
+            "employment_income": income_values,
+            "person_weight": [1.0] * n_scenarios,
+        }
+    ),
+    weights="person_weight",
 )
 
 # Create matching household/benunit data
 household_df = MicroDataFrame(
-    pd.DataFrame({
-        "household_id": range(n_scenarios),
-        "region": ["LONDON"] * n_scenarios,
-        "rent": [15000] * n_scenarios,
-        "household_weight": [1.0] * n_scenarios,
-    }),
-    weights="household_weight"
+    pd.DataFrame(
+        {
+            "household_id": range(n_scenarios),
+            "region": ["LONDON"] * n_scenarios,
+            "rent": [15000] * n_scenarios,
+            "household_weight": [1.0] * n_scenarios,
+        }
+    ),
+    weights="household_weight",
 )
 
 # ... create dataset and run simulation once for all scenarios
@@ -229,10 +241,7 @@ reform_sim = Simulation(
 reform_sim.run()
 
 # Analyse impact
-from policyengine.outputs.change_aggregate import (
-    ChangeAggregate,
-    ChangeAggregateType
-)
+from policyengine.outputs.change_aggregate import ChangeAggregate, ChangeAggregateType
 
 winners = ChangeAggregate(
     baseline_simulation=baseline_sim,
@@ -298,15 +307,12 @@ household_income = dataset.data.map_to_entity(
     source_entity="person",
     target_entity="household",
     columns=["employment_income"],
-    how="sum"
+    how="sum",
 )
 
 # Map household rent to person level (broadcast)
 person_rent = dataset.data.map_to_entity(
-    source_entity="household",
-    target_entity="person",
-    columns=["rent"],
-    how="project"
+    source_entity="household", target_entity="person", columns=["rent"], how="project"
 )
 
 # Split household savings equally per person
@@ -314,17 +320,15 @@ person_savings_share = dataset.data.map_to_entity(
     source_entity="household",
     target_entity="person",
     columns=["total_savings"],
-    how="divide"
+    how="divide",
 )
 
 # Map custom values
 import numpy as np
+
 custom_values = np.array([100, 200, 150])
 household_totals = dataset.data.map_to_entity(
-    source_entity="person",
-    target_entity="household",
-    values=custom_values,
-    how="sum"
+    source_entity="person", target_entity="household", values=custom_values, how="sum"
 )
 ```
 
@@ -335,13 +339,15 @@ from policyengine.utils.plotting import format_fig, COLORS
 import plotly.graph_objects as go
 
 fig = go.Figure()
-fig.add_trace(go.Scatter(
-    x=income_values,
-    y=net_income_values,
-    mode='lines',
-    name='Net income',
-    line=dict(color=COLORS["primary"], width=3)
-))
+fig.add_trace(
+    go.Scatter(
+        x=income_values,
+        y=net_income_values,
+        mode="lines",
+        name="Net income",
+        line=dict(color=COLORS["primary"], width=3),
+    )
+)
 
 format_fig(
     fig,
@@ -492,42 +498,50 @@ When user asks to:
 import pandas as pd
 from microdf import MicroDataFrame
 from policyengine.tax_benefit_models.uk import (
-    PolicyEngineUKDataset, UKYearData, uk_latest
+    PolicyEngineUKDataset,
+    UKYearData,
+    uk_latest,
 )
 from policyengine.core import Simulation
 
 # Create person data
 person_df = MicroDataFrame(
-    pd.DataFrame({
-        "person_id": [0],
-        "person_household_id": [0],
-        "person_benunit_id": [0],
-        "age": [30],
-        "employment_income": [30000],
-        "person_weight": [1.0],
-    }),
-    weights="person_weight"
+    pd.DataFrame(
+        {
+            "person_id": [0],
+            "person_household_id": [0],
+            "person_benunit_id": [0],
+            "age": [30],
+            "employment_income": [30000],
+            "person_weight": [1.0],
+        }
+    ),
+    weights="person_weight",
 )
 
 # Create household data
 household_df = MicroDataFrame(
-    pd.DataFrame({
-        "household_id": [0],
-        "region": ["LONDON"],
-        "rent": [12000],  # Typical London rent
-        "household_weight": [1.0],
-    }),
-    weights="household_weight"
+    pd.DataFrame(
+        {
+            "household_id": [0],
+            "region": ["LONDON"],
+            "rent": [12000],  # Typical London rent
+            "household_weight": [1.0],
+        }
+    ),
+    weights="household_weight",
 )
 
 # Create benunit data
 benunit_df = MicroDataFrame(
-    pd.DataFrame({
-        "benunit_id": [0],
-        "would_claim_uc": [True],
-        "benunit_weight": [1.0],
-    }),
-    weights="benunit_weight"
+    pd.DataFrame(
+        {
+            "benunit_id": [0],
+            "would_claim_uc": [True],
+            "benunit_weight": [1.0],
+        }
+    ),
+    weights="benunit_weight",
 )
 
 # Create and run simulation
@@ -539,7 +553,7 @@ dataset = PolicyEngineUKDataset(
         person=person_df,
         household=household_df,
         benunit=benunit_df,
-    )
+    ),
 )
 
 simulation = Simulation(

@@ -17,8 +17,8 @@ uk = pe.uk.calculate_household(
     people=[{"age": 35, "employment_income": 50_000}],
     year=2026,
 )
-print(uk.person[0].income_tax)                   # income tax
-print(uk.household.hbai_household_net_income)    # net income
+print(uk.person[0].income_tax)  # income tax
+print(uk.household.hbai_household_net_income)  # net income
 
 # US: single filer in California, with a reform
 us = pe.us.calculate_household(

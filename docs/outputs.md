@@ -55,7 +55,7 @@ Aggregate(
     aggregate_type=AggregateType.MEAN,
     filter_variable="household_net_income",
     quantile=10,
-    quantile_eq=1,          # bottom decile
+    quantile_eq=1,  # bottom decile
 )
 ```
 
@@ -86,7 +86,7 @@ winners = ChangeAggregate(
     reform_simulation=reform,
     variable="household_net_income",
     aggregate_type=ChangeAggregateType.COUNT,
-    change_geq=1,           # households gaining at least $1
+    change_geq=1,  # households gaining at least $1
 )
 ```
 
@@ -118,7 +118,7 @@ wealth_deciles = calculate_decile_impacts(
     entity="household",
 )
 
-impacts.dataframe                        # includes the decile_variable column
+impacts.dataframe  # includes the decile_variable column
 ```
 
 ## IntraDecileImpact
@@ -165,7 +165,7 @@ For all canonical poverty measures over one simulation:
 from policyengine.outputs import calculate_us_poverty_rates
 
 rates = calculate_us_poverty_rates(simulation=baseline)
-rates.outputs                 # Poverty entries for each measure
+rates.outputs  # Poverty entries for each measure
 rates.dataframe
 ```
 
