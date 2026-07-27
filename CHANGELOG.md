@@ -1,3 +1,10 @@
+## [5.0.0] - 2026-07-27
+
+### Breaking changes
+
+- Changed default decile-impact calculations to household net income and person-weighted household groups, excluded invalid computed-income values from reported deciles, preserved explicit selection of equivalised HBAI net income, made relative changes compare weighted group means, calculated overall intra-decile results directly from the included population, and preserved empty-group values as JSON-safe nulls in collection DataFrame records.
+
+
 ## [4.22.3] - 2026-07-24
 
 ### Changed
