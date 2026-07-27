@@ -141,6 +141,29 @@ def test_non_household_groups_use_entity_survey_weight():
     assert groups.tolist() == [9, 10]
 
 
+def test_computed_groups_reuse_prevalidated_effective_weight():
+    household = MicroDataFrame(
+        pd.DataFrame(
+            {
+                "household_net_income": [10, 20],
+                "household_weight": [1, 1],
+            }
+        ),
+        weights="household_weight",
+    )
+
+    groups = calculate_decile_groups(
+        household,
+        household["household_net_income"],
+        decile_variable=None,
+        entity="household",
+        quantiles=10,
+        validated_effective_weight=np.array([1.0, 1.0]),
+    )
+
+    assert groups.tolist() == [5, 10]
+
+
 def test_computed_groups_exclude_negative_ranking_values():
     household = _household_frame(
         [-10, 20, 30],
@@ -273,7 +296,7 @@ def test_computed_groups_reject_zero_total_effective_weight():
         [1, 1],
     )
 
-    with pytest.raises((ValueError, ZeroDivisionError)):
+    with pytest.raises(ValueError):
         calculate_decile_groups(
             household,
             household["household_net_income"],

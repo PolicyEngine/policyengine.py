@@ -1,5 +1,6 @@
 """Unit tests for DecileImpact and IntraDecileImpact."""
 
+import json
 from typing import Optional
 from unittest.mock import MagicMock
 
@@ -308,6 +309,11 @@ def test_intra_decile_empty_groups_are_null():
     assert empty_group.no_change is None
     assert empty_group.gain_less_than_5pct is None
     assert empty_group.gain_more_than_5pct is None
+
+    records = results.dataframe.to_dict("records")
+    empty_record = next(record for record in records if record["decile"] == 2)
+    assert empty_record["no_change"] is None
+    json.dumps(records, allow_nan=False)
 
 
 def test_intra_decile_overall_excludes_invalid_precomputed_groups():
@@ -720,6 +726,65 @@ def test_decile_impact_empty_group_has_null_statistics_and_zero_counts():
     assert impact.count_better_off == pytest.approx(0.0)
     assert impact.count_worse_off == pytest.approx(0.0)
     assert impact.count_no_change == pytest.approx(0.0)
+
+
+def test_decile_impact_collection_nulls_are_json_safe(monkeypatch):
+    version = _make_version("household_net_income", "household")
+    baseline = Simulation.model_construct(
+        tax_benefit_model_version=version,
+        output_dataset=MagicMock(
+            data=MagicMock(
+                household=MicroDataFrame(
+                    pd.DataFrame(
+                        {
+                            "household_net_income": [100.0],
+                            "household_weight": [1.0],
+                            "household_income_decile": [1],
+                        }
+                    ),
+                    weights="household_weight",
+                )
+            )
+        ),
+    )
+    reform = Simulation.model_construct(
+        tax_benefit_model_version=version,
+        output_dataset=MagicMock(
+            data=MagicMock(
+                household=MicroDataFrame(
+                    pd.DataFrame(
+                        {
+                            "household_net_income": [110.0],
+                            "household_weight": [1.0],
+                            "household_income_decile": [1],
+                        }
+                    ),
+                    weights="household_weight",
+                )
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "policyengine.outputs.decile_impact.Simulation.ensure",
+        lambda self: None,
+    )
+
+    results = calculate_decile_impacts(
+        baseline_simulation=baseline,
+        reform_simulation=reform,
+        income_variable="household_net_income",
+        decile_variable="household_income_decile",
+        entity="household",
+        quantiles=2,
+    )
+
+    records = results.dataframe.to_dict("records")
+    empty_record = next(record for record in records if record["decile"] == 2)
+    assert empty_record["baseline_mean"] is None
+    assert empty_record["reform_mean"] is None
+    assert empty_record["absolute_change"] is None
+    assert empty_record["relative_change"] is None
+    json.dumps(records, allow_nan=False)
 
 
 def test_decile_impact_zero_weight_household_does_not_affect_results():

@@ -16,6 +16,16 @@ from policyengine.outputs.decile_analysis import (
     _weighted_mean,
 )
 
+_DECILE_RESULT_COLUMNS = [
+    "baseline_mean",
+    "reform_mean",
+    "absolute_change",
+    "relative_change",
+    "count_better_off",
+    "count_worse_off",
+    "count_no_change",
+]
+
 
 @dataclass(frozen=True)
 class _DecileImpactValues:
@@ -231,5 +241,6 @@ def calculate_decile_impacts(
             for r in results
         ]
     )
+    df[_DECILE_RESULT_COLUMNS] = df[_DECILE_RESULT_COLUMNS].astype("Float64")
 
     return OutputCollection(outputs=results, dataframe=df)

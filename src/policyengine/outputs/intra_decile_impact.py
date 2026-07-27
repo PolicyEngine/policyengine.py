@@ -38,6 +38,14 @@ CATEGORY_NAMES = [
     "gain_more_than_5pct",
 ]
 
+_INTRA_DECILE_RESULT_COLUMNS = [
+    "lose_more_than_5pct",
+    "lose_less_than_5pct",
+    "no_change",
+    "gain_less_than_5pct",
+    "gain_more_than_5pct",
+]
+
 
 @dataclass(frozen=True)
 class _IntraDecileImpactValues:
@@ -205,6 +213,9 @@ def compute_intra_decile_impacts(
             }
             for r in results
         ]
+    )
+    df[_INTRA_DECILE_RESULT_COLUMNS] = df[_INTRA_DECILE_RESULT_COLUMNS].astype(
+        "Float64"
     )
 
     return OutputCollection(outputs=results, dataframe=df)

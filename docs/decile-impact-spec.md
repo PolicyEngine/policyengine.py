@@ -206,6 +206,11 @@ count_no_change:  0
 An empty group must not be represented as a populated group in which everyone
 experienced no change.
 
+Nullable result columns in the collection DataFrame use Pandas `Float64`.
+Converting the DataFrame to records must therefore preserve empty-group values
+as `None`, so strict JSON serialization emits `null` rather than non-standard
+`NaN`.
+
 ## `IntraDecileImpact`
 
 For every included household, calculate:
@@ -234,6 +239,10 @@ For a populated group, the five category proportions must sum to 1, subject
 only to floating-point tolerance.
 
 For an empty group, all five category proportions are null.
+
+The collection DataFrame uses the same nullable-column convention as
+`DecileImpact`, so empty proportions remain JSON-safe null values when
+converted to records.
 
 ## Overall intra-decile result
 

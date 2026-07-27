@@ -124,16 +124,16 @@ def _prepare_decile_analysis(
 
     baseline_income = np.asarray(baseline_income_series, dtype=float)
     reform_income = np.asarray(reform_income_series, dtype=float)
-    analysis_weight = _get_analysis_weight(
-        baseline_data,
-        entity=target_entity,
-    )
     if require_effective_weight or decile_variable is None:
-        _, effective_weight = _get_decile_weights(
+        analysis_weight, effective_weight = _get_decile_weights(
             baseline_data,
             entity=target_entity,
         )
     else:
+        analysis_weight = _get_analysis_weight(
+            baseline_data,
+            entity=target_entity,
+        )
         # A precomputed group plus a household-weighted output does not need
         # household size. Keep the prepared shape uniform without imposing an
         # unrelated input requirement.
@@ -144,6 +144,7 @@ def _prepare_decile_analysis(
         decile_variable=decile_variable,
         entity=target_entity,
         quantiles=quantiles,
+        validated_effective_weight=effective_weight,
     )
     included = groups.isin(range(1, quantiles + 1)).to_numpy(dtype=bool)
 

@@ -28,7 +28,7 @@ def _get_analysis_weight(
             f"baseline output data for entity '{entity}'."
         )
 
-    analysis_weight = np.asarray(
+    analysis_weight: np.ndarray = np.asarray(
         baseline_data[weight_variable],
         dtype=float,
     )
@@ -77,6 +77,7 @@ def calculate_decile_groups(
     decile_variable: Optional[str],
     entity: str,
     quantiles: int,
+    validated_effective_weight: Optional[np.ndarray] = None,
 ) -> pd.Series:
     """Return precomputed groups or weighted ranks of ``ranking_values``.
 
@@ -89,7 +90,9 @@ def calculate_decile_groups(
 
     Precomputed groups are returned unchanged. Callers that use values outside
     ``1..quantiles`` (including the conventional ``-1`` sentinel) can therefore
-    intentionally exclude rows from reported groups.
+    intentionally exclude rows from reported groups. Shared analysis code can
+    pass ``validated_effective_weight`` to reuse weights already prepared by
+    ``_get_decile_weights``.
     """
 
     if quantiles < 1:
@@ -100,10 +103,20 @@ def calculate_decile_groups(
             index=baseline_data.index,
         )
 
-    _, effective_weight = _get_decile_weights(
-        baseline_data,
-        entity=entity,
-    )
+    if validated_effective_weight is None:
+        _, effective_weight = _get_decile_weights(
+            baseline_data,
+            entity=entity,
+        )
+    else:
+        effective_weight = np.asarray(
+            validated_effective_weight,
+            dtype=float,
+        )
+        if len(effective_weight) != len(baseline_data):
+            raise ValueError(
+                "Effective grouping weights must align with baseline output data"
+            )
     if np.sum(effective_weight) == 0:
         raise ValueError("Effective grouping weights must have a positive total")
 
