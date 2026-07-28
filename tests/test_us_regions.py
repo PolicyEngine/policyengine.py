@@ -107,7 +107,7 @@ class TestUSRegionRegistry:
         assert national.region_type == "national"
         assert national.dataset_path == (
             "hf://policyengine/populace-us/populace_us_2024.h5"
-            "@populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z"
+            "@populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z"
         )
 
     def test__given_us_registry__then_has_51_states(self):
