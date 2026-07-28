@@ -97,30 +97,30 @@
       "version": "populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z"
     },
     "us": {
-      "build_id": "populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z",
+      "build_id": "populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z",
       "bundle_id": "us-5.0.0",
       "certification": {
         "built_with_model_version": "1.764.6",
         "certified_by": "policyengine.py bundle certification",
         "certified_for_model_version": "1.764.6",
         "compatibility_basis": "built_with_model_package",
-        "data_build_id": "populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z"
+        "data_build_id": "populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z"
       },
       "certified_data_artifact": {
-        "build_id": "populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z",
+        "build_id": "populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z",
         "data_package": {
           "name": "populace-data",
           "version": "0.1.0"
         },
         "dataset": "populace_us_2024",
-        "sha256": "d28dd2bb133041e4b74d444f7bbef2eee0a6b027e77af7e3e832f2bcb8ee7d6b",
-        "uri": "hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z"
+        "sha256": "48b9d479fb4fd1c3537f9383ce4697d130b6f618658409d74f6233c43b994c7e",
+        "uri": "hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z"
       },
       "country_id": "us",
       "data_package": {
         "name": "populace-data",
-        "release_manifest_path": "releases/populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z/release_manifest.json",
-        "release_manifest_revision": "populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z",
+        "release_manifest_path": "releases/populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z/release_manifest.json",
+        "release_manifest_revision": "populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z",
         "repo_id": "policyengine/populace-us",
         "repo_type": "dataset",
         "version": "0.1.0"
@@ -128,44 +128,44 @@
       "data_producer": "populace",
       "datasets": {
         "calibration_diagnostics": {
-          "path": "releases/populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z/calibration_diagnostics.json",
+          "path": "releases/populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z/calibration_diagnostics.json",
           "repo_id": "policyengine/populace-us",
-          "revision": "populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z",
-          "sha256": "66f0dea9b2345826c0dc3bf86362ae0f05a5562cc39f28d92f8313f2914afaaf"
+          "revision": "populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z",
+          "sha256": "870449b44e86b13b25bcea1a57f0e7af37f4d4db18be815eea3acdf9fe6eb40e"
         },
         "demographics": {
-          "path": "releases/populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z/demographics.json",
+          "path": "releases/populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z/demographics.json",
           "repo_id": "policyengine/populace-us",
-          "revision": "populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z",
-          "sha256": "7946b60793f5c9009a42acab7a7525d8acb687eaa00ef6225f930b1b6f3c672b"
+          "revision": "populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z",
+          "sha256": "50c39dea345fa4e21f32272304b376979b9572ca17383dd13061b752d9a81112"
         },
         "populace_us_2024": {
           "path": "populace_us_2024.h5",
           "repo_id": "policyengine/populace-us",
-          "revision": "populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z",
-          "sha256": "d28dd2bb133041e4b74d444f7bbef2eee0a6b027e77af7e3e832f2bcb8ee7d6b"
+          "revision": "populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z",
+          "sha256": "48b9d479fb4fd1c3537f9383ce4697d130b6f618658409d74f6233c43b994c7e"
         },
         "populace_us_2024_calibration": {
           "path": "populace_us_2024_calibration.npz",
           "repo_id": "policyengine/populace-us",
-          "revision": "populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z",
-          "sha256": "3febccc5a8d07a583c5c2ce549b438e13368e395b9e05f86bddffcb23a5025d2"
+          "revision": "populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z",
+          "sha256": "b6e9c0678de5e79e8ddbd7a2a2f17c357bd6b368153cea7b5119c299a280a1b5"
         },
         "us_source_coverage": {
-          "path": "releases/populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z/us_source_coverage.json",
+          "path": "releases/populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z/us_source_coverage.json",
           "repo_id": "policyengine/populace-us",
-          "revision": "populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z",
-          "sha256": "58980561ed0cb797541e5855a62565188dd62c11cf137cccf44e4fbd7a40c933"
+          "revision": "populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z",
+          "sha256": "6406c8686c292015a5bc7265a42402f89935f9395a8b63510efdd4d9562e7ff5"
         },
         "us_ssi_take_up": {
-          "path": "releases/populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z/us_ssi_take_up.json",
+          "path": "releases/populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z/us_ssi_take_up.json",
           "repo_id": "policyengine/populace-us",
-          "revision": "populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z",
-          "sha256": "d441cef41053253b0b3ed9601cd2bedb3e19a403f899e0d9c58cb5d9b7164405"
+          "revision": "populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z",
+          "sha256": "ce631a37e2fe2ed22927fa232d41150d3b6cf328b38d3e5b38018fc4eec1b44d"
         }
       },
       "default_dataset": "populace_us_2024",
-      "default_dataset_uri": "hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z",
+      "default_dataset_uri": "hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z",
       "model_package": {
         "name": "policyengine-us",
         "sha256": "2b2c5c02c26ab212270948db1f30129728b625fc6109fc9ca0c604b714546909",
@@ -178,10 +178,10 @@
           "path_template": "populace_us_2024.h5"
         }
       },
-      "release_manifest_uri": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z/releases/populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z/release_manifest.json",
+      "release_manifest_uri": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z/releases/populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z/release_manifest.json",
       "schema_version": 1,
-      "source_manifest_uri": "hf://dataset/policyengine/populace-us@populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z/releases/populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z/release_manifest.json",
-      "version": "populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z"
+      "source_manifest_uri": "hf://dataset/policyengine/populace-us@populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z/releases/populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z/release_manifest.json",
+      "version": "populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z"
     }
   },
   "dataset_overlays": {

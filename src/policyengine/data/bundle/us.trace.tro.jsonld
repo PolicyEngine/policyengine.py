@@ -17,7 +17,7 @@
         "schema:name": "PolicyEngine",
         "schema:url": "https://policyengine.org"
       },
-      "schema:dateCreated": "2026-07-23T02:04:29.333569+00:00",
+      "schema:dateCreated": "2026-07-28T03:56:03.415544+00:00",
       "schema:description": "TRACE TRO for certified runtime bundle us-5.0.0 covering the bundle manifest, the certified dataset artifact, the country model wheel, and the country data release manifest when it is available.",
       "schema:name": "policyengine us certified bundle TRO",
       "trov:createdWith": {
@@ -45,7 +45,7 @@
               "trov:hasArtifact": {
                 "@id": "composition/1/artifact/data_release_manifest"
               },
-              "trov:hasLocation": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z/releases/populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z/release_manifest.json"
+              "trov:hasLocation": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z/releases/populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z/release_manifest.json"
             },
             {
               "@id": "arrangement/1/location/dataset",
@@ -53,7 +53,7 @@
               "trov:hasArtifact": {
                 "@id": "composition/1/artifact/dataset"
               },
-              "trov:hasLocation": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z/populace_us_2024.h5"
+              "trov:hasLocation": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z/populace_us_2024.h5"
             },
             {
               "@id": "arrangement/1/location/model_wheel",
@@ -75,21 +75,21 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine.py bundle manifest for us",
             "trov:mimeType": "application/json",
-            "trov:sha256": "89994301c333e700510135c85762e55c49ad8e09cd7221b05ff44fae6a23e5b6"
+            "trov:sha256": "ea67b51887838d4c5f57e162100fa88c48e0f643a3cee3b77d356018596a1c94"
           },
           {
             "@id": "composition/1/artifact/data_release_manifest",
             "@type": "trov:ResearchArtifact",
             "schema:name": "populace-data release manifest 0.1.0",
             "trov:mimeType": "application/json",
-            "trov:sha256": "5226bf5e54e1179b82648bdfd2509b8091e47e3c104a5c7f629e1440d777049b"
+            "trov:sha256": "dd949ba3c4c7a56aff8442c6db5a031d2c84c3da59f5d14832f468c358604506"
           },
           {
             "@id": "composition/1/artifact/dataset",
             "@type": "trov:ResearchArtifact",
             "schema:name": "populace_us_2024",
             "trov:mimeType": "application/x-hdf5",
-            "trov:sha256": "d28dd2bb133041e4b74d444f7bbef2eee0a6b027e77af7e3e832f2bcb8ee7d6b"
+            "trov:sha256": "48b9d479fb4fd1c3537f9383ce4697d130b6f618658409d74f6233c43b994c7e"
           },
           {
             "@id": "composition/1/artifact/model_wheel",
@@ -102,7 +102,7 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "f906fbcd57273bd0d6d62018b0b0b4fbcb9bb69eb1e8c3025b892e5a8bc8d25a"
+          "trov:sha256": "584cf84cee9dc3771c776100f7353ef7691df93882f4cfeab0eb9f52019baf12"
         }
       },
       "trov:hasPerformance": {
@@ -112,13 +112,13 @@
         "pe:certifiedBy": "policyengine.py bundle certification",
         "pe:certifiedForModelVersion": "1.764.6",
         "pe:compatibilityBasis": "built_with_model_package",
-        "pe:dataBuildId": "populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z",
+        "pe:dataBuildId": "populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z",
         "pe:emittedIn": "repository-bundle",
-        "rdfs:comment": "Certification of build populace-us-2024-buildo-sparse-rmloss100-22bd902-20260722T232627Z for policyengine-us 1.764.6.",
+        "rdfs:comment": "Certification of build populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z for policyengine-us 1.764.6.",
         "trov:accessedArrangement": {
           "@id": "arrangement/1"
         },
-        "trov:startedAtTime": "2026-07-23T02:04:29.333569+00:00",
+        "trov:startedAtTime": "2026-07-28T03:56:03.415544+00:00",
         "trov:wasConductedBy": {
           "@id": "trs"
         }
