@@ -219,18 +219,18 @@
     },
     "policyengine-core": {
       "import_name": "policyengine_core",
-      "install_requirement": "policyengine-core==3.30.0",
+      "install_requirement": "policyengine-core==3.30.1",
       "name": "policyengine-core",
       "role": "runtime_dependency",
-      "version": "3.30.0"
+      "version": "3.30.1"
     },
     "policyengine-uk": {
       "country": "uk",
       "import_name": "policyengine_uk",
-      "install_requirement": "policyengine-uk==2.89.2",
+      "install_requirement": "policyengine-uk==2.90.2",
       "name": "policyengine-uk",
       "role": "country_model",
-      "version": "2.89.2"
+      "version": "2.90.2"
     },
     "policyengine-us": {
       "country": "us",
