@@ -69,9 +69,9 @@ population examples. To download the raw `.h5` file directly, see
 ## Documentation
 
 **Core concepts:**
-- [Core concepts](docs/core-concepts.md): Architecture, datasets, simulations, outputs
-- [UK tax-benefit model](docs/country-models-uk.md): Entities, parameters, examples
-- [US tax-benefit model](docs/country-models-us.md): Entities, parameters, examples
+- [Microsimulation](docs/microsim.md): Datasets, simulations, outputs, performance
+- [Country models](docs/countries.md): UK and US entities, defaults, and differences
+- [Model architecture](docs/methodology/model-architecture.md): How rules, data, and simulations fit together
 
 **Examples:**
 - `examples/income_distribution_us.py`: Analyse benefit distribution by decile
