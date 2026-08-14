@@ -1,0 +1,1 @@
+Fixed broken README links (Documentation core-concepts pages and CONTRIBUTING.md), added a CONTRIBUTING.md contributor guide, and fixed JOSS paper rendering (duplicated figure caption prefix and BibTeX institution fields split on 'and').
