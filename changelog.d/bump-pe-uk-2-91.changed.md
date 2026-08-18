@@ -1,0 +1,1 @@
+Bump the bundled PolicyEngine UK model to 2.91.0 and PolicyEngine Core to 3.30.4, carrying the retention-rate CGT elasticity semantics and response hardening (policyengine-uk#1803), the rate effective-date and fiscal blending fixes (#1806), and the new auxiliary MTR elasticity (#1823).
