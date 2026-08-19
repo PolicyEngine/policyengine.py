@@ -23,13 +23,12 @@ reductions are not yet encoded (TheAxiomFoundation/rulespec-be#1).
 """
 
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Optional, Union
+from typing import TYPE_CHECKING, Any, ClassVar, Optional, Union
 
 import pandas as pd
 from microdf import MicroDataFrame
 
-from policyengine.core import TaxBenefitModel
-from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
+from policyengine.core import TaxBenefitModel, TaxBenefitModelVersion
 
 from .datasets import BEYearData, PopulaceBelgiumDataset
 
@@ -76,7 +75,7 @@ class AxiomBelgiumPilot(TaxBenefitModelVersion):
     output_variables: list[str] = [EMPLOYEE_SSC, PIT_BEFORE_WITHHOLDING]
     communal_additional_tax_rate: float = 0.0
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         kwargs.setdefault("model", be_model)
         kwargs.setdefault("version", "0.1.0-pilot")
         super().__init__(**kwargs)
