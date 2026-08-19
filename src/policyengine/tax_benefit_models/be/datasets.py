@@ -12,7 +12,7 @@ import pandas as pd
 from microdf import MicroDataFrame
 from pydantic import ConfigDict, Field
 
-from policyengine.core.dataset import Dataset, YearData
+from policyengine.core import Dataset, YearData
 
 
 class BEYearData(YearData):
@@ -35,6 +35,8 @@ class PopulaceBelgiumDataset(Dataset):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     def load(self) -> None:
+        if self.filepath is None:
+            raise ValueError("Cannot load a Belgium pilot dataset without a filepath.")
         person = pd.read_hdf(self.filepath, key="person")
         household = pd.read_hdf(self.filepath, key="household")
         self.data = BEYearData(
@@ -45,5 +47,7 @@ class PopulaceBelgiumDataset(Dataset):
     def save(self) -> None:
         if self.data is None:
             raise ValueError("No data to save.")
+        if self.filepath is None:
+            raise ValueError("Cannot save a Belgium pilot dataset without a filepath.")
         pd.DataFrame(self.data.person).to_hdf(self.filepath, key="person", mode="w")
         pd.DataFrame(self.data.household).to_hdf(self.filepath, key="household")
