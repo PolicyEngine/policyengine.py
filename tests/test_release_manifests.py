@@ -60,9 +60,9 @@ US_RELEASE_MANIFEST_DATASET_URI = (
 # Non-default local-area overlay: a staged Populace US artifact published in its
 # own immutable release (Build L), loadable by name but never the default.
 US_LOCAL_AREA_DATASET = "populace_us_2024_acs_local"
-US_LOCAL_AREA_RELEASE_ID = "populace-us-2024-buildo-acs-local-77e2061-20260724T110908Z"
+US_LOCAL_AREA_RELEASE_ID = "populace-us-2024-buildp-acs-local-592ae5d6-20260819T020303Z"
 US_LOCAL_AREA_SHA256 = (
-    "71763290ded993789af0ad818fd833a6aabb9ca7ff7d14f78315340d8617c6f4"
+    "ae1a46854de735614eff8e7708d667319a621d346c92dc3737969b91a1945bb7"
 )
 US_LOCAL_AREA_DATASET_URI = (
     "hf://policyengine/populace-us/populace_us_2024_acs_local.h5"
