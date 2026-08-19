@@ -146,7 +146,10 @@ class DataReleaseManifest(BaseModel):
 class DataCertification(BaseModel):
     compatibility_basis: str
     certified_for_model_version: str
+    core_compatibility_basis: Optional[str] = None
+    certified_for_core_version: Optional[str] = None
     data_build_id: Optional[str] = None
+    built_with_core_version: Optional[str] = None
     built_with_model_version: Optional[str] = None
     built_with_model_git_sha: Optional[str] = None
     data_build_fingerprint: Optional[str] = None

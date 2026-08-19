@@ -151,22 +151,31 @@ def format_optional_dependencies(extras: Mapping[str, list[str]]) -> str:
 def write_or_check(path: Path, content: str, *, check: bool) -> bool:
     if path.exists() and path.read_text() == content:
         return False
+    try:
+        display_path = path.relative_to(REPO_ROOT)
+    except ValueError:
+        display_path = path
     if check:
-        print(f"{path.relative_to(REPO_ROOT)} is not up to date.", file=sys.stderr)
+        print(f"{display_path} is not up to date.", file=sys.stderr)
         return True
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content)
-    print(f"Updated {path.relative_to(REPO_ROOT)}")
+    print(f"Updated {display_path}")
     return True
 
 
-def generate(*, check: bool = False) -> int:
-    bundle = load_bundle_manifest(BUNDLE_MANIFEST)
+def generate(
+    *,
+    check: bool = False,
+    bundle_manifest: Path = BUNDLE_MANIFEST,
+    pyproject: Path = PYPROJECT,
+) -> int:
+    bundle = load_bundle_manifest(bundle_manifest)
     changed = False
-    changed |= write_or_check(BUNDLE_MANIFEST, manifest_text(bundle), check=check)
+    changed |= write_or_check(bundle_manifest, manifest_text(bundle), check=check)
     changed |= write_or_check(
-        PYPROJECT,
-        update_pyproject_text(PYPROJECT.read_text(), bundle),
+        pyproject,
+        update_pyproject_text(pyproject.read_text(), bundle),
         check=check,
     )
     return 1 if check and changed else 0

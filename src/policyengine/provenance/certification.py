@@ -48,7 +48,9 @@ import requests
 
 from policyengine.provenance.manifest import (
     HF_REQUEST_TIMEOUT_SECONDS,
+    CompatiblePackage,
     DataReleaseManifest,
+    PackageVersion,
     _specifier_matches,
     fetch_pypi_wheel_metadata,
 )
@@ -66,6 +68,8 @@ COUNTRY_MODEL_PACKAGES = {
 CERTIFIED_BY = "policyengine.py bundle certification"
 BASIS_BUILT_WITH = "built_with_model_package"
 BASIS_PUBLISHER_CLAIM = "compatible_model_packages"
+CORE_BASIS_BUILT_WITH = "built_with_core_package"
+CORE_BASIS_PUBLISHER_CLAIM = "compatible_core_packages"
 POPULACE_US_SOURCE_COVERAGE_FILE = "us_source_coverage.json"
 US_STATE_CODES = (
     "AL",
@@ -242,37 +246,97 @@ def validate_release_manifest(
         if not artifact.sha256:
             warnings.append(f"artifact {name!r} has no sha256")
 
-    built_with = None
-    if manifest.build is not None and manifest.build.built_with_model_package:
-        build_pkg = manifest.build.built_with_model_package
-        if build_pkg.name == model_package:
-            built_with = build_pkg.version
-
-    claim_specifiers = [
-        package.specifier
-        for package in manifest.compatible_model_packages
-        if package.name == model_package
-    ]
-    claim_matches = any(
-        _specifier_matches(model_version, specifier) for specifier in claim_specifiers
+    built_with = (
+        manifest.build.built_with_model_package if manifest.build is not None else None
     )
-
-    if built_with == model_version:
-        return BASIS_BUILT_WITH, warnings
-    if claim_matches:
+    compatibility_basis, built_with_version, claim_specifiers = (
+        validate_package_compatibility(
+            package_name=model_package,
+            package_version=model_version,
+            compatible_packages=manifest.compatible_model_packages,
+            built_with_package=built_with,
+            built_with_basis=BASIS_BUILT_WITH,
+            compatible_basis=BASIS_PUBLISHER_CLAIM,
+        )
+    )
+    if compatibility_basis == BASIS_PUBLISHER_CLAIM:
         warnings.append(
             f"certifying {model_package} {model_version} on the publisher's "
             f"compatibility claim {claim_specifiers}; the data was built "
-            f"with {built_with or 'an unrecorded model version'} — the test "
+            f"with {built_with_version or 'an unrecorded model version'} — the test "
             "suite is the arbiter"
         )
-        return BASIS_PUBLISHER_CLAIM, warnings
+    return compatibility_basis, warnings
+
+
+def validate_package_compatibility(
+    *,
+    package_name: str,
+    package_version: str,
+    compatible_packages: list[CompatiblePackage],
+    built_with_package: Optional[PackageVersion],
+    built_with_basis: str,
+    compatible_basis: str,
+) -> tuple[str, Optional[str], list[str]]:
+    """Validate one requested package against publisher release metadata."""
+
+    built_with_version = None
+    if built_with_package is not None and built_with_package.name == package_name:
+        built_with_version = built_with_package.version
+
+    claim_specifiers = [
+        package.specifier
+        for package in compatible_packages
+        if package.name == package_name
+    ]
+    if built_with_version == package_version:
+        return built_with_basis, built_with_version, claim_specifiers
+    if any(
+        _specifier_matches(package_version, specifier) for specifier in claim_specifiers
+    ):
+        return compatible_basis, built_with_version, claim_specifiers
     raise CertificationError(
-        f"{model_package} {model_version} matches neither the build-time "
-        f"model ({built_with or 'unrecorded'}) nor any publisher "
+        f"{package_name} {package_version} matches neither the build-time "
+        f"package ({built_with_version or 'unrecorded'}) nor any publisher "
         f"compatibility claim {claim_specifiers or '(none declared)'}; "
         "a new data build or a published compatibility claim is required."
     )
+
+
+def validate_release_package_pair(
+    manifest: DataReleaseManifest,
+    *,
+    model_package: str,
+    model_version: str,
+    core_package: str,
+    core_version: str,
+) -> tuple[str, str, list[str]]:
+    """Validate the model/core pair selected for a data release."""
+
+    model_basis, warnings = validate_release_manifest(
+        manifest,
+        model_package,
+        model_version,
+    )
+    built_with_core = (
+        manifest.build.built_with_core_package if manifest.build is not None else None
+    )
+    core_basis, built_with_version, claim_specifiers = validate_package_compatibility(
+        package_name=core_package,
+        package_version=core_version,
+        compatible_packages=manifest.compatible_core_packages,
+        built_with_package=built_with_core,
+        built_with_basis=CORE_BASIS_BUILT_WITH,
+        compatible_basis=CORE_BASIS_PUBLISHER_CLAIM,
+    )
+    if core_basis == CORE_BASIS_PUBLISHER_CLAIM:
+        warnings.append(
+            f"certifying {core_package} {core_version} on the publisher's "
+            f"compatibility claim {claim_specifiers}; the data was built "
+            f"with {built_with_version or 'an unrecorded core version'} — the test "
+            "suite is the arbiter"
+        )
+    return model_basis, core_basis, warnings
 
 
 def head_artifact(artifact, token: Optional[str] = None) -> bool:
@@ -472,6 +536,8 @@ def build_country_manifest_payload(
     model_version: str,
     model_wheel: dict,
     compatibility_basis: str = BASIS_BUILT_WITH,
+    core_version: Optional[str] = None,
+    core_compatibility_basis: Optional[str] = None,
 ) -> dict:
     """Map the data release manifest to the vendored country manifest."""
     default_dataset = manifest.default_datasets["national"]
@@ -526,6 +592,10 @@ def build_country_manifest_payload(
         "certified_for_model_version": model_version,
         "certified_by": CERTIFIED_BY,
     }
+    if core_version is not None:
+        certification["certified_for_core_version"] = core_version
+    if core_compatibility_basis is not None:
+        certification["core_compatibility_basis"] = core_compatibility_basis
     certified_artifact: dict = {
         "data_package": {
             "name": manifest.data_package.name,
@@ -542,6 +612,9 @@ def build_country_manifest_payload(
             certification["data_build_id"] = build.build_id
             certified_artifact["build_id"] = build.build_id
         model_build = build.built_with_model_package
+        core_build = build.built_with_core_package
+        if core_build is not None:
+            certification["built_with_core_version"] = core_build.version
         if model_build is not None:
             certification["built_with_model_version"] = model_build.version
             if model_build.git_sha:
