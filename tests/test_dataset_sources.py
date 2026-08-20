@@ -1,12 +1,15 @@
+import hashlib
 import importlib.util
 import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
+from policyengine.bundle import BundleError
 from policyengine.provenance import dataset_sources
+from policyengine.provenance import manifest as manifest_module
 from policyengine.provenance.dataset_sources import (
     materialize_dataset_source,
     parse_gs_uri,
@@ -14,6 +17,67 @@ from policyengine.provenance.dataset_sources import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _install_hf_downloader(monkeypatch, download):
+    core_module = ModuleType("policyengine_core")
+    core_module.__path__ = []
+    tools_module = ModuleType("policyengine_core.tools")
+    tools_module.__path__ = []
+    hf_module = ModuleType("policyengine_core.tools.hugging_face")
+    hf_module.download_huggingface_dataset = download
+    core_module.tools = tools_module
+    tools_module.hugging_face = hf_module
+    monkeypatch.setitem(sys.modules, "policyengine_core", core_module)
+    monkeypatch.setitem(sys.modules, "policyengine_core.tools", tools_module)
+    monkeypatch.setitem(
+        sys.modules,
+        "policyengine_core.tools.hugging_face",
+        hf_module,
+    )
+
+
+@pytest.fixture
+def bundle_managed_hf_download(monkeypatch, tmp_path):
+    payload = b"bundle-managed dataset bytes"
+    downloaded_path = tmp_path / "populace_uk_2023.h5"
+    country_manifest = manifest_module.get_release_manifest("uk").model_copy(deep=True)
+    dataset_name = country_manifest.default_dataset
+    path_reference = country_manifest.datasets[dataset_name]
+    dataset_uri = manifest_module.build_hf_uri(
+        repo_id=path_reference.repo_id or country_manifest.data_package.repo_id,
+        path_in_repo=path_reference.path,
+        revision=(
+            path_reference.revision
+            or country_manifest.data_package.release_manifest_revision
+            or country_manifest.data_package.version
+        ),
+    )
+    certified_artifact = country_manifest.certified_data_artifact
+    assert certified_artifact is not None
+    assert certified_artifact.uri == dataset_uri
+
+    def emit_downloaded_bytes(*args, **kwargs):
+        downloaded_path.write_bytes(payload)
+        return str(downloaded_path)
+
+    download = Mock(side_effect=emit_downloaded_bytes)
+    _install_hf_downloader(monkeypatch, download)
+    monkeypatch.setattr(
+        manifest_module,
+        "get_release_manifest",
+        Mock(return_value=country_manifest),
+    )
+    return SimpleNamespace(
+        country_manifest=country_manifest,
+        certified_artifact=certified_artifact,
+        dataset_name=dataset_name,
+        dataset_uri=dataset_uri,
+        download=download,
+        downloaded_path=downloaded_path,
+        payload=payload,
+        sha256=hashlib.sha256(payload).hexdigest(),
+    )
 
 
 def _load_module_from_path(module_name: str, path: Path):
@@ -62,10 +126,7 @@ def test_materialize_dataset_source_downloads_gcs_uri(monkeypatch):
 
 def test_materialize_dataset_source_downloads_hf_uri(monkeypatch):
     download = Mock(return_value="/tmp/enhanced_cps_2024.h5")
-    monkeypatch.setattr(
-        "policyengine_core.tools.hugging_face.download_huggingface_dataset",
-        download,
-    )
+    _install_hf_downloader(monkeypatch, download)
 
     result = materialize_dataset_source(
         "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
@@ -77,6 +138,44 @@ def test_materialize_dataset_source_downloads_hf_uri(monkeypatch):
         "enhanced_cps_2024.h5",
         version="1.77.0",
     )
+
+
+def test_bundle_managed_materialization_accepts_matching_artifact_sha256(
+    bundle_managed_hf_download,
+):
+    fixture = bundle_managed_hf_download
+    fixture.country_manifest.datasets[fixture.dataset_name].sha256 = fixture.sha256
+    fixture.certified_artifact.sha256 = "0" * 64
+
+    result = materialize_dataset_source(
+        fixture.dataset_uri,
+        country_id="uk",
+    )
+
+    assert result == str(fixture.downloaded_path)
+    assert fixture.downloaded_path.read_bytes() == fixture.payload
+    fixture.download.assert_called_once()
+
+
+def test_bundle_managed_materialization_rejects_certified_sha256_mismatch(
+    bundle_managed_hf_download,
+):
+    fixture = bundle_managed_hf_download
+    expected_sha256 = hashlib.sha256(b"expected dataset bytes").hexdigest()
+    fixture.country_manifest.datasets[fixture.dataset_name].sha256 = None
+    fixture.certified_artifact.sha256 = expected_sha256
+
+    with pytest.raises(BundleError) as exc_info:
+        materialize_dataset_source(
+            fixture.dataset_uri,
+            country_id="uk",
+        )
+
+    message = str(exc_info.value)
+    assert fixture.sha256 in message
+    assert expected_sha256 in message
+    assert "Downloaded UK dataset populace_uk_2023 has sha256" in message
+    fixture.download.assert_called_once()
 
 
 def test_materialize_dataset_source_preserves_local_path():
@@ -116,7 +215,8 @@ def test_us_create_datasets_passes_materialized_source_to_country_package(
     )
 
     materialize.assert_called_once_with(
-        "gs://policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+        "gs://policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
+        country_id="us",
     )
     microsimulation.assert_called_once_with(dataset="/tmp/enhanced_cps_2024.h5")
 
@@ -144,6 +244,7 @@ def test_uk_create_datasets_passes_materialized_source_to_country_package(
     )
 
     materialize.assert_called_once_with(
-        "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3"
+        "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3",
+        country_id="uk",
     )
     microsimulation.assert_called_once_with(dataset="/tmp/enhanced_frs_2023_24.h5")

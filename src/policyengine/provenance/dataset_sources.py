@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
+from policyengine.bundle import verify_file_sha256
+from policyengine.provenance.manifest import (
+    dataset_artifact_sha256,
+    dataset_logical_name,
+)
 from policyengine.utils.google_cloud_bucket import download_file_from_gcs
 
 
@@ -78,8 +84,24 @@ def materialize_dataset_source(
     dataset_source: str,
     *,
     version: Optional[str] = None,
+    country_id: Optional[str] = None,
 ) -> str:
-    """Return a local file path for supported remote dataset URIs."""
+    """Return a local file path, verifying bundle-managed remote artifacts."""
+
+    def verify_bundle_download(local_path: str) -> None:
+        if country_id is None:
+            return
+        expected_sha256 = dataset_artifact_sha256(country_id, dataset_source)
+        if expected_sha256 is None:
+            return
+        verify_file_sha256(
+            Path(local_path),
+            expected_sha256=expected_sha256,
+            description=(
+                f"Downloaded {country_id.upper()} dataset "
+                f"{dataset_logical_name(dataset_source)}"
+            ),
+        )
 
     if dataset_source.startswith("gs://"):
         reference = parse_gs_uri(dataset_source)
@@ -88,6 +110,7 @@ def materialize_dataset_source(
             reference.path,
             version=_select_version(reference.version, version),
         )
+        verify_bundle_download(local_path)
         return local_path
 
     if dataset_source.startswith("hf://"):
@@ -97,7 +120,7 @@ def materialize_dataset_source(
 
         reference = parse_hf_uri(dataset_source)
         try:
-            return download_huggingface_dataset(
+            local_path = download_huggingface_dataset(
                 reference.repo_id,
                 reference.path,
                 version=_select_version(reference.version, version),
@@ -109,11 +132,13 @@ def materialize_dataset_source(
             # before surfacing the original failure.
             from huggingface_hub import hf_hub_download
 
-            return hf_hub_download(
+            local_path = hf_hub_download(
                 repo_id=reference.repo_id,
                 repo_type="dataset",
                 filename=reference.path,
                 revision=_select_version(reference.version, version),
             )
+        verify_bundle_download(local_path)
+        return local_path
 
     return dataset_source

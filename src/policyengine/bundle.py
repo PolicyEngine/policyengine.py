@@ -136,13 +136,11 @@ class DataProducerRuntimeStrategy:
         return str(version) if version is not None else None
 
     def verify_download(self, plan: DatasetPlan, path: Path) -> str:
-        actual_sha256 = _sha256_file(path)
-        if plan.expected_sha256 and actual_sha256 != plan.expected_sha256:
-            raise BundleError(
-                f"Downloaded {plan.country.upper()} dataset {plan.dataset} "
-                f"has sha256 {actual_sha256}, expected {plan.expected_sha256}."
-            )
-        return actual_sha256
+        return verify_file_sha256(
+            path,
+            expected_sha256=plan.expected_sha256,
+            description=f"Downloaded {plan.country.upper()} dataset {plan.dataset}",
+        )
 
     def dataset_check(
         self,
@@ -918,3 +916,19 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: file.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def verify_file_sha256(
+    path: Path,
+    *,
+    expected_sha256: Optional[str],
+    description: str,
+) -> str:
+    """Hash a file and fail closed when its expected sha256 does not match."""
+
+    actual_sha256 = _sha256_file(path)
+    if expected_sha256 and actual_sha256 != expected_sha256:
+        raise BundleError(
+            f"{description} has sha256 {actual_sha256}, expected {expected_sha256}."
+        )
+    return actual_sha256

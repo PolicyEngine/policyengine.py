@@ -297,7 +297,10 @@ def create_datasets(
     for dataset in datasets:
         resolved_dataset = resolve_dataset_reference("us", dataset)
         dataset_stem = dataset_logical_name(resolved_dataset)
-        runtime_dataset = materialize_dataset_source(resolved_dataset)
+        runtime_dataset = materialize_dataset_source(
+            resolved_dataset,
+            country_id="us",
+        )
         sim = Microsimulation(dataset=runtime_dataset)
 
         for year in years:
@@ -1180,6 +1183,8 @@ def ensure_datasets(
             break
 
     if all_exist:
+        # This branch never materializes the source artifact, so runtime source
+        # byte verification only applies when create_datasets runs below.
         return load_datasets(datasets=datasets, years=years, data_folder=data_folder)
     else:
         return create_datasets(datasets=datasets, years=years, data_folder=data_folder)

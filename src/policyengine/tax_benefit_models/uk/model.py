@@ -310,7 +310,10 @@ def managed_microsimulation(
             allow_unmanaged and dataset is not None and "://" in dataset
         ),
     )
-    runtime_dataset_source = materialize_dataset_source(dataset_source)
+    runtime_dataset_source = materialize_dataset_source(
+        dataset_source,
+        country_id="uk",
+    )
     runtime_dataset = runtime_dataset_source
     if isinstance(runtime_dataset_source, str) and "://" not in runtime_dataset_source:
         from policyengine_uk.data.dataset_schema import (
