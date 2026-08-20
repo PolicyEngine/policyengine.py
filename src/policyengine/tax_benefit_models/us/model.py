@@ -453,7 +453,10 @@ def managed_microsimulation(
             allow_unmanaged and dataset is not None and "://" in dataset
         ),
     )
-    runtime_dataset_source = materialize_dataset_source(dataset_source)
+    runtime_dataset_source = materialize_dataset_source(
+        dataset_source,
+        country_id="us",
+    )
     microsim = Microsimulation(dataset=runtime_dataset_source, **kwargs)
     microsim.policyengine_bundle = _managed_release_bundle(
         dataset_uri,

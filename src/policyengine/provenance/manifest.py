@@ -537,6 +537,33 @@ def resolve_dataset_reference(country_id: str, dataset: str) -> str:
     return artifact.uri
 
 
+def dataset_artifact_sha256(
+    country_id: str,
+    dataset_uri: str,
+) -> Optional[str]:
+    """Return the bundled sha256 for the artifact at an exact dataset URI."""
+
+    manifest = get_release_manifest(country_id)
+    for path_reference in manifest.datasets.values():
+        reference_uri = build_hf_uri(
+            repo_id=path_reference.repo_id or manifest.data_package.repo_id,
+            path_in_repo=path_reference.path,
+            revision=path_reference.revision
+            or _artifact_revision(manifest.data_package),
+        )
+        if reference_uri == dataset_uri and path_reference.sha256:
+            return path_reference.sha256
+
+    certified_artifact = manifest.certified_data_artifact
+    if (
+        certified_artifact is not None
+        and certified_artifact.uri == dataset_uri
+        and certified_artifact.sha256
+    ):
+        return certified_artifact.sha256
+    return None
+
+
 def resolve_managed_dataset_reference(
     country_id: str,
     dataset: Optional[str] = None,
