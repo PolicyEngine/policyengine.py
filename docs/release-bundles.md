@@ -544,7 +544,7 @@ Things that should usually not affect the fingerprint:
 1. the model version exactly matches the `built_with_model_package.version`
    (`compatibility_basis: built_with_model_package`)
 2. the data publisher's `compatible_model_packages` covers the model version
-   (`compatibility_basis: compatible_model_packages` — the publisher's claim,
+   (`compatibility_basis: legacy_compatible_model_package` — the publisher's claim,
    recorded with a warning and made good by the test suite passing on the
    pinned pair)
 
