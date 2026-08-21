@@ -246,7 +246,7 @@ class TestValidateReleaseManifest:
             "1.730.0",
         )
 
-        assert basis == "compatible_model_packages"
+        assert basis == "legacy_compatible_model_package"
         assert len(warnings) == 1
         assert "built with 1.723.0" in warnings[0]
 

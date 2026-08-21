@@ -42,16 +42,16 @@ def test_bundle_manifest_exposes_model_and_country_extras():
     assert "policyengine-us-data" not in manifest["packages"]
 
 
-def test_bundle_manifest_carries_populace_uk_data_release():
+def test_bundle_manifest_carries_uk_data_release():
     release = bundle.get_current_bundle()["data_releases"]["uk"]
 
     assert release["data_producer"] == "populace"
-    assert release["data_package"]["name"] == "populace-data"
-    assert release["data_package"]["repo_type"] == "dataset"
-    assert release["default_dataset"] == "populace_uk_2023"
-    assert release["version"].startswith("populace-uk-2023-")
+    assert release["data_package"]["name"] == "policyengine-uk-data"
+    assert release["data_package"]["repo_type"] == "model"
+    assert release["default_dataset"] == "enhanced_frs_2024_25"
+    assert release["version"].startswith("policyengine-uk-data-")
     assert release["default_dataset_uri"].startswith(
-        "hf://policyengine/populace-uk-private/"
+        "hf://policyengine/policyengine-uk-data-private/"
     )
 
 

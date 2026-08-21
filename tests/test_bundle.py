@@ -34,10 +34,16 @@ def test_bundle_manifest_exposes_data_releases():
     assert manifest["bundle_version"] == manifest["policyengine_version"]
     assert manifest["data_releases"]["us"]["data_producer"] == "populace"
     assert manifest["data_releases"]["us"]["version"].startswith("populace-us-2024-")
+    # UK certified default reverted to the policyengine-uk-data enhanced FRS per
+    # the UC caseload postmortem (policyengine-uk-data discussion #464); the
+    # "populace" producer label names the strict verification contract, not the
+    # producing repo.
     assert manifest["data_releases"]["uk"]["data_producer"] == "populace"
-    assert manifest["data_releases"]["uk"]["version"].startswith("populace-uk-2023-")
+    assert manifest["data_releases"]["uk"]["version"].startswith(
+        "policyengine-uk-data-"
+    )
     assert manifest["data_releases"]["uk"]["default_dataset_uri"].startswith(
-        "hf://policyengine/populace-uk-private/"
+        "hf://policyengine/policyengine-uk-data-private/enhanced_frs_"
     )
 
 
@@ -70,14 +76,14 @@ def test_dataset_plans_use_certified_release_metadata(tmp_path):
 
     assert len(plans) == 1
     assert plans[0].country == "uk"
-    assert plans[0].data_version.startswith("populace-uk-2023-")
+    assert plans[0].data_version.startswith("policyengine-uk-data-")
     assert plans[0].data_producer == "populace"
-    assert plans[0].repo_type == "dataset"
-    assert plans[0].destination == tmp_path / "populace_uk_2023.h5"
+    assert plans[0].repo_type == "model"
+    assert plans[0].destination == tmp_path / "enhanced_frs_2024_25.h5"
     assert (
         plans[0].expected_sha256
         == bundle.get_current_bundle()["data_releases"]["uk"]["datasets"][
-            "populace_uk_2023"
+            "enhanced_frs_2024_25"
         ]["sha256"]
     )
 

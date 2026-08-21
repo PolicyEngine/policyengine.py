@@ -65,7 +65,10 @@ COUNTRY_MODEL_PACKAGES = {
 
 CERTIFIED_BY = "policyengine.py bundle certification"
 BASIS_BUILT_WITH = "built_with_model_package"
-BASIS_PUBLISHER_CLAIM = "compatible_model_packages"
+# Must match the runtime claims basis in provenance/manifest.py: the offline
+# fallback there exempts exactly this string from the fingerprint identity
+# check, so a claims-certified bundle stays importable without network access.
+BASIS_PUBLISHER_CLAIM = "legacy_compatible_model_package"
 POPULACE_US_SOURCE_COVERAGE_FILE = "us_source_coverage.json"
 US_STATE_CODES = (
     "AL",
