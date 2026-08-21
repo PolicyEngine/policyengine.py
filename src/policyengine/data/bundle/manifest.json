@@ -253,10 +253,10 @@
     },
     "policyengine-core": {
       "import_name": "policyengine_core",
-      "install_requirement": "policyengine-core==3.30.0",
+      "install_requirement": "policyengine-core==3.30.1",
       "name": "policyengine-core",
       "role": "runtime_dependency",
-      "version": "3.30.0"
+      "version": "3.30.1"
     },
     "policyengine-uk": {
       "country": "uk",
