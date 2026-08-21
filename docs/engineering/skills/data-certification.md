@@ -80,7 +80,7 @@ state overlay artifacts when `--regional-manifest-uri` is used, unknown country.
 Certification gate: the model version must either exactly match the
 build-time model (`compatibility_basis: built_with_model_package`) or be
 covered by the publisher's `compatible_model_packages` claim
-(`compatibility_basis: compatible_model_packages`, recorded with a
+(`compatibility_basis: legacy_compatible_model_package`, recorded with a
 warning — the publisher's claim is made good only by this repo's test
 suite passing on the pinned pair). Neither basis means certification is
 refused: a new data build or a published compatibility claim is required.

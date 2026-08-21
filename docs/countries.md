@@ -33,7 +33,7 @@ Override in any output with `income_variable=`.
 | | Dataset |
 |---|---|
 | US | Populace US 2024 (`populace_us_2024.h5`) |
-| UK | Populace UK 2023 (`populace_uk_2023.h5`) |
+| UK | Enhanced FRS 2024-25 (`enhanced_frs_2024_25.h5`, policyengine-uk-data) |
 
 ## State / regional breakdown
 
