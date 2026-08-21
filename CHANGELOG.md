@@ -1,3 +1,15 @@
+## [5.0.3] - 2026-08-21
+
+### Changed
+
+- Certify the UK populace data release `policyengine-uk-data-1.56.16` (enhanced_frs_2024_25, policyengine-uk 2.90.2) into the PolicyEngine bundle manifest.
+
+### Fixed
+
+- Update the certified bundle to policyengine-uk 2.90.2 (Universal Credit deductions: Fair Repayment Rate cap, protected floor and abolition reform levers) and policyengine-core 3.30.1.
+- Update the certified PolicyEngine bundle pins.
+
+
 ## [5.0.2] - 2026-08-14
 
 ### Fixed
