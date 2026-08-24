@@ -223,8 +223,8 @@
       "populace_us_2024_acs_local": {
         "path": "populace_us_2024_acs_local.h5",
         "repo_id": "policyengine/populace-us",
-        "revision": "populace-us-2024-buildo-acs-local-77e2061-20260724T110908Z",
-        "sha256": "71763290ded993789af0ad818fd833a6aabb9ca7ff7d14f78315340d8617c6f4"
+        "revision": "populace-us-2024-buildp-acs-local-592ae5d6-20260819T020303Z",
+        "sha256": "ae1a46854de735614eff8e7708d667319a621d346c92dc3737969b91a1945bb7"
       }
     }
   },
