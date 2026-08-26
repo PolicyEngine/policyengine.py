@@ -54,6 +54,22 @@ def test__single_core_value__then_history_is_open_ended():
     assert value.end_date is None
 
 
+def test__consecutive_day_updates__then_earlier_value_covers_one_day():
+    parameter = _parameter_with_core_values(
+        ("2024-01-02", 20),
+        ("2024-01-01", 10),
+    )
+
+    values = parameter.parameter_values
+
+    assert values[0].start_date == datetime(2024, 1, 1)
+    assert values[0].end_date == datetime(2024, 1, 1)
+    assert values[0].value == 10
+    assert values[1].start_date == datetime(2024, 1, 2)
+    assert values[1].end_date is None
+    assert values[1].value == 20
+
+
 def test__duplicate_effective_starts__then_first_core_value_wins():
     parameter = _parameter_with_core_values(
         ("2024-01-01", "effective"),
