@@ -1,9 +1,23 @@
 """Tests for UK and US tax-benefit model versions and core models."""
 
 import re
+from datetime import timedelta
 
 from policyengine.tax_benefit_models.uk import uk_latest
 from policyengine.tax_benefit_models.us import us_latest
+
+
+def _assert_parameter_value_interval_contract(model, parameter_name):
+    values = model.get_parameter(parameter_name).parameter_values
+
+    assert len(values) > 1
+    assert [value.start_date for value in values] == sorted(
+        value.start_date for value in values
+    )
+    for current, following in zip(values, values[1:]):
+        assert current.end_date == following.start_date - timedelta(days=1)
+        assert current.start_date <= current.end_date
+    assert values[-1].end_date is None
 
 
 class TestUKModel:
@@ -69,6 +83,13 @@ class TestUKModel:
         """model_version.parameter_values should aggregate all parameter values."""
         all_values = uk_latest.parameter_values
         assert len(all_values) >= 100
+
+    def test_parameter_value_intervals_are_chronological_and_inclusive(self):
+        """UK catalog histories should expose valid inclusive intervals."""
+        _assert_parameter_value_interval_contract(
+            uk_latest,
+            "gov.hmrc.income_tax.rates.uk[0].rate",
+        )
 
     def test__given_bracket_parameter__then_has_generated_label(self):
         """Bracket parameters should have auto-generated labels."""
@@ -154,6 +175,13 @@ class TestUSModel:
         """model_version.parameter_values should aggregate all parameter values."""
         all_values = us_latest.parameter_values
         assert len(all_values) >= 100
+
+    def test_parameter_value_intervals_are_chronological_and_inclusive(self):
+        """US catalog histories should expose valid inclusive intervals."""
+        _assert_parameter_value_interval_contract(
+            us_latest,
+            "gov.irs.credits.ctc.amount.base[0].amount",
+        )
 
     def test__given_breakdown_parameter__then_has_generated_label(self):
         """Breakdown parameters (e.g., filing status) should have auto-generated labels."""
