@@ -118,13 +118,13 @@ class PolicyEngineUKDataset(Dataset):
 
 
 def create_datasets(
-    datasets: list[str] = [
-        "populace_uk_2023",
-    ],
+    datasets: Optional[list[str]] = None,
     years: list[int] = [2026, 2027, 2028, 2029, 2030],
     data_folder: str = "./data",
     allow_unmanaged: bool = False,
 ) -> dict[str, PolicyEngineUKDataset]:
+    if datasets is None:
+        datasets = [get_release_manifest("uk").default_dataset]
     result = {}
     for dataset in datasets:
         manifest = get_release_manifest("uk")
@@ -218,12 +218,12 @@ def create_datasets(
 
 
 def load_datasets(
-    datasets: list[str] = [
-        "populace_uk_2023",
-    ],
+    datasets: Optional[list[str]] = None,
     years: list[int] = [2026, 2027, 2028, 2029, 2030],
     data_folder: str = "./data",
 ) -> dict[str, PolicyEngineUKDataset]:
+    if datasets is None:
+        datasets = [get_release_manifest("uk").default_dataset]
     result = {}
     for dataset in datasets:
         resolved_dataset = resolve_dataset_reference("uk", dataset)
@@ -245,9 +245,7 @@ def load_datasets(
 
 
 def ensure_datasets(
-    datasets: list[str] = [
-        "populace_uk_2023",
-    ],
+    datasets: Optional[list[str]] = None,
     years: list[int] = [2026, 2027, 2028, 2029, 2030],
     data_folder: str = "./data",
     allow_unmanaged: bool = False,
@@ -262,6 +260,9 @@ def ensure_datasets(
     Returns:
         Dictionary mapping dataset keys to PolicyEngineUKDataset objects
     """
+    if datasets is None:
+        datasets = [get_release_manifest("uk").default_dataset]
+
     # Check if all dataset files exist
     all_exist = True
     for dataset in datasets:

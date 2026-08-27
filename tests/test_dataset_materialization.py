@@ -28,6 +28,12 @@ def _manifest() -> CountryReleaseManifest:
                 "repo_type": "model",
             },
             "default_dataset": "enhanced_frs_2024_25",
+            "certified_data_artifact": {
+                "dataset": "enhanced_frs_2024_25",
+                "uri": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2024_25.h5@uk-release",
+                "sha256": "a" * 64,
+                "build_id": "policyengine-uk-data-test-build",
+            },
             "datasets": {
                 "enhanced_frs_2024_25": {
                     "path": "enhanced_frs_2024_25.h5",
@@ -55,6 +61,7 @@ def test_resolve_bundle_dataset_plan_inherits_primary_package(tmp_path):
     assert plan.repo_type == "model"
     assert plan.revision == "uk-release"
     assert plan.destination == tmp_path / "enhanced_frs_2024_25.h5"
+    assert plan.build_id == "policyengine-uk-data-test-build"
 
 
 def test_resolve_bundle_dataset_plan_uses_cross_package_overlay(tmp_path):
@@ -69,6 +76,7 @@ def test_resolve_bundle_dataset_plan_uses_cross_package_overlay(tmp_path):
     assert plan.repo_id == "policyengine/populace-uk-private"
     assert plan.repo_type == "model"
     assert plan.revision == "populace-release"
+    assert plan.build_id is None
 
 
 def test_bundle_dataset_models_round_trip_json():

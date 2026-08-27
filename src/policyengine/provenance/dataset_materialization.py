@@ -184,6 +184,7 @@ def resolve_bundle_dataset_plan(
         build_id=(
             country_manifest.certified_data_artifact.build_id
             if country_manifest.certified_data_artifact is not None
+            and reference.data_package_name is None
             else None
         ),
         metadata_expected_sha256=reference.metadata_sha256,

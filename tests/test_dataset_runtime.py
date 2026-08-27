@@ -90,3 +90,66 @@ def test_uk_create_datasets_passes_verified_bundle_source_to_country_package(
         "uk", "populace_uk_2023", data_dir=Path("./data")
     )
     microsimulation.assert_called_once_with(dataset="/tmp/populace_uk_2023.h5")
+
+
+def test_uk_create_datasets_defaults_to_certified_bundle_dataset(monkeypatch):
+    uk_datasets = _load_module_from_path(
+        "_test_policyengine_uk_default_create_datasets",
+        REPO_ROOT / "src/policyengine/tax_benefit_models/uk/datasets.py",
+    )
+    materialize = Mock(
+        return_value=_materialized(
+            "uk",
+            "enhanced_frs_2024_25",
+            "/tmp/enhanced_frs_2024_25.h5",
+        )
+    )
+    microsimulation = Mock()
+    monkeypatch.setattr(uk_datasets, "materialize_bundle_dataset", materialize)
+    monkeypatch.setitem(
+        sys.modules,
+        "policyengine_uk",
+        SimpleNamespace(Microsimulation=microsimulation),
+    )
+
+    uk_datasets.create_datasets(years=[])
+
+    materialize.assert_called_once_with(
+        "uk", "enhanced_frs_2024_25", data_dir=Path("./data")
+    )
+    microsimulation.assert_called_once_with(dataset="/tmp/enhanced_frs_2024_25.h5")
+
+
+def test_uk_load_datasets_defaults_to_certified_bundle_dataset(monkeypatch):
+    uk_datasets = _load_module_from_path(
+        "_test_policyengine_uk_default_load_datasets",
+        REPO_ROOT / "src/policyengine/tax_benefit_models/uk/datasets.py",
+    )
+    resolve = Mock(
+        return_value=(
+            "hf://policyengine/policyengine-uk-data-private/"
+            "enhanced_frs_2024_25.h5@1.56.16"
+        )
+    )
+    monkeypatch.setattr(uk_datasets, "resolve_dataset_reference", resolve)
+
+    assert uk_datasets.load_datasets(years=[]) == {}
+
+    resolve.assert_called_once_with("uk", "enhanced_frs_2024_25")
+
+
+def test_uk_ensure_datasets_defaults_to_certified_bundle_dataset(monkeypatch):
+    uk_datasets = _load_module_from_path(
+        "_test_policyengine_uk_default_ensure_datasets",
+        REPO_ROOT / "src/policyengine/tax_benefit_models/uk/datasets.py",
+    )
+    load = Mock(return_value={})
+    monkeypatch.setattr(uk_datasets, "load_datasets", load)
+
+    assert uk_datasets.ensure_datasets(years=[]) == {}
+
+    load.assert_called_once_with(
+        datasets=["enhanced_frs_2024_25"],
+        years=[],
+        data_folder="./data",
+    )
