@@ -1,3 +1,12 @@
+## [5.0.4] - 2026-08-27
+
+### Fixed
+
+- Fixed `Parameter.parameter_values` to return oldest-first, non-overlapping
+  histories with inclusive end dates instead of reversed intervals derived from
+  PolicyEngine Core's newest-first storage.
+
+
 ## [5.0.3] - 2026-08-21
 
 ### Changed
