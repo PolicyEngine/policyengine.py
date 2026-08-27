@@ -40,7 +40,15 @@ datasets = pe.us.ensure_datasets(
 dataset = datasets["populace_us_2024_2026"]
 ```
 
-The default US dataset is **Populace US 2024** — a Populace-built dataset calibrated to IRS, CMS, SNAP, Census, and other administrative totals. The UK default is **Populace UK 2023** — a Populace-built Family Resources Survey dataset calibrated to UK administrative targets.
+The default US dataset is **Populace US 2024** — a Populace-built dataset
+calibrated to IRS, CMS, SNAP, Census, and other administrative totals. The
+current UK certified default is **Enhanced FRS 2024–25**, supplied by
+`policyengine-uk-data`. **Populace UK 2023** remains available as a named,
+non-default bundle dataset.
+
+PolicyEngine.py obtains the repository type, immutable revision, and SHA-256
+from the installed release bundle. A cached file or local data-repository mirror
+is reused only after hash verification.
 
 List datasets already known to the country:
 
@@ -97,7 +105,7 @@ ca = Simulation(
 
 UK population data uses licensed Family Resources Survey inputs. The default
 UK release bundle points to the private
-`policyengine/populace-uk-private` Hugging Face dataset repository. Set
+`policyengine/policyengine-uk-data-private` Hugging Face repository. Set
 `HUGGING_FACE_TOKEN` to a token from a Hugging Face account with access:
 
 ```bash
@@ -113,11 +121,11 @@ import policyengine as pe
 from policyengine.core import Simulation
 
 datasets = pe.uk.ensure_datasets(
-    datasets=["populace_uk_2023"],
+    datasets=["enhanced_frs_2024_25"],
     years=[2026],
     data_folder="./data",
 )
-dataset = datasets["populace_uk_2023_2026"]
+dataset = datasets["enhanced_frs_2024_25_2026"]
 
 simulation = Simulation(
     dataset=dataset,
@@ -126,28 +134,25 @@ simulation = Simulation(
 simulation.run()
 ```
 
-To download the raw h5 artifact directly from Hugging Face, use
-`huggingface_hub` and specify `repo_type="dataset"`:
+To materialize the raw certified artifact without creating uprated yearly
+datasets, use PolicyEngine.py's bundle API:
 
 ```python
-import os
-from huggingface_hub import hf_hub_download
+from policyengine.provenance import materialize_bundle_dataset
 
-path = hf_hub_download(
-    repo_id="policyengine/populace-uk-private",
-    filename="populace_uk_2023.h5",
-    repo_type="dataset",
-    token=os.environ["HUGGING_FACE_TOKEN"],
+result = materialize_bundle_dataset(
+    "uk",
+    "enhanced_frs_2024_25",
 )
 
-print(path)
+print(result.path)
+print(result.actual_sha256)
 ```
 
-The repository URL is
-<https://huggingface.co/datasets/policyengine/populace-uk-private>. A 404 from
-the website or `RepositoryNotFoundError` from the Hub API usually means the
-browser or token is not authenticated as an account with access, or that the
-Hub call omitted `repo_type="dataset"`.
+The bundle API uses the repository type recorded in the bundle, so callers do
+not need repository-specific download logic. Authentication or authorization
+failures are reported directly and do not cause a retry against another
+repository type.
 
 ## Simulations
 
@@ -219,6 +224,7 @@ Smaller custom H5 datasets can be passed explicitly for testing:
 datasets = pe.us.ensure_datasets(
     datasets=["/path/to/smoke_test_populace_us_2024.h5"],
     years=[2026],
+    allow_unmanaged=True,
 )
 ```
 
@@ -235,7 +241,13 @@ sim = managed_microsimulation()
 # `sim` is a policyengine_us.Microsimulation — use its API directly
 ```
 
-Pass `allow_unmanaged=True` with a custom `dataset=` to opt out of the release bundle.
+Pass `allow_unmanaged=True` with a custom `dataset=` to opt out of the release
+bundle. Explicit local paths and Hugging Face URIs remain supported in this
+mode. GCS dataset URIs are not supported.
+
+For managed simulations, `sim.policyengine_bundle` records the actual source
+package, repository type, revision, expected and actual SHA-256, local path, and
+whether an already verified file was reused.
 
 ## Pinned model versions
 

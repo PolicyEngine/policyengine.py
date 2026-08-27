@@ -34,11 +34,39 @@ datasets into `./data`, moves replaced dataset files into
 `./data/.policyengine-bundle-receipt.json` receipt that records the target
 Python.
 
+Dataset pre-download uses the same materialization function as US and UK
+calculations. For every managed artifact, PolicyEngine.py reads the source data
+package name, Hugging Face repository type, immutable revision, and SHA-256 from
+the bundle. It reuses an existing file only when its hash matches, downloads and
+verifies replacements before moving the old file into the backup directory, and
+records the verified result in the receipt.
+
 The bundle manifest can certify additional regional datasets, such as US state
 datasets. Those artifacts are part of the citable bundle manifest, but
 `policyengine bundle install` does not eagerly download every regional file.
 Runtime callers should use the manifest's regional dataset URI when a regional
 simulation needs one.
+
+To materialize a default or named artifact without installing the complete
+package scaffold:
+
+```python
+from policyengine.provenance import materialize_bundle_dataset
+
+result = materialize_bundle_dataset("us", "populace_us_2024")
+print(result.path)
+print(result.actual_sha256)
+```
+
+`materialize_bundle_dataset` returns a Pydantic model containing the selected
+source package, repository type, revision, expected and actual hashes, local
+path, and cache status. `policyengine-*-data` and `populace-data` artifacts are
+selected by their bundle package names. Callers do not infer repository type
+from the repository name.
+
+Managed datasets are downloaded from the Hugging Face artifact specified in the
+bundle. GCS dataset URIs are unsupported. The separate UK geography lookup files
+retain their existing storage implementation.
 
 Country-specific and package-only installs are supported:
 

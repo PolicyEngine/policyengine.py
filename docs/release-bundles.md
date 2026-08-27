@@ -44,6 +44,11 @@ Python.
 Existing dataset files with the same filename are moved to
 `./data/.policyengine-bundle-backups/<timestamp>/`.
 
+The command invokes the same bundle materializer used by calculations. The
+materializer selects its internal strategy from the artifact's data package
+name, uses the manifest's exact Hugging Face repository type and immutable
+revision, and verifies the certified SHA-256 before exposing the local file.
+
 Regional datasets may also be certified in the bundle manifest. They are not
 eagerly downloaded by `policyengine bundle install`; callers should materialize
 the certified regional URI from the manifest when they run a regional
@@ -153,8 +158,10 @@ sibling `dataset_overlays.{country}` map:
 "dataset_overlays": {
   "us": {
     "populace_us_2024_acs_local": {
+      "data_package_name": "populace-data",
       "path": "populace_us_2024_acs_local.h5",
       "repo_id": "policyengine/populace-us",
+      "repo_type": "dataset",
       "revision": "populace-us-2024-buildo-acs-local-...",
       "sha256": "..."
     }
@@ -169,6 +176,11 @@ overlay may not shadow the certified default or any certified dataset, so
 default resolution is untouched. Because certification only rewrites
 `data_releases`, overlays survive re-certification without any manual
 re-add step.
+
+Cross-package overlays must declare `data_package_name` and `repo_type`
+explicitly. Ordinary artifacts inherit these values from the country release's
+primary `data_package`. This prevents runtime code from guessing how a
+repository should be addressed.
 
 Earlier releases (policyengine 4.15.x–4.16.x) were certified through the
 `PolicyEngine/policyengine-bundles` archive flow; those bundles remain the
@@ -600,6 +612,9 @@ The target implementation in `policyengine.py` should add:
 - hard validation of bundle certification rules
 - explicit runtime bundle metadata on simulations, APIs, and app responses
 - checksum-backed dataset resolution from the certified bundle manifest
+
+The checksum-backed runtime resolution described above is now implemented.
+Managed materialization is Hugging Face-only; GCS is not a dataset source.
 
 ## Why not let `policyengine.py` build all country data directly?
 
