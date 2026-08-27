@@ -1,7 +1,9 @@
 """Tests for parametric reforms utility functions."""
 
 from datetime import date
+from types import SimpleNamespace
 
+from policyengine.core.parameter import Parameter
 from policyengine.utils.parametric_reforms import (
     reform_dict_from_parameter_values,
     simulation_modifier_from_parameter_values,
@@ -224,6 +226,29 @@ class TestReformDictFromParameterValues:
         assert result["gov.test.mixed"] == {
             "2024-01-01.2025-12-31": 100,
             "2026-01-01.2026-12-31": 200,
+        }
+
+    def test__given_catalog_history__then_emits_valid_inclusive_ranges(self):
+        """Catalog intervals should preserve inclusive reform boundaries."""
+        parameter = Parameter.model_construct(
+            name="gov.test.catalog_value",
+            tax_benefit_model_version=None,
+        )
+        parameter._core_param = SimpleNamespace(
+            values_list=[
+                SimpleNamespace(instant_str="2022-07-01", value=20),
+                SimpleNamespace(instant_str="2020-01-01", value=10),
+            ]
+        )
+        parameter._parameter_values = None
+
+        result = reform_dict_from_parameter_values(parameter.parameter_values)
+
+        assert result == {
+            "gov.test.catalog_value": {
+                "2020-01-01.2022-06-30": 10,
+                "2022-07-01.2100-12-31": 20,
+            }
         }
 
 

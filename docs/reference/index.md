@@ -4,6 +4,14 @@ title: "Reference"
 
 Reference pages are generated from the installed country-model packages. Authored methodology pages explain why the model is structured the way it is; generated reference pages expose the exact release contents.
 
+## Parameter history contract
+
+`model.get_parameter(name).parameter_values` exposes effective values from
+oldest to newest. Each bounded value has an inclusive `end_date` equal to the
+day before the next value starts, while the newest value has `end_date=None`.
+If the underlying Core history contains duplicate effective starts, the public
+history contains the first value Core would select for that date.
+
 ## What generated reference should include
 
 The variable reference generator already reads the installed country model and can emit:
