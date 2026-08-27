@@ -83,6 +83,9 @@ where = ["src"]
 [tool.setuptools.package-data]
 "policyengine" = ["**/*"]
 
+[tool.setuptools.exclude-package-data]
+"policyengine" = ["**/__pycache__/*", "**/*.pyc", "**/*.pyo"]
+
 [tool.pytest.ini_options]
 addopts = "-v"
 testpaths = [
