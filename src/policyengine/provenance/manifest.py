@@ -61,6 +61,9 @@ class ArtifactPathReference(BaseModel):
     revision: Optional[str] = None
     sha256: Optional[str] = None
     metadata_sha256: Optional[str] = None
+    # Set when the artifact is supplied by a different package than the
+    # country release manifest's primary data package.
+    data_package_name: Optional[str] = None
     # Set when the artifact lives outside the data package's repo (inherited
     # datasets keep their original repo + revision pins).
     repo_id: Optional[str] = None

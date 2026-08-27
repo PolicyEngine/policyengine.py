@@ -24,6 +24,18 @@ from .certification import (
 from .certification import (
     certify_data_release as certify_data_release,
 )
+from .dataset_materialization import (
+    BundleDatasetPlan as BundleDatasetPlan,
+)
+from .dataset_materialization import (
+    DatasetMaterializationError as DatasetMaterializationError,
+)
+from .dataset_materialization import (
+    MaterializedDataset as MaterializedDataset,
+)
+from .dataset_materialization import (
+    resolve_bundle_dataset_plan as resolve_bundle_dataset_plan,
+)
 from .manifest import (
     CertifiedDataArtifact as CertifiedDataArtifact,
 )

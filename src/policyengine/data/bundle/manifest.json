@@ -201,28 +201,36 @@
   "dataset_overlays": {
     "uk": {
       "enhanced_frs_2023_24": {
+        "data_package_name": "policyengine-uk-data",
         "path": "enhanced_frs_2023_24.h5",
         "repo_id": "policyengine/policyengine-uk-data-private",
+        "repo_type": "model",
         "revision": "655dd07e4bb9c777b00dac044949611f1feb824f",
         "sha256": "584ae33d80ca0431254610a3f8254d132da73477d31966d6446282861ecae50d"
       },
       "frs_2023_24": {
+        "data_package_name": "policyengine-uk-data",
         "path": "frs_2023_24.h5",
         "repo_id": "policyengine/policyengine-uk-data-private",
+        "repo_type": "model",
         "revision": "655dd07e4bb9c777b00dac044949611f1feb824f",
         "sha256": "df26d4d7af9d164aa2d064181b39290292d2f62bb26fee6126fc095fc06da292"
       },
       "populace_uk_2023": {
+        "data_package_name": "populace-data",
         "path": "populace_uk_2023.h5",
         "repo_id": "policyengine/populace-uk-private",
+        "repo_type": "model",
         "revision": "populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z",
         "sha256": "f17306ccb2aad7ff0130be3589b560afb2e2a12a943570911cd0c77f07934833"
       }
     },
     "us": {
       "populace_us_2024_acs_local": {
+        "data_package_name": "populace-data",
         "path": "populace_us_2024_acs_local.h5",
         "repo_id": "policyengine/populace-us",
+        "repo_type": "dataset",
         "revision": "populace-us-2024-buildo-acs-local-77e2061-20260724T110908Z",
         "sha256": "71763290ded993789af0ad818fd833a6aabb9ca7ff7d14f78315340d8617c6f4"
       }
