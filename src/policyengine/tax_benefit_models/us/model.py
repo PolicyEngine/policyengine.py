@@ -1,14 +1,18 @@
 import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import pandas as pd
 from microdf import MicroDataFrame
 
 from policyengine.core import TaxBenefitModel
-from policyengine.provenance.dataset_sources import materialize_dataset_source
+from policyengine.provenance.dataset_materialization import (
+    MaterializedDataset,
+    materialize_bundle_dataset,
+    materialize_unmanaged_dataset_source,
+)
 from policyengine.provenance.manifest import (
     dataset_logical_name,
-    resolve_local_managed_dataset_source,
+    get_release_manifest,
     resolve_managed_dataset_reference,
 )
 from policyengine.tax_benefit_models.common import MicrosimulationModelVersion
@@ -410,12 +414,24 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
 def _managed_release_bundle(
     dataset_uri: str,
     dataset_source: Optional[str] = None,
-) -> dict[str, Optional[str]]:
-    bundle = dict(us_latest.release_bundle)
+    materialized: Optional[MaterializedDataset] = None,
+) -> dict[str, Any]:
+    bundle: dict[str, Any] = dict(us_latest.release_bundle)
     bundle["runtime_dataset"] = dataset_logical_name(dataset_uri)
     bundle["runtime_dataset_uri"] = dataset_uri
     if dataset_source:
         bundle["runtime_dataset_source"] = dataset_source
+    if materialized is not None:
+        bundle.update(
+            {
+                "runtime_dataset_data_package": materialized.data_package_name,
+                "runtime_dataset_repo_type": materialized.repo_type,
+                "runtime_dataset_revision": materialized.revision,
+                "runtime_dataset_expected_sha256": materialized.expected_sha256,
+                "runtime_dataset_sha256": materialized.actual_sha256,
+                "runtime_dataset_cache_hit": materialized.cache_hit,
+            }
+        )
     bundle["managed_by"] = "policyengine.py"
     return bundle
 
@@ -441,23 +457,32 @@ def managed_microsimulation(
             "**kwargs, so policyengine.py can enforce the release bundle."
         )
 
-    dataset_uri = resolve_managed_dataset_reference(
-        "us",
-        dataset,
-        allow_unmanaged=allow_unmanaged,
-    )
-    dataset_source = resolve_local_managed_dataset_source(
-        "us",
-        dataset_uri,
-        allow_local_mirror=not (
-            allow_unmanaged and dataset is not None and "://" in dataset
-        ),
-    )
-    runtime_dataset_source = materialize_dataset_source(dataset_source)
+    manifest = get_release_manifest("us")
+    managed_dataset = None
+    if dataset is None:
+        managed_dataset = manifest.default_dataset
+    elif dataset in manifest.datasets:
+        managed_dataset = dataset
+    elif dataset == manifest.default_dataset_uri:
+        managed_dataset = manifest.default_dataset
+
+    materialized = None
+    if managed_dataset is not None:
+        materialized = materialize_bundle_dataset("us", managed_dataset)
+        dataset_uri = materialized.source_uri
+        runtime_dataset_source = str(materialized.path)
+    else:
+        dataset_uri = resolve_managed_dataset_reference(
+            "us",
+            dataset,
+            allow_unmanaged=allow_unmanaged,
+        )
+        runtime_dataset_source = materialize_unmanaged_dataset_source(dataset_uri)
     microsim = Microsimulation(dataset=runtime_dataset_source, **kwargs)
     microsim.policyengine_bundle = _managed_release_bundle(
         dataset_uri,
         runtime_dataset_source,
+        materialized,
     )
     return microsim
 

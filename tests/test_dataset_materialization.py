@@ -168,6 +168,24 @@ def test_materialize_populace_package_uses_dataset_repo_url(tmp_path):
     )
 
 
+def test_materialize_downloads_and_verifies_metadata_sidecar(tmp_path):
+    dataset_payload = b"long-term-data"
+    metadata_payload = b'{"year": 2100}'
+    manifest = _manifest_with_hash(_sha256(dataset_payload))
+    reference = manifest.datasets[manifest.default_dataset]
+    reference.metadata_sha256 = _sha256(metadata_payload)
+    session = _Session(_Response(dataset_payload), _Response(metadata_payload))
+
+    result = materialize_bundle_dataset(
+        "uk", data_dir=tmp_path, manifest=manifest, session=session
+    )
+
+    assert result.metadata_path == (tmp_path / "enhanced_frs_2024_25.h5.metadata.json")
+    assert result.metadata_path.read_bytes() == metadata_payload
+    assert result.metadata_actual_sha256 == reference.metadata_sha256
+    assert session.calls[1][0].endswith("/enhanced_frs_2024_25.h5.metadata.json")
+
+
 def test_materialize_reuses_only_hash_verified_cache(tmp_path):
     payload = b"certified"
     manifest = _manifest_with_hash(_sha256(payload))
@@ -181,6 +199,48 @@ def test_materialize_reuses_only_hash_verified_cache(tmp_path):
 
     assert result.cache_hit is True
     assert session.calls == []
+
+
+def test_materialize_reuses_hash_verified_local_mirror(monkeypatch, tmp_path):
+    payload = b"certified-local-mirror"
+    manifest = _manifest_with_hash(_sha256(payload))
+    mirror = tmp_path / "mirror" / "enhanced_frs_2024_25.h5"
+    mirror.parent.mkdir()
+    mirror.write_bytes(payload)
+    monkeypatch.setattr(
+        "policyengine.provenance.dataset_materialization.resolve_local_managed_dataset_source",
+        lambda *args, **kwargs: str(mirror),
+    )
+    session = _Session()
+
+    result = materialize_bundle_dataset(
+        "uk", data_dir=tmp_path, manifest=manifest, session=session
+    )
+
+    assert result.path == mirror
+    assert result.cache_hit is True
+    assert session.calls == []
+
+
+def test_materialize_ignores_mismatched_local_mirror(monkeypatch, tmp_path):
+    payload = b"certified-download"
+    manifest = _manifest_with_hash(_sha256(payload))
+    mirror = tmp_path / "mirror" / "enhanced_frs_2024_25.h5"
+    mirror.parent.mkdir()
+    mirror.write_bytes(b"wrong")
+    monkeypatch.setattr(
+        "policyengine.provenance.dataset_materialization.resolve_local_managed_dataset_source",
+        lambda *args, **kwargs: str(mirror),
+    )
+    session = _Session(_Response(payload))
+
+    result = materialize_bundle_dataset(
+        "uk", data_dir=tmp_path, manifest=manifest, session=session
+    )
+
+    assert result.path == tmp_path / "enhanced_frs_2024_25.h5"
+    assert result.path.read_bytes() == payload
+    assert mirror.read_bytes() == b"wrong"
 
 
 def test_materialize_replaces_and_backs_up_mismatched_cache(tmp_path):

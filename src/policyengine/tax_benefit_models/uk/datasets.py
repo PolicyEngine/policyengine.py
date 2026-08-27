@@ -6,10 +6,15 @@ from microdf import MicroDataFrame
 from pydantic import ConfigDict
 
 from policyengine.core import Dataset, YearData
-from policyengine.provenance.dataset_sources import materialize_dataset_source
+from policyengine.provenance.dataset_materialization import (
+    materialize_bundle_dataset,
+    materialize_unmanaged_dataset_source,
+)
 from policyengine.provenance.manifest import (
     dataset_logical_name,
+    get_release_manifest,
     resolve_dataset_reference,
+    resolve_managed_dataset_reference,
 )
 
 
@@ -118,12 +123,31 @@ def create_datasets(
     ],
     years: list[int] = [2026, 2027, 2028, 2029, 2030],
     data_folder: str = "./data",
+    allow_unmanaged: bool = False,
 ) -> dict[str, PolicyEngineUKDataset]:
     result = {}
     for dataset in datasets:
-        resolved_dataset = resolve_dataset_reference("uk", dataset)
+        manifest = get_release_manifest("uk")
+        managed_dataset = dataset if dataset in manifest.datasets else None
+        if managed_dataset is not None:
+            materialized = materialize_bundle_dataset(
+                "uk",
+                managed_dataset,
+                data_dir=Path(data_folder),
+            )
+            resolved_dataset = materialized.source_uri
+            runtime_dataset = str(materialized.path)
+        else:
+            resolved_dataset = resolve_managed_dataset_reference(
+                "uk",
+                dataset,
+                allow_unmanaged=allow_unmanaged,
+            )
+            runtime_dataset = materialize_unmanaged_dataset_source(
+                resolved_dataset,
+                data_dir=Path(data_folder),
+            )
         dataset_stem = dataset_logical_name(resolved_dataset)
-        runtime_dataset = materialize_dataset_source(resolved_dataset)
         from policyengine_uk import Microsimulation
 
         sim = Microsimulation(dataset=runtime_dataset)
@@ -226,6 +250,7 @@ def ensure_datasets(
     ],
     years: list[int] = [2026, 2027, 2028, 2029, 2030],
     data_folder: str = "./data",
+    allow_unmanaged: bool = False,
 ) -> dict[str, PolicyEngineUKDataset]:
     """Ensure datasets exist, loading if available or creating if not.
 
@@ -253,4 +278,9 @@ def ensure_datasets(
     if all_exist:
         return load_datasets(datasets=datasets, years=years, data_folder=data_folder)
     else:
-        return create_datasets(datasets=datasets, years=years, data_folder=data_folder)
+        return create_datasets(
+            datasets=datasets,
+            years=years,
+            data_folder=data_folder,
+            allow_unmanaged=allow_unmanaged,
+        )

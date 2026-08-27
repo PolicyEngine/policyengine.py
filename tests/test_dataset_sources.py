@@ -7,6 +7,10 @@ from unittest.mock import Mock
 import pytest
 
 from policyengine.provenance import dataset_sources
+from policyengine.provenance.dataset_materialization import (
+    MaterializedDataset,
+    resolve_bundle_dataset_plan,
+)
 from policyengine.provenance.dataset_sources import (
     materialize_dataset_source,
     parse_gs_uri,
@@ -24,6 +28,24 @@ def _load_module_from_path(module_name: str, path: Path):
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def _materialized(country_id: str, dataset: str, path: str) -> MaterializedDataset:
+    plan = resolve_bundle_dataset_plan(country_id, dataset)
+    return MaterializedDataset(
+        country_id=plan.country_id,
+        dataset=plan.dataset,
+        data_package_name=plan.data_package_name,
+        repo_id=plan.repo_id,
+        repo_type=plan.repo_type,
+        revision=plan.revision,
+        source_uri=plan.source_uri,
+        expected_sha256=plan.expected_sha256,
+        actual_sha256=plan.expected_sha256,
+        path=Path(path),
+        cache_hit=False,
+        build_id=plan.build_id,
+    )
 
 
 def test_parse_gs_uri_extracts_bucket_path_and_version():
@@ -101,9 +123,11 @@ def test_us_create_datasets_passes_materialized_source_to_country_package(
         REPO_ROOT / "src/policyengine/tax_benefit_models/us/datasets.py",
     )
 
-    materialize = Mock(return_value="/tmp/enhanced_cps_2024.h5")
+    materialize = Mock(
+        return_value=_materialized("us", "populace_us_2024", "/tmp/populace_us_2024.h5")
+    )
     microsimulation = Mock()
-    monkeypatch.setattr(us_datasets, "materialize_dataset_source", materialize)
+    monkeypatch.setattr(us_datasets, "materialize_bundle_dataset", materialize)
     monkeypatch.setitem(
         sys.modules,
         "policyengine_us",
@@ -111,14 +135,14 @@ def test_us_create_datasets_passes_materialized_source_to_country_package(
     )
 
     us_datasets.create_datasets(
-        datasets=["gs://policyengine-us-data/enhanced_cps_2024.h5@1.77.0"],
+        datasets=["populace_us_2024"],
         years=[],
     )
 
     materialize.assert_called_once_with(
-        "gs://policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+        "us", "populace_us_2024", data_dir=Path("./data")
     )
-    microsimulation.assert_called_once_with(dataset="/tmp/enhanced_cps_2024.h5")
+    microsimulation.assert_called_once_with(dataset="/tmp/populace_us_2024.h5")
 
 
 def test_uk_create_datasets_passes_materialized_source_to_country_package(
@@ -129,9 +153,11 @@ def test_uk_create_datasets_passes_materialized_source_to_country_package(
         REPO_ROOT / "src/policyengine/tax_benefit_models/uk/datasets.py",
     )
 
-    materialize = Mock(return_value="/tmp/enhanced_frs_2023_24.h5")
+    materialize = Mock(
+        return_value=_materialized("uk", "populace_uk_2023", "/tmp/populace_uk_2023.h5")
+    )
     microsimulation = Mock()
-    monkeypatch.setattr(uk_datasets, "materialize_dataset_source", materialize)
+    monkeypatch.setattr(uk_datasets, "materialize_bundle_dataset", materialize)
     monkeypatch.setitem(
         sys.modules,
         "policyengine_uk",
@@ -139,11 +165,11 @@ def test_uk_create_datasets_passes_materialized_source_to_country_package(
     )
 
     uk_datasets.create_datasets(
-        datasets=["gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3"],
+        datasets=["populace_uk_2023"],
         years=[],
     )
 
     materialize.assert_called_once_with(
-        "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3"
+        "uk", "populace_uk_2023", data_dir=Path("./data")
     )
-    microsimulation.assert_called_once_with(dataset="/tmp/enhanced_frs_2023_24.h5")
+    microsimulation.assert_called_once_with(dataset="/tmp/populace_uk_2023.h5")

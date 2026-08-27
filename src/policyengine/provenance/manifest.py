@@ -588,7 +588,14 @@ def resolve_managed_dataset_reference(
             "bypass bundle enforcement."
         )
 
-    return resolve_dataset_reference(country_id, dataset)
+    if allow_unmanaged:
+        return resolve_dataset_reference(country_id, dataset)
+    raise ValueError(
+        f"Unknown managed dataset {dataset!r} for country {country_id!r}. "
+        f"Known bundled datasets: {sorted(manifest.datasets)}. Set "
+        "`allow_unmanaged=True` only if you intend to resolve a dataset "
+        "outside the policyengine.py release bundle."
+    )
 
 
 def resolve_local_managed_dataset_source(
