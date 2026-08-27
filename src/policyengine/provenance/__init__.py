@@ -34,6 +34,12 @@ from .dataset_materialization import (
     MaterializedDataset as MaterializedDataset,
 )
 from .dataset_materialization import (
+    materialize_bundle_dataset as materialize_bundle_dataset,
+)
+from .dataset_materialization import (
+    materialize_unmanaged_dataset_source as materialize_unmanaged_dataset_source,
+)
+from .dataset_materialization import (
     resolve_bundle_dataset_plan as resolve_bundle_dataset_plan,
 )
 from .manifest import (
