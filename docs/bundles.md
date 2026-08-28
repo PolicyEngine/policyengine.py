@@ -32,12 +32,12 @@ exact bundled package scaffold with pip, downloads certified default US and UK
 datasets into `./data`, and writes a `./data/.policyengine-bundle-receipt.json`
 receipt that records the target Python.
 
-Dataset pre-download uses the same materialization function as US and UK
-calculations. For every managed artifact, PolicyEngine.py reads the source data
-package name, Hugging Face repository type, immutable revision, and SHA-256 from
-the bundle. It reuses an existing file only when its hash matches, downloads and
-verifies a replacement before atomically replacing an invalid local file, and
-records the verified result in the receipt.
+Dataset pre-download and US and UK calculations share the same verified-download
+implementation. For every managed artifact, PolicyEngine.py reads the source
+data package name, Hugging Face repository type, immutable revision, and SHA-256
+from the bundle. It reuses an existing file only when its hash matches, downloads
+and verifies a replacement before atomically replacing an invalid local file,
+and records the verified result in the receipt.
 
 The bundle manifest can certify additional regional datasets, such as US state
 datasets. Those artifacts are part of the citable bundle manifest, but

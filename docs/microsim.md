@@ -47,8 +47,8 @@ current UK certified default is **Enhanced FRS 2024–25**, supplied by
 non-default bundle dataset.
 
 PolicyEngine.py obtains the repository type, immutable revision, and SHA-256
-from the installed release bundle. A cached file or local data-repository mirror
-is reused only after hash verification.
+from the installed release bundle. An existing file in the configured data
+directory is reused only after hash verification.
 
 List datasets already known to the country:
 
