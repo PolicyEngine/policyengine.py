@@ -521,10 +521,8 @@ def _metadata_path_for_h5(path: Path) -> Path:
 def _load_dataset_metadata(
     path: Path,
     require_metadata: bool,
-    *,
-    metadata_path: Optional[Path] = None,
 ) -> tuple[dict, Optional[Path]]:
-    metadata_path = metadata_path or _metadata_path_for_h5(path)
+    metadata_path = _metadata_path_for_h5(path)
     if not metadata_path.exists():
         if require_metadata:
             raise FileNotFoundError(
@@ -1081,16 +1079,9 @@ def load_managed_long_term_datasets(
             key,
             data_dir=Path(data_folder),
         )
-        materialized = source.bundle_dataset
-        if materialized is None:
-            raise ValueError(f"Bundle dataset {key!r} was not bundle-managed.")
         dataset_uri = source.source_uri
         path = Path(source.path)
-        metadata, metadata_path = _load_dataset_metadata(
-            path,
-            require_metadata,
-            metadata_path=materialized.metadata_path,
-        )
+        metadata, metadata_path = _load_dataset_metadata(path, require_metadata)
         _validate_loaded_long_term_metadata(
             metadata=metadata,
             metadata_path=metadata_path,
@@ -1133,7 +1124,7 @@ def load_managed_long_term_datasets(
             metadata=metadata,
             metadata_path=metadata_path,
             dataset_uri=dataset_uri,
-            materialized=materialized,
+            materialized=source.bundle_dataset,
         )
 
     return result
