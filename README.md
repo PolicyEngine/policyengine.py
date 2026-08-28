@@ -1,6 +1,6 @@
 # PolicyEngine.py
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22145450.svg)](https://doi.org/10.5281/zenodo.22145450)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22145449.svg)](https://doi.org/10.5281/zenodo.22145449)
 
 A Python package for tax-benefit microsimulation analysis. Run policy simulations, analyse distributional impacts, and visualise results across the UK and US.
 
@@ -335,5 +335,6 @@ If you use this package in research, please cite it. Citation metadata is in
 [CITATION.cff](CITATION.cff), and each release is archived on Zenodo:
 
 > Ahmadi, V., Ghenis, M., Woodruff, N., Makarchuk, P., & Volk, A. (2026).
-> policyengine: A Microsimulation Tool for Tax-Benefit Policy Analysis.
-> https://doi.org/10.5281/zenodo.22145450
+> policyengine: A Microsimulation Tool for Tax-Benefit Policy Analysis
+> (Version 5.0.4) [Computer software]. Zenodo.
+> https://doi.org/10.5281/zenodo.22145449
