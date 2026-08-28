@@ -14,14 +14,14 @@ from pydantic import ConfigDict, Field
 from policyengine.core import Dataset, YearData
 from policyengine.provenance.dataset_materialization import (
     MaterializedDataset,
+    _materialize_dataset_request,
+    _runtime_dataset_provenance,
     materialize_bundle_dataset,
-    materialize_unmanaged_dataset_source,
 )
 from policyengine.provenance.manifest import (
     dataset_logical_name,
     get_release_manifest,
     resolve_dataset_reference,
-    resolve_managed_dataset_reference,
 )
 
 
@@ -299,26 +299,12 @@ def create_datasets(
     datasets = datasets or [get_release_manifest("us").default_dataset]
     result = {}
     for dataset in datasets:
-        manifest = get_release_manifest("us")
-        managed_dataset = dataset if dataset in manifest.datasets else None
-        if managed_dataset is not None:
-            materialized = materialize_bundle_dataset(
-                "us",
-                managed_dataset,
-                data_dir=Path(data_folder),
-            )
-            resolved_dataset = materialized.source_uri
-            runtime_dataset = str(materialized.path)
-        else:
-            resolved_dataset = resolve_managed_dataset_reference(
-                "us",
-                dataset,
-                allow_unmanaged=allow_unmanaged,
-            )
-            runtime_dataset = materialize_unmanaged_dataset_source(
-                resolved_dataset,
-                data_dir=Path(data_folder),
-            )
+        resolved_dataset, runtime_dataset, _ = _materialize_dataset_request(
+            "us",
+            dataset,
+            allow_unmanaged=allow_unmanaged,
+            data_dir=Path(data_folder),
+        )
         dataset_stem = dataset_logical_name(resolved_dataset)
         sim = Microsimulation(dataset=runtime_dataset)
 
@@ -531,9 +517,12 @@ def _metadata_path_for_h5(path: Path) -> Path:
 
 
 def _load_dataset_metadata(
-    path: Path, require_metadata: bool
+    path: Path,
+    require_metadata: bool,
+    *,
+    metadata_path: Optional[Path] = None,
 ) -> tuple[dict, Optional[Path]]:
-    metadata_path = _metadata_path_for_h5(path)
+    metadata_path = metadata_path or _metadata_path_for_h5(path)
     if not metadata_path.exists():
         if require_metadata:
             raise FileNotFoundError(
@@ -872,23 +861,13 @@ def _build_long_term_dataset(
     if dataset_uri is not None:
         dataset.metadata.setdefault("policyengine_bundle", {})
         dataset.metadata["policyengine_bundle"].update(
-            {
-                "managed_by": "policyengine.py",
-                "runtime_dataset": _long_term_dataset_key(dataset_name, year),
-                "runtime_dataset_uri": dataset_uri,
-            }
-        )
-        if materialized is not None:
-            dataset.metadata["policyengine_bundle"].update(
-                {
-                    "runtime_dataset_data_package": (materialized.data_package_name),
-                    "runtime_dataset_repo_type": materialized.repo_type,
-                    "runtime_dataset_revision": materialized.revision,
-                    "runtime_dataset_expected_sha256": (materialized.expected_sha256),
-                    "runtime_dataset_sha256": materialized.actual_sha256,
-                    "runtime_dataset_cache_hit": materialized.cache_hit,
-                }
+            _runtime_dataset_provenance(
+                dataset_uri,
+                str(path),
+                materialized,
+                logical_name=_long_term_dataset_key(dataset_name, year),
             )
+        )
     return dataset
 
 
@@ -1107,24 +1086,14 @@ def load_managed_long_term_datasets(
             "us",
             key,
             data_dir=Path(data_folder),
-            manifest=manifest,
         )
         dataset_uri = materialized.source_uri
         path = materialized.path
-        metadata, metadata_path = _load_dataset_metadata(path, require_metadata)
-        if path_reference.metadata_sha256:
-            if metadata_path is None:
-                raise FileNotFoundError(
-                    f"Managed long-term dataset {key!r} at {path} is missing "
-                    "metadata sidecar required by the bundled manifest."
-                )
-            metadata_sha256 = _sha256_file(metadata_path)
-            if metadata_sha256 != path_reference.metadata_sha256:
-                raise ValueError(
-                    f"Managed long-term dataset {key!r} metadata at "
-                    f"{metadata_path} has sha256 {metadata_sha256}, expected "
-                    f"{path_reference.metadata_sha256}."
-                )
+        metadata, metadata_path = _load_dataset_metadata(
+            path,
+            require_metadata,
+            metadata_path=materialized.metadata_path,
+        )
         _validate_loaded_long_term_metadata(
             metadata=metadata,
             metadata_path=metadata_path,

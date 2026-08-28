@@ -1,14 +1,13 @@
-"""Resolve and materialize datasets certified by a PolicyEngine.py bundle."""
+"""Make bundle-certified datasets available as verified local files."""
 
 from __future__ import annotations
 
 import hashlib
 import os
-import shutil
 import tempfile
-from datetime import datetime, timezone
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Optional, Union, cast
+from typing import Literal, Optional, Union
 from urllib.parse import quote
 
 import requests
@@ -18,45 +17,24 @@ from .manifest import (
     CountryReleaseManifest,
     _artifact_revision,
     build_hf_uri,
+    dataset_logical_name,
     get_release_manifest,
     resolve_local_managed_dataset_source,
+    resolve_managed_dataset_reference,
 )
 
 DEFAULT_DATA_DIR = Path("./data")
-BACKUP_DIR_NAME = ".policyengine-bundle-backups"
 DOWNLOAD_TIMEOUT_SECONDS = 60
 
 
 class DatasetMaterializationError(ValueError):
-    """Raised when a dataset cannot be resolved or materialized safely."""
-
-
-class BundleDatasetPlan(BaseModel):
-    """Exact bundle metadata needed to materialize one managed dataset."""
-
-    country_id: str
-    dataset: str
-    data_package_name: str
-    repo_id: str
-    repo_type: Literal["model", "dataset"]
-    path: str
-    revision: str
-    expected_sha256: str
-    source_uri: str
-    destination: Path
-    build_id: Optional[str] = None
-    metadata_expected_sha256: Optional[str] = None
-    metadata_source_uri: Optional[str] = None
-    metadata_destination: Optional[Path] = None
+    """Raised when a dataset cannot be made available safely."""
 
 
 class MaterializedDataset(BaseModel):
     """Verified local representation of one bundle-managed dataset."""
 
-    country_id: str
-    dataset: str
     data_package_name: str
-    repo_id: str
     repo_type: Literal["model", "dataset"]
     revision: str
     source_uri: str
@@ -64,96 +42,66 @@ class MaterializedDataset(BaseModel):
     actual_sha256: str
     path: Path
     cache_hit: bool
-    build_id: Optional[str] = None
-    metadata_expected_sha256: Optional[str] = None
-    metadata_actual_sha256: Optional[str] = None
     metadata_path: Optional[Path] = None
 
 
-_DatasetPackageType = Literal["country", "populace"]
+@dataclass(frozen=True)
+class _ResolvedBundleDataset:
+    country_id: str
+    dataset: str
+    data_package_name: str
+    repo_id: str
+    repo_type: Literal["model", "dataset"]
+    path: str
+    revision: str
+    expected_sha256: str
+    destination: Path
+    metadata_expected_sha256: Optional[str] = None
+
+    @property
+    def source_uri(self) -> str:
+        return build_hf_uri(self.repo_id, self.path, self.revision)
+
+    @property
+    def metadata_destination(self) -> Path:
+        return Path(f"{self.destination}.metadata.json")
 
 
-def _dataset_package_type(data_package_name: str) -> _DatasetPackageType:
-    if data_package_name == "populace-data":
-        return "populace"
-    if data_package_name.startswith("policyengine-") and data_package_name.endswith(
-        "-data"
-    ):
-        return "country"
-    raise DatasetMaterializationError(
-        "Unsupported bundle data package "
-        f"{data_package_name!r}; expected 'populace-data' or "
-        "'policyengine-<country>-data'."
-    )
-
-
-def resolve_bundle_dataset_plan(
+def _resolve_bundle_dataset(
     country_id: str,
     dataset: Optional[str] = None,
     *,
     data_dir: Path = DEFAULT_DATA_DIR,
     manifest: Optional[CountryReleaseManifest] = None,
-) -> BundleDatasetPlan:
-    """Resolve one logical dataset to its exact bundle-certified source."""
-
+) -> _ResolvedBundleDataset:
     country_manifest = manifest or get_release_manifest(country_id)
     dataset_name = dataset or country_manifest.default_dataset
     reference = country_manifest.datasets.get(dataset_name)
     if reference is None:
         raise DatasetMaterializationError(
             f"Unknown managed dataset {dataset_name!r} for country "
-            f"{country_id!r}. Known datasets: "
-            f"{sorted(country_manifest.datasets)}"
+            f"{country_id!r}. Known datasets: {sorted(country_manifest.datasets)}"
         )
-
-    data_package_name = (
-        reference.data_package_name or country_manifest.data_package.name
-    )
-    repo_id = reference.repo_id or country_manifest.data_package.repo_id
-    repo_type = reference.repo_type or country_manifest.data_package.repo_type
-    revision = reference.revision or _artifact_revision(country_manifest.data_package)
-    if repo_type not in {"model", "dataset"}:
-        raise DatasetMaterializationError(
-            f"Dataset {dataset_name!r} has unsupported Hugging Face repository "
-            f"type {repo_type!r}."
-        )
-    validated_repo_type = cast(Literal["model", "dataset"], repo_type)
     if not reference.sha256:
         raise DatasetMaterializationError(
             f"Managed dataset {dataset_name!r} is missing a certified sha256."
         )
 
-    plan = BundleDatasetPlan(
+    return _ResolvedBundleDataset(
         country_id=country_id,
         dataset=dataset_name,
-        data_package_name=data_package_name,
-        repo_id=repo_id,
-        repo_type=validated_repo_type,
+        data_package_name=(
+            reference.data_package_name or country_manifest.data_package.name
+        ),
+        repo_id=reference.repo_id or country_manifest.data_package.repo_id,
+        repo_type=reference.repo_type or country_manifest.data_package.repo_type,
         path=reference.path,
-        revision=revision,
+        revision=reference.revision
+        or _artifact_revision(country_manifest.data_package),
         expected_sha256=reference.sha256,
-        source_uri=build_hf_uri(repo_id, reference.path, revision),
         destination=data_dir / Path(reference.path).name,
-        build_id=(
-            country_manifest.certified_data_artifact.build_id
-            if country_manifest.certified_data_artifact is not None
-            and reference.data_package_name is None
-            else None
-        ),
         metadata_expected_sha256=reference.metadata_sha256,
-        metadata_source_uri=(
-            build_hf_uri(repo_id, f"{reference.path}.metadata.json", revision)
-            if reference.metadata_sha256
-            else None
-        ),
-        metadata_destination=(
-            data_dir / f"{Path(reference.path).name}.metadata.json"
-            if reference.metadata_sha256
-            else None
-        ),
     )
-    _dataset_package_type(data_package_name)
-    return plan
 
 
 def materialize_bundle_dataset(
@@ -161,212 +109,193 @@ def materialize_bundle_dataset(
     dataset: Optional[str] = None,
     *,
     data_dir: Path = DEFAULT_DATA_DIR,
-    manifest: Optional[CountryReleaseManifest] = None,
-    allow_local_mirror: bool = True,
+) -> MaterializedDataset:
+    """Return a verified local copy of a dataset from the installed bundle."""
+
+    return _materialize_resolved_dataset(
+        _resolve_bundle_dataset(country_id, dataset, data_dir=data_dir)
+    )
+
+
+def _materialize_resolved_dataset(
+    resolved: _ResolvedBundleDataset,
+    *,
     session=requests,
 ) -> MaterializedDataset:
-    """Download and verify one dataset certified by the release bundle."""
-
-    plan = resolve_bundle_dataset_plan(
-        country_id,
-        dataset,
-        data_dir=data_dir,
-        manifest=manifest,
-    )
     local_source = resolve_local_managed_dataset_source(
-        country_id,
-        plan.source_uri,
-        allow_local_mirror=allow_local_mirror,
+        resolved.country_id,
+        resolved.source_uri,
     )
-    if local_source != plan.source_uri:
-        local_path = Path(local_source).expanduser()
-        if local_path.is_file():
-            actual_sha256 = _sha256_file(local_path)
-            if actual_sha256 == plan.expected_sha256:
-                metadata_path = Path(f"{local_path}.metadata.json")
-                if plan.metadata_expected_sha256 is None:
-                    return _materialized_result(
-                        plan,
-                        actual_sha256=actual_sha256,
-                        cache_hit=True,
-                        path=local_path,
-                    )
-                if metadata_path.is_file():
-                    metadata_actual_sha256 = _sha256_file(metadata_path)
-                    if metadata_actual_sha256 == plan.metadata_expected_sha256:
-                        return _materialized_result(
-                            plan,
-                            actual_sha256=actual_sha256,
-                            cache_hit=True,
-                            path=local_path,
-                            metadata_actual_sha256=metadata_actual_sha256,
-                            metadata_path=metadata_path,
-                        )
-    package_type = _dataset_package_type(plan.data_package_name)
-    if package_type == "populace":
-        return _materialize_populace_data_package(plan, session=session)
-    return _materialize_country_data_package(plan, session=session)
-
-
-def _materialize_country_data_package(
-    plan: BundleDatasetPlan,
-    *,
-    session=requests,
-) -> MaterializedDataset:
-    return _materialize_managed_hf_dataset(plan, session=session)
-
-
-def _materialize_populace_data_package(
-    plan: BundleDatasetPlan,
-    *,
-    session=requests,
-) -> MaterializedDataset:
-    return _materialize_managed_hf_dataset(plan, session=session)
-
-
-def _materialize_managed_hf_dataset(
-    plan: BundleDatasetPlan,
-    *,
-    session=requests,
-) -> MaterializedDataset:
-    destination = plan.destination
-    if destination.is_file():
-        actual_sha256 = _sha256_file(destination)
-        if actual_sha256 == plan.expected_sha256:
-            metadata_actual_sha256, metadata_path = _materialize_metadata(
-                plan,
-                session=session,
-            )
-            return _materialized_result(
-                plan,
-                actual_sha256=actual_sha256,
-                cache_hit=True,
-                metadata_actual_sha256=metadata_actual_sha256,
-                metadata_path=metadata_path,
-            )
-
-    url = _hf_download_url(
-        repo_id=plan.repo_id,
-        repo_type=plan.repo_type,
-        path=plan.path,
-        revision=plan.revision,
+    local_path = Path(local_source).expanduser()
+    local_sha256 = (
+        _matching_sha256(local_path, resolved.expected_sha256)
+        if local_source != resolved.source_uri
+        else None
     )
-    downloaded = _download_to_temp(
-        url,
-        destination=destination,
-        source_description=(f"{plan.country_id.upper()} dataset {plan.dataset!r}"),
+
+    if local_sha256 is not None:
+        path = local_path
+        actual_sha256 = local_sha256
+        cache_hit = True
+    else:
+        path, actual_sha256, cache_hit = _materialize_verified_file(
+            url=_hf_download_url(
+                repo_id=resolved.repo_id,
+                repo_type=resolved.repo_type,
+                path=resolved.path,
+                revision=resolved.revision,
+            ),
+            destination=resolved.destination,
+            expected_sha256=resolved.expected_sha256,
+            description=(f"{resolved.country_id.upper()} dataset {resolved.dataset!r}"),
+            session=session,
+        )
+
+    metadata_path = _materialize_metadata(
+        resolved,
+        dataset_path=path,
         session=session,
     )
-    try:
-        actual_sha256 = _sha256_file(downloaded)
-        if actual_sha256 != plan.expected_sha256:
-            raise DatasetMaterializationError(
-                f"Downloaded {plan.country_id.upper()} dataset {plan.dataset!r} "
-                f"has sha256 {actual_sha256}, expected {plan.expected_sha256}."
-            )
-        _backup_existing(destination)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        os.replace(downloaded, destination)
-    finally:
-        downloaded.unlink(missing_ok=True)
-
-    metadata_actual_sha256, metadata_path = _materialize_metadata(
-        plan,
-        session=session,
-    )
-    return _materialized_result(
-        plan,
-        actual_sha256=actual_sha256,
-        cache_hit=False,
-        metadata_actual_sha256=metadata_actual_sha256,
-        metadata_path=metadata_path,
-    )
-
-
-def _materialized_result(
-    plan: BundleDatasetPlan,
-    *,
-    actual_sha256: str,
-    cache_hit: bool,
-    path: Optional[Path] = None,
-    metadata_actual_sha256: Optional[str] = None,
-    metadata_path: Optional[Path] = None,
-) -> MaterializedDataset:
     return MaterializedDataset(
-        country_id=plan.country_id,
-        dataset=plan.dataset,
-        data_package_name=plan.data_package_name,
-        repo_id=plan.repo_id,
-        repo_type=plan.repo_type,
-        revision=plan.revision,
-        source_uri=plan.source_uri,
-        expected_sha256=plan.expected_sha256,
+        data_package_name=resolved.data_package_name,
+        repo_type=resolved.repo_type,
+        revision=resolved.revision,
+        source_uri=resolved.source_uri,
+        expected_sha256=resolved.expected_sha256,
         actual_sha256=actual_sha256,
-        path=path or plan.destination,
+        path=path,
         cache_hit=cache_hit,
-        build_id=plan.build_id,
-        metadata_expected_sha256=plan.metadata_expected_sha256,
-        metadata_actual_sha256=metadata_actual_sha256,
         metadata_path=metadata_path,
     )
 
 
 def _materialize_metadata(
-    plan: BundleDatasetPlan,
+    resolved: _ResolvedBundleDataset,
     *,
+    dataset_path: Path,
     session=requests,
-) -> tuple[Optional[str], Optional[Path]]:
-    if plan.metadata_expected_sha256 is None:
-        return None, None
-    if plan.metadata_destination is None:
-        raise DatasetMaterializationError(
-            f"Managed dataset {plan.dataset!r} has a metadata hash but no "
-            "metadata destination."
-        )
+) -> Optional[Path]:
+    expected_sha256 = resolved.metadata_expected_sha256
+    if expected_sha256 is None:
+        return None
 
-    destination = plan.metadata_destination
-    if destination.is_file():
-        actual_sha256 = _sha256_file(destination)
-        if actual_sha256 == plan.metadata_expected_sha256:
-            return actual_sha256, destination
+    local_path = Path(f"{dataset_path}.metadata.json")
+    if _matching_sha256(local_path, expected_sha256) is not None:
+        return local_path
 
-    url = _hf_download_url(
-        repo_id=plan.repo_id,
-        repo_type=plan.repo_type,
-        path=f"{plan.path}.metadata.json",
-        revision=plan.revision,
+    path, _, _ = _materialize_verified_file(
+        url=_hf_download_url(
+            repo_id=resolved.repo_id,
+            repo_type=resolved.repo_type,
+            path=f"{resolved.path}.metadata.json",
+            revision=resolved.revision,
+        ),
+        destination=resolved.metadata_destination,
+        expected_sha256=expected_sha256,
+        description=f"metadata for {resolved.dataset!r}",
+        session=session,
     )
+    return path
+
+
+def _materialize_verified_file(
+    *,
+    url: str,
+    destination: Path,
+    expected_sha256: str,
+    description: str,
+    session=requests,
+) -> tuple[Path, str, bool]:
+    existing_sha256 = _matching_sha256(destination, expected_sha256)
+    if existing_sha256 is not None:
+        return destination, existing_sha256, True
+
     downloaded = _download_to_temp(
         url,
         destination=destination,
-        source_description=f"metadata for {plan.dataset!r}",
+        description=description,
         session=session,
     )
     try:
         actual_sha256 = _sha256_file(downloaded)
-        if actual_sha256 != plan.metadata_expected_sha256:
+        if actual_sha256 != expected_sha256:
             raise DatasetMaterializationError(
-                f"Downloaded metadata for dataset {plan.dataset!r} has sha256 "
-                f"{actual_sha256}, expected {plan.metadata_expected_sha256}."
+                f"Downloaded {description} has sha256 {actual_sha256}, "
+                f"expected {expected_sha256}."
             )
-        _backup_existing(destination)
         os.replace(downloaded, destination)
     finally:
         downloaded.unlink(missing_ok=True)
-    return actual_sha256, destination
+    return destination, actual_sha256, False
 
 
-class _UnmanagedHFReference(BaseModel):
-    repo_id: str
-    path: str
-    revision: str
+def _materialize_dataset_request(
+    country_id: str,
+    dataset: Optional[str],
+    *,
+    allow_unmanaged: bool,
+    data_dir: Path = DEFAULT_DATA_DIR,
+) -> tuple[str, str, Optional[MaterializedDataset]]:
+    manifest = get_release_manifest(country_id)
+    managed_dataset = None
+    if dataset is None:
+        managed_dataset = manifest.default_dataset
+    elif dataset in manifest.datasets:
+        managed_dataset = dataset
+    elif dataset == manifest.default_dataset_uri:
+        managed_dataset = manifest.default_dataset
+
+    if managed_dataset is not None:
+        materialized = _materialize_resolved_dataset(
+            _resolve_bundle_dataset(
+                country_id,
+                managed_dataset,
+                data_dir=data_dir,
+                manifest=manifest,
+            )
+        )
+        return materialized.source_uri, str(materialized.path), materialized
+
+    source_uri = resolve_managed_dataset_reference(
+        country_id,
+        dataset,
+        allow_unmanaged=allow_unmanaged,
+    )
+    return (
+        source_uri,
+        _materialize_unmanaged_dataset_source(source_uri, data_dir=data_dir),
+        None,
+    )
 
 
-class _DatasetNotFoundError(DatasetMaterializationError):
-    pass
+def _runtime_dataset_provenance(
+    source_uri: str,
+    local_path: str,
+    materialized: Optional[MaterializedDataset],
+    *,
+    logical_name: Optional[str] = None,
+) -> dict[str, object]:
+    provenance: dict[str, object] = {
+        "managed_by": "policyengine.py",
+        "runtime_dataset": logical_name or dataset_logical_name(source_uri),
+        "runtime_dataset_uri": source_uri,
+        "runtime_dataset_source": local_path,
+    }
+    if materialized is not None:
+        provenance.update(
+            {
+                "runtime_dataset_data_package": materialized.data_package_name,
+                "runtime_dataset_repo_type": materialized.repo_type,
+                "runtime_dataset_revision": materialized.revision,
+                "runtime_dataset_expected_sha256": materialized.expected_sha256,
+                "runtime_dataset_sha256": materialized.actual_sha256,
+                "runtime_dataset_cache_hit": materialized.cache_hit,
+            }
+        )
+    return provenance
 
 
-def materialize_unmanaged_dataset_source(
+def _materialize_unmanaged_dataset_source(
     dataset_source: Union[str, Path],
     *,
     version: Optional[str] = None,
@@ -377,11 +306,6 @@ def materialize_unmanaged_dataset_source(
     """Return a local path for an explicitly unmanaged local or HF source."""
 
     source = str(dataset_source)
-    if source.startswith("gs://"):
-        raise DatasetMaterializationError(
-            "GCS dataset sources are no longer supported. Publish the dataset "
-            "on Hugging Face and reference that artifact instead."
-        )
     if not source.startswith("hf://"):
         if "://" in source:
             raise DatasetMaterializationError(
@@ -389,8 +313,8 @@ def materialize_unmanaged_dataset_source(
             )
         return source
 
-    reference = _parse_unmanaged_hf_reference(source, version=version)
-    destination = data_dir / Path(reference.path).name
+    repo_id, path, revision = _parse_unmanaged_hf_reference(source, version=version)
+    destination = data_dir / Path(path).name
     repo_types: list[Literal["model", "dataset"]] = (
         [repo_type] if repo_type is not None else ["model", "dataset"]
     )
@@ -398,21 +322,23 @@ def materialize_unmanaged_dataset_source(
         try:
             downloaded = _download_to_temp(
                 _hf_download_url(
-                    repo_id=reference.repo_id,
+                    repo_id=repo_id,
                     repo_type=candidate_repo_type,
-                    path=reference.path,
-                    revision=reference.revision,
+                    path=path,
+                    revision=revision,
                 ),
                 destination=destination,
-                source_description=f"unmanaged dataset {source!r}",
+                description=f"unmanaged dataset {source!r}",
                 session=session,
             )
         except _DatasetNotFoundError:
             if index + 1 < len(repo_types):
                 continue
             raise
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        os.replace(downloaded, destination)
+        try:
+            os.replace(downloaded, destination)
+        finally:
+            downloaded.unlink(missing_ok=True)
         return str(destination)
 
     raise DatasetMaterializationError(f"Could not materialize dataset {source!r}.")
@@ -422,7 +348,7 @@ def _parse_unmanaged_hf_reference(
     uri: str,
     *,
     version: Optional[str],
-) -> _UnmanagedHFReference:
+) -> tuple[str, str, str]:
     path_with_repo, uri_revision = (
         uri[5:].rsplit("@", maxsplit=1) if "@" in uri[5:] else (uri[5:], None)
     )
@@ -437,11 +363,11 @@ def _parse_unmanaged_hf_reference(
             "Invalid Hugging Face dataset URI. Expected format "
             f"'hf://owner/repo/path/to/file[@revision]', got {uri!r}."
         )
-    return _UnmanagedHFReference(
-        repo_id=f"{parts[0]}/{parts[1]}",
-        path=parts[2],
-        revision=uri_revision or version or "main",
-    )
+    return f"{parts[0]}/{parts[1]}", parts[2], uri_revision or version or "main"
+
+
+class _DatasetNotFoundError(DatasetMaterializationError):
+    pass
 
 
 def _hf_download_url(
@@ -462,14 +388,13 @@ def _download_to_temp(
     url: str,
     *,
     destination: Path,
-    source_description: str,
+    description: str,
     session=requests,
 ) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    suffix = destination.suffix or ".download"
     file_descriptor, temp_name = tempfile.mkstemp(
         prefix=".policyengine-download-",
-        suffix=suffix,
+        suffix=destination.suffix or ".download",
         dir=destination.parent,
     )
     os.close(file_descriptor)
@@ -483,14 +408,12 @@ def _download_to_temp(
         ) as response:
             if response.status_code in {401, 403}:
                 raise DatasetMaterializationError(
-                    f"Could not download {source_description}: Hugging Face "
-                    "rejected the configured credentials. Set HUGGING_FACE_TOKEN "
-                    "to a token with access to the certified repository."
+                    f"Could not download {description}: Hugging Face rejected "
+                    "the configured credentials. Set HUGGING_FACE_TOKEN to a "
+                    "token with access to the repository."
                 )
             if response.status_code == 404:
-                raise _DatasetNotFoundError(
-                    f"Could not find {source_description} at {url}."
-                )
+                raise _DatasetNotFoundError(f"Could not find {description} at {url}.")
             response.raise_for_status()
             with temp_path.open("wb") as output:
                 for chunk in response.iter_content(chunk_size=1024 * 1024):
@@ -511,13 +434,11 @@ def _hugging_face_auth_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"} if token else {}
 
 
-def _backup_existing(path: Path) -> None:
-    if not path.exists():
-        return
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    backup_dir = path.parent / BACKUP_DIR_NAME / timestamp
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(path), str(backup_dir / path.name))
+def _matching_sha256(path: Path, expected_sha256: str) -> Optional[str]:
+    if not path.is_file():
+        return None
+    actual_sha256 = _sha256_file(path)
+    return actual_sha256 if actual_sha256 == expected_sha256 else None
 
 
 def _sha256_file(path: Path) -> str:

@@ -73,7 +73,7 @@ def test_selected_dataset_plan_uses_certified_release_metadata(tmp_path):
         bundle.get_current_bundle(), ["uk"], data_dir=tmp_path
     )
 
-    plan, _, release = entries[0]
+    plan, release = entries[0]
     assert plan.country_id == "uk"
     assert plan.data_package_name == "policyengine-uk-data"
     assert plan.repo_type == "model"
@@ -151,21 +151,12 @@ def test_install_bundle_materializes_defaults_and_records_receipt(
         bundle, "install_package_scaffold", lambda *args, **kwargs: None
     )
 
-    def fake_materialize(country_id, dataset, *, data_dir, manifest):
-        plan = bundle.resolve_bundle_dataset_plan(
-            country_id,
-            dataset,
-            data_dir=data_dir,
-            manifest=manifest,
-        )
+    def fake_materialize(plan):
         calls.append(plan)
         plan.destination.parent.mkdir(parents=True, exist_ok=True)
         plan.destination.write_bytes(b"materialized")
         return MaterializedDataset(
-            country_id=plan.country_id,
-            dataset=plan.dataset,
             data_package_name=plan.data_package_name,
-            repo_id=plan.repo_id,
             repo_type=plan.repo_type,
             revision=plan.revision,
             source_uri=plan.source_uri,
@@ -173,10 +164,9 @@ def test_install_bundle_materializes_defaults_and_records_receipt(
             actual_sha256=plan.expected_sha256,
             path=plan.destination,
             cache_hit=False,
-            build_id=plan.build_id,
         )
 
-    monkeypatch.setattr(bundle, "materialize_bundle_dataset", fake_materialize)
+    monkeypatch.setattr(bundle, "_materialize_resolved_dataset", fake_materialize)
 
     result = bundle.install_bundle(
         python=sys.executable,

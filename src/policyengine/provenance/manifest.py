@@ -5,7 +5,7 @@ from functools import lru_cache
 from importlib import import_module
 from importlib.resources import files
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import requests
 from pydantic import BaseModel, Field
@@ -31,7 +31,7 @@ class PackageVersion(BaseModel):
 
 class DataPackageVersion(PackageVersion):
     repo_id: str
-    repo_type: str = "model"
+    repo_type: Literal["model", "dataset"] = "model"
     release_manifest_path: str = "release_manifest.json"
     release_manifest_revision: Optional[str] = None
 
@@ -67,7 +67,7 @@ class ArtifactPathReference(BaseModel):
     # Set when the artifact lives outside the data package's repo (inherited
     # datasets keep their original repo + revision pins).
     repo_id: Optional[str] = None
-    repo_type: Optional[str] = None
+    repo_type: Optional[Literal["model", "dataset"]] = None
 
 
 class ArtifactPathTemplate(BaseModel):

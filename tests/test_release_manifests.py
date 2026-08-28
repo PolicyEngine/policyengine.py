@@ -18,7 +18,7 @@ from policyengine.core.tax_benefit_model import TaxBenefitModel
 from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
 from policyengine.provenance.dataset_materialization import (
     MaterializedDataset,
-    resolve_bundle_dataset_plan,
+    _resolve_bundle_dataset,
 )
 from policyengine.provenance.manifest import (
     ArtifactPathReference,
@@ -95,12 +95,9 @@ def _materialized_dataset(
     dataset: str,
     path: str,
 ) -> MaterializedDataset:
-    plan = resolve_bundle_dataset_plan(country_id, dataset)
+    plan = _resolve_bundle_dataset(country_id, dataset)
     return MaterializedDataset(
-        country_id=plan.country_id,
-        dataset=plan.dataset,
         data_package_name=plan.data_package_name,
-        repo_id=plan.repo_id,
         repo_type=plan.repo_type,
         revision=plan.revision,
         source_uri=plan.source_uri,
@@ -108,8 +105,12 @@ def _materialized_dataset(
         actual_sha256=plan.expected_sha256,
         path=Path(path),
         cache_hit=False,
-        build_id=plan.build_id,
     )
+
+
+def _materialized_dataset_request(country_id: str, dataset: str, path: str):
+    materialized = _materialized_dataset(country_id, dataset, path)
+    return materialized.source_uri, str(materialized.path), materialized
 
 
 UK_LEGACY_DATA_RELEASE_REVISION = "655dd07e4bb9c777b00dac044949611f1feb824f"
@@ -953,8 +954,8 @@ class TestReleaseManifests:
             )
             with patch.object(
                 us_model,
-                "materialize_bundle_dataset",
-                return_value=_materialized_dataset(
+                "_materialize_dataset_request",
+                return_value=_materialized_dataset_request(
                     "us",
                     "populace_us_2024",
                     "/tmp/populace_us_2024.h5",
@@ -1002,8 +1003,8 @@ class TestReleaseManifests:
             )
             with patch.object(
                 us_model,
-                "materialize_unmanaged_dataset_source",
-                return_value="/tmp/cps_2023.h5",
+                "_materialize_dataset_request",
+                return_value=(dataset, "/tmp/cps_2023.h5", None),
             ):
                 microsim = us_model.managed_microsimulation(
                     dataset=dataset,
@@ -1071,8 +1072,8 @@ class TestReleaseManifests:
             )
             with patch.object(
                 uk_model,
-                "materialize_bundle_dataset",
-                return_value=_materialized_dataset(
+                "_materialize_dataset_request",
+                return_value=_materialized_dataset_request(
                     "uk",
                     "enhanced_frs_2024_25",
                     "/tmp/enhanced_frs_2024_25.h5",
@@ -1121,8 +1122,8 @@ class TestReleaseManifests:
             )
             with patch.object(
                 uk_model,
-                "materialize_unmanaged_dataset_source",
-                return_value="/tmp/frs_2022_23.h5",
+                "_materialize_dataset_request",
+                return_value=(dataset, "/tmp/frs_2022_23.h5", None),
             ):
                 microsim = uk_model.managed_microsimulation(
                     dataset=dataset,

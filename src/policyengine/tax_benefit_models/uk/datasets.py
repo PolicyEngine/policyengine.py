@@ -7,14 +7,12 @@ from pydantic import ConfigDict
 
 from policyengine.core import Dataset, YearData
 from policyengine.provenance.dataset_materialization import (
-    materialize_bundle_dataset,
-    materialize_unmanaged_dataset_source,
+    _materialize_dataset_request,
 )
 from policyengine.provenance.manifest import (
     dataset_logical_name,
     get_release_manifest,
     resolve_dataset_reference,
-    resolve_managed_dataset_reference,
 )
 
 
@@ -127,26 +125,12 @@ def create_datasets(
         datasets = [get_release_manifest("uk").default_dataset]
     result = {}
     for dataset in datasets:
-        manifest = get_release_manifest("uk")
-        managed_dataset = dataset if dataset in manifest.datasets else None
-        if managed_dataset is not None:
-            materialized = materialize_bundle_dataset(
-                "uk",
-                managed_dataset,
-                data_dir=Path(data_folder),
-            )
-            resolved_dataset = materialized.source_uri
-            runtime_dataset = str(materialized.path)
-        else:
-            resolved_dataset = resolve_managed_dataset_reference(
-                "uk",
-                dataset,
-                allow_unmanaged=allow_unmanaged,
-            )
-            runtime_dataset = materialize_unmanaged_dataset_source(
-                resolved_dataset,
-                data_dir=Path(data_folder),
-            )
+        resolved_dataset, runtime_dataset, _ = _materialize_dataset_request(
+            "uk",
+            dataset,
+            allow_unmanaged=allow_unmanaged,
+            data_dir=Path(data_folder),
+        )
         dataset_stem = dataset_logical_name(resolved_dataset)
         from policyengine_uk import Microsimulation
 

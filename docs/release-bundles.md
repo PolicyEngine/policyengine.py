@@ -41,13 +41,13 @@ environment. It installs the bundled Python packages with pip, downloads the
 certified default US and UK datasets into `./data`, and writes a
 `./data/.policyengine-bundle-receipt.json` receipt that records the target
 Python.
-Existing dataset files with the same filename are moved to
-`./data/.policyengine-bundle-backups/<timestamp>/`.
+An existing file is reused when its SHA-256 matches the manifest. Otherwise, a
+verified download atomically replaces it.
 
 The command invokes the same bundle materializer used by calculations. The
-materializer selects its internal strategy from the artifact's data package
-name, uses the manifest's exact Hugging Face repository type and immutable
-revision, and verifies the certified SHA-256 before exposing the local file.
+materializer uses the manifest's exact Hugging Face repository type, immutable
+revision, and certified SHA-256. The data package name is retained only as
+provenance metadata; it does not select a download implementation.
 
 Regional datasets may also be certified in the bundle manifest. They are not
 eagerly downloaded by `policyengine bundle install`; callers should materialize

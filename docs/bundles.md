@@ -29,16 +29,14 @@ When run from `uvx` or `pipx`, the installer creates or reuses `./.venv`.
 Inside an existing virtualenv or conda environment, it installs into that active
 environment. The installer then installs the
 exact bundled package scaffold with pip, downloads certified default US and UK
-datasets into `./data`, moves replaced dataset files into
-`./data/.policyengine-bundle-backups/<timestamp>/`, and writes a
-`./data/.policyengine-bundle-receipt.json` receipt that records the target
-Python.
+datasets into `./data`, and writes a `./data/.policyengine-bundle-receipt.json`
+receipt that records the target Python.
 
 Dataset pre-download uses the same materialization function as US and UK
 calculations. For every managed artifact, PolicyEngine.py reads the source data
 package name, Hugging Face repository type, immutable revision, and SHA-256 from
 the bundle. It reuses an existing file only when its hash matches, downloads and
-verifies replacements before moving the old file into the backup directory, and
+verifies a replacement before atomically replacing an invalid local file, and
 records the verified result in the receipt.
 
 The bundle manifest can certify additional regional datasets, such as US state

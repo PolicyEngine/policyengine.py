@@ -22,13 +22,12 @@ from typing import Any, Iterable, Mapping, Optional, Sequence
 import requests
 
 from policyengine.provenance.dataset_materialization import (
-    BACKUP_DIR_NAME,
-    BundleDatasetPlan,
     DatasetMaterializationError,
     MaterializedDataset,
+    _materialize_resolved_dataset,
+    _resolve_bundle_dataset,
+    _ResolvedBundleDataset,
     _sha256_file,
-    materialize_bundle_dataset,
-    resolve_bundle_dataset_plan,
 )
 from policyengine.provenance.manifest import CountryReleaseManifest
 
@@ -270,7 +269,7 @@ def install_package_scaffold(
 
 
 def _confirm_dataset_install(
-    plans: Sequence[BundleDatasetPlan],
+    plans: Sequence[_ResolvedBundleDataset],
     *,
     data_dir: Path,
     yes: bool,
@@ -281,10 +280,7 @@ def _confirm_dataset_install(
         "This will download certified PolicyEngine datasets for "
         f"{countries} into {data_dir}."
     )
-    print(
-        "Existing matching dataset files will be moved to "
-        f"{data_dir / BACKUP_DIR_NAME}/<timestamp>/."
-    )
+    print("Existing files with the certified content will be reused.")
     if yes or dry_run:
         return
     answer = input("Continue? [y/N] ").strip().lower()
@@ -293,7 +289,7 @@ def _confirm_dataset_install(
 
 
 def _receipt_dataset(
-    plan: BundleDatasetPlan,
+    plan: _ResolvedBundleDataset,
     release: Mapping[str, Any],
     *,
     materialized: Optional[MaterializedDataset] = None,
@@ -301,15 +297,15 @@ def _receipt_dataset(
     receipt = {
         "country": plan.country_id,
         "dataset": plan.dataset,
-        "version": release.get("version") or plan.build_id,
+        "version": release.get("version") or release.get("build_id"),
         "uri": plan.source_uri,
         "path": str(plan.destination),
         "release_manifest_uri": release.get("release_manifest_uri"),
         "data_package_name": plan.data_package_name,
         "repo_type": plan.repo_type,
     }
-    if plan.build_id:
-        receipt["build_id"] = plan.build_id
+    if release.get("build_id"):
+        receipt["build_id"] = release["build_id"]
     receipt["expected_sha256"] = plan.expected_sha256
     if materialized is not None:
         receipt["installed_sha256"] = materialized.actual_sha256
@@ -321,7 +317,7 @@ def _selected_dataset_plans(
     countries: Sequence[str],
     *,
     data_dir: Path,
-) -> list[tuple[BundleDatasetPlan, CountryReleaseManifest, Mapping[str, Any]]]:
+) -> list[tuple[_ResolvedBundleDataset, Mapping[str, Any]]]:
     releases = manifest.get("data_releases")
     if not isinstance(releases, Mapping):
         raise BundleError("Bundle manifest does not contain data releases.")
@@ -335,14 +331,14 @@ def _selected_dataset_plans(
             )
         try:
             country_manifest = CountryReleaseManifest.model_validate(release)
-            plan = resolve_bundle_dataset_plan(
+            plan = _resolve_bundle_dataset(
                 country,
                 data_dir=data_dir,
                 manifest=country_manifest,
             )
         except (ValueError, DatasetMaterializationError) as exc:
             raise BundleError(str(exc)) from exc
-        selected.append((plan, country_manifest, release))
+        selected.append((plan, release))
     return selected
 
 
@@ -416,18 +412,13 @@ def install_bundle(
                 yes=yes,
                 dry_run=dry_run,
             )
-        for plan, country_manifest, release in dataset_entries:
+        for plan, release in dataset_entries:
             if dry_run:
                 print(f"download {plan.source_uri} -> {plan.destination}")
                 installed_datasets.append(_receipt_dataset(plan, release))
                 continue
             try:
-                materialized = materialize_bundle_dataset(
-                    plan.country_id,
-                    plan.dataset,
-                    data_dir=data_dir,
-                    manifest=country_manifest,
-                )
+                materialized = _materialize_resolved_dataset(plan)
             except DatasetMaterializationError as exc:
                 raise BundleError(str(exc)) from exc
             installed_datasets.append(
@@ -638,7 +629,7 @@ def _dataset_checks(
             if isinstance(dataset, Mapping) and dataset.get("country"):
                 receipt_datasets[str(dataset["country"])] = dataset
     checks = []
-    for plan, _, release in _selected_dataset_plans(
+    for plan, release in _selected_dataset_plans(
         manifest, countries, data_dir=data_dir
     ):
         receipt_dataset = receipt_datasets.get(plan.country_id)
@@ -647,11 +638,11 @@ def _dataset_checks(
 
 
 def _dataset_check(
-    plan: BundleDatasetPlan,
+    plan: _ResolvedBundleDataset,
     release: Mapping[str, Any],
     receipt_dataset: Optional[Mapping[str, Any]],
 ) -> dict[str, Any]:
-    expected_version = release.get("version") or plan.build_id
+    expected_version = release.get("version") or release.get("build_id")
     check: dict[str, Any] = {
         "country": plan.country_id,
         "dataset": plan.dataset,

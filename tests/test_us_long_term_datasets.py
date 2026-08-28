@@ -156,10 +156,7 @@ def _manifest_with_long_term_sha(
 def _materialized_long_term(path: Path, dataset_uri: str) -> MaterializedDataset:
     actual_sha256 = _sha256(path)
     return MaterializedDataset(
-        country_id="us",
-        dataset="long_term_cps_2100",
         data_package_name="policyengine-us-data",
-        repo_id="policyengine/policyengine-us-data",
         repo_type="model",
         revision="abc123",
         source_uri=dataset_uri,
@@ -340,7 +337,6 @@ def test__load_managed_long_term_datasets__defaults_to_manifest_model_version(
     _write_us_h5(h5_path, 2100)
     _write_metadata(h5_path, 2100, policyengine_us={"version": "1.691.10"})
     dataset_uri = "hf://policyengine/policyengine-us-data/long_term/2100.h5@abc123"
-
     monkeypatch.setattr(
         us_datasets_module,
         "get_release_manifest",
@@ -379,14 +375,13 @@ def test__load_managed_long_term_datasets__checks_manifest_sha256(
         load_managed_long_term_datasets([2100])
 
 
-def test__load_managed_long_term_datasets__checks_metadata_sha256(
+def test__load_managed_long_term_datasets__propagates_metadata_hash_failure(
     monkeypatch,
     tmp_path,
 ):
     h5_path = tmp_path / "2100.h5"
     _write_us_h5(h5_path, 2100)
     _write_metadata(h5_path, 2100, policyengine_us={"version": "1.691.12"})
-    dataset_uri = "hf://policyengine/policyengine-us-data/long_term/2100.h5@abc123"
 
     monkeypatch.setattr(
         us_datasets_module,
@@ -399,7 +394,7 @@ def test__load_managed_long_term_datasets__checks_metadata_sha256(
     monkeypatch.setattr(
         us_datasets_module,
         "materialize_bundle_dataset",
-        lambda *args, **kwargs: _materialized_long_term(h5_path, dataset_uri),
+        Mock(side_effect=DatasetMaterializationError("metadata sha256 mismatch")),
     )
 
     with pytest.raises(ValueError, match="metadata"):
@@ -438,7 +433,6 @@ def test__load_managed_long_term_datasets__materializes_without_local_mirror(
         "us",
         "long_term_cps_2100",
         data_dir=tmp_path,
-        manifest=manifest,
     )
 
 
