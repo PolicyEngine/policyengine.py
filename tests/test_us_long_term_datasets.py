@@ -273,7 +273,7 @@ def test__load_long_term_datasets__rejects_support_contract_mismatch(tmp_path):
         )
 
 
-def test__load_managed_long_term_datasets__loads_bundled_local_mirror(
+def test__load_managed_long_term_datasets__loads_verified_bundle_file(
     monkeypatch,
     tmp_path,
 ):
@@ -399,7 +399,7 @@ def test__load_managed_long_term_datasets__propagates_metadata_hash_failure(
         load_managed_long_term_datasets([2100])
 
 
-def test__load_managed_long_term_datasets__materializes_without_local_mirror(
+def test__load_managed_long_term_datasets__requests_file_in_data_folder(
     monkeypatch,
     tmp_path,
 ):
