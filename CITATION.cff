@@ -1,20 +1,20 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 type: software
-title: policyengine
-version: 4.10.0
-date-released: "2026-05-22"
+title: "policyengine: A Microsimulation Tool for Tax-Benefit Policy Analysis"
+version: 5.0.4
+date-released: "2026-08-27"
 url: "https://github.com/PolicyEngine/policyengine.py"
 abstract: "An open-source Python package that provides a common analysis layer for tax-benefit microsimulation across the US and the UK."
 license: AGPL-3.0
 authors:
-  - family-names: Ghenis
-    given-names: Max
-    orcid: "https://orcid.org/0000-0002-1335-8277"
-    affiliation: PolicyEngine
   - family-names: Ahmadi
     given-names: Vahid
     orcid: "https://orcid.org/0009-0004-1093-6272"
+    affiliation: PolicyEngine
+  - family-names: Ghenis
+    given-names: Max
+    orcid: "https://orcid.org/0000-0002-1335-8277"
     affiliation: PolicyEngine
   - family-names: Woodruff
     given-names: Nikhil
@@ -26,6 +26,7 @@ authors:
     affiliation: PolicyEngine
   - family-names: Volk
     given-names: Anthony
+    orcid: "https://orcid.org/0009-0009-2183-3064"
     affiliation: PolicyEngine
 keywords:
   - microsimulation
