@@ -13,18 +13,13 @@ from pydantic import ConfigDict, Field
 
 from policyengine.core import Dataset, YearData
 from policyengine.provenance.dataset_materialization import (
-    DatasetMaterializationError,
     MaterializedDataset,
-    materialize_bundle_dataset,
+    materialize_dataset,
 )
 from policyengine.provenance.manifest import (
     dataset_logical_name,
     get_release_manifest,
     resolve_dataset_reference,
-    resolve_managed_dataset_reference,
-)
-from policyengine.tax_benefit_models.common.dataset_source import (
-    download_hf_dataset,
 )
 from policyengine.tax_benefit_models.common.model_version import (
     build_runtime_dataset_provenance,
@@ -303,43 +298,17 @@ def create_datasets(
     """
     from policyengine_us import Microsimulation
 
-    datasets = datasets or [get_release_manifest("us").default_dataset]
+    dataset_requests: list[Optional[str]] = datasets or [None]
     result = {}
-    for dataset in datasets:
-        manifest = get_release_manifest("us")
-        if dataset == manifest.default_dataset_uri:
-            managed_dataset = manifest.default_dataset
-        elif dataset in manifest.datasets:
-            managed_dataset = dataset
-        else:
-            managed_dataset = None
-        if managed_dataset is not None:
-            materialized = materialize_bundle_dataset(
-                "us",
-                managed_dataset,
-                data_dir=Path(data_folder),
-            )
-            resolved_dataset = materialized.source_uri
-            runtime_dataset = str(materialized.path)
-        else:
-            resolved_dataset = resolve_managed_dataset_reference(
-                "us",
-                dataset,
-                allow_unmanaged=allow_unmanaged,
-            )
-            if resolved_dataset.startswith("hf://"):
-                runtime_dataset = download_hf_dataset(
-                    resolved_dataset,
-                    data_dir=Path(data_folder),
-                )
-            elif "://" in resolved_dataset:
-                raise DatasetMaterializationError(
-                    f"Unsupported explicit dataset URI: {resolved_dataset!r}."
-                )
-            else:
-                runtime_dataset = resolved_dataset
-        dataset_stem = dataset_logical_name(resolved_dataset)
-        sim = Microsimulation(dataset=runtime_dataset)
+    for dataset in dataset_requests:
+        source = materialize_dataset(
+            "us",
+            dataset,
+            allow_unmanaged=allow_unmanaged,
+            data_dir=Path(data_folder),
+        )
+        dataset_stem = source.name
+        sim = Microsimulation(dataset=source.path)
 
         for year in years:
             # Get all input variables from the simulation
@@ -1107,13 +1076,16 @@ def load_managed_long_term_datasets(
                 f"Managed long-term dataset {key!r} is missing a sha256 in "
                 "the bundled US release manifest."
             )
-        materialized = materialize_bundle_dataset(
+        source = materialize_dataset(
             "us",
             key,
             data_dir=Path(data_folder),
         )
-        dataset_uri = materialized.source_uri
-        path = materialized.path
+        materialized = source.bundle_dataset
+        if materialized is None:
+            raise ValueError(f"Bundle dataset {key!r} was not bundle-managed.")
+        dataset_uri = source.source_uri
+        path = Path(source.path)
         metadata, metadata_path = _load_dataset_metadata(
             path,
             require_metadata,

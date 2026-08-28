@@ -28,10 +28,13 @@ from .dataset_materialization import (
     DatasetMaterializationError as DatasetMaterializationError,
 )
 from .dataset_materialization import (
+    DatasetSource as DatasetSource,
+)
+from .dataset_materialization import (
     MaterializedDataset as MaterializedDataset,
 )
 from .dataset_materialization import (
-    materialize_bundle_dataset as materialize_bundle_dataset,
+    materialize_dataset as materialize_dataset,
 )
 from .manifest import (
     CertifiedDataArtifact as CertifiedDataArtifact,

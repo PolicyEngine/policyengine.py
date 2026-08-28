@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 from policyengine.provenance.dataset_materialization import (
+    DatasetSource,
     MaterializedDataset,
     _resolve_bundle_dataset,
 )
@@ -34,6 +35,15 @@ def _materialized(country_id: str, dataset: str, path: str) -> MaterializedDatas
     )
 
 
+def _source(country_id: str, dataset: str, path: str) -> DatasetSource:
+    bundle_dataset = _materialized(country_id, dataset, path)
+    return DatasetSource(
+        source_uri=bundle_dataset.source_uri,
+        path=str(bundle_dataset.path),
+        bundle_dataset=bundle_dataset,
+    )
+
+
 def test_us_create_datasets_passes_verified_bundle_source_to_country_package(
     monkeypatch,
 ):
@@ -42,10 +52,10 @@ def test_us_create_datasets_passes_verified_bundle_source_to_country_package(
         REPO_ROOT / "src/policyengine/tax_benefit_models/us/datasets.py",
     )
     materialize = Mock(
-        return_value=_materialized("us", "populace_us_2024", "/tmp/populace_us_2024.h5")
+        return_value=_source("us", "populace_us_2024", "/tmp/populace_us_2024.h5")
     )
     microsimulation = Mock()
-    monkeypatch.setattr(us_datasets, "materialize_bundle_dataset", materialize)
+    monkeypatch.setattr(us_datasets, "materialize_dataset", materialize)
     monkeypatch.setitem(
         sys.modules,
         "policyengine_us",
@@ -57,6 +67,7 @@ def test_us_create_datasets_passes_verified_bundle_source_to_country_package(
     materialize.assert_called_once_with(
         "us",
         "populace_us_2024",
+        allow_unmanaged=False,
         data_dir=Path("./data"),
     )
     microsimulation.assert_called_once_with(dataset="/tmp/populace_us_2024.h5")
@@ -70,10 +81,10 @@ def test_uk_create_datasets_passes_verified_bundle_source_to_country_package(
         REPO_ROOT / "src/policyengine/tax_benefit_models/uk/datasets.py",
     )
     materialize = Mock(
-        return_value=_materialized("uk", "populace_uk_2023", "/tmp/populace_uk_2023.h5")
+        return_value=_source("uk", "populace_uk_2023", "/tmp/populace_uk_2023.h5")
     )
     microsimulation = Mock()
-    monkeypatch.setattr(uk_datasets, "materialize_bundle_dataset", materialize)
+    monkeypatch.setattr(uk_datasets, "materialize_dataset", materialize)
     monkeypatch.setitem(
         sys.modules,
         "policyengine_uk",
@@ -85,6 +96,7 @@ def test_uk_create_datasets_passes_verified_bundle_source_to_country_package(
     materialize.assert_called_once_with(
         "uk",
         "populace_uk_2023",
+        allow_unmanaged=False,
         data_dir=Path("./data"),
     )
     microsimulation.assert_called_once_with(dataset="/tmp/populace_uk_2023.h5")
@@ -96,14 +108,14 @@ def test_uk_create_datasets_defaults_to_certified_bundle_dataset(monkeypatch):
         REPO_ROOT / "src/policyengine/tax_benefit_models/uk/datasets.py",
     )
     materialize = Mock(
-        return_value=_materialized(
+        return_value=_source(
             "uk",
             "enhanced_frs_2024_25",
             "/tmp/enhanced_frs_2024_25.h5",
         )
     )
     microsimulation = Mock()
-    monkeypatch.setattr(uk_datasets, "materialize_bundle_dataset", materialize)
+    monkeypatch.setattr(uk_datasets, "materialize_dataset", materialize)
     monkeypatch.setitem(
         sys.modules,
         "policyengine_uk",
@@ -114,7 +126,8 @@ def test_uk_create_datasets_defaults_to_certified_bundle_dataset(monkeypatch):
 
     materialize.assert_called_once_with(
         "uk",
-        "enhanced_frs_2024_25",
+        None,
+        allow_unmanaged=False,
         data_dir=Path("./data"),
     )
     microsimulation.assert_called_once_with(dataset="/tmp/enhanced_frs_2024_25.h5")

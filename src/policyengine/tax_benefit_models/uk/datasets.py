@@ -7,17 +7,12 @@ from pydantic import ConfigDict
 
 from policyengine.core import Dataset, YearData
 from policyengine.provenance.dataset_materialization import (
-    DatasetMaterializationError,
-    materialize_bundle_dataset,
+    materialize_dataset,
 )
 from policyengine.provenance.manifest import (
     dataset_logical_name,
     get_release_manifest,
     resolve_dataset_reference,
-    resolve_managed_dataset_reference,
-)
-from policyengine.tax_benefit_models.common.dataset_source import (
-    download_hf_dataset,
 )
 
 
@@ -126,46 +121,19 @@ def create_datasets(
     data_folder: str = "./data",
     allow_unmanaged: bool = False,
 ) -> dict[str, PolicyEngineUKDataset]:
-    if datasets is None:
-        datasets = [get_release_manifest("uk").default_dataset]
+    dataset_requests: list[Optional[str]] = [None] if datasets is None else datasets
     result = {}
-    for dataset in datasets:
-        manifest = get_release_manifest("uk")
-        if dataset == manifest.default_dataset_uri:
-            managed_dataset = manifest.default_dataset
-        elif dataset in manifest.datasets:
-            managed_dataset = dataset
-        else:
-            managed_dataset = None
-        if managed_dataset is not None:
-            materialized = materialize_bundle_dataset(
-                "uk",
-                managed_dataset,
-                data_dir=Path(data_folder),
-            )
-            resolved_dataset = materialized.source_uri
-            runtime_dataset = str(materialized.path)
-        else:
-            resolved_dataset = resolve_managed_dataset_reference(
-                "uk",
-                dataset,
-                allow_unmanaged=allow_unmanaged,
-            )
-            if resolved_dataset.startswith("hf://"):
-                runtime_dataset = download_hf_dataset(
-                    resolved_dataset,
-                    data_dir=Path(data_folder),
-                )
-            elif "://" in resolved_dataset:
-                raise DatasetMaterializationError(
-                    f"Unsupported explicit dataset URI: {resolved_dataset!r}."
-                )
-            else:
-                runtime_dataset = resolved_dataset
-        dataset_stem = dataset_logical_name(resolved_dataset)
+    for dataset in dataset_requests:
+        source = materialize_dataset(
+            "uk",
+            dataset,
+            allow_unmanaged=allow_unmanaged,
+            data_dir=Path(data_folder),
+        )
+        dataset_stem = source.name
         from policyengine_uk import Microsimulation
 
-        sim = Microsimulation(dataset=runtime_dataset)
+        sim = Microsimulation(dataset=source.path)
         for year in years:
             year_dataset = sim.dataset[year]
 

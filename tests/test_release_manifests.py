@@ -17,6 +17,7 @@ from requests import Timeout
 from policyengine.core.tax_benefit_model import TaxBenefitModel
 from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
 from policyengine.provenance.dataset_materialization import (
+    DatasetSource,
     MaterializedDataset,
     _resolve_bundle_dataset,
 )
@@ -102,6 +103,19 @@ def _materialized_dataset(
         source_uri=plan.source_uri,
         sha256=plan.sha256,
         path=Path(path),
+    )
+
+
+def _dataset_source(
+    country_id: str,
+    dataset: str,
+    path: str,
+) -> DatasetSource:
+    bundle_dataset = _materialized_dataset(country_id, dataset, path)
+    return DatasetSource(
+        source_uri=bundle_dataset.source_uri,
+        path=str(bundle_dataset.path),
+        bundle_dataset=bundle_dataset,
     )
 
 
@@ -924,8 +938,8 @@ class TestReleaseManifests:
             )
             with patch.object(
                 us_model,
-                "materialize_bundle_dataset",
-                return_value=_materialized_dataset(
+                "materialize_dataset",
+                return_value=_dataset_source(
                     "us",
                     "populace_us_2024",
                     "/tmp/populace_us_2024.h5",
@@ -973,8 +987,11 @@ class TestReleaseManifests:
             )
             with patch.object(
                 us_model,
-                "download_hf_dataset",
-                return_value="/tmp/cps_2023.h5",
+                "materialize_dataset",
+                return_value=DatasetSource(
+                    source_uri=dataset,
+                    path="/tmp/cps_2023.h5",
+                ),
             ):
                 microsim = us_model.managed_microsimulation(
                     dataset=dataset,
@@ -1042,8 +1059,8 @@ class TestReleaseManifests:
             )
             with patch.object(
                 uk_model,
-                "materialize_bundle_dataset",
-                return_value=_materialized_dataset(
+                "materialize_dataset",
+                return_value=_dataset_source(
                     "uk",
                     "enhanced_frs_2024_25",
                     "/tmp/enhanced_frs_2024_25.h5",
@@ -1092,8 +1109,11 @@ class TestReleaseManifests:
             )
             with patch.object(
                 uk_model,
-                "download_hf_dataset",
-                return_value="/tmp/frs_2022_23.h5",
+                "materialize_dataset",
+                return_value=DatasetSource(
+                    source_uri=dataset,
+                    path="/tmp/frs_2022_23.h5",
+                ),
             ):
                 microsim = uk_model.managed_microsimulation(
                     dataset=dataset,

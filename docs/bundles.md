@@ -49,15 +49,17 @@ To materialize a default or named artifact without installing the complete
 package scaffold:
 
 ```python
-from policyengine.provenance import materialize_bundle_dataset
+from policyengine.provenance import materialize_dataset
 
-result = materialize_bundle_dataset("us", "populace_us_2024")
+result = materialize_dataset("us", "populace_us_2024")
 print(result.path)
-print(result.sha256)
+print(result.bundle_dataset.sha256)
 ```
 
-`materialize_bundle_dataset` returns the selected source package, repository
-type, revision, verified SHA-256, local path, and optional metadata path.
+`materialize_dataset` returns the selected source URI and local path. For a
+bundle-managed input, `bundle_dataset` also contains the selected source
+package, repository type, revision, verified SHA-256, and optional metadata
+path.
 `policyengine-*-data` and `populace-data` artifacts use the repository type
 recorded in the bundle. Callers do not infer repository type from the repository
 name.

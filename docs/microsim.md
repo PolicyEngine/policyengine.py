@@ -138,15 +138,15 @@ To materialize the raw certified artifact without creating uprated yearly
 datasets, use PolicyEngine.py's bundle API:
 
 ```python
-from policyengine.provenance import materialize_bundle_dataset
+from policyengine.provenance import materialize_dataset
 
-result = materialize_bundle_dataset(
+result = materialize_dataset(
     "uk",
     "enhanced_frs_2024_25",
 )
 
 print(result.path)
-print(result.sha256)
+print(result.bundle_dataset.sha256)
 ```
 
 The bundle API uses the repository type recorded in the bundle, so callers do

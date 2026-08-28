@@ -12,6 +12,7 @@ from microdf import MicroDataFrame
 import policyengine.tax_benefit_models.us.datasets as us_datasets_module
 from policyengine.provenance.dataset_materialization import (
     DatasetMaterializationError,
+    DatasetSource,
     MaterializedDataset,
 )
 from policyengine.tax_benefit_models.us.datasets import (
@@ -153,9 +154,9 @@ def _manifest_with_long_term_sha(
     )
 
 
-def _materialized_long_term(path: Path, dataset_uri: str) -> MaterializedDataset:
+def _materialized_long_term(path: Path, dataset_uri: str) -> DatasetSource:
     actual_sha256 = _sha256(path)
-    return MaterializedDataset(
+    bundle_dataset = MaterializedDataset(
         data_package_name="policyengine-us-data",
         repo_type="model",
         revision="abc123",
@@ -163,6 +164,11 @@ def _materialized_long_term(path: Path, dataset_uri: str) -> MaterializedDataset
         sha256=actual_sha256,
         path=path,
         metadata_path=Path(f"{path}.metadata.json"),
+    )
+    return DatasetSource(
+        source_uri=dataset_uri,
+        path=str(path),
+        bundle_dataset=bundle_dataset,
     )
 
 
@@ -304,7 +310,7 @@ def test__load_managed_long_term_datasets__loads_verified_bundle_file(
     )
     monkeypatch.setattr(
         us_datasets_module,
-        "materialize_bundle_dataset",
+        "materialize_dataset",
         lambda *args, **kwargs: _materialized_long_term(h5_path, dataset_uri),
     )
 
@@ -342,7 +348,7 @@ def test__load_managed_long_term_datasets__defaults_to_manifest_model_version(
     )
     monkeypatch.setattr(
         us_datasets_module,
-        "materialize_bundle_dataset",
+        "materialize_dataset",
         lambda *args, **kwargs: _materialized_long_term(h5_path, dataset_uri),
     )
 
@@ -365,7 +371,7 @@ def test__load_managed_long_term_datasets__checks_manifest_sha256(
     )
     monkeypatch.setattr(
         us_datasets_module,
-        "materialize_bundle_dataset",
+        "materialize_dataset",
         Mock(side_effect=DatasetMaterializationError("sha256 mismatch")),
     )
 
@@ -391,7 +397,7 @@ def test__load_managed_long_term_datasets__propagates_metadata_hash_failure(
     )
     monkeypatch.setattr(
         us_datasets_module,
-        "materialize_bundle_dataset",
+        "materialize_dataset",
         Mock(side_effect=DatasetMaterializationError("metadata sha256 mismatch")),
     )
 
@@ -416,7 +422,7 @@ def test__load_managed_long_term_datasets__requests_file_in_data_folder(
     materialize = Mock(return_value=_materialized_long_term(h5_path, dataset_uri))
     monkeypatch.setattr(
         us_datasets_module,
-        "materialize_bundle_dataset",
+        "materialize_dataset",
         materialize,
     )
 

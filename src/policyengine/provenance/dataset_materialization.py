@@ -16,9 +16,11 @@ from .manifest import (
     CountryReleaseManifest,
     _artifact_revision,
     build_hf_uri,
+    dataset_logical_name,
     get_release_manifest,
     https_dataset_uri,
     hugging_face_auth_headers,
+    resolve_managed_dataset_reference,
 )
 
 DEFAULT_DATA_DIR = Path("./data")
@@ -26,7 +28,7 @@ DOWNLOAD_TIMEOUT_SECONDS = 60
 
 
 class DatasetMaterializationError(ValueError):
-    """Raised when a bundle dataset cannot be made available safely."""
+    """Raised when a requested dataset cannot be made available safely."""
 
 
 @dataclass(frozen=True)
@@ -40,6 +42,19 @@ class MaterializedDataset:
     sha256: str
     path: Path
     metadata_path: Optional[Path] = None
+
+
+@dataclass(frozen=True)
+class DatasetSource:
+    """Dataset source selected for a country-package calculation."""
+
+    source_uri: str
+    path: str
+    bundle_dataset: Optional[MaterializedDataset] = None
+
+    @property
+    def name(self) -> str:
+        return dataset_logical_name(self.source_uri)
 
 
 @dataclass(frozen=True)
@@ -103,17 +118,140 @@ def _resolve_bundle_dataset(
     )
 
 
-def materialize_bundle_dataset(
+def materialize_dataset(
     country_id: str,
     dataset: Optional[str] = None,
     *,
+    allow_unmanaged: bool = False,
     data_dir: Path = DEFAULT_DATA_DIR,
-) -> MaterializedDataset:
-    """Return a verified local copy of a dataset from the installed bundle."""
+) -> DatasetSource:
+    """Select a dataset source and return the local file used for calculation."""
 
-    return _reuse_or_download_bundle_files(
-        _resolve_bundle_dataset(country_id, dataset, data_dir=data_dir)
+    manifest = get_release_manifest(country_id)
+    if dataset is None or dataset == manifest.default_dataset_uri:
+        return _use_bundle_dataset(
+            country_id,
+            manifest.default_dataset,
+            data_dir=data_dir,
+            manifest=manifest,
+        )
+    if dataset in manifest.datasets:
+        return _use_bundle_dataset(
+            country_id,
+            dataset,
+            data_dir=data_dir,
+            manifest=manifest,
+        )
+
+    source_uri = resolve_managed_dataset_reference(
+        country_id,
+        dataset,
+        allow_unmanaged=allow_unmanaged,
     )
+    if source_uri.startswith("hf://"):
+        return _download_hugging_face_dataset(source_uri, data_dir=data_dir)
+    if "://" in source_uri:
+        raise DatasetMaterializationError(
+            f"Unsupported explicit dataset URI: {source_uri!r}."
+        )
+    return _use_local_dataset(source_uri)
+
+
+def _use_bundle_dataset(
+    country_id: str,
+    dataset: str,
+    *,
+    data_dir: Path,
+    manifest: CountryReleaseManifest,
+) -> DatasetSource:
+    bundle_dataset = _reuse_or_download_bundle_files(
+        _resolve_bundle_dataset(
+            country_id,
+            dataset,
+            data_dir=data_dir,
+            manifest=manifest,
+        )
+    )
+    return DatasetSource(
+        source_uri=bundle_dataset.source_uri,
+        path=str(bundle_dataset.path),
+        bundle_dataset=bundle_dataset,
+    )
+
+
+def _download_hugging_face_dataset(
+    dataset_uri: str,
+    *,
+    data_dir: Path,
+) -> DatasetSource:
+    path_with_repo, revision = (
+        dataset_uri[5:].rsplit("@", maxsplit=1)
+        if "@" in dataset_uri[5:]
+        else (dataset_uri[5:], "main")
+    )
+    parts = path_with_repo.split("/", maxsplit=2)
+    if len(parts) != 3 or not all(parts):
+        raise DatasetMaterializationError(
+            "Invalid Hugging Face dataset URI. Expected format "
+            f"'hf://owner/repo/path/to/file[@revision]', got {dataset_uri!r}."
+        )
+
+    repo_id = f"{parts[0]}/{parts[1]}"
+    repository_path = parts[2]
+    destination = data_dir / Path(repository_path).name
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    for repo_type in ("model", "dataset"):
+        file_descriptor, temp_name = tempfile.mkstemp(
+            prefix=".policyengine-download-",
+            suffix=destination.suffix or ".download",
+            dir=destination.parent,
+        )
+        os.close(file_descriptor)
+        temporary_path = Path(temp_name)
+        url = https_dataset_uri(
+            repo_id,
+            repository_path,
+            revision,
+            repo_type=repo_type,
+        )
+        try:
+            with requests.get(
+                url,
+                headers=hugging_face_auth_headers(),
+                stream=True,
+                timeout=DOWNLOAD_TIMEOUT_SECONDS,
+            ) as response:
+                if response.status_code in {401, 403}:
+                    raise DatasetMaterializationError(
+                        "Could not download explicit dataset "
+                        f"{dataset_uri!r}: Hugging Face rejected the configured "
+                        "credentials. Set HUGGING_FACE_TOKEN to a token with "
+                        "access to the repository."
+                    )
+                if response.status_code == 404:
+                    if repo_type == "model":
+                        continue
+                    raise DatasetMaterializationError(
+                        f"Could not find explicit dataset {dataset_uri!r}."
+                    )
+                response.raise_for_status()
+                with temporary_path.open("wb") as output:
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            output.write(chunk)
+            os.replace(temporary_path, destination)
+            return DatasetSource(source_uri=dataset_uri, path=str(destination))
+        finally:
+            temporary_path.unlink(missing_ok=True)
+
+    raise DatasetMaterializationError(
+        f"Could not download explicit dataset {dataset_uri!r}."
+    )
+
+
+def _use_local_dataset(dataset_path: str) -> DatasetSource:
+    return DatasetSource(source_uri=dataset_path, path=dataset_path)
 
 
 def _reuse_or_download_bundle_files(

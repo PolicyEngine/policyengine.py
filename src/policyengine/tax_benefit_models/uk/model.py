@@ -6,17 +6,9 @@ from microdf import MicroDataFrame
 
 from policyengine.core import TaxBenefitModel
 from policyengine.provenance.dataset_materialization import (
-    DatasetMaterializationError,
-    materialize_bundle_dataset,
-)
-from policyengine.provenance.manifest import (
-    get_release_manifest,
-    resolve_managed_dataset_reference,
+    materialize_dataset,
 )
 from policyengine.tax_benefit_models.common import MicrosimulationModelVersion
-from policyengine.tax_benefit_models.common.dataset_source import (
-    download_hf_dataset,
-)
 from policyengine.tax_benefit_models.common.model_version import (
     build_runtime_dataset_provenance,
 )
@@ -293,50 +285,29 @@ def managed_microsimulation(
             "**kwargs, so policyengine.py can enforce the release bundle."
         )
 
-    manifest = get_release_manifest("uk")
-    if dataset is None or dataset == manifest.default_dataset_uri:
-        managed_dataset = manifest.default_dataset
-    elif dataset in manifest.datasets:
-        managed_dataset = dataset
-    else:
-        managed_dataset = None
-    materialized = None
-    if managed_dataset is not None:
-        materialized = materialize_bundle_dataset("uk", managed_dataset)
-        dataset_uri = materialized.source_uri
-        runtime_dataset_source = str(materialized.path)
-    else:
-        dataset_uri = resolve_managed_dataset_reference(
-            "uk",
-            dataset,
-            allow_unmanaged=allow_unmanaged,
-        )
-        if dataset_uri.startswith("hf://"):
-            runtime_dataset_source = download_hf_dataset(dataset_uri)
-        elif "://" in dataset_uri:
-            raise DatasetMaterializationError(
-                f"Unsupported explicit dataset URI: {dataset_uri!r}."
-            )
-        else:
-            runtime_dataset_source = dataset_uri
-    runtime_dataset = runtime_dataset_source
-    if isinstance(runtime_dataset_source, str) and "://" not in runtime_dataset_source:
+    source = materialize_dataset(
+        "uk",
+        dataset,
+        allow_unmanaged=allow_unmanaged,
+    )
+    runtime_dataset = source.path
+    if "://" not in source.path:
         from policyengine_uk.data.dataset_schema import (
             UKMultiYearDataset,
             UKSingleYearDataset,
         )
 
-        if UKMultiYearDataset.validate_file_path(runtime_dataset_source, False):
-            runtime_dataset = UKMultiYearDataset(runtime_dataset_source)
-        elif UKSingleYearDataset.validate_file_path(runtime_dataset_source, False):
-            runtime_dataset = UKSingleYearDataset(runtime_dataset_source)
+        if UKMultiYearDataset.validate_file_path(source.path, False):
+            runtime_dataset = UKMultiYearDataset(source.path)
+        elif UKSingleYearDataset.validate_file_path(source.path, False):
+            runtime_dataset = UKSingleYearDataset(source.path)
     microsim = Microsimulation(dataset=runtime_dataset, **kwargs)
     microsim.policyengine_bundle = dict(uk_latest.release_bundle)
     microsim.policyengine_bundle.update(
         build_runtime_dataset_provenance(
-            dataset_uri,
-            runtime_dataset_source,
-            materialized,
+            source.source_uri,
+            source.path,
+            source.bundle_dataset,
         )
     )
     return microsim
