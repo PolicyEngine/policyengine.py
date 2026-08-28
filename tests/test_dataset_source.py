@@ -7,6 +7,7 @@ import policyengine.provenance.dataset_materialization as dataset_source
 from policyengine.provenance.dataset_materialization import (
     DatasetMaterializationError,
     DatasetSource,
+    MaterializedDataset,
     materialize_dataset,
 )
 
@@ -64,6 +65,7 @@ def test_explicit_hf_download_retries_dataset_repository_after_model_404(tmp_pat
     assert result.bundle_dataset is None
     assert "/policyengine/example/" in session.calls[0][0]
     assert "/datasets/policyengine/example/" in session.calls[1][0]
+    assert DatasetSource.model_validate_json(result.model_dump_json()) == result
 
 
 def test_explicit_hf_authentication_failure_does_not_retry(tmp_path):
@@ -90,9 +92,18 @@ def test_explicit_hf_download_rejects_non_hf_uri(tmp_path):
 
 
 def test_bundle_dataset_uses_bundle_strategy(tmp_path):
+    bundle_dataset = MaterializedDataset(
+        data_package_name="populace-data",
+        repo_type="dataset",
+        revision="release",
+        source_uri=("hf://policyengine/populace-us/populace_us_2024.h5@release"),
+        sha256="a" * 64,
+        path=tmp_path / "populace_us_2024.h5",
+    )
     expected = DatasetSource(
-        source_uri="hf://policyengine/populace-us/populace_us_2024.h5@release",
-        path=str(tmp_path / "populace_us_2024.h5"),
+        source_uri=bundle_dataset.source_uri,
+        path=str(bundle_dataset.path),
+        bundle_dataset=bundle_dataset,
     )
 
     with patch.object(
@@ -108,6 +119,7 @@ def test_bundle_dataset_uses_bundle_strategy(tmp_path):
 
     assert result is expected
     use_bundle.assert_called_once()
+    assert DatasetSource.model_validate_json(result.model_dump_json()) == result
 
 
 def test_explicit_local_path_uses_local_strategy(tmp_path):
@@ -125,3 +137,4 @@ def test_explicit_local_path_uses_local_strategy(tmp_path):
         source_uri=str(local_path),
         path=str(local_path),
     )
+    assert DatasetSource.model_validate_json(result.model_dump_json()) == result

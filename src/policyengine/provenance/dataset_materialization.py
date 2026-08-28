@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Literal, Optional
 
 import requests
+from pydantic import BaseModel, ConfigDict
 
 from policyengine.utils.hashing import sha256_file
 
@@ -31,9 +32,10 @@ class DatasetMaterializationError(ValueError):
     """Raised when a requested dataset cannot be made available safely."""
 
 
-@dataclass(frozen=True)
-class MaterializedDataset:
+class MaterializedDataset(BaseModel):
     """Local file and provenance values for a verified bundle dataset."""
+
+    model_config = ConfigDict(frozen=True)
 
     data_package_name: str
     repo_type: Literal["model", "dataset"]
@@ -44,9 +46,10 @@ class MaterializedDataset:
     metadata_path: Optional[Path] = None
 
 
-@dataclass(frozen=True)
-class DatasetSource:
+class DatasetSource(BaseModel):
     """Dataset source selected for a country-package calculation."""
+
+    model_config = ConfigDict(frozen=True)
 
     source_uri: str
     path: str
