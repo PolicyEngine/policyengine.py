@@ -160,10 +160,8 @@ def _materialized_long_term(path: Path, dataset_uri: str) -> MaterializedDataset
         repo_type="model",
         revision="abc123",
         source_uri=dataset_uri,
-        expected_sha256=actual_sha256,
-        actual_sha256=actual_sha256,
+        sha256=actual_sha256,
         path=path,
-        cache_hit=True,
         metadata_path=Path(f"{path}.metadata.json"),
     )
 

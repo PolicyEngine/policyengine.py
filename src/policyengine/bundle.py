@@ -24,12 +24,12 @@ import requests
 from policyengine.provenance.dataset_materialization import (
     DatasetMaterializationError,
     MaterializedDataset,
-    _materialize_resolved_dataset,
+    _BundleDatasetSpec,
     _resolve_bundle_dataset,
-    _ResolvedBundleDataset,
-    _sha256_file,
+    _reuse_or_download_bundle_files,
 )
 from policyengine.provenance.manifest import CountryReleaseManifest
+from policyengine.utils.hashing import sha256_file
 
 BUNDLE_MANIFEST_RESOURCE = ("data", "bundle", "manifest.json")
 BUNDLE_HISTORY_RESOURCE = ("data", "bundles")
@@ -269,7 +269,7 @@ def install_package_scaffold(
 
 
 def _confirm_dataset_install(
-    plans: Sequence[_ResolvedBundleDataset],
+    plans: Sequence[_BundleDatasetSpec],
     *,
     data_dir: Path,
     yes: bool,
@@ -289,7 +289,7 @@ def _confirm_dataset_install(
 
 
 def _receipt_dataset(
-    plan: _ResolvedBundleDataset,
+    plan: _BundleDatasetSpec,
     release: Mapping[str, Any],
     *,
     materialized: Optional[MaterializedDataset] = None,
@@ -306,9 +306,9 @@ def _receipt_dataset(
     }
     if release.get("build_id"):
         receipt["build_id"] = release["build_id"]
-    receipt["expected_sha256"] = plan.expected_sha256
+    receipt["expected_sha256"] = plan.sha256
     if materialized is not None:
-        receipt["installed_sha256"] = materialized.actual_sha256
+        receipt["installed_sha256"] = materialized.sha256
     return receipt
 
 
@@ -317,7 +317,7 @@ def _selected_dataset_plans(
     countries: Sequence[str],
     *,
     data_dir: Path,
-) -> list[tuple[_ResolvedBundleDataset, Mapping[str, Any]]]:
+) -> list[tuple[_BundleDatasetSpec, Mapping[str, Any]]]:
     releases = manifest.get("data_releases")
     if not isinstance(releases, Mapping):
         raise BundleError("Bundle manifest does not contain data releases.")
@@ -418,7 +418,7 @@ def install_bundle(
                 installed_datasets.append(_receipt_dataset(plan, release))
                 continue
             try:
-                materialized = _materialize_resolved_dataset(plan)
+                materialized = _reuse_or_download_bundle_files(plan)
             except DatasetMaterializationError as exc:
                 raise BundleError(str(exc)) from exc
             installed_datasets.append(
@@ -638,7 +638,7 @@ def _dataset_checks(
 
 
 def _dataset_check(
-    plan: _ResolvedBundleDataset,
+    plan: _BundleDatasetSpec,
     release: Mapping[str, Any],
     receipt_dataset: Optional[Mapping[str, Any]],
 ) -> dict[str, Any]:
@@ -648,7 +648,7 @@ def _dataset_check(
         "dataset": plan.dataset,
         "expected_version": expected_version,
         "expected_path": str(plan.destination),
-        "expected_sha256": plan.expected_sha256,
+        "expected_sha256": plan.sha256,
     }
     if receipt_dataset is None:
         check["status"] = "missing_receipt"
@@ -661,11 +661,9 @@ def _dataset_check(
     if not path.exists():
         check["status"] = "missing_file"
         return check
-    actual_sha256 = _sha256_file(path)
+    actual_sha256 = sha256_file(path)
     check["installed_version"] = receipt_dataset.get("version")
     check["installed_sha256"] = actual_sha256
     check["path"] = str(path)
-    check["status"] = (
-        "ok" if actual_sha256 == plan.expected_sha256 else "sha256_mismatch"
-    )
+    check["status"] = "ok" if actual_sha256 == plan.sha256 else "sha256_mismatch"
     return check

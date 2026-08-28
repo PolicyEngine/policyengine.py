@@ -13,16 +13,23 @@ from pydantic import ConfigDict, Field
 
 from policyengine.core import Dataset, YearData
 from policyengine.provenance.dataset_materialization import (
+    DatasetMaterializationError,
     MaterializedDataset,
-    _materialize_dataset_request,
-    _runtime_dataset_provenance,
     materialize_bundle_dataset,
 )
 from policyengine.provenance.manifest import (
     dataset_logical_name,
     get_release_manifest,
     resolve_dataset_reference,
+    resolve_managed_dataset_reference,
 )
+from policyengine.tax_benefit_models.common.dataset_source import (
+    download_hf_dataset,
+)
+from policyengine.tax_benefit_models.common.model_version import (
+    build_runtime_dataset_provenance,
+)
+from policyengine.utils.hashing import sha256_file
 
 
 class USYearData(YearData):
@@ -299,12 +306,38 @@ def create_datasets(
     datasets = datasets or [get_release_manifest("us").default_dataset]
     result = {}
     for dataset in datasets:
-        resolved_dataset, runtime_dataset, _ = _materialize_dataset_request(
-            "us",
-            dataset,
-            allow_unmanaged=allow_unmanaged,
-            data_dir=Path(data_folder),
-        )
+        manifest = get_release_manifest("us")
+        if dataset == manifest.default_dataset_uri:
+            managed_dataset = manifest.default_dataset
+        elif dataset in manifest.datasets:
+            managed_dataset = dataset
+        else:
+            managed_dataset = None
+        if managed_dataset is not None:
+            materialized = materialize_bundle_dataset(
+                "us",
+                managed_dataset,
+                data_dir=Path(data_folder),
+            )
+            resolved_dataset = materialized.source_uri
+            runtime_dataset = str(materialized.path)
+        else:
+            resolved_dataset = resolve_managed_dataset_reference(
+                "us",
+                dataset,
+                allow_unmanaged=allow_unmanaged,
+            )
+            if resolved_dataset.startswith("hf://"):
+                runtime_dataset = download_hf_dataset(
+                    resolved_dataset,
+                    data_dir=Path(data_folder),
+                )
+            elif "://" in resolved_dataset:
+                raise DatasetMaterializationError(
+                    f"Unsupported explicit dataset URI: {resolved_dataset!r}."
+                )
+            else:
+                runtime_dataset = resolved_dataset
         dataset_stem = dataset_logical_name(resolved_dataset)
         sim = Microsimulation(dataset=runtime_dataset)
 
@@ -583,7 +616,7 @@ def _runtime_policyengine_us_metadata() -> dict[str, Any]:
             result["direct_url"] = {}
     package_file = _runtime_policyengine_us_package_file()
     if package_file is not None:
-        result["package_file_sha256"] = _sha256_file(package_file)
+        result["package_file_sha256"] = sha256_file(package_file)
         result["package_tree_sha256"] = _sha256_directory(package_file.parent)
     return result
 
@@ -861,7 +894,7 @@ def _build_long_term_dataset(
     if dataset_uri is not None:
         dataset.metadata.setdefault("policyengine_bundle", {})
         dataset.metadata["policyengine_bundle"].update(
-            _runtime_dataset_provenance(
+            build_runtime_dataset_provenance(
                 dataset_uri,
                 str(path),
                 materialized,
@@ -925,14 +958,6 @@ def _validate_loaded_long_term_metadata(
         require_policyengine_us_clean_build=require_policyengine_us_clean_build,
         require_runtime_policyengine_us_match=require_runtime_policyengine_us_match,
     )
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as file:
-        for chunk in iter(lambda: file.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def load_long_term_datasets(
@@ -1051,10 +1076,10 @@ def load_managed_long_term_datasets(
     """Load bundled long-term US datasets from the managed release manifest.
 
     Each requested year must have a logical dataset entry named
-    ``{dataset_name}_{year}`` in the bundled US manifest. A verified local mirror
-    is reused when available; otherwise the exact bundle-certified Hugging Face
-    artifact and its certified metadata sidecar are materialized into
-    ``data_folder``.
+    ``{dataset_name}_{year}`` in the bundled US manifest. A verified file in
+    ``data_folder`` is reused when available; otherwise the exact
+    bundle-certified Hugging Face artifact and its certified metadata sidecar
+    are downloaded there.
     """
 
     manifest = get_release_manifest("us")

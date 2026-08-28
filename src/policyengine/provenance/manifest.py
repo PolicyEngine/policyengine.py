@@ -2,20 +2,16 @@ import hashlib
 import json
 import os
 from functools import lru_cache
-from importlib import import_module
 from importlib.resources import files
 from pathlib import Path
 from typing import Literal, Optional
+from urllib.parse import quote
 
 import requests
 from pydantic import BaseModel, Field
 
 HF_REQUEST_TIMEOUT_SECONDS = 30
 PYPI_REQUEST_TIMEOUT_SECONDS = 30
-LOCAL_DATA_REPO_HINTS = {
-    "us": ("policyengine_us", "policyengine-us-data", "policyengine_us_data"),
-    "uk": ("policyengine_uk", "policyengine-uk-data", "policyengine_uk_data"),
-}
 
 
 class DataReleaseManifestUnavailableError(ValueError):
@@ -203,7 +199,21 @@ def https_dataset_uri(
 ) -> str:
     """Return a dereferenceable HTTPS URI for a Hugging Face dataset artifact."""
     prefix = "datasets/" if repo_type == "dataset" else ""
-    return f"https://huggingface.co/{prefix}{repo_id}/resolve/{revision}/{path_in_repo}"
+    return (
+        f"https://huggingface.co/{prefix}{repo_id}/resolve/"
+        f"{quote(revision, safe='')}/{quote(path_in_repo)}"
+    )
+
+
+def hugging_face_auth_headers() -> dict[str, str]:
+    """Return authentication headers for Hugging Face requests."""
+
+    token = (
+        os.environ.get("HUGGING_FACE_TOKEN")
+        or os.environ.get("HF_TOKEN")
+        or os.environ.get("HUGGINGFACE_HUB_TOKEN")
+    )
+    return {"Authorization": f"Bearer {token}"} if token else {}
 
 
 def _artifact_revision(data_package: "DataPackageVersion") -> str:
@@ -325,15 +335,10 @@ def get_release_manifest(country_id: str) -> CountryReleaseManifest:
 def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
     country_manifest = get_release_manifest(country_id)
 
-    headers = {}
-    token = os.environ.get("HUGGING_FACE_TOKEN")
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
     try:
         response = requests.get(
             https_release_manifest_uri(country_manifest.data_package),
-            headers=headers,
+            headers=hugging_face_auth_headers(),
             timeout=HF_REQUEST_TIMEOUT_SECONDS,
         )
     except requests.RequestException as exc:
@@ -596,67 +601,6 @@ def resolve_managed_dataset_reference(
         "`allow_unmanaged=True` only if you intend to resolve a dataset "
         "outside the policyengine.py release bundle."
     )
-
-
-def resolve_local_managed_dataset_source(
-    country_id: str,
-    dataset_uri: str,
-    *,
-    allow_local_mirror: bool = True,
-) -> str:
-    """Resolve a local mirror of a managed dataset when available.
-
-    This preserves the bundled dataset URI for provenance while allowing local
-    development environments with sibling data-repo checkouts to load the
-    exact certified artifact from disk rather than re-downloading it.
-    """
-
-    if not allow_local_mirror or not dataset_uri.startswith("hf://"):
-        return dataset_uri
-
-    local_hint = LOCAL_DATA_REPO_HINTS.get(country_id)
-    if local_hint is None:
-        return dataset_uri
-
-    path_without_revision = dataset_uri[5:].rsplit("@", 1)[0]
-    parts = path_without_revision.split("/", 2)
-    if len(parts) != 3:
-        return dataset_uri
-    _, _, path_in_repo = parts
-
-    model_module_name, data_repo_name, data_package_name = local_hint
-    explicit_repo_roots = []
-    country_env = f"POLICYENGINE_{country_id.upper()}_DATA_REPO"
-    for env_name in (country_env, "POLICYENGINE_LOCAL_DATA_REPO_ROOT"):
-        env_value = os.environ.get(env_name)
-        if env_value:
-            explicit_repo_roots.extend(
-                [
-                    Path(env_value).expanduser(),
-                    Path(env_value).expanduser() / data_repo_name,
-                ]
-            )
-
-    for candidate_repo_root in explicit_repo_roots:
-        local_path = candidate_repo_root / data_package_name / "storage" / path_in_repo
-        if local_path.exists():
-            return str(local_path)
-
-    try:
-        model_module = import_module(model_module_name)
-    except ImportError:
-        return dataset_uri
-
-    repo_root = Path(model_module.__file__).resolve().parents[1]
-    local_path = (
-        repo_root.with_name(data_repo_name)
-        / data_package_name
-        / "storage"
-        / path_in_repo
-    )
-    if local_path.exists():
-        return str(local_path)
-    return dataset_uri
 
 
 def dataset_logical_name(dataset: str) -> str:

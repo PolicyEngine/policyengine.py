@@ -146,7 +146,7 @@ result = materialize_bundle_dataset(
 )
 
 print(result.path)
-print(result.actual_sha256)
+print(result.sha256)
 ```
 
 The bundle API uses the repository type recorded in the bundle, so callers do
@@ -246,8 +246,7 @@ bundle. Explicit local paths and Hugging Face URIs remain supported in this
 mode. GCS dataset URIs are not supported.
 
 For managed simulations, `sim.policyengine_bundle` records the actual source
-package, repository type, revision, expected and actual SHA-256, local path, and
-whether an already verified file was reused.
+package, repository type, revision, verified SHA-256, and local path.
 
 ## Pinned model versions
 

@@ -33,7 +33,6 @@ from policyengine.provenance.manifest import (
     https_release_manifest_uri,
     resolve_dataset_reference,
     resolve_default_datasets,
-    resolve_local_managed_dataset_source,
     resolve_managed_dataset_reference,
     resolve_region_dataset_path,
 )
@@ -101,16 +100,9 @@ def _materialized_dataset(
         repo_type=plan.repo_type,
         revision=plan.revision,
         source_uri=plan.source_uri,
-        expected_sha256=plan.expected_sha256,
-        actual_sha256=plan.expected_sha256,
+        sha256=plan.sha256,
         path=Path(path),
-        cache_hit=False,
     )
-
-
-def _materialized_dataset_request(country_id: str, dataset: str, path: str):
-    materialized = _materialized_dataset(country_id, dataset, path)
-    return materialized.source_uri, str(materialized.path), materialized
 
 
 UK_LEGACY_DATA_RELEASE_REVISION = "655dd07e4bb9c777b00dac044949611f1feb824f"
@@ -453,28 +445,6 @@ class TestReleaseManifests:
         dataset = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.73.0"
 
         assert dataset_logical_name(dataset) == "enhanced_cps_2024"
-
-    def test__given_explicit_local_data_repo__then_resolves_local_mirror(
-        self, monkeypatch, tmp_path
-    ):
-        local_dataset = (
-            tmp_path
-            / "policyengine-us-data"
-            / "policyengine_us_data"
-            / "storage"
-            / "long_term"
-            / "2100.h5"
-        )
-        local_dataset.parent.mkdir(parents=True)
-        local_dataset.write_text("", encoding="utf-8")
-        monkeypatch.setenv("POLICYENGINE_LOCAL_DATA_REPO_ROOT", str(tmp_path))
-
-        resolved = resolve_local_managed_dataset_source(
-            "us",
-            "hf://policyengine/policyengine-us-data/long_term/2100.h5@candidate",
-        )
-
-        assert resolved == str(local_dataset)
 
     def test__given_country__then_can_fetch_data_release_manifest(self):
         get_data_release_manifest.cache_clear()
@@ -954,8 +924,8 @@ class TestReleaseManifests:
             )
             with patch.object(
                 us_model,
-                "_materialize_dataset_request",
-                return_value=_materialized_dataset_request(
+                "materialize_bundle_dataset",
+                return_value=_materialized_dataset(
                     "us",
                     "populace_us_2024",
                     "/tmp/populace_us_2024.h5",
@@ -1003,8 +973,8 @@ class TestReleaseManifests:
             )
             with patch.object(
                 us_model,
-                "_materialize_dataset_request",
-                return_value=(dataset, "/tmp/cps_2023.h5", None),
+                "download_hf_dataset",
+                return_value="/tmp/cps_2023.h5",
             ):
                 microsim = us_model.managed_microsimulation(
                     dataset=dataset,
@@ -1072,8 +1042,8 @@ class TestReleaseManifests:
             )
             with patch.object(
                 uk_model,
-                "_materialize_dataset_request",
-                return_value=_materialized_dataset_request(
+                "materialize_bundle_dataset",
+                return_value=_materialized_dataset(
                     "uk",
                     "enhanced_frs_2024_25",
                     "/tmp/enhanced_frs_2024_25.h5",
@@ -1122,8 +1092,8 @@ class TestReleaseManifests:
             )
             with patch.object(
                 uk_model,
-                "_materialize_dataset_request",
-                return_value=(dataset, "/tmp/frs_2022_23.h5", None),
+                "download_hf_dataset",
+                return_value="/tmp/frs_2022_23.h5",
             ):
                 microsim = uk_model.managed_microsimulation(
                     dataset=dataset,

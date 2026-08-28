@@ -82,9 +82,6 @@ from .manifest import (
     resolve_dataset_reference as resolve_dataset_reference,
 )
 from .manifest import (
-    resolve_local_managed_dataset_source as resolve_local_managed_dataset_source,
-)
-from .manifest import (
     resolve_managed_dataset_reference as resolve_managed_dataset_reference,
 )
 from .trace import (

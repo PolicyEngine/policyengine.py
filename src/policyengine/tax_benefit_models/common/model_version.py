@@ -35,6 +35,7 @@ from policyengine.core import (
 )
 from policyengine.provenance.manifest import (
     certify_data_release_compatibility,
+    dataset_logical_name,
     get_release_manifest,
 )
 from policyengine.utils.entity_utils import build_entity_relationships
@@ -45,6 +46,7 @@ from policyengine.utils.parameter_labels import (
 
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
+    from policyengine.provenance.dataset_materialization import MaterializedDataset
 
 
 def output_dataset_filepath(simulation: Simulation) -> Path:
@@ -59,6 +61,33 @@ def output_dataset_filepath(simulation: Simulation) -> Path:
         Path(input_filepath).parent if input_filepath else Path(tempfile.gettempdir())
     )
     return parent / (simulation.id + ".h5")
+
+
+def build_runtime_dataset_provenance(
+    source_uri: str,
+    local_path: str,
+    materialized: Optional[MaterializedDataset],
+    *,
+    logical_name: Optional[str] = None,
+) -> dict[str, object]:
+    """Return the dataset fields recorded with a managed simulation."""
+
+    provenance: dict[str, object] = {
+        "managed_by": "policyengine.py",
+        "runtime_dataset": logical_name or dataset_logical_name(source_uri),
+        "runtime_dataset_uri": source_uri,
+        "runtime_dataset_source": local_path,
+    }
+    if materialized is not None:
+        provenance.update(
+            {
+                "runtime_dataset_data_package": materialized.data_package_name,
+                "runtime_dataset_repo_type": materialized.repo_type,
+                "runtime_dataset_revision": materialized.revision,
+                "runtime_dataset_sha256": materialized.sha256,
+            }
+        )
+    return provenance
 
 
 class MicrosimulationModelVersion(TaxBenefitModelVersion):

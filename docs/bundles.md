@@ -53,14 +53,14 @@ from policyengine.provenance import materialize_bundle_dataset
 
 result = materialize_bundle_dataset("us", "populace_us_2024")
 print(result.path)
-print(result.actual_sha256)
+print(result.sha256)
 ```
 
-`materialize_bundle_dataset` returns a Pydantic model containing the selected
-source package, repository type, revision, expected and actual hashes, local
-path, and cache status. `policyengine-*-data` and `populace-data` artifacts are
-selected by their bundle package names. Callers do not infer repository type
-from the repository name.
+`materialize_bundle_dataset` returns the selected source package, repository
+type, revision, verified SHA-256, local path, and optional metadata path.
+`policyengine-*-data` and `populace-data` artifacts use the repository type
+recorded in the bundle. Callers do not infer repository type from the repository
+name.
 
 Managed datasets are downloaded from the Hugging Face artifact specified in the
 bundle. GCS dataset URIs are unsupported. The separate UK geography lookup files

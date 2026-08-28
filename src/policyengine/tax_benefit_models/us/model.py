@@ -6,10 +6,20 @@ from microdf import MicroDataFrame
 
 from policyengine.core import TaxBenefitModel
 from policyengine.provenance.dataset_materialization import (
-    _materialize_dataset_request,
-    _runtime_dataset_provenance,
+    DatasetMaterializationError,
+    materialize_bundle_dataset,
+)
+from policyengine.provenance.manifest import (
+    get_release_manifest,
+    resolve_managed_dataset_reference,
 )
 from policyengine.tax_benefit_models.common import MicrosimulationModelVersion
+from policyengine.tax_benefit_models.common.dataset_source import (
+    download_hf_dataset,
+)
+from policyengine.tax_benefit_models.common.model_version import (
+    build_runtime_dataset_provenance,
+)
 from policyengine.tax_benefit_models.common.model_version import (
     output_dataset_filepath as _output_dataset_filepath,
 )
@@ -426,15 +436,36 @@ def managed_microsimulation(
             "**kwargs, so policyengine.py can enforce the release bundle."
         )
 
-    dataset_uri, runtime_dataset_source, materialized = _materialize_dataset_request(
-        "us",
-        dataset,
-        allow_unmanaged=allow_unmanaged,
-    )
+    manifest = get_release_manifest("us")
+    if dataset is None or dataset == manifest.default_dataset_uri:
+        managed_dataset = manifest.default_dataset
+    elif dataset in manifest.datasets:
+        managed_dataset = dataset
+    else:
+        managed_dataset = None
+    materialized = None
+    if managed_dataset is not None:
+        materialized = materialize_bundle_dataset("us", managed_dataset)
+        dataset_uri = materialized.source_uri
+        runtime_dataset_source = str(materialized.path)
+    else:
+        dataset_uri = resolve_managed_dataset_reference(
+            "us",
+            dataset,
+            allow_unmanaged=allow_unmanaged,
+        )
+        if dataset_uri.startswith("hf://"):
+            runtime_dataset_source = download_hf_dataset(dataset_uri)
+        elif "://" in dataset_uri:
+            raise DatasetMaterializationError(
+                f"Unsupported explicit dataset URI: {dataset_uri!r}."
+            )
+        else:
+            runtime_dataset_source = dataset_uri
     microsim = Microsimulation(dataset=runtime_dataset_source, **kwargs)
     microsim.policyengine_bundle = dict(us_latest.release_bundle)
     microsim.policyengine_bundle.update(
-        _runtime_dataset_provenance(
+        build_runtime_dataset_provenance(
             dataset_uri,
             runtime_dataset_source,
             materialized,

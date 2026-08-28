@@ -78,7 +78,7 @@ def test_selected_dataset_plan_uses_certified_release_metadata(tmp_path):
     assert plan.data_package_name == "policyengine-uk-data"
     assert plan.repo_type == "model"
     assert plan.destination == tmp_path / "enhanced_frs_2024_25.h5"
-    assert plan.expected_sha256 == release["datasets"][plan.dataset]["sha256"]
+    assert plan.sha256 == release["datasets"][plan.dataset]["sha256"]
 
 
 def test_install_bundle_package_only_uses_explicit_python(monkeypatch, tmp_path):
@@ -160,13 +160,11 @@ def test_install_bundle_materializes_defaults_and_records_receipt(
             repo_type=plan.repo_type,
             revision=plan.revision,
             source_uri=plan.source_uri,
-            expected_sha256=plan.expected_sha256,
-            actual_sha256=plan.expected_sha256,
+            sha256=plan.sha256,
             path=plan.destination,
-            cache_hit=False,
         )
 
-    monkeypatch.setattr(bundle, "_materialize_resolved_dataset", fake_materialize)
+    monkeypatch.setattr(bundle, "_reuse_or_download_bundle_files", fake_materialize)
 
     result = bundle.install_bundle(
         python=sys.executable,
@@ -177,7 +175,7 @@ def test_install_bundle_materializes_defaults_and_records_receipt(
 
     assert [plan.country_id for plan in calls] == ["uk"]
     assert result["datasets"][0]["data_package_name"] == "policyengine-uk-data"
-    assert result["datasets"][0]["installed_sha256"] == calls[0].expected_sha256
+    assert result["datasets"][0]["installed_sha256"] == calls[0].sha256
     receipt = bundle.read_receipt(tmp_path)
     assert receipt is not None
     assert receipt["datasets"] == result["datasets"]

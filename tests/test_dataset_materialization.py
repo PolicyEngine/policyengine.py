@@ -1,14 +1,13 @@
 import hashlib
-from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
+import policyengine.provenance.dataset_materialization as dataset_materialization
 from policyengine.provenance.dataset_materialization import (
     DatasetMaterializationError,
-    MaterializedDataset,
-    _materialize_resolved_dataset,
-    _materialize_unmanaged_dataset_source,
     _resolve_bundle_dataset,
+    _reuse_or_download_bundle_files,
 )
 from policyengine.provenance.manifest import CountryReleaseManifest
 
@@ -52,42 +51,27 @@ def _manifest() -> CountryReleaseManifest:
 
 
 def test_resolve_bundle_dataset_inherits_primary_package(tmp_path):
-    plan = _resolve_bundle_dataset("uk", data_dir=tmp_path, manifest=_manifest())
+    dataset = _resolve_bundle_dataset("uk", data_dir=tmp_path, manifest=_manifest())
 
-    assert plan.data_package_name == "policyengine-uk-data"
-    assert plan.repo_id == "policyengine/policyengine-uk-data-private"
-    assert plan.repo_type == "model"
-    assert plan.revision == "uk-release"
-    assert plan.destination == tmp_path / "enhanced_frs_2024_25.h5"
+    assert dataset.data_package_name == "policyengine-uk-data"
+    assert dataset.repo_id == "policyengine/policyengine-uk-data-private"
+    assert dataset.repo_type == "model"
+    assert dataset.revision == "uk-release"
+    assert dataset.destination == tmp_path / "enhanced_frs_2024_25.h5"
 
 
 def test_resolve_bundle_dataset_uses_cross_package_overlay(tmp_path):
-    plan = _resolve_bundle_dataset(
+    dataset = _resolve_bundle_dataset(
         "uk",
         "populace_uk_2023",
         data_dir=tmp_path,
         manifest=_manifest(),
     )
 
-    assert plan.data_package_name == "populace-data"
-    assert plan.repo_id == "policyengine/populace-uk-private"
-    assert plan.repo_type == "model"
-    assert plan.revision == "populace-release"
-
-
-def test_materialized_dataset_round_trips_json():
-    plan = _resolve_bundle_dataset("uk", manifest=_manifest())
-    result = MaterializedDataset(
-        data_package_name=plan.data_package_name,
-        repo_type=plan.repo_type,
-        revision=plan.revision,
-        source_uri=plan.source_uri,
-        expected_sha256=plan.expected_sha256,
-        actual_sha256=plan.expected_sha256,
-        path=Path("data/enhanced_frs_2024_25.h5"),
-        cache_hit=True,
-    )
-    assert MaterializedDataset.model_validate_json(result.model_dump_json()) == result
+    assert dataset.data_package_name == "populace-data"
+    assert dataset.repo_id == "policyengine/populace-uk-private"
+    assert dataset.repo_type == "model"
+    assert dataset.revision == "populace-release"
 
 
 def _sha256(payload: bytes) -> str:
@@ -136,29 +120,30 @@ def _manifest_with_hash(
     return manifest
 
 
-def _materialize(manifest, tmp_path, session):
-    resolved = _resolve_bundle_dataset(
+def _download(manifest, tmp_path, session):
+    dataset = _resolve_bundle_dataset(
         "uk",
         data_dir=tmp_path,
         manifest=manifest,
     )
-    return _materialize_resolved_dataset(resolved, session=session)
+    with patch.object(dataset_materialization.requests, "get", side_effect=session.get):
+        return _reuse_or_download_bundle_files(dataset)
 
 
-def test_materialize_country_data_package_uses_model_repo_url(tmp_path):
+def test_country_data_package_uses_model_repository_url(tmp_path):
     session = _Session(_Response(b"country-data"))
     manifest = _manifest_with_hash(_sha256(b"country-data"))
 
-    result = _materialize(manifest, tmp_path, session)
+    result = _download(manifest, tmp_path, session)
 
     assert result.path.read_bytes() == b"country-data"
-    assert result.cache_hit is False
+    assert result.sha256 == _sha256(b"country-data")
     assert session.calls[0][0].startswith(
         "https://huggingface.co/policyengine/policyengine-uk-data-private/resolve/"
     )
 
 
-def test_materialize_populace_package_uses_dataset_repo_url(tmp_path):
+def test_populace_package_uses_dataset_repository_url(tmp_path):
     session = _Session(_Response(b"populace-data"))
     manifest = _manifest_with_hash(
         _sha256(b"populace-data"),
@@ -166,7 +151,7 @@ def test_materialize_populace_package_uses_dataset_repo_url(tmp_path):
         repo_type="dataset",
     )
 
-    result = _materialize(manifest, tmp_path, session)
+    result = _download(manifest, tmp_path, session)
 
     assert result.path.read_bytes() == b"populace-data"
     assert session.calls[0][0].startswith(
@@ -174,175 +159,76 @@ def test_materialize_populace_package_uses_dataset_repo_url(tmp_path):
     )
 
 
-def test_materialize_downloads_and_verifies_metadata_sidecar(tmp_path):
+def test_downloads_and_verifies_metadata_sidecar(tmp_path):
     dataset_payload = b"long-term-data"
     metadata_payload = b'{"year": 2100}'
     manifest = _manifest_with_hash(_sha256(dataset_payload))
-    reference = manifest.datasets[manifest.default_dataset]
-    reference.metadata_sha256 = _sha256(metadata_payload)
+    manifest.datasets[manifest.default_dataset].metadata_sha256 = _sha256(
+        metadata_payload
+    )
     session = _Session(_Response(dataset_payload), _Response(metadata_payload))
 
-    result = _materialize(manifest, tmp_path, session)
+    result = _download(manifest, tmp_path, session)
 
     assert result.metadata_path == (tmp_path / "enhanced_frs_2024_25.h5.metadata.json")
     assert result.metadata_path.read_bytes() == metadata_payload
     assert session.calls[1][0].endswith("/enhanced_frs_2024_25.h5.metadata.json")
 
 
-def test_materialize_reuses_only_hash_verified_cache(tmp_path):
+def test_reuses_destination_when_hash_matches(tmp_path):
     payload = b"certified"
     manifest = _manifest_with_hash(_sha256(payload))
     destination = tmp_path / "enhanced_frs_2024_25.h5"
     destination.write_bytes(payload)
     session = _Session()
 
-    result = _materialize(manifest, tmp_path, session)
+    result = _download(manifest, tmp_path, session)
 
-    assert result.cache_hit is True
+    assert result.path == destination
     assert session.calls == []
 
 
-def test_materialize_reuses_hash_verified_local_mirror(monkeypatch, tmp_path):
-    payload = b"certified-local-mirror"
-    manifest = _manifest_with_hash(_sha256(payload))
-    mirror = tmp_path / "mirror" / "enhanced_frs_2024_25.h5"
-    mirror.parent.mkdir()
-    mirror.write_bytes(payload)
-    monkeypatch.setattr(
-        "policyengine.provenance.dataset_materialization.resolve_local_managed_dataset_source",
-        lambda *args, **kwargs: str(mirror),
-    )
-    session = _Session()
-
-    result = _materialize(manifest, tmp_path, session)
-
-    assert result.path == mirror
-    assert result.cache_hit is True
-    assert session.calls == []
-
-
-def test_materialize_reuses_local_mirror_and_downloads_missing_metadata(
-    monkeypatch, tmp_path
-):
-    payload = b"certified-local-mirror"
-    metadata_payload = b'{"year": 2025}'
-    manifest = _manifest_with_hash(_sha256(payload))
-    manifest.datasets[manifest.default_dataset].metadata_sha256 = _sha256(
-        metadata_payload
-    )
-    mirror = tmp_path / "mirror" / "enhanced_frs_2024_25.h5"
-    mirror.parent.mkdir()
-    mirror.write_bytes(payload)
-    monkeypatch.setattr(
-        "policyengine.provenance.dataset_materialization.resolve_local_managed_dataset_source",
-        lambda *args, **kwargs: str(mirror),
-    )
-    session = _Session(_Response(metadata_payload))
-
-    result = _materialize(manifest, tmp_path, session)
-
-    assert result.path == mirror
-    assert result.metadata_path == tmp_path / "enhanced_frs_2024_25.h5.metadata.json"
-    assert result.metadata_path.read_bytes() == metadata_payload
-    assert len(session.calls) == 1
-
-
-def test_materialize_ignores_mismatched_local_mirror(monkeypatch, tmp_path):
-    payload = b"certified-download"
-    manifest = _manifest_with_hash(_sha256(payload))
-    mirror = tmp_path / "mirror" / "enhanced_frs_2024_25.h5"
-    mirror.parent.mkdir()
-    mirror.write_bytes(b"wrong")
-    monkeypatch.setattr(
-        "policyengine.provenance.dataset_materialization.resolve_local_managed_dataset_source",
-        lambda *args, **kwargs: str(mirror),
-    )
-    session = _Session(_Response(payload))
-
-    result = _materialize(manifest, tmp_path, session)
-
-    assert result.path == tmp_path / "enhanced_frs_2024_25.h5"
-    assert result.path.read_bytes() == payload
-    assert mirror.read_bytes() == b"wrong"
-
-
-def test_materialize_replaces_mismatched_cache(tmp_path):
+def test_replaces_destination_when_hash_does_not_match(tmp_path):
     payload = b"certified"
     manifest = _manifest_with_hash(_sha256(payload))
     destination = tmp_path / "enhanced_frs_2024_25.h5"
     destination.write_bytes(b"old")
 
-    _materialize(manifest, tmp_path, _Session(_Response(payload)))
+    _download(manifest, tmp_path, _Session(_Response(payload)))
 
     assert destination.read_bytes() == payload
 
 
-def test_hash_failure_does_not_replace_existing_cache(tmp_path):
+def test_hash_failure_preserves_existing_destination(tmp_path):
     manifest = _manifest_with_hash(_sha256(b"expected"))
     destination = tmp_path / "enhanced_frs_2024_25.h5"
     destination.write_bytes(b"old")
 
     with pytest.raises(DatasetMaterializationError, match="sha256"):
-        _materialize(manifest, tmp_path, _Session(_Response(b"wrong")))
+        _download(manifest, tmp_path, _Session(_Response(b"wrong")))
 
     assert destination.read_bytes() == b"old"
 
 
-def test_materialize_passes_hugging_face_token(monkeypatch, tmp_path):
+def test_download_passes_hugging_face_token(monkeypatch, tmp_path):
     monkeypatch.setenv("HUGGING_FACE_TOKEN", "secret-token")
     payload = b"certified"
     session = _Session(_Response(payload))
 
-    _materialize(_manifest_with_hash(_sha256(payload)), tmp_path, session)
+    _download(_manifest_with_hash(_sha256(payload)), tmp_path, session)
 
     assert session.calls[0][1]["headers"] == {"Authorization": "Bearer secret-token"}
 
 
 @pytest.mark.parametrize("status_code", [401, 403])
-def test_managed_auth_failure_does_not_retry_repo_type(tmp_path, status_code):
+def test_authentication_failure_does_not_retry_repository_type(tmp_path, status_code):
     session = _Session(_Response(status_code=status_code))
 
     with pytest.raises(DatasetMaterializationError, match="credentials"):
-        _materialize(
+        _download(
             _manifest_with_hash(_sha256(b"certified")),
             tmp_path,
             session,
         )
 
     assert len(session.calls) == 1
-
-
-def test_unmanaged_hf_retries_dataset_repo_only_after_not_found(tmp_path):
-    session = _Session(_Response(status_code=404), _Response(b"dataset"))
-
-    result = _materialize_unmanaged_dataset_source(
-        "hf://policyengine/example/data.h5@release",
-        data_dir=tmp_path,
-        session=session,
-    )
-
-    assert Path(result).read_bytes() == b"dataset"
-    assert "/policyengine/example/" in session.calls[0][0]
-    assert "/datasets/policyengine/example/" in session.calls[1][0]
-
-
-def test_unmanaged_auth_failure_does_not_retry(tmp_path):
-    session = _Session(_Response(status_code=403))
-
-    with pytest.raises(DatasetMaterializationError, match="credentials"):
-        _materialize_unmanaged_dataset_source(
-            "hf://policyengine/example/data.h5@release",
-            data_dir=tmp_path,
-            session=session,
-        )
-
-    assert len(session.calls) == 1
-
-
-def test_unmanaged_local_path_is_preserved():
-    assert _materialize_unmanaged_dataset_source("/tmp/custom.h5") == ("/tmp/custom.h5")
-
-
-def test_unmanaged_gcs_source_is_rejected():
-    with pytest.raises(DatasetMaterializationError, match="Unsupported unmanaged"):
-        _materialize_unmanaged_dataset_source("gs://bucket/data.h5@release")
