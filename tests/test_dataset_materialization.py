@@ -7,7 +7,7 @@ from policyengine.provenance.dataset_materialization import (
     BundleDatasetPlan,
     DatasetMaterializationError,
     MaterializedDataset,
-    _dataset_package_strategy,
+    _dataset_package_type,
     materialize_bundle_dataset,
     materialize_unmanaged_dataset_source,
     resolve_bundle_dataset_plan,
@@ -92,9 +92,21 @@ def test_bundle_dataset_models_round_trip_json():
     assert MaterializedDataset.model_validate_json(result.model_dump_json()) == result
 
 
+@pytest.mark.parametrize(
+    ("package_name", "expected_type"),
+    [
+        ("policyengine-us-data", "country"),
+        ("policyengine-uk-data", "country"),
+        ("populace-data", "populace"),
+    ],
+)
+def test_dataset_package_type(package_name, expected_type):
+    assert _dataset_package_type(package_name) == expected_type
+
+
 def test_unknown_data_package_is_rejected():
     with pytest.raises(DatasetMaterializationError, match="Unsupported bundle"):
-        _dataset_package_strategy("unknown-data")
+        _dataset_package_type("unknown-data")
 
 
 def _sha256(payload: bytes) -> str:

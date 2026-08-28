@@ -70,63 +70,16 @@ class MaterializedDataset(BaseModel):
     metadata_path: Optional[Path] = None
 
 
-class _DatasetPackageStrategy:
-    """Package-specific behavior for a bundle dataset source."""
-
-    def validate(self, plan: BundleDatasetPlan) -> None:
-        raise NotImplementedError
-
-    def materialize(
-        self,
-        plan: BundleDatasetPlan,
-        *,
-        session=requests,
-    ) -> MaterializedDataset:
-        raise NotImplementedError
+_DatasetPackageType = Literal["country", "populace"]
 
 
-class _CountryDataPackageStrategy(_DatasetPackageStrategy):
-    def validate(self, plan: BundleDatasetPlan) -> None:
-        package_name = plan.data_package_name
-        if not (
-            package_name.startswith("policyengine-") and package_name.endswith("-data")
-        ):
-            raise DatasetMaterializationError(
-                f"Unsupported country data package: {package_name!r}."
-            )
-
-    def materialize(
-        self,
-        plan: BundleDatasetPlan,
-        *,
-        session=requests,
-    ) -> MaterializedDataset:
-        return _materialize_country_data_package(plan, session=session)
-
-
-class _PopulaceDataPackageStrategy(_DatasetPackageStrategy):
-    def validate(self, plan: BundleDatasetPlan) -> None:
-        if plan.data_package_name != "populace-data":
-            raise DatasetMaterializationError(
-                f"Unsupported Populace data package: {plan.data_package_name!r}."
-            )
-
-    def materialize(
-        self,
-        plan: BundleDatasetPlan,
-        *,
-        session=requests,
-    ) -> MaterializedDataset:
-        return _materialize_populace_data_package(plan, session=session)
-
-
-def _dataset_package_strategy(data_package_name: str) -> _DatasetPackageStrategy:
+def _dataset_package_type(data_package_name: str) -> _DatasetPackageType:
     if data_package_name == "populace-data":
-        return _PopulaceDataPackageStrategy()
+        return "populace"
     if data_package_name.startswith("policyengine-") and data_package_name.endswith(
         "-data"
     ):
-        return _CountryDataPackageStrategy()
+        return "country"
     raise DatasetMaterializationError(
         "Unsupported bundle data package "
         f"{data_package_name!r}; expected 'populace-data' or "
@@ -199,7 +152,7 @@ def resolve_bundle_dataset_plan(
             else None
         ),
     )
-    _dataset_package_strategy(data_package_name).validate(plan)
+    _dataset_package_type(data_package_name)
     return plan
 
 
@@ -249,8 +202,10 @@ def materialize_bundle_dataset(
                             metadata_actual_sha256=metadata_actual_sha256,
                             metadata_path=metadata_path,
                         )
-    strategy = _dataset_package_strategy(plan.data_package_name)
-    return strategy.materialize(plan, session=session)
+    package_type = _dataset_package_type(plan.data_package_name)
+    if package_type == "populace":
+        return _materialize_populace_data_package(plan, session=session)
+    return _materialize_country_data_package(plan, session=session)
 
 
 def _materialize_country_data_package(
