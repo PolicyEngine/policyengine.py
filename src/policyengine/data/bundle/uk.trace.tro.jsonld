@@ -75,7 +75,7 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine.py bundle manifest for uk",
             "trov:mimeType": "application/json",
-            "trov:sha256": "b2f6dc37f9597ae0932c3b3b926f17cfd1cb622727bebe7a998f94c84b30adde"
+            "trov:sha256": "d11510105984e5f681b35efb2fa5c58cc6a0cf730ab97e3e1a240b2b49eea862"
           },
           {
             "@id": "composition/1/artifact/data_release_manifest",
@@ -102,7 +102,7 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "b3eaab80f13125c431d83da8fb4015814145513481fa6703f96502d9da787fa0"
+          "trov:sha256": "dfdc28587fe4b5181ab6dc803659c6f2222a4c27a3f3e9cc04a3f00ad3b6d5d5"
         }
       },
       "trov:hasPerformance": {

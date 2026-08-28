@@ -9,7 +9,10 @@ from policyengine.provenance.dataset_materialization import (
     _resolve_bundle_dataset,
     _reuse_or_download_bundle_files,
 )
-from policyengine.provenance.manifest import CountryReleaseManifest
+from policyengine.provenance.manifest import (
+    CountryReleaseManifest,
+    https_dataset_uri,
+)
 
 
 def _manifest() -> CountryReleaseManifest:
@@ -41,7 +44,7 @@ def _manifest() -> CountryReleaseManifest:
                     "data_package_name": "populace-data",
                     "path": "populace_uk_2023.h5",
                     "repo_id": "policyengine/populace-uk-private",
-                    "repo_type": "model",
+                    "repo_type": "dataset",
                     "revision": "populace-release",
                     "sha256": "b" * 64,
                 },
@@ -70,8 +73,25 @@ def test_resolve_bundle_dataset_uses_cross_package_overlay(tmp_path):
 
     assert dataset.data_package_name == "populace-data"
     assert dataset.repo_id == "policyengine/populace-uk-private"
-    assert dataset.repo_type == "model"
+    assert dataset.repo_type == "dataset"
     assert dataset.revision == "populace-release"
+
+
+def test_bundled_uk_populace_dataset_uses_dataset_repository_url():
+    dataset = _resolve_bundle_dataset("uk", "populace_uk_2023")
+
+    url = https_dataset_uri(
+        dataset.repo_id,
+        dataset.path,
+        dataset.revision,
+        repo_type=dataset.repo_type,
+    )
+
+    assert dataset.data_package_name == "populace-data"
+    assert dataset.repo_type == "dataset"
+    assert url.startswith(
+        "https://huggingface.co/datasets/policyengine/populace-uk-private/"
+    )
 
 
 def _sha256(payload: bytes) -> str:
