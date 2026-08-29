@@ -206,6 +206,17 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 ),
                 default_value=default_val,
                 value_type=var_obj.value_type,
+                definition_period=getattr(var_obj, "definition_period", None),
+                unit=getattr(var_obj, "unit", None),
+                quantity_type=getattr(var_obj, "quantity_type", None),
+                reference=getattr(var_obj, "reference", None),
+                defined_for=getattr(var_obj, "defined_for", None),
+                min_value=getattr(var_obj, "min_value", None),
+                max_value=getattr(var_obj, "max_value", None),
+                is_period_size_independent=getattr(
+                    var_obj, "is_period_size_independent", None
+                ),
+                metadata=getattr(var_obj, "metadata", None) or {},
             )
             if (
                 hasattr(var_obj, "possible_values")
@@ -255,6 +266,8 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 )
                 self.add_parameter(parameter)
             elif isinstance(param_node, CoreParameterNode):
+                if not param_node.children:
+                    continue
                 node = ParameterNode(
                     id=self.id + "-" + param_node.name,
                     name=param_node.name,
