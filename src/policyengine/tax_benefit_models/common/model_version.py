@@ -266,6 +266,8 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 )
                 self.add_parameter(parameter)
             elif isinstance(param_node, CoreParameterNode):
+                if not param_node.children:
+                    continue
                 node = ParameterNode(
                     id=self.id + "-" + param_node.name,
                     name=param_node.name,
