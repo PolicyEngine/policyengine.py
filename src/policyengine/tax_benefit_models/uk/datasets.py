@@ -6,9 +6,12 @@ from microdf import MicroDataFrame
 from pydantic import ConfigDict
 
 from policyengine.core import Dataset, YearData
-from policyengine.provenance.dataset_sources import materialize_dataset_source
+from policyengine.provenance.dataset_materialization import (
+    materialize_dataset,
+)
 from policyengine.provenance.manifest import (
     dataset_logical_name,
+    get_release_manifest,
     resolve_dataset_reference,
 )
 
@@ -113,20 +116,24 @@ class PolicyEngineUKDataset(Dataset):
 
 
 def create_datasets(
-    datasets: list[str] = [
-        "populace_uk_2023",
-    ],
+    datasets: Optional[list[str]] = None,
     years: list[int] = [2026, 2027, 2028, 2029, 2030],
     data_folder: str = "./data",
+    allow_unmanaged: bool = False,
 ) -> dict[str, PolicyEngineUKDataset]:
+    dataset_requests: list[Optional[str]] = [None] if datasets is None else datasets
     result = {}
-    for dataset in datasets:
-        resolved_dataset = resolve_dataset_reference("uk", dataset)
-        dataset_stem = dataset_logical_name(resolved_dataset)
-        runtime_dataset = materialize_dataset_source(resolved_dataset)
+    for dataset in dataset_requests:
+        source = materialize_dataset(
+            "uk",
+            dataset,
+            allow_unmanaged=allow_unmanaged,
+            data_dir=Path(data_folder),
+        )
+        dataset_stem = source.name
         from policyengine_uk import Microsimulation
 
-        sim = Microsimulation(dataset=runtime_dataset)
+        sim = Microsimulation(dataset=source.path)
         for year in years:
             year_dataset = sim.dataset[year]
 
@@ -194,12 +201,12 @@ def create_datasets(
 
 
 def load_datasets(
-    datasets: list[str] = [
-        "populace_uk_2023",
-    ],
+    datasets: Optional[list[str]] = None,
     years: list[int] = [2026, 2027, 2028, 2029, 2030],
     data_folder: str = "./data",
 ) -> dict[str, PolicyEngineUKDataset]:
+    if datasets is None:
+        datasets = [get_release_manifest("uk").default_dataset]
     result = {}
     for dataset in datasets:
         resolved_dataset = resolve_dataset_reference("uk", dataset)
@@ -221,11 +228,10 @@ def load_datasets(
 
 
 def ensure_datasets(
-    datasets: list[str] = [
-        "populace_uk_2023",
-    ],
+    datasets: Optional[list[str]] = None,
     years: list[int] = [2026, 2027, 2028, 2029, 2030],
     data_folder: str = "./data",
+    allow_unmanaged: bool = False,
 ) -> dict[str, PolicyEngineUKDataset]:
     """Ensure datasets exist, loading if available or creating if not.
 
@@ -237,6 +243,9 @@ def ensure_datasets(
     Returns:
         Dictionary mapping dataset keys to PolicyEngineUKDataset objects
     """
+    if datasets is None:
+        datasets = [get_release_manifest("uk").default_dataset]
+
     # Check if all dataset files exist
     all_exist = True
     for dataset in datasets:
@@ -253,4 +262,9 @@ def ensure_datasets(
     if all_exist:
         return load_datasets(datasets=datasets, years=years, data_folder=data_folder)
     else:
-        return create_datasets(datasets=datasets, years=years, data_folder=data_folder)
+        return create_datasets(
+            datasets=datasets,
+            years=years,
+            data_folder=data_folder,
+            allow_unmanaged=allow_unmanaged,
+        )

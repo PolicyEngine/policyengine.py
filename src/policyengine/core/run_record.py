@@ -20,7 +20,6 @@ emitting a false certificate.
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
@@ -31,6 +30,7 @@ from policyengine.provenance.trace import (
     extract_bundle_tro_reference,
     serialize_trace_tro,
 )
+from policyengine.utils.hashing import sha256_file
 
 if TYPE_CHECKING:
     from .dynamic import Dynamic
@@ -49,14 +49,6 @@ class SimulationRunRecord:
     paths: dict[str, Path] = field(default_factory=dict)
     composition_fingerprint: str = ""
     tro: dict = field(default_factory=dict)
-
-
-def _sha256_file(path: Union[str, Path]) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def reform_specification(
@@ -119,7 +111,7 @@ def _dataset_reference(dataset: Any) -> dict[str, Any]:
     return {
         "name": dataset.name,
         "file": filepath.name,
-        "sha256": _sha256_file(filepath),
+        "sha256": sha256_file(filepath),
         "year": dataset.year,
     }
 

@@ -16,6 +16,11 @@ from requests import Timeout
 
 from policyengine.core.tax_benefit_model import TaxBenefitModel
 from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
+from policyengine.provenance.dataset_materialization import (
+    DatasetSource,
+    MaterializedDataset,
+    _resolve_bundle_dataset,
+)
 from policyengine.provenance.manifest import (
     ArtifactPathReference,
     CountryReleaseManifest,
@@ -29,7 +34,6 @@ from policyengine.provenance.manifest import (
     https_release_manifest_uri,
     resolve_dataset_reference,
     resolve_default_datasets,
-    resolve_local_managed_dataset_source,
     resolve_managed_dataset_reference,
     resolve_region_dataset_path,
 )
@@ -84,6 +88,37 @@ UK_CERTIFICATION_SOURCE = "policyengine.py bundle certification"
 UK_CERTIFIED_DATASET_URI = (
     "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2024_25.h5@1.56.16"
 )
+
+
+def _materialized_dataset(
+    country_id: str,
+    dataset: str,
+    path: str,
+) -> MaterializedDataset:
+    plan = _resolve_bundle_dataset(country_id, dataset)
+    return MaterializedDataset(
+        data_package_name=plan.data_package_name,
+        repo_type=plan.repo_type,
+        revision=plan.revision,
+        source_uri=plan.source_uri,
+        sha256=plan.sha256,
+        path=Path(path),
+    )
+
+
+def _dataset_source(
+    country_id: str,
+    dataset: str,
+    path: str,
+) -> DatasetSource:
+    bundle_dataset = _materialized_dataset(country_id, dataset, path)
+    return DatasetSource(
+        source_uri=bundle_dataset.source_uri,
+        path=str(bundle_dataset.path),
+        bundle_dataset=bundle_dataset,
+    )
+
+
 UK_LEGACY_DATA_RELEASE_REVISION = "655dd07e4bb9c777b00dac044949611f1feb824f"
 UK_LEGACY_FRS_DATASET_URI = (
     "hf://policyengine/policyengine-uk-data-private/frs_2023_24.h5"
@@ -363,6 +398,7 @@ class TestReleaseManifests:
             datasets=["populace_us_2024"],
             years=[2026],
             data_folder="./data",
+            allow_unmanaged=False,
         )
 
     def test__given_explicit_uri__then_managed_resolution_requires_opt_in(self):
@@ -423,28 +459,6 @@ class TestReleaseManifests:
         dataset = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.73.0"
 
         assert dataset_logical_name(dataset) == "enhanced_cps_2024"
-
-    def test__given_explicit_local_data_repo__then_resolves_local_mirror(
-        self, monkeypatch, tmp_path
-    ):
-        local_dataset = (
-            tmp_path
-            / "policyengine-us-data"
-            / "policyengine_us_data"
-            / "storage"
-            / "long_term"
-            / "2100.h5"
-        )
-        local_dataset.parent.mkdir(parents=True)
-        local_dataset.write_text("", encoding="utf-8")
-        monkeypatch.setenv("POLICYENGINE_LOCAL_DATA_REPO_ROOT", str(tmp_path))
-
-        resolved = resolve_local_managed_dataset_source(
-            "us",
-            "hf://policyengine/policyengine-us-data/long_term/2100.h5@candidate",
-        )
-
-        assert resolved == str(local_dataset)
 
     def test__given_country__then_can_fetch_data_release_manifest(self):
         get_data_release_manifest.cache_clear()
@@ -924,8 +938,12 @@ class TestReleaseManifests:
             )
             with patch.object(
                 us_model,
-                "materialize_dataset_source",
-                return_value="/tmp/populace_us_2024.h5",
+                "materialize_dataset",
+                return_value=_dataset_source(
+                    "us",
+                    "populace_us_2024",
+                    "/tmp/populace_us_2024.h5",
+                ),
             ):
                 microsim = us_model.managed_microsimulation()
 
@@ -941,6 +959,11 @@ class TestReleaseManifests:
         )
         dataset_source = microsim.policyengine_bundle["runtime_dataset_source"]
         assert dataset_source == "/tmp/populace_us_2024.h5"
+        assert (
+            microsim.policyengine_bundle["runtime_dataset_sha256"]
+            == get_release_manifest("us").datasets["populace_us_2024"].sha256
+        )
+        assert microsim.policyengine_bundle["runtime_dataset_repo_type"] == "dataset"
 
     def test__given_us_unmanaged_dataset_uri__then_source_is_not_rewritten(self):
         dataset = "hf://policyengine/policyengine-us-data/cps_2023.h5@1.73.0"
@@ -964,8 +987,11 @@ class TestReleaseManifests:
             )
             with patch.object(
                 us_model,
-                "materialize_dataset_source",
-                return_value="/tmp/cps_2023.h5",
+                "materialize_dataset",
+                return_value=DatasetSource(
+                    source_uri=dataset,
+                    path="/tmp/cps_2023.h5",
+                ),
             ):
                 microsim = us_model.managed_microsimulation(
                     dataset=dataset,
@@ -1033,8 +1059,12 @@ class TestReleaseManifests:
             )
             with patch.object(
                 uk_model,
-                "materialize_dataset_source",
-                return_value="/tmp/enhanced_frs_2024_25.h5",
+                "materialize_dataset",
+                return_value=_dataset_source(
+                    "uk",
+                    "enhanced_frs_2024_25",
+                    "/tmp/enhanced_frs_2024_25.h5",
+                ),
             ):
                 microsim = uk_model.managed_microsimulation(
                     dataset="enhanced_frs_2024_25"
@@ -1051,6 +1081,11 @@ class TestReleaseManifests:
         )
         dataset_source = microsim.policyengine_bundle["runtime_dataset_source"]
         assert dataset_source == "/tmp/enhanced_frs_2024_25.h5"
+        assert (
+            microsim.policyengine_bundle["runtime_dataset_sha256"]
+            == get_release_manifest("uk").datasets["enhanced_frs_2024_25"].sha256
+        )
+        assert microsim.policyengine_bundle["runtime_dataset_repo_type"] == "model"
 
     def test__given_uk_unmanaged_dataset_uri__then_source_is_not_rewritten(self):
         dataset = "hf://policyengine/policyengine-uk-data-private/frs_2022_23.h5@1.40.4"
@@ -1074,8 +1109,11 @@ class TestReleaseManifests:
             )
             with patch.object(
                 uk_model,
-                "materialize_dataset_source",
-                return_value="/tmp/frs_2022_23.h5",
+                "materialize_dataset",
+                return_value=DatasetSource(
+                    source_uri=dataset,
+                    path="/tmp/frs_2022_23.h5",
+                ),
             ):
                 microsim = uk_model.managed_microsimulation(
                     dataset=dataset,

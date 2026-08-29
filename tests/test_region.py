@@ -38,7 +38,9 @@ class TestRegion:
         region = REGION_WITH_DATASET
 
         # Then
-        assert region.dataset_path == "gs://policyengine-us-data/states/CA.h5"
+        assert region.dataset_path == (
+            "hf://policyengine/policyengine-us-data/states/CA.h5@certified-release"
+        )
         assert region.parent_code == "us"
         assert region.state_code == "CA"
         assert not region.requires_filter

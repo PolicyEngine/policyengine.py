@@ -29,16 +29,44 @@ When run from `uvx` or `pipx`, the installer creates or reuses `./.venv`.
 Inside an existing virtualenv or conda environment, it installs into that active
 environment. The installer then installs the
 exact bundled package scaffold with pip, downloads certified default US and UK
-datasets into `./data`, moves replaced dataset files into
-`./data/.policyengine-bundle-backups/<timestamp>/`, and writes a
-`./data/.policyengine-bundle-receipt.json` receipt that records the target
-Python.
+datasets into `./data`, and writes a `./data/.policyengine-bundle-receipt.json`
+receipt that records the target Python.
+
+Dataset pre-download and US and UK calculations share the same verified-download
+implementation. For every managed artifact, PolicyEngine.py reads the source
+data package name, Hugging Face repository type, immutable revision, and SHA-256
+from the bundle. It reuses an existing file only when its hash matches, downloads
+and verifies a replacement before atomically replacing an invalid local file,
+and records the verified result in the receipt.
 
 The bundle manifest can certify additional regional datasets, such as US state
 datasets. Those artifacts are part of the citable bundle manifest, but
 `policyengine bundle install` does not eagerly download every regional file.
 Runtime callers should use the manifest's regional dataset URI when a regional
 simulation needs one.
+
+To materialize a default or named artifact without installing the complete
+package scaffold:
+
+```python
+from policyengine.provenance import materialize_dataset
+
+result = materialize_dataset("us", "populace_us_2024")
+print(result.path)
+print(result.bundle_dataset.sha256)
+```
+
+`materialize_dataset` returns the selected source URI and local path. For a
+bundle-managed input, `bundle_dataset` also contains the selected source
+package, repository type, revision, verified SHA-256, and optional metadata
+path.
+`policyengine-*-data` and `populace-data` artifacts use the repository type
+recorded in the bundle. Callers do not infer repository type from the repository
+name.
+
+Managed datasets are downloaded from the Hugging Face artifact specified in the
+bundle. GCS dataset URIs are unsupported. The separate UK geography lookup files
+retain their existing storage implementation.
 
 Country-specific and package-only installs are supported:
 

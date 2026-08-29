@@ -12,14 +12,19 @@ from microdf import MicroDataFrame
 from pydantic import ConfigDict, Field
 
 from policyengine.core import Dataset, YearData
-from policyengine.provenance.dataset_sources import materialize_dataset_source
+from policyengine.provenance.dataset_materialization import (
+    MaterializedDataset,
+    materialize_dataset,
+)
 from policyengine.provenance.manifest import (
     dataset_logical_name,
     get_release_manifest,
     resolve_dataset_reference,
-    resolve_local_managed_dataset_source,
-    resolve_managed_dataset_reference,
 )
+from policyengine.tax_benefit_models.common.model_version import (
+    build_runtime_dataset_provenance,
+)
+from policyengine.utils.hashing import sha256_file
 
 
 class USYearData(YearData):
@@ -279,6 +284,7 @@ def create_datasets(
     datasets: Optional[list[str]] = None,
     years: list[int] = [2024, 2025, 2026, 2027, 2028],
     data_folder: str = "./data",
+    allow_unmanaged: bool = False,
 ) -> dict[str, PolicyEngineUSDataset]:
     """Create PolicyEngineUSDataset instances from logical dataset names or URLs.
 
@@ -292,13 +298,17 @@ def create_datasets(
     """
     from policyengine_us import Microsimulation
 
-    datasets = datasets or [get_release_manifest("us").default_dataset]
+    dataset_requests: list[Optional[str]] = datasets or [None]
     result = {}
-    for dataset in datasets:
-        resolved_dataset = resolve_dataset_reference("us", dataset)
-        dataset_stem = dataset_logical_name(resolved_dataset)
-        runtime_dataset = materialize_dataset_source(resolved_dataset)
-        sim = Microsimulation(dataset=runtime_dataset)
+    for dataset in dataset_requests:
+        source = materialize_dataset(
+            "us",
+            dataset,
+            allow_unmanaged=allow_unmanaged,
+            data_dir=Path(data_folder),
+        )
+        dataset_stem = source.name
+        sim = Microsimulation(dataset=source.path)
 
         for year in years:
             # Get all input variables from the simulation
@@ -509,7 +519,8 @@ def _metadata_path_for_h5(path: Path) -> Path:
 
 
 def _load_dataset_metadata(
-    path: Path, require_metadata: bool
+    path: Path,
+    require_metadata: bool,
 ) -> tuple[dict, Optional[Path]]:
     metadata_path = _metadata_path_for_h5(path)
     if not metadata_path.exists():
@@ -572,7 +583,7 @@ def _runtime_policyengine_us_metadata() -> dict[str, Any]:
             result["direct_url"] = {}
     package_file = _runtime_policyengine_us_package_file()
     if package_file is not None:
-        result["package_file_sha256"] = _sha256_file(package_file)
+        result["package_file_sha256"] = sha256_file(package_file)
         result["package_tree_sha256"] = _sha256_directory(package_file.parent)
     return result
 
@@ -836,6 +847,7 @@ def _build_long_term_dataset(
     metadata: dict,
     metadata_path: Optional[Path],
     dataset_uri: Optional[str] = None,
+    materialized: Optional[MaterializedDataset] = None,
 ) -> PolicyEngineUSDataset:
     dataset = PolicyEngineUSDataset(
         id=_long_term_dataset_key(dataset_name, year),
@@ -849,11 +861,12 @@ def _build_long_term_dataset(
     if dataset_uri is not None:
         dataset.metadata.setdefault("policyengine_bundle", {})
         dataset.metadata["policyengine_bundle"].update(
-            {
-                "managed_by": "policyengine.py",
-                "runtime_dataset": _long_term_dataset_key(dataset_name, year),
-                "runtime_dataset_uri": dataset_uri,
-            }
+            build_runtime_dataset_provenance(
+                dataset_uri,
+                str(path),
+                materialized,
+                logical_name=_long_term_dataset_key(dataset_name, year),
+            )
         )
     return dataset
 
@@ -912,14 +925,6 @@ def _validate_loaded_long_term_metadata(
         require_policyengine_us_clean_build=require_policyengine_us_clean_build,
         require_runtime_policyengine_us_match=require_runtime_policyengine_us_match,
     )
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as file:
-        for chunk in iter(lambda: file.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def load_long_term_datasets(
@@ -1013,6 +1018,7 @@ def load_long_term_datasets(
 def load_managed_long_term_datasets(
     years: list[int],
     dataset_name: str = "long_term_cps",
+    data_folder: str = "./data",
     require_metadata: bool = True,
     required_profile: Optional[str] = None,
     required_target_source: Optional[str] = None,
@@ -1037,12 +1043,10 @@ def load_managed_long_term_datasets(
     """Load bundled long-term US datasets from the managed release manifest.
 
     Each requested year must have a logical dataset entry named
-    ``{dataset_name}_{year}`` in the bundled US manifest. For local development,
-    policyengine.py first checks for the corresponding sibling data-repo mirror
-    before falling back to the managed URI. Long-term H5 files are large, so this
-    helper intentionally refuses to stream remote files directly; callers should
-    either provide the published local mirror or use ``load_long_term_datasets``
-    with an explicit local data folder.
+    ``{dataset_name}_{year}`` in the bundled US manifest. A verified file in
+    ``data_folder`` is reused when available; otherwise the exact
+    bundle-certified Hugging Face artifact and its certified metadata sidecar
+    are downloaded there.
     """
 
     manifest = get_release_manifest("us")
@@ -1070,38 +1074,14 @@ def load_managed_long_term_datasets(
                 f"Managed long-term dataset {key!r} is missing a sha256 in "
                 "the bundled US release manifest."
             )
-        dataset_uri = resolve_managed_dataset_reference("us", key)
-        dataset_source = resolve_local_managed_dataset_source("us", dataset_uri)
-        if "://" in dataset_source:
-            raise FileNotFoundError(
-                f"Managed long-term dataset {key!r} resolves to {dataset_uri}, "
-                "but no local mirror exists. Download the bundled artifact into "
-                "the sibling policyengine-us-data storage mirror or call "
-                "load_long_term_datasets(..., data_folder=...) with an explicit "
-                "local directory."
-            )
-
-        path = Path(dataset_source).expanduser()
-        actual_sha256 = _sha256_file(path)
-        if actual_sha256 != path_reference.sha256:
-            raise ValueError(
-                f"Managed long-term dataset {key!r} at {path} has sha256 "
-                f"{actual_sha256}, expected {path_reference.sha256}."
-            )
+        source = materialize_dataset(
+            "us",
+            key,
+            data_dir=Path(data_folder),
+        )
+        dataset_uri = source.source_uri
+        path = Path(source.path)
         metadata, metadata_path = _load_dataset_metadata(path, require_metadata)
-        if path_reference.metadata_sha256:
-            if metadata_path is None:
-                raise FileNotFoundError(
-                    f"Managed long-term dataset {key!r} at {path} is missing "
-                    "metadata sidecar required by the bundled manifest."
-                )
-            metadata_sha256 = _sha256_file(metadata_path)
-            if metadata_sha256 != path_reference.metadata_sha256:
-                raise ValueError(
-                    f"Managed long-term dataset {key!r} metadata at "
-                    f"{metadata_path} has sha256 {metadata_sha256}, expected "
-                    f"{path_reference.metadata_sha256}."
-                )
         _validate_loaded_long_term_metadata(
             metadata=metadata,
             metadata_path=metadata_path,
@@ -1144,6 +1124,7 @@ def load_managed_long_term_datasets(
             metadata=metadata,
             metadata_path=metadata_path,
             dataset_uri=dataset_uri,
+            materialized=source.bundle_dataset,
         )
 
     return result
@@ -1153,6 +1134,7 @@ def ensure_datasets(
     datasets: Optional[list[str]] = None,
     years: list[int] = [2024, 2025, 2026, 2027, 2028],
     data_folder: str = "./data",
+    allow_unmanaged: bool = False,
 ) -> dict[str, PolicyEngineUSDataset]:
     """Ensure datasets exist, loading if available or creating if not.
 
@@ -1182,4 +1164,9 @@ def ensure_datasets(
     if all_exist:
         return load_datasets(datasets=datasets, years=years, data_folder=data_folder)
     else:
-        return create_datasets(datasets=datasets, years=years, data_folder=data_folder)
+        return create_datasets(
+            datasets=datasets,
+            years=years,
+            data_folder=data_folder,
+            allow_unmanaged=allow_unmanaged,
+        )

@@ -7,6 +7,7 @@ import pytest
 
 from policyengine import bundle
 from policyengine.cli import main as cli_main
+from policyengine.provenance.dataset_materialization import MaterializedDataset
 
 
 def _sha256(payload: bytes) -> str:
@@ -67,43 +68,17 @@ def test_bundle_install_requirements_are_country_scoped():
     assert not any("policyengine-us-data" in req for req in us_requirements)
 
 
-def test_dataset_plans_use_certified_release_metadata(tmp_path):
-    plans = bundle.dataset_plans(
-        bundle.get_current_bundle(),
-        countries=["uk"],
-        data_dir=tmp_path,
+def test_selected_dataset_plan_uses_certified_release_metadata(tmp_path):
+    entries = bundle._selected_dataset_plans(
+        bundle.get_current_bundle(), ["uk"], data_dir=tmp_path
     )
 
-    assert len(plans) == 1
-    assert plans[0].country == "uk"
-    assert plans[0].data_version.startswith("policyengine-uk-data-")
-    assert plans[0].data_producer == "populace"
-    assert plans[0].repo_type == "model"
-    assert plans[0].destination == tmp_path / "enhanced_frs_2024_25.h5"
-    assert (
-        plans[0].expected_sha256
-        == bundle.get_current_bundle()["data_releases"]["uk"]["datasets"][
-            "enhanced_frs_2024_25"
-        ]["sha256"]
-    )
-
-
-def test_runtime_strategy_selects_populace():
-    assert isinstance(
-        bundle.runtime_strategy("populace"),
-        bundle.PopulaceDataProducerRuntimeStrategy,
-    )
-
-
-def test_populace_runtime_strategy_requires_certified_hash():
-    manifest = json.loads(json.dumps(bundle.get_current_bundle()))
-    release = manifest["data_releases"]["uk"]
-    dataset = release["default_dataset"]
-    del release["datasets"][dataset]["sha256"]
-    del release["certified_data_artifact"]["sha256"]
-
-    with pytest.raises(bundle.BundleError, match="certified sha256"):
-        bundle.dataset_plans(manifest, countries=["uk"])
+    plan, release = entries[0]
+    assert plan.country_id == "uk"
+    assert plan.data_package_name == "policyengine-uk-data"
+    assert plan.repo_type == "model"
+    assert plan.destination == tmp_path / "enhanced_frs_2024_25.h5"
+    assert plan.sha256 == release["datasets"][plan.dataset]["sha256"]
 
 
 def test_install_bundle_package_only_uses_explicit_python(monkeypatch, tmp_path):
@@ -167,66 +142,43 @@ def test_resolve_target_python_uses_local_venv_from_runner_env(monkeypatch, tmp_
     assert not (tmp_path / ".venv").exists()
 
 
-class FakeResponse:
-    status_code = 200
+def test_install_bundle_materializes_defaults_and_records_receipt(
+    monkeypatch, tmp_path
+):
+    calls = []
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
-
-    def raise_for_status(self):
-        return None
-
-    def iter_content(self, chunk_size):
-        yield b"new-data"
-
-
-class FakeSession:
-    def get(self, *args, **kwargs):
-        return FakeResponse()
-
-
-def test_install_datasets_downloads_then_backs_up_existing_file(tmp_path):
-    manifest = _manifest_with_dataset_sha("us", _sha256(b"new-data"))
-    existing = tmp_path / "populace_us_2024.h5"
-    existing.write_bytes(b"old-data")
-
-    installed = bundle.install_datasets(
-        manifest,
-        countries=["us"],
-        data_dir=tmp_path,
-        yes=True,
-        session=FakeSession(),
+    monkeypatch.setattr(
+        bundle, "install_package_scaffold", lambda *args, **kwargs: None
     )
 
-    assert installed[0]["country"] == "us"
-    assert installed[0]["expected_sha256"] == _sha256(b"new-data")
-    assert installed[0]["installed_sha256"] == _sha256(b"new-data")
-    assert installed[0]["build_id"] == manifest["data_releases"]["us"]["build_id"]
-    assert existing.read_bytes() == b"new-data"
-    backups = list((tmp_path / bundle.BACKUP_DIR_NAME).glob("*/populace_us_2024.h5"))
-    assert len(backups) == 1
-    assert backups[0].read_bytes() == b"old-data"
-
-
-def test_install_datasets_rejects_downloaded_hash_mismatch(tmp_path):
-    manifest = _manifest_with_dataset_sha("us", _sha256(b"expected-data"))
-    existing = tmp_path / "populace_us_2024.h5"
-    existing.write_bytes(b"old-data")
-
-    with pytest.raises(bundle.BundleError, match="sha256"):
-        bundle.install_datasets(
-            manifest,
-            countries=["us"],
-            data_dir=tmp_path,
-            yes=True,
-            session=FakeSession(),
+    def fake_materialize(plan):
+        calls.append(plan)
+        plan.destination.parent.mkdir(parents=True, exist_ok=True)
+        plan.destination.write_bytes(b"materialized")
+        return MaterializedDataset(
+            data_package_name=plan.data_package_name,
+            repo_type=plan.repo_type,
+            revision=plan.revision,
+            source_uri=plan.source_uri,
+            sha256=plan.sha256,
+            path=plan.destination,
         )
 
-    assert existing.read_bytes() == b"old-data"
-    assert not (tmp_path / bundle.BACKUP_DIR_NAME).exists()
+    monkeypatch.setattr(bundle, "_reuse_or_download_bundle_files", fake_materialize)
+
+    result = bundle.install_bundle(
+        python=sys.executable,
+        countries=["uk"],
+        data_dir=tmp_path,
+        yes=True,
+    )
+
+    assert [plan.country_id for plan in calls] == ["uk"]
+    assert result["datasets"][0]["data_package_name"] == "policyengine-uk-data"
+    assert result["datasets"][0]["installed_sha256"] == calls[0].sha256
+    receipt = bundle.read_receipt(tmp_path)
+    assert receipt is not None
+    assert receipt["datasets"] == result["datasets"]
 
 
 def test_status_matches_receipt_and_packages(monkeypatch, tmp_path):

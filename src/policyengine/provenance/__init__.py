@@ -24,6 +24,18 @@ from .certification import (
 from .certification import (
     certify_data_release as certify_data_release,
 )
+from .dataset_materialization import (
+    DatasetMaterializationError as DatasetMaterializationError,
+)
+from .dataset_materialization import (
+    DatasetSource as DatasetSource,
+)
+from .dataset_materialization import (
+    MaterializedDataset as MaterializedDataset,
+)
+from .dataset_materialization import (
+    materialize_dataset as materialize_dataset,
+)
 from .manifest import (
     CertifiedDataArtifact as CertifiedDataArtifact,
 )
@@ -71,9 +83,6 @@ from .manifest import (
 )
 from .manifest import (
     resolve_dataset_reference as resolve_dataset_reference,
-)
-from .manifest import (
-    resolve_local_managed_dataset_source as resolve_local_managed_dataset_source,
 )
 from .manifest import (
     resolve_managed_dataset_reference as resolve_managed_dataset_reference,

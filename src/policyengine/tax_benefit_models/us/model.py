@@ -5,13 +5,13 @@ import pandas as pd
 from microdf import MicroDataFrame
 
 from policyengine.core import TaxBenefitModel
-from policyengine.provenance.dataset_sources import materialize_dataset_source
-from policyengine.provenance.manifest import (
-    dataset_logical_name,
-    resolve_local_managed_dataset_source,
-    resolve_managed_dataset_reference,
+from policyengine.provenance.dataset_materialization import (
+    materialize_dataset,
 )
 from policyengine.tax_benefit_models.common import MicrosimulationModelVersion
+from policyengine.tax_benefit_models.common.model_version import (
+    build_runtime_dataset_provenance,
+)
 from policyengine.tax_benefit_models.common.model_version import (
     output_dataset_filepath as _output_dataset_filepath,
 )
@@ -407,19 +407,6 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
                     microsim.set_input(column, dataset.year, df[column].values)
 
 
-def _managed_release_bundle(
-    dataset_uri: str,
-    dataset_source: Optional[str] = None,
-) -> dict[str, Optional[str]]:
-    bundle = dict(us_latest.release_bundle)
-    bundle["runtime_dataset"] = dataset_logical_name(dataset_uri)
-    bundle["runtime_dataset_uri"] = dataset_uri
-    if dataset_source:
-        bundle["runtime_dataset_source"] = dataset_source
-    bundle["managed_by"] = "policyengine.py"
-    return bundle
-
-
 def managed_microsimulation(
     *,
     dataset: Optional[str] = None,
@@ -441,23 +428,19 @@ def managed_microsimulation(
             "**kwargs, so policyengine.py can enforce the release bundle."
         )
 
-    dataset_uri = resolve_managed_dataset_reference(
+    source = materialize_dataset(
         "us",
         dataset,
         allow_unmanaged=allow_unmanaged,
     )
-    dataset_source = resolve_local_managed_dataset_source(
-        "us",
-        dataset_uri,
-        allow_local_mirror=not (
-            allow_unmanaged and dataset is not None and "://" in dataset
-        ),
-    )
-    runtime_dataset_source = materialize_dataset_source(dataset_source)
-    microsim = Microsimulation(dataset=runtime_dataset_source, **kwargs)
-    microsim.policyengine_bundle = _managed_release_bundle(
-        dataset_uri,
-        runtime_dataset_source,
+    microsim = Microsimulation(dataset=source.path, **kwargs)
+    microsim.policyengine_bundle = dict(us_latest.release_bundle)
+    microsim.policyengine_bundle.update(
+        build_runtime_dataset_provenance(
+            source.source_uri,
+            source.path,
+            source.bundle_dataset,
+        )
     )
     return microsim
 

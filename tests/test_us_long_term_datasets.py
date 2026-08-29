@@ -2,6 +2,7 @@ import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import h5py
 import pandas as pd
@@ -9,6 +10,11 @@ import pytest
 from microdf import MicroDataFrame
 
 import policyengine.tax_benefit_models.us.datasets as us_datasets_module
+from policyengine.provenance.dataset_materialization import (
+    DatasetMaterializationError,
+    DatasetSource,
+    MaterializedDataset,
+)
 from policyengine.tax_benefit_models.us.datasets import (
     PolicyEngineUSDataset,
     USYearData,
@@ -148,6 +154,24 @@ def _manifest_with_long_term_sha(
     )
 
 
+def _materialized_long_term(path: Path, dataset_uri: str) -> DatasetSource:
+    actual_sha256 = _sha256(path)
+    bundle_dataset = MaterializedDataset(
+        data_package_name="policyengine-us-data",
+        repo_type="model",
+        revision="abc123",
+        source_uri=dataset_uri,
+        sha256=actual_sha256,
+        path=path,
+        metadata_path=Path(f"{path}.metadata.json"),
+    )
+    return DatasetSource(
+        source_uri=dataset_uri,
+        path=str(path),
+        bundle_dataset=bundle_dataset,
+    )
+
+
 def test__load_long_term_datasets__loads_h5_and_sidecar_metadata(tmp_path):
     h5_path = tmp_path / "2075.h5"
     _write_us_h5(h5_path, 2075)
@@ -255,7 +279,7 @@ def test__load_long_term_datasets__rejects_support_contract_mismatch(tmp_path):
         )
 
 
-def test__load_managed_long_term_datasets__loads_bundled_local_mirror(
+def test__load_managed_long_term_datasets__loads_verified_bundle_file(
     monkeypatch,
     tmp_path,
 ):
@@ -267,7 +291,6 @@ def test__load_managed_long_term_datasets__loads_bundled_local_mirror(
         policyengine_us={"version": "1.700.0"},
     )
     dataset_uri = "hf://policyengine/policyengine-us-data/long_term/2100.h5@abc123"
-
     monkeypatch.setattr(
         us_datasets_module,
         "get_release_manifest",
@@ -287,13 +310,8 @@ def test__load_managed_long_term_datasets__loads_bundled_local_mirror(
     )
     monkeypatch.setattr(
         us_datasets_module,
-        "resolve_managed_dataset_reference",
-        lambda country_id, dataset: dataset_uri,
-    )
-    monkeypatch.setattr(
-        us_datasets_module,
-        "resolve_local_managed_dataset_source",
-        lambda country_id, uri: str(h5_path),
+        "materialize_dataset",
+        lambda *args, **kwargs: _materialized_long_term(h5_path, dataset_uri),
     )
 
     datasets = load_managed_long_term_datasets(
@@ -307,11 +325,12 @@ def test__load_managed_long_term_datasets__loads_bundled_local_mirror(
 
     dataset = datasets["long_term_cps_2100"]
     assert dataset.filepath == str(h5_path)
-    assert dataset.metadata["policyengine_bundle"] == {
-        "managed_by": "policyengine.py",
-        "runtime_dataset": "long_term_cps_2100",
-        "runtime_dataset_uri": dataset_uri,
-    }
+    bundle = dataset.metadata["policyengine_bundle"]
+    assert bundle["managed_by"] == "policyengine.py"
+    assert bundle["runtime_dataset"] == "long_term_cps_2100"
+    assert bundle["runtime_dataset_uri"] == dataset_uri
+    assert bundle["runtime_dataset_data_package"] == "policyengine-us-data"
+    assert bundle["runtime_dataset_sha256"] == _sha256(h5_path)
 
 
 def test__load_managed_long_term_datasets__defaults_to_manifest_model_version(
@@ -322,7 +341,6 @@ def test__load_managed_long_term_datasets__defaults_to_manifest_model_version(
     _write_us_h5(h5_path, 2100)
     _write_metadata(h5_path, 2100, policyengine_us={"version": "1.691.10"})
     dataset_uri = "hf://policyengine/policyengine-us-data/long_term/2100.h5@abc123"
-
     monkeypatch.setattr(
         us_datasets_module,
         "get_release_manifest",
@@ -330,13 +348,8 @@ def test__load_managed_long_term_datasets__defaults_to_manifest_model_version(
     )
     monkeypatch.setattr(
         us_datasets_module,
-        "resolve_managed_dataset_reference",
-        lambda country_id, dataset: dataset_uri,
-    )
-    monkeypatch.setattr(
-        us_datasets_module,
-        "resolve_local_managed_dataset_source",
-        lambda country_id, uri: str(h5_path),
+        "materialize_dataset",
+        lambda *args, **kwargs: _materialized_long_term(h5_path, dataset_uri),
     )
 
     with pytest.raises(ValueError, match="policyengine_us.version"):
@@ -350,7 +363,6 @@ def test__load_managed_long_term_datasets__checks_manifest_sha256(
     h5_path = tmp_path / "2100.h5"
     _write_us_h5(h5_path, 2100)
     _write_metadata(h5_path, 2100, policyengine_us={"version": "1.691.12"})
-    dataset_uri = "hf://policyengine/policyengine-us-data/long_term/2100.h5@abc123"
 
     monkeypatch.setattr(
         us_datasets_module,
@@ -359,27 +371,21 @@ def test__load_managed_long_term_datasets__checks_manifest_sha256(
     )
     monkeypatch.setattr(
         us_datasets_module,
-        "resolve_managed_dataset_reference",
-        lambda country_id, dataset: dataset_uri,
-    )
-    monkeypatch.setattr(
-        us_datasets_module,
-        "resolve_local_managed_dataset_source",
-        lambda country_id, uri: str(h5_path),
+        "materialize_dataset",
+        Mock(side_effect=DatasetMaterializationError("sha256 mismatch")),
     )
 
     with pytest.raises(ValueError, match="sha256"):
         load_managed_long_term_datasets([2100])
 
 
-def test__load_managed_long_term_datasets__checks_metadata_sha256(
+def test__load_managed_long_term_datasets__propagates_metadata_hash_failure(
     monkeypatch,
     tmp_path,
 ):
     h5_path = tmp_path / "2100.h5"
     _write_us_h5(h5_path, 2100)
     _write_metadata(h5_path, 2100, policyengine_us={"version": "1.691.12"})
-    dataset_uri = "hf://policyengine/policyengine-us-data/long_term/2100.h5@abc123"
 
     monkeypatch.setattr(
         us_datasets_module,
@@ -391,41 +397,47 @@ def test__load_managed_long_term_datasets__checks_metadata_sha256(
     )
     monkeypatch.setattr(
         us_datasets_module,
-        "resolve_managed_dataset_reference",
-        lambda country_id, dataset: dataset_uri,
-    )
-    monkeypatch.setattr(
-        us_datasets_module,
-        "resolve_local_managed_dataset_source",
-        lambda country_id, uri: str(h5_path),
+        "materialize_dataset",
+        Mock(side_effect=DatasetMaterializationError("metadata sha256 mismatch")),
     )
 
     with pytest.raises(ValueError, match="metadata"):
         load_managed_long_term_datasets([2100])
 
 
-def test__load_managed_long_term_datasets__requires_local_mirror(
+def test__load_managed_long_term_datasets__requests_file_in_data_folder(
     monkeypatch,
+    tmp_path,
 ):
+    h5_path = tmp_path / "2100.h5"
+    _write_us_h5(h5_path, 2100)
+    _write_metadata(h5_path, 2100, policyengine_us={"version": "1.691.12"})
     dataset_uri = "hf://policyengine/policyengine-us-data/long_term/2100.h5@abc123"
+    manifest = _manifest_with_long_term_sha(_sha256(h5_path))
     monkeypatch.setattr(
         us_datasets_module,
         "get_release_manifest",
-        lambda country_id: _manifest_with_long_term_sha("0" * 64),
+        lambda country_id: manifest,
     )
+    materialize = Mock(return_value=_materialized_long_term(h5_path, dataset_uri))
     monkeypatch.setattr(
         us_datasets_module,
-        "resolve_managed_dataset_reference",
-        lambda country_id, dataset: dataset_uri,
-    )
-    monkeypatch.setattr(
-        us_datasets_module,
-        "resolve_local_managed_dataset_source",
-        lambda country_id, uri: uri,
+        "materialize_dataset",
+        materialize,
     )
 
-    with pytest.raises(FileNotFoundError, match="no local mirror exists"):
-        load_managed_long_term_datasets([2100])
+    datasets = load_managed_long_term_datasets(
+        [2100],
+        data_folder=str(tmp_path),
+        require_runtime_policyengine_us_match=False,
+    )
+
+    assert datasets["long_term_cps_2100"].filepath == str(h5_path)
+    materialize.assert_called_once_with(
+        "us",
+        "long_term_cps_2100",
+        data_dir=tmp_path,
+    )
 
 
 def test__load_long_term_datasets__rejects_policyengine_us_version_mismatch(

@@ -8,22 +8,28 @@ plain pip cannot provide.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import shutil
 import subprocess
-import tempfile
 import venv as venv_module
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from importlib import metadata
 from importlib.resources import files
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional, Sequence
-from urllib.parse import quote
 
 import requests
+
+from policyengine.provenance.dataset_materialization import (
+    DatasetMaterializationError,
+    MaterializedDataset,
+    _BundleDatasetSpec,
+    _resolve_bundle_dataset,
+    _reuse_or_download_bundle_files,
+)
+from policyengine.provenance.manifest import CountryReleaseManifest
+from policyengine.utils.hashing import sha256_file
 
 BUNDLE_MANIFEST_RESOURCE = ("data", "bundle", "manifest.json")
 BUNDLE_HISTORY_RESOURCE = ("data", "bundles")
@@ -31,174 +37,11 @@ DEFAULT_COUNTRIES = ("us", "uk")
 DEFAULT_DATA_DIR = Path("./data")
 DEFAULT_VENV = Path(".venv")
 RECEIPT_FILENAME = ".policyengine-bundle-receipt.json"
-BACKUP_DIR_NAME = ".policyengine-bundle-backups"
 DOWNLOAD_TIMEOUT_SECONDS = 60
 
 
 class BundleError(ValueError):
     """Raised when bundle metadata or local installation state is invalid."""
-
-
-@dataclass(frozen=True)
-class DatasetPlan:
-    country: str
-    dataset: str
-    uri: str
-    filename: str
-    data_version: Optional[str]
-    release_manifest_uri: Optional[str]
-    data_producer: str
-    repo_type: str
-    destination: Path
-    expected_sha256: Optional[str]
-    build_id: Optional[str]
-
-
-class DataProducerRuntimeStrategy:
-    """Runtime install/verification behavior for a certified data producer."""
-
-    data_producer = "legacy"
-
-    def dataset_plan(
-        self,
-        *,
-        country: str,
-        release: Mapping[str, Any],
-        data_dir: Path,
-    ) -> Optional[DatasetPlan]:
-        uri = release.get("default_dataset_uri")
-        dataset = release.get("default_dataset")
-        if not uri or not dataset:
-            return None
-        data_package = release.get("data_package", {})
-        repo_type = (
-            data_package.get("repo_type", "model")
-            if isinstance(data_package, Mapping)
-            else "model"
-        )
-        dataset_name = str(dataset)
-        filename = _filename_from_uri(str(uri))
-        return DatasetPlan(
-            country=country,
-            dataset=dataset_name,
-            uri=str(uri),
-            filename=filename,
-            data_version=(
-                str(release["version"]) if release.get("version") is not None else None
-            ),
-            release_manifest_uri=(
-                str(release["release_manifest_uri"])
-                if release.get("release_manifest_uri")
-                else None
-            ),
-            data_producer=str(release.get("data_producer") or self.data_producer),
-            repo_type=str(repo_type),
-            destination=data_dir / filename,
-            expected_sha256=self.expected_sha256(release, dataset_name),
-            build_id=self.build_id(release),
-        )
-
-    def expected_sha256(
-        self,
-        release: Mapping[str, Any],
-        dataset: str,
-    ) -> Optional[str]:
-        dataset_artifact = self.default_dataset_artifact(release, dataset)
-        if dataset_artifact is not None and dataset_artifact.get("sha256"):
-            return str(dataset_artifact["sha256"])
-        certified_artifact = release.get("certified_data_artifact")
-        if isinstance(certified_artifact, Mapping) and certified_artifact.get("sha256"):
-            return str(certified_artifact["sha256"])
-        return None
-
-    def default_dataset_artifact(
-        self,
-        release: Mapping[str, Any],
-        dataset: str,
-    ) -> Optional[Mapping[str, Any]]:
-        datasets = release.get("datasets")
-        if isinstance(datasets, Mapping):
-            artifact = datasets.get(dataset)
-            if isinstance(artifact, Mapping):
-                return artifact
-        return None
-
-    def build_id(self, release: Mapping[str, Any]) -> Optional[str]:
-        build_id = release.get("build_id")
-        if build_id:
-            return str(build_id)
-        certified_artifact = release.get("certified_data_artifact")
-        if isinstance(certified_artifact, Mapping) and certified_artifact.get(
-            "build_id"
-        ):
-            return str(certified_artifact["build_id"])
-        version = release.get("version")
-        return str(version) if version is not None else None
-
-    def verify_download(self, plan: DatasetPlan, path: Path) -> str:
-        actual_sha256 = _sha256_file(path)
-        if plan.expected_sha256 and actual_sha256 != plan.expected_sha256:
-            raise BundleError(
-                f"Downloaded {plan.country.upper()} dataset {plan.dataset} "
-                f"has sha256 {actual_sha256}, expected {plan.expected_sha256}."
-            )
-        return actual_sha256
-
-    def dataset_check(
-        self,
-        plan: DatasetPlan,
-        receipt_dataset: Optional[Mapping[str, Any]],
-    ) -> dict[str, Any]:
-        check: dict[str, Any] = {
-            "country": plan.country,
-            "dataset": plan.dataset,
-            "expected_version": plan.data_version,
-            "expected_path": str(plan.destination),
-        }
-        if plan.expected_sha256:
-            check["expected_sha256"] = plan.expected_sha256
-        if receipt_dataset is None:
-            check["status"] = "missing_receipt"
-            return check
-        if receipt_dataset.get("version") != plan.data_version:
-            check["status"] = "mismatch"
-            check["installed_version"] = receipt_dataset.get("version")
-            return check
-        path = Path(str(receipt_dataset.get("path", plan.destination)))
-        if not path.exists():
-            check["status"] = "missing_file"
-            return check
-        check["installed_version"] = receipt_dataset.get("version")
-        check["path"] = str(path)
-        if plan.expected_sha256:
-            actual_sha256 = _sha256_file(path)
-            check["installed_sha256"] = actual_sha256
-            if actual_sha256 != plan.expected_sha256:
-                check["status"] = "sha256_mismatch"
-                return check
-        check["status"] = "ok"
-        return check
-
-
-class LegacyDataProducerRuntimeStrategy(DataProducerRuntimeStrategy):
-    data_producer = "legacy"
-
-
-class PopulaceDataProducerRuntimeStrategy(DataProducerRuntimeStrategy):
-    data_producer = "populace"
-
-    def expected_sha256(
-        self,
-        release: Mapping[str, Any],
-        dataset: str,
-    ) -> str:
-        expected = super().expected_sha256(release, dataset)
-        if not expected:
-            raise BundleError(
-                f"Populace data release for dataset {dataset!r} is missing "
-                "a certified sha256."
-            )
-        return expected
 
 
 def _bundle_resource_path():
@@ -355,13 +198,6 @@ def _requirement(component: Mapping[str, Any]) -> str:
     return requirement
 
 
-def runtime_strategy(data_producer: Optional[str]) -> DataProducerRuntimeStrategy:
-    producer = data_producer or "legacy"
-    if producer == "populace":
-        return PopulaceDataProducerRuntimeStrategy()
-    return LegacyDataProducerRuntimeStrategy()
-
-
 def resolve_target_python(
     *,
     python: Optional[str] = None,
@@ -432,92 +268,19 @@ def install_package_scaffold(
     subprocess.run(command, check=True)
 
 
-def dataset_plans(
-    manifest: Optional[Mapping[str, Any]] = None,
-    *,
-    countries: Optional[Sequence[str]] = None,
-    data_dir: Path = DEFAULT_DATA_DIR,
-) -> list[DatasetPlan]:
-    bundle = _normalise_manifest(manifest or get_current_bundle())
-    releases = bundle.get("data_releases") or _data_releases_from_countries(bundle)
-    plans: list[DatasetPlan] = []
-    for country in normalise_countries(countries, bundle):
-        release = releases.get(country, {}) if isinstance(releases, Mapping) else {}
-        strategy = runtime_strategy(str(release.get("data_producer") or "legacy"))
-        plan = strategy.dataset_plan(
-            country=country, release=release, data_dir=data_dir
-        )
-        if plan is None:
-            continue
-        plans.append(plan)
-    return plans
-
-
-def _filename_from_uri(uri: str) -> str:
-    without_revision = uri.rsplit("@", 1)[0]
-    if without_revision.startswith("hf://"):
-        return (
-            without_revision.removeprefix("hf://").split("/", 2)[2].rsplit("/", 1)[-1]
-        )
-    if without_revision.startswith("gs://"):
-        return (
-            without_revision.removeprefix("gs://").split("/", 1)[1].rsplit("/", 1)[-1]
-        )
-    return Path(without_revision).name
-
-
-def install_datasets(
-    manifest: Mapping[str, Any],
-    *,
-    countries: Optional[Sequence[str]] = None,
-    data_dir: Path = DEFAULT_DATA_DIR,
-    yes: bool = False,
-    dry_run: bool = False,
-    session=requests,
-) -> list[dict[str, Any]]:
-    plans = dataset_plans(manifest, countries=countries, data_dir=data_dir)
-    if not plans:
-        return []
-    _confirm_dataset_install(plans, data_dir=data_dir, yes=yes, dry_run=dry_run)
-    installed = []
-    for plan in plans:
-        if dry_run:
-            print(f"download {plan.uri} -> {plan.destination}")
-            installed.append(_receipt_dataset(plan))
-            continue
-        downloaded = _download_to_temp(plan, data_dir=data_dir, session=session)
-        installed_sha256 = None
-        try:
-            installed_sha256 = runtime_strategy(plan.data_producer).verify_download(
-                plan,
-                downloaded,
-            )
-            _backup_existing(plan.destination)
-            plan.destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(downloaded), str(plan.destination))
-        finally:
-            if downloaded.exists():
-                downloaded.unlink()
-        installed.append(_receipt_dataset(plan, installed_sha256=installed_sha256))
-    return installed
-
-
 def _confirm_dataset_install(
-    plans: Sequence[DatasetPlan],
+    plans: Sequence[_BundleDatasetSpec],
     *,
     data_dir: Path,
     yes: bool,
     dry_run: bool,
 ) -> None:
-    countries = ", ".join(plan.country for plan in plans)
+    countries = ", ".join(plan.country_id for plan in plans)
     print(
         "This will download certified PolicyEngine datasets for "
         f"{countries} into {data_dir}."
     )
-    print(
-        "Existing matching dataset files will be moved to "
-        f"{data_dir / BACKUP_DIR_NAME}/<timestamp>/."
-    )
+    print("Existing files with the certified content will be reused.")
     if yes or dry_run:
         return
     answer = input("Continue? [y/N] ").strip().lower()
@@ -525,112 +288,58 @@ def _confirm_dataset_install(
         raise BundleError("Dataset installation cancelled.")
 
 
-def _download_to_temp(plan: DatasetPlan, *, data_dir: Path, session=requests) -> Path:
-    data_dir.mkdir(parents=True, exist_ok=True)
-    url = _download_url(plan.uri, repo_type=plan.repo_type)
-    headers = _auth_headers(plan.uri)
-    suffix = Path(plan.filename).suffix or ".download"
-    fd, temp_name = tempfile.mkstemp(
-        prefix=".policyengine-download-", suffix=suffix, dir=data_dir
-    )
-    os.close(fd)
-    temp_path = Path(temp_name)
-    try:
-        with session.get(
-            url,
-            headers=headers,
-            stream=True,
-            timeout=DOWNLOAD_TIMEOUT_SECONDS,
-        ) as response:
-            if response.status_code in {401, 403}:
-                raise BundleError(
-                    f"Could not download {plan.country.upper()} dataset. "
-                    "If this is a private Hugging Face dataset, set HUGGING_FACE_TOKEN."
-                )
-            response.raise_for_status()
-            with temp_path.open("wb") as stream:
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
-                    if chunk:
-                        stream.write(chunk)
-    except Exception:
-        if temp_path.exists():
-            temp_path.unlink()
-        raise
-    return temp_path
-
-
-def _download_url(uri: str, *, repo_type: str = "model") -> str:
-    without_revision, revision = _split_revision(uri)
-    if without_revision.startswith("hf://"):
-        parts = without_revision.removeprefix("hf://").split("/", 2)
-        if len(parts) != 3:
-            raise BundleError(f"Invalid Hugging Face dataset URI: {uri}")
-        repo_id = f"{parts[0]}/{parts[1]}"
-        path = parts[2]
-        if not revision:
-            raise BundleError(f"Hugging Face dataset URI must pin a revision: {uri}")
-        prefix = "datasets/" if repo_type == "dataset" else ""
-        return (
-            f"https://huggingface.co/{prefix}{repo_id}/resolve/{quote(revision)}/{path}"
-        )
-    if without_revision.startswith("gs://"):
-        bucket_and_path = without_revision.removeprefix("gs://")
-        bucket, _, path = bucket_and_path.partition("/")
-        return f"https://storage.googleapis.com/{bucket}/{quote(path)}"
-    if without_revision.startswith(("http://", "https://")):
-        return uri
-    return uri
-
-
-def _split_revision(uri: str) -> tuple[str, Optional[str]]:
-    if "@" not in uri:
-        return uri, None
-    without_revision, revision = uri.rsplit("@", 1)
-    return without_revision, revision
-
-
-def _auth_headers(uri: str) -> dict[str, str]:
-    if not uri.startswith(("hf://", "https://huggingface.co/")):
-        return {}
-    token = (
-        os.environ.get("HUGGING_FACE_TOKEN")
-        or os.environ.get("HF_TOKEN")
-        or os.environ.get("HUGGINGFACE_HUB_TOKEN")
-    )
-    return {"Authorization": f"Bearer {token}"} if token else {}
-
-
-def _backup_existing(path: Path) -> None:
-    if not path.exists():
-        return
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    backup_dir = path.parent / BACKUP_DIR_NAME / timestamp
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(path), str(backup_dir / path.name))
-
-
 def _receipt_dataset(
-    plan: DatasetPlan,
+    plan: _BundleDatasetSpec,
+    release: Mapping[str, Any],
     *,
-    installed_sha256: Optional[str] = None,
+    materialized: Optional[MaterializedDataset] = None,
 ) -> dict[str, Any]:
     receipt = {
-        "country": plan.country,
+        "country": plan.country_id,
         "dataset": plan.dataset,
-        "version": plan.data_version,
-        "uri": plan.uri,
+        "version": release.get("version") or release.get("build_id"),
+        "uri": plan.source_uri,
         "path": str(plan.destination),
-        "release_manifest_uri": plan.release_manifest_uri,
-        "data_producer": plan.data_producer,
+        "release_manifest_uri": release.get("release_manifest_uri"),
+        "data_package_name": plan.data_package_name,
         "repo_type": plan.repo_type,
     }
-    if plan.build_id:
-        receipt["build_id"] = plan.build_id
-    if plan.expected_sha256:
-        receipt["expected_sha256"] = plan.expected_sha256
-    if installed_sha256:
-        receipt["installed_sha256"] = installed_sha256
+    if release.get("build_id"):
+        receipt["build_id"] = release["build_id"]
+    receipt["expected_sha256"] = plan.sha256
+    if materialized is not None:
+        receipt["installed_sha256"] = materialized.sha256
     return receipt
+
+
+def _selected_dataset_plans(
+    manifest: Mapping[str, Any],
+    countries: Sequence[str],
+    *,
+    data_dir: Path,
+) -> list[tuple[_BundleDatasetSpec, Mapping[str, Any]]]:
+    releases = manifest.get("data_releases")
+    if not isinstance(releases, Mapping):
+        raise BundleError("Bundle manifest does not contain data releases.")
+
+    selected = []
+    for country in countries:
+        release = releases.get(country)
+        if not isinstance(release, Mapping):
+            raise BundleError(
+                f"Bundle manifest does not contain a {country.upper()} data release."
+            )
+        try:
+            country_manifest = CountryReleaseManifest.model_validate(release)
+            plan = _resolve_bundle_dataset(
+                country,
+                data_dir=data_dir,
+                manifest=country_manifest,
+            )
+        except (ValueError, DatasetMaterializationError) as exc:
+            raise BundleError(str(exc)) from exc
+        selected.append((plan, release))
+    return selected
 
 
 def write_receipt(
@@ -692,13 +401,29 @@ def install_bundle(
     install_package_scaffold(target_python, requirements, dry_run=dry_run)
     installed_datasets: list[dict[str, Any]] = []
     if not no_datasets:
-        installed_datasets = install_datasets(
-            manifest,
-            countries=selected_countries,
-            data_dir=data_dir,
-            yes=yes,
-            dry_run=dry_run,
+        dataset_entries = _selected_dataset_plans(
+            manifest, selected_countries, data_dir=data_dir
         )
+        plans = [entry[0] for entry in dataset_entries]
+        if plans:
+            _confirm_dataset_install(
+                plans,
+                data_dir=data_dir,
+                yes=yes,
+                dry_run=dry_run,
+            )
+        for plan, release in dataset_entries:
+            if dry_run:
+                print(f"download {plan.source_uri} -> {plan.destination}")
+                installed_datasets.append(_receipt_dataset(plan, release))
+                continue
+            try:
+                materialized = _reuse_or_download_bundle_files(plan)
+            except DatasetMaterializationError as exc:
+                raise BundleError(str(exc)) from exc
+            installed_datasets.append(
+                _receipt_dataset(plan, release, materialized=materialized)
+            )
     if not dry_run:
         write_receipt(
             manifest,
@@ -904,17 +629,41 @@ def _dataset_checks(
             if isinstance(dataset, Mapping) and dataset.get("country"):
                 receipt_datasets[str(dataset["country"])] = dataset
     checks = []
-    for plan in dataset_plans(manifest, countries=countries, data_dir=data_dir):
-        receipt_dataset = receipt_datasets.get(plan.country)
-        checks.append(
-            runtime_strategy(plan.data_producer).dataset_check(plan, receipt_dataset)
-        )
+    for plan, release in _selected_dataset_plans(
+        manifest, countries, data_dir=data_dir
+    ):
+        receipt_dataset = receipt_datasets.get(plan.country_id)
+        checks.append(_dataset_check(plan, release, receipt_dataset))
     return checks
 
 
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as file:
-        for chunk in iter(lambda: file.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+def _dataset_check(
+    plan: _BundleDatasetSpec,
+    release: Mapping[str, Any],
+    receipt_dataset: Optional[Mapping[str, Any]],
+) -> dict[str, Any]:
+    expected_version = release.get("version") or release.get("build_id")
+    check: dict[str, Any] = {
+        "country": plan.country_id,
+        "dataset": plan.dataset,
+        "expected_version": expected_version,
+        "expected_path": str(plan.destination),
+        "expected_sha256": plan.sha256,
+    }
+    if receipt_dataset is None:
+        check["status"] = "missing_receipt"
+        return check
+    if receipt_dataset.get("version") != expected_version:
+        check["status"] = "mismatch"
+        check["installed_version"] = receipt_dataset.get("version")
+        return check
+    path = Path(str(receipt_dataset.get("path", plan.destination)))
+    if not path.exists():
+        check["status"] = "missing_file"
+        return check
+    actual_sha256 = sha256_file(path)
+    check["installed_version"] = receipt_dataset.get("version")
+    check["installed_sha256"] = actual_sha256
+    check["path"] = str(path)
+    check["status"] = "ok" if actual_sha256 == plan.sha256 else "sha256_mismatch"
+    return check
