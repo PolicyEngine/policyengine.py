@@ -1,3 +1,23 @@
+## [5.1.0] - 2026-08-29
+
+### Changed
+
+- PolicyEngine.py now exposes one `materialize_dataset` entry point for
+  bundle-managed datasets, explicit Hugging Face URIs, and explicit local paths.
+  Managed datasets are reused or downloaded from the exact repository type,
+  immutable revision, and SHA-256 recorded in the release bundle; the other two
+  inputs remain opt-in.
+
+### Removed
+
+- Removed the legacy dataset-specific GCS downloader and its direct dependencies,
+  the public `resolve_local_managed_dataset_source` export, and the former
+  `policyengine.provenance.dataset_sources.materialize_dataset_source` function.
+  Use `policyengine.provenance.materialize_dataset` for bundle-managed datasets,
+  explicit Hugging Face references, and explicit local files. The separate UK
+  geography asset implementation is unchanged.
+
+
 ## [5.0.4] - 2026-08-27
 
 ### Fixed
