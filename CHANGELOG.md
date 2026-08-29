@@ -1,3 +1,10 @@
+## [5.2.0] - 2026-08-29
+
+### Added
+
+- Expose variable period, unit, quantity type, references, applicability, numeric bounds, period-size behavior, and sanitized country metadata on the public `Variable` model. Exclude empty organizational nodes from the public parameter catalogue.
+
+
 ## [5.1.0] - 2026-08-29
 
 ### Changed
