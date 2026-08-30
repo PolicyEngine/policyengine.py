@@ -20,6 +20,10 @@ binary hash. A source-built extension can lack package version metadata; its
 binary hash remains mandatory. Wrapper package versions do not establish the
 native engine's release version.
 
+Restoring a serialized model configuration verifies the saved runtime identity.
+It fails if source or native code has changed; create a new model explicitly to
+run a different version.
+
 ## Input and calculation contract
 
 Use the example in `examples/nz_axiom_pilot.py` with a supplied HDF5 artifact and
@@ -46,6 +50,16 @@ including Decimal and nullable-boolean preservation.
 The two outputs are `budget_2025_wff_abatement_entitlement_change` and
 `budget_2026_iwtc_entitlement_change`. Aggregate them with the returned
 MicroSeries `.sum()`, not manual multiplication by person or family weights.
+
+NZ model configurations and direct `PopulaceNewZealandDataset` outputs support
+Pydantic JSON round-trips. The NZ-only table codec retains exact Decimals,
+nullable booleans, categories, indices, dtypes, and effective weight columns.
+Serialize the output dataset itself with `output_dataset.model_dump_json()` and
+restore it with `PopulaceNewZealandDataset.model_validate_json(...)`.
+
+The shared `Simulation` model still serializes through base-typed dataset/model
+fields, which omit subclass details. Its generic JSON form is not a complete NZ
+run archive; this pilot does not change that pre-existing cross-country behavior.
 
 ## What the result does not establish
 

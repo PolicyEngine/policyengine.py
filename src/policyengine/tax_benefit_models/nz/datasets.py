@@ -13,9 +13,11 @@ from typing import Any, Literal, Optional
 import numpy as np
 import pandas as pd
 from microdf import MicroDataFrame
-from pydantic import Field
+from pydantic import Field, ValidationInfo, field_serializer, field_validator
 
 from policyengine.core import Dataset, YearData
+
+from .serialization import decode_table, encode_table
 
 ENTITIES = ("person", "household", "family")
 
@@ -26,6 +28,17 @@ class NZYearData(YearData):
     person: MicroDataFrame
     household: MicroDataFrame
     family: MicroDataFrame
+
+    @field_serializer("person", "household", "family", when_used="json")
+    def serialize_entity_table(self, value: MicroDataFrame) -> dict[str, Any]:
+        return encode_table(value)
+
+    @field_validator("person", "household", "family", mode="before")
+    @classmethod
+    def restore_entity_table(cls, value: Any, info: ValidationInfo) -> Any:
+        if isinstance(value, dict):
+            return decode_table(value, info.field_name)
+        return value
 
     @property
     def entity_data(self) -> dict[str, MicroDataFrame]:

@@ -14,6 +14,7 @@ from decimal import Decimal, InvalidOperation
 from hashlib import sha256
 from importlib import metadata as importlib_metadata
 from importlib.util import find_spec
+from numbers import Real
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -63,6 +64,17 @@ class AxiomNewZealandPilot(TaxBenefitModelVersion):
         version = sha256(
             json.dumps(provenance, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
+        identity = {
+            "runtime_provenance": provenance,
+            "version": version,
+            "id": f"{nz_model.id}@{version}",
+        }
+        for field, current in identity.items():
+            if field in kwargs and kwargs[field] != current:
+                raise ValueError(
+                    f"The saved NZ model {field} has changed relative to this runtime; "
+                    "construct a new model explicitly instead of rebinding saved configuration."
+                )
         kwargs.update(
             rulespec_root=str(root),
             transport_contract=contract,
@@ -115,11 +127,11 @@ class AxiomNewZealandPilot(TaxBenefitModelVersion):
                 family.loc[:, item["name"]] = item["value"]
                 padding_applied.append(item["name"])
             values = family[item["name"]]
-            if (
-                values.isna().any()
-                or not is_numeric_dtype(values.dtype)
-                or is_bool_dtype(values.dtype)
-                or not (values == 0).all()
+            if values.isna().any() or not all(
+                isinstance(value, (Real, Decimal))
+                and not isinstance(value, (bool, np.bool_))
+                and value == 0
+                for value in values
             ):
                 raise ValueError(
                     f"NZ adapter padding {item['name']!r} must contain numeric zeros only."

@@ -387,6 +387,15 @@ def test_model_configuration_json_roundtrip(rulespec_root, stub_runtime):
     assert restored.transport_contract == model.transport_contract
 
 
+def test_saved_model_refuses_runtime_drift(rulespec_root, stub_runtime, monkeypatch):
+    saved = AxiomNewZealandPilot(rulespec_root=str(rulespec_root)).model_dump_json()
+    monkeypatch.setattr(
+        nz_model, "_build_runtime_provenance", lambda _root: {"changed": True}
+    )
+    with pytest.raises(ValueError, match="changed"):
+        AxiomNewZealandPilot.model_validate_json(saved)
+
+
 def test_tampered_effective_weights_fail(dataset, rulespec_root, stub_runtime):
     dataset.load()
     dataset.data.family["family_weight"] = [1.0, 1.0]
@@ -460,6 +469,13 @@ def test_nonzero_adapter_padding_fails(dataset, rulespec_root, stub_runtime):
         _run(dataset, rulespec_root)
 
 
+def test_decimal_adapter_padding_is_valid(dataset, rulespec_root, stub_runtime):
+    dataset.load()
+    dataset.data.family[PADDING_INPUTS[0]] = [Decimal("0.00"), Decimal("0.00")]
+    simulation = _run(dataset, rulespec_root)
+    assert simulation.output_dataset.data.family[WFF_ABATEMENT_CHANGE].sum() == 120.0
+
+
 def test_mutated_input_has_distinct_execution_fingerprint(
     dataset, rulespec_root, stub_runtime
 ):
@@ -476,6 +492,52 @@ def test_mutated_input_has_distinct_execution_fingerprint(
     assert first["input_artifact_sha256"] == second["input_artifact_sha256"]
     assert first["input_frame_sha256"] != second["input_frame_sha256"]
     json.dumps(second, allow_nan=False)
+
+
+def test_output_dataset_json_roundtrip_preserves_tables_and_receipt(
+    dataset, rulespec_root, stub_runtime
+):
+    dataset.load()
+    name = "wff_family_scheme_income_for_relationship_period"
+    dataset.data.family[name] = [Decimal("50000.00"), Decimal("100000.00")]
+    output = _run(dataset, rulespec_root).output_dataset
+    # These extra columns exercise JSON transport, not policy inputs.
+    output.data.family["nullable_marker"] = pd.Series([True, pd.NA], dtype="boolean")
+    output.data.family["source_category"] = pd.Categorical(
+        ["b", "a"], categories=["a", "b", "unused"], ordered=True
+    )
+    encoded = output.model_dump_json()
+    restored = PopulaceNewZealandDataset.model_validate_json(encoded)
+    assert restored.filepath is None
+    assert restored.is_output_dataset
+    assert restored.policy_period == output.policy_period
+    assert restored.metadata == output.metadata
+    for entity in nz_datasets.ENTITIES:
+        pd.testing.assert_frame_equal(
+            pd.DataFrame(getattr(restored.data, entity)),
+            pd.DataFrame(getattr(output.data, entity)),
+        )
+    assert list(restored.data.family[name]) == [
+        Decimal("50000.00"),
+        Decimal("100000.00"),
+    ]
+    assert restored.data.family[WFF_ABATEMENT_CHANGE].sum() == 120.0
+
+
+def test_year_data_json_roundtrip_preserves_named_nonrange_indices(stub_runtime):
+    tables = _tables()
+    tables["family"].index = pd.Index(["second", "first"], name="family_row")
+    tables["person"].index = pd.MultiIndex.from_tuples(
+        [("a", 1), ("a", 2), ("a", 3), ("b", 1), ("b", 2)],
+        names=["group", "row"],
+    )
+    data = nz_datasets.year_data_from_frame(nz_datasets.frame_from_tables(tables))
+    restored = nz_datasets.NZYearData.model_validate_json(data.model_dump_json())
+    for entity in nz_datasets.ENTITIES:
+        pd.testing.assert_frame_equal(
+            pd.DataFrame(getattr(restored, entity)),
+            pd.DataFrame(getattr(data, entity)),
+        )
 
 
 @pytest.mark.skipif(
