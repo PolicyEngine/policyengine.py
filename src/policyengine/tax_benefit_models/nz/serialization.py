@@ -160,6 +160,9 @@ def decode_table(payload: dict[str, Any], entity: str) -> MicroDataFrame:
         [[_decode_cell(value) for value in row] for row in payload["data"]],
         index=_decode_index(payload["index"]),
         columns=columns,
+        # Avoid pandas inferring float for integer+None object columns before
+        # the recorded dtype is restored: that can round integers above 2**53.
+        dtype=object,
     ).astype(
         {
             name: _decode_dtype(dtype)

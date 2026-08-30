@@ -540,6 +540,19 @@ def test_year_data_json_roundtrip_preserves_named_nonrange_indices(stub_runtime)
         )
 
 
+def test_json_codec_does_not_coerce_large_object_integers(
+    dataset, rulespec_root, stub_runtime
+):
+    output = _run(dataset, rulespec_root).output_dataset
+    large_id = 9007199254740993
+    output.data.family["optional_id"] = pd.Series([large_id, None], dtype=object)
+    restored = PopulaceNewZealandDataset.model_validate_json(output.model_dump_json())
+    values = restored.data.family["optional_id"]
+    assert values.iloc[0] == large_id
+    assert type(values.iloc[0]) is int
+    assert values.iloc[1] is None
+
+
 @pytest.mark.skipif(
     os.environ.get("RUN_NZ_AXIOM_INTEGRATION") != "1",
     reason="requires compatible source-only Microcosm/Axiom runtime",
