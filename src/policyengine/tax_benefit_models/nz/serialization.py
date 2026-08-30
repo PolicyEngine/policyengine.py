@@ -64,7 +64,11 @@ def _encode_dtype(dtype: Any) -> dict[str, Any]:
             "ordered": dtype.ordered,
         }
     if isinstance(dtype, pd.StringDtype):
-        return {"kind": "string", "storage": dtype.storage}
+        return {
+            "kind": "string",
+            "storage": dtype.storage,
+            "na_value": _encode_cell(dtype.na_value),
+        }
     return {"kind": "pandas", "name": str(dtype)}
 
 
@@ -74,7 +78,23 @@ def _decode_dtype(payload: dict[str, Any]) -> Any:
             categories=_decode_index(payload["categories"]), ordered=payload["ordered"]
         )
     if payload["kind"] == "string":
-        return pd.StringDtype(storage=payload["storage"])
+        na_value = _decode_cell(payload.get("na_value", {"_type": "na"}))
+        if na_value is pd.NA:
+            # The omitted keyword keeps older pandas versions compatible.
+            return pd.StringDtype(storage=payload["storage"])
+        if not isinstance(na_value, float) or not math.isnan(na_value):
+            raise ValueError("Invalid NZ JSON string missing-value descriptor.")
+        try:
+            return pd.StringDtype(storage=payload["storage"], na_value=na_value)
+        except TypeError as exc:
+            # pandas 2.2's pyarrow_numpy storage already has NaN semantics,
+            # but its constructor does not accept the na_value keyword.
+            legacy_dtype = pd.StringDtype(storage=payload["storage"])
+            if _encode_cell(legacy_dtype.na_value) == _encode_cell(na_value):
+                return legacy_dtype
+            raise ValueError(
+                "This pandas version cannot restore NaN-semantics string data."
+            ) from exc
     if payload["kind"] != "pandas":
         raise ValueError("Unsupported NZ JSON dtype descriptor.")
     return pd.api.types.pandas_dtype(payload["name"])

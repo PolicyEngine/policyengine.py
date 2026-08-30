@@ -25,6 +25,7 @@ from policyengine.tax_benefit_models.nz import (
 )
 from policyengine.tax_benefit_models.nz import datasets as nz_datasets
 from policyengine.tax_benefit_models.nz import model as nz_model
+from policyengine.tax_benefit_models.nz import serialization as nz_serialization
 
 REQUIRED_INPUTS = {
     "family_tax_credit_eldest_dependent_child_care_units": "decimal128(18,2)",
@@ -551,6 +552,75 @@ def test_json_codec_does_not_coerce_large_object_integers(
     assert values.iloc[0] == large_id
     assert type(values.iloc[0]) is int
     assert values.iloc[1] is None
+
+
+@pytest.mark.parametrize("missing_value", [pd.NA, np.nan], ids=["NA", "NaN"])
+def test_json_codec_preserves_string_missing_value_semantics(
+    stub_runtime, missing_value
+):
+    try:
+        dtype = pd.StringDtype(storage="python", na_value=missing_value)
+    except TypeError:
+        if missing_value is not pd.NA:
+            pytest.skip("Installed pandas does not support NaN-semantics strings")
+        dtype = pd.StringDtype(storage="python")
+    tables = _tables()
+    family = tables["family"]
+    family["optional_text"] = pd.Series(["a", None], dtype=dtype)
+    family["source_category"] = pd.Categorical(
+        ["a", None], categories=pd.Index(["a", "unused"], dtype=dtype), ordered=True
+    )
+    family.index = pd.Index(["second", None], dtype=dtype, name="family_row")
+    data = nz_datasets.year_data_from_frame(nz_datasets.frame_from_tables(tables))
+    restored = nz_datasets.NZYearData.model_validate_json(data.model_dump_json())
+    pd.testing.assert_frame_equal(
+        pd.DataFrame(restored.family), pd.DataFrame(data.family)
+    )
+
+
+def test_json_codec_reads_original_string_descriptor():
+    dtype = nz_serialization._decode_dtype({"kind": "string", "storage": "python"})
+    assert dtype == pd.StringDtype(storage="python")
+    assert dtype.na_value is pd.NA
+
+
+def test_json_codec_rejects_invalid_string_missing_value_descriptor():
+    with pytest.raises(ValueError, match="missing-value descriptor"):
+        nz_serialization._decode_dtype(
+            {"kind": "string", "storage": "python", "na_value": "missing"}
+        )
+
+
+@pytest.mark.parametrize("supports_nan", [True, False])
+def test_json_codec_legacy_string_constructor_preserves_semantics(
+    monkeypatch, supports_nan
+):
+    # Exercise the old constructor signature without requiring an Arrow
+    # installation: only dtype metadata is involved in this fallback.
+    try:
+        legacy_dtype = pd.StringDtype(
+            storage="python", na_value=np.nan if supports_nan else pd.NA
+        )
+    except TypeError:
+        if supports_nan:
+            pytest.skip("Installed pandas does not support NaN-semantics strings")
+        legacy_dtype = pd.StringDtype(storage="python")
+
+    def legacy_constructor(*, storage):
+        assert storage == "pyarrow_numpy"
+        return legacy_dtype
+
+    monkeypatch.setattr(nz_serialization.pd, "StringDtype", legacy_constructor)
+    payload = {
+        "kind": "string",
+        "storage": "pyarrow_numpy",
+        "na_value": {"_type": "float", "value": "nan"},
+    }
+    if supports_nan:
+        assert nz_serialization._decode_dtype(payload) is legacy_dtype
+    else:
+        with pytest.raises(ValueError, match="cannot restore NaN-semantics"):
+            nz_serialization._decode_dtype(payload)
 
 
 @pytest.mark.skipif(
