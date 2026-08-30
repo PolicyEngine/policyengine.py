@@ -99,7 +99,16 @@ class FakeAxiomEngine:
 
 
 @pytest.fixture
-def stub_source_runtime(monkeypatch):
+def stub_rulespec_root(tmp_path):
+    root = tmp_path / "rulespec-be"
+    module = root / be_model_module.PILOT_MODULE
+    module.parent.mkdir(parents=True)
+    module.write_text("format: rulespec/v1\nrules: []\n", encoding="utf-8")
+    return root
+
+
+@pytest.fixture
+def stub_source_runtime(monkeypatch, stub_rulespec_root):
     FakeFrame.latest = None
     FakeAxiomEngine.latest = None
     monkeypatch.setattr(
@@ -118,6 +127,7 @@ def stub_source_runtime(monkeypatch):
             FakeAxiomEngine,
         ),
     )
+    return stub_rulespec_root
 
 
 @pytest.fixture
@@ -162,9 +172,15 @@ def pilot_dataset(tmp_path):
     )
 
 
-def _run(pilot_dataset, *, period=2025, communal_additional_tax_rate=0.0):
+def _run(
+    pilot_dataset,
+    *,
+    rulespec_root,
+    period=2025,
+    communal_additional_tax_rate=0.0,
+):
     version = AxiomBelgiumPilot(
-        rulespec_root=str(RULESPEC_ROOT),
+        rulespec_root=str(rulespec_root),
         period=period,
         communal_additional_tax_rate=communal_additional_tax_rate,
     )
@@ -182,7 +198,11 @@ def test_run_preserves_input_periods_weights_and_metadata(
     input_path = Path(pilot_dataset.filepath)
     before = sha256(input_path.read_bytes()).hexdigest()
 
-    simulation = _run(pilot_dataset, period=2025)
+    simulation = _run(
+        pilot_dataset,
+        rulespec_root=stub_source_runtime,
+        period=2025,
+    )
     output = simulation.output_dataset
 
     assert sha256(input_path.read_bytes()).hexdigest() == before
@@ -190,7 +210,7 @@ def test_run_preserves_input_periods_weights_and_metadata(
     assert output.year == 2026
     assert output.policy_period == 2025
     assert FakeAxiomEngine.latest.period == 2025
-    assert FakeAxiomEngine.latest.rulespec_roots == (RULESPEC_ROOT.resolve(),)
+    assert FakeAxiomEngine.latest.rulespec_roots == (stub_source_runtime.resolve(),)
     assert pilot_dataset.metadata == SOURCE_METADATA
     assert output.metadata["build_id"] == SOURCE_METADATA["build_id"]
     assert output.metadata["calibration"] == SOURCE_METADATA["calibration"]
@@ -233,7 +253,11 @@ def test_run_preserves_input_periods_weights_and_metadata(
 
 
 def test_default_policy_period_is_the_dataset_year(pilot_dataset, stub_source_runtime):
-    simulation = _run(pilot_dataset, period=None)
+    simulation = _run(
+        pilot_dataset,
+        rulespec_root=stub_source_runtime,
+        period=None,
+    )
     assert FakeAxiomEngine.latest.period == 2026
     assert simulation.output_dataset.policy_period == 2026
 
@@ -241,6 +265,7 @@ def test_default_policy_period_is_the_dataset_year(pilot_dataset, stub_source_ru
 def test_run_records_result_changing_configuration(pilot_dataset, stub_source_runtime):
     simulation = _run(
         pilot_dataset,
+        rulespec_root=stub_source_runtime,
         period=2025,
         communal_additional_tax_rate=0.075,
     )
@@ -260,7 +285,11 @@ def test_output_metadata_round_trips_only_after_a_distinct_path_is_chosen(
 ):
     input_path = Path(pilot_dataset.filepath)
     before = sha256(input_path.read_bytes()).hexdigest()
-    output = _run(pilot_dataset, period=2025).output_dataset
+    output = _run(
+        pilot_dataset,
+        rulespec_root=stub_source_runtime,
+        period=2025,
+    ).output_dataset
     output_path = tmp_path / "belgium_output.h5"
     assert output_path != input_path
 
@@ -293,13 +322,16 @@ def test_dataset_rejects_a_mislabeled_hdf5_period(pilot_dataset):
 def test_model_version_is_derived_from_content_provenance(
     monkeypatch, stub_source_runtime
 ):
-    first = AxiomBelgiumPilot(rulespec_root=str(RULESPEC_ROOT), period=2025)
+    first = AxiomBelgiumPilot(
+        rulespec_root=str(stub_source_runtime),
+        period=2025,
+    )
     assert first.version.startswith("rulespec-be@222222222222+runtime@")
     assert first.version != "0.1.0-pilot"
     assert first.id == f"{be_model_module.be_model.id}@{first.version}"
 
     attempted_override = AxiomBelgiumPilot(
-        rulespec_root=str(RULESPEC_ROOT),
+        rulespec_root=str(stub_source_runtime),
         period=2025,
         id="caller-supplied-id",
     )
@@ -319,14 +351,17 @@ def test_model_version_is_derived_from_content_provenance(
             lambda _root, value=changed: value,
         )
         changed_version = AxiomBelgiumPilot(
-            rulespec_root=str(RULESPEC_ROOT),
+            rulespec_root=str(stub_source_runtime),
             period=2025,
         )
         assert changed_version.version != first.version
 
 
 def test_run_refuses_provenance_drift(monkeypatch, pilot_dataset, stub_source_runtime):
-    version = AxiomBelgiumPilot(rulespec_root=str(RULESPEC_ROOT), period=2025)
+    version = AxiomBelgiumPilot(
+        rulespec_root=str(stub_source_runtime),
+        period=2025,
+    )
     changed = deepcopy(TEST_PROVENANCE)
     changed["rulespec"]["module_sha256"] = "f" * 64
     monkeypatch.setattr(
@@ -464,19 +499,27 @@ def test_dataset_rejects_a_mismatched_legacy_person_weight(tmp_path):
     ),
 )
 def test_real_source_stack_computes_the_worker_slice(pilot_dataset):
-    simulation = _run(pilot_dataset, period=2025)
+    simulation = _run(
+        pilot_dataset,
+        rulespec_root=RULESPEC_ROOT,
+        period=2025,
+    )
     person = pd.DataFrame(simulation.output_dataset.data.person)
     gross = person[REMUNERATION].to_numpy()
     ssc = person[EMPLOYEE_SSC].to_numpy()
     pit = person[PIT_BEFORE_WITHHOLDING].to_numpy()
 
     statutory = gross * ORDINARY_WORKER_SSC_RATE
+    assert np.isfinite(ssc).all()
+    assert np.isfinite(pit).all()
     assert ssc[0] == 0.0
     assert ssc[1] == 0.0
     assert 0.0 < ssc[2] < statutory[2]
     np.testing.assert_allclose(ssc[3], statutory[3], rtol=1e-9)
     assert pit[0] == 0.0
-    assert 0.0 <= pit[1] <= pit[2] < pit[3]
+    # The pinned RuleSpec companion fixture establishes that this output is
+    # net of a refundable credit and can be negative at low remuneration.
+    assert pit[1] < 0.0 < pit[2] < pit[3]
 
 
 @pytest.fixture
@@ -517,7 +560,10 @@ def test_run_rejects_mismatched_in_memory_person_weights(
     )
 
     with pytest.raises(ValueError, match="person_weight values do not exactly match"):
-        _run(in_memory_pilot_dataset)
+        _run(
+            in_memory_pilot_dataset,
+            rulespec_root=stub_source_runtime,
+        )
 
     assert FakeFrame.latest is None
     assert FakeAxiomEngine.latest is None
@@ -541,7 +587,10 @@ def test_run_derives_in_memory_weights_from_households(
     original_person = pd.DataFrame(in_memory_pilot_dataset.data.person).copy()
     original_household = pd.DataFrame(in_memory_pilot_dataset.data.household).copy()
 
-    output = _run(in_memory_pilot_dataset).output_dataset
+    output = _run(
+        in_memory_pilot_dataset,
+        rulespec_root=stub_source_runtime,
+    ).output_dataset
 
     # The runtime double returns 1 and 2; household weights make 1*2 + 2*5 = 12.
     assert float(output.data.person[EMPLOYEE_SSC].sum()) == 12.0
