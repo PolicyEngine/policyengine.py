@@ -44,7 +44,11 @@ from microdf import MicroDataFrame
 
 from policyengine.core import TaxBenefitModel, TaxBenefitModelVersion
 
-from .datasets import BEYearData, PopulaceBelgiumDataset
+from .datasets import (
+    BEYearData,
+    PopulaceBelgiumDataset,
+    _person_with_household_weights,
+)
 
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
@@ -127,8 +131,11 @@ class AxiomBelgiumPilot(TaxBenefitModelVersion):
             dataset.load()
         assert dataset.data is not None
 
-        person = pd.DataFrame(dataset.data.person).copy()
         household = pd.DataFrame(dataset.data.household).copy()
+        person = _person_with_household_weights(
+            pd.DataFrame(dataset.data.person),
+            household,
+        )
         for name, value in SUPPLIED_DEFAULTS.items():
             if name not in person.columns:
                 person[name] = value

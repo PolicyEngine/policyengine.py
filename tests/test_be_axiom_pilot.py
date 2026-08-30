@@ -477,3 +477,88 @@ def test_real_source_stack_computes_the_worker_slice(pilot_dataset):
     np.testing.assert_allclose(ssc[3], statutory[3], rtol=1e-9)
     assert pit[0] == 0.0
     assert 0.0 <= pit[1] <= pit[2] < pit[3]
+
+
+@pytest.fixture
+def in_memory_pilot_dataset():
+    return PopulaceBelgiumDataset(
+        name="in-memory-pilot",
+        description="two-person household-authoritative weight fixture",
+        year=2026,
+        metadata=deepcopy(SOURCE_METADATA),
+        data=BEYearData(
+            person=MicroDataFrame(
+                {
+                    "person_id": [1, 2],
+                    "person_household_id": [1, 2],
+                    REMUNERATION: [10.0, 20.0],
+                }
+            ),
+            household=MicroDataFrame(
+                {
+                    # Reversed rows require an ID join, not positional copying.
+                    "household_id": [2, 1],
+                    "household_weight": [5.0, 2.0],
+                },
+                weights="household_weight",
+            ),
+        ),
+    )
+
+
+def test_run_rejects_mismatched_in_memory_person_weights(
+    in_memory_pilot_dataset, stub_source_runtime
+):
+    person = pd.DataFrame(in_memory_pilot_dataset.data.person).copy()
+    person["person_weight"] = [2.0, 999.0]
+    in_memory_pilot_dataset.data.person = MicroDataFrame(
+        person,
+        weights="person_weight",
+    )
+
+    with pytest.raises(ValueError, match="person_weight values do not exactly match"):
+        _run(in_memory_pilot_dataset)
+
+    assert FakeFrame.latest is None
+    assert FakeAxiomEngine.latest is None
+    np.testing.assert_array_equal(
+        in_memory_pilot_dataset.data.person["person_weight"],
+        [2.0, 999.0],
+    )
+
+
+@pytest.mark.parametrize("with_legacy_person_weights", [False, True])
+def test_run_derives_in_memory_weights_from_households(
+    in_memory_pilot_dataset, stub_source_runtime, with_legacy_person_weights
+):
+    if with_legacy_person_weights:
+        person = pd.DataFrame(in_memory_pilot_dataset.data.person).copy()
+        person["person_weight"] = [2.0, 5.0]
+        in_memory_pilot_dataset.data.person = MicroDataFrame(
+            person,
+            weights="person_weight",
+        )
+    original_person = pd.DataFrame(in_memory_pilot_dataset.data.person).copy()
+    original_household = pd.DataFrame(in_memory_pilot_dataset.data.household).copy()
+
+    output = _run(in_memory_pilot_dataset).output_dataset
+
+    # The runtime double returns 1 and 2; household weights make 1*2 + 2*5 = 12.
+    assert float(output.data.person[EMPLOYEE_SSC].sum()) == 12.0
+    np.testing.assert_array_equal(output.data.person["person_weight"], [2.0, 5.0])
+    assert "person_weight" not in FakeFrame.latest.tables["person"]
+    np.testing.assert_array_equal(
+        FakeFrame.latest.weights["household"].values,
+        [5.0, 2.0],
+    )
+    assert in_memory_pilot_dataset.filepath is None
+    assert output.filepath is None
+    assert in_memory_pilot_dataset.metadata == SOURCE_METADATA
+    pd.testing.assert_frame_equal(
+        pd.DataFrame(in_memory_pilot_dataset.data.person),
+        original_person,
+    )
+    pd.testing.assert_frame_equal(
+        pd.DataFrame(in_memory_pilot_dataset.data.household),
+        original_household,
+    )
