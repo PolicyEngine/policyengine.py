@@ -1,3 +1,10 @@
+## [5.3.0] - 2026-08-30
+
+### Added
+
+- Belgium pilot: add an Axiom-backed model over Microcosm-BE entity tables with content-bound RuleSpec/engine provenance, separately labeled data and policy periods, metadata-preserving HDF5 round trips, nonuniform calibrated-weight coverage, and in-memory outputs that cannot overwrite their inputs.
+
+
 ## [5.2.0] - 2026-08-29
 
 ### Added
