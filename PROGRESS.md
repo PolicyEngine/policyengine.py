@@ -17,6 +17,10 @@
   substitute.
 - Scope: data-only behavior input configuration and ID-keyed resolution; no
   simulation or country-computation integration.
+- Frozen-review status: not ready. The implementation, tests, documentation,
+  type check, Ruff, and diff checks are green, but the required GitHub issue,
+  issue-numbered changelog fragment, current-network fetch, push, and draft PR
+  cannot be completed while GitHub DNS/API access is unavailable.
 
 ## Done
 
@@ -30,7 +34,7 @@
   collection because the not-yet-implemented public models are absent, as
   expected. The normal `uv run` environment could not be created offline, so
   the red run used the available Python environment with repository conftests
-  disabled; full validation remains pending.
+  disabled; later green validation is recorded below.
 - Resumed from the TDD commit and inspected the dirty implementation, salvage
   ref `refs/codex-salvage/feat-be-behavior-input-contract-20260830-212607-7535`,
   complete architecture audit, and all repository instruction files. The dirty
@@ -71,10 +75,23 @@
 - Final architecture review confirmed the source/API scope is clean and added
   the audit's exact legal-operability, non-inference, and explicit non-goal
   guardrails to the documentation.
+- Focused mypy validation passes for `src/policyengine/core/behavior.py`, and a
+  runtime API probe reconfirms JSON round-trip, private resolver scope, and no
+  top-level `pe.be` export.
+- Towncrier comparison was run with an available local installation and fails
+  only because no new fragment exists: `No new newsfragments found on this
+  branch.` A fragment was not fabricated without the required issue number.
+- Independent final reviews found no blocking code or architecture defect and
+  assessed implementation risk as low. The sole tracked completion blocker is
+  the missing issue-numbered Towncrier fragment.
 
 ## Next
 
-- Create or identify the required GitHub issue, then add its issue-numbered
-  Towncrier fragment using the live `.added.md` convention.
-- Retry the network fetch, then run changelog and final verification and attempt
-  the required same-repository draft PR workflow only if every gate is green.
+- Retry `git fetch origin main`; reconcile only if the exact upstream SHA has
+  advanced from `3c3b4f6442f4a5adc47274734d71a6ca10103b43`.
+- Create or verify the GitHub issue, add `changelog.d/<issue>.added.md`, and make
+  the first PR-body line `Fixes #<issue>`.
+- Re-run Towncrier, final tests/Ruff/diff checks, and the full docs render in an
+  environment with a writable Quarto cache.
+- Push with `make push-pr-branch`, open only a same-repository draft PR, and
+  verify `isDraft=true` and head repository `PolicyEngine/policyengine.py`.
