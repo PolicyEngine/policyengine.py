@@ -45,6 +45,54 @@ A complete model page should be explicit about four pieces:
 
 For example, a program page should not stop at eligibility. It should say how benefit value is represented, whether household-paid costs are modeled, what data inputs are required, and how the program enters aggregate output concepts.
 
+## Behavior inputs and legal semantics
+
+Legal rules, population construction, and non-legal behavioral mechanics have
+different owners:
+
+| Layer | Owns |
+|---|---|
+| Source systems and Chronicle | Documentary source facts |
+| Microcosm | Population construction and measured or latent population flags |
+| PolicyEngine | Explicit population-input bindings and, in later stages, non-legal take-up and labor-supply mechanics |
+| Axiom and RuleSpec | Only legal rules, concepts, events, and statuses grounded in public documents |
+
+These terms are not interchangeable:
+
+- **Eligibility** is a legal qualifying predicate.
+- **Entitlement** is a legal right or calculated amount. It does not establish
+  application, award, payment, or receipt.
+- **Application or claim** is a claimant or administrative event. Microcosm may
+  carry measured or latent application state; Axiom may receive it only when an
+  exact public authority makes it legally operative.
+- **Award** is an administrative determination. It must not be inferred from
+  eligibility or receipt.
+- **Payment** is a legal amount due, issued, or disbursed.
+- **Receipt** is a measured or latent population fact or a PolicyEngine
+  behavioral outcome. It may lag or differ from legal payment.
+- **Simulated non-take-up** is a PolicyEngine-owned behavioral outcome. It is
+  not ineligibility, denial, loss of entitlement, or an Axiom fact.
+
+Eligibility or a positive static amount alone proves none of application,
+award, payment, or receipt.
+
+`BehaviorInputBinding` gives an adapter-local role an entity and column
+reference. Roles are local labels, not universal legal or benefit concepts;
+bindings do not contain arrays, dataframes, simulations, callables,
+probabilities, or arbitrary objects. `BehaviorInputs` is the frozen,
+JSON-round-trippable collection of those bindings.
+
+The internal resolver reads only declared columns from loaded
+`YearData.entity_data`. It requires a non-null, unique `<entity>_id`, copies
+values into series indexed by that stable ID, and preserves nulls. It never
+aligns rows positionally, remaps between entities, or requires a column to
+appear in a legal-model variable registry.
+
+This boundary only validates and resolves inputs. It adds no behavior or
+Belgian formula, `takes_up_*` concept, adapter registry, legal rerun,
+`Simulation` field, cache behavior, public `pe.be` export, effect on
+`Simulation.run()`, or country and labor-supply numerical change.
+
 ## What belongs in generated reference
 
 Generated reference pages should include:
@@ -70,4 +118,3 @@ Authored methodology pages should focus on model choices:
 - what current limitations users should know before interpreting outputs
 
 That is the structure used by the first new US health-cost page.
-
