@@ -5,11 +5,11 @@ from typing import Optional
 import pandas as pd
 import pytest
 from microdf import MicroDataFrame
-from policyengine.core.behavior import _resolve_behavior_inputs
 from pydantic import ValidationError
 
 import policyengine.core as core
 from policyengine.core import BehaviorInputBinding, BehaviorInputs
+from policyengine.core.behavior import _resolve_behavior_inputs
 from policyengine.tax_benefit_models.be.datasets import BEYearData
 
 BEHAVIOR_COLUMN = "microcosm_latent_claim_flag"
@@ -268,5 +268,8 @@ def test_resolution_copies_values_without_mutating_or_aliasing_source(
     pd.testing.assert_frame_equal(pd.DataFrame(be_year_data.person), source_before)
     values.loc[30] = False
     assert be_year_data.person.loc[0, BEHAVIOR_COLUMN] == True  # noqa: E712
-    be_year_data.person.loc[0, BEHAVIOR_COLUMN] = pd.NA
+    be_year_data.person[BEHAVIOR_COLUMN] = pd.Series(
+        [pd.NA, pd.NA, pd.NA],
+        dtype="boolean",
+    )
     assert values.loc[30] == False  # noqa: E712

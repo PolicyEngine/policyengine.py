@@ -45,6 +45,9 @@
   for the implementation slice. The canonical `uv run` remains blocked because
   the sandbox cannot write the configured user cache; canonical validation is
   still pending.
+- Hardened the source-aliasing test against MicroDataFrame scalar-setter
+  differences across pandas/microdf versions and corrected the Ruff import
+  grouping. The 17 focused tests and direct Ruff checks remain green.
 
 ## Next
 
