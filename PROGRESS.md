@@ -34,10 +34,20 @@
   implementation is byte-identical to the salvage snapshot.
 - Confirmed the requested boundary has no dependency on `Simulation.run()`, a
   legal-variable registry, positional entity mapping, or source runtimes.
+- Added the frozen, extra-forbidding `BehaviorInputBinding` and `BehaviorInputs`
+  models, exported only those configuration models from `policyengine.core`,
+  and kept the pure resolver internal.
+- The resolver requires non-null unique stable entity IDs, returns copied
+  ID-indexed series, preserves nullable values, and does not mutate source
+  tables or remap entities.
+- Focused diagnostic validation passes all 17 contract tests under the available
+  Python 3.14 environment. Direct Ruff format/check and `git diff --check` pass
+  for the implementation slice. The canonical `uv run` remains blocked because
+  the sandbox cannot write the configured user cache; canonical validation is
+  still pending.
 
 ## Next
 
-- Validate and commit the minimal frozen Pydantic models and pure resolver.
 - Add ownership/vocabulary documentation and a Towncrier fragment.
 - Run focused and proportional regression checks, self-review, and attempt the
   required same-repository draft PR workflow only after current upstream Git
