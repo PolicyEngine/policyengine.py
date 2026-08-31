@@ -5,11 +5,14 @@
 - Branch: `feat/be-behavior-input-contract`
 - Starting base: `3c3b4f6442f4a5adc47274734d71a6ca10103b43`
 - Local `origin/main` at start: `3c3b4f6442f4a5adc47274734d71a6ca10103b43`
-- Last fetch attempt: 2026-08-31; blocked because the execution environment
-  cannot resolve `github.com`.
-- Live comparison: GitHub's repository page shows a newer `main` history than
-  the 1,161 commits available in local `origin/main`. Publication and final
-  base selection remain gated on fetching the actual upstream Git objects.
+- Last network fetch attempt: 2026-08-31; blocked because the execution
+  environment cannot resolve `github.com`.
+- Live comparison: this worktree's common repository is shallow and therefore
+  counts 1,161 commits at `origin/main`. An independent non-shallow clone has
+  the same `origin/main` SHA with 1,168 commits, matching GitHub's live history
+  count. The apparent seven-commit difference was shallow history, not an
+  upstream advance; the exact comparison base remains
+  `3c3b4f6442f4a5adc47274734d71a6ca10103b43`.
 - The local `main` ref is unrelated divergent work and is not a safe upstream
   substitute.
 - Scope: data-only behavior input configuration and ID-keyed resolution; no
@@ -42,9 +45,9 @@
   tables or remap entities.
 - Focused diagnostic validation passes all 17 contract tests under the available
   Python 3.14 environment. Direct Ruff format/check and `git diff --check` pass
-  for the implementation slice. The canonical `uv run` remains blocked because
-  the sandbox cannot write the configured user cache; canonical validation is
-  still pending.
+  for the implementation slice. A syncing `uv run` remains blocked because the
+  sandbox cannot write the configured user cache; later validation therefore
+  uses `uv run --no-sync` with an existing development environment.
 - Hardened the source-aliasing test against MicroDataFrame scalar-setter
   differences across pandas/microdf versions and corrected the Ruff import
   grouping. The 17 focused tests and direct Ruff checks remain green.
@@ -73,6 +76,5 @@
 
 - Create or identify the required GitHub issue, then add its issue-numbered
   Towncrier fragment using the live `.added.md` convention.
-- Fetch and reconcile the current upstream Git objects, then run changelog and
-  final verification and attempt the required same-repository draft PR
-  workflow only if every gate is green.
+- Retry the network fetch, then run changelog and final verification and attempt
+  the required same-repository draft PR workflow only if every gate is green.
