@@ -5,10 +5,15 @@
 - Branch: `feat/be-behavior-input-contract`
 - Starting base: `3c3b4f6442f4a5adc47274734d71a6ca10103b43`
 - Local `origin/main` at start: `3c3b4f6442f4a5adc47274734d71a6ca10103b43`
+- Last fetch attempt: 2026-08-31; blocked because the execution environment
+  cannot resolve `github.com`.
+- Live comparison: GitHub's repository page shows a newer `main` history than
+  the 1,161 commits available in local `origin/main`. Publication and final
+  base selection remain gated on fetching the actual upstream Git objects.
+- The local `main` ref is unrelated divergent work and is not a safe upstream
+  substitute.
 - Scope: data-only behavior input configuration and ID-keyed resolution; no
   simulation or country-computation integration.
-- Upstream refresh: attempted on 2026-08-30, but GitHub DNS resolution is
-  unavailable in the execution environment.
 
 ## Done
 
@@ -23,10 +28,17 @@
   expected. The normal `uv run` environment could not be created offline, so
   the red run used the available Python environment with repository conftests
   disabled; full validation remains pending.
+- Resumed from the TDD commit and inspected the dirty implementation, salvage
+  ref `refs/codex-salvage/feat-be-behavior-input-contract-20260830-212607-7535`,
+  complete architecture audit, and all repository instruction files. The dirty
+  implementation is byte-identical to the salvage snapshot.
+- Confirmed the requested boundary has no dependency on `Simulation.run()`, a
+  legal-variable registry, positional entity mapping, or source runtimes.
 
 ## Next
 
-- Implement the minimal frozen Pydantic models and pure resolver.
+- Validate and commit the minimal frozen Pydantic models and pure resolver.
 - Add ownership/vocabulary documentation and a Towncrier fragment.
 - Run focused and proportional regression checks, self-review, and attempt the
-  required same-repository draft PR workflow.
+  required same-repository draft PR workflow only after current upstream Git
+  objects can be fetched and reconciled.
