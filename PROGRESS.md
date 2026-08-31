@@ -17,10 +17,9 @@
   substitute.
 - Scope: data-only behavior input configuration and ID-keyed resolution; no
   simulation or country-computation integration.
-- Frozen-review status: implementation-ready. The code, tests, documentation,
-  type check, Ruff, and diff checks are green; issue #510 and its Towncrier
-  fragment now bind the change. Draft publication and independent frozen-head
-  review remain.
+- Frozen-review status: locally ready. The code, tests, documentation, type
+  check, Ruff, diff, and issue-bound Towncrier checks are green. Draft
+  publication and independent frozen-head review remain.
 
 ## Done
 
@@ -78,20 +77,23 @@
 - Focused mypy validation passes for `src/policyengine/core/behavior.py`, and a
   runtime API probe reconfirms JSON round-trip, private resolver scope, and no
   top-level `pe.be` export.
-- Towncrier comparison was run with an available local installation and fails
-  only because no new fragment exists: `No new newsfragments found on this
-  branch.` A fragment was not fabricated without the required issue number.
+- Towncrier comparison now finds `changelog.d/510.added.md` and passes against
+  the freshly fetched `origin/main`.
 - Independent final reviews found no blocking code or architecture defect and
   assessed implementation risk as low. The previously missing issue-numbered
   Towncrier fragment is now resolved by issue #510.
 - Created PolicyEngine/policyengine.py issue #510, added
   `changelog.d/510.added.md`, and re-fetched the live upstream base without a
   branch divergence.
+- Re-ran the issue-bound tree: all 17 focused contract tests pass in the
+  hermetic no-country-import environment; whole-repository Ruff format and lint,
+  focused mypy, architecture Markdown parsing, Towncrier, and diff checks pass.
+  The shared canonical clone environment has since picked up an uncertified US
+  package/data combination, so it is no longer a valid runner for this isolated
+  branch; the hermetic contract suite is unaffected.
 
 ## Next
 
-- Re-run Towncrier, focused tests, Ruff, and diff checks on the issue-bound
-  tree.
 - Push the same-repository branch, open only a draft PR beginning `Fixes #510`,
   and verify its live base/head/draft state.
 - Freeze the published head for independent review; keep the full docs render
