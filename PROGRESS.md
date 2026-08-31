@@ -16,12 +16,16 @@
   `origin/main`, and merge-base matched exactly.
 - Read all repository instruction files, the relevant engineering skills, and
   the complete defensive correctness audit.
-- Started read-only review of `YearData`, tests, documentation, changelog, and
-  package conventions.
+- Completed read-only review of `YearData`, Pydantic, pandas, tests,
+  documentation, changelog, and package conventions.
+- Added the focused behavior-input tests first. The isolated test run is red at
+  collection because the not-yet-implemented public models are absent, as
+  expected. The normal `uv run` environment could not be created offline, so
+  the red run used the available Python environment with repository conftests
+  disabled; full validation remains pending.
 
 ## Next
 
-- Write focused behavior-input contract tests before implementation.
 - Implement the minimal frozen Pydantic models and pure resolver.
 - Add ownership/vocabulary documentation and a Towncrier fragment.
 - Run focused and proportional regression checks, self-review, and attempt the
