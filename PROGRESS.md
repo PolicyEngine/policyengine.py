@@ -65,6 +65,9 @@
 - GitNexus reported that this worktree was not indexed; its index attempt was
   blocked by the non-writable global registry. The generated untracked index
   artifacts were removed, and impact review used direct source/history instead.
+- Final architecture review confirmed the source/API scope is clean and added
+  the audit's exact legal-operability, non-inference, and explicit non-goal
+  guardrails to the documentation.
 
 ## Next
 

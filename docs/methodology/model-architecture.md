@@ -62,13 +62,19 @@ These terms are not interchangeable:
 - **Eligibility** is a legal qualifying predicate.
 - **Entitlement** is a legal right or calculated amount. It does not establish
   application, award, payment, or receipt.
-- **Application or claim** is a claimant or administrative event.
-- **Award** is an administrative determination.
+- **Application or claim** is a claimant or administrative event. Microcosm may
+  carry measured or latent application state; Axiom may receive it only when an
+  exact public authority makes it legally operative.
+- **Award** is an administrative determination. It must not be inferred from
+  eligibility or receipt.
 - **Payment** is a legal amount due, issued, or disbursed.
 - **Receipt** is a measured or latent population fact or a PolicyEngine
-  behavioral outcome.
+  behavioral outcome. It may lag or differ from legal payment.
 - **Simulated non-take-up** is a PolicyEngine-owned behavioral outcome. It is
-  not ineligibility, denial, or loss of entitlement.
+  not ineligibility, denial, loss of entitlement, or an Axiom fact.
+
+Eligibility or a positive static amount alone proves none of application,
+award, payment, or receipt.
 
 `BehaviorInputBinding` gives an adapter-local role an entity and column
 reference. Roles are local labels, not universal legal or benefit concepts;
@@ -82,8 +88,10 @@ values into series indexed by that stable ID, and preserves nulls. It never
 aligns rows positionally, remaps between entities, or requires a column to
 appear in a legal-model variable registry.
 
-This boundary only validates and resolves inputs. It adds no behavior formula,
-adapter registry, legal rerun, cache behavior, or effect on `Simulation.run()`.
+This boundary only validates and resolves inputs. It adds no behavior or
+Belgian formula, `takes_up_*` concept, adapter registry, legal rerun,
+`Simulation` field, cache behavior, public `pe.be` export, effect on
+`Simulation.run()`, or country and labor-supply numerical change.
 
 ## What belongs in generated reference
 
