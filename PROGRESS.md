@@ -51,11 +51,25 @@
 - Documented cross-system ownership, legal/behavioral vocabulary, the
   stable-ID resolution contract, and the explicit execution non-goals in the
   model architecture guide.
+- Stronger validation through `uv run --no-sync` and the canonical clone's
+  existing development environment is green: 17 focused behavior tests; 36
+  Belgium/labor-supply tests with 4 expected source-stack skips; and 73
+  dataset, model, and extra-variable regression tests.
+- Whole-repository Ruff format-check and lint pass (`197 files already
+  formatted`; no lint findings), and both working-tree and branch diffs pass
+  `git diff --check`.
+- The architecture Markdown parses successfully through Quarto's Pandoc. The
+  full `make docs` render is environment-blocked because Quarto attempts to
+  open its Sass database in a non-writable user cache, not because of a
+  documentation diagnostic.
+- GitNexus reported that this worktree was not indexed; its index attempt was
+  blocked by the non-writable global registry. The generated untracked index
+  artifacts were removed, and impact review used direct source/history instead.
 
 ## Next
 
 - Create or identify the required GitHub issue, then add its issue-numbered
   Towncrier fragment using the live `.added.md` convention.
-- Run focused and proportional regression checks, self-review, and attempt the
-  required same-repository draft PR workflow only after current upstream Git
-  objects can be fetched and reconciled.
+- Fetch and reconcile the current upstream Git objects, then run changelog and
+  final verification and attempt the required same-repository draft PR
+  workflow only if every gate is green.
