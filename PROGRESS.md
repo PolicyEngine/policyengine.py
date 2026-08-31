@@ -5,8 +5,8 @@
 - Branch: `feat/be-behavior-input-contract`
 - Starting base: `3c3b4f6442f4a5adc47274734d71a6ca10103b43`
 - Local `origin/main` at start: `3c3b4f6442f4a5adc47274734d71a6ca10103b43`
-- Last network fetch attempt: 2026-08-31; blocked because the execution
-  environment cannot resolve `github.com`.
+- Live `origin/main` was fetched on 2026-08-31 and remains exactly
+  `3c3b4f6442f4a5adc47274734d71a6ca10103b43`.
 - Live comparison: this worktree's common repository is shallow and therefore
   counts 1,161 commits at `origin/main`. An independent non-shallow clone has
   the same `origin/main` SHA with 1,168 commits, matching GitHub's live history
@@ -17,10 +17,10 @@
   substitute.
 - Scope: data-only behavior input configuration and ID-keyed resolution; no
   simulation or country-computation integration.
-- Frozen-review status: not ready. The implementation, tests, documentation,
-  type check, Ruff, and diff checks are green, but the required GitHub issue,
-  issue-numbered changelog fragment, current-network fetch, push, and draft PR
-  cannot be completed while GitHub DNS/API access is unavailable.
+- Frozen-review status: implementation-ready. The code, tests, documentation,
+  type check, Ruff, and diff checks are green; issue #510 and its Towncrier
+  fragment now bind the change. Draft publication and independent frozen-head
+  review remain.
 
 ## Done
 
@@ -82,16 +82,17 @@
   only because no new fragment exists: `No new newsfragments found on this
   branch.` A fragment was not fabricated without the required issue number.
 - Independent final reviews found no blocking code or architecture defect and
-  assessed implementation risk as low. The sole tracked completion blocker is
-  the missing issue-numbered Towncrier fragment.
+  assessed implementation risk as low. The previously missing issue-numbered
+  Towncrier fragment is now resolved by issue #510.
+- Created PolicyEngine/policyengine.py issue #510, added
+  `changelog.d/510.added.md`, and re-fetched the live upstream base without a
+  branch divergence.
 
 ## Next
 
-- Retry `git fetch origin main`; reconcile only if the exact upstream SHA has
-  advanced from `3c3b4f6442f4a5adc47274734d71a6ca10103b43`.
-- Create or verify the GitHub issue, add `changelog.d/<issue>.added.md`, and make
-  the first PR-body line `Fixes #<issue>`.
-- Re-run Towncrier, final tests/Ruff/diff checks, and the full docs render in an
-  environment with a writable Quarto cache.
-- Push with `make push-pr-branch`, open only a same-repository draft PR, and
-  verify `isDraft=true` and head repository `PolicyEngine/policyengine.py`.
+- Re-run Towncrier, focused tests, Ruff, and diff checks on the issue-bound
+  tree.
+- Push the same-repository branch, open only a draft PR beginning `Fixes #510`,
+  and verify its live base/head/draft state.
+- Freeze the published head for independent review; keep the full docs render
+  as a disclosed environment-only residual check.
