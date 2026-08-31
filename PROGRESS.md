@@ -48,10 +48,14 @@
 - Hardened the source-aliasing test against MicroDataFrame scalar-setter
   differences across pandas/microdf versions and corrected the Ruff import
   grouping. The 17 focused tests and direct Ruff checks remain green.
+- Documented cross-system ownership, legal/behavioral vocabulary, the
+  stable-ID resolution contract, and the explicit execution non-goals in the
+  model architecture guide.
 
 ## Next
 
-- Add ownership/vocabulary documentation and a Towncrier fragment.
+- Create or identify the required GitHub issue, then add its issue-numbered
+  Towncrier fragment using the live `.added.md` convention.
 - Run focused and proportional regression checks, self-review, and attempt the
   required same-repository draft PR workflow only after current upstream Git
   objects can be fetched and reconciled.
