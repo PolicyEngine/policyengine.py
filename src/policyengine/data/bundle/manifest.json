@@ -240,7 +240,8 @@
     "models": [
       "policyengine-core",
       "policyengine-us",
-      "policyengine-uk"
+      "policyengine-uk",
+      "spm-calculator"
     ],
     "uk": [
       "policyengine-core",
@@ -248,7 +249,8 @@
     ],
     "us": [
       "policyengine-core",
-      "policyengine-us"
+      "policyengine-us",
+      "spm-calculator"
     ]
   },
   "packages": {
@@ -281,6 +283,14 @@
       "name": "policyengine-us",
       "role": "country_model",
       "version": "1.764.6"
+    },
+    "spm-calculator": {
+      "country": "us",
+      "import_name": "spm_calculator",
+      "install_requirement": "spm-calculator==0.3.1",
+      "name": "spm-calculator",
+      "role": "country_dependency",
+      "version": "0.3.1"
     }
   },
   "policyengine_version": "5.3.0",

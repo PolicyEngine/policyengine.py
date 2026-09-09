@@ -84,6 +84,19 @@ Derived artifacts are:
 - `src/policyengine/data/bundle/{country}.trace.tro.jsonld`
 - GitHub release assets exported from the bundle manifest
 
+The US model in this bundle uses the SPM calculator 0.3.1 API. The manifest pins
+`spm-calculator==0.3.1` in the US package scaffold and the generated `us`,
+`models`, and `dev` extras. The model formulas and certified dataset artifacts
+remain unchanged.
+
+Previously published versions cannot acquire a new dependency constraint. To
+reproduce the historical 5.3.0 US package set, include the compatible calculator
+explicitly:
+
+```bash
+uv pip install "policyengine[us]==5.3.0" "spm-calculator==0.3.1"
+```
+
 Inspect or verify a local setup with:
 
 ```bash

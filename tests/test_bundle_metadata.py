@@ -29,10 +29,12 @@ def test_bundle_manifest_exposes_model_and_country_extras():
         "policyengine-core",
         "policyengine-us",
         "policyengine-uk",
+        "spm-calculator",
     ]
     assert manifest["extras"]["us"] == [
         "policyengine-core",
         "policyengine-us",
+        "spm-calculator",
     ]
     assert manifest["extras"]["uk"] == [
         "policyengine-core",
@@ -40,6 +42,24 @@ def test_bundle_manifest_exposes_model_and_country_extras():
     ]
     assert "policyengine-uk-data" not in manifest["packages"]
     assert "policyengine-us-data" not in manifest["packages"]
+
+
+def test_generated_us_extras_preserve_legacy_spm_compatibility(monkeypatch):
+    scripts_dir = Path(__file__).resolve().parents[1] / "scripts"
+    monkeypatch.syspath_prepend(str(scripts_dir))
+    from generate_bundle_artifacts import update_pyproject_text
+
+    pyproject_path = scripts_dir.parent / "pyproject.toml"
+    original = pyproject_path.read_text()
+    generated = update_pyproject_text(original, bundle.get_current_bundle())
+    # Regeneration and a later release must retain the constraint in every US
+    # installation surface, including dev; the UK-only extra does not need it.
+    assert generated == original
+    for extra in ("us", "models", "dev"):
+        section = generated.split(f"\n{extra} = [\n", 1)[1].split("\n]", 1)[0]
+        assert '"spm-calculator==0.3.1"' in section
+    uk_section = generated.split("\nuk = [\n", 1)[1].split("\n]", 1)[0]
+    assert "spm-calculator" not in uk_section
 
 
 def test_bundle_manifest_carries_uk_data_release():
@@ -113,6 +133,10 @@ def test_export_release_assets_writes_bundle_assets(monkeypatch, tmp_path):
     assert json.loads(bundle_manifest.read_text()) == manifest
     assert (
         f"policyengine=={manifest['policyengine_version']}"
+        in (tmp_path / f"policyengine-bundle-{version}.constraints.txt").read_text()
+    )
+    assert (
+        "spm-calculator==0.3.1"
         in (tmp_path / f"policyengine-bundle-{version}.constraints.txt").read_text()
     )
     assert (
