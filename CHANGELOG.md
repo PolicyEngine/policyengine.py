@@ -1,3 +1,10 @@
+## [5.3.1] - 2026-09-10
+
+### Fixed
+
+- Pin the compatible SPM calculator in US model extras and bundle installation requirements while preserving the certified model and dataset versions.
+
+
 ## [5.3.0] - 2026-08-30
 
 ### Added
