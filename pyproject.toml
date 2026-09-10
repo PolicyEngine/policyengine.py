@@ -45,6 +45,7 @@ models = [
     "policyengine-core==3.30.1",
     "policyengine-us==1.764.6",
     "policyengine-uk==2.90.2",
+    "spm-calculator==0.3.1",
 ]
 uk = [
     "policyengine-core==3.30.1",
@@ -53,6 +54,7 @@ uk = [
 us = [
     "policyengine-core==3.30.1",
     "policyengine-us==1.764.6",
+    "spm-calculator==0.3.1",
 ]
 dev = [
     "pytest",
@@ -71,6 +73,7 @@ dev = [
     "policyengine-core==3.30.1",
     "policyengine-us==1.764.6",
     "policyengine-uk==2.90.2",
+    "spm-calculator==0.3.1",
 ]
 
 [tool.setuptools]
