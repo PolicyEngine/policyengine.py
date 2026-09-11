@@ -4,6 +4,8 @@
 
 A Python package for tax-benefit microsimulation analysis. Run policy simulations, analyse distributional impacts, and visualise results across the UK and US.
 
+Requires Python 3.11–3.14.
+
 > **Results are estimates.** PolicyEngine simulates a large, evolving body of tax-benefit law (the US model alone encodes more than 95,000 parameters across 5,500+ variables) over survey microdata calibrated to administrative targets. Treat outputs as estimates, and validate them against the policies relevant to your analysis, the scope of the rules engine, and external or back-of-the-envelope calculations. You can inspect the certified US dataset's calibration at https://calibration-diagnostics.vercel.app/populace.
 
 
@@ -26,12 +28,16 @@ print(uk.household.hbai_household_net_income)  # net income
 us = pe.us.calculate_household(
     people=[{"age": 35, "employment_income": 60_000}],
     tax_unit={"filing_status": "SINGLE"},
-    household={"state_code": "CA"},
+    household={"state_code": "CA", "county_fips": "06037"},
     year=2026,
     reform={"gov.irs.credits.ctc.amount.adult_dependent": 1000},
 )
 print(us.tax_unit.income_tax, us.household.household_net_income)
 ```
+
+US default outputs require observed county FIPS or an explicit national/SPM-area
+choice. See the [SPM household contract](docs/households.md#spm-geography-and-measurement-selection)
+for settings, provenance and the pending coordinated bundle release.
 
 ### Population analysis
 

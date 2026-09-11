@@ -12,6 +12,58 @@
 
 This document defines the intended reproducibility boundary for `policyengine.py`.
 
+## Preparing and checking release artifacts
+
+After certifying a new country/data pair, prepare its complete sidecars with
+`python scripts/bundle.py generate --include-tros`. Review the generated manifest,
+TRO source hashes and locations, and the resolved `uv.lock` together. Ordinary
+local generation can emit limited provenance when a remote manifest is unavailable;
+that output cannot pass the public release checks.
+
+Trusted same-repository PRs, Versioning, and Publish require:
+
+```bash
+python scripts/check_release_credentials.py
+python scripts/bundle.py check --published-spm --include-tros --strict-tros
+python scripts/release_lock.py
+```
+
+Strict generation requires full US/UK release manifests from pinned revisions,
+matching the raw hashes and URLs in the reviewed sidecars. It checks the existing
+publisher compatibility contract and certified dataset hash, and requires pinned
+model wheel hashes and URLs. The certified model must match the corresponding
+runtime package name/version, any explicit component wheel pins, and the exact
+wheel URL and SHA256 in the reviewed `uv.lock`. Missing credentials, fetch failures, missing datasets,
+or changed source bytes stop the workflow. These metadata checks do not replace
+native dataset certification or the model test suite. Supply a read-only Hugging
+Face credential through the repository's `HUGGING_FACE_TOKEN` secret; PR verification
+uses `pull_request` only for same-repository heads, never `pull_request_target`.
+Each trusted verification job authenticates its actual credential with Hugging
+Face's `whoami-v2` endpoint and requires access-token role `read`. Missing metadata,
+write scope, and unrecognized or fine-grained permission schemas fail closed;
+the check logs no token, account details, or response body. The workflow does not
+change existing credential permissions.
+
+Versioning checks those reviewed inputs before the bump, generates the versioned
+bundle metadata, and runs `python scripts/release_lock.py --refresh`. The helper
+clears inherited uv resolver overrides, explicitly disables frozen mode, resolves
+from PyPI without local sources, and permits only the root package version to change
+in the reviewed lock. Every locked distribution must use an HTTPS artifact URL
+on PyPI's `files.pythonhosted.org` host and a valid SHA256 digest; a registry source
+label alone is insufficient. Any dependency graph change fails and restores the original
+lock; stage such changes in a reviewed PR instead. The helper then runs the actual
+`uv lock --check`. Final unpublished dependency pins must wait for registry
+publication before these checks can pass.
+
+The bump changes the wrapper version, bundle identifiers, derived requirements and
+citation fields, root lock version, and the TRO bundle-manifest hash/composition
+fingerprint and wrapper-version fields. Remote data and model hashes, certification
+fields, dataset identities, and fixed repository emission context remain unchanged.
+TRO timestamps come from the pinned manifest, not the current clock. The changelog
+uses Towncrier's release date and consumes the reviewed fragments. Run the actual
+version helper, generator, strict checks, and lock refresh in a staging checkout
+before merge, and compare the eventual published wheel against that receipt.
+
 The key design decision is:
 
 - country `*-data` repos build and stage immutable data artifacts

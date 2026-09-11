@@ -4,6 +4,10 @@ title: "Microsimulation"
 
 For population-level estimates — budget cost, winners and losers, poverty impact — run a microsimulation over calibrated microdata.
 
+For US decile analysis, `calculate_decile_impacts(dataset=..., spm=...)` passes
+the selection to both constructed simulations. When supplying existing
+baseline and reform simulations, set `spm` on each simulation directly.
+
 ## Quick example
 
 ```python
@@ -27,6 +31,78 @@ total_snap.result
 ```
 
 `Simulation.ensure()` loads a cached result if one exists, or runs and caches on miss. Call `Simulation.run()` explicitly if you want to bypass the cache.
+
+### Canonical US SPM settings and provenance
+
+The coordinated canonical SPM integration resolves measurement settings from
+the bundle. Its default uses each household's observed `county_fips` and native
+SPM membership. To make an explicit national sensitivity calculation:
+
+```python
+simulation = pe.Simulation(
+    dataset=dataset,
+    tax_benefit_model_version=pe.us.model,
+    spm={"geography_kind": "national", "scenario": "zero_real"},
+)
+simulation.run()
+settings = simulation.spm_config
+receipt = simulation.spm_provenance()
+serialized = simulation.model_dump_json(include={"spm", "spm_receipt"})
+```
+
+`spm_config` exposes all six resolved settings; `spm_provenance()` returns a
+detached JSON-compatible measurement receipt after calculation. The stored
+`spm_receipt` is a Pydantic model. Before calculation, serializing a partial
+selection preserves omitted options so they continue to inherit the bundle's
+defaults after JSON restoration; successful calculation freezes all six settings.
+Selection participates in simulation identity
+and cached results. The example serializes the measurement settings and receipt;
+the existing full simulation model graph contains circular model/variable
+references and cannot currently be exported with an unrestricted
+`model_dump_json()`. Use simulation persistence and run records for saved runs.
+The same `spm=` selection is accepted by
+`pe.us.managed_microsimulation`; its returned country simulation exposes
+`spm_config` and `spm_provenance()` too. See the [household SPM
+contract](households.md#spm-geography-and-measurement-selection) for exact keys,
+the 2022–2035 artifact horizon and explicit geography errors. No provider or
+forecast-file path can replace the bundle's pinned artifact.
+
+For a small local development dataset, explicitly opt out of managed data
+selection:
+
+```python
+simulation = pe.us.managed_microsimulation(
+    dataset=str(local_h5_path),
+    allow_unmanaged=True,
+    spm={"geography_kind": "county"},
+)
+```
+
+This does not certify the local file. The canonical population release must
+preserve the prior native arrays, memberships and weights while adding the
+source-backed `is_spm_independent_minor_role` input. Formula-owned measurement
+counts, thresholds, geographic factors, SPM resources and poverty outputs must
+not be present as input columns; the wrapper validates the input DataFrames
+before passing them to the country model. Generic adult/child counts remain
+separate. The native source enrichment is not recalibration, and inherited
+schema-5 calibration diagnostics cannot be relabeled as schema 6.
+
+The wrapper's native pandas HDF loader accepts files that store only calibrated
+`household_weight`. It maps missing person and group weight columns through
+native membership IDs in memory, retaining supplied weight columns and the
+original row order. Inputs are aligned to country populations by native entity ID,
+and calculated outputs are aligned back to those IDs before attaching weights.
+Independently shuffled entity tables therefore retain the correct geography and
+results. Null or duplicate entity IDs are rejected before weight mapping.
+Group weights are not sums of person weights. The file is
+opened read-only; missing or ambiguous links raise an error instead of creating
+unweighted rows. Core variable/period H5 files use the same mapping.
+
+The packaged 5.3.0 production manifest retains `policyengine-us==1.764.6` and
+does not yet certify this integration. Local-wheel tests use an explicitly
+uncertified development manifest. Registry publication, a producer-issued data
+compatibility certification and final bundle promotion remain separate gates;
+measurement provenance alone does not satisfy them.
 
 ## Datasets
 
