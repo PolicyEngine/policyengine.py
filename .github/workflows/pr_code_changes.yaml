@@ -10,6 +10,7 @@ on:
       - .github/**
       - changelog.d/**
       - pyproject.toml
+      - uv.lock
       - src/policyengine/data/bundle/manifest.json
   workflow_dispatch:
 
@@ -57,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v6
       - name: Set up Python ${{ matrix.python-version }}
@@ -68,16 +69,13 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
       - name: Install package (no country-model extras)
-        # `h5py` is used transitively by policyengine.core.scoping_strategy
-        # but is normally supplied via the [us]/[uk] extras (through
-        # policyengine-core). Install it directly so the smoke import can
-        # exercise the wrapper without the country models, which pin
-        # versions that don't support 3.9/3.10 yet.
-        run: uv pip install --system . h5py
+        run: uv pip install --system .
       - name: Smoke-import core modules
         run: python -c "import policyengine; from policyengine.core import Dataset, Policy, Simulation; from policyengine.outputs import aggregate, poverty, inequality; print('import OK')"
   BundleVerification:
     name: Verify bundle metadata
+    # Private manifest credentials are available only to trusted repository PRs.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     env:
       POLICYENGINE_SKIP_COUNTRY_IMPORTS: "1"
@@ -113,6 +111,13 @@ jobs:
           PY
       - name: Check installed package consistency
         run: python -m pip check
+      # Only the reviewed registry lock is a pull-request concern. The
+      # read-only credential, published-measurement and TRACE sidecar gates
+      # are release gates: the release workflow regenerates the sidecars and
+      # publishes the wheels immediately before checking them, so they cannot
+      # be satisfied from a pull request. They run in push.yaml instead.
+      - name: Check the reviewed registry lock
+        run: python scripts/release_lock.py
       - name: Verify bundle packages
         run: policyengine bundle verify --country us --country uk --packages-only --json
   Test:
@@ -120,7 +125,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.13', '3.14']
+        python-version: ['3.11', '3.12', '3.13', '3.14']
     steps:
         - name: Checkout repo
           uses: actions/checkout@v6

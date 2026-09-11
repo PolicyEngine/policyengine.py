@@ -43,7 +43,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.13', '3.14']
+        python-version: ['3.11', '3.12', '3.13', '3.14']
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -114,22 +114,39 @@ jobs:
           fetch-depth: 0
       - name: Fetch tags
         run: git fetch --tags --force
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.13'
+      - name: Install package for TRO verification and regeneration
+        run: uv pip install -e . h5py --system
+      - name: Check reviewed release inputs before versioning
+        env:
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+        run: |
+          if [[ -z "${HUGGING_FACE_TOKEN:-}" ]]; then
+            echo "::error::Full private release verification requires HUGGING_FACE_TOKEN"
+            exit 1
+          fi
+          python scripts/check_release_credentials.py
+          python scripts/bundle.py check --published-spm --include-tros --strict-tros
+          python scripts/release_lock.py
       - name: Build changelog
         run: pip install yaml-changelog towncrier && make changelog
       - name: Generate derived bundle metadata
         run: python scripts/bundle.py generate
+      - name: Refresh only the release version in the registry lock
+        run: python scripts/release_lock.py --refresh
       - name: Preview changelog update
         run: ".github/get-changelog-diff.sh"
-      - name: Install package for TRO regeneration
-        run: pip install -e . h5py
       - name: Regenerate bundled TRACE TROs
         env:
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
-        run: python scripts/bundle.py generate --include-tros
+        run: |
+          python scripts/bundle.py generate --include-tros --strict-tros
+          python scripts/bundle.py check --published-spm --include-tros --strict-tros
       - name: Update changelog, bundle metadata, and TROs
         uses: EndBug/add-and-commit@v9
         with:
@@ -160,6 +177,17 @@ jobs:
       - name: Capture published version
         id: version
         run: bash .github/capture-version.sh
+      - name: Validate complete bundle and registry lock before publication
+        env:
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+        run: |
+          if [[ -z "${HUGGING_FACE_TOKEN:-}" ]]; then
+            echo "::error::Full private release verification requires HUGGING_FACE_TOKEN"
+            exit 1
+          fi
+          python scripts/check_release_credentials.py
+          python scripts/bundle.py check --published-spm --include-tros --strict-tros
+          python scripts/release_lock.py
       - name: Publish a git tag
         run: ".github/publish-git-tag.sh"
       - name: Build package
@@ -200,10 +228,16 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
       - name: Wait for release to be visible on PyPI
         env:
           VERSION: ${{ needs.Publish.outputs.version }}
         run: bash .github/wait-for-pypi.sh
+      - name: Validate published SPM bundle before consumer updates
+        run: python -S scripts/bundle.py check --published-spm
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v1
