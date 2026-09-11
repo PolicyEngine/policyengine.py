@@ -253,6 +253,16 @@
       "spm-calculator"
     ]
   },
+  "measurements": {
+    "spm": {
+      "as_of": null,
+      "county_vintage": "2020",
+      "forecast_content_sha256": "3d86d5c4c0423480e6b69b75d222ffa4a7a2639e4094df5ba2504af01be17173",
+      "geography_id": null,
+      "geography_kind": "county",
+      "scenario": "ce_trend"
+    }
+  },
   "packages": {
     "policyengine": {
       "import_name": "policyengine",

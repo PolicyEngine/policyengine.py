@@ -13,7 +13,7 @@ import os
 import shutil
 import subprocess
 import venv as venv_module
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from importlib import metadata
 from importlib.resources import files
 from pathlib import Path
@@ -21,6 +21,7 @@ from typing import Any, Iterable, Mapping, Optional, Sequence
 
 import requests
 
+from policyengine.provenance.bundle_validation import validate_bundle_measurements
 from policyengine.provenance.dataset_materialization import (
     DatasetMaterializationError,
     MaterializedDataset,
@@ -71,6 +72,10 @@ def _normalise_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
     payload.setdefault("packages", {})
     payload.setdefault("extras", {})
     payload.setdefault("data_releases", _data_releases_from_countries(payload))
+    try:
+        validate_bundle_measurements(payload)
+    except ValueError as exc:
+        raise BundleError(str(exc)) from exc
     return payload
 
 
@@ -183,10 +188,12 @@ def _include_component(
         return False
     role = component.get("role")
     country = component.get("country")
-    if role in {"bundle_carrier", "runtime_dependency"}:
+    if role == "bundle_carrier":
         return True
     if isinstance(country, str):
         return country in countries
+    if role == "runtime_dependency":
+        return True
     return key == "policyengine"
 
 
@@ -352,7 +359,7 @@ def write_receipt(
 ) -> Path:
     receipt = {
         "schema_version": 1,
-        "installed_at": datetime.now(timezone.utc).isoformat(),
+        "installed_at": datetime.now(UTC).isoformat(),
         "bundle_version": manifest["bundle_version"],
         "policyengine_version": manifest["policyengine_version"],
         "countries": list(countries),
