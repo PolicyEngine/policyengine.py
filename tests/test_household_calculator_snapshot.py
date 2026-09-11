@@ -117,9 +117,13 @@ def test_us_household_snapshot(case_name: str) -> None:
     import policyengine as pe
 
     kwargs = US_CASES[case_name]
-    result = pe.us.calculate_household(**kwargs)
+    result = pe.us.calculate_household(**kwargs, spm={"geography_kind": "national"})
     out: dict[str, float] = {}
-    _flatten("", result.to_dict(), out)
+    # Provenance is an additive receipt tested in test_spm_household.py; keep
+    # this historical snapshot focused on its existing numeric output contract.
+    values = result.to_dict()
+    values.pop("provenance", None)
+    _flatten("", values, out)
     _check_snapshot(case_name, out)
 
 

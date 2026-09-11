@@ -106,18 +106,17 @@ class PolicyEngineUSDataset(Dataset):
             return
 
         with pd.HDFStore(filepath, mode="r") as store:
-            self.data = USYearData(
-                person=MicroDataFrame(store["person"], weights="person_weight"),
-                marital_unit=MicroDataFrame(
-                    store["marital_unit"], weights="marital_unit_weight"
-                ),
-                family=MicroDataFrame(store["family"], weights="family_weight"),
-                spm_unit=MicroDataFrame(store["spm_unit"], weights="spm_unit_weight"),
-                tax_unit=MicroDataFrame(store["tax_unit"], weights="tax_unit_weight"),
-                household=MicroDataFrame(
-                    store["household"], weights="household_weight"
-                ),
-            )
+            data = {entity: store[entity] for entity in US_ENTITY_KEYS}
+        # Native producer files store calibrated household weights. Project
+        # missing weights through membership IDs on these in-memory copies,
+        # before constructing MicroDataFrames; the source HDF remains read-only.
+        _assign_missing_entity_weights(data)
+        self.data = USYearData(
+            **{
+                entity: MicroDataFrame(frame, weights=f"{entity}_weight")
+                for entity, frame in data.items()
+            }
+        )
 
     def __repr__(self) -> str:
         if self.data is None:
@@ -201,45 +200,88 @@ def _core_h5_variable_entities() -> dict[str, str]:
     return {name: variable.entity.key for name, variable in system.variables.items()}
 
 
+def _validate_entity_ids(data: dict[str, pd.DataFrame]) -> None:
+    """Reject ambiguous row identities before joining inputs or weights."""
+    for entity, frame in data.items():
+        entity_id = US_ENTITY_ID_COLUMNS[entity]
+        if entity_id not in frame:
+            raise ValueError(f"Missing {entity_id} for native entity alignment")
+        if frame[entity_id].isna().any() or frame[entity_id].duplicated().any():
+            raise ValueError(
+                f"Native entity alignment requires unique nonmissing {entity_id} values"
+            )
+
+
 def _assign_missing_entity_weights(data: dict[str, pd.DataFrame]) -> None:
+    """Project missing weights from calibrated households through native IDs.
+
+    Both supported HDF layouts use this mapping. Existing weight columns are
+    retained; group weights are one household weight, never sums of person
+    weights. Missing or ambiguous links cannot silently produce unweighted rows.
+    """
+    _validate_entity_ids(data)
+    missing = [
+        entity for entity in US_ENTITY_KEYS if f"{entity}_weight" not in data[entity]
+    ]
+    if not missing:
+        return
     household = data["household"]
     if "household_id" not in household or "household_weight" not in household:
-        return
-
-    household_weights = household[["household_id", "household_weight"]]
-    person = data["person"]
+        raise ValueError(
+            "Missing household_id or household_weight for deriving entity weights"
+        )
     if (
-        "person_weight" not in person
-        and "person_household_id" in person
-        and len(person) > 0
+        household["household_id"].isna().any()
+        or household["household_id"].duplicated().any()
     ):
-        person.loc[:, "person_weight"] = person["person_household_id"].map(
-            household_weights.set_index("household_id")["household_weight"]
+        raise ValueError(
+            "Deriving entity weights requires unique nonmissing household_id values"
+        )
+    if household["household_weight"].isna().any():
+        raise ValueError(
+            "Cannot derive entity weights from missing household_weight values"
         )
 
-    for entity, person_entity_id in US_PERSON_ENTITY_ID_COLUMNS.items():
-        if entity == "household":
-            continue
-        entity_id = US_ENTITY_ID_COLUMNS[entity]
-        entity_weight = US_ENTITY_WEIGHT_COLUMNS[entity]
-        if (
-            entity_weight in data[entity]
-            or entity_id not in data[entity]
-            or person_entity_id not in person
-            or "person_household_id" not in person
-        ):
-            continue
+    household_weights = household.set_index("household_id")["household_weight"]
+    person = data["person"]
 
-        entity_households = person[
-            [person_entity_id, "person_household_id"]
-        ].drop_duplicates(subset=[person_entity_id])
-        weight_lookup = entity_households.merge(
-            household_weights,
-            left_on="person_household_id",
-            right_on="household_id",
-            how="left",
-        ).set_index(person_entity_id)["household_weight"]
-        data[entity].loc[:, entity_weight] = data[entity][entity_id].map(weight_lookup)
+    def person_link(entity: str) -> str:
+        native = US_PERSON_ENTITY_ID_COLUMNS[entity]
+        alias = US_ENTITY_ID_COLUMNS[entity]
+        if native in person:
+            return native
+        if alias in person:
+            return alias
+        raise ValueError(f"Missing person {native} link for deriving {entity} weights")
+
+    for entity in missing:
+        frame = data[entity]
+        weight = US_ENTITY_WEIGHT_COLUMNS[entity]
+        if frame.empty:
+            frame[weight] = pd.Series(index=frame.index, dtype=household_weights.dtype)
+            continue
+        household_link = person_link("household")
+        if entity == "person":
+            weights = person[household_link].map(household_weights)
+        else:
+            entity_id = US_ENTITY_ID_COLUMNS[entity]
+            if entity_id not in frame:
+                raise ValueError(f"Missing {entity_id} for deriving {weight}")
+            entity_link = person_link(entity)
+            relationships = person[[entity_link, household_link]].drop_duplicates()
+            if relationships[entity_link].duplicated().any():
+                raise ValueError(
+                    f"Cannot derive {weight}: {entity_id} spans multiple households"
+                )
+            weight_lookup = relationships.set_index(entity_link)[household_link].map(
+                household_weights
+            )
+            weights = frame[entity_id].map(weight_lookup)
+        if weights.isna().any():
+            raise ValueError(
+                f"Cannot derive {weight}: missing or unknown native household/entity links"
+            )
+        frame[weight] = weights
 
 
 def _load_policyengine_core_h5(path: Path, year: int) -> USYearData:
@@ -298,6 +340,8 @@ def create_datasets(
     """
     from policyengine_us import Microsimulation
 
+    from policyengine.tax_benefit_models.us.spm import resolve_spm_selection
+
     dataset_requests: list[Optional[str]] = datasets or [None]
     result = {}
     for dataset in dataset_requests:
@@ -308,7 +352,7 @@ def create_datasets(
             data_dir=Path(data_folder),
         )
         dataset_stem = source.name
-        sim = Microsimulation(dataset=source.path)
+        sim = Microsimulation(dataset=source.path, spm=resolve_spm_selection())
 
         for year in years:
             # Get all input variables from the simulation

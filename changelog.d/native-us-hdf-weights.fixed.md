@@ -1,0 +1,1 @@
+Load native US pandas HDF datasets that store only calibrated household weights by mapping missing person and entity weights through native membership IDs in memory, preserving source files and supplied weights.

@@ -9,6 +9,7 @@ from policyengine.provenance.dataset_materialization import (
     MaterializedDataset,
     _resolve_bundle_dataset,
 )
+from policyengine.tax_benefit_models.us.spm import resolve_spm_selection
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -70,7 +71,9 @@ def test_us_create_datasets_passes_verified_bundle_source_to_country_package(
         allow_unmanaged=False,
         data_dir=Path("./data"),
     )
-    microsimulation.assert_called_once_with(dataset="/tmp/populace_us_2024.h5")
+    microsimulation.assert_called_once_with(
+        dataset="/tmp/populace_us_2024.h5", spm=resolve_spm_selection()
+    )
 
 
 def test_uk_create_datasets_passes_verified_bundle_source_to_country_package(
