@@ -376,8 +376,9 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             )
         simulation.output_dataset.save()
         if serialized_spm is not None:
-            # Receipts can exceed HDF5's attribute-size limit. Store UTF-8
-            # JSON in a dataset, keeping the result file self-contained.
+            # Store UTF-8 JSON in a dataset rather than an attribute: the
+            # payload size stays unbounded and the receipt is kept out of
+            # the object header, keeping the result file self-contained.
             with h5py.File(simulation.output_dataset.filepath, "a") as stream:
                 stream.create_dataset(
                     "policyengine_spm",

@@ -2,10 +2,15 @@
 
 ## State
 
-**Complete.** Draft PR https://github.com/PolicyEngine/policyengine.py/pull/515
-is open against `main` from `max/spm-canonical-wrapper-release-20260910`, with
-eight commits and hosted CI run. #512 is left open and untouched, referenced as
-superseded.
+**Complete, and independently re-verified.** Draft PR
+https://github.com/PolicyEngine/policyengine.py/pull/515 is open against `main`
+from `max/spm-canonical-wrapper-release-20260910`, with ten commits and hosted CI
+run. #512 is left open and untouched, referenced as superseded.
+
+The lane was cut off by a rate-limit re-pick after opening the PR and before
+writing its report, leaving the deliverable at 0 bytes. The resumed lane re-ran
+every local check from scratch, re-derived the file-set comparison, and put the
+PR body's mechanism claims through a six-way adversarial audit.
 
 Hosted CI: nine checks pass (changelog, Lint, Mypy, Verify bundle metadata,
 Install + smoke-import on 3.11/3.12/3.13/3.14, docs build); the four `Test`
@@ -50,6 +55,30 @@ local run, one root cause.
   1.0.0. Publishing policyengine-us 2.0.0 is the gate.
 - Steps 5-7: pushed the branch (it did not exist on origin), opened the draft
   PR, and watched CI to completion.
+- Re-verification pass. Corrected the file-set numbers: 73 release-final paths
+  (not 72), 67 common, 54 byte-identical, 13 differing (not 11), and production
+  holds three exclusive reports, not four — `PROGRESS.md` exists in both
+  checkouts under the same name. Of the 13, two are pure rebase artifacts
+  (`origin/main` already carries 5.3.1 and the `spm-calculator`
+  `country_dependency` pin), three are consequences of the rebase, two are the
+  TRO schema fix and the Python floor, four are deliberate divergences, and two
+  are non-code.
+- Six-cluster adversarial audit of the PR body against source. Of ten claims an
+  auditor flagged, nine were refuted and stand as written. One survived: the
+  body and the source comment both justified storing the SPM receipt as an H5
+  dataset by saying receipts "exceed HDF5's attribute-size limit". That limit
+  was an HDF5 1.6-era compact-storage threshold lifted in 1.8. Confirmed by
+  direct test on the pinned stack (h5py 3.16.0, libhdf5 2.0.0): attributes of
+  65KB, 110KB, 282KB and 5MB all write and round-trip byte-identical into a
+  `pd.HDFStore(mode="w")` file, with pandas still reading the frames after.
+  The storage choice is sound and correctly described; only the stated
+  necessity was false. Rewrote the comment and the PR body around the real
+  reason. No behaviour change.
+- Independently confirmed the integrity-critical claim: nothing is stubbed,
+  mocked, faked or vendored for the canonical tuple. `src/policyengine/`
+  contains no `ModuleType` or `sys.modules[...]` assignment at all, and the one
+  `types.ModuleType('policyengine_us.spm')` in the tree is an adversarial test
+  that plants a foreign module and asserts the loader rejects it.
 
 ## Next
 
