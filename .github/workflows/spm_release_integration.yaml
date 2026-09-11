@@ -1,0 +1,34 @@
+name: SPM release household integration
+
+on:
+  pull_request:
+    paths:
+      - src/**
+      - tests/test_spm_release_household.py
+      - tests/test_household_impact.py
+      - .github/workflows/spm_release_integration.yaml
+  workflow_dispatch:
+
+jobs:
+  development-households:
+    runs-on: ubuntu-latest
+    env:
+      # Explicitly unbundled household execution; population paths refuse it.
+      POLICYENGINE_US_HOUSEHOLD_ONLY: "1"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - uses: astral-sh/setup-uv@v8.1.0
+      - name: Install exact reviewed development dependencies
+        # Country commit pins spm-calculator 0.5.0 at 9e6ae4798458771231613b994df2345dd1685214.
+        # This job intentionally does not install the certified [us] bundle.
+        run: >-
+          uv pip install --system -e . pytest pytest-asyncio
+          "policyengine-core==3.30.2"
+          "policyengine-us @ git+https://github.com/PolicyEngine/policyengine-us@3a4ff53654c75e4559b7d55374e8f00c0261b392"
+      - name: Verify package consistency
+        run: uv pip check --system
+      - name: Run release acceptance and existing household API tests
+        run: python -m pytest tests/test_spm_release_household.py tests/test_household_impact.py::TestUSCalculateHousehold -q

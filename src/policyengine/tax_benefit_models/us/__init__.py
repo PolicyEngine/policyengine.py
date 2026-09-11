@@ -52,6 +52,7 @@ if find_spec("policyengine_us") is not None:
         managed_microsimulation,
         us_latest,
     )
+    from .spm_release import SPMReleaseSelection
 
     model = us_latest
     """The pinned US ``TaxBenefitModelVersion`` for this policyengine release."""
@@ -78,6 +79,7 @@ if find_spec("policyengine_us") is not None:
         "model",
         "us_latest",
         "calculate_household",
+        "SPMReleaseSelection",
         "economic_impact_analysis",
         "calculate_budgetary_impact",
         "BudgetaryImpact",

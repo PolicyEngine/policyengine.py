@@ -37,7 +37,9 @@ an optional reform, get back a dot-accessible result.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping
+from contextlib import nullcontext
 from typing import Any, Optional
 
 from policyengine.tax_benefit_models.common import (
@@ -52,6 +54,7 @@ from policyengine.tax_benefit_models.common import (
 from policyengine.utils.household_validation import validate_household_input
 
 from .model import us_latest
+from .spm_release import SPMIntegrationProvenance, SPMReleaseSelection
 
 _GROUP_ENTITIES = ("marital_unit", "family", "spm_unit", "tax_unit", "household")
 
@@ -68,7 +71,7 @@ def _raise_unexpected_kwargs(unexpected: Mapping[str, Any]) -> None:
         lines.append(f"  - '{name}'{hint}")
     lines.append(
         "Valid kwargs: people, marital_unit, family, spm_unit, tax_unit, "
-        "household, year, reform, extra_variables, axes."
+        "household, year, reform, extra_variables, axes, spm_release."
     )
     raise TypeError("\n".join(lines))
 
@@ -142,6 +145,7 @@ _ALLOWED_KWARGS = frozenset(
         "reform",
         "extra_variables",
         "axes",
+        "spm_release",
     }
 )
 
@@ -158,6 +162,7 @@ def calculate_household(
     reform: Optional[Mapping[str, Any]] = None,
     extra_variables: Optional[list[str]] = None,
     axes: Optional[list[Any]] = None,
+    spm_release: Optional[SPMReleaseSelection] = None,
     **unexpected: Any,
 ) -> HouseholdResult:
     """Compute tax and benefit variables for a single US household.
@@ -184,6 +189,10 @@ def calculate_household(
             shape or a flat list of axis dictionaries. Missing ``period``
             values default to ``year``. When axes are present, result values
             are lists ordered by the axis grid instead of scalars.
+        spm_release: Optional explicit SPMReleaseSelection (or JSON mapping).
+            Activates simulation-specific release formulas and adds an SPM
+            provenance receipt. This developmental integration does not certify
+            population data. Omission preserves the existing model behavior.
 
     Returns:
         :class:`HouseholdResult` with dot-accessible per-entity
@@ -236,19 +245,48 @@ def calculate_household(
     normalized_axes = normalize_axes(axes=axes, year=year, model_version=us_latest)
     axes_active = normalized_axes is not None
 
-    simulation = Simulation(
-        situation=_build_situation(
-            people=people,
-            marital_unit=entities["marital_unit"],
-            family=entities["family"],
-            spm_unit=entities["spm_unit"],
-            tax_unit=entities["tax_unit"],
-            household=entities["household"],
-            year=year,
-            axes=normalized_axes,
-        ),
-        reform=reform_dict,
-    )
+    spm_provider = None
+    if spm_release is not None:
+        from spm_calculator.policyengine_adapter import (
+            build_policyengine_reform,
+            validate_policyengine_inputs,
+        )
+
+        selection = SPMReleaseSelection.model_validate(spm_release)
+        validate_policyengine_inputs(
+            {"person": people, **{name: [value] for name, value in entities.items()}}
+        )
+        if normalized_axes is not None:
+            validate_policyengine_inputs(
+                {
+                    "axes": [
+                        {axis["name"]: None}
+                        for group in normalized_axes
+                        for axis in group
+                    ]
+                }
+            )
+        spm_reform = build_policyengine_reform(selection.create_provider())
+        spm_provider = spm_reform.spm_release_provider
+        reform_dict = (reform_dict or (), spm_reform)
+
+    # Country-model loading changes global warning filters. Restore the
+    # caller's filters before evaluating the explicit provider, so its CPI
+    # extrapolation warning is not silently swallowed by those imports.
+    with warnings.catch_warnings() if spm_provider is not None else nullcontext():
+        simulation = Simulation(
+            situation=_build_situation(
+                people=people,
+                marital_unit=entities["marital_unit"],
+                family=entities["family"],
+                spm_unit=entities["spm_unit"],
+                tax_unit=entities["tax_unit"],
+                household=entities["household"],
+                year=year,
+                axes=normalized_axes,
+            ),
+            reform=reform_dict,
+        )
 
     result = HouseholdResult()
     for entity, columns in output_columns.items():
@@ -282,4 +320,14 @@ def calculate_household(
                     for variable in columns
                 }
             )
+    if spm_provider is not None:
+        result["provenance"] = {
+            "spm": SPMIntegrationProvenance.model_validate(
+                spm_provider.provenance()
+            ).model_dump(mode="json"),
+            "wrapper_model_mode": "household_only_development"
+            if getattr(us_latest, "household_only", False)
+            else "installed_country_model",
+            "certified_population_bundle": False,
+        }
     return result
