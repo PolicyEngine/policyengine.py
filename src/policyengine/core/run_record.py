@@ -175,6 +175,15 @@ def build_simulation_run_record_payloads(
     output["tables"] = _table_summaries(simulation.output_dataset)
     results_payload = {"output_dataset": output}
 
+    if simulation.spm_config is not None:
+        recorded_config = simulation.output_dataset.metadata.get("spm_config")
+        if recorded_config != simulation.spm_config:
+            raise ValueError(
+                "SPM settings changed since this output was calculated; run again before writing a run record"
+            )
+        input_payload["spm"] = simulation.spm_config
+        results_payload["spm"] = simulation.spm_provenance()
+
     return {"reform": reform, "input": input_payload, "results": results_payload}
 
 
