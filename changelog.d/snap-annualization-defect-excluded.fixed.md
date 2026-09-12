@@ -1,1 +1,0 @@
-Excluded the four US single-adult snapshot fields contaminated by the SNAP annualization defect (policyengine-us#9447) instead of rebaselining them, and added a guard that fails when the country fixes it.

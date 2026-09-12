@@ -52,22 +52,11 @@ def _round(value, places: int = 2):
     return value
 
 
-def _check_snapshot(
-    name: str, data: dict, exclude: dict[str, str] | None = None
-) -> None:
+def _check_snapshot(name: str, data: dict) -> None:
     path = SNAPSHOT_DIR / f"{name}.json"
     rounded = {k: _round(v) for k, v in sorted(data.items())}
-    excluded = dict(exclude or {})
 
     if UPDATE or not path.exists():
-        if excluded and path.exists():
-            # A refresh must never launder a known country defect into the
-            # expected output. Keep the pre-defect value for excluded fields so
-            # PE_UPDATE_SNAPSHOTS=1 cannot quietly freeze the wrong number.
-            previous = json.loads(path.read_text())
-            for key in excluded:
-                if key in previous:
-                    rounded[key] = previous[key]
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(rounded, indent=2, sort_keys=True) + "\n")
         if not UPDATE:
@@ -76,7 +65,7 @@ def _check_snapshot(
 
     expected = json.loads(path.read_text())
     diffs = []
-    all_keys = (set(expected) | set(rounded)) - set(excluded)
+    all_keys = set(expected) | set(rounded)
     for key in sorted(all_keys):
         if key not in expected:
             diffs.append(f"  new key: {key}={rounded[key]!r}")
@@ -122,44 +111,6 @@ US_CASES = {
 }
 
 
-SNAP_ANNUALIZATION_ISSUE = "https://github.com/PolicyEngine/policyengine-us/issues/9447"
-
-# Fields whose expected value is contaminated by a country defect. They are
-# excluded from the comparison rather than rebaselined, so the rest of the case
-# keeps protecting against drift while the wrong number is never frozen in.
-#
-# For 2026 policyengine-us reports one month's SNAP allotment where the annual
-# value belongs (spm_unit.snap 3596.04 -> 298.00); the three resource fields
-# below are downstream sums of it. The behaviour is identical on
-# policyengine-us 1.825.2 and 2.0.x, so it predates the canonical SPM release
-# and is not drift this pin introduced.
-#
-# It is also not the wrapper's: on a bare policyengine_us.Simulation, annual
-# `snap` sums its monthly values and only some months resolve — 2024 picks up
-# November and December alone (584 = 2 x 292), 2025 picks up all twelve
-# (3522 = 9 x 292 + 3 x 298), 2026 picks up January alone (298), and 2027 picks
-# up none (0). `snap_max_allotment` behaves the same way — 298.00 for
-# 2026-01 and 0.00 for every later 2026 month — which places the defect in
-# parameter resolution rather than in the `snap` variable itself.
-#
-# The stored 3596.04 was the correct twelve-month sum under the older uprating
-# index (9 x 298 + 3 x 304.68). A correct 2026 annual on this pin is on the
-# order of 3,600 — nine months at 298.00 plus three at the uprated October
-# rate — but it cannot be measured here, because the months that would carry
-# the uprated rate are exactly the ones resolving to zero. Rebaselining to
-# 298.00 would therefore freeze roughly a twelfth of the real benefit into the
-# expected output. Instead test_snap_annualization_defect_still_present fails
-# loudly the moment the country annualizes SNAP again.
-COUNTRY_DEFECT_EXCLUSIONS: dict[str, dict[str, str]] = {
-    "us_single_adult_no_income": {
-        "spm_unit.snap": SNAP_ANNUALIZATION_ISSUE,
-        "household.household_benefits": SNAP_ANNUALIZATION_ISSUE,
-        "household.household_net_income": SNAP_ANNUALIZATION_ISSUE,
-        "spm_unit.spm_unit_net_income": SNAP_ANNUALIZATION_ISSUE,
-    },
-}
-
-
 @pytest.mark.parametrize("case_name", sorted(US_CASES))
 def test_us_household_snapshot(case_name: str) -> None:
     pytest.importorskip("policyengine_us")
@@ -173,33 +124,53 @@ def test_us_household_snapshot(case_name: str) -> None:
     values = result.to_dict()
     values.pop("provenance", None)
     _flatten("", values, out)
-    _check_snapshot(case_name, out, exclude=COUNTRY_DEFECT_EXCLUSIONS.get(case_name))
+    _check_snapshot(case_name, out)
 
 
-def test_snap_annualization_defect_still_present() -> None:
-    """Fail loudly when policyengine-us#9447 is fixed.
+def test_snap_work_requirement_inputs_drive_the_no_income_case() -> None:
+    """Pin why ``us_single_adult_no_income`` reports one month of SNAP.
 
-    While the defect stands, the fields in ``COUNTRY_DEFECT_EXCLUSIONS`` are
-    excluded from ``test_us_household_snapshot[us_single_adult_no_income]``.
-    A correctly annualized 2026 benefit for a one-person unit with no income is
-    on the order of 3,600; the country currently returns January alone. When
-    that changes this assertion fails: drop the exclusion entry, regenerate
-    ``us_single_adult_no_income.json``, and delete this test.
+    A childless 35-year-old with no income is an ABAWD subject to the SNAP
+    time limit, and the case supplies no hours. Two country changes decide the
+    result: ``weekly_hours_worked_before_lsr`` now defaults to 0 rather than
+    40, so an omitted-hours household fails the 20-hour test; and California's
+    statewide ABAWD waiver runs only through 2026-01-31. The unit is therefore
+    exempt in January 2026 and time-limited from February, giving one eligible
+    month rather than a broken annualization — the twelve-month sum is intact,
+    as the hours-supplied comparison here shows.
+
+    This is the mechanism behind the snapshot's SNAP figure, so it is pinned
+    separately: if the hours default or the waiver modelling moves, this fails
+    with the reason rather than leaving an unexplained number in a fixture.
     """
     pytest.importorskip("policyengine_us")
-    import policyengine as pe
+    from policyengine_us import Simulation
 
-    result = pe.us.calculate_household(
-        **US_CASES["us_single_adult_no_income"], spm={"geography_kind": "national"}
-    )
-    snap = result.spm_unit.snap
-    assert snap < 1_000, (
-        f"policyengine-us returned annual SNAP {snap:.2f}, which is no longer a "
-        f"single month's allotment. {SNAP_ANNUALIZATION_ISSUE} appears fixed: "
-        "remove the COUNTRY_DEFECT_EXCLUSIONS entry for "
-        "us_single_adult_no_income, regenerate that snapshot, and delete this "
-        "test."
-    )
+    def situation(hours: float | None) -> dict:
+        person: dict = {"age": {"2026": 35}}
+        if hours is not None:
+            person["weekly_hours_worked_before_lsr"] = {"2026": hours}
+        return {
+            "people": {"you": person},
+            "spm_units": {"sp": {"members": ["you"]}},
+            "tax_units": {"tu": {"members": ["you"]}},
+            "families": {"f": {"members": ["you"]}},
+            "marital_units": {"mu": {"members": ["you"]}},
+            "households": {"hh": {"members": ["you"], "state_code": {"2026": "CA"}}},
+        }
+
+    omitted = Simulation(situation=situation(None))
+    assert omitted.calculate("snap", 2026)[0] == pytest.approx(298.00, abs=0.01)
+    # Exempt only while the California statewide waiver is in force.
+    assert bool(omitted.calculate("is_snap_abawd_exempt", "2026-01")[0]) is True
+    assert bool(omitted.calculate("is_snap_abawd_exempt", "2026-02")[0]) is False
+    assert omitted.calculate("snap", "2026-01")[0] == pytest.approx(298.00, abs=0.01)
+    assert omitted.calculate("snap", "2026-02")[0] == pytest.approx(0.0, abs=0.01)
+
+    # Supplying hours satisfies the work requirement, and the same model then
+    # returns a full, correctly uprated twelve months: 9 x 298 + 3 x 308.52.
+    working = Simulation(situation=situation(40))
+    assert working.calculate("snap", 2026)[0] == pytest.approx(3607.57, abs=0.01)
 
 
 # UK cases -------------------------------------------------------------------
