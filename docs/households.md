@@ -79,11 +79,18 @@ State alone is insufficient for SPM and raises `SPM_GEOGRAPHY_REQUIRED`.
 Unknown counties or selected areas raise `SPM_GEOGRAPHY_UNAVAILABLE`; a measured
 unit with no classified adult raises `SPM_COMPOSITION_REQUIRED`. These are
 calculator `SPMInputError` exceptions with `code` and `to_dict()` attributes.
-Geography is checked when an SPM-dependent formula runs. Net income, benefits,
-MTR, income decile and equivalized net income all evaluate the housing cap,
-including households receiving zero housing assistance, so each requires this
-choice. A genuinely independent tax-only country-model calculation can use
-state alone; the wrapper's default outputs include SPM-dependent results.
+Geography is checked when an SPM-dependent formula runs, and only for the units
+whose result depends on the measurement. SPM measurement itself — thresholds,
+the geographic factor and SPM poverty — always requires this choice. Resource
+outputs (net income, benefits, MTR, income decile and equivalized net income)
+reach the measurement only through the capped housing subsidy, which the country
+evaluates for units with housing assistance to cap; a unit receiving no housing
+assistance has a capped subsidy of zero by construction and consults no
+measurement. So a resource calculation for an unassisted unit succeeds on state
+alone and records an empty measurement receipt, while the same calculation for
+an assisted unit raises `SPM_GEOGRAPHY_REQUIRED`. A genuinely independent
+tax-only country-model calculation can use state alone; the wrapper's default
+outputs include SPM poverty and therefore always require the choice.
 
 Supply observed inputs such as age, tenure, county and the source-backed
 `is_spm_independent_minor_role`. Computed SPM thresholds, geographic factors,
@@ -92,11 +99,13 @@ resources, poverty outputs and `spm_measurement_adults` /
 Generic `is_adult`, `spm_unit_count_adults` and `spm_unit_count_children` remain
 separate benefit inputs; they do not override SPM measurement composition.
 
-These changes require the coordinated canonical country/calculator bundle.
-The packaged 5.3.0 production manifest still pins `policyengine-us==1.764.6`
-and does not certify this integration. Local-wheel development manifest fixtures
-are explicitly uncertified. The measurement receipt identifies a calculation;
-it does not certify a population dataset or establish publication readiness.
+These changes require the coordinated canonical country/calculator bundle, which
+the packaged production manifest now pins and certifies: `policyengine-us`
+2.0.0, `policyengine-core` 3.32.5, `spm-calculator` 1.0.0, and the US data
+release `populace-us-2024-spm-20260909`. Local-wheel development manifest
+fixtures remain explicitly uncertified. The measurement receipt identifies a
+calculation; it does not certify a population dataset or establish publication
+readiness.
 
 ## UK
 

@@ -188,10 +188,19 @@ def calculate_household(
             values default to ``year``. When axes are present, result values
             are lists ordered by the axis grid instead of scalars.
         spm: SPMSelection or mapping selecting a scenario and geography from
-            the bundle's independently pinned artifact. Default outputs require
-            household county_fips or an explicit metro/national selection,
-            including when housing assistance is zero. Formula-owned SPM
-            amounts and measurement counts cannot be supplied as inputs/axes.
+            the bundle's independently pinned artifact. Geography is demanded
+            only by the results that actually use the measurement. SPM
+            measurement itself — thresholds, the geographic factor and SPM
+            poverty — always requires household county_fips or an explicit
+            metro/national selection, and so do the default outputs, which
+            include SPM poverty. Resource outputs reach the measurement only
+            through the capped housing subsidy, which the country evaluates
+            for units with housing assistance to cap: a unit receiving no
+            housing assistance has a capped subsidy of zero by construction,
+            so its resources compute on state alone, while an assisted unit
+            without a geography raises ``SPM_GEOGRAPHY_REQUIRED``.
+            Formula-owned SPM amounts and measurement counts cannot be
+            supplied as inputs/axes.
 
     Returns:
         :class:`HouseholdResult` with dot-accessible per-entity

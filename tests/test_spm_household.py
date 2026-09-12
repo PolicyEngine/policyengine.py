@@ -148,29 +148,69 @@ def test_default_resource_outputs_require_a_real_geography(location, settings, c
     assert caught.value.to_dict()["code"] == code
 
 
-def test_state_only_tax_graph_succeeds_and_resource_graph_requires_geography(
+RESOURCE_VARIABLES = (
+    "household_net_income",
+    "household_benefits",
+    "marginal_tax_rate",
+    "household_income_decile",
+    "equiv_household_net_income",
+)
+
+
+def test_state_only_graphs_require_geography_only_where_measurement_is_used(
     monkeypatch,
 ):
+    """Geography is demanded by exactly the results that use the measurement.
+
+    The country owns this contract and the wrapper follows it. Its housing cap
+    (``spm_unit_capped_housing_subsidy``) consults the canonical SPM housing
+    portion for units with housing assistance to cap and for no others, so an
+    unassisted unit's resource graph never reaches the measurement and needs no
+    geography; an assisted unit's does, and fails closed without one. SPM
+    measurement itself requires geography either way.
+    """
     from policyengine.tax_benefit_models.us.model import us_latest
 
     # Limit only this test's requested outputs. The public wrapper continues to
     # include resources and SPM poverty by default.
     monkeypatch.setattr(us_latest, "entity_variables", {"tax_unit": ["income_tax"]})
     inputs = household_inputs(household={"state_code": "CA"})
+    assisted = household_inputs(
+        household={"state_code": "CA"},
+        spm_unit={"spm_unit_tenure_type": "RENTER", "housing_assistance": 6_000},
+    )
+
+    # A genuinely tax-only graph never consults the measurement.
     tax = pe.us.calculate_household(**inputs, extra_variables=["housing_assistance"])
     assert tax.tax_unit.income_tax > 0
     assert tax.spm_unit.housing_assistance == 0
     assert tax.to_dict()["provenance"]["spm"]["years"] == {}
-    for variable in (
-        "household_net_income",
-        "household_benefits",
-        "marginal_tax_rate",
-        "household_income_decile",
-        "equiv_household_net_income",
-    ):
+
+    # Unassisted: the capped subsidy is zero by construction, so every resource
+    # output computes on state alone and records an empty measurement receipt.
+    unassisted_cap = pe.us.calculate_household(
+        **inputs, extra_variables=["spm_unit_capped_housing_subsidy"]
+    )
+    assert unassisted_cap.spm_unit.spm_unit_capped_housing_subsidy == 0
+    assert unassisted_cap.to_dict()["provenance"]["spm"]["years"] == {}
+    for variable in RESOURCE_VARIABLES:
+        computed = pe.us.calculate_household(**inputs, extra_variables=[variable])
+        assert computed.to_dict()["provenance"]["spm"]["years"] == {}
+
+    # Assisted: the same graph now has a cap to apply, so it fails closed.
+    for variable in RESOURCE_VARIABLES:
         with pytest.raises(SPMInputError) as caught:
-            pe.us.calculate_household(**inputs, extra_variables=[variable])
+            pe.us.calculate_household(**assisted, extra_variables=[variable])
         assert caught.value.code == "SPM_GEOGRAPHY_REQUIRED"
+
+    # SPM measurement always requires geography, assisted or not.
+    for situation in (inputs, assisted):
+        for variable in ("spm_unit_spm_threshold", "spm_unit_is_in_spm_poverty"):
+            with pytest.raises(SPMInputError) as caught:
+                pe.us.calculate_household(**situation, extra_variables=[variable])
+            assert caught.value.code == "SPM_GEOGRAPHY_REQUIRED"
+
+    # An explicit selection computes for both.
     for settings, located_inputs in (
         ({"geography_kind": "national"}, inputs),
         ({"geography_kind": "county"}, household_inputs()),
