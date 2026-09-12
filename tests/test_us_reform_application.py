@@ -6,7 +6,6 @@ from tests.fixtures.us_reform_fixtures import (
     MARRIED_COUPLE_WITH_KIDS,
 )
 
-
 # These fixtures declare no county, and the certified bundle's measurements.spm
 # block selects geography_kind="county". Declare national geography explicitly,
 # as the SPM contract requires; these tests assert federal income tax only.
@@ -23,9 +22,7 @@ def _double_standard_deduction(year: int) -> dict:
 
 class TestUSHouseholdReformApplication:
     def test__baseline__then_income_tax_positive(self):
-        result = pe.us.calculate_household(
-            **HIGH_INCOME_SINGLE_FILER, spm=NATIONAL_SPM
-        )
+        result = pe.us.calculate_household(**HIGH_INCOME_SINGLE_FILER, spm=NATIONAL_SPM)
         assert result.tax_unit.income_tax > 0
 
     def test__doubled_standard_deduction__then_tax_lower(self):
