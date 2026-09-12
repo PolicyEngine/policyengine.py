@@ -116,16 +116,38 @@ those counts are the same number on either pin. Regenerating on 2.0.0 yields exa
   `bundle.py update-packages`, `set-spm`, `certify-data`, `generate`; extras are generated
   from the bundle manifest, so no pin is hand-edited).
 
+- **Ruling A done** (`85b1d711`). Read the authoritative source in the 2.0.1 wheel:
+  `spm_unit_capped_housing_subsidy` computes `assisted = housing_assistance > 0`, returns
+  zeros without touching the provider when none is assisted, and otherwise calls
+  `masked_policyengine_amount`, which evaluates only the assisted rows through
+  `CountyRequiringSPMProvider`. Probed all four clauses against the installed model rather
+  than assuming: 5/5 resource outputs compute with an empty measurement receipt when housing
+  assistance is zero; 5/5 raise `SPM_GEOGRAPHY_REQUIRED` when it is positive; threshold and
+  poverty raise either way; default outputs still require the choice. Updated the public
+  docstring, `docs/households.md`, and the contract test (renamed, since its old name
+  asserted the unconditional rule). 42/42 SPM household tests pass.
+- **Ruling C done** (`456af5da`). Regenerated `us_model_surface`:
+  `num_variables_bucketed_100s` 57 -> 61 (raw 6157), `num_parameters_bucketed_100s`
+  978 -> 1025 (raw 102525), `data_package_name` `populace-data` -> `microcosm-data`.
+  Counted the raw surface under both installed wheels: **identical** on 2.0.0 and 2.0.1
+  (6157 / 102525 both), so this snapshot is already the 2.0.1 value.
+- **Ruling D done** (`74675620`). Excluded the four contaminated fields rather than
+  xfailing the case, because all four are downstream of the one defect and an xfail would
+  have discarded the other 42 fields of coverage. Two guards make it honest:
+  `_check_snapshot` preserves prior values for excluded fields under
+  `PE_UPDATE_SNAPSHOTS=1` (verified by md5 across a refresh), and
+  `test_snap_annualization_defect_still_present` fails loudly on fix. Note a strict xfail
+  would *not* have failed loudly: the corrected annual figure is ~3,576 against a stored
+  3,596.04, so the case would have gone on xfailing silently.
+- Confirmed policyengine-us#9447 is OPEN and its body records the same values on 1.825.2
+  and 2.0.0, independently corroborating Ruling D.
+
 ## Next
 
-1. Ruling B: repin to 2.0.1 through the bundle tooling; recertify the US data release for
-   2.0.1; regenerate derived artifacts; relock with uv; sync the venv.
-2. Ruling A: read the 2.0.1 housing-cap source, rewrite the wrapper docstring and the
-   contract test to assert the authoritative behaviour.
-3. Ruling C: regenerate `us_model_surface`, record before/after counts.
-4. Ruling D: mark the `us_single_adult_no_income` SNAP defect xfail(strict=True) / exclude
-   the field, pointing at pe-us#9447.
-5. Ruling E: regenerate the three drifting snapshots, justify every field against a located
-   country change between 1.764.6 and 2.0.x.
-6. Full `make test` as CI runs it; lint, mypy, changelog; push; `gh pr checks 515`; update
+1. Ruling E: regenerate the three drifting snapshots, justify every field against a located
+   country change. Root causes already isolated by measurement - the three cases reduce to
+   exactly two: school meal subsidy 1130.96 -> 1142.24 (+11.28, both child cases) and CA
+   state income tax (-7.76 at 60k single, -24.05 at 240k joint). Archaeology running.
+2. Full `make test` as CI runs it; lint, mypy, changelog; push; `gh pr checks 515`; update
    the PR body and mark ready for review.
+3. Ruling B stays blocked - see BLOCKER above. Hand the publisher the evidence pack.
