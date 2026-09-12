@@ -37,10 +37,81 @@ behaviour, and settles all six red tests under those rulings.
 | policyengine-core 3.32.5 | pinned exactly by the bundle | to re-verify |
 | HF data tag | `populace-us-2024-spm-20260909`, H5 `6496cc43...` | carried; to re-verify |
 
+## BLOCKER (Ruling B): 2.0.1 is published, but no data release is certified for it
+
+**The repin to policyengine-us 2.0.1 cannot be completed in this repo.** It is blocked on
+an act by the *data publisher*, not by anything in the wrapper.
+
+The certified US data release `populace-us-2024-spm-20260909` publishes this claim:
+
+```json
+"build": {"built_with_model_package": {"name": "policyengine-us", "version": "2.0.0"}},
+"compatible_model_packages": [{"name": "policyengine-us", "specifier": "==2.0.0"}]
+```
+
+`certify_data_release_compatibility` accepts exactly three bases — build-time match,
+matching data build fingerprint, or a publisher `compatible_model_packages` claim. 2.0.1
+satisfies none (the manifest records no `data_build_fingerprint`), so:
+
+- `bundle.py certify-data --model-version 2.0.1` **refuses**:
+  *"policyengine-us 2.0.1 matches neither the build-time model (2.0.0) nor any publisher
+  compatibility claim ['==2.0.0']; a new data build or a published compatibility claim is
+  required."*
+- With 2.0.1 installed, the gate fires at **import of the US model** (`us_latest =
+  PolicyEngineUSLatest()`, `model.py:512`), raising *"Data release manifest is not certified
+  for the runtime model version 2.0.1 in country 'us'."* Not just microsimulation —
+  `pe.us.calculate_household` and every US test error out too.
+
+This is the documented, intended behaviour. `docs/engineering/skills/data-certification.md`:
+*"Neither basis means certification is refused: a new data build or a published
+compatibility claim is required."* There is no override flag, and I did not manufacture one:
+hand-writing a claim into the bundle, or mutating the published release manifest at an
+immutable release tag, would launder exactly the invariant this gate exists to protect.
+
+I verified no published release covers 2.0.1: all 25 `policyengine/populace-us` tags and all
+3 branches were enumerated; `populace-us-2024-spm-20260909` is the newest, and its manifest
+carries `==2.0.0` on both the tag and `main`.
+
+### The claim-widening is substantively justified (evidence for the publisher)
+
+2.0.1 is 2.0.0 plus pe-us#9446 and nothing else. Verified by extracting and diffing both
+published wheels:
+
+| Check | Result |
+|---|---|
+| Files differing, whole wheel | 2 variable `.py` files + 1 added test (`tests/core/test_ald_determinism.py`) + dist-info |
+| `variables/` file set | **identical** — 5981 files in both |
+| `parameters/` file set | **identical** — 5970 files, and byte-identical content |
+| Substance of both diffs | `list(set(all_alds) - ...)` -> `sorted(set(all_alds) - ...)` |
+| 2.0.1 wheel sha256 | `20e355823bbc89e6c9f413435a7d0b92095cff65541ea366048ee448da025aee` (PyPI-declared == downloaded == brief) |
+
+The change alters only the *order* of float summation within above-the-line-deduction
+aggregation. No variable, parameter, or input schema changed, so the dataset's compatibility
+with the model is unaffected — widening the claim to cover 2.0.1 asserts nothing the bytes
+do not already support.
+
+**Unblocking action (data publisher, one line):** publish a populace-us release whose
+manifest claims `policyengine-us` compatibility covering 2.0.1 (a new release tag —
+never an in-place edit of the existing immutable tag). The wrapper side is then
+`bundle.py update-packages --us 2.0.1` + `certify-data --model-version 2.0.1` + relock.
+
+**This lane therefore leaves the branch on the certified 2.0.0 tuple** and completes every
+other part of the brief in full. A branch pinned to 2.0.1 would fail to import the US model
+at all, making PR #515 entirely red and unreviewable — strictly worse than what it replaces.
+
+### Consequence for Ruling C
+
+Ruling C asks for the variable/parameter counts "regenerated for 2.0.1". Because the
+`variables/` and `parameters/` file sets are provably identical between 2.0.0 and 2.0.1,
+those counts are the same number on either pin. Regenerating on 2.0.0 yields exactly the
+2.0.1 result.
+
 ## Done
 
 - Read the prior lane's PROGRESS.md and the full branch history (24 commits off `origin/main`).
 - Verified the 2.0.1 prerequisite from PyPI directly. Wheel sha256 matches the brief exactly.
+- Ran the repin through the tooling, hit the certification gate, and reverted to the certified
+  2.0.0 tuple with a clean tree (see BLOCKER above).
 - Established the repin procedure the prior lane used (repository tooling only:
   `bundle.py update-packages`, `set-spm`, `certify-data`, `generate`; extras are generated
   from the bundle manifest, so no pin is hand-edited).
