@@ -92,9 +92,7 @@ def test_historical_bundle_without_measurements_still_loads(canonical_bundle):
 def test_staged_config_preserves_certification_and_fails_release_gate(canonical_bundle):
     # The canonical bundle now ships the promoted runtime pin, so rebuild the
     # pre-promotion staging state this guard is about.
-    canonical_bundle["packages"].pop("spm-calculator")
-    for extra in ("us", "models"):
-        canonical_bundle["extras"][extra].remove("spm-calculator")
+    canonical_bundle["packages"]["spm-calculator"]["role"] = "country_dependency"
     before = copy.deepcopy(canonical_bundle)
     updated = configure_spm(
         canonical_bundle, canonical_bundle["measurements"]["spm"], None
