@@ -632,10 +632,19 @@ class TestCertifyDataRelease:
             "--skip-artifact-check",
         ]
 
-    def test__given_missing_populace_us_source_coverage__then_raises(self, tmp_path):
+    @pytest.mark.parametrize("producer_name", ["populace-data", "microcosm-data"])
+    @pytest.mark.parametrize("check_artifacts", [True, False])
+    def test__given_missing_populace_us_source_coverage__then_raises(
+        self, tmp_path, producer_name, check_artifacts
+    ):
+        payload = (
+            _source_enrichment_manifest_payload()
+            if producer_name == "microcosm-data"
+            else _release_manifest_payload()
+        )
         response = MagicMock()
         response.status_code = 200
-        response.content = json.dumps(_release_manifest_payload()).encode()
+        response.content = json.dumps(payload).encode()
 
         with (
             patch(
@@ -645,7 +654,7 @@ class TestCertifyDataRelease:
             patch(
                 "policyengine.provenance.certification.head_release_file",
                 return_value=False,
-            ),
+            ) as coverage_head,
             pytest.raises(CertificationError, match="us_source_coverage.json"),
         ):
             certify_data_release(
@@ -653,7 +662,14 @@ class TestCertifyDataRelease:
                 data_producer="populace",
                 manifest_uri=MANIFEST_URI,
                 model_version="1.723.0",
+                bundle_path=tmp_path / "manifest.json",
+                check_artifacts=check_artifacts,
             )
+
+        coverage_head.assert_called_once_with(
+            parse_manifest_uri(MANIFEST_URI), "us_source_coverage.json", token=None
+        )
+        assert not (tmp_path / "manifest.json").exists()
 
     def test__given_unreachable_artifact__then_raises(self, tmp_path):
         response = MagicMock()
@@ -686,10 +702,19 @@ class TestCertifyDataRelease:
                 model_version="1.723.0",
             )
 
-    def test__given_unreachable_vendored_artifact__then_raises(self, tmp_path):
+    @pytest.mark.parametrize("producer_name", ["populace-data", "microcosm-data"])
+    def test__given_unreachable_vendored_artifact__then_raises(
+        self, tmp_path, producer_name
+    ):
+        payload = (
+            _source_enrichment_manifest_payload()
+            if producer_name == "microcosm-data"
+            else _release_manifest_payload()
+        )
         response = MagicMock()
         response.status_code = 200
-        response.content = json.dumps(_release_manifest_payload()).encode()
+        response.content = json.dumps(payload).encode()
+        coverage_path = f"releases/{TAG}/us_source_coverage.json"
 
         with (
             patch(
@@ -710,16 +735,27 @@ class TestCertifyDataRelease:
             ),
             patch(
                 "policyengine.provenance.certification.head_artifact_reference",
-                return_value=False,
+                side_effect=lambda reference, *_args, **_kwargs: (
+                    reference["path"] != coverage_path
+                ),
+            ) as artifact_head,
+            pytest.raises(
+                CertificationError, match="Vendored artifact 'us_source_coverage'"
             ),
-            pytest.raises(CertificationError, match="Vendored artifact"),
         ):
             certify_data_release(
                 country="us",
                 data_producer="populace",
                 manifest_uri=MANIFEST_URI,
                 model_version="1.723.0",
+                bundle_path=tmp_path / "manifest.json",
             )
+
+        checked_paths = [call.args[0]["path"] for call in artifact_head.call_args_list]
+        assert checked_paths.count(coverage_path) == 1
+        assert "populace_us_2024.h5" in checked_paths
+        assert "populace_us_2024_calibration.npz" in checked_paths
+        assert not (tmp_path / "manifest.json").exists()
 
 
 class TestVendoredSidecarBinding:

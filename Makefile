@@ -39,8 +39,9 @@ clean:
 	find . -not -path "./.venv/*" -type f -name "*.h5" -delete
 
 changelog:
+	@test -n "$(RELEASE_DATE)" || (echo "RELEASE_DATE is required by shared release preparation"; exit 1)
 	python .github/bump_version.py
-	towncrier build --yes --version $$(python -c "import re; print(re.search(r'version = \"(.+?)\"', open('pyproject.toml').read()).group(1))")
+	towncrier build --yes --version $$(python -c "import re; print(re.search(r'version = \"(.+?)\"', open('pyproject.toml').read()).group(1))") --date "$(RELEASE_DATE)"
 build-package:
 	python -m build
 

@@ -97,116 +97,100 @@ jobs:
         uses: actions/deploy-pages@v4
 
   Versioning:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [Lint, Test]
     if: github.event.head_commit.message != 'Update package version'
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      POLICYENGINE_SKIP_COUNTRY_IMPORTS: '1'
     steps:
       - name: Generate GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
       - name: Fetch tags
         run: git fetch --tags --force
-      - name: Install uv
-        uses: astral-sh/setup-uv@v8.1.0
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-      - name: Install package for TRO verification and regeneration
-        run: uv pip install -e . h5py --system
-      - name: Check reviewed release inputs before versioning
+      - uses: ./.github/actions/release-toolchain
+      - name: Authenticate candidate and reproduce its exact prepared tree
         env:
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
-        run: |
-          if [[ -z "${HUGGING_FACE_TOKEN:-}" ]]; then
-            echo "::error::Full private release verification requires HUGGING_FACE_TOKEN"
-            exit 1
-          fi
-          python scripts/check_release_credentials.py
-          python scripts/bundle.py check --published-spm --include-tros --strict-tros
-          python scripts/release_lock.py
-      - name: Build changelog
-        run: pip install yaml-changelog towncrier && make changelog
-      - name: Generate derived bundle metadata
-        run: python scripts/bundle.py generate
-      - name: Refresh only the release version in the registry lock
-        run: python scripts/release_lock.py --refresh
+        run: python scripts/release_build.py versioning --output "$RUNNER_TEMP/wrapper-versioning-receipt.json"
+      - name: Preserve authenticated Versioning preparation
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wrapper-versioning-check-${{ github.sha }}
+          path: ${{ runner.temp }}/wrapper-versioning-receipt.json
+          if-no-files-found: error
+          retention-days: 90
       - name: Preview changelog update
-        run: ".github/get-changelog-diff.sh"
-      - name: Regenerate bundled TRACE TROs
-        env:
-          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
-        run: |
-          python scripts/bundle.py generate --include-tros --strict-tros
-          python scripts/bundle.py check --published-spm --include-tros --strict-tros
+        run: .github/get-changelog-diff.sh
       - name: Update changelog, bundle metadata, and TROs
-        uses: EndBug/add-and-commit@v9
+        uses: EndBug/add-and-commit@a94899bca583c204427a224a7af87c02f9b325d5 # v9
         with:
-          add: "."
+          add: '-u .'
           message: Update package version
 
   # ── Phase 2: Publish (only on sentinel commit) ────────────
   Publish:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event.head_commit.message == 'Update package version'
+    permissions:
+      contents: write
+      actions: read
     env:
       GH_TOKEN: ${{ github.token }}
+      POLICYENGINE_SKIP_COUNTRY_IMPORTS: '1'
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
-      - name: Install uv
-        uses: astral-sh/setup-uv@v8.1.0
-      - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          python-version: '3.13'
-      - name: Install package
-        run: uv pip install -e .[dev] --system
-      - name: Install policyengine
-        run: uv pip install policyengine --system
+          fetch-depth: 0
+      - uses: ./.github/actions/release-toolchain
+      - name: Authenticate candidate, validate release and compare rebuilt wheel
+        env:
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+        run: python scripts/release_build.py publish-check --output "$RUNNER_TEMP/wrapper-publish-receipt.json"
+      - name: Preserve prepublication byte comparison
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wrapper-publish-byte-check-${{ github.sha }}
+          path: ${{ runner.temp }}/wrapper-publish-receipt.json
+          if-no-files-found: error
+          retention-days: 90
       - name: Capture published version
         id: version
         run: bash .github/capture-version.sh
-      - name: Validate complete bundle and registry lock before publication
-        env:
-          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
-        run: |
-          if [[ -z "${HUGGING_FACE_TOKEN:-}" ]]; then
-            echo "::error::Full private release verification requires HUGGING_FACE_TOKEN"
-            exit 1
-          fi
-          python scripts/check_release_credentials.py
-          python scripts/bundle.py check --published-spm --include-tros --strict-tros
-          python scripts/release_lock.py
-      - name: Publish a git tag
-        run: ".github/publish-git-tag.sh"
-      - name: Build package
-        run: python -m build
       - name: Export bundle release assets
         run: python scripts/export_bundle_release_assets.py --dist-dir release-assets
       - name: Verify bundle package metadata
-        env:
-          POLICYENGINE_SKIP_COUNTRY_IMPORTS: "1"
         run: |
           VERSION=$(python .github/fetch_version.py)
           policyengine bundle verify --country us --country uk --packages-only --json \
             > "release-assets/policyengine-bundle-$VERSION.verification.json"
+      - name: Publish a git tag
+        run: |
+          python scripts/release_build.py require-unpublished
+          .github/publish-git-tag.sh
+      - name: Recheck registry immediately before distribution upload
+        run: python scripts/release_build.py require-unpublished
       - name: Publish a Python distribution to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
         with:
           user: __token__
           password: ${{ secrets.PYPI }}
-          skip-existing: true
+          skip-existing: false
           packages-dir: dist
       - name: Create GitHub Release
         run: |

@@ -289,32 +289,28 @@ def test_release_workflows_gate_complete_inputs_and_lock():
         "github.event.pull_request.head.repo.full_name == github.repository"
         in pr["jobs"]["BundleVerification"]["if"]
     )
-    for job in (
-        push["jobs"]["Versioning"],
-        push["jobs"]["Publish"],
-    ):
-        commands = "\n".join(step.get("run", "") for step in job["steps"])
-        assert "check --published-spm --include-tros --strict-tros" in commands
-        assert 'if [[ -z "${HUGGING_FACE_TOKEN:-}" ]]' in commands
-        assert "python scripts/release_lock.py" in commands
-        assert commands.index(
-            "python scripts/check_release_credentials.py"
-        ) < commands.index("check --published-spm")
-    # The pull-request job checks only the reviewed registry lock. The
-    # read-only credential, published-measurement and TRACE sidecar gates
-    # depend on the release workflow regenerating sidecars and publishing
-    # wheels first, so a pull request can never satisfy them.
+    # The shared helper's ordered credential/TRACE/lock checks are exercised by
+    # test_release_build's preparation and publication controls. Both ordinary
+    # jobs must invoke it with the read-only private-manifest credential.
+    for name, command in (("Versioning", "versioning"), ("Publish", "publish-check")):
+        steps = [
+            step
+            for step in push["jobs"][name]["steps"]
+            if f"release_build.py {command}" in step.get("run", "")
+        ]
+        assert len(steps) == 1
+        assert (
+            steps[0]["env"]["HUGGING_FACE_TOKEN"] == "${{ secrets.HUGGING_FACE_TOKEN }}"
+        )
+        assert any(
+            step.get("uses") == "./.github/actions/release-toolchain"
+            for step in push["jobs"][name]["steps"]
+        )
+    # The lightweight PR metadata check still needs only the reviewed lock.
+    # The separate nonpublishing stable candidate is intentionally held until
+    # real country/data publication supplies the strict release prerequisites.
     pr_commands = "\n".join(
         step.get("run", "") for step in pr["jobs"]["BundleVerification"]["steps"]
     )
     assert "python scripts/release_lock.py" in pr_commands
     assert "--published-spm" not in pr_commands
-    commands = "\n".join(
-        step.get("run", "") for step in push["jobs"]["Versioning"]["steps"]
-    )
-    assert commands.index("check --published-spm") < commands.index("make changelog")
-    assert (
-        commands.index("make changelog")
-        < commands.index("release_lock.py --refresh")
-        < commands.index("generate --include-tros --strict-tros")
-    )
