@@ -44,10 +44,10 @@ POLICYENGINE_VERSION = re.search(
     PYPROJECT.read_text(),
     re.MULTILINE,
 ).group(1)
-US_MODEL_VERSION = "1.764.6"
-US_BUILT_WITH_MODEL_VERSION = "1.764.6"
+US_MODEL_VERSION = "2.0.0"
+US_BUILT_WITH_MODEL_VERSION = "2.0.0"
 US_DATA_RELEASE_VERSION = "0.1.0"
-US_DATA_RELEASE_ID = "populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z"
+US_DATA_RELEASE_ID = "populace-us-2024-spm-20260909"
 US_DATA_RELEASE_REVISION = US_DATA_RELEASE_ID
 US_DATA_RELEASE_PATH = f"releases/{US_DATA_RELEASE_ID}/release_manifest.json"
 US_DATA_ARTIFACT_REVISION = US_DATA_RELEASE_ID
@@ -195,7 +195,7 @@ class TestReleaseManifests:
         assert manifest.policyengine_version == POLICYENGINE_VERSION
         assert manifest.model_package.name == "policyengine-us"
         assert manifest.model_package.version == US_MODEL_VERSION
-        assert manifest.data_package.name == "populace-data"
+        assert manifest.data_package.name == "microcosm-data"
         assert manifest.data_package.version == US_DATA_RELEASE_VERSION
         assert manifest.data_package.repo_id == "policyengine/populace-us"
         assert manifest.data_package.release_manifest_path == US_DATA_RELEASE_PATH

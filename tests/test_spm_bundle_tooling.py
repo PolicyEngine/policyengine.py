@@ -90,13 +90,18 @@ def test_historical_bundle_without_measurements_still_loads(canonical_bundle):
 
 
 def test_staged_config_preserves_certification_and_fails_release_gate(canonical_bundle):
+    # The canonical bundle now ships the promoted runtime pin, so rebuild the
+    # pre-promotion staging state this guard is about.
+    canonical_bundle["packages"].pop("spm-calculator")
+    for extra in ("us", "models"):
+        canonical_bundle["extras"][extra].remove("spm-calculator")
     before = copy.deepcopy(canonical_bundle)
     updated = configure_spm(
         canonical_bundle, canonical_bundle["measurements"]["spm"], None
     )
     assert updated["data_releases"] == before["data_releases"]
     assert updated["packages"] == before["packages"]
-    assert updated["packages"]["policyengine-us"]["version"] == "1.764.6"
+    assert updated["packages"]["policyengine-us"]["version"] == "2.0.0"
     validate_bundle_measurements(updated)
     with pytest.raises(ValueError, match="promotion pending"):
         validate_bundle_measurements(updated, require_published_spm=True)
