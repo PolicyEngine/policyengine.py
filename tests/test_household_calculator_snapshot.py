@@ -138,12 +138,18 @@ SNAP_ANNUALIZATION_ISSUE = "https://github.com/PolicyEngine/policyengine-us/issu
 # `snap` sums its monthly values and only some months resolve — 2024 picks up
 # November and December alone (584 = 2 x 292), 2025 picks up all twelve
 # (3522 = 9 x 292 + 3 x 298), 2026 picks up January alone (298), and 2027 picks
-# up none (0). The stored 3596.04 was the correct twelve-month sum under the
-# older uprating index (9 x 298 + 3 x 304.68); on this pin the correct annual
-# figure would be 3607.56 (9 x 298 + 3 x 308.52), so rebaselining to 298.00
-# would freeze about a twelfth of the real benefit into the expected output.
-# Instead test_snap_annualization_defect_still_present fails loudly the moment
-# the country annualizes SNAP again.
+# up none (0). `snap_max_allotment` behaves the same way — 298.00 for
+# 2026-01 and 0.00 for every later 2026 month — which places the defect in
+# parameter resolution rather than in the `snap` variable itself.
+#
+# The stored 3596.04 was the correct twelve-month sum under the older uprating
+# index (9 x 298 + 3 x 304.68). A correct 2026 annual on this pin is on the
+# order of 3,600 — nine months at 298.00 plus three at the uprated October
+# rate — but it cannot be measured here, because the months that would carry
+# the uprated rate are exactly the ones resolving to zero. Rebaselining to
+# 298.00 would therefore freeze roughly a twelfth of the real benefit into the
+# expected output. Instead test_snap_annualization_defect_still_present fails
+# loudly the moment the country annualizes SNAP again.
 COUNTRY_DEFECT_EXCLUSIONS: dict[str, dict[str, str]] = {
     "us_single_adult_no_income": {
         "spm_unit.snap": SNAP_ANNUALIZATION_ISSUE,
@@ -176,9 +182,8 @@ def test_snap_annualization_defect_still_present() -> None:
     While the defect stands, the fields in ``COUNTRY_DEFECT_EXCLUSIONS`` are
     excluded from ``test_us_household_snapshot[us_single_adult_no_income]``.
     A correctly annualized 2026 benefit for a one-person unit with no income is
-    3607.56 on this pin (nine months at the 298.00 allotment plus three at the
-    uprated 308.52); the country currently returns January alone. When that
-    changes this assertion fails: drop the exclusion entry, regenerate
+    on the order of 3,600; the country currently returns January alone. When
+    that changes this assertion fails: drop the exclusion entry, regenerate
     ``us_single_adult_no_income.json``, and delete this test.
     """
     pytest.importorskip("policyengine_us")
