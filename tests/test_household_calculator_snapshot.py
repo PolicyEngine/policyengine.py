@@ -168,7 +168,8 @@ def test_snap_work_requirement_inputs_drive_the_no_income_case() -> None:
     assert omitted.calculate("snap", "2026-02")[0] == pytest.approx(0.0, abs=0.01)
 
     # Supplying hours satisfies the work requirement, and the same model then
-    # returns a full, correctly uprated twelve months: 9 x 298 + 3 x 308.52.
+    # returns a full, correctly uprated twelve months: nine at the 298.00
+    # allotment plus three at the October 2026 uprated rate.
     working = Simulation(situation=situation(40))
     assert working.calculate("snap", 2026)[0] == pytest.approx(3607.57, abs=0.01)
 
