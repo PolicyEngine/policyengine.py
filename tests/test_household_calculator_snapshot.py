@@ -52,11 +52,22 @@ def _round(value, places: int = 2):
     return value
 
 
-def _check_snapshot(name: str, data: dict) -> None:
+def _check_snapshot(
+    name: str, data: dict, exclude: dict[str, str] | None = None
+) -> None:
     path = SNAPSHOT_DIR / f"{name}.json"
     rounded = {k: _round(v) for k, v in sorted(data.items())}
+    excluded = dict(exclude or {})
 
     if UPDATE or not path.exists():
+        if excluded and path.exists():
+            # A refresh must never launder a known country defect into the
+            # expected output. Keep the pre-defect value for excluded fields so
+            # PE_UPDATE_SNAPSHOTS=1 cannot quietly freeze the wrong number.
+            previous = json.loads(path.read_text())
+            for key in excluded:
+                if key in previous:
+                    rounded[key] = previous[key]
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(rounded, indent=2, sort_keys=True) + "\n")
         if not UPDATE:
@@ -65,7 +76,7 @@ def _check_snapshot(name: str, data: dict) -> None:
 
     expected = json.loads(path.read_text())
     diffs = []
-    all_keys = set(expected) | set(rounded)
+    all_keys = (set(expected) | set(rounded)) - set(excluded)
     for key in sorted(all_keys):
         if key not in expected:
             diffs.append(f"  new key: {key}={rounded[key]!r}")
@@ -111,6 +122,30 @@ US_CASES = {
 }
 
 
+SNAP_ANNUALIZATION_ISSUE = "https://github.com/PolicyEngine/policyengine-us/issues/9447"
+
+# Fields whose expected value is contaminated by a country defect. They are
+# excluded from the comparison rather than rebaselined, so the rest of the case
+# keeps protecting against drift while the wrong number is never frozen in.
+#
+# For 2026 policyengine-us reports one month's SNAP allotment where the annual
+# value belongs (spm_unit.snap 3596.04 -> 298.00); the three resource fields
+# below are downstream sums of it. The behaviour is identical on
+# policyengine-us 1.825.2 and 2.0.x, so it predates the canonical SPM release
+# and is not drift this pin introduced. Rebaselining would freeze a twelfth of
+# the real benefit into the expected output; instead
+# test_snap_annualization_defect_still_present fails loudly the moment the
+# country annualizes SNAP again.
+COUNTRY_DEFECT_EXCLUSIONS: dict[str, dict[str, str]] = {
+    "us_single_adult_no_income": {
+        "spm_unit.snap": SNAP_ANNUALIZATION_ISSUE,
+        "household.household_benefits": SNAP_ANNUALIZATION_ISSUE,
+        "household.household_net_income": SNAP_ANNUALIZATION_ISSUE,
+        "spm_unit.spm_unit_net_income": SNAP_ANNUALIZATION_ISSUE,
+    },
+}
+
+
 @pytest.mark.parametrize("case_name", sorted(US_CASES))
 def test_us_household_snapshot(case_name: str) -> None:
     pytest.importorskip("policyengine_us")
@@ -124,7 +159,33 @@ def test_us_household_snapshot(case_name: str) -> None:
     values = result.to_dict()
     values.pop("provenance", None)
     _flatten("", values, out)
-    _check_snapshot(case_name, out)
+    _check_snapshot(case_name, out, exclude=COUNTRY_DEFECT_EXCLUSIONS.get(case_name))
+
+
+def test_snap_annualization_defect_still_present() -> None:
+    """Fail loudly when policyengine-us#9447 is fixed.
+
+    While the defect stands, the fields in ``COUNTRY_DEFECT_EXCLUSIONS`` are
+    excluded from ``test_us_household_snapshot[us_single_adult_no_income]``.
+    A correctly annualized 2026 benefit for a one-person unit with no income is
+    on the order of 3,500; the country currently returns one month of it. When
+    that changes this assertion fails: drop the exclusion entry, regenerate
+    ``us_single_adult_no_income.json``, and delete this test.
+    """
+    pytest.importorskip("policyengine_us")
+    import policyengine as pe
+
+    result = pe.us.calculate_household(
+        **US_CASES["us_single_adult_no_income"], spm={"geography_kind": "national"}
+    )
+    snap = result.spm_unit.snap
+    assert snap < 1_000, (
+        f"policyengine-us returned annual SNAP {snap:.2f}, which is no longer a "
+        f"single month's allotment. {SNAP_ANNUALIZATION_ISSUE} appears fixed: "
+        "remove the COUNTRY_DEFECT_EXCLUSIONS entry for "
+        "us_single_adult_no_income, regenerate that snapshot, and delete this "
+        "test."
+    )
 
 
 # UK cases -------------------------------------------------------------------
