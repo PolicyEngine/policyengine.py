@@ -2,7 +2,7 @@
 
 ## State
 
-**Binding complete; release BLOCKED on a wheel-provenance defect that is not mine to fix.**
+**Binding complete and pushed; release BLOCKED on a wheel-provenance defect that is not mine to fix.**
 
 Everything the brief asked for has been done: the pins, the dataset certification, the
 lock, the TROs and the release guards all bind the published canonical tuple. But while
@@ -79,11 +79,42 @@ regression behind a green suite.
 - Ran the full suite. The previously-skipped SPM tests now **run**: skips fell 14 -> 9 and
   passes rose 1005 -> 1079.
 
-## Next
+- Triaged all 35 post-repin failures and fixed the 29 that are safe to fix, leaving 6.
+  `make test` goes from **39 failed / 1005 passed / 14 skipped** to
+  **6 failed / 1108 passed / 9 skipped**.
+  - Retargeted 14 assertions that pinned the legacy identity (model version, calculator
+    version, data package name, dataset build tag).
+  - Gave the synthetic US microsim fixtures a real county (`06037` Los Angeles for the CA
+    households, `48201` Harris for the TX one) and declared
+    `spm={"geography_kind": "national"}` on the household reform fixtures. Both add input
+    the certified county-kind configuration requires; no expected output was touched, and
+    the rejection comes from `spm_calculator/policyengine_adapter.py`, byte-identical
+    across every 1.0.0 build, so this is not published-wheel-specific.
+- Verified the automatic bump: `bump_version.infer_bump` reads the two `.breaking.md`
+  fragments and yields **5.3.1 -> 6.0.0**. `pyproject`'s version is deliberately untouched.
+- Local CI gates: ruff format, ruff check, `bundle.py check`,
+  `bundle.py check --published-spm --include-tros`, `release_lock.py` and the towncrier
+  changelog check all exit 0.
 
-1. Apply only the failure fixes that are safe — those asserting the superseded legacy pin
-   identity. Leave the numeric and contract failures red and documented.
-2. Push with `--force-with-lease` against `223bce47`, watch CI, leave the PR a draft.
-3. Escalate the wheel-provenance blocker to the coordinator: either republish
-   policyengine-us 2.0.0 from the accepted source, or re-run the acceptance matrix on the
-   published wheel bytes (pinning `PYTHONHASHSEED`, given the dropped ALD fix).
+## The 6 remaining failures are deliberately left red
+
+None can be made green without adopting a number or behaviour that has no acceptance
+evidence. Each would bury something a reviewer needs to see.
+
+| Test | Why it stays red |
+|---|---|
+| `test_spm_household::test_state_only_tax_graph_succeeds_and_resource_graph_requires_geography` | The published wheel's `masked_policyengine_amount` skips SPM evaluation when no unit has housing assistance, so none of the five resource variables raises. That contradicts this PR's own public API docstring at `src/policyengine/tax_benefit_models/us/household.py:191-193`: default outputs require geography "including when housing assistance is zero". The published build breaks a documented contract. |
+| `test_us_household_snapshot[us_single_adult_no_income]` | Would freeze `spm_unit.snap` 3596.04 -> 298.00. The ratio is 12.07, i.e. a monthly figure reported as annual — the "January-only annual SNAP" defect the previous lane already recorded as an open country-owner investigation. |
+| `test_us_household_snapshot` × 3 (employment income, single parent, married two kids) | CA state income tax and child-benefit drift. Same under both the accepted and the published wheel, so not published-only — but still computed household monetary values with no household-level acceptance evidence, and regeneration is wholesale. |
+| `test_us_model_version_surface` | Mixed. Its `data_package_name` key is pin identity, but the same snapshot asserts variable/parameter counts that differ **between** the accepted and published wheels (6155/102506 vs 6157/102525 — the `gov/contrib/trump` and `gov/contrib/states/co` trees exist only in the published build). Blocked by its strictest component. |
+
+## Next (for the coordinator, not this lane)
+
+1. Resolve the wheel provenance: either republish policyengine-us 2.0.0 from the accepted
+   source tree, or re-run the acceptance matrix against the published wheel bytes. If the
+   latter, pin `PYTHONHASHSEED` and repeat under at least two seeds, because the published
+   build dropped the ALD ordering fix that the matrix's exact-parity claim depends on.
+2. Decide whether the published wheel's relaxed `policyengine-core>=3.30.1` is intended;
+   the bundle pins 3.32.5 explicitly, so the wrapper is safe, but the country package no
+   longer enforces the version it was accepted on.
+3. Settle the January-only annual SNAP defect before any household snapshot is rebaselined.
