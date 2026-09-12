@@ -142,6 +142,31 @@ those counts are the same number on either pin. Regenerating on 2.0.0 yields exa
 - Confirmed policyengine-us#9447 is OPEN and its body records the same values on 1.825.2
   and 2.0.0, independently corroborating Ruling D.
 
+- **Ruling E done** (`04960e64`), and **Ruling D reversed on a corrected premise** (`2019530f`).
+  Fanned out the country archaeology across the four drift signatures, each adversarially
+  verified from three lenses (arithmetic, provenance, alternative-cause): 12 verdicts, 11
+  upholding, 1 refuting. Two root causes explain all three Ruling-E cases, both reproduced
+  from parameter values to the cent:
+  - `c991cd844a` (PR #9100, 1.779.1) added published BLS CPI-U actuals, moving the
+    2026-01-01 index 323.364 -> 326.588; the NSLP/SBP per-meal rates uprate through it, so
+    the free-tier net school meal subsidy goes 1130.96 -> 1142.24.
+  - `df3482f4ef` (PR #9059, 1.776.2) moved `uprating: gov.states.ca.cpi` off the CA standard
+    deduction's file-level metadata, where `uprate_parameters` never read it, onto each
+    filing status. The deduction un-freezes into 2026: SINGLE 5,706 -> 5,835.31,
+    JOINT/HOH 11,412 -> 11,670.63. At the 6% and 9.3% marginal brackets that is -7.76 and
+    -24.05 exactly.
+- **The SNAP finding overturned Ruling D's premise, and I verified it myself before acting.**
+  There is no annualization defect; the x12 is intact. The case is an ABAWD with no hours
+  supplied, and two country changes decide it: `82745ca239` dropped
+  `weekly_hours_worked_before_lsr`'s default from 40 to 0, and `74b0a75e5f` added
+  `waived_states.yaml`, under which California's statewide ABAWD waiver expires 2026-01-31.
+  One eligible month at 298.00. Measured directly: monthly snap 2026 is `[298, 0 x 11]`;
+  the same household with hours = 40 returns 3607.571; CA/IL/NV return 298.00 while
+  TX/NY/FL return 0.00. The year series I had cited as proof of a resolution defect
+  (584/3522/298/0 for 2024-2027) is the CA waiver schedule read line by line. So the four
+  fields were rebaselined under Ruling E's standard and the defect guard was replaced with
+  a test pinning the real mechanism.
+
 ## Next
 
 1. Ruling E: regenerate the three drifting snapshots, justify every field against a located
