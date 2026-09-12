@@ -6,6 +6,11 @@ from tests.fixtures.us_reform_fixtures import (
     MARRIED_COUPLE_WITH_KIDS,
 )
 
+# These fixtures declare no county, and the certified bundle's measurements.spm
+# block selects geography_kind="county". Declare national geography explicitly,
+# as the SPM contract requires; these tests assert federal income tax only.
+NATIONAL_SPM = {"geography_kind": "national"}
+
 
 def _double_standard_deduction(year: int) -> dict:
     """Dict reform: standard deduction doubled from ~$14,600 / $29,200 baseline."""
@@ -17,22 +22,28 @@ def _double_standard_deduction(year: int) -> dict:
 
 class TestUSHouseholdReformApplication:
     def test__baseline__then_income_tax_positive(self):
-        result = pe.us.calculate_household(**HIGH_INCOME_SINGLE_FILER)
+        result = pe.us.calculate_household(**HIGH_INCOME_SINGLE_FILER, spm=NATIONAL_SPM)
         assert result.tax_unit.income_tax > 0
 
     def test__doubled_standard_deduction__then_tax_lower(self):
-        baseline = pe.us.calculate_household(**HIGH_INCOME_SINGLE_FILER)
+        baseline = pe.us.calculate_household(
+            **HIGH_INCOME_SINGLE_FILER, spm=NATIONAL_SPM
+        )
         reformed = pe.us.calculate_household(
             **HIGH_INCOME_SINGLE_FILER,
             reform=_double_standard_deduction(2024),
+            spm=NATIONAL_SPM,
         )
         assert reformed.tax_unit.income_tax < baseline.tax_unit.income_tax
 
     def test__doubled_standard_deduction__then_reduction_is_meaningful(self):
-        baseline = pe.us.calculate_household(**HIGH_INCOME_SINGLE_FILER)
+        baseline = pe.us.calculate_household(
+            **HIGH_INCOME_SINGLE_FILER, spm=NATIONAL_SPM
+        )
         reformed = pe.us.calculate_household(
             **HIGH_INCOME_SINGLE_FILER,
             reform=_double_standard_deduction(2024),
+            spm=NATIONAL_SPM,
         )
         reduction = baseline.tax_unit.income_tax - reformed.tax_unit.income_tax
         assert reduction >= 1000, (
@@ -40,17 +51,24 @@ class TestUSHouseholdReformApplication:
         )
 
     def test__married_couple_joint_deduction__then_tax_lower(self):
-        baseline = pe.us.calculate_household(**MARRIED_COUPLE_WITH_KIDS)
+        baseline = pe.us.calculate_household(
+            **MARRIED_COUPLE_WITH_KIDS, spm=NATIONAL_SPM
+        )
         reformed = pe.us.calculate_household(
             **MARRIED_COUPLE_WITH_KIDS,
             reform=_double_standard_deduction(2024),
+            spm=NATIONAL_SPM,
         )
         assert reformed.tax_unit.income_tax < baseline.tax_unit.income_tax
 
     def test__same_reform_twice__then_deterministic(self):
         reform = _double_standard_deduction(2024)
-        first = pe.us.calculate_household(**HIGH_INCOME_SINGLE_FILER, reform=reform)
-        second = pe.us.calculate_household(**HIGH_INCOME_SINGLE_FILER, reform=reform)
+        first = pe.us.calculate_household(
+            **HIGH_INCOME_SINGLE_FILER, reform=reform, spm=NATIONAL_SPM
+        )
+        second = pe.us.calculate_household(
+            **HIGH_INCOME_SINGLE_FILER, reform=reform, spm=NATIONAL_SPM
+        )
         assert first.tax_unit.income_tax == second.tax_unit.income_tax
 
     def test__custom_deduction_values__then_tax_reflects_values(self):
@@ -63,9 +81,9 @@ class TestUSHouseholdReformApplication:
             "gov.irs.deductions.standard.amount.JOINT": {"2024-01-01": 100000},
         }
         small = pe.us.calculate_household(
-            **HIGH_INCOME_SINGLE_FILER, reform=small_reform
+            **HIGH_INCOME_SINGLE_FILER, reform=small_reform, spm=NATIONAL_SPM
         )
         large = pe.us.calculate_household(
-            **HIGH_INCOME_SINGLE_FILER, reform=large_reform
+            **HIGH_INCOME_SINGLE_FILER, reform=large_reform, spm=NATIONAL_SPM
         )
         assert large.tax_unit.income_tax < small.tax_unit.income_tax

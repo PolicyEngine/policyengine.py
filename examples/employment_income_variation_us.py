@@ -101,7 +101,8 @@ def create_dataset_with_varied_employment_income(
     # Create household data
     household_data = {
         "household_id": list(range(n_households)),
-        "state_name": ["CA"] * n_households,  # California
+        "state_code": ["CA"] * n_households,
+        "county_fips": ["06037"] * n_households,  # Los Angeles County
         "household_weight": [1000.0] * n_households,
     }
 

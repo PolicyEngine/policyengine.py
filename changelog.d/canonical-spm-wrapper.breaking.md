@@ -1,0 +1,1 @@
+Use the bundle-pinned canonical SPM configuration across US household and population simulations, require explicit geography for SPM-dependent outputs, reject formula-owned SPM inputs, and retain serialisable selection and calculation provenance across results and replay.

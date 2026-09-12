@@ -4,6 +4,8 @@ title: "Getting started"
 
 ## Install
 
+Use Python 3.11–3.14, the supported range for the certified country models.
+
 ```bash
 pip install policyengine
 ```
@@ -26,7 +28,7 @@ import policyengine as pe
 result = pe.us.calculate_household(
     people=[{"age": 35, "employment_income": 60_000}],
     tax_unit={"filing_status": "SINGLE"},
-    household={"state_code": "CA"},
+    household={"state_code": "CA", "county_fips": "06037"},
     year=2026,
 )
 
@@ -35,7 +37,7 @@ result.tax_unit.eitc
 result.household.household_net_income
 ```
 
-Each `.*` lookup is a regular Python scalar. The result is a typed `HouseholdResult` with entity sections (`person[i]`, `tax_unit`, `spm_unit`, `household`) populated from every variable in the country model.
+Each `.*` lookup is a regular Python scalar. The result is a typed `HouseholdResult` with entity sections (`person[i]`, `tax_unit`, `spm_unit`, `household`) populated from the default output catalog. Additional outputs can be requested with `extra_variables`. US defaults include SPM resources and poverty, so provide observed county FIPS or explicitly select national measurement with `spm={"geography_kind": "national"}`; see [Households](households.md#spm-geography-and-measurement-selection).
 
 ## Apply a reform
 
@@ -45,6 +47,7 @@ Reforms are parameter-path → value dicts:
 reformed = pe.us.calculate_household(
     people=[{"age": 35, "employment_income": 60_000}],
     tax_unit={"filing_status": "SINGLE"},
+    household={"state_code": "CA", "county_fips": "06037"},
     year=2026,
     reform={"gov.irs.credits.ctc.amount.adult_dependent": 1_000},
 )

@@ -15,7 +15,7 @@ an optional reform, get back a dot-accessible result.
             {"age": 6, "is_tax_unit_dependent": True},
         ],
         tax_unit={"filing_status": "HEAD_OF_HOUSEHOLD"},
-        household={"state_code": "NY"},
+        household={"state_code": "NY", "county_fips": "36061"},
         year=2026,
         extra_variables=["adjusted_gross_income"],
     )
@@ -29,7 +29,7 @@ an optional reform, get back a dot-accessible result.
             {"age": 6, "is_tax_unit_dependent": True},
         ],
         tax_unit={"filing_status": "HEAD_OF_HOUSEHOLD"},
-        household={"state_code": "NY"},
+        household={"state_code": "NY", "county_fips": "36061"},
         year=2026,
         reform={"gov.usda.snap.income.deductions.earned_income": 0},
     )
@@ -52,6 +52,7 @@ from policyengine.tax_benefit_models.common import (
 from policyengine.utils.household_validation import validate_household_input
 
 from .model import us_latest
+from .spm import SPMSelection, calculation_provenance, resolve_spm_selection
 
 _GROUP_ENTITIES = ("marital_unit", "family", "spm_unit", "tax_unit", "household")
 
@@ -68,7 +69,7 @@ def _raise_unexpected_kwargs(unexpected: Mapping[str, Any]) -> None:
         lines.append(f"  - '{name}'{hint}")
     lines.append(
         "Valid kwargs: people, marital_unit, family, spm_unit, tax_unit, "
-        "household, year, reform, extra_variables, axes."
+        "household, year, reform, extra_variables, axes, spm."
     )
     raise TypeError("\n".join(lines))
 
@@ -142,6 +143,7 @@ _ALLOWED_KWARGS = frozenset(
         "reform",
         "extra_variables",
         "axes",
+        "spm",
     }
 )
 
@@ -158,6 +160,7 @@ def calculate_household(
     reform: Optional[Mapping[str, Any]] = None,
     extra_variables: Optional[list[str]] = None,
     axes: Optional[list[Any]] = None,
+    spm: Optional[SPMSelection] = None,
     **unexpected: Any,
 ) -> HouseholdResult:
     """Compute tax and benefit variables for a single US household.
@@ -184,6 +187,20 @@ def calculate_household(
             shape or a flat list of axis dictionaries. Missing ``period``
             values default to ``year``. When axes are present, result values
             are lists ordered by the axis grid instead of scalars.
+        spm: SPMSelection or mapping selecting a scenario and geography from
+            the bundle's independently pinned artifact. Geography is demanded
+            only by the results that actually use the measurement. SPM
+            measurement itself — thresholds, the geographic factor and SPM
+            poverty — always requires household county_fips or an explicit
+            metro/national selection, and so do the default outputs, which
+            include SPM poverty. Resource outputs reach the measurement only
+            through the capped housing subsidy, which the country evaluates
+            for units with housing assistance to cap: a unit receiving no
+            housing assistance has a capped subsidy of zero by construction,
+            so its resources compute on state alone, while an assisted unit
+            without a geography raises ``SPM_GEOGRAPHY_REQUIRED``.
+            Formula-owned SPM amounts and measurement counts cannot be
+            supplied as inputs/axes.
 
     Returns:
         :class:`HouseholdResult` with dot-accessible per-entity
@@ -218,6 +235,11 @@ def calculate_household(
     )
 
     from policyengine_us import Simulation
+    from spm_calculator.policyengine_adapter import validate_policyengine_inputs
+
+    validate_policyengine_inputs(
+        {"person": people, **{name: [value] for name, value in entities.items()}}
+    )
 
     validate_household_input(
         model_version=us_latest,
@@ -234,7 +256,16 @@ def calculate_household(
     output_columns = _default_output_columns(extra_by_entity)
     reform_dict = compile_reform(reform, year=year, model_version=us_latest)
     normalized_axes = normalize_axes(axes=axes, year=year, model_version=us_latest)
+    if normalized_axes is not None:
+        validate_policyengine_inputs(
+            {
+                "axes": [
+                    {axis["name"]: None} for group in normalized_axes for axis in group
+                ]
+            }
+        )
     axes_active = normalized_axes is not None
+    spm_config = resolve_spm_selection(spm)
 
     simulation = Simulation(
         situation=_build_situation(
@@ -248,6 +279,7 @@ def calculate_household(
             axes=normalized_axes,
         ),
         reform=reform_dict,
+        spm=spm_config,
     )
 
     result = HouseholdResult()
@@ -282,4 +314,8 @@ def calculate_household(
                     for variable in columns
                 }
             )
+    result["provenance"] = {
+        "spm_config": dict(simulation.spm_config),
+        "spm": calculation_provenance(simulation),
+    }
     return result

@@ -57,7 +57,7 @@ def test_generated_us_extras_preserve_legacy_spm_compatibility(monkeypatch):
     assert generated == original
     for extra in ("us", "models", "dev"):
         section = generated.split(f"\n{extra} = [\n", 1)[1].split("\n]", 1)[0]
-        assert '"spm-calculator==0.3.1"' in section
+        assert '"spm-calculator==1.0.0"' in section
     uk_section = generated.split("\nuk = [\n", 1)[1].split("\n]", 1)[0]
     assert "spm-calculator" not in uk_section
 
@@ -136,7 +136,7 @@ def test_export_release_assets_writes_bundle_assets(monkeypatch, tmp_path):
         in (tmp_path / f"policyengine-bundle-{version}.constraints.txt").read_text()
     )
     assert (
-        "spm-calculator==0.3.1"
+        "spm-calculator==1.0.0"
         in (tmp_path / f"policyengine-bundle-{version}.constraints.txt").read_text()
     )
     assert (

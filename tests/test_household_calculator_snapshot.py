@@ -117,10 +117,61 @@ def test_us_household_snapshot(case_name: str) -> None:
     import policyengine as pe
 
     kwargs = US_CASES[case_name]
-    result = pe.us.calculate_household(**kwargs)
+    result = pe.us.calculate_household(**kwargs, spm={"geography_kind": "national"})
     out: dict[str, float] = {}
-    _flatten("", result.to_dict(), out)
+    # Provenance is an additive receipt tested in test_spm_household.py; keep
+    # this historical snapshot focused on its existing numeric output contract.
+    values = result.to_dict()
+    values.pop("provenance", None)
+    _flatten("", values, out)
     _check_snapshot(case_name, out)
+
+
+def test_snap_work_requirement_inputs_drive_the_no_income_case() -> None:
+    """Pin why ``us_single_adult_no_income`` reports one month of SNAP.
+
+    A childless 35-year-old with no income is an ABAWD subject to the SNAP
+    time limit, and the case supplies no hours. Two country changes decide the
+    result: ``weekly_hours_worked_before_lsr`` now defaults to 0 rather than
+    40, so an omitted-hours household fails the 20-hour test; and California's
+    statewide ABAWD waiver runs only through 2026-01-31. The unit is therefore
+    exempt in January 2026 and time-limited from February, giving one eligible
+    month rather than a broken annualization — the twelve-month sum is intact,
+    as the hours-supplied comparison here shows.
+
+    This is the mechanism behind the snapshot's SNAP figure, so it is pinned
+    separately: if the hours default or the waiver modelling moves, this fails
+    with the reason rather than leaving an unexplained number in a fixture.
+    """
+    pytest.importorskip("policyengine_us")
+    from policyengine_us import Simulation
+
+    def situation(hours: float | None) -> dict:
+        person: dict = {"age": {"2026": 35}}
+        if hours is not None:
+            person["weekly_hours_worked_before_lsr"] = {"2026": hours}
+        return {
+            "people": {"you": person},
+            "spm_units": {"sp": {"members": ["you"]}},
+            "tax_units": {"tu": {"members": ["you"]}},
+            "families": {"f": {"members": ["you"]}},
+            "marital_units": {"mu": {"members": ["you"]}},
+            "households": {"hh": {"members": ["you"], "state_code": {"2026": "CA"}}},
+        }
+
+    omitted = Simulation(situation=situation(None))
+    assert omitted.calculate("snap", 2026)[0] == pytest.approx(298.00, abs=0.01)
+    # Exempt only while the California statewide waiver is in force.
+    assert bool(omitted.calculate("is_snap_abawd_exempt", "2026-01")[0]) is True
+    assert bool(omitted.calculate("is_snap_abawd_exempt", "2026-02")[0]) is False
+    assert omitted.calculate("snap", "2026-01")[0] == pytest.approx(298.00, abs=0.01)
+    assert omitted.calculate("snap", "2026-02")[0] == pytest.approx(0.0, abs=0.01)
+
+    # Supplying hours satisfies the work requirement, and the same model then
+    # returns a full, correctly uprated twelve months: nine at the 298.00
+    # allotment plus three at the October 2026 uprated rate.
+    working = Simulation(situation=situation(40))
+    assert working.calculate("snap", 2026)[0] == pytest.approx(3607.57, abs=0.01)
 
 
 # UK cases -------------------------------------------------------------------

@@ -10,10 +10,79 @@ on:
       - .github/**
       - changelog.d/**
       - pyproject.toml
+      - uv.lock
+      - Makefile
       - src/policyengine/data/bundle/manifest.json
   workflow_dispatch:
 
 jobs:
+  ReleaseCandidate:
+    name: Nonpublishing wrapper candidate (release)
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      POLICYENGINE_SKIP_COUNTRY_IMPORTS: '1'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/release-toolchain
+      - name: Prepare and build isolated candidate source
+        env:
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+        run: python scripts/release_build.py candidate --flavor release --output "$RUNNER_TEMP/wrapper-candidate"
+      - name: Upload actual candidate wheel and preparation evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wrapper-release-candidate-${{ github.event.pull_request.head.sha }}-${{ github.event.pull_request.base.sha }}-release
+          path: ${{ runner.temp }}/wrapper-candidate/
+          if-no-files-found: error
+          retention-days: 90
+
+  NumericalCandidate:
+    name: Nonpublishing wrapper candidate (rc1)
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && vars.RELEASE_COUNTRY_CANDIDATE_ARTIFACT_ID != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      POLICYENGINE_SKIP_COUNTRY_IMPORTS: '1'
+      RELEASE_COUNTRY_CANDIDATE_ARTIFACT_ID: ${{ vars.RELEASE_COUNTRY_CANDIDATE_ARTIFACT_ID }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Read selected country artifact with the existing GitHub App
+        id: country-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: PolicyEngine
+          repositories: policyengine-us
+          permission-actions: read
+      - uses: ./.github/actions/release-toolchain
+      - name: Prepare and build isolated candidate source
+        env:
+          GH_TOKEN: ${{ steps.country-token.outputs.token }}
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+        run: python scripts/release_build.py candidate --flavor rc1 --output "$RUNNER_TEMP/wrapper-candidate"
+      - name: Upload actual candidate wheel and preparation evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wrapper-release-candidate-${{ github.event.pull_request.head.sha }}-${{ github.event.pull_request.base.sha }}-rc1
+          path: ${{ runner.temp }}/wrapper-candidate/
+          if-no-files-found: error
+          retention-days: 90
+
   check-changelog:
     name: Check changelog fragment
     runs-on: ubuntu-latest
@@ -57,7 +126,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v6
       - name: Set up Python ${{ matrix.python-version }}
@@ -68,16 +137,13 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
       - name: Install package (no country-model extras)
-        # `h5py` is used transitively by policyengine.core.scoping_strategy
-        # but is normally supplied via the [us]/[uk] extras (through
-        # policyengine-core). Install it directly so the smoke import can
-        # exercise the wrapper without the country models, which pin
-        # versions that don't support 3.9/3.10 yet.
-        run: uv pip install --system . h5py
+        run: uv pip install --system .
       - name: Smoke-import core modules
         run: python -c "import policyengine; from policyengine.core import Dataset, Policy, Simulation; from policyengine.outputs import aggregate, poverty, inequality; print('import OK')"
   BundleVerification:
     name: Verify bundle metadata
+    # Private manifest credentials are available only to trusted repository PRs.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     env:
       POLICYENGINE_SKIP_COUNTRY_IMPORTS: "1"
@@ -113,6 +179,13 @@ jobs:
           PY
       - name: Check installed package consistency
         run: python -m pip check
+      # Only the reviewed registry lock is a pull-request concern. The
+      # read-only credential, published-measurement and TRACE sidecar gates
+      # are release gates: the release workflow regenerates the sidecars and
+      # publishes the wheels immediately before checking them, so they cannot
+      # be satisfied from a pull request. They run in push.yaml instead.
+      - name: Check the reviewed registry lock
+        run: python scripts/release_lock.py
       - name: Verify bundle packages
         run: policyengine bundle verify --country us --country uk --packages-only --json
   Test:
@@ -120,7 +193,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.13', '3.14']
+        python-version: ['3.11', '3.12', '3.13', '3.14']
     steps:
         - name: Checkout repo
           uses: actions/checkout@v6

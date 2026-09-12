@@ -64,6 +64,11 @@ def _us_fixture_dataset(tmp_path, year: int = 2025):
             {
                 "household_id": [1, 2],
                 "state_code": ["CA", "TX"],
+                # The certified bundle measures SPM at county geography
+                # (manifest ``measurements.spm.geography_kind == "county"``),
+                # so a US household fixture must name its county. State alone
+                # does not identify an SPM area.
+                "county_fips": ["06037", "48201"],
                 "household_weight": [1_000.0, 1_000.0],
             }
         ),

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import copy
+import importlib.util
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -20,6 +22,21 @@ PYPROJECT = REPO_ROOT / "pyproject.toml"
 BUNDLE_MANIFEST = (
     REPO_ROOT / "src" / "policyengine" / "data" / "bundle" / "manifest.json"
 )
+# Other maintenance subcommands explicitly load runtime helpers after this
+# module; retain their source-checkout and country-import behavior.
+os.environ.setdefault("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
+sys.path.insert(0, str(REPO_ROOT / "src"))
+
+# These commands run before dependencies are installed in release/PR CI. Load
+# the same stdlib-only validator used at runtime without importing policyengine.
+_VALIDATION_SPEC = importlib.util.spec_from_file_location(
+    "_policyengine_bundle_validation",
+    REPO_ROOT / "src" / "policyengine" / "provenance" / "bundle_validation.py",
+)
+assert _VALIDATION_SPEC is not None and _VALIDATION_SPEC.loader is not None
+_VALIDATION_MODULE = importlib.util.module_from_spec(_VALIDATION_SPEC)
+_VALIDATION_SPEC.loader.exec_module(_VALIDATION_MODULE)
+validate_bundle_measurements = _VALIDATION_MODULE.validate_bundle_measurements
 
 OPTIONAL_DEPENDENCIES_HEADER = "[project.optional-dependencies]"
 NEXT_SECTION_PATTERN = re.compile(r"\n\[tool\.setuptools\]", re.MULTILINE)
@@ -34,7 +51,9 @@ RETIRED_BUNDLE_EXTRAS = {
 
 
 def load_bundle_manifest(path: Path = BUNDLE_MANIFEST) -> dict[str, Any]:
-    return json.loads(path.read_text())
+    bundle = json.loads(path.read_text())
+    validate_bundle_measurements(bundle)
+    return bundle
 
 
 def write_bundle_manifest(
@@ -51,6 +70,7 @@ def normalized_manifest(bundle: Mapping[str, Any]) -> dict[str, Any]:
     so release assets and runtime commands can consume one stable shape.
     """
 
+    validate_bundle_measurements(bundle)
     packages = {
         key: {
             **value,
