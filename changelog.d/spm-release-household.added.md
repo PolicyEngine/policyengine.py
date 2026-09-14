@@ -1,0 +1,1 @@
+Accept an explicit, hash-verified SPM release in US household calculations, with simulation-specific threshold and housing-share formulas and JSON provenance; add opt-in household-only registration for unbundled development models without certifying population data.

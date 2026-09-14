@@ -1,13 +1,16 @@
 import datetime
+import os
+from importlib import metadata
 from typing import TYPE_CHECKING, Optional
 
 import pandas as pd
 from microdf import MicroDataFrame
 
-from policyengine.core import TaxBenefitModel
+from policyengine.core import TaxBenefitModel, TaxBenefitModelVersion
 from policyengine.provenance.dataset_materialization import (
     materialize_dataset,
 )
+from policyengine.provenance.manifest import PackageVersion
 from policyengine.tax_benefit_models.common import MicrosimulationModelVersion
 from policyengine.tax_benefit_models.common.model_version import (
     build_runtime_dataset_provenance,
@@ -420,6 +423,11 @@ def managed_microsimulation(
     ``allow_unmanaged=True``.
     """
 
+    if getattr(us_latest, "household_only", False):
+        raise ValueError(
+            "The household-only development model cannot run population microsimulations"
+        )
+
     from policyengine_us import Microsimulation
 
     if "dataset" in kwargs:
@@ -445,4 +453,49 @@ def managed_microsimulation(
     return microsim
 
 
-us_latest = PolicyEngineUSLatest()
+class PolicyEngineUSHouseholdOnly(PolicyEngineUSLatest):
+    """Explicit development model metadata with no population certification.
+
+    Set POLICYENGINE_US_HOUSEHOLD_ONLY=1 before importing policyengine to use
+    an unbundled country model through the ordinary household calculator.
+    Certified manifests remain untouched, and population execution is refused.
+    """
+
+    household_only: bool = True
+
+    def __init__(self):
+        installed = metadata.version(self.package_name)
+        TaxBenefitModelVersion.__init__(
+            self,
+            model=us_model,
+            version=installed,
+            description="Household-only development integration; no certified population data",
+            model_package=PackageVersion(name=self.package_name, version=installed),
+        )
+        self.id = f"{self.model.id}@{installed}:household-only"
+        self.region_registry = self._load_region_registry()
+        system = self._load_system()
+        self._populate_variables(system)
+        self._populate_parameters(system)
+
+    def run(self, simulation):
+        raise ValueError(
+            "The household-only development model cannot run population simulations"
+        )
+
+    def save(self, simulation):
+        raise ValueError(
+            "The household-only development model cannot save population simulations"
+        )
+
+    def load(self, simulation):
+        raise ValueError(
+            "The household-only development model cannot load population simulations"
+        )
+
+
+us_latest = (
+    PolicyEngineUSHouseholdOnly()
+    if os.environ.get("POLICYENGINE_US_HOUSEHOLD_ONLY") == "1"
+    else PolicyEngineUSLatest()
+)
