@@ -1,5 +1,6 @@
 # PolicyEngine.py
 
+[![status](https://joss.theoj.org/papers/34b9f72df98e586d7e6a2448922407e7/status.svg)](https://joss.theoj.org/papers/34b9f72df98e586d7e6a2448922407e7)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22145449.svg)](https://doi.org/10.5281/zenodo.22145449)
 
 A Python package for tax-benefit microsimulation analysis. Run policy simulations, analyse distributional impacts, and visualise results across the UK and US.
