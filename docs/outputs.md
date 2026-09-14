@@ -179,6 +179,12 @@ rates.dataframe
 
 Call it once per simulation for a baseline-vs-reform comparison. Age / gender / race breakdowns: `calculate_us_poverty_by_age`, `_by_gender`, `_by_race`. UK counterparts: `calculate_uk_poverty_rates`, `_by_age`, `_by_gender`.
 
+Missing poverty statuses are excluded from `total_population`, which reports the eligible weighted population after demographic filters. If that denominator is zero, `rate` is `None`; an eligible population with no poor members has a measured rate of `0.0`. The collection's `rate` column uses Pandas `Float64`, so `rates.dataframe.to_dict("records")` retains missing rates as JSON `null` and supports `json.dumps(..., allow_nan=False)`.
+
+Generic `Aggregate` and `ChangeAggregate` means also return `None` when their eligible weighted denominator is zero. US household results convert nonfinite country-model values to `None`, including missing SPM statuses and values returned along household-calculator axes.
+
+The five US SPM status variables (`in_poverty`, `in_deep_poverty`, `person_in_poverty`, `spm_unit_is_in_spm_poverty`, and `spm_unit_is_in_deep_spm_poverty`) support summaries at their native entity and projection to people. `Poverty`, `Aggregate`, and `ChangeAggregate` reject upward or group-to-group mapping of these statuses, including when used as filters: combining status flags across entities requires an explicit measurement-universe rule. Generic amount mapping retains its existing behavior.
+
 ## Inequality
 
 Gini, top-10 share, top-1 share, bottom-50 share — for one simulation.
