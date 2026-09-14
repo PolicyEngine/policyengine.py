@@ -38,6 +38,7 @@ an optional reform, get back a dot-accessible result.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from math import isfinite
 from typing import Any, Optional
 
 from policyengine.tax_benefit_models.common import (
@@ -90,7 +91,8 @@ def _default_output_columns(
 
 def _safe_convert(value: Any) -> Any:
     try:
-        return float(value)
+        number = float(value)
+        return number if isfinite(number) else None
     except (ValueError, TypeError):
         return str(value) if value is not None else None
 
