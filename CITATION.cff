@@ -38,4 +38,41 @@ identifiers:
   - type: doi
     value: 10.5281/zenodo.22145449
     description: Concept DOI for all versions
+  - type: doi
+    value: 10.5281/zenodo.22145450
+    description: Archived snapshot of version 5.0.4
 repository-code: "https://github.com/PolicyEngine/policyengine.py"
+preferred-citation:
+  type: article
+  title: "policyengine: A Microsimulation Tool for Tax-Benefit Policy Analysis"
+  doi: 10.21105/joss.11115
+  url: "https://doi.org/10.21105/joss.11115"
+  journal: "Journal of Open Source Software"
+  publisher:
+    name: "The Open Journal"
+  volume: 11
+  issue: 125
+  start: 11115
+  year: 2026
+  month: 9
+  authors:
+    - family-names: Ahmadi
+      given-names: Vahid
+      orcid: "https://orcid.org/0009-0004-1093-6272"
+      affiliation: "PolicyEngine, Washington, DC, United States"
+    - family-names: Ghenis
+      given-names: Max
+      orcid: "https://orcid.org/0000-0002-1335-8277"
+      affiliation: "PolicyEngine, Washington, DC, United States"
+    - family-names: Woodruff
+      given-names: Nikhil
+      orcid: "https://orcid.org/0009-0009-5004-4910"
+      affiliation: "PolicyEngine, Washington, DC, United States"
+    - family-names: Makarchuk
+      given-names: Pavel
+      orcid: "https://orcid.org/0009-0003-4869-7409"
+      affiliation: "PolicyEngine, Washington, DC, United States"
+    - family-names: Volk
+      given-names: Anthony
+      orcid: "https://orcid.org/0009-0009-2183-3064"
+      affiliation: "PolicyEngine, Washington, DC, United States"
