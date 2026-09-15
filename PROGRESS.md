@@ -88,10 +88,45 @@ source-origin check that refused namespace packages.
   `tests/test_spm_household.py` by hash and delegates it elsewhere; the three
   reviews contain zero occurrences of "household".
 
+## Conflicts with prior rulings (for the wrapper owner to settle)
+
+An adversarial pass found two places where this lane's brief and a prior
+approved ruling disagree. Both are reported, not resolved here.
+
+1. **The guard change runs against `WRAPPER-R3-CI-DIAGNOSIS-20260913.md` §1**,
+   which says: "Keep the production guard strict. Do not delete arbitrary
+   cached modules or accept missing origins merely to pass the full suite."
+   A root-approved patch --
+   `wrapper-ci-harness-repair-20260913/ROOT-REVIEW.json`, `approved: true`,
+   parent `818c894e`, patch sha256 `9ad1e023...` -- repairs the same failure in
+   the test harness with a fresh subprocess and leaves `assert_source_origin`
+   untouched. `e0b1f4f2` takes that subprocess control as an additional test,
+   so the strict cross-checkout property is pinned either way and adopting the
+   approved patch instead would cost only the namespace branch.
+2. **§3 says to preserve the household rewrite**, not revert it: "preserve this
+   assertion and complete the already approved final-country pin transaction".
+   The brief instructed the revert, recorded as returning with the repin. The
+   evidence that justifies restoring it is
+   `household-integration-20260912/REPORT.md`: 84 wrapper controls against the
+   authenticated country `2.0.2rc1`.
+
+Also: §1's line-208 reading means the restore is two-part. The rewrite needs
+both the two absent variables and the country's assisted ordinary-resource
+independence; re-adding only the variables would still fail.
+
+## A fourth CI blocker these fixes do not touch
+
+`gh pr checks 515` shows `Nonpublishing wrapper candidate (release)` failing in
+12s at `scripts/check_release_credentials.py` -- "Release verification requires
+an authenticated Hugging Face access token with role read" -- before any strict
+gate. These fixes address the four `Test (3.x)` failures. PR #515 stays red
+until the credential is settled.
+
 ## Next
 
 1. Wait for CI on PR #520 (`gh pr checks 520`).
 2. The household rewrite returns with the country repin, once #9467 publishes.
+3. Wrapper owner to settle the two conflicts above.
 
 ---
 
