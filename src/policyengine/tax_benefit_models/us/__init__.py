@@ -10,6 +10,7 @@ Typical usage (fresh session, no other imports required):
     result = pe.us.calculate_household(
         people=[{"age": 35, "employment_income": 60000}],
         tax_unit={"filing_status": "SINGLE"},
+        household={"state_code": "NY", "county_fips": "36061"},
         year=2026,
     )
     print(result.tax_unit.income_tax)
@@ -18,6 +19,7 @@ Typical usage (fresh session, no other imports required):
     reformed = pe.us.calculate_household(
         people=[{"age": 35, "employment_income": 60000}],
         tax_unit={"filing_status": "SINGLE"},
+        household={"state_code": "NY", "county_fips": "36061"},
         year=2026,
         reform={"gov.irs.credits.ctc.amount.adult_dependent": 1000},
         extra_variables=["adjusted_gross_income"],
@@ -52,6 +54,7 @@ if find_spec("policyengine_us") is not None:
         managed_microsimulation,
         us_latest,
     )
+    from .spm import SPMProvenance, SPMSelection
 
     model = us_latest
     """The pinned US ``TaxBenefitModelVersion`` for this policyengine release."""
@@ -78,6 +81,8 @@ if find_spec("policyengine_us") is not None:
         "model",
         "us_latest",
         "calculate_household",
+        "SPMSelection",
+        "SPMProvenance",
         "economic_impact_analysis",
         "calculate_budgetary_impact",
         "BudgetaryImpact",

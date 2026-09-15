@@ -16,6 +16,8 @@ from policyengine.provenance.certification import (
     certify_data_release,
     merge_us_state_release_manifest,
     parse_manifest_uri,
+    required_supplemental_release_files,
+    should_validate_vendored_artifacts,
     validate_release_manifest,
 )
 from policyengine.provenance.manifest import DataReleaseManifest
@@ -741,3 +743,92 @@ class TestVendoredSidecarBinding:
         assert bundle_manifest["trov:sha256"] == expected
         performance = tro["@graph"][0]["trov:hasPerformance"]
         assert performance["pe:emittedIn"] == "repository-bundle"
+
+
+def _source_enrichment_manifest_payload() -> dict:
+    """A `microcosm-data` release whose sidecars use the `evidence` kind.
+
+    This is the shape the Populace US producer publishes for source-enrichment
+    releases: the data package is named `microcosm-data` rather than
+    `populace-data`, and release-directory sidecars are labelled `evidence`
+    rather than `diagnostics`.
+    """
+    payload = _release_manifest_payload()
+    payload["data_package"]["name"] = "microcosm-data"
+    payload["artifacts"]["us_source_coverage"]["kind"] = "evidence"
+    payload["artifacts"]["build_manifest"] = {
+        "kind": "evidence",
+        "path": "build_manifest.json",
+        "repo_id": "policyengine/populace-us",
+        "revision": TAG,
+        "sha256": "1" * 64,
+        "size_bytes": 1,
+    }
+    return payload
+
+
+class TestSourceEnrichmentProducerRelease:
+    """The `microcosm-data` producer name must keep every Populace rule armed.
+
+    A release published under the newer producer name previously fell through
+    every `populace-data` guard, which both skipped the per-artifact
+    reachability check and left release-scoped sidecars pinned at repo-root
+    paths that do not resolve.
+    """
+
+    def _payload(self) -> dict:
+        return build_country_manifest_payload(
+            country="us",
+            manifest=DataReleaseManifest.model_validate(
+                _source_enrichment_manifest_payload()
+            ),
+            uri_parts=parse_manifest_uri(MANIFEST_URI),
+            policyengine_version="9.9.9",
+            model_package="policyengine-us",
+            model_version="1.723.0",
+            model_wheel={"sha256": "d" * 64, "url": "https://example/wheel"},
+        )
+
+    def test__given_evidence_kind_sidecar__then_rewrites_to_release_path(self):
+        datasets = self._payload()["datasets"]
+
+        assert datasets["us_source_coverage"]["path"] == (
+            f"releases/{TAG}/us_source_coverage.json"
+        )
+        assert datasets["build_manifest"]["path"] == (
+            f"releases/{TAG}/build_manifest.json"
+        )
+
+    def test__given_microdata_kind__then_keeps_repo_root_path(self):
+        datasets = self._payload()["datasets"]
+
+        assert datasets["populace_us_2024"]["path"] == "populace_us_2024.h5"
+        assert (
+            datasets["populace_us_2024_calibration"]["path"]
+            == "populace_us_2024_calibration.npz"
+        )
+
+    def test__given_microcosm_producer__then_validates_vendored_artifacts(self):
+        assert should_validate_vendored_artifacts(
+            "us",
+            DataReleaseManifest.model_validate(_source_enrichment_manifest_payload()),
+            parse_manifest_uri(MANIFEST_URI),
+        )
+
+    def test__given_microcosm_producer__then_requires_source_coverage_file(self):
+        assert required_supplemental_release_files(
+            "us",
+            DataReleaseManifest.model_validate(_source_enrichment_manifest_payload()),
+            parse_manifest_uri(MANIFEST_URI),
+        ) == ("us_source_coverage.json",)
+
+    def test__given_microcosm_producer__then_still_omits_area_h5_artifacts(self):
+        datasets = self._payload()["datasets"]
+
+        assert "states/AK" not in datasets
+        assert "districts/CA-01" not in datasets
+
+    def test__given_microcosm_producer__then_still_drops_area_region_templates(self):
+        assert self._payload()["region_datasets"] == {
+            "national": {"path_template": "populace_us_2024.h5"}
+        }

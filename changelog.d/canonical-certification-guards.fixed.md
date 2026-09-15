@@ -1,0 +1,1 @@
+Recognise the `microcosm-data` producer name and the `evidence` artifact kind when certifying a US data release, so source-enrichment releases keep the per-artifact reachability check and pin their release-directory sidecars at paths that resolve.

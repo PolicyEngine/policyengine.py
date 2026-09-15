@@ -1,3 +1,5 @@
+import hashlib
+import json
 import logging
 from datetime import datetime
 from typing import Any, Optional, Union
@@ -10,6 +12,7 @@ from .dataset import Dataset
 from .dynamic import Dynamic
 from .policy import Policy
 from .scoping_strategy import ScopingStrategy
+from .spm import SPMProvenance, SPMSelection
 from .tax_benefit_model_version import TaxBenefitModelVersion
 
 logger = logging.getLogger(__name__)
@@ -91,6 +94,43 @@ class Simulation(BaseModel):
 
     output_dataset: Optional[Dataset] = None
 
+    spm: Optional[SPMSelection] = Field(
+        default=None,
+        description="US SPM forecast and geography selection within the release bundle.",
+    )
+    spm_receipt: Optional[SPMProvenance] = Field(
+        default=None,
+        description="Detached SPM calculation receipt, populated by a US run or load.",
+    )
+
+    @property
+    def spm_config(self) -> Optional[dict[str, Any]]:
+        """Resolve the US measurement selection without retaining a country object."""
+        if getattr(self.tax_benefit_model_version, "country_code", None) != "us":
+            if self.spm is not None:
+                raise ValueError("SPM selection is only supported by the US model")
+            return None
+        from policyengine.tax_benefit_models.us.spm import resolve_spm_selection
+
+        return resolve_spm_selection(self.spm)
+
+    def spm_provenance(self) -> Optional[dict[str, Any]]:
+        """Return a detached JSON receipt, or None before a US calculation."""
+        return (
+            self.spm_receipt.model_dump(mode="json")
+            if self.spm_receipt is not None
+            else None
+        )
+
+    @property
+    def storage_id(self) -> str:
+        """Include resolved SPM settings in cache and saved-result identity."""
+        config = self.spm_config
+        if config is None:
+            return self.id
+        encoded = json.dumps(config, sort_keys=True, separators=(",", ":")).encode()
+        return f"{self.id}-spm-{hashlib.sha256(encoded).hexdigest()}"
+
     @model_validator(mode="after")
     def _compile_dict_reforms(self) -> "Simulation":
         """Coerce dict ``policy`` / ``dynamic`` inputs into proper objects.
@@ -128,12 +168,24 @@ class Simulation(BaseModel):
         return self
 
     def run(self):
+        # Reject unsupported country settings even on model paths that do not
+        # use US measurement. Results from an earlier run are no longer valid.
+        if self.spm_config is not None:
+            self.spm_receipt = None
+            self.output_dataset = None
         self.tax_benefit_model_version.run(self)
 
     def ensure(self):
-        cached_result = _cache.get(self.id)
+        cache_key = self.storage_id
+        cached_result = _cache.get(cache_key)
         if cached_result:
             self.output_dataset = cached_result.output_dataset
+            self.spm = cached_result.spm
+            self.spm_receipt = (
+                cached_result.spm_receipt.model_copy(deep=True)
+                if cached_result.spm_receipt is not None
+                else None
+            )
             return
         try:
             self.tax_benefit_model_version.load(self)
@@ -149,7 +201,18 @@ class Simulation(BaseModel):
             self.run()
             self.save()
 
-        _cache.add(self.id, self)
+        # Cache a snapshot: changing this Simulation's selection then running
+        # it again must not overwrite the receipt for an earlier cache key.
+        _cache.add(
+            cache_key,
+            self.model_copy(
+                update={
+                    "spm_receipt": self.spm_receipt.model_copy(deep=True)
+                    if self.spm_receipt is not None
+                    else None
+                }
+            ),
+        )
 
     def save(self):
         """Save the simulation's output dataset."""
@@ -171,15 +234,20 @@ class Simulation(BaseModel):
         return write_simulation_run_record(self, directory, **kwargs)
 
     @property
-    def release_bundle(self) -> dict[str, Optional[str]]:
+    def release_bundle(self) -> dict[str, Any]:
         bundle = (
             self.tax_benefit_model_version.release_bundle
             if self.tax_benefit_model_version is not None
             else {}
         )
-        return {
+        result = {
             **bundle,
             "dataset_filepath": self.dataset.filepath
             if self.dataset is not None
             else None,
         }
+        if self.spm_config is not None:
+            recorded = getattr(self.output_dataset, "metadata", {}).get("spm_config")
+            result["spm_config"] = dict(recorded or self.spm_config)
+            result["spm"] = self.spm_provenance()
+        return result

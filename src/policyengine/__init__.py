@@ -10,6 +10,7 @@ Canonical entry points for a fresh coding session:
     result = pe.us.calculate_household(
         people=[{"age": 35, "employment_income": 60000}],
         tax_unit={"filing_status": "SINGLE"},
+        household={"state_code": "NY", "county_fips": "36061"},
         year=2026,
         reform={"gov.irs.credits.ctc.amount.adult_dependent": 1000},
     )

@@ -74,23 +74,69 @@ def _generate(args: argparse.Namespace) -> int:
     result = generate(check=False)
     if not args.include_tros:
         return result
-    return _generate_tros()
+    return _generate_tros(strict=args.strict_tros)
 
 
 def _check(args: argparse.Namespace) -> int:
-    from generate_bundle_artifacts import generate
+    from generate_bundle_artifacts import (
+        generate,
+        load_bundle_manifest,
+        validate_bundle_measurements,
+    )
 
+    validate_bundle_measurements(
+        load_bundle_manifest(), require_published_spm=args.published_spm
+    )
     result = generate(check=True)
     if not args.include_tros:
         return result
-    return result or _check_tros()
+    return result or _check_tros(strict=args.strict_tros)
 
 
-def _generate_tros() -> int:
+def _set_spm(args: argparse.Namespace) -> int:
+    from generate_bundle_artifacts import (
+        generate,
+        load_bundle_manifest,
+        write_bundle_manifest,
+    )
+    from spm_bundle import configure_spm, published_calculator_component
+
+    calculator = (
+        published_calculator_component(args.calculator_version)
+        if args.calculator_version
+        else None
+    )
+    settings = {
+        key: getattr(args, key)
+        for key in (
+            "forecast_content_sha256",
+            "scenario",
+            "geography_kind",
+            "geography_id",
+            "county_vintage",
+            "as_of",
+        )
+    }
+    write_bundle_manifest(configure_spm(load_bundle_manifest(), settings, calculator))
+    return generate(check=False)
+
+
+def _development_manifest(args: argparse.Namespace) -> int:
+    from generate_bundle_artifacts import load_bundle_manifest
+    from spm_bundle import write_development_manifest
+
+    write_development_manifest(
+        load_bundle_manifest(), args.country_wheel, args.calculator_wheel, args.output
+    )
+    print(f"Wrote uncertified local development fixture {args.output}")
+    return 0
+
+
+def _generate_tros(*, strict: bool = False) -> int:
     os.environ.setdefault("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
     from generate_trace_tros import regenerate_all
 
-    written, regressions = regenerate_all()
+    written, regressions = regenerate_all(strict=strict)
     for path in written:
         print(f"wrote {path}")
     for country_id, tro_path, reason in regressions:
@@ -106,12 +152,12 @@ def _generate_tros() -> int:
     return 0
 
 
-def _check_tros() -> int:
+def _check_tros(*, strict: bool = False) -> int:
     os.environ.setdefault("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
     from generate_trace_tros import generated_tros
 
     changed = False
-    for path, payload in generated_tros():
+    for path, payload in generated_tros(strict=strict):
         if path.exists() and path.read_bytes() == payload:
             continue
         print(
@@ -201,6 +247,32 @@ def _parser() -> argparse.ArgumentParser:
     )
     packages.set_defaults(func=_update_packages)
 
+    spm = subparsers.add_parser(
+        "set-spm", help="Stage SPM defaults and optional verified PyPI calculator pin."
+    )
+    spm.add_argument("--forecast-content-sha256", required=True)
+    spm.add_argument("--scenario", required=True)
+    spm.add_argument(
+        "--geography-kind", choices=["county", "metro", "national"], default="county"
+    )
+    spm.add_argument("--geography-id")
+    spm.add_argument("--county-vintage", default="2020")
+    spm.add_argument("--as-of")
+    spm.add_argument(
+        "--calculator-version",
+        help="Verify actual published wheel bytes before adding the runtime dependency.",
+    )
+    spm.set_defaults(func=_set_spm)
+
+    development = subparsers.add_parser(
+        "development-manifest",
+        help="Write an uncertified fixture using actual local wheel metadata.",
+    )
+    development.add_argument("--country-wheel", required=True, type=Path)
+    development.add_argument("--calculator-wheel", required=True, type=Path)
+    development.add_argument("--output", required=True, type=Path)
+    development.set_defaults(func=_development_manifest)
+
     generate = subparsers.add_parser(
         "generate",
         help="Regenerate derived bundle artifacts.",
@@ -220,6 +292,11 @@ def _parser() -> argparse.ArgumentParser:
         help="Check derived bundle metadata.",
     )
     check.add_argument(
+        "--published-spm",
+        action="store_true",
+        help="Check SPM measurement pins include a published hashed calculator; does not certify country/data compatibility or release readiness.",
+    )
+    check.add_argument(
         "--include-tros",
         action="store_true",
         help=(
@@ -229,12 +306,25 @@ def _parser() -> argparse.ArgumentParser:
     )
     check.set_defaults(func=_check)
 
+    for command in (generate, check):
+        command.add_argument(
+            "--strict-tros",
+            action="store_true",
+            help="Require full authenticated manifests matching reviewed TRO source pins; requires --include-tros.",
+        )
+
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
-    return args.func(args)
+    parser = _parser()
+    args = parser.parse_args(argv)
+    if getattr(args, "strict_tros", False) and not args.include_tros:
+        parser.error("--strict-tros requires --include-tros")
+    try:
+        return args.func(args)
+    except ValueError as exc:
+        parser.error(str(exc))
 
 
 if __name__ == "__main__":

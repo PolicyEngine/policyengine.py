@@ -20,7 +20,7 @@ import policyengine as pe
 result = pe.us.calculate_household(
     people=[{"age": 35, "employment_income": 60_000}],
     tax_unit={"filing_status": "SINGLE"},
-    household={"state_code": "CA"},
+    household={"state_code": "CA", "county_fips": "06037"},
     year=2026,
 )
 

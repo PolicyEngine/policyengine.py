@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
@@ -31,9 +31,7 @@ class TaxBenefitModelVersion(BaseModel):
     model: TaxBenefitModel
     version: str
     description: Optional[str] = None
-    created_at: Optional[datetime] = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(UTC))
 
     variables: list["Variable"] = Field(default_factory=list)
     parameters: list["Parameter"] = Field(default_factory=list)

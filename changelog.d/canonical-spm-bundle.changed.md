@@ -1,0 +1,1 @@
+Validate independently pinned SPM bundle settings, verify published calculator wheel identities, and support explicitly uncertified local-wheel development fixtures ahead of the production promotion that follows this release.

@@ -16,7 +16,13 @@ from policyengine.tax_benefit_models.common.model_version import (
     output_dataset_filepath as _output_dataset_filepath,
 )
 
-from .datasets import PolicyEngineUSDataset, USYearData
+from .datasets import PolicyEngineUSDataset, USYearData, _validate_entity_ids
+from .spm import (
+    SPMProvenance,
+    SPMSelection,
+    calculation_provenance,
+    resolve_spm_selection,
+)
 
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
@@ -157,6 +163,12 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         if dataset.data is None:
             dataset.load()
 
+        # Validate every entity before constructing either the reform or its
+        # baseline, so no set_input can suppress a canonical SPM formula.
+        from spm_calculator.policyengine_adapter import validate_policyengine_inputs
+
+        validate_policyengine_inputs(dataset.data.entity_data)
+
         # Apply regional scoping if specified
         if simulation.scoping_strategy:
             scoped_data = simulation.scoping_strategy.apply(
@@ -190,7 +202,17 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         dynamic_reform = build_reform_dict(simulation.dynamic)
         reform_dict = merge_reform_dicts(policy_reform, dynamic_reform)
 
-        microsim = Microsimulation(reform=reform_dict)
+        class InputMicrosimulation(Microsimulation):
+            # The caller already supplied the entire dataset. The country
+            # default would load another population before we build this one.
+            default_dataset = None
+
+        microsim = InputMicrosimulation(
+            situation={},
+            reform=reform_dict,
+            spm=simulation.spm_config,
+            default_input_period=dataset.year,
+        )
         # Use ``microsim.tax_benefit_system``, not the module-level
         # ``system``: ``Microsimulation.__init__`` applies structural
         # reforms (e.g. ``gov.contrib.ctc.*``) to its per-sim system but
@@ -248,22 +270,33 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         # Person entity also needs person-level group ID columns so that
         # downstream joins (e.g. person->tax_unit) work.
         person_input_df = pd.DataFrame(dataset.data.person)
-        for col in person_input_df.columns:
-            if col.startswith("person_") and col.endswith("_id"):
-                target_col = col.replace("person_", "")
-                if target_col in id_columns:
-                    data["person"][target_col] = person_input_df[col].values
+        for entity in US_GROUP_ENTITIES:
+            target_col = f"{entity}_id"
+            native_col = f"person_{target_col}"
+            source_col = (
+                native_col if native_col in person_input_df.columns else target_col
+            )
+            if source_col in person_input_df.columns:
+                data["person"][target_col] = person_input_df[source_col].values
 
         # Calculate non-ID, non-weight variables from simulation.
         # ``resolve_entity_variables`` merges bundled defaults with
         # caller-supplied ``simulation.extra_variables``; unknown
         # entity keys or variable names raise with close-match hints.
         for entity, variables in self.resolve_entity_variables(simulation).items():
+            # Country populations use their own ID order. Restore each native
+            # table's order before attaching values to its IDs and weights.
+            input_ids = pd.DataFrame(getattr(dataset.data, entity))[f"{entity}_id"]
+            output_order = pd.Index(microsim.populations[entity].ids).get_indexer(
+                input_ids
+            )
+            if (output_order < 0).any():
+                raise ValueError(f"Missing {entity}_id in simulation output")
             for var in variables:
                 if var not in id_columns and var not in weight_columns:
                     data[entity][var] = microsim.calculate(
                         var, period=simulation.dataset.year, map_to=entity
-                    ).values
+                    ).values[output_order]
 
         data["person"] = MicroDataFrame(data["person"], weights="person_weight")
         data["marital_unit"] = MicroDataFrame(
@@ -283,6 +316,7 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             filepath=str(_output_dataset_filepath(simulation)),
             year=simulation.dataset.year,
             is_output_dataset=True,
+            metadata={"spm_config": dict(microsim.spm_config)},
             data=USYearData(
                 person=data["person"],
                 marital_unit=data["marital_unit"],
@@ -292,6 +326,10 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
                 household=data["household"],
             ),
         )
+        simulation.spm_receipt = SPMProvenance.model_validate(
+            calculation_provenance(microsim)
+        )
+        simulation.spm = SPMSelection.model_validate(microsim.spm_config)
 
     def _build_simulation_from_dataset(self, microsim, dataset, system):
         """Build a PolicyEngine Core simulation from dataset entity IDs.
@@ -304,6 +342,10 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         from policyengine_core.simulations.simulation_builder import (
             SimulationBuilder,
         )
+        from spm_calculator.policyengine_adapter import validate_policyengine_inputs
+
+        validate_policyengine_inputs(dataset.data.entity_data)
+        _validate_entity_ids(dataset.data.entity_data)
 
         builder = SimulationBuilder()
         builder.populations = system.instantiate_entities()
@@ -335,6 +377,24 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             if "person_tax_unit_id" in person_data.columns
             else "tax_unit_id"
         )
+
+        # The builder requires membership IDs and declared population IDs to
+        # describe the same groups. Check explicitly before its positional
+        # membership mapping can silently attach a person to a different group.
+        for entity, link in {
+            "household": household_id_col,
+            "marital_unit": marital_unit_id_col,
+            "family": family_id_col,
+            "spm_unit": spm_unit_id_col,
+            "tax_unit": tax_unit_id_col,
+        }.items():
+            if link not in person_data or person_data[link].isna().any():
+                raise ValueError(f"Missing nonnull person {link} membership")
+            entity_ids = pd.DataFrame(getattr(dataset.data, entity))[f"{entity}_id"]
+            if set(entity_ids) != set(person_data[link]):
+                raise ValueError(
+                    f"Native {entity}_id values must match person {link} memberships"
+                )
 
         builder.declare_person_entity("person", person_data["person_id"].values)
         builder.declare_entity(
@@ -401,7 +461,8 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             ("tax_unit", dataset.data.tax_unit),
             ("marital_unit", dataset.data.marital_unit),
         ]:
-            df = pd.DataFrame(entity_df)
+            df = pd.DataFrame(entity_df).set_index(f"{entity_name}_id", drop=False)
+            df = df.loc[microsim.populations[entity_name].ids]
             for column in df.columns:
                 if column not in id_columns and column in system.variables:
                     microsim.set_input(column, dataset.year, df[column].values)
@@ -411,6 +472,7 @@ def managed_microsimulation(
     *,
     dataset: Optional[str] = None,
     allow_unmanaged: bool = False,
+    spm: Optional[SPMSelection] = None,
     **kwargs,
 ):
     """Construct a country-package Microsimulation pinned to this bundle.
@@ -428,12 +490,13 @@ def managed_microsimulation(
             "**kwargs, so policyengine.py can enforce the release bundle."
         )
 
+    selection = resolve_spm_selection(spm)
     source = materialize_dataset(
         "us",
         dataset,
         allow_unmanaged=allow_unmanaged,
     )
-    microsim = Microsimulation(dataset=source.path, **kwargs)
+    microsim = Microsimulation(dataset=source.path, spm=selection, **kwargs)
     microsim.policyengine_bundle = dict(us_latest.release_bundle)
     microsim.policyengine_bundle.update(
         build_runtime_dataset_provenance(
@@ -442,6 +505,7 @@ def managed_microsimulation(
             source.bundle_dataset,
         )
     )
+    microsim.policyengine_bundle["spm"] = dict(microsim.spm_config)
     return microsim
 
 

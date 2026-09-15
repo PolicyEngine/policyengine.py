@@ -1,0 +1,1 @@
+Documented that SPM geography is required only by results that use the measurement: SPM thresholds and poverty always require it, the ordinary resource outputs never do, and the SPM unit's capped housing subsidy and everything downstream of it require it for units allocated housing assistance.

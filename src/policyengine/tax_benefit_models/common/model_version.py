@@ -17,6 +17,7 @@ handful of thin hooks (``_load_system``, ``_load_region_registry``,
 from __future__ import annotations
 
 import datetime
+import json
 import os
 import tempfile
 import warnings
@@ -25,6 +26,7 @@ from importlib import metadata
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Optional
 
+import h5py
 import pandas as pd
 
 from policyengine.core import (
@@ -60,7 +62,7 @@ def output_dataset_filepath(simulation: Simulation) -> Path:
     parent = (
         Path(input_filepath).parent if input_filepath else Path(tempfile.gettempdir())
     )
-    return parent / (simulation.id + ".h5")
+    return parent / (simulation.storage_id + ".h5")
 
 
 def build_runtime_dataset_provenance(
@@ -353,7 +355,36 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 "simulation.run() or simulation.ensure() first so there is "
                 "something to persist."
             )
+        serialized_spm = None
+        if self.country_code == "us":
+            from policyengine.core.spm import SPMProvenance
+
+            receipt = SPMProvenance.model_validate(simulation.spm_provenance())
+            if (
+                simulation.output_dataset.metadata.get("spm_config")
+                != simulation.spm_config
+            ):
+                raise ValueError(
+                    "SPM settings changed since this output was calculated; run again before saving"
+                )
+            serialized_spm = json.dumps(
+                {
+                    "config": simulation.spm_config,
+                    "provenance": receipt.model_dump(mode="json"),
+                },
+                sort_keys=True,
+            )
         simulation.output_dataset.save()
+        if serialized_spm is not None:
+            # Store UTF-8 JSON in a dataset rather than an attribute: the
+            # payload size stays unbounded and the receipt is kept out of
+            # the object header, keeping the result file self-contained.
+            with h5py.File(simulation.output_dataset.filepath, "a") as stream:
+                stream.create_dataset(
+                    "policyengine_spm",
+                    data=serialized_spm,
+                    dtype=h5py.string_dtype("utf-8"),
+                )
 
     def load(self, simulation: Simulation) -> None:
         """Rehydrate the simulation's output dataset from disk.
@@ -363,9 +394,26 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
         are not written back on ``save()``, so they're filesystem
         approximations, not a true round-trip of the original timestamps.
         """
-        filepath = str(
-            Path(simulation.dataset.filepath).parent / (simulation.id + ".h5")
-        )
+        filepath = str(output_dataset_filepath(simulation))
+
+        receipt = None
+        if self.country_code == "us":
+            from policyengine.core.spm import SPMProvenance
+
+            with h5py.File(filepath, "r") as stream:
+                raw = (
+                    stream["policyengine_spm"].asstr()[()]
+                    if "policyengine_spm" in stream
+                    else None
+                )
+            if raw is None:
+                raise ValueError(
+                    "Saved US simulation has no SPM configuration or receipt"
+                )
+            recorded = json.loads(raw)
+            if recorded["config"] != simulation.spm_config:
+                raise ValueError("Saved US simulation uses different SPM settings")
+            receipt = SPMProvenance.model_validate(recorded["provenance"])
 
         simulation.output_dataset = self._dataset_class(
             id=simulation.id,
@@ -375,6 +423,12 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             year=simulation.dataset.year,
             is_output_dataset=True,
         )
+        if self.country_code == "us":
+            from policyengine.core.spm import SPMSelection
+
+            simulation.spm_receipt = receipt
+            simulation.spm = SPMSelection.model_validate(recorded["config"])
+            simulation.output_dataset.metadata["spm_config"] = recorded["config"]
 
         if os.path.exists(filepath):
             simulation.created_at = datetime.datetime.fromtimestamp(

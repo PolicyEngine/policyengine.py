@@ -9,6 +9,7 @@ from policyengine.core import Output, OutputCollection, Simulation
 from policyengine.core.dataset import Dataset
 from policyengine.core.dynamic import Dynamic
 from policyengine.core.policy import Policy
+from policyengine.core.spm import SPMSelection
 from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
 from policyengine.outputs.decile_analysis import (
     _prepare_decile_analysis,
@@ -151,8 +152,13 @@ def calculate_decile_impacts(
     quantiles: int = 10,
     baseline_simulation: Optional[Simulation] = None,
     reform_simulation: Optional[Simulation] = None,
+    spm: Optional[SPMSelection] = None,
 ) -> OutputCollection[DecileImpact]:
     """Calculate decile-by-decile impact of a reform.
+
+    ``spm`` selects canonical US measurement settings when constructing the
+    baseline/reform simulations. When supplying simulations, select SPM on
+    each Simulation directly.
 
     By default, changes are measured in ``household_net_income`` and household
     deciles are computed from that variable using survey weights multiplied by
@@ -174,6 +180,8 @@ def calculate_decile_impacts(
         raise ValueError(
             "baseline_simulation and reform_simulation must be provided together"
         )
+    if baseline_simulation is not None and spm is not None:
+        raise ValueError("Pass SPM settings on the supplied simulations directly")
 
     if baseline_simulation is None:
         if dataset is None or tax_benefit_model_version is None:
@@ -186,12 +194,14 @@ def calculate_decile_impacts(
             tax_benefit_model_version=tax_benefit_model_version,
             policy=baseline_policy,
             dynamic=dynamic,
+            spm=spm,
         )
         reform_simulation = Simulation(
             dataset=dataset,
             tax_benefit_model_version=tax_benefit_model_version,
             policy=reform_policy,
             dynamic=dynamic,
+            spm=spm,
         )
 
     assert baseline_simulation is not None

@@ -27,7 +27,7 @@ from __future__ import annotations
 import hashlib
 import os
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Callable, Optional
 
 from .manifest import (
@@ -477,7 +477,7 @@ def mirror_release_to_zenodo(
             "resume it manually before retrying, to avoid orphaned drafts."
         ) from exc
 
-    deposited_at = datetime.now(timezone.utc).isoformat()
+    deposited_at = datetime.now(UTC).isoformat()
     mirrors = [
         PreservationMirror(
             kind="zenodo",

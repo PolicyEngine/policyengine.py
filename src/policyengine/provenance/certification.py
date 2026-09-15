@@ -70,6 +70,13 @@ BASIS_BUILT_WITH = "built_with_model_package"
 # check, so a claims-certified bundle stays importable without network access.
 BASIS_PUBLISHER_CLAIM = "legacy_compatible_model_package"
 POPULACE_US_SOURCE_COVERAGE_FILE = "us_source_coverage.json"
+# The Populace US producer publishes under `microcosm-data` since the
+# source-enrichment releases; `populace-data` is its earlier name. Both denote
+# the same producer, so every Populace-specific rule below must accept either.
+POPULACE_DATA_PACKAGES = frozenset({"populace-data", "microcosm-data"})
+# Artifact kinds published beside the release manifest rather than at the repo
+# root, so their manifest paths are relative to the release directory.
+RELEASE_SCOPED_ARTIFACT_KINDS = frozenset({"diagnostics", "evidence"})
 US_STATE_CODES = (
     "AL",
     "AK",
@@ -322,7 +329,7 @@ def artifact_path_for_country_manifest(artifact, uri_parts: dict) -> str:
     path = artifact.path
     release_dir = release_manifest_dir(uri_parts)
     if (
-        artifact.kind == "diagnostics"
+        artifact.kind in RELEASE_SCOPED_ARTIFACT_KINDS
         and artifact.repo_id == uri_parts["repo_id"]
         and artifact.revision == uri_parts["revision"]
         and not path.startswith(f"{release_dir}/")
@@ -370,7 +377,7 @@ def required_supplemental_release_files(
 ) -> tuple[str, ...]:
     if (
         country == "us"
-        and manifest.data_package.name == "populace-data"
+        and manifest.data_package.name in POPULACE_DATA_PACKAGES
         and uri_parts["repo_id"] == "policyengine/populace-us"
     ):
         return (POPULACE_US_SOURCE_COVERAGE_FILE,)
@@ -384,7 +391,7 @@ def should_validate_vendored_artifacts(
 ) -> bool:
     return (
         country == "us"
-        and manifest.data_package.name == "populace-data"
+        and manifest.data_package.name in POPULACE_DATA_PACKAGES
         and uri_parts["repo_id"] == "policyengine/populace-us"
     )
 
@@ -489,7 +496,7 @@ def build_country_manifest_payload(
     for name, artifact in manifest.artifacts.items():
         if (
             country == "us"
-            and manifest.data_package.name == "populace-data"
+            and manifest.data_package.name in POPULACE_DATA_PACKAGES
             and artifact.path.endswith(".h5")
             and (
                 artifact.path.startswith("states/")
@@ -513,7 +520,7 @@ def build_country_manifest_payload(
         for region, template in sorted(raw_regions.items()):
             if (
                 country == "us"
-                and manifest.data_package.name == "populace-data"
+                and manifest.data_package.name in POPULACE_DATA_PACKAGES
                 and region in {"state", "congressional_district"}
             ):
                 continue
