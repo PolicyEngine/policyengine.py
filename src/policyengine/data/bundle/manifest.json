@@ -111,30 +111,30 @@
       "version": "policyengine-uk-data-1.56.16"
     },
     "us": {
-      "build_id": "populace-us-2024-spm-20260909",
+      "build_id": "populace-us-2024-spm-20260915",
       "bundle_id": "us-5.3.1",
       "certification": {
-        "built_with_model_version": "2.0.0",
+        "built_with_model_version": "2.2.1",
         "certified_by": "policyengine.py bundle certification",
-        "certified_for_model_version": "2.0.0",
+        "certified_for_model_version": "2.2.1",
         "compatibility_basis": "built_with_model_package",
-        "data_build_id": "populace-us-2024-spm-20260909"
+        "data_build_id": "populace-us-2024-spm-20260915"
       },
       "certified_data_artifact": {
-        "build_id": "populace-us-2024-spm-20260909",
+        "build_id": "populace-us-2024-spm-20260915",
         "data_package": {
           "name": "microcosm-data",
           "version": "0.1.0"
         },
         "dataset": "populace_us_2024",
         "sha256": "6496cc4393d4d3c6574f76eca231de5898c803b9067645591fd5c4d3e65aee84",
-        "uri": "hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-spm-20260909"
+        "uri": "hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-spm-20260915"
       },
       "country_id": "us",
       "data_package": {
         "name": "microcosm-data",
-        "release_manifest_path": "releases/populace-us-2024-spm-20260909/release_manifest.json",
-        "release_manifest_revision": "populace-us-2024-spm-20260909",
+        "release_manifest_path": "releases/populace-us-2024-spm-20260915/release_manifest.json",
+        "release_manifest_revision": "populace-us-2024-spm-20260915",
         "repo_id": "policyengine/populace-us",
         "repo_type": "dataset",
         "version": "0.1.0"
@@ -142,73 +142,73 @@
       "data_producer": "populace",
       "datasets": {
         "build_manifest": {
-          "path": "releases/populace-us-2024-spm-20260909/build_manifest.json",
+          "path": "releases/populace-us-2024-spm-20260915/build_manifest.json",
           "repo_id": "policyengine/populace-us",
-          "revision": "populace-us-2024-spm-20260909",
-          "sha256": "73497b656d66eafab042f88ae60d1405aa14570984f8da51a968a676afafca3b"
+          "revision": "populace-us-2024-spm-20260915",
+          "sha256": "f3fd734867324bca7619f5f083a8115e32104bea3948d48723b345cfd39fa03b"
         },
         "calibration_diagnostics": {
-          "path": "releases/populace-us-2024-spm-20260909/calibration_diagnostics.json",
+          "path": "releases/populace-us-2024-spm-20260915/calibration_diagnostics.json",
           "repo_id": "policyengine/populace-us",
-          "revision": "populace-us-2024-spm-20260909",
+          "revision": "populace-us-2024-spm-20260915",
           "sha256": "870449b44e86b13b25bcea1a57f0e7af37f4d4db18be815eea3acdf9fe6eb40e"
         },
         "parent_build_manifest": {
-          "path": "releases/populace-us-2024-spm-20260909/parent_build_manifest.json",
+          "path": "releases/populace-us-2024-spm-20260915/parent_build_manifest.json",
           "repo_id": "policyengine/populace-us",
-          "revision": "populace-us-2024-spm-20260909",
+          "revision": "populace-us-2024-spm-20260915",
           "sha256": "1990e8fd37ce66f499b8e6600c5896701bb07015be132a12de64e321a2edc67e"
         },
         "parent_release_manifest": {
-          "path": "releases/populace-us-2024-spm-20260909/parent_release_manifest.json",
+          "path": "releases/populace-us-2024-spm-20260915/parent_release_manifest.json",
           "repo_id": "policyengine/populace-us",
-          "revision": "populace-us-2024-spm-20260909",
+          "revision": "populace-us-2024-spm-20260915",
           "sha256": "dd949ba3c4c7a56aff8442c6db5a031d2c84c3da59f5d14832f468c358604506"
         },
         "populace_us_2024": {
           "path": "populace_us_2024.h5",
           "repo_id": "policyengine/populace-us",
-          "revision": "populace-us-2024-spm-20260909",
+          "revision": "populace-us-2024-spm-20260915",
           "sha256": "6496cc4393d4d3c6574f76eca231de5898c803b9067645591fd5c4d3e65aee84"
         },
         "source_enrichment": {
-          "path": "releases/populace-us-2024-spm-20260909/source_enrichment.json",
+          "path": "releases/populace-us-2024-spm-20260915/source_enrichment.json",
           "repo_id": "policyengine/populace-us",
-          "revision": "populace-us-2024-spm-20260909",
-          "sha256": "a6142b74d9bbdbda484f21532d699badb85ea5a572934898d55e5e134abe7af5"
+          "revision": "populace-us-2024-spm-20260915",
+          "sha256": "85329907b2b9c4299855b0970b1f24ede5819d3b16c312eb7400b4203bd71203"
         },
         "source_enrichment_compatibility": {
-          "path": "releases/populace-us-2024-spm-20260909/source_enrichment_compatibility.json",
+          "path": "releases/populace-us-2024-spm-20260915/source_enrichment_compatibility.json",
           "repo_id": "policyengine/populace-us",
-          "revision": "populace-us-2024-spm-20260909",
-          "sha256": "319035464dbe14c47c7bee81494355c84d116f1606bb0f20e628a3ff2a32e574"
+          "revision": "populace-us-2024-spm-20260915",
+          "sha256": "63109acffd486453c99c476dece6b0154cc5388e5a430830a30744a2249444d1"
         },
         "source_spm_independence_provenance": {
-          "path": "releases/populace-us-2024-spm-20260909/source_spm_independence_provenance.json",
+          "path": "releases/populace-us-2024-spm-20260915/source_spm_independence_provenance.json",
           "repo_id": "policyengine/populace-us",
-          "revision": "populace-us-2024-spm-20260909",
+          "revision": "populace-us-2024-spm-20260915",
           "sha256": "265e844178ed3856d68c1638820f3089e0e1e1363aa4677e33bebb37cbd5bff3"
         },
         "source_spm_person_independence": {
-          "path": "releases/populace-us-2024-spm-20260909/source_spm_person_independence.csv",
+          "path": "releases/populace-us-2024-spm-20260915/source_spm_person_independence.csv",
           "repo_id": "policyengine/populace-us",
-          "revision": "populace-us-2024-spm-20260909",
+          "revision": "populace-us-2024-spm-20260915",
           "sha256": "22b5968d90fecfeef7614583e493fe10cc16bda8b5be82e6f49a5bc2102d3ce5"
         },
         "us_source_coverage": {
-          "path": "releases/populace-us-2024-spm-20260909/us_source_coverage.json",
+          "path": "releases/populace-us-2024-spm-20260915/us_source_coverage.json",
           "repo_id": "policyengine/populace-us",
-          "revision": "populace-us-2024-spm-20260909",
+          "revision": "populace-us-2024-spm-20260915",
           "sha256": "6406c8686c292015a5bc7265a42402f89935f9395a8b63510efdd4d9562e7ff5"
         }
       },
       "default_dataset": "populace_us_2024",
-      "default_dataset_uri": "hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-spm-20260909",
+      "default_dataset_uri": "hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-spm-20260915",
       "model_package": {
         "name": "policyengine-us",
-        "sha256": "4ca187509efc2f7d3ace5035c27de88c744d0f112fdc7da027372f3ae07c540a",
-        "version": "2.0.0",
-        "wheel_url": "https://files.pythonhosted.org/packages/fc/fa/b94e315f2cd67919afdc40bd136fc338ec629119b4d655bc5c03a0880874/policyengine_us-2.0.0-py3-none-any.whl"
+        "sha256": "0993a6c73fcdfbe171a796aca9d302741bd8e00ab83388ad81c15a08740318c6",
+        "version": "2.2.1",
+        "wheel_url": "https://files.pythonhosted.org/packages/5e/09/86ac3968d2a18e28fce3ba1186fc21728e9f299b96a806d6f204f1e0aaed/policyengine_us-2.2.1-py3-none-any.whl"
       },
       "policyengine_version": "5.3.1",
       "region_datasets": {
@@ -216,10 +216,10 @@
           "path_template": "populace_us_2024.h5"
         }
       },
-      "release_manifest_uri": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-spm-20260909/releases/populace-us-2024-spm-20260909/release_manifest.json",
+      "release_manifest_uri": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-spm-20260915/releases/populace-us-2024-spm-20260915/release_manifest.json",
       "schema_version": 1,
-      "source_manifest_uri": "hf://dataset/policyengine/populace-us@populace-us-2024-spm-20260909/releases/populace-us-2024-spm-20260909/release_manifest.json",
-      "version": "populace-us-2024-spm-20260909"
+      "source_manifest_uri": "hf://dataset/policyengine/populace-us@populace-us-2024-spm-20260915/releases/populace-us-2024-spm-20260915/release_manifest.json",
+      "version": "populace-us-2024-spm-20260915"
     }
   },
   "dataset_overlays": {
@@ -313,10 +313,10 @@
     "policyengine-us": {
       "country": "us",
       "import_name": "policyengine_us",
-      "install_requirement": "policyengine-us==2.0.0",
+      "install_requirement": "policyengine-us==2.2.1",
       "name": "policyengine-us",
       "role": "country_model",
-      "version": "2.0.0"
+      "version": "2.2.1"
     },
     "spm-calculator": {
       "country": "us",
