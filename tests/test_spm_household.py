@@ -11,8 +11,8 @@ from copy import deepcopy
 import numpy as np
 import pytest
 
-# The canonical calculator API is not published yet. Skip rather than weaken
-# these cases: they must run against the real module, never a substitute.
+# These cases must run against the real published calculator module, never a
+# substitute; skip only if the pinned module is absent from the environment.
 pytest.importorskip("spm_calculator.errors")
 pytest.importorskip("spm_calculator.release")
 pytest.importorskip("spm_calculator.rolling_forecast")
@@ -215,11 +215,14 @@ def test_state_only_graphs_require_geography_only_where_measurement_is_used(
         assert math.isfinite(entity[variable])
         assert computed.to_dict()["provenance"]["spm"]["years"] == {}
 
-    # Only the assisted SPM resource graph needs geography for its housing cap.
+    # Only the assisted SPM resource graph needs geography for its housing cap:
+    # the five variables the shipped contract names, and nothing household-level.
     for variable in (
         "spm_unit_capped_housing_subsidy",
         "spm_unit_benefits",
         "spm_unit_net_income",
+        "spm_unit_oecd_equiv_net_income",
+        "spm_unit_income_decile",
     ):
         with pytest.raises(SPMInputError) as caught:
             pe.us.calculate_household(**assisted, extra_variables=[variable])

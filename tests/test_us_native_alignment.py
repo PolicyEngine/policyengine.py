@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-# The canonical calculator API is not published yet. Skip rather than weaken
-# these cases: they must run against the real module, never a substitute.
+# These cases must run against the real published calculator module, never a
+# substitute; skip only if the pinned module is absent from the environment.
 pytest.importorskip("spm_calculator.release")
 pytest.importorskip("spm_calculator.rolling_forecast")
 pytest.importorskip("spm_calculator.policyengine_adapter")

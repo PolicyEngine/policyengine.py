@@ -37,7 +37,7 @@ print(us.tax_unit.income_tax, us.household.household_net_income)
 
 US default outputs require observed county FIPS or an explicit national/SPM-area
 choice. See the [SPM household contract](docs/households.md#spm-geography-and-measurement-selection)
-for settings, provenance and the pending coordinated bundle release.
+for settings, provenance and the coordinated bundle this release ships.
 
 ### Population analysis
 
