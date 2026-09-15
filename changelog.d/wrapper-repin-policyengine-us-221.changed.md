@@ -1,1 +1,0 @@
-Repin the US bundle, registry lock and TRACE sidecars onto policyengine-us 2.2.1, the build-time model the certified data release records. The certified microdata is byte-identical to the superseded `populace-us-2024-spm-20260909` release.

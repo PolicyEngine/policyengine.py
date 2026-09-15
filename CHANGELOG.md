@@ -1,3 +1,37 @@
+## [6.0.0] - 2026-09-15
+
+### Breaking changes
+
+- Require Python 3.11–3.14, matching the supported runtime range of the canonical US model bundle. Install checks now cover that complete range.
+- Use the bundle-pinned canonical SPM configuration across US household and population simulations, require explicit geography for SPM-dependent outputs, reject formula-owned SPM inputs, and retain serialisable selection and calculation provenance across results and replay.
+
+### Changed
+
+- Validate independently pinned SPM bundle settings, verify published calculator wheel identities, and support explicitly uncertified local-wheel development fixtures ahead of the production promotion that follows this release.
+- Pin the canonical PolicyEngine tuple: policyengine-us 2.2.1, policyengine-core 3.32.5 and spm-calculator 1.0.0.
+- Documented that SPM geography is required only by results that use the measurement: SPM thresholds and poverty always require it, the ordinary resource outputs never do, and the SPM unit's capped housing subsidy and everything downstream of it require it for units allocated housing assistance.
+- Regenerated three US household snapshots for two located country changes: the BLS CPI-U actuals refresh that uprates school meal reimbursement rates, and the California standard deduction whose uprating metadata was un-frozen.
+- Regenerated the US model-version surface snapshot for the pinned country and data package.
+- Regenerated the US single-adult-no-income snapshot for the SNAP ABAWD work-requirement changes, and noted that omitting weekly_hours_worked_before_lsr now reads as zero hours.
+- Certify the US populace data release `populace-us-2024-spm-20260915` (populace_us_2024, policyengine-us 2.2.1) into the PolicyEngine bundle manifest.
+- Repin the US bundle, registry lock and TRACE sidecars onto policyengine-us 2.2.1, the build-time model the certified data release records. The certified microdata is byte-identical to the superseded `populace-us-2024-spm-20260909` release.
+
+### Fixed
+
+- Recognise the `microcosm-data` producer name and the `evidence` artifact kind when certifying a US data release, so source-enrichment releases keep the per-artifact reachability check and pin their release-directory sidecars at paths that resolve.
+- Require complete authenticated bundle provenance and a registry-only, version-consistent lockfile before automatic release publication.
+- Preserve native entity ID alignment across input/output tables, reject malformed
+  group IDs, and retain partial SPM selection semantics through JSON round trips.
+  Validate managed SPM settings before dataset materialization, preserve
+  dependency-light bundle bootstrap, and enforce published measurement pins in
+  the release workflow. Authenticate candidate import sources and correct the
+  measurement serialization example.
+- Load native US pandas HDF datasets that store only calibrated household weights by mapping missing person and entity weights through native membership IDs in memory, preserving source files and supplied weights.
+- Accept the repository-bundle TRACE emission context and validate all generated country TROs against the packaged schema before writing bundle sidecars.
+- Corrected the SPM receipt storage comment, which justified the H5 dataset by an HDF5 attribute-size limit that the supported h5py range does not have.
+- Pinned the uv release in every CI `setup-uv` step and regenerated the lock with it, so the Versioning lock refresh reproduces the reviewed dependency graph instead of failing on resolver-version marker rewrites.
+
+
 ## [5.3.1] - 2026-09-10
 
 ### Fixed
