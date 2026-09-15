@@ -90,10 +90,27 @@ The certification dimension came back clean under independent verification: all 
 artifacts match the live release's bytes by sha256, the manifest carries no
 remaining `20260909` or `2.0.0` string, and the model wheel hash matches PyPI.
 
-## Next
+## Delivered
 
-- [ ] Push to `origin/max/spm-canonical-wrapper-release-20260910`, watch CI on #515,
-      update the PR body. Do not mark ready, do not merge.
+- [x] Pushed to `origin/max/spm-canonical-wrapper-release-20260910`.
+- [x] PR body carries a "Repin to 2.2.1 and populace-us-2024-spm-20260915" section,
+      appended to the existing body, calling out the country-package version change
+      as `docs/engineering/skills/repository-guidance.md` requires.
+- [x] CI watched to completion on the pushed head.
+- [x] Left as a draft. Not marked ready, not merged.
+
+## Open for the wrapper owner
+
+- `scripts/check_release_credentials.py` is the first release gate and has never run in
+  CI, because the release workflow has not run since it was added. It fails closed on
+  write-scope and fine-grained Hugging Face tokens; whether the repository secret
+  satisfies it cannot be checked from a lane.
+- `make lint` and CI's Lint job disagree. The lock pins ruff 0.12.11, which still emits
+  `UP038` (11 pre-existing hits in files this change does not touch); CI pip-installs
+  ruff unpinned and gets 0.16.7, where the rule is gone. Both pass on their own terms.
+- The wrapper is pinned below PyPI's latest policyengine-us on purpose. 2.3.0 ships the
+  same certified bytes as its own default but sits outside the release's `<2.3` claim.
+  If that claim is widened, revisit the pin; nothing here depends on it staying.
 
 The version in `pyproject.toml` is untouched: `bump_version.py` derives 6.0.0
 from the two `.breaking.md` fragments at release time.
