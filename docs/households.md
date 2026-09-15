@@ -81,16 +81,19 @@ unit with no classified adult raises `SPM_COMPOSITION_REQUIRED`. These are
 calculator `SPMInputError` exceptions with `code` and `to_dict()` attributes.
 Geography is checked when an SPM-dependent formula runs, and only for the units
 whose result depends on the measurement. SPM measurement itself — thresholds,
-the geographic factor and SPM poverty — always requires this choice. Resource
-outputs (net income, benefits, MTR, income decile and equivalized net income)
-reach the measurement only through the capped housing subsidy, which the country
-evaluates for units with housing assistance to cap; a unit receiving no housing
-assistance has a capped subsidy of zero by construction and consults no
-measurement. So a resource calculation for an unassisted unit succeeds on state
-alone and records an empty measurement receipt, while the same calculation for
-an assisted unit raises `SPM_GEOGRAPHY_REQUIRED`. A genuinely independent
-tax-only country-model calculation can use state alone; the wrapper's default
-outputs include SPM poverty and therefore always require the choice.
+the geographic factor and SPM poverty — always requires this choice. Household
+resource outputs (net income, benefits, MTR, income decile and equivalized net
+income) use the actual housing award rather than the capped SPM subsidy, so
+they succeed on state alone and record an empty measurement receipt whether or
+not the unit is assisted. The SPM unit's own resources are what reach the
+measurement: the country's cap (`spm_unit_capped_housing_subsidy`, and through
+it `spm_unit_benefits` and `spm_unit_net_income`) consults the canonical
+housing portion for units allocated assistance, so an assisted unit without a
+geography raises `SPM_GEOGRAPHY_REQUIRED` there; a unit allocated none has a
+capped subsidy of zero by construction and consults no measurement. A
+genuinely independent tax-only country-model calculation can use state alone;
+the wrapper's default outputs include SPM poverty and therefore always require
+the choice.
 
 Supply observed inputs such as age, tenure, county and the source-backed
 `is_spm_independent_minor_role`. Computed SPM thresholds, geographic factors,
@@ -101,8 +104,8 @@ separate benefit inputs; they do not override SPM measurement composition.
 
 These changes require the coordinated canonical country/calculator bundle, which
 the packaged production manifest now pins and certifies: `policyengine-us`
-2.0.0, `policyengine-core` 3.32.5, `spm-calculator` 1.0.0, and the US data
-release `populace-us-2024-spm-20260909`. Local-wheel development manifest
+2.2.1, `policyengine-core` 3.32.5, `spm-calculator` 1.0.0, and the US data
+release `populace-us-2024-spm-20260915`. Local-wheel development manifest
 fixtures remain explicitly uncertified. The measurement receipt identifies a
 calculation; it does not certify a population dataset or establish publication
 readiness.

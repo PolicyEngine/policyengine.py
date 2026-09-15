@@ -193,12 +193,15 @@ def calculate_household(
             measurement itself — thresholds, the geographic factor and SPM
             poverty — always requires household county_fips or an explicit
             metro/national selection, and so do the default outputs, which
-            include SPM poverty. Resource outputs reach the measurement only
-            through the capped housing subsidy, which the country evaluates
-            for units with housing assistance to cap: a unit receiving no
-            housing assistance has a capped subsidy of zero by construction,
-            so its resources compute on state alone, while an assisted unit
-            without a geography raises ``SPM_GEOGRAPHY_REQUIRED``.
+            include SPM poverty. Household resource outputs use the actual
+            housing award rather than the capped SPM subsidy, so they compute
+            on state alone whether or not the unit is assisted. The country's
+            cap (``spm_unit_capped_housing_subsidy``, and through it
+            ``spm_unit_benefits`` and ``spm_unit_net_income``) consults the
+            canonical housing portion for units allocated assistance, so an
+            assisted unit without a geography raises
+            ``SPM_GEOGRAPHY_REQUIRED`` there; a unit allocated none has a
+            capped subsidy of zero by construction.
             Formula-owned SPM amounts and measurement counts cannot be
             supplied as inputs/axes.
 
