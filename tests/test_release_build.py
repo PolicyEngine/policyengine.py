@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 import subprocess
 import sys
 import zipfile
@@ -1048,6 +1049,73 @@ def test_source_origin_rejects_previously_imported_other_checkout(
         release.assert_source_origin(tmp_path)
 
 
+def test_source_origin_rejects_another_checkout_from_a_clean_interpreter(tmp_path):
+    """The same control as above, run where no collector has been.
+
+    The in-process version inherits whatever the pytest session imported. This
+    one matches the production boundary — `source_command` starts a fresh
+    interpreter — so it pins the strict property independently of collection
+    order, and would still hold if the namespace allowance above were removed.
+    """
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"PYTHONHOME", "PYTHONUSERBASE"}
+    }
+    env.update(
+        POLICYENGINE_SKIP_COUNTRY_IMPORTS="1",
+        PYTHONPATH=str(ROOT / "src"),
+        PYTHONDONTWRITEBYTECODE="1",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-B",
+            "-s",
+            "-c",
+            """
+import json
+import sys
+from pathlib import Path
+
+root, other = map(Path, sys.argv[1:])
+sys.path.insert(0, str(root / "scripts"))
+import release_build
+
+actual = release_build.assert_source_origin(root)
+assert not [
+    name
+    for name, module in sys.modules.items()
+    if (name == "policyengine" or name.startswith("policyengine."))
+    and getattr(module, "__file__", None) is None
+], "a clean interpreter should hold no fileless policyengine module"
+sys.path.insert(0, str(other / "src"))
+try:
+    release_build.assert_source_origin(other)
+except ValueError as error:
+    assert "source origin" in str(error)
+else:
+    raise AssertionError("Cached imports from the original source were accepted")
+print(json.dumps(actual))
+""",
+            str(ROOT),
+            str(tmp_path),
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    actual = json.loads(result.stdout)
+    assert actual["resources"] == "src/policyengine"
+    assert actual["modules"]["policyengine.provenance.trace"].startswith(
+        "src/policyengine/"
+    )
+
+
 def test_source_origin_places_a_namespace_package_by_its_portions(monkeypatch):
     """``policyengine.tax_benefit_models`` has no ``__init__.py``, so no file.
 
@@ -1081,6 +1149,33 @@ def test_source_origin_still_refuses_a_module_it_cannot_place(monkeypatch, porti
     elif portions == "outside":
         stand_in.__path__ = [str(ROOT.parent / "other/src/policyengine/stand_in")]
     monkeypatch.setitem(sys.modules, "policyengine.stand_in", stand_in)
+    with pytest.raises(ValueError, match="source origin"):
+        release.assert_source_origin(ROOT)
+
+
+def test_source_origin_takes_an_in_checkout_path_at_its_word(monkeypatch):
+    """The shape the namespace allowance newly admits, stated rather than left silent.
+
+    A fileless module that declares a ``__path__`` inside the checkout is
+    accepted and recorded, because nothing here can tell a real namespace
+    package from a stand-in that assigned the attribute. That is not a step
+    down from ``__file__``, which is equally assignable, and the strict
+    cross-checkout property is pinned in a clean interpreter by
+    ``test_source_origin_rejects_another_checkout_from_a_clean_interpreter``.
+    A stand-in for the root package is still refused: it owes an
+    ``__init__.py``.
+    """
+    monkeypatch.setenv("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
+    monkeypatch.syspath_prepend(str(ROOT / "src"))
+    stand_in = ModuleType("policyengine.stand_in")
+    stand_in.__path__ = [str(ROOT / "src/policyengine/provenance")]
+    monkeypatch.setitem(sys.modules, "policyengine.stand_in", stand_in)
+    actual = release.assert_source_origin(ROOT)
+    assert actual["modules"]["policyengine.stand_in"] == ["src/policyengine/provenance"]
+
+    root_stand_in = ModuleType("policyengine")
+    root_stand_in.__path__ = [str(ROOT / "src/policyengine")]
+    monkeypatch.setitem(sys.modules, "policyengine", root_stand_in)
     with pytest.raises(ValueError, match="source origin"):
         release.assert_source_origin(ROOT)
 

@@ -118,7 +118,13 @@ def test_release_checks_published_spm_before_publication_and_after_pypi_visibili
         for index, step in enumerate(publish_steps)
         if step.get("uses", "").startswith("pypa/gh-action-pypi-publish@")
     )
-    assert prepublication_gate < publication
+    # The git tag is a public side effect too, so the gate precedes it as well.
+    tag = next(
+        index
+        for index, step in enumerate(publish_steps)
+        if ".github/publish-git-tag.sh" in step.get("run", "")
+    )
+    assert prepublication_gate < tag < publication
     notify = workflow["jobs"]["NotifyConsumers"]
     assert "Publish" in notify["needs"]
     steps = notify["steps"]

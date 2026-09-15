@@ -497,6 +497,13 @@ def module_origin(module: object, root: Path, expected: Path) -> str | list[str]
     ``__init__.py`` — and proves it with ``__path__`` instead, so every portion
     has to resolve inside the prepared checkout. A module with neither is
     unattributable, which is exactly what a synthesized stand-in looks like.
+
+    Both attributes are self-declarations, not proof: an in-process caller that
+    can write ``sys.modules`` can set either one. This locates a module; it does
+    not authenticate it. The invariant being kept is that nothing is served out
+    of another checkout, and for that ``__path__`` is as good as ``__file__`` —
+    a namespace package spanning a second checkout carries that checkout's
+    portion and is refused here.
     """
 
     def located(candidate: Path) -> str:
@@ -518,19 +525,24 @@ def assert_source_origin(root: Path) -> dict:
     """Reject cached modules or package resources from any other checkout."""
     from importlib.resources import files
 
-    import policyengine
-    import policyengine.provenance.manifest
-    import policyengine.provenance.trace
+    # Loaded so the walk below has them to place, not for their names.
+    import policyengine  # noqa: F401
+    import policyengine.provenance.manifest  # noqa: F401
+    import policyengine.provenance.trace  # noqa: F401
 
     expected = (root / "src/policyengine").resolve()
-    resources = Path(str(files("policyengine"))).resolve()
     origins = {}
     for name, module in tuple(sys.modules.items()):
         if name == "policyengine" or name.startswith("policyengine."):
             origins[name] = module_origin(module, root, expected)
+    # The root package has an __init__.py, so unlike its namespace subpackages
+    # it owes a file. Settle that before asking importlib for the resource
+    # root: `files()` on a stand-in raises AttributeError, which main() does
+    # not catch, so the run would end in a traceback instead of the reported
+    # hold this raises.
     if (
-        resources != expected
-        or Path(policyengine.__file__).resolve().parent != expected
+        origins.get("policyengine") != "src/policyengine/__init__.py"
+        or Path(str(files("policyengine"))).resolve() != expected
     ):
         raise ValueError("Prepared package resources have the wrong source origin")
     return {"resources": "src/policyengine", "modules": origins}
