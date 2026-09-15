@@ -11,10 +11,78 @@ on:
       - changelog.d/**
       - pyproject.toml
       - uv.lock
+      - Makefile
       - src/policyengine/data/bundle/manifest.json
   workflow_dispatch:
 
 jobs:
+  ReleaseCandidate:
+    name: Nonpublishing wrapper candidate (release)
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      POLICYENGINE_SKIP_COUNTRY_IMPORTS: '1'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/release-toolchain
+      - name: Prepare and build isolated candidate source
+        env:
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+        run: python scripts/release_build.py candidate --flavor release --output "$RUNNER_TEMP/wrapper-candidate"
+      - name: Upload actual candidate wheel and preparation evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wrapper-release-candidate-${{ github.event.pull_request.head.sha }}-${{ github.event.pull_request.base.sha }}-release
+          path: ${{ runner.temp }}/wrapper-candidate/
+          if-no-files-found: error
+          retention-days: 90
+
+  NumericalCandidate:
+    name: Nonpublishing wrapper candidate (rc1)
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && vars.RELEASE_COUNTRY_CANDIDATE_ARTIFACT_ID != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      POLICYENGINE_SKIP_COUNTRY_IMPORTS: '1'
+      RELEASE_COUNTRY_CANDIDATE_ARTIFACT_ID: ${{ vars.RELEASE_COUNTRY_CANDIDATE_ARTIFACT_ID }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Read selected country artifact with the existing GitHub App
+        id: country-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: PolicyEngine
+          repositories: policyengine-us
+          permission-actions: read
+      - uses: ./.github/actions/release-toolchain
+      - name: Prepare and build isolated candidate source
+        env:
+          GH_TOKEN: ${{ steps.country-token.outputs.token }}
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+        run: python scripts/release_build.py candidate --flavor rc1 --output "$RUNNER_TEMP/wrapper-candidate"
+      - name: Upload actual candidate wheel and preparation evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wrapper-release-candidate-${{ github.event.pull_request.head.sha }}-${{ github.event.pull_request.base.sha }}-rc1
+          path: ${{ runner.temp }}/wrapper-candidate/
+          if-no-files-found: error
+          retention-days: 90
+
   check-changelog:
     name: Check changelog fragment
     runs-on: ubuntu-latest

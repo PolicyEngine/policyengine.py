@@ -102,19 +102,29 @@ def test_dependency_free_generation_validates_before_writing(
 def test_release_checks_published_spm_before_publication_and_after_pypi_visibility():
     workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/push.yaml").read_text())
     publish_steps = workflow["jobs"]["Publish"]["steps"]
-    # Publish installs the package first, so its gate is the full bundle check
-    # rather than the dependency-light one NotifyConsumers has to use.
+    # Publish runs the full bundle check rather than the dependency-light one
+    # NotifyConsumers has to use, but it reaches it indirectly: the whole
+    # prepublication gate is now `release_build.py publish-check`, which runs
+    # `bundle.py check --published-spm --include-tros --strict-tros` itself.
+    # That the indirection still carries the published-spm check is pinned by
+    # tests/test_release_build.py::test_publication_checks_existing_strict_gates_before_member_comparison.
     prepublication_gate = next(
         index
         for index, step in enumerate(publish_steps)
-        if "bundle.py check --published-spm" in step.get("run", "")
+        if "scripts/release_build.py publish-check" in step.get("run", "")
     )
     publication = next(
         index
         for index, step in enumerate(publish_steps)
         if step.get("uses", "").startswith("pypa/gh-action-pypi-publish@")
     )
-    assert prepublication_gate < publication
+    # The git tag is a public side effect too, so the gate precedes it as well.
+    tag = next(
+        index
+        for index, step in enumerate(publish_steps)
+        if ".github/publish-git-tag.sh" in step.get("run", "")
+    )
+    assert prepublication_gate < tag < publication
     notify = workflow["jobs"]["NotifyConsumers"]
     assert "Publish" in notify["needs"]
     steps = notify["steps"]

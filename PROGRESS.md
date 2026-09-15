@@ -1,3 +1,138 @@
+# Fix the release-candidate tooling's two defects (lane of 2026-09-14)
+
+Branch `max/wrapper-release-candidates-20260914`, stacked on `818c894e`
+("Build and verify isolated wrapper release candidates"). That commit is
+already the head of PR #515's branch `max/spm-canonical-wrapper-release-20260910`
+(verified against origin), so this lane's PR is the four commits on top of it.
+The prior lane's record is preserved below, unchanged.
+
+This branch cannot stand on `main`. Verified against `origin/main`:
+`scripts/release_lock.py`, `scripts/check_release_credentials.py` and
+`scripts/spm_bundle.py` do not exist there; `scripts/bundle.py` exists but has
+no `--published-spm`; and `trace_tro.schema.json` exists but its `pe:emittedIn`
+enum is `["local", "github-actions", "policyengine-api"]`, without the
+`repository-bundle` value `release_build.py` emits.
+
+## State
+
+The release-candidate tooling stays. Three things it carried are fixed: an
+unverified household-test rewrite, a stale publication-gate assertion, and a
+source-origin check that refused namespace packages.
+
+## Done
+
+- Verified the worktree at `818c894e`, clean tree. Synced the locked
+  environment (`uv sync --frozen`, Python 3.14.4).
+- Reproduced both defects: baseline `pytest tests/test_release_build.py
+  tests/test_spm_bundle_bootstrap.py tests/test_graph -q` gave 2 failed,
+  98 passed.
+- Established defect B's trigger with an instrumented probe over three import
+  phases rather than assuming it. Bare `import policyengine`: 0 offenders.
+  After `tests/conftest.py`: exactly one, the namespace package
+  `policyengine.tax_benefit_models` (`__file__` None, `__path__` inside the
+  checkout). After `tests/test_graph/test_extractor.py`: two more, the bare
+  stand-ins it installs for `policyengine` and `policyengine.graph`. The
+  conftest one is why the test failed even when run alone.
+- **Commit `35981756`** restores `tests/test_spm_household.py` to its
+  `1b6c001c` content, byte-identical (sha256 `fe6df0c7...`). The rewrite at
+  `818c894e` (sha256 `061cbc1b...`) drives the assisted case through
+  `pha_payment_standard`, `receives_housing_assistance`,
+  `spm_unit_allocated_housing_subsidy` and `spm_unit_allocated_tenant_payment`
+   — country behaviour the unified candidate policyengine-us#9467 carries, not
+  the pinned model. It went through the R1–R3 reviews unverified. It comes back
+  with the country repin, once #9467 publishes and the pin moves. Note this
+  file is where Ruling A landed (see the prior lane below); `1b6c001c` is the
+  reviewed post-Ruling-A content, so the revert keeps Ruling A intact.
+- **Commit `14e5db47`** fixes the publication-gate assertion. `818c894e`
+  replaced the Publish job's inline `bundle.py check --published-spm` with
+  `release_build.py publish-check`, so the test's `next(...)` matched nothing
+  and raised `StopIteration` instead of asserting. It now finds the step that
+  carries the gate. `publish_check` still runs that same check
+  (`scripts/release_build.py:1381`), pinned by
+  `test_publication_checks_existing_strict_gates_before_member_comparison`.
+- **Commit `abf75454`** fixes `assert_source_origin`. `module_origin` places a
+  module by `__file__` when it has one and otherwise by every `__path__`
+  portion, each of which must resolve inside the prepared source. Neither, an
+  empty `__path__`, or any portion outside is still refused.
+  `tests/test_graph/test_extractor.py` now restores `sys.modules` in a
+  `finally`, leaving nothing behind. Three regression cases added.
+- Mutation-checked the new tests. Reverting to the pre-fix logic fails the
+  acceptance case; accepting any file-less module fails all three refusals.
+- Targeted suite after the fixes: 104 passed, exit 0.
+- `ruff format --check .`: exit 0. `ruff check .`: 11 UP038 findings, every one
+  present at `818c894e` and none in a file this lane touches; the touched files
+  pass clean. Local ruff is 0.12.11; CI installs latest, where UP038 is gone.
+
+- Full suite: 1203 passed, 9 skipped, 280s, exit 0.
+- Pushed `d841dae3`; draft PR #520 open against
+  `max/spm-canonical-wrapper-release-20260910`.
+
+## Corrections to earlier claims in this lane
+
+- `abf75454`'s message names `tests/conftest.py` ->
+  `tests/fixtures/us_reform_fixtures.py:12` as the import path to the namespace
+  package. That path is real but not the first: `tests/conftest.py:6` ->
+  `tests/fixtures/filtering_fixtures.py:7` reaches it earlier in every session.
+  Both are unrestored module-level imports and the fix covers either.
+- The rewrite's dependency on #9467 is now verified rather than assumed. Exactly
+  two of the names it introduces are absent from the pinned policyengine-us
+  2.0.0 -- `spm_unit_allocated_housing_subsidy` and
+  `spm_unit_allocated_tenant_payment`, zero `class <name>(Variable)` definitions
+  each -- and PolicyEngine/policyengine-us#9467's file list adds exactly those
+  two variable files. `pre_subsidy_rent`, `pha_payment_standard` and
+  `receives_housing_assistance` do exist in 2.0.0.
+- No review examined either defect. `tests/test_spm_bundle_bootstrap.py` appears
+  in none of the six `WRAPPER-RELEASE-BUILD*` files, none of the three frozen
+  inventories and none of the three independent reviews.
+  `WRAPPER-RELEASE-BUILD-R2-RESPONSE.md:35` carries
+  `tests/test_spm_household.py` by hash and delegates it elsewhere; the three
+  reviews contain zero occurrences of "household".
+
+## Conflicts with prior rulings (for the wrapper owner to settle)
+
+An adversarial pass found two places where this lane's brief and a prior
+approved ruling disagree. Both are reported, not resolved here.
+
+1. **The guard change runs against `WRAPPER-R3-CI-DIAGNOSIS-20260913.md` §1**,
+   which says: "Keep the production guard strict. Do not delete arbitrary
+   cached modules or accept missing origins merely to pass the full suite."
+   A root-approved patch --
+   `wrapper-ci-harness-repair-20260913/ROOT-REVIEW.json`, `approved: true`,
+   parent `818c894e`, patch sha256 `9ad1e023...` -- repairs the same failure in
+   the test harness with a fresh subprocess and leaves `assert_source_origin`
+   untouched. `e0b1f4f2` takes that subprocess control as an additional test,
+   so the strict cross-checkout property is pinned either way and adopting the
+   approved patch instead would cost only the namespace branch.
+2. **§3 says to preserve the household rewrite**, not revert it: "preserve this
+   assertion and complete the already approved final-country pin transaction".
+   The brief instructed the revert, recorded as returning with the repin. The
+   evidence that justifies restoring it is
+   `household-integration-20260912/REPORT.md`: 84 wrapper controls against the
+   authenticated country `2.0.2rc1`.
+
+Also: §1's line-208 reading means the restore is two-part. The rewrite needs
+both the two absent variables and the country's assisted ordinary-resource
+independence; re-adding only the variables would still fail.
+
+## A fourth CI blocker these fixes do not touch
+
+`gh pr checks 515` shows `Nonpublishing wrapper candidate (release)` failing in
+12s at `scripts/check_release_credentials.py` -- "Release verification requires
+an authenticated Hugging Face access token with role read" -- before any strict
+gate. These fixes address the four `Test (3.x)` failures. PR #515 stays red
+until the credential is settled.
+
+## Next
+
+1. Wait for CI on PR #520 (`gh pr checks 520`).
+2. The household rewrite returns with the country repin, once #9467 publishes.
+3. Wrapper owner to settle the two conflicts above.
+
+---
+
+*Below: the prior lane's record, restored verbatim. An earlier commit in this
+lane (`44604506`) overwrote it; `abf75454`'s successor puts it back.*
+
 # Finalize wrapper PR #515 on policyengine-us 2.0.1
 
 ## State
