@@ -162,12 +162,10 @@ def test_state_only_graphs_require_geography_only_where_measurement_is_used(
 ):
     """Geography is demanded by exactly the results that use the measurement.
 
-    The country owns this contract and the wrapper follows it. Its housing cap
-    (``spm_unit_capped_housing_subsidy``) consults the canonical SPM housing
-    portion for units with housing assistance to cap and for no others, so an
-    unassisted unit's resource graph never reaches the measurement and needs no
-    geography; an assisted unit's does, and fails closed without one. SPM
-    measurement itself requires geography either way.
+    Ordinary benefits and income use the actual housing award independently of
+    SPM geography. The country's cap consults the canonical housing portion only
+    for units allocated assistance, so assisted SPM resources require geography.
+    The threshold and SPM poverty status require geography either way.
     """
     from policyengine.tax_benefit_models.us.model import us_latest
 
@@ -175,9 +173,16 @@ def test_state_only_graphs_require_geography_only_where_measurement_is_used(
     # include resources and SPM poverty by default.
     monkeypatch.setattr(us_latest, "entity_variables", {"tax_unit": ["income_tax"]})
     inputs = household_inputs(household={"state_code": "CA"})
+    # Match the country integration control: computed HUD award and contribution,
+    # with low enough earnings for a positive national/county SPM housing cap.
     assisted = household_inputs(
-        household={"state_code": "CA"},
-        spm_unit={"spm_unit_tenure_type": "RENTER", "housing_assistance": 6_000},
+        year=2024,
+        people=[{"age": 40, "employment_income": 24_000, "pre_subsidy_rent": 36_000}],
+        household={"state_code": "CA", "pha_payment_standard": 36_000},
+        spm_unit={
+            "spm_unit_tenure_type": "RENTER",
+            "receives_housing_assistance": True,
+        },
     )
 
     # A genuinely tax-only graph never consults the measurement.
@@ -197,8 +202,25 @@ def test_state_only_graphs_require_geography_only_where_measurement_is_used(
         computed = pe.us.calculate_household(**inputs, extra_variables=[variable])
         assert computed.to_dict()["provenance"]["spm"]["years"] == {}
 
-    # Assisted: the same graph now has a cap to apply, so it fails closed.
+    # Assisted ordinary resources still use the actual award, without an SPM cap.
+    assisted_ordinary = {}
     for variable in RESOURCE_VARIABLES:
+        computed = pe.us.calculate_household(**assisted, extra_variables=[variable])
+        entity = (
+            computed.person[0]
+            if variable == "marginal_tax_rate"
+            else computed.household
+        )
+        assisted_ordinary[variable] = entity[variable]
+        assert math.isfinite(entity[variable])
+        assert computed.to_dict()["provenance"]["spm"]["years"] == {}
+
+    # Only the assisted SPM resource graph needs geography for its housing cap.
+    for variable in (
+        "spm_unit_capped_housing_subsidy",
+        "spm_unit_benefits",
+        "spm_unit_net_income",
+    ):
         with pytest.raises(SPMInputError) as caught:
             pe.us.calculate_household(**assisted, extra_variables=[variable])
         assert caught.value.code == "SPM_GEOGRAPHY_REQUIRED"
@@ -210,7 +232,7 @@ def test_state_only_graphs_require_geography_only_where_measurement_is_used(
                 pe.us.calculate_household(**situation, extra_variables=[variable])
             assert caught.value.code == "SPM_GEOGRAPHY_REQUIRED"
 
-    # An explicit selection computes for both.
+    # Preserve the unassisted national and county controls.
     for settings, located_inputs in (
         ({"geography_kind": "national"}, inputs),
         ({"geography_kind": "county"}, household_inputs()),
@@ -222,6 +244,47 @@ def test_state_only_graphs_require_geography_only_where_measurement_is_used(
         )
         assert math.isfinite(located.household.household_net_income)
         assert math.isfinite(located.person[0].marginal_tax_rate)
+
+    # Persist assisted positive controls through the same public wrapper path.
+    assisted_county = deepcopy(assisted)
+    assisted_county["household"]["county_fips"] = "06037"
+    actual_awards = []
+    for settings, located_inputs in (
+        ({"geography_kind": "national"}, assisted),
+        ({"geography_kind": "county"}, assisted_county),
+    ):
+        located = pe.us.calculate_household(
+            **located_inputs,
+            spm=settings,
+            extra_variables=[
+                *RESOURCE_VARIABLES,
+                "housing_assistance",
+                "spm_unit_allocated_housing_subsidy",
+                "spm_unit_allocated_tenant_payment",
+                "spm_unit_capped_housing_subsidy",
+                "spm_unit_benefits",
+                "spm_unit_net_income",
+            ],
+        )
+        subsidy = located.spm_unit.spm_unit_allocated_housing_subsidy
+        capped = located.spm_unit.spm_unit_capped_housing_subsidy
+        assert 0 < capped < subsidy
+        assert located.spm_unit.spm_unit_allocated_tenant_payment > 0
+        assert math.isfinite(located.spm_unit.spm_unit_benefits)
+        assert math.isfinite(located.spm_unit.spm_unit_net_income)
+        actual_awards.append(located.spm_unit.housing_assistance)
+        for variable in RESOURCE_VARIABLES:
+            entity = (
+                located.person[0]
+                if variable == "marginal_tax_rate"
+                else located.household
+            )
+            assert entity[variable] == assisted_ordinary[variable]
+        receipt = located.to_dict()["provenance"]["spm"]
+        assert receipt["years"][str(assisted["year"])]
+        assert receipt["geography_kind"] == settings["geography_kind"]
+        assert receipt["geographies"]
+    assert actual_awards[0] == actual_awards[1] > 0
 
 
 def test_adultless_measurement_has_a_structured_composition_error():
