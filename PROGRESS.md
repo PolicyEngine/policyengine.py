@@ -63,11 +63,35 @@ source-origin check that refused namespace packages.
   present at `818c894e` and none in a file this lane touches; the touched files
   pass clean. Local ruff is 0.12.11; CI installs latest, where UP038 is gone.
 
+- Full suite: 1203 passed, 9 skipped, 280s, exit 0.
+- Pushed `d841dae3`; draft PR #520 open against
+  `max/spm-canonical-wrapper-release-20260910`.
+
+## Corrections to earlier claims in this lane
+
+- `abf75454`'s message names `tests/conftest.py` ->
+  `tests/fixtures/us_reform_fixtures.py:12` as the import path to the namespace
+  package. That path is real but not the first: `tests/conftest.py:6` ->
+  `tests/fixtures/filtering_fixtures.py:7` reaches it earlier in every session.
+  Both are unrestored module-level imports and the fix covers either.
+- The rewrite's dependency on #9467 is now verified rather than assumed. Exactly
+  two of the names it introduces are absent from the pinned policyengine-us
+  2.0.0 -- `spm_unit_allocated_housing_subsidy` and
+  `spm_unit_allocated_tenant_payment`, zero `class <name>(Variable)` definitions
+  each -- and PolicyEngine/policyengine-us#9467's file list adds exactly those
+  two variable files. `pre_subsidy_rent`, `pha_payment_standard` and
+  `receives_housing_assistance` do exist in 2.0.0.
+- No review examined either defect. `tests/test_spm_bundle_bootstrap.py` appears
+  in none of the six `WRAPPER-RELEASE-BUILD*` files, none of the three frozen
+  inventories and none of the three independent reviews.
+  `WRAPPER-RELEASE-BUILD-R2-RESPONSE.md:35` carries
+  `tests/test_spm_household.py` by hash and delegates it elsewhere; the three
+  reviews contain zero occurrences of "household".
+
 ## Next
 
-1. Full `uv run --no-sync pytest tests -q`; record counts and exit code.
-2. Push and open a DRAFT PR against
-   `max/spm-canonical-wrapper-release-20260910`.
+1. Wait for CI on PR #520 (`gh pr checks 520`).
+2. The household rewrite returns with the country repin, once #9467 publishes.
 
 ---
 
