@@ -99,7 +99,7 @@ def test_staged_config_preserves_certification_and_fails_release_gate(canonical_
     )
     assert updated["data_releases"] == before["data_releases"]
     assert updated["packages"] == before["packages"]
-    assert updated["packages"]["policyengine-us"]["version"] == "2.0.0"
+    assert updated["packages"]["policyengine-us"]["version"] == "2.2.1"
     validate_bundle_measurements(updated)
     with pytest.raises(ValueError, match="promotion pending"):
         validate_bundle_measurements(updated, require_published_spm=True)
