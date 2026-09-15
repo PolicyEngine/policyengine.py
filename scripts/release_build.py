@@ -489,6 +489,31 @@ def candidate_uk_tro() -> dict:
     )
 
 
+def module_origin(module: object, root: Path, expected: Path) -> str | list[str]:
+    """Locate one imported module, by its file or by its namespace portions.
+
+    An ordinary module proves where it came from with ``__file__``. A namespace
+    package has none — ``policyengine.tax_benefit_models`` carries no
+    ``__init__.py`` — and proves it with ``__path__`` instead, so every portion
+    has to resolve inside the prepared checkout. A module with neither is
+    unattributable, which is exactly what a synthesized stand-in looks like.
+    """
+
+    def located(candidate: Path) -> str:
+        resolved = candidate.resolve()
+        if not resolved.is_relative_to(expected):
+            raise ValueError("Prepared package import has the wrong source origin")
+        return str(resolved.relative_to(root.resolve()))
+
+    filename = getattr(module, "__file__", None)
+    if filename is not None:
+        return located(Path(filename))
+    portions = list(getattr(module, "__path__", None) or ())
+    if not portions:
+        raise ValueError("Prepared package import has no verifiable source origin")
+    return [located(Path(portion)) for portion in portions]
+
+
 def assert_source_origin(root: Path) -> dict:
     """Reject cached modules or package resources from any other checkout."""
     from importlib.resources import files
@@ -502,12 +527,7 @@ def assert_source_origin(root: Path) -> dict:
     origins = {}
     for name, module in tuple(sys.modules.items()):
         if name == "policyengine" or name.startswith("policyengine."):
-            filename = getattr(module, "__file__", None)
-            if filename is None or not Path(filename).resolve().is_relative_to(
-                expected
-            ):
-                raise ValueError("Prepared package import has the wrong source origin")
-            origins[name] = str(Path(filename).resolve().relative_to(root.resolve()))
+            origins[name] = module_origin(module, root, expected)
     if (
         resources != expected
         or Path(policyengine.__file__).resolve().parent != expected

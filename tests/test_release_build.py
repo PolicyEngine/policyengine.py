@@ -8,8 +8,10 @@ import importlib.util
 import io
 import json
 import subprocess
+import sys
 import zipfile
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -1044,6 +1046,43 @@ def test_source_origin_rejects_previously_imported_other_checkout(
     monkeypatch.syspath_prepend(str(tmp_path / "src"))
     with pytest.raises(ValueError, match="source origin"):
         release.assert_source_origin(tmp_path)
+
+
+def test_source_origin_places_a_namespace_package_by_its_portions(monkeypatch):
+    """``policyengine.tax_benefit_models`` has no ``__init__.py``, so no file.
+
+    Rejecting it for that would hold every release run whose interpreter had
+    already imported a country model — which the test session itself does,
+    through ``tests/conftest.py``. Its ``__path__`` is the proof instead.
+    """
+    monkeypatch.setenv("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
+    monkeypatch.syspath_prepend(str(ROOT / "src"))
+    import policyengine.tax_benefit_models as namespaced
+
+    assert namespaced.__file__ is None
+    actual = release.assert_source_origin(ROOT)
+    assert actual["modules"]["policyengine.tax_benefit_models"] == [
+        "src/policyengine/tax_benefit_models"
+    ]
+
+
+@pytest.mark.parametrize("portions", ["none", "empty", "outside"])
+def test_source_origin_still_refuses_a_module_it_cannot_place(monkeypatch, portions):
+    """No file and no portion inside the checkout is no proof of origin at all.
+
+    A synthesized stand-in looks exactly like this, so accepting namespace
+    packages must not become accepting anything without a ``__file__``.
+    """
+    monkeypatch.setenv("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
+    monkeypatch.syspath_prepend(str(ROOT / "src"))
+    stand_in = ModuleType("policyengine.stand_in")
+    if portions == "empty":
+        stand_in.__path__ = []
+    elif portions == "outside":
+        stand_in.__path__ = [str(ROOT.parent / "other/src/policyengine/stand_in")]
+    monkeypatch.setitem(sys.modules, "policyengine.stand_in", stand_in)
+    with pytest.raises(ValueError, match="source origin"):
+        release.assert_source_origin(ROOT)
 
 
 @pytest.mark.parametrize(

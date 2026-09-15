@@ -25,6 +25,25 @@ from pathlib import Path
 from textwrap import dedent
 from types import ModuleType
 
+_ABSENT = object()
+
+# The sys.modules entries the loader below may create or overwrite. Loading
+# this way installs stand-ins that carry no ``__file__``, and leaving them
+# behind would outlive this file: pytest imports it during collection, before
+# any test runs, so every later test in the session would see an
+# unattributable ``policyengine`` entry — precisely what
+# ``scripts/release_build.py``'s source-origin check exists to refuse. The
+# loader restores these as soon as it finishes. The module objects survive
+# through the references it returns, and ``extractor.py`` resolves its own
+# ``from policyengine.graph.graph import VariableGraph`` while the entries are
+# still installed.
+_TOUCHED = (
+    "policyengine",
+    "policyengine.graph",
+    "policyengine.graph.graph",
+    "policyengine.graph.extractor",
+)
+
 
 # ``policyengine/__init__.py`` eagerly imports the full country-model
 # stack (policyengine-us, policyengine-uk), which makes a normal
@@ -40,35 +59,43 @@ def _load_graph_module() -> ModuleType:
         return sys.modules["policyengine.graph"]
 
     graph_dir = Path(__file__).resolve().parents[2] / "src" / "policyengine" / "graph"
+    before = {name: sys.modules.get(name, _ABSENT) for name in _TOUCHED}
 
-    if "policyengine" not in sys.modules:
-        fake_pkg = ModuleType("policyengine")
-        fake_pkg.__path__ = [str(graph_dir.parent)]
-        sys.modules["policyengine"] = fake_pkg
-    if "policyengine.graph" not in sys.modules or not hasattr(
-        sys.modules["policyengine.graph"], "__path__"
-    ):
-        fake_subpkg = ModuleType("policyengine.graph")
-        fake_subpkg.__path__ = [str(graph_dir)]
-        sys.modules["policyengine.graph"] = fake_subpkg
+    try:
+        if "policyengine" not in sys.modules:
+            fake_pkg = ModuleType("policyengine")
+            fake_pkg.__path__ = [str(graph_dir.parent)]
+            sys.modules["policyengine"] = fake_pkg
+        if "policyengine.graph" not in sys.modules or not hasattr(
+            sys.modules["policyengine.graph"], "__path__"
+        ):
+            fake_subpkg = ModuleType("policyengine.graph")
+            fake_subpkg.__path__ = [str(graph_dir)]
+            sys.modules["policyengine.graph"] = fake_subpkg
 
-    for submod, filename in [
-        ("policyengine.graph.graph", "graph.py"),
-        ("policyengine.graph.extractor", "extractor.py"),
-    ]:
-        if submod in sys.modules:
-            continue
-        spec = importlib.util.spec_from_file_location(submod, graph_dir / filename)
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[submod] = module
-        spec.loader.exec_module(module)  # type: ignore[union-attr]
+        for submod, filename in [
+            ("policyengine.graph.graph", "graph.py"),
+            ("policyengine.graph.extractor", "extractor.py"),
+        ]:
+            if submod in sys.modules:
+                continue
+            spec = importlib.util.spec_from_file_location(submod, graph_dir / filename)
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[submod] = module
+            spec.loader.exec_module(module)  # type: ignore[union-attr]
 
-    graph_mod = sys.modules["policyengine.graph"]
-    graph_mod.extract_from_path = sys.modules[
-        "policyengine.graph.extractor"
-    ].extract_from_path
-    graph_mod.VariableGraph = sys.modules["policyengine.graph.graph"].VariableGraph
-    return graph_mod
+        graph_mod = sys.modules["policyengine.graph"]
+        graph_mod.extract_from_path = sys.modules[
+            "policyengine.graph.extractor"
+        ].extract_from_path
+        graph_mod.VariableGraph = sys.modules["policyengine.graph.graph"].VariableGraph
+        return graph_mod
+    finally:
+        for name, module in before.items():
+            if module is _ABSENT:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
 
 
 _graph = _load_graph_module()

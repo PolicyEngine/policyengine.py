@@ -1,0 +1,1 @@
+Authenticate a candidate's namespace packages by their `__path__` rather than refusing them for having no `__file__`, so preparing a release no longer holds when the interpreter has already imported a country model. Modules with neither a file nor a portion inside the prepared checkout are still refused.
