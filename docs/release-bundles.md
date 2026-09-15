@@ -51,7 +51,10 @@ from PyPI without local sources, and permits only the root package version to ch
 in the reviewed lock. Every locked distribution must use an HTTPS artifact URL
 on PyPI's `files.pythonhosted.org` host and a valid SHA256 digest; a registry source
 label alone is insufficient. Any dependency graph change fails and restores the original
-lock; stage such changes in a reviewed PR instead. The helper then runs the actual
+lock; stage such changes in a reviewed PR instead. Every workflow pins the uv release in its
+`setup-uv` step: the lock's dependency-marker spelling depends on the resolver
+version, so an unpinned latest uv can rewrite reviewed edges and fail this check.
+Raise that pin and regenerate `uv.lock` with the same uv in one reviewed PR. The helper then runs the actual
 `uv lock --check`. Final unpublished dependency pins must wait for registry
 publication before these checks can pass.
 
