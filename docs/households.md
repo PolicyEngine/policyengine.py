@@ -81,19 +81,21 @@ unit with no classified adult raises `SPM_COMPOSITION_REQUIRED`. These are
 calculator `SPMInputError` exceptions with `code` and `to_dict()` attributes.
 Geography is checked when an SPM-dependent formula runs, and only for the units
 whose result depends on the measurement. SPM measurement itself — thresholds,
-the geographic factor and SPM poverty — always requires this choice. Household
-resource outputs (net income, benefits, MTR, income decile and equivalized net
-income) use the actual housing award rather than the capped SPM subsidy, so
+the geographic factor and SPM poverty — always requires this choice. The
+ordinary resource outputs — household net income, benefits, income decile and
+equivalized net income, and each person's marginal tax rate — take the
+household's housing assistance amount rather than the capped SPM subsidy, so
 they succeed on state alone and record an empty measurement receipt whether or
-not the unit is assisted. The SPM unit's own resources are what reach the
-measurement: the country's cap (`spm_unit_capped_housing_subsidy`, and through
-it `spm_unit_benefits` and `spm_unit_net_income`) consults the canonical
-housing portion for units allocated assistance, so an assisted unit without a
-geography raises `SPM_GEOGRAPHY_REQUIRED` there; a unit allocated none has a
-capped subsidy of zero by construction and consults no measurement. A
-genuinely independent tax-only country-model calculation can use state alone;
-the wrapper's default outputs include SPM poverty and therefore always require
-the choice.
+not the unit is allocated assistance. The country's cap
+(`spm_unit_capped_housing_subsidy`) is what consults the canonical housing
+portion, and only for units allocated assistance. So for an assisted unit
+without a geography the cap and everything downstream of it —
+`spm_unit_benefits`, `spm_unit_net_income` and in turn
+`spm_unit_oecd_equiv_net_income` and `spm_unit_income_decile` — raise
+`SPM_GEOGRAPHY_REQUIRED`, while a unit allocated none has a capped subsidy of
+zero by construction and consults no measurement. A genuinely independent
+tax-only country-model calculation can use state alone; the wrapper's default
+outputs include SPM poverty and therefore always require the choice.
 
 Supply observed inputs such as age, tenure, county and the source-backed
 `is_spm_independent_minor_role`. Computed SPM thresholds, geographic factors,

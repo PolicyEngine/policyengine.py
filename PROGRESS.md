@@ -65,6 +65,31 @@ Working order: certify → `uv lock` → `release_lock.py` → `generate
 - [x] Dropped the superseded `certify-us-…20260909` fragment.
 - [x] Lint/format clean under the ruff CI installs (0.16.7).
 
+## Review round
+
+An adversarial review of the pushed diff raised 29 findings across six dimensions;
+28 were refuted as pre-existing, out of scope, or wrong. Two things were changed
+as a result, both verified against the installed 2.2.1 model rather than taken on
+the reviewer's word:
+
+- **The fail-closed set is five variables, not three.** Probing the pinned model
+  directly (assisted unit, state only, default outputs narrowed the way the
+  acceptance test narrows them) shows `spm_unit_capped_housing_subsidy`,
+  `spm_unit_benefits`, `spm_unit_net_income`, `spm_unit_oecd_equiv_net_income`
+  and `spm_unit_income_decile` all raise `SPM_GEOGRAPHY_REQUIRED`; the last two
+  are downstream of `spm_unit_net_income`. The corrected prose now names the
+  whole chain instead of reading as an exhaustive list of three. The same probe
+  confirms every ordinary resource output, and `housing_assistance` itself,
+  computes on state alone for the assisted unit.
+- **`docs/bundles.md` still said the manifest pins `spm-calculator==0.3.1`.**
+  True on `main`, false on this branch since the canonical-tuple commit. Corrected
+  to 1.0.0; the separate historical note about reproducing the published 5.3.0
+  package set with 0.3.1 is still accurate and is left alone.
+
+The certification dimension came back clean under independent verification: all ten
+artifacts match the live release's bytes by sha256, the manifest carries no
+remaining `20260909` or `2.0.0` string, and the model wheel hash matches PyPI.
+
 ## Next
 
 - [ ] Push to `origin/max/spm-canonical-wrapper-release-20260910`, watch CI on #515,
