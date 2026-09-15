@@ -12,45 +12,63 @@ policyengine 6.0.0 on a country pin and a certified data release that agree.
 |---|---|
 | PyPI has policyengine-us 2.2.1 | Yes. Wheel sha256 `0993a6c73fcdfbe171a796aca9d302741bd8e00ab83388ad81c15a08740318c6`, uploaded 2026-09-15T04:45:46Z. |
 | PyPI latest is 2.3.0 (not the target) | Yes, uploaded 06:11:55Z. Deliberately **not** pinned: the certified claim is `>=2.0.0,<2.3` and 2.2.1 is the built-with version. |
-| HF tag `populace-us-2024-spm-20260915` exists and is readable | Yes. Release manifest records `build.built_with_model_package` = policyengine-us **2.2.1**, `build.build_id` = `populace-us-2024-spm-20260915`, H5 sha256 `6496cc4393d4d3c6574f76eca231de5898c803b9067645591fd5c4d3e65aee84`. |
-| Release carries a publisher compatibility range | Yes. `compatible_model_packages` = `policyengine-us >=2.0.0,<2.3`, basis `publisher_claim`. |
+| HF tag `populace-us-2024-spm-20260915` exists and is readable | Yes. `build.built_with_model_package` = policyengine-us **2.2.1**, `build.build_id` = `populace-us-2024-spm-20260915`, H5 sha256 `6496cc4393d4d3c6574f76eca231de5898c803b9067645591fd5c4d3e65aee84`. |
+| Release carries a publisher compatibility range | Yes. `policyengine-us >=2.0.0,<2.3`, basis `publisher_claim`. Not the basis used — see below. |
 | microcosm main contains PR #928 | Yes. Merged 2026-09-15T06:34:17Z, merge commit `743683b0e121378e93c9b426cd9c79d41d29595b`. |
 | Branch head unmoved | Yes, `origin/max/spm-canonical-wrapper-release-20260910` = `1b6c001c`. |
 
-## Baseline at `1b6c001c`
+## Sequence actually run (corrected from the brief)
 
-- `pyproject.toml` pins `policyengine-us==2.0.0` in the `models`, `us` and `dev` extras;
-  `policyengine-core==3.32.5`, `spm-calculator==1.0.0`, `policyengine-uk==2.90.2`.
-- `src/policyengine/data/bundle/manifest.json` → `data_releases.us` certifies build
-  `populace-us-2024-spm-20260909` for model version `2.0.0`, basis
-  `built_with_model_package`.
-- The H5 sha256 is byte-identical across the 20260909 and 20260915 releases
-  (`6496cc43…aee84`); the release-directory evidence files differ.
+The brief's order and two of its flags do not exist or cannot succeed. Verified
+against the code, not assumed:
 
-## Plan
+1. **`--data-producer populace` is required for the US.** `certification.py:753`
+   defaults a missing producer to `legacy` for every country except UK, and the
+   legacy strategy raises unconditionally.
+2. **`scripts/release_lock.py --committed` does not exist.** The script has
+   exactly one flag, `--refresh` (`release_lock.py:184`).
+3. **`--refresh` cannot perform a repin.** It permits only the root package
+   version to move and restores the lock on any graph change
+   (`release_lock.py:169-179`). Run as instructed it failed with "Versioning
+   changed the reviewed dependency graph" and left `uv.lock` byte-identical.
+   The repin needs an ordinary registry-only `uv lock`, then plain
+   `release_lock.py` — which is what PR CI runs
+   (`pr_code_changes.yaml:120`) and what `docs/release-bundles.md:50-56`
+   prescribes.
+4. **`generate --include-tros --strict-tros` cannot prepare a sidecar for a
+   changed data release.** Strict generation refuses to substitute remote bytes
+   over the reviewed pin in the committed TRO
+   (`generate_trace_tros.py:114-121`), and separately requires the lock to
+   already carry the certified model (`:143-164`). Preparation is the
+   non-strict `generate --include-tros`; `check … --strict-tros` is the gate.
 
-1. Re-certify: `scripts/certify_data_release.py` against the 20260915 release manifest at
-   model version 2.2.1.
-2. Regenerate bundle artifacts: `scripts/bundle.py generate --include-tros --strict-tros`.
-   The pyproject pins are **generated** from `manifest.json`; they are never hand-edited.
-   `provenance/pyproject_pins.py::update_country_pins` is not used (it misses the `models`
-   extra).
-3. Refresh the lock: `scripts/release_lock.py --refresh`, then `--committed`.
-4. Restore the `tests/test_spm_household.py` rewrite from `818c894e` (the version that
-   needs the new country semantics) and run it against the repinned environment.
-5. Full verification: pytest, lint/format, `scripts/bundle.py check --published-spm
-   --include-tros --strict-tros`.
-6. Commit in four steps, push, watch CI on #515, update the PR body. **Do not merge.**
-
-The version in `pyproject.toml` is not touched: `bump_version.py` derives 6.0.0 from the
-two `.breaking.md` fragments at release time.
+Working order: certify → `uv lock` → `release_lock.py` → `generate
+--include-tros` → `check --published-spm --include-tros --strict-tros`.
 
 ## Done
 
 - [x] Prerequisites verified against primary sources.
-- [x] Worktree created at the pinned head.
+- [x] Re-certified: basis **`built_with_model_package`**, zero warnings, because
+      the release's build-time model equals the certified version.
+- [x] Generated pins: `models`, `us`, `dev` extras at `policyengine-us==2.2.1`;
+      `spm-calculator==1.0.0` kept, inside 2.2.1's `>=1.0.0,<=1.0.0.post1`.
+- [x] Lock resolved to 2.2.1 from PyPI with the certified wheel hash;
+      `release_lock.py` exits 0 with one root package at 5.3.1.
+- [x] TRACE sidecars regenerated; `bundle.py check --published-spm
+      --include-tros --strict-tros` exits 0.
+- [x] Restored `tests/test_spm_household.py` from `818c894e`
+      (sha256 `061cbc1b…`): 42 passed against the repinned environment.
+- [x] Updated the identity-fact pins in four test modules.
+- [x] Corrected two shipped mechanism claims that 2.2.1 falsifies (the public
+      `calculate_household` docstring and `docs/households.md`), plus two
+      unreleased changelog fragments that stated the superseded contract and pin.
+- [x] Dropped the superseded `certify-us-…20260909` fragment.
+- [x] Lint/format clean under the ruff CI installs (0.16.7).
 
 ## Next
 
-- [ ] Map the certify/generate/lock machinery from the code before running it.
-- [ ] Step 1: re-certify.
+- [ ] Push to `origin/max/spm-canonical-wrapper-release-20260910`, watch CI on #515,
+      update the PR body. Do not mark ready, do not merge.
+
+The version in `pyproject.toml` is untouched: `bump_version.py` derives 6.0.0
+from the two `.breaking.md` fragments at release time.
