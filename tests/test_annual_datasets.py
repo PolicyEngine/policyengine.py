@@ -83,6 +83,37 @@ def test_annual_manifest_rejects_unpinned_or_unknown_artifact(change):
         CountryReleaseManifest.model_validate(payload)
 
 
+@pytest.mark.parametrize(
+    "years, error",
+    [
+        (
+            {2024: "populace_us_2024", 2026: "populace_us_2025"},
+            "contiguous",
+        ),
+        ({2025: "populace_us_2025"}, "earliest year.*family"),
+        (
+            {2024: "populace_us_2025", 2025: "populace_us_2024"},
+            "earliest year.*family",
+        ),
+    ],
+)
+def test_annual_manifest_rejects_incomplete_family_history(years, error):
+    payload = annual_manifest().model_dump(mode="json")
+    payload["dataset_years"]["populace_us_2024"] = years
+
+    with pytest.raises(ValidationError, match=error):
+        CountryReleaseManifest.model_validate(payload)
+
+
+def test_annual_manifest_accepts_base_only_family():
+    payload = annual_manifest().model_dump(mode="json")
+    payload["dataset_years"]["populace_us_2024"] = {2024: "populace_us_2024"}
+
+    manifest = CountryReleaseManifest.model_validate(payload)
+
+    assert manifest.dataset_years == {"populace_us_2024": {2024: "populace_us_2024"}}
+
+
 def test_managed_source_cache_separates_revisions_and_digests(tmp_path):
     first = annual_manifest()
     second = first.model_copy(deep=True)

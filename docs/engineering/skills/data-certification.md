@@ -121,8 +121,10 @@ A producer can advertise exact annual inputs through release metadata:
 ```
 
 Each value names an ordinary `artifacts` entry with an H5 path, explicit revision
-and SHA256. Add every supported year through the projection horizon; do not use
-path templates or implicit extension for missing years. Keep the source base
+and SHA256. Each family must map its earliest year to the family/base artifact
+and include every year through its projection horizon. Certification rejects
+gaps and omitted bases so formula lookbacks retain the complete input history.
+Do not use path templates or implicit extension for missing years. Keep the source base
 release and content identity in producer provenance separately. Certification
 validates this mapping and copies it into `data_releases.us.dataset_years`.
 It does not invent artifact pins or certify an unpublished candidate.

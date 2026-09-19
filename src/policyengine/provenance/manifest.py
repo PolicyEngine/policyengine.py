@@ -205,6 +205,16 @@ class CountryReleaseManifest(BaseModel):
                     raise ValueError(
                         f"Annual dataset {name!r} requires a SHA256 digest"
                     )
+            first_year = min(years)
+            if len(years) != max(years) - first_year + 1:
+                raise ValueError(
+                    f"Annual dataset family {family!r} must contain contiguous years"
+                )
+            if years[first_year] != family:
+                raise ValueError(
+                    f"The earliest year of annual dataset family {family!r} "
+                    "must map to the family dataset"
+                )
         return self
 
     @property
