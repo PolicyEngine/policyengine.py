@@ -8,7 +8,7 @@ from typing import Literal, Optional
 from urllib.parse import quote
 
 import requests
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 HF_REQUEST_TIMEOUT_SECONDS = 30
 PYPI_REQUEST_TIMEOUT_SECONDS = 30
@@ -171,10 +171,41 @@ class CountryReleaseManifest(BaseModel):
     default_dataset: str
     datasets: dict[str, ArtifactPathReference] = Field(default_factory=dict)
     region_datasets: dict[str, ArtifactPathTemplate] = Field(default_factory=dict)
+    dataset_years: dict[str, dict[int, str]] = Field(default_factory=dict)
     certified_data_artifact: Optional[CertifiedDataArtifact] = None
     certification: Optional[DataCertification] = None
     source_sha256: Optional[str] = Field(default=None, exclude=True)
     """Byte sha256 of the bundled manifest before Pydantic normalization."""
+
+    @model_validator(mode="after")
+    def validate_dataset_years(self):
+        if self.dataset_years and self.country_id != "us":
+            raise ValueError(
+                "Annual native dataset families currently support only the US"
+            )
+        for family, years in self.dataset_years.items():
+            if family not in self.datasets or not years:
+                raise ValueError(
+                    f"Annual dataset family {family!r} must name a dataset and contain years"
+                )
+            for year, name in years.items():
+                reference = self.datasets.get(name)
+                if year < 1 or reference is None:
+                    raise ValueError(
+                        f"Unknown annual dataset {name!r} for {family!r}, year {year}"
+                    )
+                if not reference.path.endswith(".h5") or not reference.revision:
+                    raise ValueError(
+                        f"Annual dataset {name!r} requires an H5 path and explicit revision"
+                    )
+                digest = reference.sha256 or ""
+                if len(digest) != 64 or any(
+                    c not in "0123456789abcdef" for c in digest
+                ):
+                    raise ValueError(
+                        f"Annual dataset {name!r} requires a SHA256 digest"
+                    )
+        return self
 
     @property
     def default_dataset_uri(self) -> str:
@@ -514,6 +545,54 @@ def certify_data_release_compatibility(
         "Data release manifest is not certified for the runtime model version "
         f"{runtime_model_version} in country '{country_id}'."
     )
+
+
+def _dataset_years(
+    manifest: CountryReleaseManifest,
+    dataset: Optional[str],
+    *,
+    include_history: bool = False,
+) -> dict[int, str]:
+    """Return calculation coverage, or the parent family's input history."""
+    name = dataset or manifest.default_dataset
+    for artifact, reference in manifest.datasets.items():
+        if name == build_hf_uri(
+            reference.repo_id or manifest.data_package.repo_id,
+            reference.path,
+            reference.revision or _artifact_revision(manifest.data_package),
+        ):
+            name = artifact
+            break
+    if name in manifest.dataset_years:
+        return manifest.dataset_years[name]
+    families = [
+        years for years in manifest.dataset_years.values() if name in years.values()
+    ]
+    if len(families) > 1:
+        raise ValueError(f"Annual artifact {name!r} belongs to multiple families")
+    if not families:
+        return {}
+    if include_history:
+        return families[0]
+    return {
+        year: artifact for year, artifact in families[0].items() if artifact == name
+    }
+
+
+def _dataset_for_year(
+    manifest: CountryReleaseManifest, dataset: Optional[str], year: Optional[int]
+) -> Optional[str]:
+    years = _dataset_years(manifest, dataset)
+    if not years:
+        return dataset
+    selected = min(years) if year is None else year
+    if selected not in years:
+        raise ValueError(
+            f"Year {selected} is outside annual dataset coverage for "
+            f"{dataset or manifest.default_dataset!r}: {sorted(years)}. "
+            "The managed family cannot fall back to engine uprating."
+        )
+    return years[selected]
 
 
 def resolve_dataset_reference(country_id: str, dataset: str) -> str:

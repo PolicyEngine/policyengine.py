@@ -1,4 +1,7 @@
 import datetime
+from contextvars import ContextVar
+from copy import deepcopy
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import pandas as pd
@@ -8,6 +11,7 @@ from policyengine.core import TaxBenefitModel
 from policyengine.provenance.dataset_materialization import (
     materialize_dataset,
 )
+from policyengine.provenance.manifest import _dataset_years, get_release_manifest
 from policyengine.tax_benefit_models.common import MicrosimulationModelVersion
 from policyengine.tax_benefit_models.common.model_version import (
     build_runtime_dataset_provenance,
@@ -15,8 +19,18 @@ from policyengine.tax_benefit_models.common.model_version import (
 from policyengine.tax_benefit_models.common.model_version import (
     output_dataset_filepath as _output_dataset_filepath,
 )
+from policyengine.utils.entity_utils import filter_dataset_by_household_ids
+from policyengine.utils.hashing import sha256_file
 
-from .datasets import PolicyEngineUSDataset, USYearData, _validate_entity_ids
+from .datasets import (
+    PolicyEngineUSDataset,
+    USYearData,
+    _annual_dataset,
+    _annual_input_sources,
+    _validate_annual_file_year,
+    _validate_annual_tables,
+    _validate_entity_ids,
+)
 from .spm import (
     SPMProvenance,
     SPMSelection,
@@ -162,6 +176,7 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         # autosave removal in datasets.py).
         if dataset.data is None:
             dataset.load()
+        source_dataset = dataset
 
         # Validate every entity before constructing either the reform or its
         # baseline, so no set_input can suppress a canonical SPM formula.
@@ -171,6 +186,13 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
 
         # Apply regional scoping if specified
         if simulation.scoping_strategy:
+            if (
+                dataset.metadata.get("annual_dataset_family")
+                and simulation.scoping_strategy.strategy_type == "weight_replacement"
+            ):
+                raise ValueError(
+                    "Annual national datasets require row filters; positional weight replacement lacks certified year and ID alignment"
+                )
             scoped_data = simulation.scoping_strategy.apply(
                 entity_data=dataset.data.entity_data,
                 group_entities=US_GROUP_ENTITIES,
@@ -186,6 +208,7 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
                 filepath=None,
                 year=dataset.year,
                 is_output_dataset=dataset.is_output_dataset,
+                metadata=dict(dataset.metadata),
                 data=USYearData(
                     person=scoped_data["person"],
                     marital_unit=scoped_data["marital_unit"],
@@ -207,27 +230,43 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             # default would load another population before we build this one.
             default_dataset = None
 
-        microsim = InputMicrosimulation(
-            situation={},
-            reform=reform_dict,
-            spm=simulation.spm_config,
-            default_input_period=dataset.year,
-        )
+        if dataset.metadata.get("annual_dataset_family"):
+            annual_inputs = _ordinary_annual_inputs(source_dataset, dataset)
+            microsim = Microsimulation(
+                dataset=annual_inputs,
+                reform=reform_dict,
+                spm=simulation.spm_config,
+                default_input_period=dataset.year,
+            )
+            microsim.default_calculation_period = dataset.year
+            if microsim.baseline is not None:
+                microsim.baseline.default_calculation_period = dataset.year
+        else:
+            microsim = InputMicrosimulation(
+                situation={},
+                reform=reform_dict,
+                spm=simulation.spm_config,
+                default_input_period=dataset.year,
+            )
         # Use ``microsim.tax_benefit_system``, not the module-level
         # ``system``: ``Microsimulation.__init__`` applies structural
         # reforms (e.g. ``gov.contrib.ctc.*``) to its per-sim system but
         # leaves the module-level one untouched. Building populations
         # against the module-level system would hide reform-registered
         # variables like ``ctc_minimum_refundable_amount`` at calc time.
-        if microsim.baseline is not None:
+        if (
+            not dataset.metadata.get("annual_dataset_family")
+            and microsim.baseline is not None
+        ):
             self._build_simulation_from_dataset(
                 microsim.baseline,
                 dataset,
                 microsim.baseline.tax_benefit_system,
             )
-        self._build_simulation_from_dataset(
-            microsim, dataset, microsim.tax_benefit_system
-        )
+        if not dataset.metadata.get("annual_dataset_family"):
+            self._build_simulation_from_dataset(
+                microsim, dataset, microsim.tax_benefit_system
+            )
 
         data = {
             "person": pd.DataFrame(),
@@ -316,7 +355,18 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             filepath=str(_output_dataset_filepath(simulation)),
             year=simulation.dataset.year,
             is_output_dataset=True,
-            metadata={"spm_config": dict(microsim.spm_config)},
+            metadata={
+                "spm_config": dict(microsim.spm_config),
+                **(
+                    {
+                        "annual_input_sources": deepcopy(
+                            dataset.metadata["annual_input_sources"]
+                        )
+                    }
+                    if dataset.metadata.get("annual_dataset_family")
+                    else {}
+                ),
+            },
             data=USYearData(
                 person=data["person"],
                 marital_unit=data["marital_unit"],
@@ -468,9 +518,128 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
                     microsim.set_input(column, dataset.year, df[column].values)
 
 
+def _ordinary_annual_inputs(source_dataset, scoped_dataset):
+    """Use the country's loader and response normalization for every input year."""
+    from policyengine_us.data import USMultiYearDataset, USSingleYearDataset
+
+    references = source_dataset.metadata.get("annual_input_sources")
+    if not references or str(source_dataset.year) not in references:
+        raise ValueError("Annual simulation requires recorded source and history pins")
+    if references != _annual_input_sources(
+        get_release_manifest("us"),
+        references[str(source_dataset.year)]["dataset"],
+        source_dataset.year,
+    ):
+        raise ValueError("Annual input history differs from the certified family pins")
+    _validate_entity_ids(scoped_dataset.data.entity_data)
+    keep_ids = scoped_dataset.data.household["household_id"]
+    singles = []
+    for year_text, reference in sorted(
+        references.items(), key=lambda item: int(item[0])
+    ):
+        year = int(year_text)
+        if year > source_dataset.year:
+            raise ValueError("Annual history cannot include future input years")
+        if year == source_dataset.year:
+            frames = scoped_dataset.data.entity_data
+        else:
+            source = materialize_dataset("us", reference["uri"], year=year)
+            digest = (
+                source.bundle_dataset.sha256
+                if source.bundle_dataset is not None
+                else sha256_file(Path(source.path))
+            )
+            if source.source_uri != reference["uri"] or digest != reference["sha256"]:
+                raise ValueError(
+                    f"Annual {year} input no longer matches recorded history pins"
+                )
+            earlier = _annual_dataset(source, reference["dataset"], year)
+            _validate_annual_tables(
+                source_dataset.data.entity_data, earlier.data.entity_data, year
+            )
+            frames = filter_dataset_by_household_ids(
+                earlier.data.entity_data, US_GROUP_ENTITIES, keep_ids
+            )
+        # Country datasets require native membership names to distinguish
+        # person links from each group's own ID column when flattening tables.
+        native = {
+            entity: pd.DataFrame(frame).copy(deep=False)
+            for entity, frame in frames.items()
+        }
+        person = native["person"]
+        for entity in US_GROUP_ENTITIES:
+            bare, link = f"{entity}_id", f"person_{entity}_id"
+            if bare in person:
+                person = (
+                    person.drop(columns=[bare])
+                    if link in person
+                    else person.rename(columns={bare: link})
+                )
+        native["person"] = person
+        singles.append(USSingleYearDataset(**native, time_period=year))
+    return USMultiYearDataset(datasets=singles)
+
+
+_annual_calculation_active = ContextVar("annual_calculation_active", default=False)
+
+
+def _validate_annual_period(period, years):
+    # Use the engine's period parser so monthly and multi-year requests obey
+    # exactly the same syntax as the country API. This does not calculate policy.
+    from policyengine_core.periods import period as parse_period
+
+    parsed = parse_period(period)
+    if parsed.unit == "eternity":
+        return
+    if any(
+        year not in years for year in range(parsed.start.year, parsed.stop.year + 1)
+    ):
+        raise ValueError(
+            f"Requested period {period!r} is outside annual dataset coverage: {list(years)}"
+        )
+
+
+class _AnnualDatasetCoverage:
+    """Guard external requests, preserving formula lookbacks and monthly calls."""
+
+    def _with_annual_coverage(self, method, variable, period, *args, **kwargs):
+        if _annual_calculation_active.get():
+            return method(variable, period, *args, **kwargs)
+        _validate_annual_period(
+            self.default_calculation_period if period is None else period,
+            self._annual_years,
+        )
+        token = _annual_calculation_active.set(True)
+        try:
+            return method(variable, period, *args, **kwargs)
+        finally:
+            _annual_calculation_active.reset(token)
+
+    def calculate(self, variable_name, period=None, *args, **kwargs):
+        return self._with_annual_coverage(
+            super().calculate, variable_name, period, *args, **kwargs
+        )
+
+    def calculate_add(self, variable_name, period=None, *args, **kwargs):
+        return self._with_annual_coverage(
+            super().calculate_add, variable_name, period, *args, **kwargs
+        )
+
+    def calculate_divide(self, variable_name, period=None, *args, **kwargs):
+        return self._with_annual_coverage(
+            super().calculate_divide, variable_name, period, *args, **kwargs
+        )
+
+    def calculate_dataframe(self, variable_names, period=None, *args, **kwargs):
+        return self._with_annual_coverage(
+            super().calculate_dataframe, variable_names, period, *args, **kwargs
+        )
+
+
 def managed_microsimulation(
     *,
     dataset: Optional[str] = None,
+    years: Optional[list[int]] = None,
     allow_unmanaged: bool = False,
     spm: Optional[SPMSelection] = None,
     **kwargs,
@@ -479,7 +648,13 @@ def managed_microsimulation(
 
     By default this enforces the dataset selection from the bundled
     ``policyengine.py`` release manifest. Arbitrary dataset URIs require
-    ``allow_unmanaged=True``.
+    ``allow_unmanaged=True``. For an advertised annual family, ``years`` selects
+    external calculation coverage. Its default follows ``default_calculation_period``
+    or the current calendar year. Load those years and every earlier advertised
+    input year for formula lookbacks, without extending annual inputs or loading
+    future years. External calculations outside the selected years raise
+    ``ValueError``. Downloads and memory scale with this history prefix; use
+    ``ensure_datasets(years=[...])`` to materialize only selected annual files.
     """
 
     from policyengine_us import Microsimulation
@@ -491,18 +666,103 @@ def managed_microsimulation(
         )
 
     selection = resolve_spm_selection(spm)
-    source = materialize_dataset(
-        "us",
-        dataset,
-        allow_unmanaged=allow_unmanaged,
-    )
-    microsim = Microsimulation(dataset=source.path, spm=selection, **kwargs)
-    microsim.policyengine_bundle = dict(us_latest.release_bundle)
+    manifest = get_release_manifest("us")
+    annual_years = _dataset_years(manifest, dataset)
+    if annual_years:
+        from policyengine_core.periods import period as parse_period
+        from policyengine_us.data import USMultiYearDataset, USSingleYearDataset
+
+        default_period = kwargs.get("default_calculation_period")
+        if years is None:
+            default_period = (
+                datetime.date.today().year if default_period is None else default_period
+            )
+            parsed = parse_period(default_period)
+            if parsed.unit == "eternity":
+                raise ValueError(
+                    "Select annual calculation years for an eternity default"
+                )
+            selected_years = list(range(parsed.start.year, parsed.stop.year + 1))
+        else:
+            if not years or any(type(year) is not int or year < 1 for year in years):
+                raise ValueError(
+                    "years must contain positive integer calculation years"
+                )
+            selected_years = sorted(set(years))
+            if default_period is None:
+                default_period = min(selected_years)
+        for year in selected_years:
+            _validate_annual_period(year, annual_years)
+        _validate_annual_period(default_period, selected_years)
+        input_years = {
+            year: artifact
+            for year, artifact in _dataset_years(
+                manifest, dataset, include_history=True
+            ).items()
+            if year <= max(selected_years)
+        }
+        singles = []
+        sources = {}
+        for year in sorted(input_years):
+            source = materialize_dataset(
+                "us", input_years[year], year=year, allow_unmanaged=allow_unmanaged
+            )
+            _validate_annual_file_year(source.path, year)
+            single = USSingleYearDataset(file_path=source.path, time_period=year)
+            if singles:
+                _validate_annual_tables(
+                    {
+                        entity: getattr(singles[0], entity)
+                        for entity in singles[0].table_names
+                    },
+                    {entity: getattr(single, entity) for entity in single.table_names},
+                    year,
+                )
+            singles.append(single)
+            sources[year] = source
+
+        class AnnualMicrosimulation(_AnnualDatasetCoverage, Microsimulation):
+            _annual_years = tuple(selected_years)
+
+        token = _annual_calculation_active.set(True)
+        try:
+            microsim = AnnualMicrosimulation(
+                dataset=USMultiYearDataset(datasets=singles), spm=selection, **kwargs
+            )
+        finally:
+            _annual_calculation_active.reset(token)
+        # Core initializes this from the earliest dataset, overriding kwargs.
+        microsim.default_calculation_period = default_period
+        if getattr(microsim, "baseline", None) is not None:
+            microsim.baseline.default_calculation_period = default_period
+        microsim.policyengine_bundle = dict(us_latest.release_bundle)
+        microsim.policyengine_bundle["annual_datasets"] = {
+            str(year): build_runtime_dataset_provenance(
+                source.source_uri,
+                source.path,
+                source.bundle_dataset,
+                logical_name=input_years[year],
+            )
+            for year, source in sources.items()
+        }
+        microsim.policyengine_bundle["annual_selected_years"] = selected_years
+        microsim.policyengine_bundle["annual_loaded_years"] = sorted(sources)
+        bytes_by_year = {
+            str(year): Path(source.path).stat().st_size
+            for year, source in sources.items()
+        }
+        microsim.policyengine_bundle["annual_input_bytes_by_year"] = bytes_by_year
+        microsim.policyengine_bundle["annual_input_bytes"] = sum(bytes_by_year.values())
+        source = sources[min(sources)]
+    else:
+        if years is not None:
+            raise ValueError("years requires a certified annual dataset family")
+        source = materialize_dataset("us", dataset, allow_unmanaged=allow_unmanaged)
+        microsim = Microsimulation(dataset=source.path, spm=selection, **kwargs)
+        microsim.policyengine_bundle = dict(us_latest.release_bundle)
     microsim.policyengine_bundle.update(
         build_runtime_dataset_provenance(
-            source.source_uri,
-            source.path,
-            source.bundle_dataset,
+            source.source_uri, source.path, source.bundle_dataset
         )
     )
     microsim.policyengine_bundle["spm"] = dict(microsim.spm_config)
