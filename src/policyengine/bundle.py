@@ -394,18 +394,32 @@ def install_bundle(
     countries: Optional[Sequence[str]] = None,
     data_dir: Path = DEFAULT_DATA_DIR,
     no_datasets: bool = False,
+    no_packages: bool = False,
     yes: bool = False,
     dry_run: bool = False,
 ) -> dict[str, Any]:
+    if no_datasets and no_packages:
+        raise BundleError("Pass either no_datasets or no_packages, not both.")
+    if no_packages and (python is not None or venv is not None):
+        raise BundleError(
+            "Python and virtualenv targets cannot be used when packages are skipped."
+        )
+
     manifest = load_bundle_manifest(version, manifest_ref=manifest_ref)
     selected_countries = normalise_countries(countries, manifest)
-    requirements = bundle_install_requirements(manifest, countries=selected_countries)
-    target_python = resolve_target_python(
-        python=python,
-        venv=venv,
-        create_venv=not dry_run,
-    )
-    install_package_scaffold(target_python, requirements, dry_run=dry_run)
+    requirements: list[str] = []
+    target_python: Optional[Path] = None
+    if not no_packages:
+        requirements = bundle_install_requirements(
+            manifest,
+            countries=selected_countries,
+        )
+        target_python = resolve_target_python(
+            python=python,
+            venv=venv,
+            create_venv=not dry_run,
+        )
+        install_package_scaffold(target_python, requirements, dry_run=dry_run)
     installed_datasets: list[dict[str, Any]] = []
     if not no_datasets:
         dataset_entries = _selected_dataset_plans(
@@ -445,7 +459,7 @@ def install_bundle(
         "countries": selected_countries,
         "datasets": installed_datasets,
         "data_dir": str(data_dir),
-        "target_python": str(target_python),
+        "target_python": str(target_python) if target_python is not None else None,
     }
 
 

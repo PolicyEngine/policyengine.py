@@ -182,6 +182,69 @@ def test_install_bundle_materializes_defaults_and_records_receipt(
     assert receipt["datasets"] == result["datasets"]
 
 
+def test_install_bundle_datasets_only_skips_python_and_packages(monkeypatch, tmp_path):
+    calls = []
+
+    def fail_if_called(*args, **kwargs):
+        pytest.fail("Datasets-only installation must not manage Python packages.")
+
+    def fake_materialize(plan):
+        calls.append(plan)
+        plan.destination.parent.mkdir(parents=True, exist_ok=True)
+        plan.destination.write_bytes(b"materialized")
+        return MaterializedDataset(
+            data_package_name=plan.data_package_name,
+            repo_type=plan.repo_type,
+            revision=plan.revision,
+            source_uri=plan.source_uri,
+            sha256=plan.sha256,
+            path=plan.destination,
+        )
+
+    monkeypatch.setattr(bundle, "resolve_target_python", fail_if_called)
+    monkeypatch.setattr(bundle, "install_package_scaffold", fail_if_called)
+    monkeypatch.setattr(bundle, "_reuse_or_download_bundle_files", fake_materialize)
+
+    result = bundle.install_bundle(
+        countries=["uk"],
+        data_dir=tmp_path,
+        no_packages=True,
+        yes=True,
+    )
+
+    assert [plan.country_id for plan in calls] == ["uk"]
+    assert result["requirements"] == []
+    assert result["target_python"] is None
+    receipt = bundle.read_receipt(tmp_path)
+    assert receipt is not None
+    assert "target_python" not in receipt
+    assert receipt["datasets"] == result["datasets"]
+
+
+def test_install_bundle_rejects_skipping_all_components(tmp_path):
+    with pytest.raises(
+        bundle.BundleError,
+        match="Pass either no_datasets or no_packages, not both",
+    ):
+        bundle.install_bundle(
+            data_dir=tmp_path,
+            no_datasets=True,
+            no_packages=True,
+        )
+
+
+def test_install_bundle_rejects_python_target_when_packages_are_skipped(tmp_path):
+    with pytest.raises(
+        bundle.BundleError,
+        match="Python and virtualenv targets cannot be used",
+    ):
+        bundle.install_bundle(
+            python=sys.executable,
+            data_dir=tmp_path,
+            no_packages=True,
+        )
+
+
 def test_status_matches_receipt_and_packages(monkeypatch, tmp_path):
     manifest = _manifest_with_dataset_sha("uk", _sha256(b"data"))
     datasets = [
@@ -375,6 +438,26 @@ def test_bundle_install_dry_run_cli_uses_standard_flags(capsys):
         ]
         in output
     )
+
+
+def test_bundle_install_datasets_only_dry_run_cli_skips_packages(capsys):
+    exit_code = cli_main(
+        [
+            "bundle",
+            "install",
+            "--country",
+            "uk",
+            "--no-packages",
+            "--yes",
+            "--dry-run",
+        ]
+    )
+
+    assert exit_code == 0
+    output = capsys.readouterr().out
+    assert "pip install" not in output
+    assert "download " in output
+    assert '"target_python": null' in output
 
 
 def test_bundle_verify_cli_handles_unknown_bundle(capsys):

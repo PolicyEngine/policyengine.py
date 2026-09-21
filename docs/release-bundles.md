@@ -115,8 +115,16 @@ Useful variants:
 uvx --from policyengine policyengine bundle install
 uvx --from policyengine policyengine bundle install --country uk
 uvx --from policyengine policyengine bundle install --no-datasets
+uvx --from policyengine policyengine bundle install --no-packages --yes
 uvx --from policyengine policyengine bundle install --yes
 ```
+
+Use `--no-packages` when packages are installed from a separate lockfile. The
+command still downloads and verifies the selected certified datasets and writes
+the bundle receipt, but it does not resolve Python, create a virtual environment,
+or install packages. Dataset-only receipts omit `target_python`; `bundle status`
+therefore inspects its current interpreter unless `--python` or `--venv` is
+supplied explicitly.
 
 Check a local environment against a bundle:
 
