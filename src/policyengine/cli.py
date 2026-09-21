@@ -147,10 +147,16 @@ def _parser() -> argparse.ArgumentParser:
         choices=("us", "uk"),
         help="Country to include. Repeat for multiple countries. Defaults to all.",
     )
-    bundle_install.add_argument(
+    bundle_install_components = bundle_install.add_mutually_exclusive_group()
+    bundle_install_components.add_argument(
         "--no-datasets",
         action="store_true",
         help="Install packages without downloading certified datasets.",
+    )
+    bundle_install_components.add_argument(
+        "--no-packages",
+        action="store_true",
+        help="Download certified datasets without installing packages.",
     )
     bundle_install.add_argument(
         "--data-dir",
@@ -387,6 +393,7 @@ def _install_bundle(args: argparse.Namespace) -> int:
             countries=args.country,
             data_dir=args.data_dir,
             no_datasets=args.no_datasets,
+            no_packages=args.no_packages,
             yes=args.yes,
             dry_run=args.dry_run,
         )

@@ -68,14 +68,21 @@ Managed datasets are downloaded from the Hugging Face artifact specified in the
 bundle. GCS dataset URIs are unsupported. The separate UK geography lookup files
 retain their existing storage implementation.
 
-Country-specific and package-only installs are supported:
+Country-specific, package-only, and dataset-only installs are supported:
 
 ```bash
 uvx --from policyengine policyengine bundle install --country uk
 uvx --from policyengine policyengine bundle install --no-datasets
+uvx --from policyengine policyengine bundle install --no-packages --yes
 ```
 
 Use `--yes` for CI/CD. Without `--yes`, dataset downloads ask for confirmation.
+Use `--no-packages` when a lockfile or another package manager owns the Python
+environment. It downloads and verifies the selected certified datasets and
+writes the bundle receipt without resolving Python, creating a virtual
+environment, or installing packages. Dataset-only receipts omit
+`target_python`; `bundle status` therefore inspects its current interpreter
+unless `--python` or `--venv` is supplied explicitly.
 
 The canonical bundle manifest is `src/policyengine/data/bundle/manifest.json`.
 Derived artifacts are:
