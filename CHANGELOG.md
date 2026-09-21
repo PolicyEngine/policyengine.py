@@ -1,3 +1,10 @@
+## [6.1.0] - 2026-09-21
+
+### Added
+
+- Allow bundle consumers to download and verify certified datasets and write a receipt without installing Python packages.
+
+
 ## [6.0.0] - 2026-09-15
 
 ### Breaking changes
