@@ -1,3 +1,10 @@
+## [6.1.1] - 2026-09-22
+
+### Fixed
+
+- Decode enum values to their names in US household calculation results.
+
+
 ## [6.1.0] - 2026-09-21
 
 ### Added
