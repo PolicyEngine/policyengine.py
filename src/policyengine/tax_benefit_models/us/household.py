@@ -292,7 +292,14 @@ def calculate_household(
     result = HouseholdResult()
     for entity, columns in output_columns.items():
         raw = {
-            variable: list(simulation.calculate(variable, period=year, map_to=entity))
+            variable: list(
+                simulation.calculate(
+                    variable,
+                    period=year,
+                    map_to=entity,
+                    decode_enums=True,
+                )
+            )
             for variable in columns
         }
         if entity == "person":

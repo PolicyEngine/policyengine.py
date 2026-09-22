@@ -175,6 +175,17 @@ class TestUSCalculateHousehold:
         assert "adjusted_gross_income" in result.tax_unit
         assert result.tax_unit.adjusted_gross_income > 0
 
+    def test__enum_extra_variable__then_returns_name(self):
+        result = pe.us.calculate_household(
+            spm={"geography_kind": "national"},
+            people=[{"age": 35, "is_tax_unit_head": True}],
+            household={"state_code": "CA"},
+            year=2026,
+            extra_variables=["state_name"],
+        )
+
+        assert result.household.state_name == "CA"
+
     def test__axes__then_result_values_are_axis_series(self):
         result = pe.us.calculate_household(
             spm={"geography_kind": "national"},
@@ -197,7 +208,7 @@ class TestUSCalculateHousehold:
                     "count": 3,
                 }
             ],
-            extra_variables=["charitable_cash_donations"],
+            extra_variables=["charitable_cash_donations", "state_name"],
         )
         assert result.person[0].charitable_cash_donations == [0, 5000, 10000]
         # Donations reduce income tax via the charitable deduction; assert
@@ -208,6 +219,7 @@ class TestUSCalculateHousehold:
         assert income_tax[0] > income_tax[-1]
         assert all(a >= b for a, b in zip(income_tax, income_tax[1:]))
         assert len(result.household.household_net_income) == 3
+        assert result.household.state_name == ["CA", "CA", "CA"]
 
     def test__nested_axes_shape__then_supported(self):
         result = pe.us.calculate_household(
