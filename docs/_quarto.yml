@@ -55,6 +55,7 @@ website:
           - countries.md
           - release-bundles.md
           - data-publishing-design.md
+          - weighted-module-design.md
           - examples.md
           - dev.md
 
