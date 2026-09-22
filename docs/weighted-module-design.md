@@ -9,8 +9,8 @@ title: Weighted module (design note)
 > kernel definitions, two of which change published Gini and share
 > figures; Stage 1 with the kernels under `policyengine/weighted/` and
 > a parity test against `microcosm.frame.accounting`; Stage 2 as a
-> major version. Not decided here: Stage 3 (what the engines return)
-> and policyengine.py's Python floor. Counts come from a code census of
+> major version, with the Python floor moving to 3.13 in it. Not
+> decided here: Stage 3 (what the engines return). Counts come from a code census of
 > policyengine.py 6.1.0, microdf 1.5.10, policyengine-core 3.32.6 and
 > microcosm `fe2f92f`, each re-derived by a second reader; simulated
 > figures name their setup.
@@ -49,9 +49,9 @@ install only when policyengine-core and policyengine-uk stop returning
 Stage 1 ships the kernels in `policyengine/weighted/kernels.py`, with a
 CI job on Python 3.13 asserting equality with
 `microcosm.frame.accounting` on shared fixtures. They become an import
-from microcosm-frame the release after microcosm-frame is on PyPI and
-policyengine.py's floor is 3.13; if neither has happened by 31 March
-2027, the copy is the home and this paragraph is revised.
+from microcosm-frame the release after it is on PyPI; if that has not
+happened by 31 March 2027, the copy is the home and this paragraph is
+revised.
 
 microcosm's README names `microcosm-frame` as the package that succeeds
 microdf, and its `DESIGN.md` allows "a thin pandas-compat veneer" for
@@ -59,8 +59,11 @@ migration; `policyengine.weighted` is that veneer. `accounting.py` has
 six functions, and its quantile and Gini formulas are the ones pinned
 below; the other thirteen kernels exist in neither package today.
 microcosm-frame is unpublished (the `microcosm` name on PyPI is someone
-else's) and requires Python 3.13, while `pyproject.toml` here allows
-3.11. policyengine.py already imports `microcosm.frame` for the Belgium
+else's) and requires Python 3.13. policyengine.py's floor moves from
+3.11 to 3.13 with Stage 2's major version: CI already tests 3.11 to
+3.14, sim-api's runtime images are `python:3.13`, axiom-oracles
+requires 3.13, and the country packages, which allow 3.11, are
+unaffected. policyengine.py already imports `microcosm.frame` for the Belgium
 pilot (`be/model.py:217`) as an undeclared source checkout.
 
 ## What policyengine.py does today
@@ -224,7 +227,6 @@ pandas-method coverage is withdrawn there.
 
 ## Not settled here
 
-- **The Python floor.** It decides the kernels' home, not the design.
 - **Variance of published estimates.** Replicate-weight standard
   errors need replicate weights, which PolicyEngine's calibrated files
   do not carry. The uncertainty story belongs with microcosm's
