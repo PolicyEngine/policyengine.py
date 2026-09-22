@@ -125,11 +125,26 @@ class Simulation(BaseModel):
     @property
     def storage_id(self) -> str:
         """Include resolved SPM settings in cache and saved-result identity."""
+        identity = self.id
+        history = getattr(self.dataset, "metadata", {}).get("annual_input_sources")
+        if history:
+            from policyengine.tax_benefit_models.us.datasets import (
+                _derived_cache_identity,
+            )
+
+            annual = {
+                "dataset_id": self.dataset.id,
+                "year": self.dataset.year,
+                "history": history,
+                "runtime": _derived_cache_identity(),
+            }
+            encoded = json.dumps(annual, sort_keys=True, separators=(",", ":")).encode()
+            identity += f"-annual-{hashlib.sha256(encoded).hexdigest()}"
         config = self.spm_config
         if config is None:
-            return self.id
+            return identity
         encoded = json.dumps(config, sort_keys=True, separators=(",", ":")).encode()
-        return f"{self.id}-spm-{hashlib.sha256(encoded).hexdigest()}"
+        return f"{identity}-spm-{hashlib.sha256(encoded).hexdigest()}"
 
     @model_validator(mode="after")
     def _compile_dict_reforms(self) -> "Simulation":

@@ -78,7 +78,11 @@ def test_selected_dataset_plan_uses_certified_release_metadata(tmp_path):
     assert plan.country_id == "uk"
     assert plan.data_package_name == "policyengine-uk-data"
     assert plan.repo_type == "model"
-    assert plan.destination == tmp_path / "enhanced_frs_2024_25.h5"
+    assert plan.destination.name == "enhanced_frs_2024_25.h5"
+    assert plan.destination.parent.parent == tmp_path / ".policyengine" / "sources"
+    cache_identity = plan.destination.parent.name
+    assert len(cache_identity) == 64
+    assert set(cache_identity) <= set("0123456789abcdef")
     assert plan.sha256 == release["datasets"][plan.dataset]["sha256"]
 
 

@@ -60,7 +60,8 @@ def test_resolve_bundle_dataset_inherits_primary_package(tmp_path):
     assert dataset.repo_id == "policyengine/policyengine-uk-data-private"
     assert dataset.repo_type == "model"
     assert dataset.revision == "uk-release"
-    assert dataset.destination == tmp_path / "enhanced_frs_2024_25.h5"
+    assert dataset.destination.name == "enhanced_frs_2024_25.h5"
+    assert dataset.destination.parent.parent == tmp_path / ".policyengine" / "sources"
 
 
 def test_resolve_bundle_dataset_uses_cross_package_overlay(tmp_path):
@@ -190,7 +191,7 @@ def test_downloads_and_verifies_metadata_sidecar(tmp_path):
 
     result = _download(manifest, tmp_path, session)
 
-    assert result.metadata_path == (tmp_path / "enhanced_frs_2024_25.h5.metadata.json")
+    assert result.metadata_path == result.path.with_suffix(".h5.metadata.json")
     assert result.metadata_path.read_bytes() == metadata_payload
     assert session.calls[1][0].endswith("/enhanced_frs_2024_25.h5.metadata.json")
 
@@ -198,7 +199,10 @@ def test_downloads_and_verifies_metadata_sidecar(tmp_path):
 def test_reuses_destination_when_hash_matches(tmp_path):
     payload = b"certified"
     manifest = _manifest_with_hash(_sha256(payload))
-    destination = tmp_path / "enhanced_frs_2024_25.h5"
+    destination = _resolve_bundle_dataset(
+        "uk", data_dir=tmp_path, manifest=manifest
+    ).destination
+    destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(payload)
     session = _Session()
 
@@ -211,7 +215,10 @@ def test_reuses_destination_when_hash_matches(tmp_path):
 def test_replaces_destination_when_hash_does_not_match(tmp_path):
     payload = b"certified"
     manifest = _manifest_with_hash(_sha256(payload))
-    destination = tmp_path / "enhanced_frs_2024_25.h5"
+    destination = _resolve_bundle_dataset(
+        "uk", data_dir=tmp_path, manifest=manifest
+    ).destination
+    destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(b"old")
 
     _download(manifest, tmp_path, _Session(_Response(payload)))
@@ -221,7 +228,10 @@ def test_replaces_destination_when_hash_does_not_match(tmp_path):
 
 def test_hash_failure_preserves_existing_destination(tmp_path):
     manifest = _manifest_with_hash(_sha256(b"expected"))
-    destination = tmp_path / "enhanced_frs_2024_25.h5"
+    destination = _resolve_bundle_dataset(
+        "uk", data_dir=tmp_path, manifest=manifest
+    ).destination
+    destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(b"old")
 
     with pytest.raises(DatasetMaterializationError, match="sha256"):

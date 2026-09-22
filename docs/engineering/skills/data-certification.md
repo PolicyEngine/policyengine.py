@@ -104,3 +104,93 @@ before they can be updated through this path.
 The retired `policyengine-bundles` flow (candidates → generated bundle →
 archive import) is preserved read-only in that repo's history; bundles
 4.15.x–4.16.x remain the historical record of earlier certifications.
+
+## Annual national artifact families
+
+A producer can advertise exact annual inputs through release metadata:
+
+```json
+"metadata": {
+  "dataset_years": {
+    "populace_us_2024": {
+      "2024": "populace_us_2024",
+      "2025": "populace_us_2025"
+    }
+  }
+}
+```
+
+Each value names an ordinary `artifacts` entry with an H5 path, explicit revision
+and SHA256. Each family must map its earliest year to the family/base artifact
+and include every year through its projection horizon. Certification rejects
+gaps and omitted bases so formula lookbacks retain the complete input history.
+Do not use path templates or implicit extension for missing years. Keep the source base
+release and content identity in producer provenance separately. Certification
+validates this mapping and copies it into `data_releases.us.dataset_years`.
+It does not invent artifact pins or certify an unpublished candidate.
+
+Annual files use the existing single-year entity tables plus `_time_period`.
+The runtime requires that stored year to match the selected manifest year.
+`pe.us.ensure_datasets(years=[2025])` fetches only the requested annual file and
+loads its native inputs; it does not calculate or uprate those inputs again.
+Return keys retain the requested family name, such as
+`populace_us_2024_2025`. Explicit annual artifact names work too, with coverage
+limited to that artifact's year. Families without this metadata retain engine
+extension behavior.
+
+`pe.us.managed_microsimulation(years=[2025, 2030])` permits external calculations
+for those two years. Without `years`, the wrapper selects the years in an explicit
+`default_calculation_period`, or the current calendar year. With `years` and no
+explicit default period, calculations default to the first selected year. The
+wrapper checks coverage before downloading any files and preserves the chosen
+default after the engine's initialization. External periods outside the selected
+years raise `ValueError`, including years available only for internal lookbacks.
+Legacy families without annual metadata do not accept `years`; their existing
+country-model period behavior remains unchanged.
+
+The country `USMultiYearDataset` receives the selected years and every advertised
+earlier year through the last selected year, with no future inputs. This history
+prefix supplies actual prior-year income for Medicare IRMAA, state tax provisions,
+and recursive employment-income formulas. Selecting an individual annual artifact
+also loads its parent family's earlier inputs. Internal formula lookbacks keep
+their normal behavior; the wrapper supplies no history before the family's first
+year, so earlier lookbacks retain the country's existing assumptions. The loader
+checks schema, row counts and IDs across files, and preserves each year's source
+URI, revision and digest in `policyengine_bundle["annual_datasets"]`.
+
+The ordinary `Simulation(dataset=ensure_datasets(...)[...])` route uses the same
+annual history. `ensure_datasets` records the required source references in the
+dataset's JSON metadata without fetching them; `Simulation.run()` fetches earlier
+files when needed. Both the baseline and reform use the country multi-year loader,
+including its income-response normalization. Regional runs retain the same current
+household IDs in every earlier input year. The wrapper rejects missing or changed
+history pins, and the output records those references in `annual_input_sources`.
+
+For a 2024–2035 family in calendar year 2026, default construction loads three
+files (2024–2026). Selecting 2035 explicitly loads all 12 files. A local candidate
+built during this integration measured 1,754,538,463 bytes (1.755 GB) for the
+three-year prefix and 5,928,824,315 bytes (5.929 GB) for all 12 files. Its base
+file occupied 826,917,837 bytes; each projected file occupied about 463.81 MB.
+These measurements describe candidate artifacts; release certification remains a
+separate step. `annual_selected_years`, `annual_loaded_years`,
+`annual_input_bytes_by_year`, and `annual_input_bytes` record the actual selection
+and file sizes. The total describes input storage and the maximum download size;
+cached files do not require another download. Memory also includes decoded tables
+and engine arrays, so production adoption still needs a population-scale memory
+check. The wrapper performs one full entity load per annual file; its preliminary
+`_time_period` check reads only that small entry. `ensure_datasets` materializes
+only the requested files and does not load this history prefix.
+
+Source caches live beneath `.policyengine/sources/` and include the artifact's
+repository, path, revision, content hash and metadata hash. Derived input caches
+beneath `.policyengine/derived/` also include the installed model source/version,
+core/wrapper versions, SPM selection and requested year. Legacy basename-only
+caches cannot establish that identity and are not reused. Loading never rewrites
+annual native files; no model-specific derived input file is necessary.
+Annual output cache keys also include the selected dataset, frozen history pins,
+and runtime identity, even when a caller reuses an explicit simulation ID.
+
+US regional analysis keeps row filters over the annual national dataset.
+Positional weight replacement cannot establish annual year/ID alignment, so the
+wrapper rejects it for annual inputs. A separate certified alignment contract
+would be necessary before supporting such an overlay.

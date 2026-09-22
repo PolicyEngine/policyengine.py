@@ -367,10 +367,25 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 raise ValueError(
                     "SPM settings changed since this output was calculated; run again before saving"
                 )
+            annual_sources = getattr(simulation.dataset, "metadata", {}).get(
+                "annual_input_sources"
+            )
+            if (
+                simulation.output_dataset.metadata.get("annual_input_sources")
+                != annual_sources
+            ):
+                raise ValueError(
+                    "Annual input pins changed since this output was calculated; run again before saving"
+                )
             serialized_spm = json.dumps(
                 {
                     "config": simulation.spm_config,
                     "provenance": receipt.model_dump(mode="json"),
+                    **(
+                        {"annual_input_sources": annual_sources}
+                        if annual_sources
+                        else {}
+                    ),
                 },
                 sort_keys=True,
             )
@@ -413,6 +428,11 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             recorded = json.loads(raw)
             if recorded["config"] != simulation.spm_config:
                 raise ValueError("Saved US simulation uses different SPM settings")
+            annual_sources = getattr(simulation.dataset, "metadata", {}).get(
+                "annual_input_sources"
+            )
+            if recorded.get("annual_input_sources") != annual_sources:
+                raise ValueError("Saved US simulation uses different annual input pins")
             receipt = SPMProvenance.model_validate(recorded["provenance"])
 
         simulation.output_dataset = self._dataset_class(
@@ -429,6 +449,10 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             simulation.spm_receipt = receipt
             simulation.spm = SPMSelection.model_validate(recorded["config"])
             simulation.output_dataset.metadata["spm_config"] = recorded["config"]
+            if recorded.get("annual_input_sources"):
+                simulation.output_dataset.metadata["annual_input_sources"] = recorded[
+                    "annual_input_sources"
+                ]
 
         if os.path.exists(filepath):
             simulation.created_at = datetime.datetime.fromtimestamp(

@@ -13,13 +13,19 @@ from pydantic import ConfigDict, Field
 
 from policyengine.core import Dataset, YearData
 from policyengine.provenance.dataset_materialization import (
+    DatasetSource,
     MaterializedDataset,
     materialize_dataset,
 )
 from policyengine.provenance.manifest import (
+    _artifact_revision,
+    _dataset_for_year,
+    _dataset_years,
+    build_hf_uri,
     dataset_logical_name,
     get_release_manifest,
     resolve_dataset_reference,
+    resolve_managed_dataset_reference,
 )
 from policyengine.tax_benefit_models.common.model_version import (
     build_runtime_dataset_provenance,
@@ -322,6 +328,130 @@ def _load_policyengine_core_h5(path: Path, year: int) -> USYearData:
     )
 
 
+def _validate_annual_file_year(path: str, year: int) -> None:
+    """Reject a mislabeled producer artifact before any engine interpretation."""
+    with pd.HDFStore(path, mode="r") as store:
+        if "_time_period" not in store:
+            raise ValueError(f"Annual dataset {path} requires _time_period={year}")
+        stored = store["_time_period"]
+        if len(stored) != 1 or stored.iloc[0] != year:
+            raise ValueError(
+                f"Annual dataset {path} has _time_period={stored.tolist()}, expected {year}"
+            )
+
+
+def _annual_dataset(
+    source: DatasetSource,
+    family: str,
+    year: int,
+    input_sources: Optional[dict] = None,
+) -> PolicyEngineUSDataset:
+    _validate_annual_file_year(source.path, year)
+    identity = hashlib.sha256(
+        json.dumps(
+            {
+                "source": source.source_uri,
+                "sha256": source.bundle_dataset.sha256
+                if source.bundle_dataset is not None
+                else sha256_file(Path(source.path)),
+                "year": year,
+                "annual_input_sources": input_sources or {},
+            },
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+    return PolicyEngineUSDataset(
+        id=f"{family}_{year}_{identity}",
+        name=f"{family}-year-{year}",
+        description=f"Certified annual US inputs for {year} from {family}",
+        filepath=source.path,
+        year=year,
+        metadata={
+            "annual_dataset_family": family,
+            "annual_input_sources": input_sources or {},
+            **build_runtime_dataset_provenance(
+                source.source_uri, source.path, source.bundle_dataset
+            ),
+        },
+    )
+
+
+def _annual_input_sources(manifest, dataset: Optional[str], year: int) -> dict:
+    """Freeze the history pins without fetching any earlier inputs."""
+    return {
+        str(input_year): {
+            "dataset": artifact,
+            "uri": build_hf_uri(
+                reference.repo_id or manifest.data_package.repo_id,
+                reference.path,
+                reference.revision or _artifact_revision(manifest.data_package),
+            ),
+            "sha256": reference.sha256,
+        }
+        for input_year, artifact in _dataset_years(
+            manifest, dataset, include_history=True
+        ).items()
+        if input_year <= year
+        for reference in [manifest.datasets[artifact]]
+    }
+
+
+def _validate_annual_tables(reference: dict, annual: dict, year: int) -> None:
+    for entity, baseline_table in reference.items():
+        baseline_table = pd.DataFrame(baseline_table)
+        annual_table = pd.DataFrame(annual[entity])
+        identifiers = [name for name in baseline_table if name.endswith("_id")]
+        if (
+            not baseline_table.columns.equals(annual_table.columns)
+            or len(baseline_table) != len(annual_table)
+            or not baseline_table[identifiers].equals(annual_table[identifiers])
+        ):
+            raise ValueError(
+                f"Annual {year} {entity} schema, rows or IDs differ from the source year"
+            )
+
+
+def _derived_cache_identity() -> dict:
+    from .spm import resolve_spm_selection
+
+    return {
+        "format": 1,
+        "model": _runtime_policyengine_us_metadata(),
+        "core": importlib_metadata.version("policyengine-core"),
+        "wrapper": importlib_metadata.version("policyengine"),
+        "spm": resolve_spm_selection(),
+    }
+
+
+def _derived_dataset_path(
+    dataset: str, year: int, data_folder: str, runtime: dict
+) -> Path:
+    manifest = get_release_manifest("us")
+    digest = None
+    for reference in manifest.datasets.values():
+        uri = build_hf_uri(
+            reference.repo_id or manifest.data_package.repo_id,
+            reference.path,
+            reference.revision
+            or manifest.data_package.release_manifest_revision
+            or manifest.data_package.version,
+        )
+        if uri == dataset:
+            digest = reference.sha256
+            break
+    if "://" not in dataset and Path(dataset).is_file():
+        digest = sha256_file(Path(dataset))
+    identity = {"source": dataset, "sha256": digest, "year": year, **runtime}
+    key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+    return (
+        Path(data_folder)
+        / ".policyengine"
+        / "derived"
+        / key
+        / f"{dataset_logical_name(dataset)}_year_{year}.h5"
+    )
+
+
 def create_datasets(
     datasets: Optional[list[str]] = None,
     years: list[int] = [2024, 2025, 2026, 2027, 2028],
@@ -344,7 +474,28 @@ def create_datasets(
 
     dataset_requests: list[Optional[str]] = datasets or [None]
     result = {}
+    manifest = get_release_manifest("us")
+    runtime = None
     for dataset in dataset_requests:
+        annual_years = _dataset_years(manifest, dataset)
+        if annual_years:
+            family = dataset_logical_name(dataset or manifest.default_dataset)
+            for year in years:
+                _dataset_for_year(manifest, dataset, year)
+                source = materialize_dataset(
+                    "us",
+                    dataset,
+                    year=year,
+                    allow_unmanaged=allow_unmanaged,
+                    data_dir=Path(data_folder),
+                )
+                result[f"{family}_{year}"] = _annual_dataset(
+                    source,
+                    family,
+                    year,
+                    input_sources=_annual_input_sources(manifest, dataset, year),
+                )
+            continue
         source = materialize_dataset(
             "us",
             dataset,
@@ -355,6 +506,8 @@ def create_datasets(
         sim = Microsimulation(dataset=source.path, spm=resolve_spm_selection())
 
         for year in years:
+            if runtime is None:
+                runtime = _derived_cache_identity()
             # Get all input variables from the simulation
             # We'll calculate each input variable for the specified year
             entity_data = {
@@ -490,11 +643,14 @@ def create_datasets(
                     elif entity_name == "tax_unit":
                         tax_unit_df = entity_df
 
+            filepath = _derived_dataset_path(
+                source.source_uri, year, data_folder, runtime
+            )
             us_dataset = PolicyEngineUSDataset(
-                id=f"{dataset_stem}_year_{year}",
+                id=f"{dataset_stem}_year_{year}_{filepath.parent.name}",
                 name=f"{dataset_stem}-year-{year}",
                 description=f"US Dataset for year {year} based on {dataset_stem}",
-                filepath=f"{data_folder}/{dataset_stem}_year_{year}.h5",
+                filepath=str(filepath),
                 year=int(year),
                 data=USYearData(
                     person=MicroDataFrame(person_df, weights="person_weight"),
@@ -532,18 +688,31 @@ def load_datasets(
     """
     datasets = datasets or [get_release_manifest("us").default_dataset]
     result = {}
+    manifest = get_release_manifest("us")
+    runtime = None
     for dataset in datasets:
+        if _dataset_years(manifest, dataset):
+            result.update(
+                create_datasets(
+                    datasets=[dataset], years=years, data_folder=data_folder
+                )
+            )
+            continue
+        if runtime is None:
+            runtime = _derived_cache_identity()
         resolved_dataset = resolve_dataset_reference("us", dataset)
         dataset_stem = dataset_logical_name(resolved_dataset)
         for year in years:
-            filepath = f"{data_folder}/{dataset_stem}_year_{year}.h5"
+            filepath = _derived_dataset_path(
+                resolved_dataset, year, data_folder, runtime
+            )
             us_dataset = PolicyEngineUSDataset(
+                id=f"{dataset_stem}_year_{year}_{filepath.parent.name}",
                 name=f"{dataset_stem}-year-{year}",
                 description=f"US Dataset for year {year} based on {dataset_stem}",
-                filepath=filepath,
+                filepath=str(filepath),
                 year=year,
             )
-            us_dataset.load()
 
             dataset_key = f"{dataset_stem}_{year}"
             result[dataset_key] = us_dataset
@@ -1192,13 +1361,41 @@ def ensure_datasets(
     """
     datasets = datasets or [get_release_manifest("us").default_dataset]
 
-    # Check if all dataset files exist
+    manifest = get_release_manifest("us")
+    if any(_dataset_years(manifest, dataset) for dataset in datasets):
+        result = {}
+        for dataset in datasets:
+            if _dataset_years(manifest, dataset):
+                result.update(
+                    create_datasets(
+                        datasets=[dataset],
+                        years=years,
+                        data_folder=data_folder,
+                        allow_unmanaged=allow_unmanaged,
+                    )
+                )
+            else:
+                result.update(
+                    ensure_datasets(
+                        datasets=[dataset],
+                        years=years,
+                        data_folder=data_folder,
+                        allow_unmanaged=allow_unmanaged,
+                    )
+                )
+        return result
+
+    runtime = _derived_cache_identity()
+    # Check only caches matching the source revision/digest and runtime identity.
     all_exist = True
     for dataset in datasets:
-        resolved_dataset = resolve_dataset_reference("us", dataset)
-        dataset_stem = dataset_logical_name(resolved_dataset)
+        resolved_dataset = resolve_managed_dataset_reference(
+            "us", dataset, allow_unmanaged=allow_unmanaged
+        )
         for year in years:
-            filepath = Path(f"{data_folder}/{dataset_stem}_year_{year}.h5")
+            filepath = _derived_dataset_path(
+                resolved_dataset, year, data_folder, runtime
+            )
             if not filepath.exists():
                 all_exist = False
                 break

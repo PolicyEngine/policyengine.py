@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import tempfile
 from dataclasses import dataclass
@@ -16,6 +18,7 @@ from policyengine.utils.hashing import sha256_file
 from .manifest import (
     CountryReleaseManifest,
     _artifact_revision,
+    _dataset_for_year,
     build_hf_uri,
     dataset_logical_name,
     get_release_manifest,
@@ -104,6 +107,18 @@ def _resolve_bundle_dataset(
             f"Managed dataset {dataset_name!r} is missing a certified sha256."
         )
 
+    identity = {
+        "repo_id": reference.repo_id or country_manifest.data_package.repo_id,
+        "repo_type": reference.repo_type or country_manifest.data_package.repo_type,
+        "path": reference.path,
+        "revision": reference.revision
+        or _artifact_revision(country_manifest.data_package),
+        "sha256": reference.sha256,
+        "metadata_sha256": reference.metadata_sha256,
+    }
+    cache_key = hashlib.sha256(
+        json.dumps(identity, sort_keys=True).encode()
+    ).hexdigest()
     return _BundleDatasetSpec(
         country_id=country_id,
         dataset=dataset_name,
@@ -116,7 +131,11 @@ def _resolve_bundle_dataset(
         revision=reference.revision
         or _artifact_revision(country_manifest.data_package),
         sha256=reference.sha256,
-        destination=data_dir / Path(reference.path).name,
+        destination=data_dir
+        / ".policyengine"
+        / "sources"
+        / cache_key
+        / Path(reference.path).name,
         metadata_sha256=reference.metadata_sha256,
     )
 
@@ -127,10 +146,12 @@ def materialize_dataset(
     *,
     allow_unmanaged: bool = False,
     data_dir: Path = DEFAULT_DATA_DIR,
+    year: Optional[int] = None,
 ) -> DatasetSource:
     """Select a dataset source and return the local file used for calculation."""
 
     manifest = get_release_manifest(country_id)
+    dataset = _dataset_for_year(manifest, dataset, year)
     if dataset is None or dataset == manifest.default_dataset_uri:
         return _use_bundle_dataset(
             country_id,

@@ -48,6 +48,7 @@ import requests
 
 from policyengine.provenance.manifest import (
     HF_REQUEST_TIMEOUT_SECONDS,
+    CountryReleaseManifest,
     DataReleaseManifest,
     _specifier_matches,
     fetch_pypi_wheel_metadata,
@@ -561,7 +562,7 @@ def build_country_manifest_payload(
                     model_build.data_build_fingerprint
                 )
 
-    return {
+    payload = {
         "schema_version": 1,
         "bundle_id": f"{country}-{policyengine_version}",
         "country_id": country,
@@ -583,9 +584,18 @@ def build_country_manifest_payload(
         "default_dataset": default_dataset,
         "datasets": datasets,
         "region_datasets": region_datasets,
+        **(
+            {"dataset_years": manifest.metadata["dataset_years"]}
+            if "dataset_years" in manifest.metadata
+            else {}
+        ),
         "certified_data_artifact": certified_artifact,
         "certification": certification,
     }
+
+    # Annual metadata must survive certification only with complete artifact pins.
+    CountryReleaseManifest.model_validate(payload)
+    return payload
 
 
 def build_bundle_data_release_payload(
