@@ -24,6 +24,11 @@ from policyengine.provenance.manifest import (
 from policyengine.tax_benefit_models.common.model_version import (
     build_runtime_dataset_provenance,
 )
+from policyengine.tax_benefit_models.us.legacy_inputs import (
+    RENAMES_RECORD_KEY,
+    apply_legacy_input_renames_to_microsimulation,
+    pending_legacy_input_renames,
+)
 from policyengine.utils.hashing import sha256_file
 
 
@@ -197,7 +202,15 @@ def _core_h5_entity_lengths(h5_file: h5py.File, year: int) -> dict[str, int]:
 def _core_h5_variable_entities() -> dict[str, str]:
     from policyengine_us.system import system
 
-    return {name: variable.entity.key for name, variable in system.variables.items()}
+    entities = {
+        name: variable.entity.key for name, variable in system.variables.items()
+    }
+    # A stored input the engine has since renamed belongs to its live input's
+    # entity. Without this its entity is guessed from its length, and a column
+    # as long as two entities is dropped before the rename can map it.
+    for legacy, live in pending_legacy_input_renames(system.variables).items():
+        entities[legacy] = entities[live]
+    return entities
 
 
 def _validate_entity_ids(data: dict[str, pd.DataFrame]) -> None:
@@ -353,6 +366,9 @@ def create_datasets(
         )
         dataset_stem = source.name
         sim = Microsimulation(dataset=source.path, spm=resolve_spm_selection())
+        # Map stored inputs the engine has since renamed before extracting,
+        # so each year's file stores the live input rather than dropping it.
+        legacy_input_renames = apply_legacy_input_renames_to_microsimulation(sim)
 
         for year in years:
             # Get all input variables from the simulation
@@ -496,6 +512,9 @@ def create_datasets(
                 description=f"US Dataset for year {year} based on {dataset_stem}",
                 filepath=f"{data_folder}/{dataset_stem}_year_{year}.h5",
                 year=int(year),
+                metadata={
+                    RENAMES_RECORD_KEY: dict(sorted(legacy_input_renames.items()))
+                },
                 data=USYearData(
                     person=MicroDataFrame(person_df, weights="person_weight"),
                     household=MicroDataFrame(household_df, weights="household_weight"),

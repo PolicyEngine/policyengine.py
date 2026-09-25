@@ -356,8 +356,13 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 "something to persist."
             )
         serialized_spm = None
+        serialized_renames = None
         if self.country_code == "us":
             from policyengine.core.spm import SPMProvenance
+            from policyengine.tax_benefit_models.us.legacy_inputs import (
+                RENAMES_H5_DATASET,
+                RENAMES_RECORD_KEY,
+            )
 
             receipt = SPMProvenance.model_validate(simulation.spm_provenance())
             if (
@@ -374,6 +379,16 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 },
                 sort_keys=True,
             )
+            renames = (getattr(simulation.output_dataset, "metadata", None) or {}).get(
+                RENAMES_RECORD_KEY
+            )
+            if renames is None:
+                raise ValueError(
+                    "This US output does not record which renamed stored "
+                    "inputs were mapped when it was calculated; run again "
+                    "before saving"
+                )
+            serialized_renames = json.dumps(dict(renames), sort_keys=True)
         simulation.output_dataset.save()
         if serialized_spm is not None:
             # Store UTF-8 JSON in a dataset rather than an attribute: the
@@ -385,6 +400,12 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     data=serialized_spm,
                     dtype=h5py.string_dtype("utf-8"),
                 )
+                if serialized_renames is not None:
+                    stream.create_dataset(
+                        RENAMES_H5_DATASET,
+                        data=serialized_renames,
+                        dtype=h5py.string_dtype("utf-8"),
+                    )
 
     def load(self, simulation: Simulation) -> None:
         """Rehydrate the simulation's output dataset from disk.
@@ -399,11 +420,20 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
         receipt = None
         if self.country_code == "us":
             from policyengine.core.spm import SPMProvenance
+            from policyengine.tax_benefit_models.us.legacy_inputs import (
+                RENAMES_H5_DATASET,
+                RENAMES_RECORD_KEY,
+            )
 
             with h5py.File(filepath, "r") as stream:
                 raw = (
                     stream["policyengine_spm"].asstr()[()]
                     if "policyengine_spm" in stream
+                    else None
+                )
+                raw_renames = (
+                    stream[RENAMES_H5_DATASET].asstr()[()]
+                    if RENAMES_H5_DATASET in stream
                     else None
                 )
             if raw is None:
@@ -414,6 +444,16 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             if recorded["config"] != simulation.spm_config:
                 raise ValueError("Saved US simulation uses different SPM settings")
             receipt = SPMProvenance.model_validate(recorded["provenance"])
+            # Outputs saved before stored inputs were mapped onto renamed
+            # live inputs were calculated without them (for example with
+            # every WIC-eligible person taking WIC up), so they are not
+            # reused. ``Simulation.ensure()`` runs such a simulation again.
+            if raw_renames is None:
+                raise ValueError(
+                    "Saved US simulation predates the mapping of renamed "
+                    "stored inputs (it has no record of them); run it again"
+                )
+            recorded_renames = json.loads(raw_renames)
 
         simulation.output_dataset = self._dataset_class(
             id=simulation.id,
@@ -428,7 +468,9 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
 
             simulation.spm_receipt = receipt
             simulation.spm = SPMSelection.model_validate(recorded["config"])
-            simulation.output_dataset.metadata["spm_config"] = recorded["config"]
+            simulation.output_dataset.metadata.update(
+                {"spm_config": recorded["config"], RENAMES_RECORD_KEY: recorded_renames}
+            )
 
         if os.path.exists(filepath):
             simulation.created_at = datetime.datetime.fromtimestamp(
