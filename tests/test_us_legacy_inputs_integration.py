@@ -314,6 +314,38 @@ def test_a_core_h5_with_a_part_year_draw_is_refused_by_run(tmp_path):
         )
 
 
+def test_a_core_h5_storing_the_live_name_ignores_a_part_year_legacy_draw(
+    tmp_path,
+):
+    """No-op: data that stores the live name is loaded natively on both paths.
+
+    Its legacy column is not mapped, so the period it is stored for does not
+    matter, and neither load path refuses the file.
+    """
+    path = _write_variable_centric(tmp_path / "both.h5", draw_period=f"{YEAR}-01")
+    live = [False, True, False]
+    with h5py.File(path, "a") as file:
+        file.create_dataset(f"{LIVE}/{YEAR}", data=np.array(live))
+
+    dataset = PolicyEngineUSDataset(
+        name="legacy-wic-draw-both",
+        description="Uncertified three-person WIC take-up fixture",
+        filepath=path,
+        year=YEAR,
+    )
+    simulation = _run(dataset)
+    person = _person_outputs(simulation)
+    assert person[LIVE].tolist() == live
+    assert person["wic"].iloc[INFANT] > 0
+    assert person["wic"].iloc[TODDLER] == 0
+    assert simulation.output_dataset.metadata["legacy_input_renames"] == {}
+
+    microsim = pe.us.managed_microsimulation(dataset=path, allow_unmanaged=True)
+    for month in MONTHS:
+        np.testing.assert_array_equal(microsim.calculate(LIVE, month).values, live)
+    assert microsim.policyengine_bundle["legacy_input_renames"] == {}
+
+
 # --- Load path 2: managed_microsimulation() over the country loader ----
 
 

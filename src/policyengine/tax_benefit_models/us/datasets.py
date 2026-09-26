@@ -212,8 +212,8 @@ def _core_h5_entity_lengths(h5_file: h5py.File, year: int) -> dict[str, int]:
     return lengths
 
 
-def _core_h5_variable_entities() -> tuple[dict[str, str], set[str]]:
-    """Return each variable's entity, and the stored legacy names to map."""
+def _core_h5_variable_entities() -> tuple[dict[str, str], dict[str, str]]:
+    """Return each variable's entity, and the pending renames ``{legacy: live}``."""
     from policyengine_us.system import system
 
     entities = {
@@ -225,7 +225,7 @@ def _core_h5_variable_entities() -> tuple[dict[str, str], set[str]]:
     pending = pending_legacy_input_renames(system.variables)
     for legacy, live in pending.items():
         entities[legacy] = entities[live]
-    return entities, set(pending)
+    return entities, pending
 
 
 def _validate_entity_ids(data: dict[str, pd.DataFrame]) -> None:
@@ -316,15 +316,18 @@ def _load_policyengine_core_h5(path: Path, year: int) -> USYearData:
     """Load a PolicyEngine core variable/period H5 into .py entity DataFrames."""
 
     data = {entity: pd.DataFrame() for entity in US_ENTITY_KEYS}
-    variable_entities, legacy_names = _core_h5_variable_entities()
+    variable_entities, pending_renames = _core_h5_variable_entities()
 
     with h5py.File(path, "r") as h5_file:
         entity_lengths = _core_h5_entity_lengths(h5_file, year)
         for variable_name in h5_file.keys():
-            if variable_name in legacy_names:
+            live_name = pending_renames.get(variable_name)
+            if live_name is not None and live_name not in h5_file:
                 # A stored legacy column is mapped onto every month of the
                 # year, so a part-year value is refused, as it is when
-                # ``managed_microsimulation`` reads this file.
+                # ``managed_microsimulation`` reads this file. A file that
+                # also stores the live name loads that natively, and its
+                # legacy column is left alone on both paths.
                 node = h5_file[variable_name]
                 check_yearly_periods(
                     variable_name,

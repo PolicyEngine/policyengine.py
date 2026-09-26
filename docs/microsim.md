@@ -341,8 +341,9 @@ the new name. The new input is then set from the stored values for every month
 of every dataset year. The stored table must list the simulation's entity IDs
 in the simulation's order, or loading fails rather than attach values to the
 wrong people. Only values stored for a whole year are mapped, so a file that
-stores the old name for part of a year is refused. The mapping turns itself off once the data stores the new name,
-or if the engine defines the old name again.
+stores the old name for part of a year, and not the new name, is refused. The
+mapping turns itself off once the data stores the new name, or if the engine
+defines the old name again.
 
 The renames applied are recorded as `{old: new}` (`{}` when none applied):
 
