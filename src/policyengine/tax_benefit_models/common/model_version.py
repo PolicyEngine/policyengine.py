@@ -356,11 +356,9 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 "something to persist."
             )
         serialized_spm = None
-        serialized_renames = None
         if self.country_code == "us":
             from policyengine.core.spm import SPMProvenance
             from policyengine.tax_benefit_models.us.legacy_inputs import (
-                RENAMES_H5_DATASET,
                 RENAMES_RECORD_KEY,
             )
 
@@ -379,6 +377,8 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 },
                 sort_keys=True,
             )
+            # ``PolicyEngineUSDataset.save()`` writes this record into the
+            # file, and ``load()`` refuses an output without it.
             renames = (getattr(simulation.output_dataset, "metadata", None) or {}).get(
                 RENAMES_RECORD_KEY
             )
@@ -388,7 +388,6 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     "inputs were mapped when it was calculated; run again "
                     "before saving"
                 )
-            serialized_renames = json.dumps(dict(renames), sort_keys=True)
         simulation.output_dataset.save()
         if serialized_spm is not None:
             # Store UTF-8 JSON in a dataset rather than an attribute: the
@@ -400,12 +399,6 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     data=serialized_spm,
                     dtype=h5py.string_dtype("utf-8"),
                 )
-                if serialized_renames is not None:
-                    stream.create_dataset(
-                        RENAMES_H5_DATASET,
-                        data=serialized_renames,
-                        dtype=h5py.string_dtype("utf-8"),
-                    )
 
     def load(self, simulation: Simulation) -> None:
         """Rehydrate the simulation's output dataset from disk.
@@ -421,8 +414,8 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
         if self.country_code == "us":
             from policyengine.core.spm import SPMProvenance
             from policyengine.tax_benefit_models.us.legacy_inputs import (
-                RENAMES_H5_DATASET,
                 RENAMES_RECORD_KEY,
+                read_renames_record,
             )
 
             with h5py.File(filepath, "r") as stream:
@@ -431,11 +424,7 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     if "policyengine_spm" in stream
                     else None
                 )
-                raw_renames = (
-                    stream[RENAMES_H5_DATASET].asstr()[()]
-                    if RENAMES_H5_DATASET in stream
-                    else None
-                )
+            recorded_renames = read_renames_record(filepath)
             if raw is None:
                 raise ValueError(
                     "Saved US simulation has no SPM configuration or receipt"
@@ -448,12 +437,11 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             # live inputs were calculated without them (for example with
             # every WIC-eligible person taking WIC up), so they are not
             # reused. ``Simulation.ensure()`` runs such a simulation again.
-            if raw_renames is None:
+            if recorded_renames is None:
                 raise ValueError(
                     "Saved US simulation predates the mapping of renamed "
                     "stored inputs (it has no record of them); run it again"
                 )
-            recorded_renames = json.loads(raw_renames)
 
         simulation.output_dataset = self._dataset_class(
             id=simulation.id,

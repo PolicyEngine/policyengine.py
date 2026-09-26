@@ -23,6 +23,7 @@ if the engine defines the legacy name again.
 from __future__ import annotations
 
 import inspect
+import json
 from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
@@ -44,12 +45,22 @@ LEGACY_INPUT_RENAMES: dict[str, str] = {
 }
 
 #: Key under which a run records the renames it applied, ``{legacy: live}``:
-#: in an output dataset's ``metadata``, ``Simulation.release_bundle``, a
-#: managed Microsimulation's ``policyengine_bundle`` and a run record's
-#: results.
+#: in a dataset's ``metadata`` (a ``create_datasets`` year file or a run's
+#: output), ``Simulation.release_bundle``, a managed Microsimulation's
+#: ``policyengine_bundle`` and a run record's results.
+#:
+#: ``{}`` means no stored column was mapped. It does not show that the data
+#: carried a take-up draw at all: data that stores neither name runs with
+#: the live input's default.
 RENAMES_RECORD_KEY = "legacy_input_renames"
 
-#: H5 dataset holding that record, as UTF-8 JSON, in a saved US output file.
+#: H5 dataset holding that record, as UTF-8 JSON, in a US file written by
+#: ``PolicyEngineUSDataset.save()`` (a saved output or a ``create_datasets``
+#: year file). Files written before this mapping existed have none, so its
+#: absence marks them as calculated or cut without it: ``Simulation.load()``
+#: refuses such an output, ``load_datasets`` refuses such a year file and
+#: ``ensure_datasets`` regenerates it. A new register entry would need those
+#: checks to tell files written before it apart as well.
 RENAMES_H5_DATASET = "policyengine_legacy_input_renames"
 
 #: ``{year: {entity key: stored table}}``, one table per entity per dataset
@@ -71,6 +82,54 @@ def pending_legacy_input_renames(variables: Any) -> dict[str, str]:
         for legacy, live in LEGACY_INPUT_RENAMES.items()
         if legacy not in variables and live in variables
     }
+
+
+def read_renames_record(path: str | Path) -> dict[str, str] | None:
+    """Return the renames record stored in an H5 file, or ``None``.
+
+    ``None`` means the file stores no record (see :data:`RENAMES_H5_DATASET`)
+    or is not an H5 file.
+    """
+    import h5py
+
+    try:
+        with h5py.File(path, "r") as file:
+            if RENAMES_H5_DATASET not in file:
+                return None
+            raw = file[RENAMES_H5_DATASET].asstr()[()]
+    except OSError:
+        return None
+    return dict(json.loads(raw))
+
+
+def write_renames_record(path: str | Path, record: Mapping[str, str]) -> None:
+    """Store a renames record in an H5 file, replacing any it has."""
+    import h5py
+
+    with h5py.File(path, "a") as file:
+        if RENAMES_H5_DATASET in file:
+            del file[RENAMES_H5_DATASET]
+        # UTF-8 JSON in a dataset, as for the SPM receipt of a saved output.
+        file.create_dataset(
+            RENAMES_H5_DATASET,
+            data=json.dumps(dict(record), sort_keys=True),
+            dtype=h5py.string_dtype("utf-8"),
+        )
+
+
+def check_yearly_periods(column: str, periods: Iterable[Any], source: Any) -> None:
+    """Refuse a legacy column stored for any period that is not a year.
+
+    A value stored for part of a year (or for ``ETERNITY``) cannot stand for
+    every month of a year, so it is not mapped rather than spread over them.
+    """
+    for period in periods:
+        if not str(period).isdigit():
+            raise ValueError(
+                f"Cannot map stored {column!r} from {source}: it is stored "
+                f"for period {str(period)!r}, and only yearly periods are "
+                "supported."
+            )
 
 
 def apply_legacy_input_renames(
@@ -222,15 +281,9 @@ def _variable_centric_tables(
             first_ids = next(iter(ids_by_period.values()), None)
             columns_by_year: dict[int, dict[str, np.ndarray]] = {}
             for column in legacy_columns:
-                for period, stored in _stored_periods(
-                    file[column], default_period
-                ).items():
-                    if not period.isdigit():
-                        raise ValueError(
-                            f"Cannot map stored {column!r} from {path}: it is "
-                            f"stored for period {period!r}, and only yearly "
-                            "periods are supported."
-                        )
+                stored_by_period = _stored_periods(file[column], default_period)
+                check_yearly_periods(column, stored_by_period, path)
+                for period, stored in stored_by_period.items():
                     columns_by_year.setdefault(int(period), {})[column] = stored
             for year, columns in sorted(columns_by_year.items()):
                 ids = ids_by_period.get(str(year), first_ids)

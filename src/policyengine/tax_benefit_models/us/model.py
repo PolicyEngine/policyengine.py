@@ -224,7 +224,13 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         # leaves the module-level one untouched. Building populations
         # against the module-level system would hide reform-registered
         # variables like ``ctc_minimum_refundable_amount`` at calc time.
-        legacy_input_renames: dict[str, str] = {}
+        # Renames already applied when the input data was cut (a
+        # ``create_datasets`` year file stores the mapped input under its
+        # live name) count as applied to this run's inputs too, so the
+        # output's record keeps the whole chain.
+        legacy_input_renames: dict[str, str] = dict(
+            simulation.dataset.metadata.get(RENAMES_RECORD_KEY) or {}
+        )
         if microsim.baseline is not None:
             legacy_input_renames.update(
                 self._build_simulation_from_dataset(

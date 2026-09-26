@@ -38,10 +38,14 @@ from hypothesis import strategies as st
 from policyengine.tax_benefit_models.us import legacy_inputs
 from policyengine.tax_benefit_models.us.legacy_inputs import (
     LEGACY_INPUT_RENAMES,
+    RENAMES_H5_DATASET,
     apply_legacy_input_renames,
     apply_legacy_input_renames_to_microsimulation,
+    check_yearly_periods,
     pending_legacy_input_renames,
+    read_renames_record,
     stored_entity_tables,
+    write_renames_record,
 )
 
 LEGACY = "would_claim_wic"
@@ -493,6 +497,32 @@ def test_variable_centric_file_is_read_by_year(tmp_path):
     assert tables[2025]["person"]["person_id"].tolist() == [5, 6]
 
 
+def test_a_year_storing_its_own_ids_is_checked_against_them(tmp_path):
+    """Order check, for a year that stores its own person IDs.
+
+    policyengine-core builds the population from the first period's IDs.
+    A later year that stores the same people in another order would attach
+    each value to the wrong person, so it is refused and nothing is set.
+    """
+    path = _write_h5(
+        tmp_path / "core.h5",
+        {
+            "person_id/2024": [5, 6],
+            "person_id/2025": [6, 5],
+            f"{LEGACY}/2025": [True, False],
+        },
+    )
+    dataset = _core_dataset(path, "time_period_arrays")
+
+    tables = stored_entity_tables(dataset, {"person": {LEGACY: LIVE}})
+    assert tables[2025]["person"]["person_id"].tolist() == [6, 5]
+
+    simulation = FakeSimulation(_variables(LIVE), [5, 6], dataset=dataset)
+    with pytest.raises(ValueError, match="not in the simulation's person order"):
+        apply_legacy_input_renames_to_microsimulation(simulation)
+    assert simulation.inputs == {}
+
+
 @pytest.mark.parametrize("live_period", ["2024", "2025", "2024-01"])
 def test_variable_centric_file_storing_the_live_name_is_not_read(tmp_path, live_period):
     # Data that stores the live name for any period loads it natively, even
@@ -576,3 +606,51 @@ def test_core_dataset_objects_are_probed_without_loading_keys(tmp_path):
     simulation = FakeSimulation(_variables(LIVE), [5, 6], dataset=dataset)
     assert apply_legacy_input_renames_to_microsimulation(simulation) == {LEGACY: LIVE}
     assert simulation.inputs[(LIVE, "2024-01")].tolist() == [True, False]
+
+
+# --- The record a US file keeps -----------------------------------------
+
+RECORDS = st.dictionaries(st.text(min_size=1), st.text(min_size=1), max_size=4)
+
+
+@settings(max_examples=50, deadline=None)
+@given(record=RECORDS, replaced=RECORDS)
+def test_a_stored_record_reads_back_as_written(record, replaced):
+    """Round trip: a file's record reads back exactly, and a new one replaces it."""
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "output.h5"
+        _write_h5(path, {"person_id": [5, 6]})
+        assert read_renames_record(path) is None
+
+        write_renames_record(path, record)
+        assert read_renames_record(path) == record
+
+        write_renames_record(path, replaced)
+        assert read_renames_record(path) == replaced
+        with h5py.File(path, "r") as file:
+            assert file["person_id"][()].tolist() == [5, 6]
+
+
+def test_a_missing_or_foreign_file_has_no_record(tmp_path):
+    assert read_renames_record(tmp_path / "missing.h5") is None
+    text = tmp_path / "notes.txt"
+    text.write_text("not an H5 file")
+    assert read_renames_record(text) is None
+
+
+def test_the_record_is_stored_as_utf8_json(tmp_path):
+    path = _write_h5(tmp_path / "output.h5", {"person_id": [5]})
+    write_renames_record(path, {LEGACY: LIVE})
+    with h5py.File(path, "r") as file:
+        assert file[RENAMES_H5_DATASET].asstr()[()] == f'{{"{LEGACY}": "{LIVE}"}}'
+
+
+@pytest.mark.parametrize("period", ["2024-01", "2024-01-01", "ETERNITY", "month"])
+def test_a_part_year_period_is_refused(period):
+    with pytest.raises(ValueError, match="only yearly periods"):
+        check_yearly_periods(LEGACY, ["2024", period], "source.h5")
+
+
+def test_yearly_periods_are_accepted():
+    check_yearly_periods(LEGACY, ["2024", 2025, np.int64(2026)], "source.h5")
+    check_yearly_periods(LEGACY, [], "source.h5")

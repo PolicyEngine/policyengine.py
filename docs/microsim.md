@@ -340,26 +340,35 @@ the old name but does define the new one, and the data does not already store
 the new name. The new input is then set from the stored values for every month
 of every dataset year. The stored table must list the simulation's entity IDs
 in the simulation's order, or loading fails rather than attach values to the
-wrong people. The mapping turns itself off once the data stores the new name,
+wrong people. Only values stored for a whole year are mapped, so a file that
+stores the old name for part of a year is refused. The mapping turns itself off once the data stores the new name,
 or if the engine defines the old name again.
 
 The renames applied are recorded as `{old: new}` (`{}` when none applied):
 
 - `Simulation.run()`: `simulation.output_dataset.metadata["legacy_input_renames"]`,
-  also shown as `simulation.release_bundle["legacy_input_renames"]`. A US
-  `save()` writes the record into the output file and `load()` restores it,
-  and a run record's `results.json` binds it;
+  also shown as `simulation.release_bundle["legacy_input_renames"]`. It
+  includes renames applied when the input year file was cut, so a run over a
+  `create_datasets` year file records the rename even though the file already
+  stores the new name. A US `save()` writes the record into the output file,
+  `load()` restores it, and a run record's `results.json` binds it;
 - `managed_microsimulation`: `sim.policyengine_bundle["legacy_input_renames"]`;
-- `create_datasets`: each returned dataset's `metadata["legacy_input_renames"]`.
+- `create_datasets`: each year file, and each returned dataset's
+  `metadata["legacy_input_renames"]`.
 
-A US output file saved before this mapping existed has no record, and its
-results were calculated without the mapped inputs. `load()` refuses it, and
-`ensure()` runs the simulation again and saves the new output.
+`{}` means that no stored column was mapped. It does not show that the data
+carried the draw: data that stores neither name runs with the new input's
+default, which for WIC is full take-up.
 
-Year files that `ensure_datasets` or `create_datasets` wrote before this
-mapping existed store neither name, so the draw is lost from them, and
-`ensure_datasets` reuses existing files as they are. Delete and regenerate
-them.
+Files written before this mapping existed have no record, and are not reused:
+
+- A saved US output may have been calculated without the mapped inputs.
+  `load()` refuses it, and `ensure()` runs the simulation again and saves the new
+  output.
+- A year file that `ensure_datasets` or `create_datasets` wrote stores
+  neither name, so the draw is lost from it. `ensure_datasets` creates such
+  year files again, and `load_datasets` refuses them. A year file opened
+  directly, as `PolicyEngineUSDataset(filepath=...)`, is not checked.
 
 ## Pinned model versions
 

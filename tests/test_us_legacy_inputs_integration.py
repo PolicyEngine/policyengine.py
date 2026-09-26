@@ -30,10 +30,17 @@ from policyengine.tax_benefit_models.us.datasets import (  # noqa: E402
     PolicyEngineUSDataset,
     USYearData,
     create_datasets,
+    ensure_datasets,
+    load_datasets,
 )
 from policyengine.tax_benefit_models.us.legacy_inputs import (  # noqa: E402
+    RENAMES_H5_DATASET,
     apply_legacy_input_renames,
     apply_legacy_input_renames_to_microsimulation,
+    read_renames_record,
+)
+from policyengine.tax_benefit_models.us.model import (  # noqa: E402
+    PolicyEngineUSLatest,
 )
 
 YEAR = 2024
@@ -99,15 +106,19 @@ def _write_entity_tables(path) -> str:
     return str(path)
 
 
-def _write_variable_centric(path) -> str:
-    """Write the household as a policyengine-core ``variable/period`` H5."""
+def _write_variable_centric(path, draw_period=YEAR) -> str:
+    """Write the household as a policyengine-core ``variable/period`` H5.
+
+    The draw is stored for ``draw_period``; every other column for ``YEAR``.
+    """
     with h5py.File(path, "w") as file:
         for entity, frame in _frames().items():
             for name in frame.columns:
                 values = frame[name].to_numpy()
                 if values.dtype.kind in {"O", "U"}:
                     values = np.asarray(values, dtype="S")
-                file.create_dataset(f"{name}/{YEAR}", data=values)
+                period = draw_period if name == LEGACY else YEAR
+                file.create_dataset(f"{name}/{period}", data=values)
     return str(path)
 
 
@@ -235,6 +246,42 @@ def test_run_over_a_region_keeps_a_stored_false_draw(tmp_path):
     assert simulation.release_bundle["legacy_input_renames"] == RENAME
 
 
+def test_run_maps_the_baseline_of_a_reform_too(tmp_path, monkeypatch):
+    """A reformed run builds its baseline from the data as well.
+
+    policyengine-us reads baseline incomes from the baseline branch (for
+    example for labor-supply responses), so an unmapped baseline would give
+    every eligible person WIC there while the reform keeps the draw.
+    """
+    built = []
+    build = PolicyEngineUSLatest._build_simulation_from_dataset
+
+    def capture(self, country_simulation, dataset, system):
+        applied = build(self, country_simulation, dataset, system)
+        built.append(country_simulation)
+        return applied
+
+    monkeypatch.setattr(PolicyEngineUSLatest, "_build_simulation_from_dataset", capture)
+    simulation = pe.Simulation(
+        dataset=_in_memory_dataset(tmp_path),
+        tax_benefit_model_version=pe.us.model,
+        policy={"gov.irs.credits.ctc.amount.base[0].amount": 3_000},
+        extra_variables={"person": [LIVE, "wic"]},
+    )
+    simulation.run()
+
+    assert len(built) == 2
+    baseline, reform = built
+    assert baseline is reform.baseline
+    for country_simulation in built:
+        for month in MONTHS:
+            np.testing.assert_array_equal(
+                country_simulation.get_array(LIVE, month), DRAW
+            )
+        assert country_simulation.calculate("wic", YEAR).values[INFANT] == 0
+    assert simulation.output_dataset.metadata["legacy_input_renames"] == RENAME
+
+
 def test_run_leaves_data_that_stores_the_live_name_alone(tmp_path):
     frames = _frames()
     # A re-cut release: the live name, with a draw that differs from the
@@ -247,6 +294,24 @@ def test_run_leaves_data_that_stores_the_live_name_alone(tmp_path):
     assert person["wic"].iloc[INFANT] > 0
     assert person["wic"].iloc[TODDLER] == 0
     assert simulation.output_dataset.metadata["legacy_input_renames"] == {}
+
+
+def test_a_core_h5_with_a_part_year_draw_is_refused_by_run(tmp_path):
+    """A draw stored for one month cannot stand for all twelve.
+
+    ``managed_microsimulation`` refuses such a file (see the managed test
+    below); ``Simulation.run()`` loads it through the dataset loader, which
+    would otherwise read the first stored month for the whole year.
+    """
+    path = _write_variable_centric(tmp_path / "monthly.h5", draw_period=f"{YEAR}-01")
+
+    with pytest.raises(ValueError, match="only yearly periods"):
+        PolicyEngineUSDataset(
+            name="legacy-wic-draw-monthly",
+            description="Uncertified three-person WIC take-up fixture",
+            filepath=path,
+            year=YEAR,
+        )
 
 
 # --- Load path 2: managed_microsimulation() over the country loader ----
@@ -345,6 +410,13 @@ def test_managed_variable_centric_file_keeps_a_stored_false_draw(tmp_path):
     assert microsim.policyengine_bundle["legacy_input_renames"] == RENAME
 
 
+def test_managed_core_h5_with_a_part_year_draw_is_refused(tmp_path):
+    path = _write_variable_centric(tmp_path / "monthly.h5", draw_period=f"{YEAR}-01")
+
+    with pytest.raises(ValueError, match="only yearly periods"):
+        pe.us.managed_microsimulation(dataset=path, allow_unmanaged=True)
+
+
 @pytest.fixture(scope="module")
 def engine_microsim(tmp_path_factory):
     """A real managed Microsimulation the property below maps draws onto."""
@@ -410,28 +482,100 @@ def test_both_load_paths_give_the_same_take_up_and_wic(mapped_run, mapped_manage
 # --- create_datasets(): extraction for ensure_datasets() ----------------
 
 
-def test_create_datasets_extracts_the_draw_under_the_live_name(tmp_path):
-    path = _write_entity_tables(tmp_path / "populace_layout.h5")
+def _create_year_file(directory):
+    """Cut the household's entity-table file into a year file."""
+    source = _write_entity_tables(directory / "populace_layout.h5")
     created = create_datasets(
-        datasets=[path],
+        datasets=[source],
         years=[YEAR],
-        data_folder=str(tmp_path / "data"),
+        data_folder=str(directory / "data"),
         allow_unmanaged=True,
     )
     (dataset,) = created.values()
+    return source, dataset
+
+
+def test_create_datasets_extracts_the_draw_under_the_live_name(tmp_path):
+    _, dataset = _create_year_file(tmp_path)
     person = pd.DataFrame(dataset.data.person)
 
     assert person[LIVE].tolist() == DRAW
     assert LEGACY not in person.columns
     assert dataset.metadata["legacy_input_renames"] == RENAME
+    # The year file keeps the record, so reloading it keeps the chain.
+    assert read_renames_record(dataset.filepath) == RENAME
+    reloaded = PolicyEngineUSDataset(
+        name=dataset.name,
+        description=dataset.description,
+        filepath=dataset.filepath,
+        year=YEAR,
+    )
+    assert reloaded.metadata["legacy_input_renames"] == RENAME
 
-    # The extracted data now carries the live name, so a run reads it
-    # natively and the mapping has nothing left to do.
-    simulation = _run(dataset)
-    outputs = _person_outputs(simulation)
-    assert outputs["wic"].iloc[INFANT] == 0
-    assert outputs["wic"].iloc[TODDLER] > 0
-    assert simulation.output_dataset.metadata["legacy_input_renames"] == {}
+    # The extracted data carries the live name, so a run reads it natively
+    # and maps nothing itself. Its record still shows the rename applied
+    # when the year file was cut.
+    for input_dataset in (dataset, reloaded):
+        simulation = _run(input_dataset)
+        outputs = _person_outputs(simulation)
+        assert outputs[LIVE].tolist() == DRAW
+        assert outputs["wic"].iloc[INFANT] == 0
+        assert outputs["wic"].iloc[TODDLER] > 0
+        assert simulation.output_dataset.metadata["legacy_input_renames"] == RENAME
+        assert simulation.release_bundle["legacy_input_renames"] == RENAME
+
+
+def _cut_before_the_mapping(path):
+    """Make a year file look like one ``create_datasets`` wrote before the fix.
+
+    policyengine.py 6.0.0 to 6.1.1 stored neither name, since the engine
+    skipped the legacy column, and wrote no record.
+    """
+    frames = {}
+    with pd.HDFStore(path, mode="r") as store:
+        for key in store.keys():
+            frames[key.strip("/")] = store[key]
+    frames["person"] = frames["person"].drop(columns=[LIVE])
+    with pd.HDFStore(path, mode="w") as store:
+        for key, frame in frames.items():
+            store[key] = frame
+    with h5py.File(path, "r") as file:
+        assert RENAMES_H5_DATASET not in file
+
+
+def test_ensure_datasets_regenerates_a_year_file_cut_before_the_mapping(tmp_path):
+    source, dataset = _create_year_file(tmp_path)
+    _cut_before_the_mapping(dataset.filepath)
+    data_folder = str(tmp_path / "data")
+
+    # The stale file has lost the draw: a run over it gives the infant WIC.
+    stale = PolicyEngineUSDataset(
+        name="stale", description="stale", filepath=dataset.filepath, year=YEAR
+    )
+    assert LIVE not in pd.DataFrame(stale.data.person).columns
+    assert _person_outputs(_run(stale))["wic"].iloc[INFANT] > 0
+
+    with pytest.raises(ValueError, match="no record of the renamed stored inputs"):
+        load_datasets(datasets=[source], years=[YEAR], data_folder=data_folder)
+
+    (regenerated,) = ensure_datasets(
+        datasets=[source],
+        years=[YEAR],
+        data_folder=data_folder,
+        allow_unmanaged=True,
+    ).values()
+
+    assert regenerated.filepath == dataset.filepath
+    assert read_renames_record(dataset.filepath) == RENAME
+    assert pd.DataFrame(regenerated.data.person)[LIVE].tolist() == DRAW
+    # The regenerated file is current, so it is reused from now on.
+    (loaded,) = load_datasets(
+        datasets=[source], years=[YEAR], data_folder=data_folder
+    ).values()
+    assert pd.DataFrame(loaded.data.person)[LIVE].tolist() == DRAW
+    simulation = _run(loaded)
+    assert _person_outputs(simulation)["wic"].iloc[INFANT] == 0
+    assert simulation.release_bundle["legacy_input_renames"] == RENAME
 
 
 # --- Saved outputs and run records keep the record ----------------------
