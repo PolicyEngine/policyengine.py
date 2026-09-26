@@ -17,6 +17,11 @@ from policyengine.tax_benefit_models.common.model_version import (
 )
 
 from .datasets import PolicyEngineUSDataset, USYearData, _validate_entity_ids
+from .legacy_inputs import (
+    RENAMES_RECORD_KEY,
+    apply_legacy_input_renames,
+    apply_legacy_input_renames_to_microsimulation,
+)
 from .spm import (
     SPMProvenance,
     SPMSelection,
@@ -219,14 +224,25 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         # leaves the module-level one untouched. Building populations
         # against the module-level system would hide reform-registered
         # variables like ``ctc_minimum_refundable_amount`` at calc time.
+        # Renames already applied when the input data was cut (a
+        # ``create_datasets`` year file stores the mapped input under its
+        # live name) count as applied to this run's inputs too, so the
+        # output's record keeps the whole chain.
+        legacy_input_renames: dict[str, str] = dict(
+            simulation.dataset.metadata.get(RENAMES_RECORD_KEY) or {}
+        )
         if microsim.baseline is not None:
-            self._build_simulation_from_dataset(
-                microsim.baseline,
-                dataset,
-                microsim.baseline.tax_benefit_system,
+            legacy_input_renames.update(
+                self._build_simulation_from_dataset(
+                    microsim.baseline,
+                    dataset,
+                    microsim.baseline.tax_benefit_system,
+                )
             )
-        self._build_simulation_from_dataset(
-            microsim, dataset, microsim.tax_benefit_system
+        legacy_input_renames.update(
+            self._build_simulation_from_dataset(
+                microsim, dataset, microsim.tax_benefit_system
+            )
         )
 
         data = {
@@ -316,7 +332,10 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             filepath=str(_output_dataset_filepath(simulation)),
             year=simulation.dataset.year,
             is_output_dataset=True,
-            metadata={"spm_config": dict(microsim.spm_config)},
+            metadata={
+                "spm_config": dict(microsim.spm_config),
+                RENAMES_RECORD_KEY: dict(sorted(legacy_input_renames.items())),
+            },
             data=USYearData(
                 person=data["person"],
                 marital_unit=data["marital_unit"],
@@ -337,6 +356,12 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         Mirrors the policyengine-uk pattern of instantiating entities from
         IDs first and then setting variable inputs. Handles both the legacy
         ``person_X_id`` and the ``X_id`` column-naming conventions.
+
+        Stored columns the engine has since renamed are mapped onto their
+        live inputs (see ``legacy_inputs.LEGACY_INPUT_RENAMES``).
+
+        Returns:
+            The legacy input renames applied, ``{legacy: live}``.
         """
         import numpy as np
         from policyengine_core.simulations.simulation_builder import (
@@ -453,6 +478,7 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             "person_marital_unit_id",
         }
 
+        stored_tables = {}
         for entity_name, entity_df in [
             ("person", dataset.data.person),
             ("household", dataset.data.household),
@@ -463,9 +489,15 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         ]:
             df = pd.DataFrame(entity_df).set_index(f"{entity_name}_id", drop=False)
             df = df.loc[microsim.populations[entity_name].ids]
+            stored_tables[entity_name] = df
             for column in df.columns:
                 if column not in id_columns and column in system.variables:
                     microsim.set_input(column, dataset.year, df[column].values)
+
+        # The loop above skips columns the engine does not define, including
+        # stored inputs it has since renamed. The tables are already in the
+        # simulation's entity order.
+        return apply_legacy_input_renames(microsim, {dataset.year: stored_tables})
 
 
 def managed_microsimulation(
@@ -480,6 +512,10 @@ def managed_microsimulation(
     By default this enforces the dataset selection from the bundled
     ``policyengine.py`` release manifest. Arbitrary dataset URIs require
     ``allow_unmanaged=True``.
+
+    Stored inputs the engine has since renamed are mapped onto their live
+    inputs (see ``legacy_inputs.LEGACY_INPUT_RENAMES``), and the renames
+    applied are recorded as ``policyengine_bundle["legacy_input_renames"]``.
     """
 
     from policyengine_us import Microsimulation
@@ -497,6 +533,7 @@ def managed_microsimulation(
         allow_unmanaged=allow_unmanaged,
     )
     microsim = Microsimulation(dataset=source.path, spm=selection, **kwargs)
+    legacy_input_renames = apply_legacy_input_renames_to_microsimulation(microsim)
     microsim.policyengine_bundle = dict(us_latest.release_bundle)
     microsim.policyengine_bundle.update(
         build_runtime_dataset_provenance(
@@ -506,6 +543,9 @@ def managed_microsimulation(
         )
     )
     microsim.policyengine_bundle["spm"] = dict(microsim.spm_config)
+    microsim.policyengine_bundle[RENAMES_RECORD_KEY] = dict(
+        sorted(legacy_input_renames.items())
+    )
     return microsim
 
 

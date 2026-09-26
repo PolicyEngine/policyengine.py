@@ -24,6 +24,14 @@ from policyengine.provenance.manifest import (
 from policyengine.tax_benefit_models.common.model_version import (
     build_runtime_dataset_provenance,
 )
+from policyengine.tax_benefit_models.us.legacy_inputs import (
+    RENAMES_RECORD_KEY,
+    apply_legacy_input_renames_to_microsimulation,
+    check_yearly_periods,
+    pending_legacy_input_renames,
+    read_renames_record,
+    write_renames_record,
+)
 from policyengine.utils.hashing import sha256_file
 
 
@@ -97,12 +105,22 @@ class PolicyEngineUSDataset(Dataset):
                 store["spm_unit"] = pd.DataFrame(self.data.spm_unit)
                 store["tax_unit"] = pd.DataFrame(self.data.tax_unit)
                 store["household"] = pd.DataFrame(self.data.household)
+        # The renamed stored inputs mapped when this data was cut or
+        # calculated. Its presence marks a year file or output as written
+        # with the mapping (see ``legacy_inputs.RENAMES_H5_DATASET``).
+        renames = self.metadata.get(RENAMES_RECORD_KEY)
+        if renames is not None:
+            write_renames_record(filepath, renames)
 
     def load(self) -> None:
         """Load dataset from HDF5 file into this instance."""
         filepath = self.filepath
-        if _is_policyengine_core_h5(Path(filepath)):
-            self.data = _load_policyengine_core_h5(Path(filepath), self.year)
+        path = Path(filepath)
+        renames = read_renames_record(path)
+        if renames is not None:
+            self.metadata[RENAMES_RECORD_KEY] = renames
+        if _is_policyengine_core_h5(path):
+            self.data = _load_policyengine_core_h5(path, self.year)
             return
 
         with pd.HDFStore(filepath, mode="r") as store:
@@ -194,10 +212,20 @@ def _core_h5_entity_lengths(h5_file: h5py.File, year: int) -> dict[str, int]:
     return lengths
 
 
-def _core_h5_variable_entities() -> dict[str, str]:
+def _core_h5_variable_entities() -> tuple[dict[str, str], dict[str, str]]:
+    """Return each variable's entity, and the pending renames ``{legacy: live}``."""
     from policyengine_us.system import system
 
-    return {name: variable.entity.key for name, variable in system.variables.items()}
+    entities = {
+        name: variable.entity.key for name, variable in system.variables.items()
+    }
+    # A stored input the engine has since renamed belongs to its live input's
+    # entity. Without this its entity is guessed from its length, and a column
+    # as long as two entities is dropped before the rename can map it.
+    pending = pending_legacy_input_renames(system.variables)
+    for legacy, live in pending.items():
+        entities[legacy] = entities[live]
+    return entities, pending
 
 
 def _validate_entity_ids(data: dict[str, pd.DataFrame]) -> None:
@@ -288,11 +316,24 @@ def _load_policyengine_core_h5(path: Path, year: int) -> USYearData:
     """Load a PolicyEngine core variable/period H5 into .py entity DataFrames."""
 
     data = {entity: pd.DataFrame() for entity in US_ENTITY_KEYS}
-    variable_entities = _core_h5_variable_entities()
+    variable_entities, pending_renames = _core_h5_variable_entities()
 
     with h5py.File(path, "r") as h5_file:
         entity_lengths = _core_h5_entity_lengths(h5_file, year)
         for variable_name in h5_file.keys():
+            live_name = pending_renames.get(variable_name)
+            if live_name is not None and live_name not in h5_file:
+                # A stored legacy column is mapped onto every month of the
+                # year, so a part-year value is refused, as it is when
+                # ``managed_microsimulation`` reads this file. A file that
+                # also stores the live name loads that natively, and its
+                # legacy column is left alone on both paths.
+                node = h5_file[variable_name]
+                check_yearly_periods(
+                    variable_name,
+                    node.keys() if isinstance(node, h5py.Group) else [],
+                    path,
+                )
             values = _read_core_h5_period_values(h5_file, variable_name, year)
             entity = variable_entities.get(variable_name)
             if entity is None:
@@ -353,6 +394,9 @@ def create_datasets(
         )
         dataset_stem = source.name
         sim = Microsimulation(dataset=source.path, spm=resolve_spm_selection())
+        # Map stored inputs the engine has since renamed before extracting,
+        # so each year's file stores the live input rather than dropping it.
+        legacy_input_renames = apply_legacy_input_renames_to_microsimulation(sim)
 
         for year in years:
             # Get all input variables from the simulation
@@ -496,6 +540,9 @@ def create_datasets(
                 description=f"US Dataset for year {year} based on {dataset_stem}",
                 filepath=f"{data_folder}/{dataset_stem}_year_{year}.h5",
                 year=int(year),
+                metadata={
+                    RENAMES_RECORD_KEY: dict(sorted(legacy_input_renames.items()))
+                },
                 data=USYearData(
                     person=MicroDataFrame(person_df, weights="person_weight"),
                     household=MicroDataFrame(household_df, weights="household_weight"),
@@ -515,12 +562,27 @@ def create_datasets(
     return result
 
 
+def _year_file_records_renames(path: Path) -> bool:
+    """Return whether a year file records the renamed stored inputs mapped.
+
+    ``create_datasets`` writes the record into every year file (``{}`` when
+    nothing needed mapping). Files written before it did may have lost a
+    renamed input such as the WIC take-up draw.
+    """
+    return read_renames_record(path) is not None
+
+
 def load_datasets(
     datasets: Optional[list[str]] = None,
     years: list[int] = [2024, 2025, 2026, 2027, 2028],
     data_folder: str = "./data",
 ) -> dict[str, PolicyEngineUSDataset]:
     """Load PolicyEngineUSDataset instances from saved HDF5 files.
+
+    A year file without the record of renamed stored inputs that
+    ``create_datasets`` writes was cut before those inputs were mapped, and
+    may have lost one (see ``legacy_inputs.RENAMES_H5_DATASET``), so it is
+    refused.
 
     Args:
         datasets: List of HuggingFace dataset paths (used to derive file names)
@@ -537,6 +599,17 @@ def load_datasets(
         dataset_stem = dataset_logical_name(resolved_dataset)
         for year in years:
             filepath = f"{data_folder}/{dataset_stem}_year_{year}.h5"
+            if Path(filepath).exists() and not _year_file_records_renames(
+                Path(filepath)
+            ):
+                raise ValueError(
+                    f"US year file {filepath} has no record of the renamed "
+                    "stored inputs mapped when it was cut, so it was written "
+                    "before policyengine.py mapped them and may have lost "
+                    "the WIC take-up draw (every WIC-eligible person would "
+                    "then take WIC up). Regenerate it with ensure_datasets() "
+                    "or create_datasets()."
+                )
             us_dataset = PolicyEngineUSDataset(
                 name=f"{dataset_stem}-year-{year}",
                 description=f"US Dataset for year {year} based on {dataset_stem}",
@@ -1182,6 +1255,11 @@ def ensure_datasets(
 ) -> dict[str, PolicyEngineUSDataset]:
     """Ensure datasets exist, loading if available or creating if not.
 
+    Year files without the record of renamed stored inputs that
+    ``create_datasets`` writes were cut before those inputs were mapped, and
+    may have lost one such as the WIC take-up draw, so they are created
+    again rather than loaded.
+
     Args:
         datasets: List of HuggingFace dataset paths
         years: List of years to load/create data for
@@ -1199,7 +1277,9 @@ def ensure_datasets(
         dataset_stem = dataset_logical_name(resolved_dataset)
         for year in years:
             filepath = Path(f"{data_folder}/{dataset_stem}_year_{year}.h5")
-            if not filepath.exists():
+            # A year file written before renamed stored inputs were mapped
+            # may have lost them, so it is regenerated rather than reused.
+            if not filepath.exists() or not _year_file_records_renames(filepath):
                 all_exist = False
                 break
         if not all_exist:
