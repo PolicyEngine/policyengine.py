@@ -1,3 +1,14 @@
+## [6.1.2] - 2026-09-27
+
+### Changed
+
+- US files written before the WIC take-up mapping are no longer reused, because they may have lost the draw or were calculated without it. `Simulation.load()` raises for a saved US output that has no record of renamed stored inputs (`Simulation.ensure()` calculates it again), `load_datasets` raises for such a year file, and `ensure_datasets` creates such year files again.
+
+### Fixed
+
+- Map the stored US WIC take-up draw `would_claim_wic` onto `takes_up_wic_if_eligible` when loading US data, so policyengine-us 2.x no longer gives WIC to every WIC-eligible person in data that stores the draw under its old name, such as the certified default. `Simulation.run()`, `managed_microsimulation` and `create_datasets` apply the mapping and record the renames applied (output dataset metadata, `release_bundle`, saved output and year files, run records and `policyengine_bundle`). A stored table that is not in the simulation's person order, or that stores the draw for only part of a year, is refused. The mapping turns itself off once the data stores `takes_up_wic_if_eligible` or the engine defines `would_claim_wic` again.
+
+
 ## [6.1.1] - 2026-09-22
 
 ### Fixed
