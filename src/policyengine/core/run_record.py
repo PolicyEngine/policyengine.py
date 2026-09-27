@@ -184,6 +184,15 @@ def build_simulation_run_record_payloads(
         input_payload["spm"] = simulation.spm_config
         results_payload["spm"] = simulation.spm_provenance()
 
+    # Stored inputs the country loader mapped onto renamed live inputs (for
+    # example the US WIC take-up draw) change the results, so the record
+    # binds them. See ``policyengine.tax_benefit_models.us.legacy_inputs``.
+    renames = (getattr(simulation.output_dataset, "metadata", None) or {}).get(
+        "legacy_input_renames"
+    )
+    if renames is not None:
+        results_payload["legacy_input_renames"] = dict(renames)
+
     return {"reform": reform, "input": input_payload, "results": results_payload}
 
 

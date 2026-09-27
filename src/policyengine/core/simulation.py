@@ -240,7 +240,7 @@ class Simulation(BaseModel):
             if self.tax_benefit_model_version is not None
             else {}
         )
-        result = {
+        result: dict[str, Any] = {
             **bundle,
             "dataset_filepath": self.dataset.filepath
             if self.dataset is not None
@@ -250,4 +250,12 @@ class Simulation(BaseModel):
             recorded = getattr(self.output_dataset, "metadata", {}).get("spm_config")
             result["spm_config"] = dict(recorded or self.spm_config)
             result["spm"] = self.spm_provenance()
+        # Stored inputs the country loader mapped onto renamed live inputs
+        # (for example the US WIC take-up draw), as the run recorded them.
+        # See ``policyengine.tax_benefit_models.us.legacy_inputs``.
+        renames = (getattr(self.output_dataset, "metadata", None) or {}).get(
+            "legacy_input_renames"
+        )
+        if renames is not None:
+            result["legacy_input_renames"] = dict(renames)
         return result

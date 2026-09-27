@@ -119,8 +119,9 @@ def test_native_inputs_and_calculated_outputs_align_by_id(
     build = PolicyEngineUSLatest._build_simulation_from_dataset
 
     def capture(self, country_simulation, dataset, system):
-        build(self, country_simulation, dataset, system)
+        applied = build(self, country_simulation, dataset, system)
         country_simulations.append(country_simulation)
+        return applied
 
     monkeypatch.setattr(PolicyEngineUSLatest, "_build_simulation_from_dataset", capture)
     simulation = pe.Simulation(dataset=dataset, tax_benefit_model_version=pe.us.model)

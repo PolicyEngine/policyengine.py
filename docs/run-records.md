@@ -46,7 +46,7 @@ The directory contains:
 | `bundle.trace.tro.jsonld` | The certified bundle TRO (model + data pins) |
 | `reform.json` | The reform as parameter values with effective dates |
 | `input.json` | Input dataset hash, dynamics, scoping, extra variables |
-| `results.json` | Output dataset hash and per-entity table summaries |
+| `results.json` | Output dataset hash and per-entity table summaries; for US runs, the SPM receipt and the renamed stored inputs mapped onto live ones (see [Renamed inputs in stored data](microsim.md#renamed-inputs-in-stored-data)) |
 
 All payload files are written with the same canonical JSON used for
 hashing, so the record verifies offline exactly as written.
