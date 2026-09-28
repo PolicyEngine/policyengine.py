@@ -189,7 +189,7 @@ The reasons:
   - Example: raising the personal allowance to £15,000 in 2026-27 lowers absolute child poverty and raises relative child poverty.
 - **After-housing-costs measures subtract housing spending,** and much of that spending is a choice: a flat or a mansion. International poverty statistics are computed on income before housing costs.
 
-The absolute line is HBAI's FYE 2011 line, 60% of the 2010-11 median, uprated by CPI (the `household.poverty.absolute_poverty_threshold_bhc` and `_ahc` parameters). In March 2026 DWP moved its absolute reference year to FYE 2025 for the years with administrative data linking. Rates on PolicyEngine's line are therefore lower than DWP's current absolute figures.
+The absolute line is HBAI's: 60% of median income in a fixed reference year, held constant in real terms (the `household.poverty.absolute_poverty_threshold_bhc` and `_ahc` parameters). Since the March 2026 HBAI release, DWP's reference year is FYE 2025 for FYE 2022 onward: 60% of the FYE 2025 medians of £719.48 (BHC) and £623.14 (AHC), so £431.69 and £373.89 a week (HBAI table 2.4ts). Earlier years keep the FYE 2011 reference, and DWP plans to extend FYE 2025 back to FYE 2019 in its March 2027 release. policyengine-uk follows the same split from version 2.102.3: FYE 2022 to FYE 2024 use HBAI's own annual CPI-variant deflators, and later years are uprated by the OBR's CPI forecast. Earlier policyengine-uk versions use the FYE 2011 line throughout, so their absolute rates are lower than DWP's.
 
 ## Inequality
 
