@@ -179,6 +179,18 @@ rates.dataframe
 
 Call it once per simulation for a baseline-vs-reform comparison. Age / gender / race breakdowns: `calculate_us_poverty_by_age`, `_by_gender`, `_by_race`. UK counterparts: `calculate_uk_poverty_rates`, `_by_age`, `_by_gender`.
 
+### Which measure to headline
+
+PolicyEngine headlines **absolute poverty before housing costs** in the UK: `absolute_bhc` in `calculate_uk_poverty_rates`, from the `in_poverty_bhc` variable. That function also returns `absolute_ahc`, `relative_bhc` and `relative_ahc`. In the US, `calculate_us_poverty_rates` returns the Supplemental Poverty Measure (`spm`) and deep SPM poverty (`spm_deep`).
+
+The reasons:
+
+- **Relative poverty measures inequality, not poverty.** policyengine-uk draws the relative line at 60% of each simulation's own median income. A reform that raises the median raises the line with it, so relative poverty can rise when every household is better off.
+  - Example: raising the personal allowance to £15,000 in 2026-27 lowers absolute child poverty and raises relative child poverty.
+- **After-housing-costs measures subtract housing spending,** and much of that spending is a choice: a flat or a mansion. International poverty statistics are computed on income before housing costs.
+
+The absolute line is HBAI's FYE 2011 line, 60% of the 2010-11 median, uprated by CPI (the `household.poverty.absolute_poverty_threshold_bhc` and `_ahc` parameters). In March 2026 DWP moved its absolute reference year to FYE 2025 for the years with administrative data linking. Rates on PolicyEngine's line are therefore lower than DWP's current absolute figures.
+
 ## Inequality
 
 Gini, top-10 share, top-1 share, bottom-50 share — for one simulation.
