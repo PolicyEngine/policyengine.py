@@ -2,6 +2,7 @@ from enum import Enum
 from typing import Any, Optional
 
 from policyengine.core import Output, Simulation
+from policyengine.outputs._poverty_status import validate_poverty_status_mapping
 from policyengine.outputs.aggregate import (
     get_aggregate_variable,
     get_output_entity_data,
@@ -70,6 +71,9 @@ class ChangeAggregate(Output):
 
         # Get the target entity data
         target_entity = self.entity or var_obj.entity
+        validate_poverty_status_mapping(
+            self.variable, var_obj.entity, target_entity, "ChangeAggregate.variable"
+        )
         baseline_data = get_output_entity_data(
             self.baseline_simulation,
             target_entity,
@@ -175,6 +179,12 @@ class ChangeAggregate(Output):
                 self.filter_variable,
                 "ChangeAggregate.filter_variable",
             )
+            validate_poverty_status_mapping(
+                self.filter_variable,
+                filter_var_obj.entity,
+                target_entity,
+                "ChangeAggregate.filter_variable",
+            )
 
             if filter_var_obj.entity != target_entity:
                 filter_source_data = get_output_entity_data(
@@ -234,4 +244,6 @@ class ChangeAggregate(Output):
         elif self.aggregate_type == ChangeAggregateType.SUM:
             self.result = filtered_change.sum()
         elif self.aggregate_type == ChangeAggregateType.MEAN:
-            self.result = filtered_change.mean()
+            self.result = (
+                filtered_change.mean() if filtered_change.count() > 0 else None
+            )

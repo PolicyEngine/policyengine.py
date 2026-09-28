@@ -3,6 +3,7 @@ from enum import Enum
 from typing import Any, Optional
 
 from policyengine.core import Output, Simulation, Variable
+from policyengine.outputs._poverty_status import validate_poverty_status_mapping
 
 
 class AggregateType(str, Enum):
@@ -120,6 +121,9 @@ class Aggregate(Output):
 
         # Get the target entity data
         target_entity = self.entity or var_obj.entity
+        validate_poverty_status_mapping(
+            self.variable, var_obj.entity, target_entity, "Aggregate.variable"
+        )
         data = get_output_entity_data(
             self.simulation, target_entity, "Aggregate.entity"
         )
@@ -154,6 +158,12 @@ class Aggregate(Output):
         if self.filter_variable is not None:
             filter_var_obj = get_aggregate_variable(
                 self.simulation, self.filter_variable, "Aggregate.filter_variable"
+            )
+            validate_poverty_status_mapping(
+                self.filter_variable,
+                filter_var_obj.entity,
+                target_entity,
+                "Aggregate.filter_variable",
             )
 
             if filter_var_obj.entity != target_entity:
@@ -207,6 +217,6 @@ class Aggregate(Output):
         if self.aggregate_type == AggregateType.SUM:
             self.result = series.sum()
         elif self.aggregate_type == AggregateType.MEAN:
-            self.result = series.mean()
+            self.result = series.mean() if series.count() > 0 else None
         elif self.aggregate_type == AggregateType.COUNT:
             self.result = series.count()

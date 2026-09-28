@@ -7,6 +7,7 @@ import pandas as pd
 from pydantic import ConfigDict
 
 from policyengine.core import Output, OutputCollection, Simulation
+from policyengine.outputs._poverty_status import validate_poverty_status_mapping
 
 
 class UKPovertyType(str, Enum):
@@ -44,7 +45,8 @@ class Poverty(Output):
 
     This is a single-simulation output type that calculates poverty
     headcount and rate for a given poverty measure, optionally filtered
-    by demographic variables.
+    by demographic variables. Missing statuses are excluded from the
+    eligible population; a zero eligible denominator produces a null rate.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -77,6 +79,12 @@ class Poverty(Output):
 
         # Get target entity data
         target_entity = self.entity
+        validate_poverty_status_mapping(
+            self.poverty_variable,
+            poverty_var_obj.entity,
+            target_entity,
+            "Poverty.poverty_variable",
+        )
         data = getattr(self.simulation.output_dataset.data, target_entity)
 
         # Map poverty variable to target entity if needed
@@ -94,6 +102,12 @@ class Poverty(Output):
         if self.filter_variable is not None:
             filter_var_obj = self.simulation.tax_benefit_model_version.get_variable(
                 self.filter_variable
+            )
+            validate_poverty_status_mapping(
+                self.filter_variable,
+                filter_var_obj.entity,
+                target_entity,
+                "Poverty.filter_variable",
             )
 
             if filter_var_obj.entity != target_entity:
@@ -118,11 +132,14 @@ class Poverty(Output):
             # Apply mask
             poverty_series = poverty_series[mask]
 
-        # Calculate results using weighted counts
+        # Missing statuses are outside the measure's eligible population.
+        # MicroSeries.count() excludes them while preserving survey weights.
         self.headcount = float((poverty_series == True).sum())  # noqa: E712
         self.total_population = float(poverty_series.count())
         self.rate = (
-            self.headcount / self.total_population if self.total_population > 0 else 0.0
+            self.headcount / self.total_population
+            if self.total_population > 0
+            else None
         )
 
 
@@ -179,6 +196,9 @@ def calculate_uk_poverty_rates(
         ]
     )
 
+    # Preserve absent rates as JSON null in record exports.
+    df["rate"] = df["rate"].astype("Float64")
+
     return OutputCollection(outputs=results, dataframe=df)
 
 
@@ -234,6 +254,9 @@ def calculate_us_poverty_rates(
             for r in results
         ]
     )
+
+    # Preserve absent rates as JSON null in record exports.
+    df["rate"] = df["rate"].astype("Float64")
 
     return OutputCollection(outputs=results, dataframe=df)
 
@@ -300,6 +323,9 @@ def calculate_uk_poverty_by_age(
         ]
     )
 
+    # Preserve absent rates as JSON null in record exports.
+    df["rate"] = df["rate"].astype("Float64")
+
     return OutputCollection(outputs=results, dataframe=df)
 
 
@@ -338,6 +364,9 @@ def calculate_us_poverty_by_age(
             for r in results
         ]
     )
+
+    # Preserve absent rates as JSON null in record exports.
+    df["rate"] = df["rate"].astype("Float64")
 
     return OutputCollection(outputs=results, dataframe=df)
 
@@ -378,6 +407,9 @@ def calculate_uk_poverty_by_gender(
         ]
     )
 
+    # Preserve absent rates as JSON null in record exports.
+    df["rate"] = df["rate"].astype("Float64")
+
     return OutputCollection(outputs=results, dataframe=df)
 
 
@@ -416,6 +448,9 @@ def calculate_us_poverty_by_gender(
             for r in results
         ]
     )
+
+    # Preserve absent rates as JSON null in record exports.
+    df["rate"] = df["rate"].astype("Float64")
 
     return OutputCollection(outputs=results, dataframe=df)
 
@@ -458,5 +493,8 @@ def calculate_us_poverty_by_race(
             for r in results
         ]
     )
+
+    # Preserve absent rates as JSON null in record exports.
+    df["rate"] = df["rate"].astype("Float64")
 
     return OutputCollection(outputs=results, dataframe=df)
