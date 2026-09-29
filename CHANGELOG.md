@@ -1,3 +1,14 @@
+## [6.2.0] - 2026-09-29
+
+### Added
+
+- Documented the default headline poverty measure (UK: absolute poverty before housing costs) and the reasons for it.
+
+### Changed
+
+- Bump policyengine-uk to 2.102.3, which rebases the absolute poverty line to HBAI's FYE 2025 reference year (431.69 BHC / 373.89 AHC a week at FYE 2025, as DWP has reported it since March 2026), and certify the UK data release `policyengine-uk-data-1.56.16` (enhanced_frs_2024_25) for it on the publisher's compatibility claim. UK absolute poverty rates rise: in 2026-27 on the certified enhanced FRS, by about 4 points overall and about 7 points for children after housing costs. The bump also brings every policyengine-uk change since 2.90.2, including relative poverty measured on the median over individuals (policyengine-uk#1865).
+
+
 ## [6.1.2] - 2026-09-27
 
 ### Changed
