@@ -179,6 +179,18 @@ rates.dataframe
 
 Call it once per simulation for a baseline-vs-reform comparison. Age / gender / race breakdowns: `calculate_us_poverty_by_age`, `_by_gender`, `_by_race`. UK counterparts: `calculate_uk_poverty_rates`, `_by_age`, `_by_gender`.
 
+### Which measure to headline
+
+PolicyEngine headlines **absolute poverty before housing costs** in the UK: `absolute_bhc` in `calculate_uk_poverty_rates`, from the `in_poverty_bhc` variable. That function also returns `absolute_ahc`, `relative_bhc` and `relative_ahc`. In the US, `calculate_us_poverty_rates` returns the Supplemental Poverty Measure (`spm`) and deep SPM poverty (`spm_deep`).
+
+The reasons:
+
+- **Relative poverty measures inequality, not poverty.** policyengine-uk draws the relative line at 60% of each simulation's own median income. A reform that raises the median raises the line with it, so relative poverty can rise when every household is better off.
+  - Example: raising the personal allowance to £15,000 in 2026-27 lowers absolute child poverty and raises relative child poverty.
+- **After-housing-costs measures subtract housing spending,** and much of that spending is a choice: a flat or a mansion. International poverty statistics are computed on income before housing costs.
+
+The absolute line is HBAI's: 60% of median income in a fixed reference year, held constant in real terms (the `household.poverty.absolute_poverty_threshold_bhc` and `_ahc` parameters). Since the March 2026 HBAI release, DWP's reference year is FYE 2025 for FYE 2022 onward: 60% of the FYE 2025 medians of £719.48 (BHC) and £623.14 (AHC), so £431.69 and £373.89 a week (HBAI table 2.4ts). Earlier years keep the FYE 2011 reference, and DWP plans to extend FYE 2025 back to FYE 2019 in its March 2027 release. policyengine-uk follows the same split from version 2.102.3: FYE 2022 to FYE 2024 use HBAI's own annual CPI-variant deflators, and later years are uprated by the OBR's CPI forecast. Earlier policyengine-uk versions use the FYE 2011 line throughout, so their absolute rates are lower than DWP's.
+
 ## Inequality
 
 Gini, top-10 share, top-1 share, bottom-50 share — for one simulation.
