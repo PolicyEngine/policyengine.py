@@ -72,11 +72,11 @@ US_LOCAL_AREA_DATASET_URI = (
     "hf://policyengine/populace-us/populace_us_2024_acs_local.h5"
     f"@{US_LOCAL_AREA_RELEASE_ID}"
 )
-UK_MODEL_VERSION = "2.90.2"
+UK_MODEL_VERSION = "2.102.3"
 UK_BUILT_WITH_MODEL_VERSION = "2.89.2"
 UK_DATA_RELEASE_VERSION = "1.56.16"
 UK_DATA_RELEASE_ID = "policyengine-uk-data-1.56.16"
-UK_DATA_RELEASE_REVISION = "2966541fca275ab5ccb6cfb659b010b1db37ad49"
+UK_DATA_RELEASE_REVISION = "78788372fec47fc8df835bd32307ef61eaed83c2"
 UK_DATA_RELEASE_PATH = "releases/1.56.16/release_manifest.json"
 # The prior certified default, kept resolvable via dataset_overlays.
 UK_POPULACE_RELEASE_ID = "populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z"
