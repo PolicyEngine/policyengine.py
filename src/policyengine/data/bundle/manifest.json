@@ -277,6 +277,34 @@
       "spm-calculator"
     ]
   },
+  "geography_assets": {
+    "uk": {
+      "local_authority": {
+        "assets": {
+          "lad22": {
+            "bucket": "policyengine-uk-data-private",
+            "filename": "local_authorities_lad22.csv",
+            "sha256": "58057da44c3dcd44bef22136515222d281f133d9e77e9a15172232248be1f21e"
+          },
+          "lad23": {
+            "bucket": "policyengine-uk-data-private",
+            "filename": "local_authorities_lad23.csv",
+            "sha256": "b9b7ed5a1072ba28c5bfd55fcc3fd974582f5bd82ee385601b65907bdee7ec2c"
+          }
+        },
+        "default_vintage": "lad23",
+        "lad22_dataset_identities": [
+          "enhanced_frs_2023_24",
+          "enhanced_frs_2024_25",
+          "enhanced_frs_2024_25_tiny",
+          "frs_2023_24",
+          "frs_2024_25",
+          "frs_2024_25_tiny",
+          "populace_uk_2023"
+        ]
+      }
+    }
+  },
   "measurements": {
     "spm": {
       "as_of": null,

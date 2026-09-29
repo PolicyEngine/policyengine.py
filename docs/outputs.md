@@ -277,11 +277,17 @@ impacts = compute_uk_constituency_impacts(
 impacts.constituency_results
 ```
 
-`compute_uk_local_authority_impacts` follows the same pattern. Pass
-`constituency_csv_path` or `local_authority_csv_path` to use a specific
+`compute_uk_local_authority_impacts` follows the same pattern. Managed
+callers should pass the bundle dataset name as `dataset_identity`. The bundle
+maps named legacy datasets to the LAD22 lookup; LAD23 is the default for every
+other dataset, including future Microcosm releases. Bundle-managed lookup files
+are verified against their pinned SHA-256 hashes.
+
+Pass `constituency_csv_path` or `local_authority_csv_path` to use a specific
 metadata file; pass `download_missing_assets=False` to skip metadata downloads
-and use code-only labels. Legacy matrix arguments are accepted for backward
-compatibility but ignored. See [Regions](regions.md).
+and use code-only labels. An explicit metadata path is treated as a caller-owned
+override and is not checked against the bundle hash. Legacy matrix arguments are
+accepted for backward compatibility but ignored. See [Regions](regions.md).
 
 ## Writing your own
 

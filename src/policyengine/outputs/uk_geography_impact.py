@@ -9,6 +9,7 @@ from policyengine.data.uk_geography_assets import (
     UKGeographyAssetSpec,
     default_download_dir,
     default_local_search_dirs,
+    verify_uk_geography_lookup_asset,
 )
 
 
@@ -39,6 +40,7 @@ def resolve_uk_geography_lookup_csv_path(
     for search_dir in default_local_search_dirs():
         path = search_dir / spec.lookup_csv_filename
         if path.is_file():
+            verify_uk_geography_lookup_asset(path, spec)
             return str(path)
 
     if not download_missing_assets:
@@ -49,16 +51,18 @@ def resolve_uk_geography_lookup_csv_path(
     except ImportError:
         return None
 
+    target_path = default_download_dir() / spec.lookup_csv_filename
+    target_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        target_path = default_download_dir() / spec.lookup_csv_filename
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        return download_gcs_file(
+        downloaded_path = download_gcs_file(
             bucket=spec.resolved_lookup_csv_bucket,
             file_path=spec.lookup_csv_filename,
             local_path=str(target_path),
         )
     except Exception:
         return None
+    verify_uk_geography_lookup_asset(downloaded_path, spec)
+    return str(downloaded_path)
 
 
 def _load_lookup_metadata(

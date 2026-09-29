@@ -1,14 +1,22 @@
 """Canonical UK geography asset metadata and resolution helpers."""
 
+import hashlib
+import json
 import os
 from dataclasses import dataclass
+from enum import Enum
+from functools import lru_cache
+from importlib.resources import files
 from pathlib import Path
 from typing import Optional, Sequence, Union
+
+from pydantic import BaseModel, Field, model_validator
 
 UK_GEOGRAPHY_BUCKET = "policyengine-uk-data-private"
 UK_GEOGRAPHY_BUCKET_URI = f"gs://{UK_GEOGRAPHY_BUCKET}"
 UK_GEOGRAPHY_DATA_DIR_ENV = "POLICYENGINE_UK_GEOGRAPHY_DATA_DIR"
 POLICYENGINE_DATA_FOLDER_ENV = "POLICYENGINE_DATA_FOLDER"
+PathLike = Union[os.PathLike, str]
 
 
 @dataclass(frozen=True)
@@ -21,6 +29,7 @@ class UKGeographyAssetSpec:
     bucket: str = UK_GEOGRAPHY_BUCKET
     weight_matrix_bucket: Optional[str] = None
     lookup_csv_bucket: Optional[str] = None
+    lookup_csv_sha256: Optional[str] = None
 
     @property
     def resolved_weight_matrix_bucket(self) -> str:
@@ -39,17 +48,128 @@ class UKGeographyAssetPaths:
     lookup_csv_path: str
 
 
+class LocalAuthorityVintage(str, Enum):
+    """Supported UK local-authority code rosters."""
+
+    LAD22 = "lad22"
+    LAD23 = "lad23"
+
+
+class UKLocalAuthorityLookupAsset(BaseModel):
+    """One immutable local-authority display-metadata asset."""
+
+    bucket: str
+    filename: str
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class UKLocalAuthorityLookupConfiguration(BaseModel):
+    """Bundle-owned rules for choosing local-authority display metadata."""
+
+    default_vintage: LocalAuthorityVintage
+    lad22_dataset_identities: frozenset[str] = Field(default_factory=frozenset)
+    assets: dict[LocalAuthorityVintage, UKLocalAuthorityLookupAsset]
+
+    @model_validator(mode="after")
+    def validate_required_assets(self) -> "UKLocalAuthorityLookupConfiguration":
+        missing = set(LocalAuthorityVintage) - set(self.assets)
+        if missing:
+            values = ", ".join(sorted(vintage.value for vintage in missing))
+            raise ValueError(f"Missing UK local-authority lookup assets: {values}")
+        if self.default_vintage is not LocalAuthorityVintage.LAD23:
+            raise ValueError("The default UK local-authority vintage must be LAD23")
+        return self
+
+
 CONSTITUENCY_ASSET_SPEC = UKGeographyAssetSpec(
     geography_type="constituency",
     weight_matrix_filename="parliamentary_constituency_weights.h5",
     lookup_csv_filename="constituencies_2024.csv",
 )
 
-LOCAL_AUTHORITY_ASSET_SPEC = UKGeographyAssetSpec(
-    geography_type="local_authority",
-    weight_matrix_filename="local_authority_weights.h5",
-    lookup_csv_filename="local_authorities_2021.csv",
+
+@lru_cache
+def get_uk_local_authority_lookup_configuration() -> (
+    UKLocalAuthorityLookupConfiguration
+):
+    """Load the bundle-owned dataset-to-local-authority mapping."""
+
+    manifest_path = files("policyengine").joinpath("data", "bundle", "manifest.json")
+    bundle = json.loads(manifest_path.read_text())
+    try:
+        payload = bundle["geography_assets"]["uk"]["local_authority"]
+    except (KeyError, TypeError) as exc:
+        raise ValueError(
+            "The PolicyEngine bundle has no UK local-authority lookup configuration"
+        ) from exc
+    return UKLocalAuthorityLookupConfiguration.model_validate(payload)
+
+
+def resolve_uk_local_authority_vintage(
+    dataset_identity: Optional[str],
+) -> LocalAuthorityVintage:
+    """Resolve LAD22 only for explicitly mapped legacy datasets.
+
+    LAD23 is the default for every dataset identity not named in the bundle's
+    compatibility set, including future datasets.
+    """
+
+    configuration = get_uk_local_authority_lookup_configuration()
+    if dataset_identity in configuration.lad22_dataset_identities:
+        return LocalAuthorityVintage.LAD22
+    return configuration.default_vintage
+
+
+def uk_local_authority_asset_spec(
+    vintage: LocalAuthorityVintage,
+) -> UKGeographyAssetSpec:
+    """Build the asset specification for one local-authority code vintage."""
+
+    asset = get_uk_local_authority_lookup_configuration().assets[vintage]
+    return UKGeographyAssetSpec(
+        geography_type="local_authority",
+        weight_matrix_filename="local_authority_weights.h5",
+        lookup_csv_filename=asset.filename,
+        lookup_csv_bucket=asset.bucket,
+        lookup_csv_sha256=asset.sha256,
+    )
+
+
+def resolve_uk_local_authority_asset_spec(
+    dataset_identity: Optional[str],
+) -> UKGeographyAssetSpec:
+    """Select the local-authority asset for a managed dataset identity."""
+
+    return uk_local_authority_asset_spec(
+        resolve_uk_local_authority_vintage(dataset_identity)
+    )
+
+
+LOCAL_AUTHORITY_LAD22_ASSET_SPEC = uk_local_authority_asset_spec(
+    LocalAuthorityVintage.LAD22
 )
+LOCAL_AUTHORITY_LAD23_ASSET_SPEC = uk_local_authority_asset_spec(
+    LocalAuthorityVintage.LAD23
+)
+# Backwards-compatible name for callers that do not provide a dataset identity.
+LOCAL_AUTHORITY_ASSET_SPEC = LOCAL_AUTHORITY_LAD23_ASSET_SPEC
+
+
+def verify_uk_geography_lookup_asset(
+    path: PathLike,
+    spec: UKGeographyAssetSpec,
+) -> None:
+    """Verify a bundle-managed lookup file against its pinned content hash."""
+
+    if spec.lookup_csv_sha256 is None:
+        return
+    candidate = Path(path).expanduser()
+    actual_sha256 = hashlib.sha256(candidate.read_bytes()).hexdigest()
+    if actual_sha256 != spec.lookup_csv_sha256:
+        raise ValueError(
+            f"UK {spec.geography_type} lookup CSV failed its SHA-256 check: "
+            f"{candidate}; expected {spec.lookup_csv_sha256}, got {actual_sha256}"
+        )
 
 
 def _env_path(name: str) -> Optional[Path]:
@@ -121,9 +241,6 @@ class UKGeographyAssetStrategy:
         raise NotImplementedError
 
 
-PathLike = Union[os.PathLike, str]
-
-
 class LocalUKGeographyAssetStrategy(UKGeographyAssetStrategy):
     """Resolve geography assets from explicit paths or local search dirs."""
 
@@ -170,6 +287,8 @@ class LocalUKGeographyAssetStrategy(UKGeographyAssetStrategy):
         )
 
         if weight_path is not None and csv_path is not None:
+            if lookup_csv_path is None:
+                verify_uk_geography_lookup_asset(csv_path, spec)
             self.last_error = None
             return UKGeographyAssetPaths(
                 weight_matrix_path=str(weight_path),
@@ -251,6 +370,9 @@ class GCSUKGeographyAssetStrategy(UKGeographyAssetStrategy):
         except Exception as exc:
             self.last_error = f"GCS download failed for {spec.geography_type}: {exc}"
             return None
+
+        if lookup_csv_path is None:
+            verify_uk_geography_lookup_asset(resolved_lookup_csv_path, spec)
 
         self.last_error = None
         return UKGeographyAssetPaths(

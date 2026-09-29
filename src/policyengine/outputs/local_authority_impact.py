@@ -10,7 +10,9 @@ import pandas as pd
 from pydantic import ConfigDict
 
 from policyengine.core import Output
-from policyengine.data.uk_geography_assets import LOCAL_AUTHORITY_ASSET_SPEC
+from policyengine.data.uk_geography_assets import (
+    resolve_uk_local_authority_asset_spec,
+)
 from policyengine.outputs.uk_geography_assets import (
     UKGeographyAssetStrategy,
 )
@@ -63,6 +65,7 @@ def compute_uk_local_authority_impacts(
     year: str = "2025",
     asset_strategies: Optional[Sequence[UKGeographyAssetStrategy]] = None,
     download_missing_assets: bool = True,
+    dataset_identity: Optional[str] = None,
 ) -> LocalAuthorityImpact:
     """Compute per-local-authority income changes for UK.
 
@@ -71,19 +74,22 @@ def compute_uk_local_authority_impacts(
         reform_simulation: Completed reform simulation.
         weight_matrix_path: Deprecated and ignored. Local-authority outputs
             now group by ``la_code_oa`` on the household output.
-        local_authority_csv_path: Optional path to local_authorities_2021.csv.
+        local_authority_csv_path: Optional path to a local-authority lookup CSV.
             If omitted, standard local paths are checked before downloading
             from GCS. If still unavailable, results use geography codes as names.
         year: Deprecated and ignored.
         asset_strategies: Deprecated and ignored.
         download_missing_assets: Whether to download the optional lookup CSV
             from GCS when no local CSV is found.
+        dataset_identity: Managed bundle dataset identity. Explicitly mapped
+            legacy datasets use LAD22 lookup metadata; all others use LAD23.
 
     Returns:
         LocalAuthorityImpact with local_authority_results populated.
     """
+    asset_spec = resolve_uk_local_authority_asset_spec(dataset_identity)
     lookup_csv_path = resolve_uk_geography_lookup_csv_path(
-        LOCAL_AUTHORITY_ASSET_SPEC,
+        asset_spec,
         lookup_csv_path=local_authority_csv_path,
         download_missing_assets=download_missing_assets,
     )

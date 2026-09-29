@@ -82,12 +82,15 @@ from policyengine.outputs import compute_uk_local_authority_impacts
 impacts = compute_uk_local_authority_impacts(
     baseline_simulation=baseline,
     reform_simulation=reform,
+    dataset_identity="enhanced_frs_2024_25",
 )
 impacts.local_authority_results
 ```
 
 Local-authority impacts follow the same longwise pattern using `la_code_oa`.
-Pass `local_authority_csv_path` to use a specific metadata CSV, or
+The bundle uses `dataset_identity` to select LAD22 metadata for explicitly
+listed legacy datasets and LAD23 metadata for all other datasets. Pass
+`local_authority_csv_path` to use a specific caller-owned metadata CSV, or
 `download_missing_assets=False` to skip metadata download and use code-only
 labels. The legacy `weight_matrix_path` and `year` arguments are accepted for
 backward compatibility but ignored.

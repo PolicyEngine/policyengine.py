@@ -9,7 +9,11 @@ from microdf import MicroDataFrame
 from policyengine.outputs.local_authority_impact import (
     compute_uk_local_authority_impacts,
 )
-from policyengine.outputs.uk_geography_assets import LOCAL_AUTHORITY_ASSET_SPEC
+from policyengine.outputs.uk_geography_assets import (
+    LOCAL_AUTHORITY_ASSET_SPEC,
+    LOCAL_AUTHORITY_LAD22_ASSET_SPEC,
+    LOCAL_AUTHORITY_LAD23_ASSET_SPEC,
+)
 
 
 def _make_sim(household_data: dict) -> MagicMock:
@@ -176,19 +180,62 @@ def test_compute_uses_local_lookup_csv_without_matrix_or_gcs(
         ]
     ).to_csv(csv_path, index=False)
 
-    with patch(
-        "policyengine.outputs.uk_geography_impact.default_local_search_dirs",
-        return_value=[tmp_path],
-    ):
-        impact = compute_uk_local_authority_impacts(
-            baseline,
-            reform,
-            download_missing_assets=True,
-        )
+    impact = compute_uk_local_authority_impacts(
+        baseline,
+        reform,
+        local_authority_csv_path=str(csv_path),
+        download_missing_assets=True,
+    )
 
     assert impact.local_authority_csv_path == str(csv_path)
     assert len(impact.local_authority_results) == 2
     assert impact.local_authority_results[0]["local_authority_name"] == "A"
+
+
+@pytest.mark.parametrize(
+    ("dataset_identity", "expected_spec"),
+    [
+        ("populace_uk_2023", LOCAL_AUTHORITY_LAD22_ASSET_SPEC),
+        ("future_microcosm_release", LOCAL_AUTHORITY_LAD23_ASSET_SPEC),
+    ],
+)
+def test_compute_selects_lookup_from_dataset_identity(
+    tmp_path,
+    dataset_identity,
+    expected_spec,
+):
+    baseline = _make_sim(
+        {
+            "la_code_oa": ["LA001"],
+            "household_net_income": [100.0],
+            "household_weight": [1.0],
+        }
+    )
+    reform = _make_sim(
+        {
+            "la_code_oa": ["LA001"],
+            "household_net_income": [110.0],
+            "household_weight": [1.0],
+        }
+    )
+    csv_path = _write_lookup_csv(
+        tmp_path,
+        [{"code": "LA001", "name": "A", "x": 0, "y": 0}],
+    )
+
+    with patch(
+        "policyengine.outputs.local_authority_impact."
+        "resolve_uk_geography_lookup_csv_path",
+        return_value=csv_path,
+    ) as resolve_lookup:
+        compute_uk_local_authority_impacts(
+            baseline,
+            reform,
+            dataset_identity=dataset_identity,
+            download_missing_assets=False,
+        )
+
+    assert resolve_lookup.call_args.args[0] == expected_spec
 
 
 def test_compute_local_authority_impacts_does_not_require_lookup_csv_or_matrix(

@@ -1,5 +1,6 @@
 """Tests for UK geography asset resolution."""
 
+import hashlib
 from pathlib import Path
 from unittest.mock import patch
 
@@ -8,16 +9,111 @@ import pytest
 from policyengine.outputs.uk_geography_assets import (
     CONSTITUENCY_ASSET_SPEC,
     LOCAL_AUTHORITY_ASSET_SPEC,
+    LOCAL_AUTHORITY_LAD22_ASSET_SPEC,
+    LOCAL_AUTHORITY_LAD23_ASSET_SPEC,
     GCSUKGeographyAssetStrategy,
+    LocalAuthorityVintage,
     LocalUKGeographyAssetStrategy,
     UKGeographyAssetSpec,
     UKGeographyAssetStrategy,
+    get_uk_local_authority_lookup_configuration,
     resolve_uk_geography_asset_paths,
+    resolve_uk_local_authority_asset_spec,
+    resolve_uk_local_authority_vintage,
+)
+from policyengine.outputs.uk_geography_impact import (
+    resolve_uk_geography_lookup_csv_path,
 )
 
 
 def _touch(path: Path) -> None:
     path.write_text("test asset")
+
+
+EXPECTED_LAD22_DATASETS = {
+    "enhanced_frs_2023_24",
+    "enhanced_frs_2024_25",
+    "enhanced_frs_2024_25_tiny",
+    "frs_2023_24",
+    "frs_2024_25",
+    "frs_2024_25_tiny",
+    "populace_uk_2023",
+}
+
+
+def test_local_authority_configuration_maps_only_declared_datasets_to_lad22():
+    configuration = get_uk_local_authority_lookup_configuration()
+
+    assert configuration.default_vintage is LocalAuthorityVintage.LAD23
+    assert configuration.lad22_dataset_identities == EXPECTED_LAD22_DATASETS
+    for dataset_identity in EXPECTED_LAD22_DATASETS:
+        assert (
+            resolve_uk_local_authority_vintage(dataset_identity)
+            is LocalAuthorityVintage.LAD22
+        )
+        assert (
+            resolve_uk_local_authority_asset_spec(dataset_identity)
+            == LOCAL_AUTHORITY_LAD22_ASSET_SPEC
+        )
+
+
+@pytest.mark.parametrize("dataset_identity", [None, "", "future_microcosm_release"])
+def test_local_authority_configuration_defaults_unknown_datasets_to_lad23(
+    dataset_identity,
+):
+    assert (
+        resolve_uk_local_authority_vintage(dataset_identity)
+        is LocalAuthorityVintage.LAD23
+    )
+    assert (
+        resolve_uk_local_authority_asset_spec(dataset_identity)
+        == LOCAL_AUTHORITY_LAD23_ASSET_SPEC
+    )
+    assert LOCAL_AUTHORITY_ASSET_SPEC == LOCAL_AUTHORITY_LAD23_ASSET_SPEC
+
+
+def test_lookup_resolver_rejects_bundle_asset_with_wrong_hash(tmp_path):
+    lookup_path = tmp_path / "lookup.csv"
+    lookup_path.write_text("code,x,y,name\nLA001,0,0,Authority\n")
+    spec = UKGeographyAssetSpec(
+        geography_type="test",
+        weight_matrix_filename="unused.h5",
+        lookup_csv_filename=lookup_path.name,
+        lookup_csv_sha256="0" * 64,
+    )
+
+    with patch(
+        "policyengine.outputs.uk_geography_impact.default_local_search_dirs",
+        return_value=[tmp_path],
+    ):
+        with pytest.raises(ValueError, match="failed its SHA-256 check"):
+            resolve_uk_geography_lookup_csv_path(
+                spec,
+                download_missing_assets=False,
+            )
+
+
+def test_lookup_resolver_accepts_bundle_asset_with_matching_hash(tmp_path):
+    lookup_path = tmp_path / "lookup.csv"
+    contents = b"code,x,y,name\nLA001,0,0,Authority\n"
+    lookup_path.write_bytes(contents)
+    spec = UKGeographyAssetSpec(
+        geography_type="test",
+        weight_matrix_filename="unused.h5",
+        lookup_csv_filename=lookup_path.name,
+        lookup_csv_sha256=hashlib.sha256(contents).hexdigest(),
+    )
+
+    with patch(
+        "policyengine.outputs.uk_geography_impact.default_local_search_dirs",
+        return_value=[tmp_path],
+    ):
+        resolved = resolve_uk_geography_lookup_csv_path(
+            spec,
+            download_missing_assets=False,
+        )
+
+    assert resolved == str(lookup_path)
 
 
 def test_local_strategy_resolves_explicit_paths(tmp_path):
@@ -38,13 +134,18 @@ def test_local_strategy_resolves_explicit_paths(tmp_path):
 
 
 def test_local_strategy_resolves_standard_files_from_search_dir(tmp_path):
-    weight_matrix_path = tmp_path / LOCAL_AUTHORITY_ASSET_SPEC.weight_matrix_filename
-    lookup_csv_path = tmp_path / LOCAL_AUTHORITY_ASSET_SPEC.lookup_csv_filename
+    spec = UKGeographyAssetSpec(
+        geography_type="local_authority",
+        weight_matrix_filename="local_authority_weights.h5",
+        lookup_csv_filename="local_authorities.csv",
+    )
+    weight_matrix_path = tmp_path / spec.weight_matrix_filename
+    lookup_csv_path = tmp_path / spec.lookup_csv_filename
     _touch(weight_matrix_path)
     _touch(lookup_csv_path)
 
     paths = resolve_uk_geography_asset_paths(
-        LOCAL_AUTHORITY_ASSET_SPEC,
+        spec,
         asset_strategies=[LocalUKGeographyAssetStrategy(search_dirs=[tmp_path])],
     )
 

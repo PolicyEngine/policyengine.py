@@ -21,6 +21,7 @@ from policyengine.data.uk_geography_assets import (
     CONSTITUENCY_ASSET_SPEC,
     LOCAL_AUTHORITY_ASSET_SPEC,
     UK_GEOGRAPHY_BUCKET_URI,
+    verify_uk_geography_lookup_asset,
 )
 from policyengine.provenance.manifest import resolve_region_dataset_path
 
@@ -92,6 +93,7 @@ def _load_local_authorities_from_csv() -> list[dict]:
             gcs_bucket=LOCAL_AUTHORITY_ASSET_SPEC.bucket,
             gcs_key=LOCAL_AUTHORITY_ASSET_SPEC.lookup_csv_filename,
         )
+        verify_uk_geography_lookup_asset(csv_path, LOCAL_AUTHORITY_ASSET_SPEC)
         import pandas as pd
 
         df = pd.read_csv(csv_path)
