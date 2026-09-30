@@ -6,6 +6,8 @@ here — importing a core value object should not pull in the
 provenance layer.
 """
 
+from .behavior import BehaviorInputBinding as BehaviorInputBinding
+from .behavior import BehaviorInputs as BehaviorInputs
 from .dataset import Dataset
 from .dataset import YearData as YearData
 from .dataset import map_to_entity as map_to_entity
