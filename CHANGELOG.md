@@ -1,3 +1,15 @@
+## [6.2.1] - 2026-09-30
+
+### Changed
+
+- Update the certified PolicyEngine bundle to PolicyEngine Core 3.32.10.
+- Run the full Python test matrices on GitHub-hosted Ubuntu machines and cancel earlier workflow runs when a pull request receives a new commit.
+
+### Fixed
+
+- Correct the US and UK TRACE composition fingerprints after the PolicyEngine Core 3.32.10 bundle update, and run the authenticated TRACE comparison on same-repository pull requests.
+
+
 ## [6.2.0] - 2026-09-29
 
 ### Added

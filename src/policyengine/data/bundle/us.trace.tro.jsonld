@@ -17,18 +17,18 @@
         "schema:name": "PolicyEngine",
         "schema:url": "https://policyengine.org"
       },
-      "schema:description": "TRACE TRO for certified runtime bundle us-6.2.0 covering the bundle manifest, the certified dataset artifact, the country model wheel, and the country data release manifest when it is available.",
+      "schema:description": "TRACE TRO for certified runtime bundle us-6.2.1 covering the bundle manifest, the certified dataset artifact, the country model wheel, and the country data release manifest when it is available.",
       "schema:name": "policyengine us certified bundle TRO",
       "trov:createdWith": {
         "@type": "schema:SoftwareApplication",
         "schema:name": "policyengine",
-        "schema:softwareVersion": "6.2.0"
+        "schema:softwareVersion": "6.2.1"
       },
       "trov:hasArrangement": [
         {
           "@id": "arrangement/1",
           "@type": "trov:ArtifactArrangement",
-          "rdfs:comment": "Certified arrangement for bundle us-6.2.0.",
+          "rdfs:comment": "Certified arrangement for bundle us-6.2.1.",
           "trov:hasArtifactLocation": [
             {
               "@id": "arrangement/1/location/bundle_manifest",
@@ -74,7 +74,7 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine.py bundle manifest for us",
             "trov:mimeType": "application/json",
-            "trov:sha256": "c7a46674f363fba0d826003423d01e5ad75754a31cfb9ad8d362ed609e1353a4"
+            "trov:sha256": "0b80f402511f5cec0cfbe018b7f8b42e83b54a7bdfc5c9c210a2f77bb63bd21b"
           },
           {
             "@id": "composition/1/artifact/data_release_manifest",
@@ -101,7 +101,7 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "1a978ebb6d8843fda08a599d33d38139dfe2b1544f937af2b7b5031332548bd1"
+          "trov:sha256": "7f7f19f41f2cfd707098768565562f6509b454b48c79bcd0558dab061b5b40a6"
         }
       },
       "trov:hasPerformance": {
