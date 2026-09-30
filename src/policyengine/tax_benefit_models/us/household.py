@@ -72,18 +72,23 @@ _COUNTY_INPUTS = ("county_fips", "county", "county_str")
 def _is_absent(name: str, value: Any) -> bool:
     """Whether a county input's value means that no county was given.
 
-    Missing values (``None``, empty text, NaN, ``pd.NA``) are absent, as the
-    country model's county check also treats them, and so is ``"UNKNOWN"``,
-    the ``county`` enum's default, for the two county-name inputs. Anything
-    else, including a malformed code such as ``6037``, names a county and so
-    reaches the county selection's typed error.
+    Missing values (``None``, empty text, NaN or the text ``"nan"``,
+    ``pd.NA``) are absent, as the country model's county check also treats
+    them, and so is ``"UNKNOWN"``, the ``county`` enum's default, for
+    ``county`` and ``county_str`` only. Anything else, including a malformed
+    code such as ``6037``, names a county and so reaches the county
+    selection's typed error. This decides only the SPM selection: the country
+    model itself rejects some of these as inputs (``pd.NA`` and bytes fail to
+    serialize whatever the geography).
     """
     if value is None:
         return True
     if isinstance(value, bytes):
         value = value.decode(errors="replace")
     if isinstance(value, str):
-        return value == "" or (name != "county_fips" and value == "UNKNOWN")
+        if value == "" or value.lower() == "nan":
+            return True
+        return name != "county_fips" and value == "UNKNOWN"
     if isinstance(value, numbers.Number) and not isinstance(value, bool):
         try:
             return math.isnan(value)
@@ -239,8 +244,9 @@ def calculate_household(
             the bundle's independently pinned artifact. When it chooses no
             ``geography_kind``, a household with ``county_fips`` is measured
             in its county's Census SPM estimation area, and a household that
-            names no county (no county input, or only missing values or
-            ``"UNKNOWN"``) is measured nationally, with no geographic
+            names no county (no county input, only missing values, or
+            ``county``/``county_str`` of ``"UNKNOWN"``) is measured
+            nationally, with no geographic
             adjustment, in its thresholds and in the capped SPM housing
             subsidy; ``provenance["spm_geography_source"]`` is then
             ``"national_fallback"`` (otherwise ``"default"``, or

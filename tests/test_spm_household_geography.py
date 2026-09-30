@@ -159,6 +159,9 @@ def test_sources_are_the_documented_set(county_bundle):
         ({"state_code": "CA", "county_fips": ""}, None, False),
         ({"state_code": "CA", "county_fips": b""}, None, False),
         ({"state_code": "CA", "county_fips": float("nan")}, None, False),
+        ({"state_code": "CA", "county_fips": "nan"}, None, False),
+        # "UNKNOWN" is the county enum's default, not a county FIPS code.
+        ({"state_code": "CA", "county_fips": "UNKNOWN"}, None, True),
         ({"state_code": "CA", "county_fips": pd.NA}, None, False),
         ({"state_code": "CA", "county": "UNKNOWN"}, None, False),
         ({"state_code": "CA", "county_str": "UNKNOWN"}, None, False),
@@ -263,6 +266,7 @@ def test_state_only_default_equals_explicit_national(state_code):
         {"county_fips": ""},
         {"county_fips": None},
         {"county_fips": float("nan")},
+        {"county_fips": "nan"},
         {"county_str": "UNKNOWN"},
     ],
 )

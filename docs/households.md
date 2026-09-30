@@ -39,7 +39,7 @@ US household results include SPM resources and poverty by default. With the
 household's county FIPS, as above, SPM thresholds use that county's Census SPM
 estimation area. A household that gives only its state is measured nationally,
 with no geographic adjustment, and the result says so. Missing values (`None`,
-`""`, NaN) and `"UNKNOWN"` count as no county:
+`""`, NaN) and a `county` or `county_str` of `"UNKNOWN"` count as no county:
 
 ```python
 result = pe.us.calculate_household(
