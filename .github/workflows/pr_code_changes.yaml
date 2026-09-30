@@ -14,6 +14,10 @@ on:
       - src/policyengine/data/bundle/manifest.json
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   check-changelog:
     name: Check changelog fragment
@@ -127,7 +131,7 @@ jobs:
       - name: Verify bundle packages
         run: policyengine bundle verify --country us --country uk --packages-only --json
   Test:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
