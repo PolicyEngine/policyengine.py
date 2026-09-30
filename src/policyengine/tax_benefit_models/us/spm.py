@@ -5,9 +5,17 @@ from policyengine.core.spm import SPMProvenance, SPMSelection
 __all__ = [
     "SPMSelection",
     "SPMProvenance",
+    "SPM_GEOGRAPHY_SOURCES",
     "resolve_spm_selection",
+    "resolve_household_spm_selection",
     "calculation_provenance",
 ]
+
+# How a household calculation's SPM geography was chosen, reported as
+# ``provenance["spm_geography_source"]``: the caller's own ``geography_kind``,
+# the bundle default as given, or national measurement in place of the default
+# county selection because the household names no county.
+SPM_GEOGRAPHY_SOURCES = ("selection", "default", "national_fallback")
 
 
 def resolve_spm_selection(selection=None) -> dict:
@@ -41,6 +49,36 @@ def resolve_spm_selection(selection=None) -> dict:
     values["forecast_content_sha256"] = defaults.forecast_content_sha256
     values["scenario"] = chosen.scenario or defaults.scenario
     return SPMSelection.model_validate(values).model_dump()
+
+
+def resolve_household_spm_selection(
+    selection=None, *, household_names_county: bool
+) -> tuple[dict, str]:
+    """Resolve one household calculation's SPM selection and how it was chosen.
+
+    A ``geography_kind`` the caller chose is honoured as given, so an explicit
+    county selection for a household with no county still raises
+    ``SPM_GEOGRAPHY_REQUIRED``. Otherwise the bundle default applies, except
+    that the default county selection becomes national measurement when the
+    household names no county. A state alone does not identify a Census SPM
+    estimation area, and national measurement is the one geography that needs
+    no area. The substitution is reported in the returned source, never made
+    silently.
+
+    Every other setting, such as ``scenario``, is kept. Population simulations
+    do not use this function: their data must supply observed counties.
+
+    Returns the resolved configuration and one of ``SPM_GEOGRAPHY_SOURCES``.
+    """
+    chosen = SPMSelection.model_validate({} if selection is None else selection)
+    config = resolve_spm_selection(chosen)
+    if "geography_kind" in chosen.model_fields_set:
+        return config, "selection"
+    if config["geography_kind"] != "county" or household_names_county:
+        return config, "default"
+    # ``model_dump`` keeps only the settings the caller chose.
+    national = {**chosen.model_dump(), "geography_kind": "national"}
+    return resolve_spm_selection(national), "national_fallback"
 
 
 def calculation_provenance(simulation) -> dict:
