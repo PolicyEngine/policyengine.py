@@ -81,7 +81,7 @@ jobs:
       - name: Smoke-import core modules
         run: python -c "import policyengine; from policyengine.core import Dataset, Policy, Simulation; from policyengine.outputs import aggregate, poverty, inequality; print('import OK')"
   BundleVerification:
-    name: Verify bundle metadata
+    name: Verify release inputs and bundle packages
     # Private manifest credentials are available only to trusted repository PRs.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
@@ -97,8 +97,19 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.13'
-      - name: Check derived bundle metadata
-        run: python scripts/bundle.py check
+      - name: Install package for TRACE verification
+        run: uv pip install -e . h5py --system
+      - name: Check reviewed release inputs
+        env:
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+        run: |
+          if [[ -z "${HUGGING_FACE_TOKEN:-}" ]]; then
+            echo "::error::Full private release verification requires HUGGING_FACE_TOKEN"
+            exit 1
+          fi
+          python scripts/check_release_credentials.py
+          python scripts/bundle.py check --published-spm --include-tros --strict-tros
+          python scripts/release_lock.py
       - name: Install bundle package scaffold
         run: |
           uv pip install -e ".[models]" --system
@@ -121,13 +132,6 @@ jobs:
           PY
       - name: Check installed package consistency
         run: python -m pip check
-      # Only the reviewed registry lock is a pull-request concern. The
-      # read-only credential, published-measurement and TRACE sidecar gates
-      # are release gates: the release workflow regenerates the sidecars and
-      # publishes the wheels immediately before checking them, so they cannot
-      # be satisfied from a pull request. They run in push.yaml instead.
-      - name: Check the reviewed registry lock
-        run: python scripts/release_lock.py
       - name: Verify bundle packages
         run: policyengine bundle verify --country us --country uk --packages-only --json
   Test:
