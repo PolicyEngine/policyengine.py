@@ -1880,10 +1880,10 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.0.0" },
     { name = "plotly", marker = "extra == 'dev'", specifier = ">=5.0.0" },
     { name = "plotly", marker = "extra == 'plotting'", specifier = ">=5.0.0" },
-    { name = "policyengine-core", marker = "extra == 'dev'", specifier = "==3.32.5" },
-    { name = "policyengine-core", marker = "extra == 'models'", specifier = "==3.32.5" },
-    { name = "policyengine-core", marker = "extra == 'uk'", specifier = "==3.32.5" },
-    { name = "policyengine-core", marker = "extra == 'us'", specifier = "==3.32.5" },
+    { name = "policyengine-core", marker = "extra == 'dev'", specifier = "==3.32.10" },
+    { name = "policyengine-core", marker = "extra == 'models'", specifier = "==3.32.10" },
+    { name = "policyengine-core", marker = "extra == 'uk'", specifier = "==3.32.10" },
+    { name = "policyengine-core", marker = "extra == 'us'", specifier = "==3.32.10" },
     { name = "policyengine-uk", marker = "extra == 'dev'", specifier = "==2.102.3" },
     { name = "policyengine-uk", marker = "extra == 'models'", specifier = "==2.102.3" },
     { name = "policyengine-uk", marker = "extra == 'uk'", specifier = "==2.102.3" },
@@ -1907,7 +1907,7 @@ provides-extras = ["plotting", "graph", "models", "uk", "us", "dev"]
 
 [[package]]
 name = "policyengine-core"
-version = "3.32.5"
+version = "3.32.10"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dpath" },
@@ -1928,9 +1928,9 @@ dependencies = [
     { name = "standard-imghdr" },
     { name = "wheel" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/12/54/cfd2138584de9cddaa4459bba7fdc381101ca8b8ffd38356a1b256850d5f/policyengine_core-3.32.5.tar.gz", hash = "sha256:f051c269b538fe77ee7868f7cfbc0138551960b1b677a0ad6fdc1a93f1660460", size = 420112, upload-time = "2026-09-10T04:16:48.889Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d6/cd/9fc967c5b787baa5f9d83461773ba0982a8e22ae83c40155a7ee55edd11a/policyengine_core-3.32.10.tar.gz", hash = "sha256:0f51e8abfa8f172c69d03ba8f4304632a348fc6dca780e41021b2fd0cec04fde", size = 427479, upload-time = "2026-09-29T17:56:43.582Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c6/d9/72c3707465e9fe77e6f7a55ea64b49a287cbf875b78f6e862d945df26975/policyengine_core-3.32.5-py3-none-any.whl", hash = "sha256:9d8c162d5fe5c784ae16c885da3ffbfc39a536add0e111133144d8edd555935f", size = 245925, upload-time = "2026-09-10T04:16:47.153Z" },
+    { url = "https://files.pythonhosted.org/packages/58/50/291d73da16f39a3c4f05dffb6d40b1142fc400ec39b5a2ca7481e6fe9d90/policyengine_core-3.32.10-py3-none-any.whl", hash = "sha256:124afc555fe7c848ae8237b820fed0b6ea0ea1280e8850ad8bf356937ee10e5b", size = 247410, upload-time = "2026-09-29T17:56:42.218Z" },
 ]
 
 [[package]]
@@ -2219,7 +2219,7 @@ wheels = [
 
 [[package]]
 name = "pytest"
-version = "8.4.1"
+version = "9.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorama", marker = "sys_platform == 'win32'" },
@@ -2228,21 +2228,22 @@ dependencies = [
     { name = "pluggy" },
     { name = "pygments" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/08/ba/45911d754e8eba3d5a841a5ce61a65a685ff1798421ac054f85aa8747dfb/pytest-8.4.1.tar.gz", hash = "sha256:7c67fd69174877359ed9371ec3af8a3d2b04741818c51e5e99cc1742251fa93c", size = 1517714, upload-time = "2025-06-18T05:48:06.109Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e4/47/b9efed96c114afcfa3c9d3fe98a76a1d14c74a9e266d397cf6eb64be5e01/pytest-9.1.1.tar.gz", hash = "sha256:1088fbde8f2b49d95a549a195707afa7a76a3ce9bcadc26b6d71f0ffda5fe313", size = 1636369, upload-time = "2026-06-19T10:58:32.857Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/29/16/c8a903f4c4dffe7a12843191437d7cd8e32751d5de349d45d3fe69544e87/pytest-8.4.1-py3-none-any.whl", hash = "sha256:539c70ba6fcead8e78eebbf1115e8b589e7565830d7d006a8723f19ac8a0afb7", size = 365474, upload-time = "2025-06-18T05:48:03.955Z" },
+    { url = "https://files.pythonhosted.org/packages/24/25/1de2678b631f5a49215c6c96fff41ba892b0a34df68d6d80292b1b48aa7f/pytest-9.1.1-py3-none-any.whl", hash = "sha256:37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c", size = 386536, upload-time = "2026-06-19T10:58:31.347Z" },
 ]
 
 [[package]]
 name = "pytest-asyncio"
-version = "1.1.0"
+version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pytest" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4e/51/f8794af39eeb870e87a8c8068642fc07bce0c854d6865d7dd0f2a9d338c2/pytest_asyncio-1.1.0.tar.gz", hash = "sha256:796aa822981e01b68c12e4827b8697108f7205020f24b5793b3c41555dab68ea", size = 46652, upload-time = "2025-07-16T04:29:26.393Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/7c/d36d04db312ecf4298932ef77e6e4a9e8ad017906e24e34f0b0c361a2473/pytest_asyncio-1.4.0.tar.gz", hash = "sha256:c6c0d2259945122819f171a32ecea2c349ead889ee28176caaf492143424be42", size = 58514, upload-time = "2026-05-26T09:56:04.083Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c7/9d/bf86eddabf8c6c9cb1ea9a869d6873b46f105a5d292d3a6f7071f5b07935/pytest_asyncio-1.1.0-py3-none-any.whl", hash = "sha256:5fe2d69607b0bd75c656d1211f969cadba035030156745ee09e7d71740e58ecf", size = 15157, upload-time = "2025-07-16T04:29:24.929Z" },
+    { url = "https://files.pythonhosted.org/packages/03/e2/08a497ef684b88559c9cc5f4ad53a37e7b99e727094a86d6ea32536d5d3c/pytest_asyncio-1.4.0-py3-none-any.whl", hash = "sha256:933ca923a23075a87fb7070c0ec272a6848489824d887c85c812670932835aa1", size = 16930, upload-time = "2026-05-26T09:56:02.576Z" },
 ]
 
 [[package]]

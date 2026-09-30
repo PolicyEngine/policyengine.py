@@ -106,7 +106,7 @@ separate benefit inputs; they do not override SPM measurement composition.
 
 These changes require the coordinated canonical country/calculator bundle, which
 the packaged production manifest now pins and certifies: `policyengine-us`
-2.2.1, `policyengine-core` 3.32.5, `spm-calculator` 1.0.0, and the US data
+2.2.1, `policyengine-core` 3.32.10, `spm-calculator` 1.0.0, and the US data
 release `populace-us-2024-spm-20260915`. Local-wheel development manifest
 fixtures remain explicitly uncertified. The measurement receipt identifies a
 calculation; it does not certify a population dataset or establish publication
