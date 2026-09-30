@@ -21,12 +21,15 @@ def _selection_schema(schema: dict[str, Any]) -> None:
 
 
 class SPMSelection(BaseModel):
-    """Select from the bundle's pinned artifact; national geography is explicit.
+    """Select from the bundle's pinned artifact.
 
     County mode reads the household's observed ``county_fips``. A state alone
-    does not identify an SPM area. These settings contain no provider or path.
-    Serialization preserves omitted options so they still inherit bundle defaults
-    after a round trip. A resolved selection explicitly contains all six fields.
+    does not identify an SPM area, so national measurement is either selected
+    explicitly or, for a household calculation that chose no geography and
+    names no county, a fallback recorded as ``spm_geography_source``. These
+    settings contain no provider or path. Serialization preserves omitted
+    options so they still inherit bundle defaults after a round trip. A resolved
+    selection explicitly contains all six fields.
     """
 
     model_config = ConfigDict(
