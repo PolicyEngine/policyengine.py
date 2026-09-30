@@ -13,12 +13,34 @@ import pytest
 import requests
 
 from policyengine.provenance import manifest
+from policyengine.provenance.trace import compute_trace_composition_fingerprint
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "release_tros"
 sys.path.insert(0, str(ROOT / "scripts"))
 import bundle as maintenance  # noqa: E402
 import generate_trace_tros as generator  # noqa: E402
+
+
+@pytest.mark.parametrize("country", ["us", "uk"])
+def test_bundled_tro_composition_fingerprint_matches_artifacts(country):
+    tro_path = (
+        ROOT
+        / "src"
+        / "policyengine"
+        / "data"
+        / "bundle"
+        / f"{country}.trace.tro.jsonld"
+    )
+    tro = json.loads(tro_path.read_text())["@graph"][0]
+    composition = tro["trov:hasComposition"]
+    artifact_hashes = [
+        artifact["trov:sha256"] for artifact in composition["trov:hasArtifact"]
+    ]
+
+    assert composition["trov:hasFingerprint"]["trov:sha256"] == (
+        compute_trace_composition_fingerprint(artifact_hashes)
+    )
 
 
 @pytest.fixture
