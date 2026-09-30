@@ -13,12 +13,34 @@ import pytest
 import requests
 
 from policyengine.provenance import manifest
+from policyengine.provenance.trace import compute_trace_composition_fingerprint
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "release_tros"
 sys.path.insert(0, str(ROOT / "scripts"))
 import bundle as maintenance  # noqa: E402
 import generate_trace_tros as generator  # noqa: E402
+
+
+@pytest.mark.parametrize("country", ["us", "uk"])
+def test_bundled_tro_composition_fingerprint_matches_artifacts(country):
+    tro_path = (
+        ROOT
+        / "src"
+        / "policyengine"
+        / "data"
+        / "bundle"
+        / f"{country}.trace.tro.jsonld"
+    )
+    tro = json.loads(tro_path.read_text())["@graph"][0]
+    composition = tro["trov:hasComposition"]
+    artifact_hashes = [
+        artifact["trov:sha256"] for artifact in composition["trov:hasArtifact"]
+    ]
+
+    assert composition["trov:hasFingerprint"]["trov:sha256"] == (
+        compute_trace_composition_fingerprint(artifact_hashes)
+    )
 
 
 @pytest.fixture
@@ -300,15 +322,18 @@ def test_release_workflows_gate_complete_inputs_and_lock():
         assert commands.index(
             "python scripts/check_release_credentials.py"
         ) < commands.index("check --published-spm")
-    # The pull-request job checks only the reviewed registry lock. The
-    # read-only credential, published-measurement and TRACE sidecar gates
-    # depend on the release workflow regenerating sidecars and publishing
-    # wheels first, so a pull request can never satisfy them.
+    # Same-repository pull requests have the read-only credential required to
+    # run the exact pre-versioning release check before merge.
     pr_commands = "\n".join(
         step.get("run", "") for step in pr["jobs"]["BundleVerification"]["steps"]
     )
     assert "python scripts/release_lock.py" in pr_commands
-    assert "--published-spm" not in pr_commands
+    assert "check --published-spm --include-tros --strict-tros" in pr_commands
+    assert 'if [[ -z "${HUGGING_FACE_TOKEN:-}" ]]' in pr_commands
+    assert "python scripts/check_release_credentials.py" in pr_commands
+    assert pr_commands.index(
+        "python scripts/check_release_credentials.py"
+    ) < pr_commands.index("check --published-spm")
     commands = "\n".join(
         step.get("run", "") for step in push["jobs"]["Versioning"]["steps"]
     )

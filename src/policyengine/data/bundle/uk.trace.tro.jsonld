@@ -102,7 +102,7 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "323677508f58ce65912d6b90f485952e948f0050817be2f8fa093ede0df746ff"
+          "trov:sha256": "33eb1f57385df5ed4526990a14563029aabe1e57c1900fd1bd4c4e0238ae1e5a"
         }
       },
       "trov:hasPerformance": {
