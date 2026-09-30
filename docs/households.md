@@ -38,7 +38,8 @@ All adults default to one shared tax unit and household. For separate tax units 
 US household results include SPM resources and poverty by default. With the
 household's county FIPS, as above, SPM thresholds use that county's Census SPM
 estimation area. A household that gives only its state is measured nationally,
-with no geographic adjustment, and the result says so:
+with no geographic adjustment, and the result says so. Missing values (`None`,
+`""`, NaN) and `"UNKNOWN"` count as no county:
 
 ```python
 result = pe.us.calculate_household(
@@ -52,6 +53,10 @@ result.provenance["spm_geography_source"]  # "national_fallback"
 receipt = result.to_dict()["provenance"]["spm"]
 result.write("household-result.json")  # Includes the JSON-compatible receipt.
 ```
+
+National measurement applies to everything that uses the SPM measurement: the
+thresholds and poverty status, and, for a unit allocated housing assistance, the
+capped SPM housing subsidy and the SPM resources built on it.
 
 `spm_geography_source` is `"national_fallback"` when national measurement
 replaced the default county selection because the household named no county,
@@ -74,7 +79,7 @@ set of keys is:
 |---|---|
 | `forecast_content_sha256` | Optional assertion of the bundle's independently pinned artifact content hash. A different hash is rejected. |
 | `scenario` | Scenario within that artifact: `ce_trend` by default or the `zero_real` sensitivity. |
-| `geography_kind` | `county` by default, or `national` for a household that names no county; `national` or `metro` can be chosen explicitly. |
+| `geography_kind` | `county` by default. If you leave it out and the household has no `county_fips`, the calculation falls back to `national`. `national` or `metro` can be chosen explicitly. |
 | `geography_id` | Required only for a fixed `metro` SPM area. |
 | `county_vintage` | County assignment vintage, `"2020"` by default. |
 | `as_of` | Optional information-date cutoff accepted by the pinned artifact. |

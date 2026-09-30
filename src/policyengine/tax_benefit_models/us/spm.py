@@ -71,6 +71,8 @@ def resolve_household_spm_selection(
     Returns the resolved configuration and one of ``SPM_GEOGRAPHY_SOURCES``.
     """
     chosen = SPMSelection.model_validate({} if selection is None else selection)
+    # Resolve before deciding: this also rejects a selection that asserts a
+    # different artifact hash, whichever geography is finally used.
     config = resolve_spm_selection(chosen)
     if "geography_kind" in chosen.model_fields_set:
         return config, "selection"

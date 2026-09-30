@@ -37,6 +37,8 @@ an optional reform, get back a dot-accessible result.
 
 from __future__ import annotations
 
+import math
+import numbers
 from collections.abc import Mapping
 from typing import Any, Optional
 
@@ -67,13 +69,39 @@ _GROUP_ENTITIES = ("marital_unit", "family", "spm_unit", "tax_unit", "household"
 _COUNTY_INPUTS = ("county_fips", "county", "county_str")
 
 
+def _is_absent(name: str, value: Any) -> bool:
+    """Whether a county input's value means that no county was given.
+
+    Missing values (``None``, empty text, NaN, ``pd.NA``) are absent, as the
+    country model's county check also treats them, and so is ``"UNKNOWN"``,
+    the ``county`` enum's default, for the two county-name inputs. Anything
+    else, including a malformed code such as ``6037``, names a county and so
+    reaches the county selection's typed error.
+    """
+    if value is None:
+        return True
+    if isinstance(value, bytes):
+        value = value.decode(errors="replace")
+    if isinstance(value, str):
+        return value == "" or (name != "county_fips" and value == "UNKNOWN")
+    if isinstance(value, numbers.Number) and not isinstance(value, bool):
+        try:
+            return math.isnan(value)
+        except TypeError:
+            return False
+    import pandas as pd
+
+    return value is pd.NA
+
+
 def _names_county(
     household: Mapping[str, Any], axes: Optional[list[list[dict[str, Any]]]]
 ) -> bool:
-    for name in _COUNTY_INPUTS:
-        value = household.get(name)
-        if value is not None and not (isinstance(value, str) and value == ""):
-            return True
+    if any(
+        name in household and not _is_absent(name, household[name])
+        for name in _COUNTY_INPUTS
+    ):
+        return True
     return any(axis["name"] in _COUNTY_INPUTS for group in axes or [] for axis in group)
 
 
@@ -211,8 +239,10 @@ def calculate_household(
             the bundle's independently pinned artifact. When it chooses no
             ``geography_kind``, a household with ``county_fips`` is measured
             in its county's Census SPM estimation area, and a household that
-            names no county is measured nationally, with no geographic
-            adjustment; ``provenance["spm_geography_source"]`` is then
+            names no county (no county input, or only missing values or
+            ``"UNKNOWN"``) is measured nationally, with no geographic
+            adjustment, in its thresholds and in the capped SPM housing
+            subsidy; ``provenance["spm_geography_source"]`` is then
             ``"national_fallback"`` (otherwise ``"default"``, or
             ``"selection"`` when you chose the geography). A household that
             names its county only as ``county`` or ``county_str`` keeps county

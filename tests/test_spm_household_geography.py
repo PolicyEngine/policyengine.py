@@ -13,13 +13,16 @@ Invariants checked here, for every household that names no county:
   ``spm_geography_source``;
 - its geographic adjustment is exactly 1 and its threshold equals the
   unadjusted threshold;
-- SPM poverty is exactly ``spm_unit_net_income < spm_unit_spm_threshold``.
+- SPM poverty is exactly ``spm_unit_net_income < spm_unit_spm_threshold``
+  (the country formula, rechecked on fallback results as a consistency check).
 
 A household with ``county_fips`` equals the explicit county calculation.
+Missing values (``None``, ``""``, NaN) and ``"UNKNOWN"`` count as no county.
 """
 
 import math
 
+import pandas as pd
 import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
@@ -105,6 +108,33 @@ def test_fallback_keeps_the_other_chosen_settings(county_bundle):
     assert config["as_of"] == "2026-09-09"
 
 
+@pytest.mark.parametrize(
+    "selection",
+    [
+        SPMSelection(scenario="zero_real"),
+        {"forecast_content_sha256": ARTIFACT},
+        {"forecast_content_sha256": None},
+        {"county_vintage": "2020"},
+    ],
+)
+def test_selections_without_a_geography_fall_back(county_bundle, selection):
+    config, source = resolve_household_spm_selection(
+        selection, household_names_county=False
+    )
+    assert source == "national_fallback"
+    chosen = SPMSelection.model_validate(selection).model_dump()
+    expected = resolve_spm_selection({**chosen, "geography_kind": "national"})
+    assert config == expected
+    assert config["forecast_content_sha256"] == ARTIFACT
+
+
+def test_fallback_still_rejects_a_different_artifact(county_bundle):
+    with pytest.raises(ValueError, match="artifact hash"):
+        resolve_household_spm_selection(
+            {"forecast_content_sha256": "b" * 64}, household_names_county=False
+        )
+
+
 def test_fallback_is_only_for_the_county_default(county_bundle):
     county_bundle["measurements"]["spm"]["geography_kind"] = "national"
     config, source = resolve_household_spm_selection(None, household_names_county=False)
@@ -127,6 +157,12 @@ def test_sources_are_the_documented_set(county_bundle):
         ({"state_code": "CA"}, None, False),
         ({"state_code": "CA", "county_fips": None}, None, False),
         ({"state_code": "CA", "county_fips": ""}, None, False),
+        ({"state_code": "CA", "county_fips": b""}, None, False),
+        ({"state_code": "CA", "county_fips": float("nan")}, None, False),
+        ({"state_code": "CA", "county_fips": pd.NA}, None, False),
+        ({"state_code": "CA", "county": "UNKNOWN"}, None, False),
+        ({"state_code": "CA", "county_str": "UNKNOWN"}, None, False),
+        ({"state_code": "CA", "county": None, "county_str": ""}, None, False),
         ({"state_code": "CA", "county_fips": "06037"}, None, True),
         # Malformed codes still name a county, so they reach the typed error.
         ({"state_code": "CA", "county_fips": 6037}, None, True),
@@ -221,10 +257,32 @@ def test_state_only_default_equals_explicit_national(state_code):
     assert without_source(default) == without_source(explicit)
 
 
-def test_blank_county_fips_is_no_county():
-    result = calculate(household("CA", county_fips=""))
+@pytest.mark.parametrize(
+    "location",
+    [
+        {"county_fips": ""},
+        {"county_fips": None},
+        {"county_fips": float("nan")},
+        {"county_str": "UNKNOWN"},
+    ],
+)
+def test_missing_county_values_are_no_county(location):
+    # Compare with explicit national for the same inputs: a county input can
+    # move non-SPM outputs slightly (a county-name input shifts one float32
+    # Medicaid value in the last digit), which is not what this tests.
+    inputs = household("CA", **location)
+    result = calculate(inputs)
     check_national_fallback(result)
-    assert without_source(result) == without_source(calculate(household("CA")))
+    explicit = calculate(inputs, {"geography_kind": "national"})
+    assert without_source(result) == without_source(explicit)
+
+
+def test_unknown_county_enum_is_no_county():
+    inputs = household("CA", county="UNKNOWN")
+    result = calculate(inputs)
+    check_national_fallback(result)
+    explicit = calculate(inputs, {"geography_kind": "national"})
+    assert without_source(result) == without_source(explicit)
 
 
 def test_fallback_keeps_a_chosen_scenario():
@@ -282,6 +340,7 @@ def test_every_state_code_without_county_computes(state_code):
 
 @settings(
     max_examples=20,
+    derandomize=True,
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow],
 )
