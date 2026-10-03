@@ -131,7 +131,7 @@ def test_narrate_passes_trace_to_litellm(monkeypatch):
     def fake_completion(**kwargs):
         captured["kwargs"] = kwargs
         message = types.SimpleNamespace(content="Stub narrative.")
-        choice = types.SimpleNamespace(message=message)
+        choice = types.SimpleNamespace(message=message, finish_reason="stop")
         return types.SimpleNamespace(choices=[choice])
 
     monkeypatch.setitem(
@@ -165,6 +165,13 @@ def test_narrate_passes_trace_to_litellm(monkeypatch):
     assert "adjusted_gross_income = 81820.85" in prompt
     assert "TX, joint, 2 adults, ~$85k income" in prompt
     assert "COUNTRY: US" in prompt
+    assert captured["kwargs"]["model"] == "claude-sonnet-5-5"
+    assert captured["kwargs"]["custom_llm_provider"] == "anthropic"
+    assert captured["kwargs"]["max_tokens"] == 4096
+    assert captured["kwargs"]["output_config"] == {"effort": "low"}
+    assert "temperature" not in captured["kwargs"]
+    assert "thinking" not in captured["kwargs"]
+    assert "reasoning_effort" not in captured["kwargs"]
 
 
 def test_narrate_async_uses_litellm_acompletion(monkeypatch):
@@ -173,7 +180,7 @@ def test_narrate_async_uses_litellm_acompletion(monkeypatch):
     async def fake_acompletion(**kwargs):
         captured["kwargs"] = kwargs
         message = types.SimpleNamespace(content="Async stub.")
-        choice = types.SimpleNamespace(message=message)
+        choice = types.SimpleNamespace(message=message, finish_reason="stop")
         return types.SimpleNamespace(choices=[choice])
 
     monkeypatch.setitem(
@@ -190,4 +197,178 @@ def test_narrate_async_uses_litellm_acompletion(monkeypatch):
     )
     result = asyncio.run(narrate_async(derivation))
     assert result == "Async stub."
-    assert captured["kwargs"]["model"] == "claude-sonnet-4-6"
+    assert captured["kwargs"]["model"] == "claude-sonnet-5-5"
+    assert captured["kwargs"]["custom_llm_provider"] == "anthropic"
+    assert captured["kwargs"]["max_tokens"] == 4096
+    assert captured["kwargs"]["output_config"] == {"effort": "low"}
+    assert "temperature" not in captured["kwargs"]
+    assert "thinking" not in captured["kwargs"]
+    assert "reasoning_effort" not in captured["kwargs"]
+
+
+@pytest.fixture
+def narration_derivation():
+    return Derivation(
+        variable="x", value=1.0, period=2026, trace=TraceNode(name="x", value=1.0)
+    )
+
+
+@pytest.fixture(params=[False, True], ids=["sync", "async"])
+def call_narration(request):
+    def call(derivation, **kwargs):
+        if request.param:
+            return asyncio.run(narrate_async(derivation, **kwargs))
+        return narrate(derivation, **kwargs)
+
+    return call
+
+
+@pytest.fixture
+def fake_narration_client(monkeypatch):
+    client = types.SimpleNamespace(
+        kwargs=None,
+        response=types.SimpleNamespace(
+            choices=[
+                types.SimpleNamespace(
+                    message=types.SimpleNamespace(content=" Narrative. "),
+                    finish_reason="stop",
+                )
+            ]
+        ),
+    )
+
+    def completion(**kwargs):
+        client.kwargs = kwargs
+        return client.response
+
+    async def acompletion(**kwargs):
+        return completion(**kwargs)
+
+    client.completion = completion
+    client.acompletion = acompletion
+    monkeypatch.setitem(__import__("sys").modules, "litellm", client)
+    return client
+
+
+@pytest.mark.parametrize("model", ["claude-sonnet-5-5", "anthropic/claude-sonnet-5-5"])
+def test_narration_rejects_temperature_for_sonnet_55(
+    call_narration, narration_derivation, fake_narration_client, model
+):
+    with pytest.raises(ValueError, match="does not support temperature"):
+        call_narration(narration_derivation, model=model, temperature=0.0)
+    assert fake_narration_client.kwargs is None
+
+
+def test_narration_preserves_custom_model_options(
+    call_narration, narration_derivation, fake_narration_client
+):
+    result = call_narration(
+        narration_derivation,
+        model="custom-provider/custom-model",
+        temperature=0.2,
+        max_tokens=512,
+    )
+    assert result == "Narrative."
+    kwargs = fake_narration_client.kwargs
+    assert kwargs["model"] == "custom-provider/custom-model"
+    assert kwargs["temperature"] == 0.2
+    assert kwargs["max_tokens"] == 512
+    assert "output_config" not in kwargs
+    assert "custom_llm_provider" not in kwargs
+
+
+@pytest.mark.parametrize("finish_reason", ["refusal", "content_filter"])
+def test_narration_raises_on_refusal(
+    call_narration, narration_derivation, fake_narration_client, finish_reason
+):
+    fake_narration_client.response.choices[0].finish_reason = finish_reason
+    with pytest.raises(ValueError, match="refused"):
+        call_narration(narration_derivation)
+
+
+@pytest.mark.parametrize("content", [None, "", "  "])
+def test_narration_raises_when_response_has_no_text(
+    call_narration, narration_derivation, fake_narration_client, content
+):
+    fake_narration_client.response.choices[0].message.content = content
+    with pytest.raises(ValueError, match="no text"):
+        call_narration(narration_derivation)
+
+
+@pytest.mark.parametrize("stop_reason", ["end_turn", "refusal"])
+@pytest.mark.parametrize("model", ["claude-sonnet-5-5", "anthropic/claude-sonnet-5-5"])
+def test_narration_litellm_provider_translation_offline(
+    monkeypatch, call_narration, narration_derivation, stop_reason, model
+):
+    """Exercise the pinned wrapper's request and response mapping without HTTP."""
+    import socket
+
+    def no_network(*args, **kwargs):
+        raise AssertionError("This test must not make a network connection")
+
+    monkeypatch.setattr(socket.socket, "connect", no_network)
+    monkeypatch.setattr(socket.socket, "connect_ex", no_network)
+    monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+
+    import httpx
+    import litellm
+    from litellm.llms.anthropic.chat.transformation import AnthropicConfig
+    from litellm.utils import get_optional_params
+
+    def completion(model, messages, **kwargs):
+        model, provider, _, _ = litellm.get_llm_provider(
+            model=model, custom_llm_provider=kwargs["custom_llm_provider"]
+        )
+        assert (model, provider) == ("claude-sonnet-5-5", "anthropic")
+        config = AnthropicConfig()
+        request = config.transform_request(
+            model=model,
+            messages=messages,
+            optional_params=get_optional_params(model=model, **kwargs),
+            litellm_params={},
+            headers={},
+        )
+        assert request["model"] == "claude-sonnet-5-5"
+        assert request["max_tokens"] == 4096
+        assert request["output_config"] == {"effort": "low"}
+        assert not {
+            "temperature",
+            "top_p",
+            "top_k",
+            "thinking",
+            "tool_choice",
+            "tools",
+        }.intersection(request)
+        raw = {
+            "id": "msg_offline_test",
+            "type": "message",
+            "role": "assistant",
+            "model": model,
+            "content": [
+                {"type": "thinking", "thinking": "", "signature": "mock-signature"},
+                {"type": "text", "text": "First sentence. "},
+                {"type": "text", "text": "Second sentence."},
+            ],
+            "stop_reason": stop_reason,
+            "stop_sequence": None,
+            "usage": {"input_tokens": 10, "output_tokens": 20},
+        }
+        return config.transform_parsed_response(
+            completion_response=raw,
+            raw_response=httpx.Response(200, json=raw),
+            model_response=litellm.ModelResponse(),
+        )
+
+    async def acompletion(**kwargs):
+        return completion(**kwargs)
+
+    monkeypatch.setattr(litellm, "completion", completion)
+    monkeypatch.setattr(litellm, "acompletion", acompletion)
+    if stop_reason == "refusal":
+        with pytest.raises(ValueError, match="refused"):
+            call_narration(narration_derivation, model=model)
+    else:
+        assert (
+            call_narration(narration_derivation, model=model)
+            == "First sentence. Second sentence."
+        )
