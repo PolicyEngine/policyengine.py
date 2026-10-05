@@ -4,7 +4,7 @@ import os
 from functools import lru_cache
 from importlib.resources import files
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Any, Literal, Mapping, Optional
 from urllib.parse import quote
 
 import requests
@@ -265,6 +265,7 @@ def fetch_pypi_wheel_metadata(name: str, version: str) -> dict[str, Optional[str
 
 
 DATASET_OVERLAYS_KEY = "dataset_overlays"
+REGIONAL_DATASET_DEFAULTS_KEY = "regional_dataset_defaults"
 
 
 def _apply_dataset_overlays(
@@ -285,8 +286,9 @@ def _apply_dataset_overlays(
     ``data_releases``, overlays survive re-certification untouched.
 
     Overlays are strictly additive: an overlay may not shadow the certified
-    default dataset or any certified dataset entry, so it can never alter
-    default resolution.
+    default dataset or conflict with a certified dataset entry, so it can never
+    alter default resolution. An identical existing entry is accepted to make
+    bundle normalization idempotent.
     """
     overlays = (bundle.get(DATASET_OVERLAYS_KEY) or {}).get(country_id) or {}
     if not overlays:
@@ -302,6 +304,8 @@ def _apply_dataset_overlays(
                 "change default resolution."
             )
         if overlay_name in certified_datasets:
+            if certified_datasets[overlay_name] == overlay_reference:
+                continue
             raise ValueError(
                 f"Dataset overlay '{overlay_name}' for country '{country_id}' "
                 "collides with a certified dataset entry. Overlays must be "
@@ -310,6 +314,109 @@ def _apply_dataset_overlays(
         certified_datasets[overlay_name] = overlay_reference
 
     return {**release_payload, "datasets": certified_datasets}
+
+
+def _apply_regional_dataset_defaults(
+    country_id: str,
+    release_payload: dict,
+    bundle: Mapping[str, Any],
+) -> dict:
+    """Apply durable region-to-dataset selections to one country release.
+
+    Certification replaces ``data_releases.{country}`` as a unit. Regional
+    defaults therefore live beside ``data_releases`` and refer to logical
+    dataset names after overlays have been merged. The country-wide default
+    remains owned by the certified release.
+    """
+
+    defaults_by_country = bundle.get(REGIONAL_DATASET_DEFAULTS_KEY) or {}
+    if not isinstance(defaults_by_country, Mapping):
+        raise ValueError(f"{REGIONAL_DATASET_DEFAULTS_KEY} must be a mapping.")
+    regional_defaults = defaults_by_country.get(country_id) or {}
+    if not isinstance(regional_defaults, Mapping):
+        raise ValueError(
+            f"{REGIONAL_DATASET_DEFAULTS_KEY}.{country_id} must be a mapping."
+        )
+    if not regional_defaults:
+        return release_payload
+
+    datasets = release_payload.get("datasets") or {}
+    if not isinstance(datasets, Mapping):
+        raise ValueError(f"Datasets for country '{country_id}' must be a mapping.")
+    region_datasets = dict(release_payload.get("region_datasets") or {})
+
+    for region_type, dataset_name in regional_defaults.items():
+        if region_type == "national":
+            raise ValueError(
+                f"Regional dataset defaults for country '{country_id}' must not "
+                "override the national certified default."
+            )
+        if not isinstance(dataset_name, str) or dataset_name not in datasets:
+            raise ValueError(
+                f"Regional dataset default for country '{country_id}' and region "
+                f"type '{region_type}' references unknown dataset '{dataset_name}'."
+            )
+        reference = datasets[dataset_name]
+        if not isinstance(reference, Mapping) or not isinstance(
+            reference.get("path"), str
+        ):
+            raise ValueError(
+                f"Regional dataset default '{dataset_name}' for country "
+                f"'{country_id}' has no artifact path."
+            )
+        regional_template = {"path_template": reference["path"]}
+        certified_template = region_datasets.get(region_type)
+        if certified_template is not None and certified_template != regional_template:
+            raise ValueError(
+                f"Regional dataset default for country '{country_id}' and region "
+                f"type '{region_type}' conflicts with certified region dataset "
+                f"template {certified_template!r}."
+            )
+        region_datasets[region_type] = regional_template
+
+    return {**release_payload, "region_datasets": region_datasets}
+
+
+def normalise_bundle_dataset_metadata(bundle: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a bundle with overlays and regional defaults applied.
+
+    Both the public bundle API and country release loading use this function so
+    callers observe the same dataset registry and region mapping.
+    """
+
+    payload = dict(bundle)
+    releases = payload.get("data_releases")
+    if releases is None:
+        return payload
+    if not isinstance(releases, Mapping):
+        raise ValueError("data_releases must be a mapping.")
+
+    defaults_by_country = payload.get(REGIONAL_DATASET_DEFAULTS_KEY) or {}
+    if not isinstance(defaults_by_country, Mapping):
+        raise ValueError(f"{REGIONAL_DATASET_DEFAULTS_KEY} must be a mapping.")
+    unknown_countries = set(defaults_by_country) - set(releases)
+    if unknown_countries:
+        raise ValueError(
+            "Regional dataset defaults reference countries without data releases: "
+            f"{sorted(unknown_countries)}."
+        )
+
+    normalised_releases: dict[str, Any] = {}
+    for country_id, release_payload in releases.items():
+        if not isinstance(country_id, str) or not isinstance(release_payload, dict):
+            raise ValueError("Each data release must be a country-keyed mapping.")
+        release_payload = _apply_dataset_overlays(
+            country_id,
+            release_payload,
+            payload,
+        )
+        normalised_releases[country_id] = _apply_regional_dataset_defaults(
+            country_id,
+            release_payload,
+            payload,
+        )
+    payload["data_releases"] = normalised_releases
+    return payload
 
 
 @lru_cache
@@ -321,11 +428,11 @@ def get_release_manifest(country_id: str) -> CountryReleaseManifest:
     source_bytes = manifest_path.read_text().encode()
     bundle = json.loads(source_bytes)
     try:
-        release_payload = bundle["data_releases"][country_id]
+        release_payload = normalise_bundle_dataset_metadata(bundle)["data_releases"][
+            country_id
+        ]
     except KeyError as exc:
         raise ValueError(f"No bundled data release for country '{country_id}'") from exc
-
-    release_payload = _apply_dataset_overlays(country_id, release_payload, bundle)
     manifest = CountryReleaseManifest.model_validate(release_payload)
     manifest.source_sha256 = hashlib.sha256(source_bytes).hexdigest()
     return manifest

@@ -8,6 +8,8 @@ from pathlib import Path
 
 from generate_bundle_artifacts import BUNDLE_MANIFEST, REPO_ROOT
 
+from policyengine.provenance.manifest import normalise_bundle_dataset_metadata
+
 
 def _write_json(dist_dir: Path, name: str, payload: object) -> Path:
     path = dist_dir / name
@@ -26,7 +28,7 @@ def main() -> int:
     parser.add_argument("--dist-dir", type=Path, default=REPO_ROOT / "dist")
     args = parser.parse_args()
 
-    bundle = json.loads(BUNDLE_MANIFEST.read_text())
+    bundle = normalise_bundle_dataset_metadata(json.loads(BUNDLE_MANIFEST.read_text()))
     version = bundle["bundle_version"]
     args.dist_dir.mkdir(parents=True, exist_ok=True)
 

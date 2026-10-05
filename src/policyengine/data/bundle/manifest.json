@@ -255,8 +255,8 @@
         "path": "populace_us_2024_acs_local.h5",
         "repo_id": "policyengine/populace-us",
         "repo_type": "dataset",
-        "revision": "populace-us-2024-buildo-acs-local-77e2061-20260724T110908Z",
-        "sha256": "71763290ded993789af0ad818fd833a6aabb9ca7ff7d14f78315340d8617c6f4"
+        "revision": "populace-us-2024-buildo-acs-local-767312d60-20260923T074941Z",
+        "sha256": "769756c31f3ca646d12c272511744dec04c0e68870c6946dd945fbba65b6a7ec"
       }
     }
   },
@@ -330,5 +330,11 @@
     }
   },
   "policyengine_version": "6.2.1",
+  "regional_dataset_defaults": {
+    "us": {
+      "congressional_district": "populace_us_2024_acs_local",
+      "state": "populace_us_2024_acs_local"
+    }
+  },
   "schema_version": 2
 }

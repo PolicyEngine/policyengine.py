@@ -8,6 +8,7 @@ import pytest
 from policyengine import bundle
 from policyengine.cli import main as cli_main
 from policyengine.provenance.dataset_materialization import MaterializedDataset
+from policyengine.provenance.manifest import get_release_manifest
 
 
 def _sha256(payload: bytes) -> str:
@@ -48,6 +49,20 @@ def test_bundle_manifest_exposes_data_releases():
     )
 
 
+def test_bundle_and_country_manifest_share_normalised_dataset_metadata():
+    bundle_release = bundle.get_current_bundle()["data_releases"]["us"]
+    country_release = get_release_manifest("us")
+
+    assert set(bundle_release["datasets"]) == set(country_release.datasets)
+    assert {
+        region_type: template["path_template"]
+        for region_type, template in bundle_release["region_datasets"].items()
+    } == {
+        region_type: template.path_template
+        for region_type, template in country_release.region_datasets.items()
+    }
+
+
 def test_bundle_install_requirements_are_country_scoped():
     manifest = bundle.get_current_bundle()
 
@@ -80,6 +95,18 @@ def test_selected_dataset_plan_uses_certified_release_metadata(tmp_path):
     assert plan.repo_type == "model"
     assert plan.destination == tmp_path / "enhanced_frs_2024_25.h5"
     assert plan.sha256 == release["datasets"][plan.dataset]["sha256"]
+
+
+def test_selected_us_dataset_plan_installs_only_national_default(tmp_path):
+    manifest = bundle.get_current_bundle()
+
+    entries = bundle._selected_dataset_plans(manifest, ["us"], data_dir=tmp_path)
+
+    assert len(entries) == 1
+    plan, release = entries[0]
+    assert plan.dataset == "populace_us_2024"
+    assert plan.dataset != manifest["regional_dataset_defaults"]["us"]["state"]
+    assert plan.source_uri == release["default_dataset_uri"]
 
 
 def test_install_bundle_package_only_uses_explicit_python(monkeypatch, tmp_path):
