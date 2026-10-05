@@ -1,11 +1,20 @@
 """Tests for US region definitions."""
 
-from policyengine.countries.us.data import DISTRICT_COUNTS, US_STATE_FIPS, US_STATES
+from policyengine.countries.us.data import (
+    DISTRICT_COUNTS,
+    US_STATE_FIPS,
+    US_STATES,
+)
 from policyengine.countries.us.regions import (
     build_us_region_registry,
     us_region_registry,
 )
 from policyengine.provenance.manifest import CountryReleaseManifest
+
+US_LOCAL_AREA_DATASET_URI = (
+    "hf://policyengine/populace-us/populace_us_2024_acs_local.h5"
+    "@populace-us-2024-buildo-acs-local-767312d60-20260923T074941Z"
+)
 
 
 class TestUSStates:
@@ -134,7 +143,7 @@ class TestUSRegionRegistry:
         assert ca.label == "California"
         assert ca.region_type == "state"
         assert ca.parent_code == "us"
-        assert ca.dataset_path is None
+        assert ca.dataset_path == US_LOCAL_AREA_DATASET_URI
         assert ca.requires_filter
         assert ca.scoping_strategy is not None
         assert ca.scoping_strategy.variable_name == "state_fips"
@@ -167,7 +176,7 @@ class TestUSRegionRegistry:
         assert "1st" in ca01.label.lower() or "1 " in ca01.label
         assert ca01.region_type == "congressional_district"
         assert ca01.parent_code == "state/ca"
-        assert ca01.dataset_path is None
+        assert ca01.dataset_path == US_LOCAL_AREA_DATASET_URI
         assert ca01.requires_filter
         assert ca01.scoping_strategy is not None
         assert ca01.scoping_strategy.variable_name == "congressional_district_geoid"
@@ -250,24 +259,51 @@ class TestUSRegionRegistry:
         assert len(district_children) == DISTRICT_COUNTS["CA"]
         assert len(place_children) >= 10  # CA has many large cities
 
-    def test__given_us_registry__then_dataset_regions_are_national_only(self):
+    def test__given_us_registry__then_all_filter_regions_have_datasets(self):
         """Given: US region registry
         When: Getting regions with datasets
-        Then: Only the national canonical Populace dataset is dedicated
+        Then: National, state, and district regions declare their input dataset
         """
         # When
         dataset_regions = us_region_registry.get_dataset_regions()
 
         # Then
-        assert len(dataset_regions) == 1
-        assert dataset_regions[0].region_type == "national"
+        assert len(dataset_regions) == 1 + 51 + 436
+        assert {region.region_type for region in dataset_regions} == {
+            "national",
+            "state",
+            "congressional_district",
+        }
 
-    def test__given_certified_state_template__then_state_filters_national_dataset(
+    def test__given_states_and_districts__then_all_use_local_area_dataset(self):
+        local_regions = [
+            *us_region_registry.get_by_type("state"),
+            *us_region_registry.get_by_type("congressional_district"),
+        ]
+
+        assert len(local_regions) == 51 + 436
+        assert {region.dataset_path for region in local_regions} == {
+            US_LOCAL_AREA_DATASET_URI
+        }
+        assert all(region.requires_filter for region in local_regions)
+
+    def test__given_dc_state_and_district__then_both_use_local_area_dataset(self):
+        dc = us_region_registry.get("state/dc")
+        dc_al = us_region_registry.get("congressional_district/DC-01")
+
+        assert dc is not None
+        assert dc_al is not None
+        assert dc.dataset_path == US_LOCAL_AREA_DATASET_URI
+        assert dc_al.dataset_path == US_LOCAL_AREA_DATASET_URI
+        assert dc.scoping_strategy is not None
+        assert dc_al.scoping_strategy is not None
+
+    def test__given_certified_state_template__then_state_uses_it_and_filters_rows(
         self, monkeypatch
     ):
         """Given: US bundle manifest with a certified state template
         When: Building the region registry
-        Then: State regions still filter the national certified dataset
+        Then: State regions use the declared dataset and retain row filtering
         """
         manifest = CountryReleaseManifest.model_validate(
             {
@@ -312,7 +348,9 @@ class TestUSRegionRegistry:
         ca = registry.get("state/ca")
 
         assert ca is not None
-        assert ca.dataset_path is None
+        assert ca.dataset_path == (
+            "hf://policyengine/policyengine-us-data/states/CA.h5@1.115.5"
+        )
         assert ca.requires_filter
         assert ca.scoping_strategy is not None
         assert ca.scoping_strategy.variable_name == "state_fips"
