@@ -134,15 +134,16 @@ pe.us.load_datasets()  # or pe.uk.load_datasets()
 
 ### US local-area dataset
 
-Alongside the certified national default, the bundle registers a **non-default**
-US dataset for finer geographic work: `populace_us_2024_acs_local`. It is a
+Alongside the certified national default, the bundle registers a US dataset for
+finer geographic work: `populace_us_2024_acs_local`. It is a
 Populace US 2024 build of roughly **1.6 million households** on an **ACS 2024
 multispine**, with each household **PUMA-assigned** to a 119th-Congress
 congressional district, county, and state, and calibrated to **state
 administrative totals and state and congressional-district population**. Its
-release gate summary records **four reviewed limitations**, so read that gate
-summary before relying on it. It ships in its own immutable release and is never
-selected implicitly — you load it by name.
+release validation summary records **four reviewed limitations**, so read that
+summary before relying on it. It ships in its own immutable release. State and
+congressional-district region simulations select it through the bundle's
+regional-default metadata; direct microsimulations can still load it by name.
 
 Two-line load:
 

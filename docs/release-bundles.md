@@ -205,11 +205,11 @@ python scripts/bundle.py certify-data --country us --data-producer populace \
 ```
 
 That produces one US bundle manifest entry containing the Populace national
-default dataset. State and congressional-district regions are runtime row
-filters over that national dataset, so derived `states/*.h5` or
+default dataset. State and congressional-district simulations use one
+ACS-local dataset and runtime row filters, so derived `states/*.h5` or
 `districts/*.h5` files are not vendored into `data_releases.us.datasets`.
 
-### Non-default dataset overlays
+### Dataset overlays and regional defaults
 
 `certify_data_release` rewrites `data_releases.{country}` wholesale from the
 certified release manifest, so that block only ever holds datasets from the
@@ -235,10 +235,32 @@ sibling `dataset_overlays.{country}` map:
 `get_release_manifest` merges overlays into the resolvable dataset registry, so
 `resolve_dataset_reference` and `managed_microsimulation` load them by name at
 their own pinned, sha-verified revision. Overlays are strictly additive: an
-overlay may not shadow the certified default or any certified dataset, so
-default resolution is untouched. Because certification only rewrites
-`data_releases`, overlays survive re-certification without any manual
-re-add step.
+overlay may not shadow the certified default or conflict with any certified
+dataset, so country-wide default resolution is untouched. Re-normalizing an
+already merged bundle accepts an identical entry.
+
+A second sibling mapping selects an overlaid or certified dataset for a region
+type:
+
+```json
+"regional_dataset_defaults": {
+  "us": {
+    "state": "populace_us_2024_acs_local",
+    "congressional_district": "populace_us_2024_acs_local"
+  }
+}
+```
+
+Bundle normalization merges overlays first, validates every regional logical
+name, and then emits the corresponding `region_datasets` path templates. The
+mapping cannot replace the national default or conflict with a region template
+from the certified release. `get_current_bundle` and `get_release_manifest`
+share this normalization path.
+
+Because certification only rewrites `data_releases`, both sibling blocks
+survive re-certification without a manual re-add step. Ordinary bundle
+installation still downloads only `default_dataset`; a regional runtime is
+responsible for materializing its selected regional dataset.
 
 Cross-package overlays must declare `data_package_name` and `repo_type`
 explicitly. Ordinary artifacts inherit these values from the country release's

@@ -146,11 +146,17 @@ python scripts/bundle.py certify-data \
   --model-version <policyengine-us-version>
 ```
 
-US state and congressional-district regions scope the certified national
-Populace dataset with row filters. If a Populace release also publishes derived
-`states/*.h5` or `districts/*.h5` area slices, the bundle certification omits
-those slices from `data_releases.us.datasets`; they are not runtime dataset
-dependencies.
+US state and congressional-district regions scope the ACS-local Populace
+dataset with row filters. The durable `regional_dataset_defaults.us` mapping
+selects that named dataset after `dataset_overlays.us` is merged into the
+certified release. Certification may replace `data_releases.us` without
+removing either sibling block. If a release publishes derived `states/*.h5` or
+`districts/*.h5` slices, certification still omits them: the runtime loads one
+ACS-local national file and filters its rows.
+
+`policyengine bundle install` continues to materialize only each country's
+certified `default_dataset`. Regional runtimes materialize additional datasets
+when the selected region declares one.
 
 Use `python scripts/bundle.py generate` to regenerate derived bundle metadata,
 and `python scripts/bundle.py generate --include-tros` when TRACE TRO sidecars

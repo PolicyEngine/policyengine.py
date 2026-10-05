@@ -34,8 +34,8 @@ python scripts/bundle.py certify-data --country us --data-producer populace \
   --model-version "<policyengine-us-version>"
 ```
 
-US state and congressional-district regions are row filters over the certified
-national Populace dataset. Certification writes:
+US state and congressional-district regions are row filters over the ACS-local
+Populace dataset. Certification still writes only its national template:
 
 ```json
 "region_datasets": {
@@ -43,9 +43,16 @@ national Populace dataset. Certification writes:
 }
 ```
 
+The hand-maintained sibling blocks `dataset_overlays.us` and
+`regional_dataset_defaults.us` register the ACS-local artifact and select it
+for state and congressional-district regions. Bundle normalization combines
+those blocks with the newly certified release. Certification must preserve both
+sibling blocks.
+
 If the Populace release publishes derived `states/*.h5` or `districts/*.h5`
 files for compatibility checks, certification omits them from the runtime
-bundle. The national H5 is the canonical `.py` dataset.
+bundle. The country-wide default and ACS-local dataset are each single national
+files; region registries select one and then filter its rows.
 
 The script fetches and validates the manifest (every artifact must carry a
 revision pin; the certified dataset must be reachable), writes the canonical

@@ -97,15 +97,15 @@ M was built against a newer `policyengine-us`:
   `PE_UPDATE_SNAPSHOTS=1 pytest tests/test_household_calculator_snapshot.py`
   and commit `tests/fixtures/household_calculator_snapshots/`.
 
-## Step 5 — verify the local-area overlay survived
+## Step 5 — verify the local-area metadata survived
 
-Certification rewrites only `data_releases.us`, so the non-default
-`dataset_overlays.us.populace_us_2024_acs_local` entry (see
-[Non-default dataset overlays](../../release-bundles.md#non-default-dataset-overlays))
-must still be present and resolvable. No manual re-add is needed — confirm it:
+Certification rewrites only `data_releases.us`, so both the
+`dataset_overlays.us.populace_us_2024_acs_local` entry and the state/district
+entries under `regional_dataset_defaults.us` must remain present and
+resolvable. No manual re-add is needed—confirm them:
 
 ```bash
-python -c "import json; b=json.load(open('src/policyengine/data/bundle/manifest.json')); assert 'populace_us_2024_acs_local' in b['dataset_overlays']['us'], 'overlay lost'; print('overlay preserved')"
+python -c "import json; b=json.load(open('src/policyengine/data/bundle/manifest.json')); assert 'populace_us_2024_acs_local' in b['dataset_overlays']['us'], 'overlay lost'; assert set(b['regional_dataset_defaults']['us']) == {'state', 'congressional_district'}, 'regional defaults lost'; print('local-area metadata preserved')"
 pytest tests/test_release_manifests.py -k "local_area or DatasetOverlays" -q
 ```
 

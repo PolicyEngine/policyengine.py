@@ -23,9 +23,9 @@ ca_snap = Aggregate(
 ca_snap.run()
 ```
 
-Each state is a region in the US registry. State regions scope the certified
-national Populace dataset by `state_fips`; they do not require separate state
-H5 files:
+Each state is a region in the US registry. State regions load the ACS-local
+Populace dataset declared by `region.dataset_path`, then scope its rows by
+`state_fips`. They do not require separate state H5 files:
 
 ```python
 states = pe.us.model.region_registry.get_by_type("state")
@@ -33,8 +33,9 @@ for region in states:
     print(region.code, region.label, region.scoping_strategy)
 ```
 
-For state-specific simulations, pass `scoping_strategy=region.scoping_strategy`
-with the certified national dataset.
+For state-specific simulations, use both `region.dataset_path` and
+`region.scoping_strategy`. The regional simulation API performs both steps from
+the registry entry.
 
 ## US congressional districts
 
@@ -49,7 +50,9 @@ for row in impacts.district_results:
     print(row["district_geoid"], row["avg_change"], row["winner_percentage"])
 ```
 
-`district_geoid` is the SSDD integer (state FIPS × 100 + district number; at-large districts use `00`). Congressional district regions scope the certified national Populace dataset by `congressional_district_geoid`.
+`district_geoid` is the SSDD integer (state FIPS × 100 + district number;
+at-large districts use `00`). Congressional district regions load the same
+ACS-local file and scope its rows by `congressional_district_geoid`.
 
 ## UK parliamentary constituencies
 
