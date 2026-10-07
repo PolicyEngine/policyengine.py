@@ -1,3 +1,10 @@
+## [6.2.2] - 2026-10-07
+
+### Changed
+
+- Use the ACS-local Populace dataset by default for US state and congressional-district simulations while retaining the sparse Populace dataset as the national default.
+
+
 ## [6.2.1] - 2026-09-30
 
 ### Changed
