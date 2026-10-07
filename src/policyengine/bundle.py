@@ -29,10 +29,7 @@ from policyengine.provenance.dataset_materialization import (
     _resolve_bundle_dataset,
     _reuse_or_download_bundle_files,
 )
-from policyengine.provenance.manifest import (
-    CountryReleaseManifest,
-    normalise_bundle_dataset_metadata,
-)
+from policyengine.provenance.manifest import CountryReleaseManifest
 from policyengine.utils.hashing import sha256_file
 
 BUNDLE_MANIFEST_RESOURCE = ("data", "bundle", "manifest.json")
@@ -75,10 +72,6 @@ def _normalise_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
     payload.setdefault("packages", {})
     payload.setdefault("extras", {})
     payload.setdefault("data_releases", _data_releases_from_countries(payload))
-    try:
-        payload = normalise_bundle_dataset_metadata(payload)
-    except ValueError as exc:
-        raise BundleError(str(exc)) from exc
     try:
         validate_bundle_measurements(payload)
     except ValueError as exc:
