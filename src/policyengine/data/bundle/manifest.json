@@ -171,6 +171,13 @@
           "revision": "populace-us-2024-spm-20260915",
           "sha256": "6496cc4393d4d3c6574f76eca231de5898c803b9067645591fd5c4d3e65aee84"
         },
+        "populace_us_2024_acs_local": {
+          "path": "populace_us_2024_acs_local.h5",
+          "repo_id": "policyengine/populace-us",
+          "repo_type": "dataset",
+          "revision": "populace-us-2024-buildo-acs-local-767312d60-20260923T074941Z",
+          "sha256": "769756c31f3ca646d12c272511744dec04c0e68870c6946dd945fbba65b6a7ec"
+        },
         "source_enrichment": {
           "path": "releases/populace-us-2024-spm-20260915/source_enrichment.json",
           "repo_id": "policyengine/populace-us",
@@ -212,10 +219,18 @@
       },
       "policyengine_version": "6.2.1",
       "region_datasets": {
+        "congressional_district": {
+          "path_template": "populace_us_2024_acs_local.h5"
+        },
         "national": {
           "path_template": "populace_us_2024.h5"
+        },
+        "state": {
+          "path_template": "populace_us_2024_acs_local.h5"
         }
       },
+      "regional_release_manifest_uri": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-buildo-acs-local-767312d60-20260923T074941Z/releases/populace-us-2024-buildo-acs-local-767312d60-20260923T074941Z/release_manifest.json",
+      "regional_source_manifest_uri": "hf://dataset/policyengine/populace-us@populace-us-2024-buildo-acs-local-767312d60-20260923T074941Z/releases/populace-us-2024-buildo-acs-local-767312d60-20260923T074941Z/release_manifest.json",
       "release_manifest_uri": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-spm-20260915/releases/populace-us-2024-spm-20260915/release_manifest.json",
       "schema_version": 1,
       "source_manifest_uri": "hf://dataset/policyengine/populace-us@populace-us-2024-spm-20260915/releases/populace-us-2024-spm-20260915/release_manifest.json",
@@ -247,16 +262,6 @@
         "repo_type": "dataset",
         "revision": "populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z",
         "sha256": "f17306ccb2aad7ff0130be3589b560afb2e2a12a943570911cd0c77f07934833"
-      }
-    },
-    "us": {
-      "populace_us_2024_acs_local": {
-        "data_package_name": "populace-data",
-        "path": "populace_us_2024_acs_local.h5",
-        "repo_id": "policyengine/populace-us",
-        "repo_type": "dataset",
-        "revision": "populace-us-2024-buildo-acs-local-77e2061-20260724T110908Z",
-        "sha256": "71763290ded993789af0ad818fd833a6aabb9ca7ff7d14f78315340d8617c6f4"
       }
     }
   },

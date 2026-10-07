@@ -1,10 +1,10 @@
 """Region definitions for geographic simulations.
 
 This module provides the Region and RegionRegistry classes for defining
-geographic regions that a tax-benefit model supports. Regions can have:
-1. A dedicated dataset, usually for the national default.
-2. A scoping strategy that derives the region from a parent dataset
-   (row filter or weight replacement).
+geographic regions that a tax-benefit model supports. Regions can select an
+input dataset, apply a scoping strategy to a selected dataset, or do both. For
+example, US states and congressional districts select the shared ACS-local
+dataset and then filter its rows.
 """
 
 from typing import Literal, Optional, Union
@@ -22,10 +22,8 @@ RegionType = Union[USRegionType, UKRegionType]
 class Region(BaseModel):
     """Geographic region for tax-benefit simulations.
 
-    Regions can either have:
-    1. A dedicated dataset (``dataset_path`` is set).
-    2. A scoping strategy that derives the region from a parent dataset
-       (``scoping_strategy`` is set).
+    ``dataset_path`` selects the input dataset. ``scoping_strategy`` optionally
+    scopes that dataset to the requested geography. A region may declare both.
 
     The unique identifier is the code field, which uses a prefixed format:
     - National: "us", "uk"
@@ -56,7 +54,7 @@ class Region(BaseModel):
     # Dataset configuration
     dataset_path: Optional[str] = Field(
         default=None,
-        description="URI to a dedicated dataset when the region has one.",
+        description="URI to the input dataset selected before regional scoping.",
     )
 
     # Scoping strategy for regions that derive from a parent dataset
@@ -173,11 +171,11 @@ class RegionRegistry(BaseModel):
         return [r for r in self.regions if r.parent_code == parent_code]
 
     def get_dataset_regions(self) -> list[Region]:
-        """Get all regions that have a dedicated dataset on disk."""
+        """Get all regions that select an input dataset."""
         return [r for r in self.regions if r.dataset_path is not None]
 
     def get_filter_regions(self) -> list[Region]:
-        """Get all regions that derive from a parent dataset via a scoping strategy."""
+        """Get all regions that apply a scoping strategy to their input dataset."""
         return [r for r in self.regions if r.scoping_strategy is not None]
 
     def __len__(self) -> int:

@@ -143,14 +143,20 @@ python scripts/bundle.py certify-data \
   --country us \
   --data-producer populace \
   --manifest-uri hf://dataset/policyengine/populace-us@<release>/releases/<release>/release_manifest.json \
+  --regional-manifest-uri hf://dataset/policyengine/populace-us@<local-area-release>/releases/<local-area-release>/release_manifest.json \
   --model-version <policyengine-us-version>
 ```
 
-US state and congressional-district regions scope the certified national
-Populace dataset with row filters. If a Populace release also publishes derived
-`states/*.h5` or `districts/*.h5` area slices, the bundle certification omits
-those slices from `data_releases.us.datasets`; they are not runtime dataset
-dependencies.
+US state and congressional-district regions scope one certified ACS-local
+Populace dataset with row filters. Pass its non-default local-area release
+manifest through `--regional-manifest-uri`; certification adds the pinned H5
+artifact to `data_releases.us.datasets` and writes both regional path templates
+under `data_releases.us.region_datasets`. If a legacy release publishes derived
+`states/*.h5` or `districts/*.h5` slices, certification still omits them.
+
+`policyengine bundle install` continues to materialize only each country's
+certified national `default_dataset`. Regional runtimes materialize the
+additional certified dataset when the selected region declares it.
 
 Use `python scripts/bundle.py generate` to regenerate derived bundle metadata,
 and `python scripts/bundle.py generate --include-tros` when TRACE TRO sidecars
