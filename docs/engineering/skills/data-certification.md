@@ -102,8 +102,9 @@ publisher-claim basis above.
 
 Concrete, fill-in-the-id runbooks that replay a specific certification live
 under `docs/engineering/runbooks/`. See
-`runbooks/us-populace-certification.md` for the reusable US national and
-local-area certification procedure.
+`runbooks/build-m-us-populace-certification.md` for the reusable US national
+and local-area certification procedure. The historical filename is retained
+so existing links remain valid.
 
 ## Legacy paths
 

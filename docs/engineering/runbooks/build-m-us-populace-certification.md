@@ -5,6 +5,9 @@ the shared ACS-local release used for state and congressional-district
 simulations. Read the [data certification](../skills/data-certification.md)
 skill first for validation semantics.
 
+This historical filename is retained so existing links remain valid; the
+procedure itself is release-independent.
+
 ## When to use
 
 Both release manifests have been published to `policyengine/populace-us`, and
