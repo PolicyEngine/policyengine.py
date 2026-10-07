@@ -126,10 +126,10 @@ def test_uk_model_exposes_selected_variable_metadata():
     assert employment_income.is_period_size_independent is False
     assert employment_income.metadata == {}
 
-    personal_rent = uk_latest.get_variable("personal_rent")
-    assert personal_rent.defined_for == "is_household_head"
-    assert personal_rent.min_value is None
-    assert personal_rent.max_value is None
+    child_benefit = uk_latest.get_variable("child_benefit")
+    assert child_benefit.defined_for == "would_claim_child_benefit"
+    assert child_benefit.min_value is None
+    assert child_benefit.max_value is None
 
 
 def test_us_model_exposes_selected_variable_metadata():
