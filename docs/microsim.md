@@ -143,7 +143,7 @@ administrative totals and state and congressional-district population**. Its
 release validation summary records **four reviewed limitations**, so read that
 summary before relying on it. It ships in its own immutable release. State and
 congressional-district region simulations select it through the bundle's
-regional-default metadata; direct microsimulations can still load it by name.
+`region_datasets` metadata; direct microsimulations can still load it by name.
 
 Two-line load:
 

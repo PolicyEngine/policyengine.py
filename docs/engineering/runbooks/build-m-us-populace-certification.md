@@ -25,10 +25,11 @@ it was built with is known.
   UK TRO in the `--include-tros` step and to run the UK data-release fetch in
   the test suite. The US populace repo is public.
 
-## Fill in these three values
+## Fill in these four values
 
 ```
 BUILD_M_RELEASE_ID = populace-us-2024-buildm-sparse-rmloss100-<sha>-<timestamp>Z
+LOCAL_AREA_RELEASE_ID = populace-us-2024-buildo-acs-local-<sha>-<timestamp>Z
 MODEL_VERSION      = 1.764.6      # policyengine-us Build M was built with
 CURRENT_RELEASE_ID = populace-us-2024-buildj-sparse-rmloss100-75d5add-20260710T094201Z
 ```
@@ -44,7 +45,8 @@ python scripts/certify_data_release.py \
   --country us \
   --data-producer populace \
   --model-version "$MODEL_VERSION" \
-  --manifest-uri "hf://dataset/policyengine/populace-us@$BUILD_M_RELEASE_ID/releases/$BUILD_M_RELEASE_ID/release_manifest.json"
+  --manifest-uri "hf://dataset/policyengine/populace-us@$BUILD_M_RELEASE_ID/releases/$BUILD_M_RELEASE_ID/release_manifest.json" \
+  --regional-manifest-uri "hf://dataset/policyengine/populace-us@$LOCAL_AREA_RELEASE_ID/releases/$LOCAL_AREA_RELEASE_ID/release_manifest.json"
 ```
 
 This one command:
@@ -97,16 +99,16 @@ M was built against a newer `policyengine-us`:
   `PE_UPDATE_SNAPSHOTS=1 pytest tests/test_household_calculator_snapshot.py`
   and commit `tests/fixtures/household_calculator_snapshots/`.
 
-## Step 5 — verify the local-area metadata survived
+## Step 5 — certify and verify the local-area release
 
-Certification rewrites only `data_releases.us`, so both the
-`dataset_overlays.us.populace_us_2024_acs_local` entry and the state/district
-entries under `regional_dataset_defaults.us` must remain present and
-resolvable. No manual re-add is needed—confirm them:
+The step 1 command passes the immutable ACS-local release manifest with
+`--regional-manifest-uri`. Certification merges its one non-default microdata artifact into
+`data_releases.us.datasets` and records its path for both supported regional
+types. Confirm that the resulting release is self-contained:
 
 ```bash
-python -c "import json; b=json.load(open('src/policyengine/data/bundle/manifest.json')); assert 'populace_us_2024_acs_local' in b['dataset_overlays']['us'], 'overlay lost'; assert set(b['regional_dataset_defaults']['us']) == {'state', 'congressional_district'}, 'regional defaults lost'; print('local-area metadata preserved')"
-pytest tests/test_release_manifests.py -k "local_area or DatasetOverlays" -q
+python -c "import json; r=json.load(open('src/policyengine/data/bundle/manifest.json'))['data_releases']['us']; assert 'populace_us_2024_acs_local' in r['datasets']; assert set(r['region_datasets']) >= {'national', 'state', 'congressional_district'}; print('local-area release certified')"
+pytest tests/test_certify_data_release.py tests/test_release_manifests.py -k "local_area" -q
 ```
 
 ## Step 6 — check, format, lint, test

@@ -472,6 +472,108 @@ def merge_us_state_release_manifest(
     return DataReleaseManifest.model_validate(primary_payload)
 
 
+def merge_us_local_area_release_manifest(
+    primary_manifest: DataReleaseManifest,
+    regional_manifest: DataReleaseManifest,
+) -> DataReleaseManifest:
+    """Add one certified local-area dataset to a primary US release.
+
+    The supplemental release remains non-default nationally. State and
+    congressional-district simulations load the shared artifact and apply the
+    existing row-filtering strategy at runtime.
+    """
+
+    if regional_manifest.dataset_role != "non_default_local_area":
+        raise CertificationError(
+            "US local-area release must declare dataset_role='non_default_local_area'."
+        )
+    if regional_manifest.is_default is not False:
+        raise CertificationError("US local-area release must declare is_default=false.")
+    if regional_manifest.default_datasets:
+        raise CertificationError(
+            "US local-area release must not declare default datasets."
+        )
+
+    local_area_artifacts = [
+        (name, artifact)
+        for name, artifact in regional_manifest.artifacts.items()
+        if artifact.kind == "microdata"
+    ]
+    if len(local_area_artifacts) != 1:
+        raise CertificationError(
+            "US local-area release must contain exactly one microdata artifact."
+        )
+    artifact_name, artifact = local_area_artifacts[0]
+    if not artifact.path.endswith(".h5"):
+        raise CertificationError("US local-area artifact must be an H5 file.")
+    if not artifact.repo_id or not artifact.revision or not artifact.sha256:
+        raise CertificationError(
+            "US local-area artifact must declare repo_id, revision, and sha256."
+        )
+
+    primary_payload = primary_manifest.model_dump(mode="json", exclude_none=True)
+    merged_artifacts = primary_payload.setdefault("artifacts", {})
+    if artifact_name in merged_artifacts:
+        raise CertificationError(
+            f"Regional artifact {artifact_name!r} conflicts with the primary manifest."
+        )
+    if any(item.get("path") == artifact.path for item in merged_artifacts.values()):
+        raise CertificationError(
+            f"Regional artifact path {artifact.path!r} conflicts with the primary manifest."
+        )
+    merged_artifacts[artifact_name] = artifact.model_dump(
+        mode="json",
+        exclude_none=True,
+    )
+
+    metadata = primary_payload.setdefault("metadata", {})
+    region_datasets = metadata.setdefault("region_datasets", {})
+    default_dataset = primary_manifest.default_datasets["national"]
+    default_artifact = primary_manifest.artifacts[default_dataset]
+    region_datasets.setdefault(
+        "national",
+        {"path_template": default_artifact.path},
+    )
+    regional_template = {"path_template": artifact.path}
+    for region_type in ("state", "congressional_district"):
+        existing = region_datasets.get(region_type)
+        if existing is not None and existing != regional_template:
+            raise CertificationError(
+                f"US local-area release conflicts with the {region_type!r} "
+                "dataset template in the primary manifest."
+            )
+        region_datasets[region_type] = regional_template
+
+    return DataReleaseManifest.model_validate(primary_payload)
+
+
+def merge_us_regional_release_manifest(
+    primary_manifest: DataReleaseManifest,
+    regional_manifest: DataReleaseManifest,
+    *,
+    artifact_prefix: str = "states/",
+    path_template: str = "states/{state_code}.h5",
+) -> DataReleaseManifest:
+    """Merge a typed shared local-area release or a legacy per-state release."""
+
+    if regional_manifest.dataset_role == "non_default_local_area":
+        return merge_us_local_area_release_manifest(
+            primary_manifest,
+            regional_manifest,
+        )
+    if regional_manifest.dataset_role is not None:
+        raise CertificationError(
+            "Unsupported US regional release dataset_role "
+            f"{regional_manifest.dataset_role!r}."
+        )
+    return merge_us_state_release_manifest(
+        primary_manifest,
+        regional_manifest,
+        artifact_prefix=artifact_prefix,
+        path_template=path_template,
+    )
+
+
 def build_country_manifest_payload(
     *,
     country: str,
@@ -518,14 +620,18 @@ def build_country_manifest_payload(
     raw_regions = manifest.metadata.get("region_datasets")
     if isinstance(raw_regions, dict):
         for region, template in sorted(raw_regions.items()):
+            if not isinstance(template, dict) or "path_template" not in template:
+                continue
+            path_template = template.get("path_template")
             if (
                 country == "us"
                 and manifest.data_package.name in POPULACE_DATA_PACKAGES
                 and region in {"state", "congressional_district"}
+                and isinstance(path_template, str)
+                and "{" in path_template
             ):
                 continue
-            if isinstance(template, dict) and "path_template" in template:
-                region_datasets[region] = {"path_template": template["path_template"]}
+            region_datasets[region] = {"path_template": template["path_template"]}
     region_datasets.setdefault(
         "national",
         {"path_template": default_artifact.path},
@@ -681,15 +787,15 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
         if regional_manifest_uri is not None:
             if country != "us":
                 raise CertificationError(
-                    "Regional data release overlays are only supported for US "
+                    "Regional data release manifests are only supported for US "
                     "Populace certification."
                 )
-            state_manifest, _, regional_uri_parts = fetch_release_manifest(
+            regional_manifest, _, regional_uri_parts = fetch_release_manifest(
                 regional_manifest_uri, token=token
             )
-            manifest = merge_us_state_release_manifest(
+            manifest = merge_us_regional_release_manifest(
                 manifest,
-                state_manifest,
+                regional_manifest,
                 artifact_prefix=regional_artifact_prefix,
                 path_template=regional_path_template,
             )

@@ -49,7 +49,7 @@ def test_bundle_manifest_exposes_data_releases():
     )
 
 
-def test_bundle_and_country_manifest_share_normalised_dataset_metadata():
+def test_bundle_and_country_manifest_share_certified_dataset_metadata():
     bundle_release = bundle.get_current_bundle()["data_releases"]["us"]
     country_release = get_release_manifest("us")
 
@@ -105,7 +105,7 @@ def test_selected_us_dataset_plan_installs_only_national_default(tmp_path):
     assert len(entries) == 1
     plan, release = entries[0]
     assert plan.dataset == "populace_us_2024"
-    assert plan.dataset != manifest["regional_dataset_defaults"]["us"]["state"]
+    assert "populace_us_2024_acs_local" in release["datasets"]
     assert plan.source_uri == release["default_dataset_uri"]
 
 

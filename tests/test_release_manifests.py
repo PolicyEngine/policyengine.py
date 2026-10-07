@@ -12,7 +12,6 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-import pytest
 from requests import Timeout
 
 from policyengine.core.tax_benefit_model import TaxBenefitModel
@@ -33,7 +32,6 @@ from policyengine.provenance.manifest import (
     get_data_release_manifest,
     get_release_manifest,
     https_release_manifest_uri,
-    normalise_bundle_dataset_metadata,
     resolve_dataset_reference,
     resolve_default_datasets,
     resolve_managed_dataset_reference,
@@ -63,8 +61,8 @@ US_CERTIFIED_DATASET_URI = (
 US_RELEASE_MANIFEST_DATASET_URI = (
     f"hf://policyengine/populace-us/populace_us_2024.h5@{US_DATA_RELEASE_REVISION}"
 )
-# Local-area overlay: a Populace US artifact published in its own immutable
-# release. It remains non-default nationally and is the regional default for
+# Certified local-area dataset: a Populace US artifact published in its own
+# immutable release. It remains non-default nationally and is selected for
 # states and congressional districts.
 US_LOCAL_AREA_DATASET = "populace_us_2024_acs_local"
 US_LOCAL_AREA_RELEASE_ID = (
@@ -321,13 +319,8 @@ class TestReleaseManifests:
             == get_release_manifest("us").default_dataset_uri
         )
 
-    def test__given_local_area_overlay__then_national_default_is_unchanged(self):
-        """Regression: the local-area overlay never changes the national default.
-
-        The overlay adds a loadable name; it must never become the certified
-        default, and default resolution must keep pointing at the certified
-        national Populace artifact.
-        """
+    def test__given_local_area_dataset__then_national_default_is_unchanged(self):
+        """The certified regional dataset never changes the national default."""
         manifest = get_release_manifest("us")
 
         assert manifest.default_dataset == "populace_us_2024"
@@ -346,7 +339,7 @@ class TestReleaseManifests:
         )
 
     def test__given_local_area_name__then_resolves_to_its_immutable_tag(self):
-        """The local-area overlay resolves to its own Build L release tag."""
+        """The local-area dataset resolves to its own immutable release tag."""
         assert (
             resolve_dataset_reference("us", US_LOCAL_AREA_DATASET)
             == US_LOCAL_AREA_DATASET_URI
@@ -358,7 +351,7 @@ class TestReleaseManifests:
             == US_LOCAL_AREA_DATASET_URI
         )
 
-    def test__given_local_area_overlay__then_registered_with_sha_but_not_default(self):
+    def test__given_local_area_dataset__then_registered_with_sha_but_not_default(self):
         manifest = get_release_manifest("us")
 
         reference = manifest.datasets[US_LOCAL_AREA_DATASET]
@@ -1141,12 +1134,12 @@ class TestReleaseManifests:
 
 
 class TestDatasetOverlays:
-    """Unit tests for durable dataset metadata outside certification output.
+    """Unit tests for the ``dataset_overlays`` merge layer.
 
     ``dataset_overlays`` is the hand-maintained sibling of ``data_releases``.
     ``certify_data_release`` rewrites ``data_releases.{country}`` wholesale, so
-    these tests pin the invariant that overlays and regional defaults survive
-    re-certification without changing the country-wide default.
+    these tests pin the invariant that overlays are additive, survive
+    re-certification, and can never hijack default resolution.
     """
 
     def teardown_method(self):
@@ -1190,21 +1183,16 @@ class TestDatasetOverlays:
             }
         }
 
-    def test__given_recertified_release__then_regional_default_survives(self):
-        """Sibling metadata survives replacement of ``data_releases.us``."""
+    def test__given_recertified_release__then_overlay_survives(self):
+        """The overlay lives outside ``data_releases``, so a re-certified
+        payload that never mentions it still resolves it by name."""
         payload = self._recertified_us_payload()
         bundle = {
             "data_releases": {"us": payload},
             "dataset_overlays": {"us": self._local_area_overlay()},
-            "regional_dataset_defaults": {
-                "us": {
-                    "state": US_LOCAL_AREA_DATASET,
-                    "congressional_district": US_LOCAL_AREA_DATASET,
-                }
-            },
         }
 
-        merged = normalise_bundle_dataset_metadata(bundle)["data_releases"]["us"]
+        merged = _apply_dataset_overlays("us", payload, bundle)
         manifest = CountryReleaseManifest.model_validate(merged)
 
         assert manifest.default_dataset == "populace_us_2024"
@@ -1212,45 +1200,11 @@ class TestDatasetOverlays:
         reference = manifest.datasets[US_LOCAL_AREA_DATASET]
         assert reference.revision == US_LOCAL_AREA_RELEASE_ID
         assert reference.sha256 == US_LOCAL_AREA_SHA256
-        assert manifest.region_datasets["state"].path_template == reference.path
-        assert (
-            manifest.region_datasets["congressional_district"].path_template
-            == reference.path
-        )
-
-    def test__given_bundle__then_current_bundle_and_release_manifest_match(self):
-        bundle = normalise_bundle_dataset_metadata(
-            {
-                "data_releases": {"us": self._recertified_us_payload()},
-                "dataset_overlays": {"us": self._local_area_overlay()},
-                "regional_dataset_defaults": {"us": {"state": US_LOCAL_AREA_DATASET}},
-            }
-        )
-
-        release = CountryReleaseManifest.model_validate(bundle["data_releases"]["us"])
-
-        assert US_LOCAL_AREA_DATASET in release.datasets
-        assert release.region_datasets["state"].path_template == (
-            release.datasets[US_LOCAL_AREA_DATASET].path
-        )
 
     def test__given_no_overlays__then_payload_is_returned_unchanged(self):
         payload = self._recertified_us_payload()
 
         assert _apply_dataset_overlays("us", payload, {"data_releases": {}}) is payload
-
-    def test__given_normalised_bundle__then_normalising_again_is_unchanged(self):
-        payload = self._recertified_us_payload()
-        bundle = {
-            "data_releases": {"us": payload},
-            "dataset_overlays": {"us": self._local_area_overlay()},
-            "regional_dataset_defaults": {"us": {"state": US_LOCAL_AREA_DATASET}},
-        }
-
-        once = normalise_bundle_dataset_metadata(bundle)
-        twice = normalise_bundle_dataset_metadata(once)
-
-        assert twice == once
 
     def test__given_overlay_shadowing_default__then_raises(self):
         payload = self._recertified_us_payload()
@@ -1286,54 +1240,3 @@ class TestDatasetOverlays:
             assert "collides with a certified dataset" in str(error)
         else:
             raise AssertionError("Expected overlay colliding with a dataset to fail")
-
-    def test__given_unknown_regional_dataset__then_raises(self):
-        payload = self._recertified_us_payload()
-        bundle = {
-            "data_releases": {"us": payload},
-            "regional_dataset_defaults": {"us": {"state": "missing_dataset"}},
-        }
-
-        with pytest.raises(ValueError, match="unknown dataset 'missing_dataset'"):
-            normalise_bundle_dataset_metadata(bundle)
-
-    def test__given_national_regional_default__then_raises(self):
-        payload = self._recertified_us_payload()
-        bundle = {
-            "data_releases": {"us": payload},
-            "regional_dataset_defaults": {"us": {"national": "populace_us_2024"}},
-        }
-
-        with pytest.raises(ValueError, match="must not override the national"):
-            normalise_bundle_dataset_metadata(bundle)
-
-    def test__given_conflicting_certified_region_template__then_raises(self):
-        payload = self._recertified_us_payload()
-        payload["region_datasets"]["state"] = {
-            "path_template": "states/{state_code}.h5"
-        }
-        bundle = {
-            "data_releases": {"us": payload},
-            "dataset_overlays": {"us": self._local_area_overlay()},
-            "regional_dataset_defaults": {"us": {"state": US_LOCAL_AREA_DATASET}},
-        }
-
-        with pytest.raises(ValueError, match="conflicts with certified region dataset"):
-            normalise_bundle_dataset_metadata(bundle)
-
-    def test__given_identical_certified_region_template__then_accepts_it(self):
-        payload = self._recertified_us_payload()
-        payload["region_datasets"]["state"] = {
-            "path_template": "populace_us_2024_acs_local.h5"
-        }
-        bundle = {
-            "data_releases": {"us": payload},
-            "dataset_overlays": {"us": self._local_area_overlay()},
-            "regional_dataset_defaults": {"us": {"state": US_LOCAL_AREA_DATASET}},
-        }
-
-        normalised = normalise_bundle_dataset_metadata(bundle)
-
-        assert normalised["data_releases"]["us"]["region_datasets"]["state"] == {
-            "path_template": "populace_us_2024_acs_local.h5"
-        }

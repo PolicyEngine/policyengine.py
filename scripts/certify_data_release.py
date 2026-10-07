@@ -60,12 +60,12 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--regional-artifact-prefix",
         default="states/",
-        help="Regional artifact path prefix to import. Defaults to states/.",
+        help="Legacy per-state artifact path prefix to import. Defaults to states/.",
     )
     parser.add_argument(
         "--regional-path-template",
         default="states/{state_code}.h5",
-        help="Region dataset path template to certify into the bundle manifest.",
+        help="Legacy per-state dataset path template to certify.",
     )
     parser.add_argument(
         "--model-version",

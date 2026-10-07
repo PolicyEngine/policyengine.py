@@ -202,11 +202,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     certify.add_argument(
         "--regional-artifact-prefix",
-        help="Regional artifact prefix to import. Defaults to states/.",
+        help="Legacy per-state artifact prefix to import. Defaults to states/.",
     )
     certify.add_argument(
         "--regional-path-template",
-        help="Region dataset path template to certify.",
+        help="Legacy per-state dataset path template to certify.",
     )
     certify.add_argument(
         "--no-generate",

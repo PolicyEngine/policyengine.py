@@ -14,6 +14,8 @@ from policyengine.provenance.certification import (
     CertificationError,
     build_country_manifest_payload,
     certify_data_release,
+    merge_us_local_area_release_manifest,
+    merge_us_regional_release_manifest,
     merge_us_state_release_manifest,
     parse_manifest_uri,
     required_supplemental_release_files,
@@ -35,6 +37,11 @@ US_DATA_VERSION = "1.115.5"
 US_DATA_MANIFEST_URI = (
     "hf://model/policyengine/policyengine-us-data"
     f"@{US_DATA_VERSION}/releases/{US_DATA_VERSION}/release_manifest.json"
+)
+US_LOCAL_AREA_TAG = "populace-us-2024-buildo-acs-local-767312d60-20260923T074941Z"
+US_LOCAL_AREA_MANIFEST_URI = (
+    "hf://dataset/policyengine/populace-us"
+    f"@{US_LOCAL_AREA_TAG}/releases/{US_LOCAL_AREA_TAG}/release_manifest.json"
 )
 
 
@@ -154,6 +161,26 @@ def _state_release_manifest_payload(
         "schema_version": 1,
         "data_package": {"name": "policyengine-us-data", "version": US_DATA_VERSION},
         "artifacts": artifacts,
+    }
+
+
+def _local_area_release_manifest_payload() -> dict:
+    return {
+        "schema_version": 1,
+        "data_package": {"name": "microcosm-data", "version": "0.1.0"},
+        "dataset_role": "non_default_local_area",
+        "is_default": False,
+        "default_datasets": {},
+        "artifacts": {
+            "populace_us_2024_acs_local": {
+                "kind": "microdata",
+                "path": "populace_us_2024_acs_local.h5",
+                "repo_id": "policyengine/populace-us",
+                "revision": US_LOCAL_AREA_TAG,
+                "sha256": "7" * 64,
+                "size_bytes": 1,
+            }
+        },
     }
 
 
@@ -444,6 +471,104 @@ class TestMergeUSStateReleaseManifest:
         )
 
 
+class TestMergeUSLocalAreaReleaseManifest:
+    def test__given_typed_local_area_release__then_certifies_shared_dataset(self):
+        primary = DataReleaseManifest.model_validate(
+            _populace_manifest_payload_without_regions()
+        )
+        regional = DataReleaseManifest.model_validate(
+            _local_area_release_manifest_payload()
+        )
+
+        merged = merge_us_local_area_release_manifest(primary, regional)
+        payload = build_country_manifest_payload(
+            country="us",
+            manifest=merged,
+            uri_parts=parse_manifest_uri(MANIFEST_URI),
+            policyengine_version="9.9.9",
+            model_package="policyengine-us",
+            model_version="1.723.0",
+            model_wheel={},
+        )
+
+        local_dataset = payload["datasets"]["populace_us_2024_acs_local"]
+        assert local_dataset == {
+            "path": "populace_us_2024_acs_local.h5",
+            "revision": US_LOCAL_AREA_TAG,
+            "sha256": "7" * 64,
+            "repo_id": "policyengine/populace-us",
+        }
+        assert payload["region_datasets"] == {
+            "congressional_district": {
+                "path_template": "populace_us_2024_acs_local.h5"
+            },
+            "national": {"path_template": "populace_us_2024.h5"},
+            "state": {"path_template": "populace_us_2024_acs_local.h5"},
+        }
+
+    @pytest.mark.parametrize(
+        ("field", "value", "message"),
+        [
+            ("dataset_role", "other", "dataset_role='non_default_local_area'"),
+            ("is_default", True, "is_default=false"),
+            ("default_datasets", {"national": "local"}, "default datasets"),
+        ],
+    )
+    def test__given_invalid_release_role__then_rejects_it(
+        self,
+        field,
+        value,
+        message,
+    ):
+        primary = DataReleaseManifest.model_validate(
+            _populace_manifest_payload_without_regions()
+        )
+        regional_payload = _local_area_release_manifest_payload()
+        regional_payload[field] = value
+        regional = DataReleaseManifest.model_validate(regional_payload)
+
+        with pytest.raises(CertificationError, match=message):
+            merge_us_local_area_release_manifest(primary, regional)
+
+    def test__given_more_than_one_microdata_artifact__then_rejects_it(self):
+        primary = DataReleaseManifest.model_validate(
+            _populace_manifest_payload_without_regions()
+        )
+        regional_payload = _local_area_release_manifest_payload()
+        regional_payload["artifacts"]["second"] = {
+            **regional_payload["artifacts"]["populace_us_2024_acs_local"],
+            "path": "second.h5",
+        }
+        regional = DataReleaseManifest.model_validate(regional_payload)
+
+        with pytest.raises(CertificationError, match="exactly one microdata"):
+            merge_us_local_area_release_manifest(primary, regional)
+
+    def test__given_legacy_regional_release__then_uses_state_merge(self):
+        primary = DataReleaseManifest.model_validate(
+            _populace_manifest_payload_without_regions()
+        )
+        states = DataReleaseManifest.model_validate(_state_release_manifest_payload())
+
+        merged = merge_us_regional_release_manifest(primary, states)
+
+        assert "states/CA" in merged.artifacts
+        assert merged.metadata["region_datasets"]["state"] == {
+            "path_template": "states/{state_code}.h5"
+        }
+
+    def test__given_unknown_regional_role__then_rejects_it(self):
+        primary = DataReleaseManifest.model_validate(
+            _populace_manifest_payload_without_regions()
+        )
+        regional_payload = _local_area_release_manifest_payload()
+        regional_payload["dataset_role"] = "unknown"
+        regional = DataReleaseManifest.model_validate(regional_payload)
+
+        with pytest.raises(CertificationError, match="Unsupported.*dataset_role"):
+            merge_us_regional_release_manifest(primary, regional)
+
+
 class TestCertifyDataRelease:
     def test__given_fetched_populace_manifest__then_updates_bundle_manifest(
         self, tmp_path
@@ -501,7 +626,7 @@ class TestCertifyDataRelease:
         assert result.build_id == UK_TAG
         assert result.bundle_path == bundle_path
 
-    def test__given_us_regional_manifest__then_validates_but_does_not_vendor_state_artifacts(
+    def test__given_us_local_area_manifest__then_certifies_shared_regional_dataset(
         self, tmp_path
     ):
         bundle_path = tmp_path / "manifest.json"
@@ -514,7 +639,7 @@ class TestCertifyDataRelease:
         regional_response = MagicMock()
         regional_response.status_code = 200
         regional_response.content = json.dumps(
-            _state_release_manifest_payload()
+            _local_area_release_manifest_payload()
         ).encode()
 
         with (
@@ -547,7 +672,7 @@ class TestCertifyDataRelease:
                 country="us",
                 data_producer="populace",
                 manifest_uri=MANIFEST_URI,
-                regional_manifest_uri=US_DATA_MANIFEST_URI,
+                regional_manifest_uri=US_LOCAL_AREA_MANIFEST_URI,
                 model_version="1.723.0",
                 bundle_path=bundle_path,
             )
@@ -555,12 +680,16 @@ class TestCertifyDataRelease:
         written = json.loads(bundle_path.read_text())
         release = written["data_releases"]["us"]
         assert release["source_manifest_uri"] == MANIFEST_URI
-        assert release["regional_source_manifest_uri"] == US_DATA_MANIFEST_URI
+        assert release["regional_source_manifest_uri"] == US_LOCAL_AREA_MANIFEST_URI
         assert release["region_datasets"] == {
-            "national": {"path_template": "populace_us_2024.h5"}
+            "congressional_district": {
+                "path_template": "populace_us_2024_acs_local.h5"
+            },
+            "national": {"path_template": "populace_us_2024.h5"},
+            "state": {"path_template": "populace_us_2024_acs_local.h5"},
         }
-        assert "states/CA" not in release["datasets"]
-        assert result.dataset_count == 4
+        assert "populace_us_2024_acs_local" in release["datasets"]
+        assert result.dataset_count == 5
 
     def test__given_us_without_data_producer__then_legacy_update_is_explicitly_unsupported(
         self, tmp_path

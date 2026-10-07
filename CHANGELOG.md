@@ -167,7 +167,7 @@
 
 ### Changed
 
-- Repin the US local-area overlay (`populace_us_2024_acs_local`) to the buildo-acs-local release built on the certified Build O lineage: consumer-loadable bytes, 4,461-target local surface, immutable tag, default resolution unchanged.
+- Certify the US ACS-local dataset (`populace_us_2024_acs_local`) for state and congressional-district simulations using the immutable buildo-acs-local release, while retaining the existing national default dataset.
 
 
 ## [4.22.2] - 2026-07-23
