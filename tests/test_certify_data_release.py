@@ -480,7 +480,11 @@ class TestMergeUSLocalAreaReleaseManifest:
             _local_area_release_manifest_payload()
         )
 
-        merged = merge_us_local_area_release_manifest(primary, regional)
+        merged = merge_us_local_area_release_manifest(
+            primary,
+            regional,
+            regional_repo_type="dataset",
+        )
         payload = build_country_manifest_payload(
             country="us",
             manifest=merged,
@@ -497,6 +501,7 @@ class TestMergeUSLocalAreaReleaseManifest:
             "revision": US_LOCAL_AREA_TAG,
             "sha256": "7" * 64,
             "repo_id": "policyengine/populace-us",
+            "repo_type": "dataset",
         }
         assert payload["region_datasets"] == {
             "congressional_district": {
@@ -689,6 +694,9 @@ class TestCertifyDataRelease:
             "state": {"path_template": "populace_us_2024_acs_local.h5"},
         }
         assert "populace_us_2024_acs_local" in release["datasets"]
+        assert (
+            release["datasets"]["populace_us_2024_acs_local"]["repo_type"] == "dataset"
+        )
         assert result.dataset_count == 5
 
     def test__given_us_without_data_producer__then_legacy_update_is_explicitly_unsupported(

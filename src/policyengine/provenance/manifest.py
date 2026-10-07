@@ -106,6 +106,7 @@ class DataReleaseArtifact(BaseModel):
     path: str
     repo_id: str
     revision: str
+    repo_type: Optional[Literal["model", "dataset"]] = None
     sha256: Optional[str] = None
     size_bytes: Optional[int] = None
     preservation_mirrors: list[PreservationMirror] = Field(default_factory=list)

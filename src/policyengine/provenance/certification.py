@@ -42,7 +42,7 @@ import re
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import requests
 
@@ -475,6 +475,8 @@ def merge_us_state_release_manifest(
 def merge_us_local_area_release_manifest(
     primary_manifest: DataReleaseManifest,
     regional_manifest: DataReleaseManifest,
+    *,
+    regional_repo_type: Optional[Literal["model", "dataset"]] = None,
 ) -> DataReleaseManifest:
     """Add one certified local-area dataset to a primary US release.
 
@@ -521,10 +523,13 @@ def merge_us_local_area_release_manifest(
         raise CertificationError(
             f"Regional artifact path {artifact.path!r} conflicts with the primary manifest."
         )
-    merged_artifacts[artifact_name] = artifact.model_dump(
+    artifact_payload = artifact.model_dump(
         mode="json",
         exclude_none=True,
     )
+    if regional_repo_type is not None:
+        artifact_payload["repo_type"] = regional_repo_type
+    merged_artifacts[artifact_name] = artifact_payload
 
     metadata = primary_payload.setdefault("metadata", {})
     region_datasets = metadata.setdefault("region_datasets", {})
@@ -551,6 +556,7 @@ def merge_us_regional_release_manifest(
     primary_manifest: DataReleaseManifest,
     regional_manifest: DataReleaseManifest,
     *,
+    regional_repo_type: Optional[Literal["model", "dataset"]] = None,
     artifact_prefix: str = "states/",
     path_template: str = "states/{state_code}.h5",
 ) -> DataReleaseManifest:
@@ -560,6 +566,7 @@ def merge_us_regional_release_manifest(
         return merge_us_local_area_release_manifest(
             primary_manifest,
             regional_manifest,
+            regional_repo_type=regional_repo_type,
         )
     if regional_manifest.dataset_role is not None:
         raise CertificationError(
@@ -614,6 +621,8 @@ def build_country_manifest_payload(
             payload["sha256"] = artifact.sha256
         if artifact.repo_id:
             payload["repo_id"] = artifact.repo_id
+        if artifact.repo_type:
+            payload["repo_type"] = artifact.repo_type
         datasets[name] = payload
 
     region_datasets = {}
@@ -796,6 +805,7 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
             manifest = merge_us_regional_release_manifest(
                 manifest,
                 regional_manifest,
+                regional_repo_type=regional_uri_parts["repo_type"],
                 artifact_prefix=regional_artifact_prefix,
                 path_template=regional_path_template,
             )
