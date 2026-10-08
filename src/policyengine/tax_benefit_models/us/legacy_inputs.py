@@ -394,10 +394,10 @@ def _live_values(stored: pd.Series, variable: Any, context: str) -> np.ndarray:
     # Nullable legacy H5 columns may contain genuine booleans and numeric 0/1
     # as objects. Validate each value before casting: bool("False") is True.
     if stored.map(
-        lambda value: isinstance(
-            value, bool | np.bool_ | int | np.integer | float | np.floating
+        lambda value: (
+            isinstance(value, bool | np.bool_ | int | np.integer | float | np.floating)
+            and value in (0, 1)
         )
-        and value in (0, 1)
     ).all():
         return np.asarray(stored.to_numpy(), dtype=bool)
     raise ValueError(f"{context}: the stored values are not boolean.")
