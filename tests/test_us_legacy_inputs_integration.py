@@ -177,13 +177,12 @@ def test_run_keeps_a_stored_false_draw(mapped_run):
     assert mapped_run.release_bundle["legacy_input_renames"] == RENAME
 
 
-def test_missing_acs_claim_decisions_do_not_make_ineligible_people_wic_eligible(
+def test_native_wic_decisions_preserve_eligibility_without_compatibility(
     tmp_path,
 ):
     frames = _frames()
-    # Keep the donor infant's False and the ACS toddler's existing True.
-    # Only the ACS adult is missing a participation decision.
-    frames["person"][LEGACY] = pd.Series([None, False, True], dtype=object)
+    del frames["person"][LEGACY]
+    frames["person"][LIVE] = [True, False, True]
     frames["person"]["person_support_channel"] = [
         "acs_2024_1yr",
         "asec",

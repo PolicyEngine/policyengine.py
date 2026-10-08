@@ -1,6 +1,6 @@
 # Replace the temporary ACS WIC assumption
 
-## Temporary compatibility fix
+## Behaviour before removal
 
 The certified local-area release
 `populace-us-2024-buildo-acs-local-767312d60-20260923T074941Z` stores donor
@@ -8,7 +8,7 @@ participation decisions as `would_claim_wic`, with missing decisions on ACS
 people. The current model consumes the monthly person input
 `takes_up_wic_if_eligible`.
 
-The wrapper preserves all valid existing decisions and sets only missing
+The compatibility parent preserves all valid existing decisions and sets only missing
 decisions on people whose `person_support_channel` is `acs_2024_1yr` to `True`.
 This explicitly assumes that every eligible affected ACS person claims WIC;
 it does not change eligibility. Missing donor decisions, missing identifying
@@ -37,6 +37,12 @@ and satisfy the existing release checks.
 The separate stacked [removal PR #563](https://github.com/PolicyEngine/policyengine.py/pull/563)
 must remain a draft until the replacement dataset has been published and
 certified. Do not invent its revision or hash or relax its failing check.
+
+This branch removes the exception and rejects all missing legacy decisions,
+including ACS decisions. `test_acs_wic_replacement.py` intentionally fails
+while the known incomplete source remains certified. That failure is a merge
+requirement, not a test to skip. No replacement is currently certified by
+these changes.
 
 Once the replacement is available:
 

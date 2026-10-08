@@ -146,9 +146,8 @@ def apply_legacy_input_renames(
     Every mapped table is checked before anything is set. Its ``{entity}_id``
     column must list the simulation's entity IDs in the simulation's order,
     and its stored values must be complete and, for a boolean live input,
-    boolean. A temporary WIC-only exception assumes claiming for missing
-    decisions on explicitly identified ACS people. Missing donor decisions
-    and malformed stored values still raise ``ValueError``.
+    boolean. Missing decisions, including ACS decisions, and malformed
+    stored values raise ``ValueError``.
 
     Applying the mapping again sets the same values, so it is idempotent.
 
@@ -166,15 +165,7 @@ def apply_legacy_input_renames(
                 continue
             context = f"Cannot map stored {legacy!r} onto {live!r} for {year}"
             _check_order(simulation, table, entity, context)
-            stored = table[legacy]
-            if (
-                legacy == "would_claim_wic"
-                and live == "takes_up_wic_if_eligible"
-                and entity == "person"
-                and variable.value_type is bool
-            ):
-                stored = _temporary_acs_wic_values(table, context)
-            values = _live_values(stored, variable, context)
+            values = _live_values(table[legacy], variable, context)
             periods = _periods_of_year(int(year), variable.definition_period, context)
             planned.append((legacy, live, periods, values))
 
@@ -354,32 +345,6 @@ def _check_order(simulation, table: pd.DataFrame, entity: str, context: str) -> 
             f"{entity} order ({id_column} differs), so its values would attach "
             "to the wrong rows."
         )
-
-
-def _temporary_acs_wic_values(table: pd.DataFrame, context: str) -> pd.Series:
-    """Preserve stored decisions; assume claiming only for missing ACS cells."""
-    stored = table["would_claim_wic"]
-    missing = stored.isna()
-    if not missing.any():
-        return stored
-    channel = "person_support_channel"
-    if channel not in table or not (
-        table.loc[missing, channel].eq("acs_2024_1yr").fillna(False).all()
-    ):
-        raise ValueError(
-            f"{context}: the stored column has missing values outside "
-            "explicitly identified ACS people."
-        )
-    # TEMPORARY ACS WIC COMPATIBILITY — REMOVE AS SOON AS POSSIBLE.
-    # Replacement dataset: https://github.com/PolicyEngine/microcosm/issues/1154
-    # Prepared removal: https://github.com/PolicyEngine/policyengine.py/pull/563
-    # The currently certified ACS-local dataset did not generate WIC
-    # participation decisions for ACS people. For missing ACS decisions only,
-    # assume that every eligible person claims WIC.
-    # This is an explicit modelling assumption, not observed participation.
-    # Replace the dataset with a corrected Microcosm release and DELETE
-    # this exception immediately after that replacement is certified.
-    return stored.mask(missing, True)
 
 
 def _live_values(stored: pd.Series, variable: Any, context: str) -> np.ndarray:
