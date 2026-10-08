@@ -371,6 +371,8 @@ def _temporary_acs_wic_values(table: pd.DataFrame, context: str) -> pd.Series:
             "explicitly identified ACS people."
         )
     # TEMPORARY ACS WIC COMPATIBILITY — REMOVE AS SOON AS POSSIBLE.
+    # Replacement dataset: https://github.com/PolicyEngine/microcosm/issues/1154
+    # Prepared removal: https://github.com/PolicyEngine/policyengine.py/pull/563
     # The currently certified ACS-local dataset did not generate WIC
     # participation decisions for ACS people. For missing ACS decisions only,
     # assume that every eligible person claims WIC.
