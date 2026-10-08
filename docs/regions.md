@@ -60,6 +60,16 @@ UK country simulations filter the national dataset's stored household `region`
 column. The UK model derives `country` from `region`; the input dataset does not
 need a separate `country` column.
 
+| Country selector | Stored household input selection |
+| --- | --- |
+| `country/scotland` | `region == "SCOTLAND"` |
+| `country/wales` | `region == "WALES"` |
+| `country/northern_ireland` | `region == "NORTHERN_IRELAND"` |
+
+The `country/` prefix identifies a public geographic selector; it does not name
+a dataset column. Always filter these countries through `region` before running
+the simulation.
+
 Each country uses `RowFilterStrategy`. England matches a list of nine ITL1 regions:
 `NORTH_EAST`, `NORTH_WEST`, `YORKSHIRE`, `EAST_MIDLANDS`, `WEST_MIDLANDS`,
 `EAST_OF_ENGLAND`, `LONDON`, `SOUTH_EAST`, and `SOUTH_WEST`. Scotland, Wales and

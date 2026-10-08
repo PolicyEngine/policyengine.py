@@ -52,6 +52,35 @@ representative-data runs unless the change specifically needs that coverage.
 When a test needs country package data, make the dependency explicit and skip
 cleanly if credentials or local artifacts are unavailable.
 
+## UK country filtering
+
+Raw UK household data stores `region`. The UK model derives `country` from
+that input during calculation. Filtering precedes calculation, so agents and
+developers must use `region` for country selection even though the registry's
+public identifiers start with `country/`.
+
+| Public selector | Required input filter |
+| --- | --- |
+| `country/scotland` | `region == "SCOTLAND"` |
+| `country/wales` | `region == "WALES"` |
+| `country/northern_ireland` | `region == "NORTHERN_IRELAND"` |
+| `country/england` | `region` is one of the nine English values below |
+
+The English values are `NORTH_EAST`, `NORTH_WEST`, `YORKSHIRE`, `EAST_MIDLANDS`,
+`WEST_MIDLANDS`, `EAST_OF_ENGLAND`, `LONDON`, `SOUTH_EAST`, and `SOUTH_WEST`.
+There is no stored `ENGLAND` region value. Use explicit membership so unknown
+or missing regions do not become English households.
+
+Keep all four country entries as `RowFilterStrategy` so the simulation API can
+combine them with `RegionGroupStrategy`. Do not add a dataset `country` column
+or run a preliminary model calculation to work around an incorrect filter.
+Preserve household membership, related people/benefit units, and weights.
+
+Regression tests must exercise Scotland, Wales, Northern Ireland, and England
+against household inputs with `region` and **no `country` column**, including
+the string and byte representations accepted by the dataset loader. See
+`tests/test_uk_regions.py` and the public explanation in `docs/regions.md`.
+
 ## Anti-Patterns
 
 - Do not bypass the wrapper layer without a clear reason.
