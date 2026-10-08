@@ -378,6 +378,7 @@ def _temporary_acs_wic_values(table: pd.DataFrame, context: str) -> pd.Series:
     # Replace the dataset with a corrected Microcosm release and DELETE
     # this exception immediately after that replacement is certified.
     # Replacement tracking: https://github.com/PolicyEngine/microcosm/issues/1154
+    # Prepared removal PR: https://github.com/PolicyEngine/policyengine.py/pull/563
     return stored.mask(missing, True)
 
 

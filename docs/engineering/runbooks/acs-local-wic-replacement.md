@@ -38,7 +38,8 @@ and calibration outputs and satisfy every existing release check.
 
 ## Remove the exception
 
-The removal change is prepared as a separate stacked draft PR now. It is
+The removal change is prepared in the separate stacked draft
+[PR #563](https://github.com/PolicyEngine/policyengine.py/pull/563). It is
 blocked until a new qualified local-area release is published. Do not invent
 its revision or hash, weaken tests, or merge removal against the broken pin.
 
