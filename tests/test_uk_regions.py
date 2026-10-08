@@ -2,8 +2,15 @@
 
 from unittest.mock import patch
 
+import pandas as pd
+import pytest
+from microdf import MicroDataFrame
+from pydantic import TypeAdapter
+
 from policyengine.core.scoping_strategy import (
+    RegionGroupStrategy,
     RowFilterStrategy,
+    ScopingStrategy,
 )
 from policyengine.countries.uk.regions import (
     UK_COUNTRIES,
@@ -91,7 +98,7 @@ class TestUKRegionRegistry:
     def test__given_england_region__then_filters_from_national(self):
         """Given: England country region
         When: Checking its properties
-        Then: Filters from national with country field
+        Then: Filters from national using the nine English regions
         """
         # When
         england = uk_region_registry.get("country/england")
@@ -102,22 +109,24 @@ class TestUKRegionRegistry:
         assert england.region_type == "country"
         assert england.parent_code == "uk"
         assert england.requires_filter
-        assert england.scoping_strategy.variable_name == "country"
-        assert england.scoping_strategy.variable_value == "ENGLAND"
+        assert isinstance(england.scoping_strategy, RowFilterStrategy)
+        assert england.scoping_strategy.variable_name == "region"
+        assert len(england.scoping_strategy.variable_value) == 9
         assert england.dataset_path is None
 
-    def test__given_country_regions__then_have_row_filter_strategy(self):
+    def test__given_country_regions__then_filter_stored_regions(self):
         """Given: UK country regions
         When: Checking their scoping strategies
-        Then: Each has a RowFilterStrategy with correct variable/value
+        Then: Each country retains a row filter on stored regions
         """
-        for code, name in UK_COUNTRIES.items():
+        for code in UK_COUNTRIES:
             region = uk_region_registry.get(f"country/{code}")
             assert region is not None
             assert region.scoping_strategy is not None
             assert isinstance(region.scoping_strategy, RowFilterStrategy)
-            assert region.scoping_strategy.variable_name == "country"
-            assert region.scoping_strategy.variable_value == code.upper()
+            assert region.scoping_strategy.variable_name == "region"
+            if code != "england":
+                assert region.scoping_strategy.variable_value == code.upper()
 
     def test__given_scotland_region__then_filters_from_national(self):
         """Given: Scotland country region
@@ -292,3 +301,153 @@ class TestUKRegionRegistryBuilder:
         assert isinstance(local_authority.scoping_strategy, RowFilterStrategy)
         assert local_authority.scoping_strategy.variable_name == "la_code_oa"
         assert local_authority.scoping_strategy.variable_value == "LA001"
+
+
+# The pinned UK model's Region enum contains nine English ITL1 regions and
+# Scotland, Wales and Northern Ireland. Country is derived, not a stored input.
+_REGION_COUNTRIES = [
+    ("NORTH_EAST", "england"),
+    ("NORTH_WEST", "england"),
+    ("YORKSHIRE", "england"),
+    ("EAST_MIDLANDS", "england"),
+    ("WEST_MIDLANDS", "england"),
+    ("EAST_OF_ENGLAND", "england"),
+    ("LONDON", "england"),
+    ("SOUTH_EAST", "england"),
+    ("SOUTH_WEST", "england"),
+    ("SCOTLAND", "scotland"),
+    ("WALES", "wales"),
+    ("NORTHERN_IRELAND", "northern_ireland"),
+    ("UNKNOWN", None),
+]
+
+
+@pytest.fixture
+def region_only_uk_data():
+    """Raw UK entities without a derived country column, with distinct weights."""
+    household_ids = list(range(1, len(_REGION_COUNTRIES) + 1))
+    household = pd.DataFrame(
+        {
+            "household_id": household_ids,
+            "household_weight": [100.0 + hid for hid in household_ids],
+            "region": [region for region, _ in _REGION_COUNTRIES],
+        }
+    ).iloc[::-1]
+    person = pd.DataFrame(
+        {
+            "person_id": [
+                hid * 10 + offset for hid in household_ids for offset in (1, 2)
+            ],
+            "person_household_id": [hid for hid in household_ids for _ in (1, 2)],
+            "person_benunit_id": [hid * 100 for hid in household_ids for _ in (1, 2)],
+            "person_weight": [100.0 + hid for hid in household_ids for _ in (1, 2)],
+        }
+    )
+    benunit = pd.DataFrame(
+        {
+            "benunit_id": [hid * 100 for hid in household_ids],
+            "benunit_weight": [100.0 + hid for hid in household_ids],
+        }
+    )
+    return {
+        name: MicroDataFrame(frame, weights=f"{name}_weight")
+        for name, frame in (
+            ("person", person),
+            ("benunit", benunit),
+            ("household", household),
+        )
+    }
+
+
+@pytest.mark.parametrize("country", UK_COUNTRIES)
+@pytest.mark.parametrize("encoding", ["str", "bytes", "category"])
+def test_country_scoping_uses_raw_regions_and_preserves_entities(
+    country, encoding, region_only_uk_data
+):
+    household = region_only_uk_data["household"]
+    if encoding == "bytes":
+        household["region"] = household["region"].map(str.encode)
+    elif encoding == "category":
+        household["region"] = household["region"].astype("category")
+    originals = {
+        entity: pd.DataFrame(frame).copy(deep=True)
+        for entity, frame in region_only_uk_data.items()
+    }
+    expected_households = {
+        index
+        for index, (_, expected_country) in enumerate(_REGION_COUNTRIES, start=1)
+        if expected_country == country
+    }
+
+    strategy = uk_region_registry.get(f"country/{country}").scoping_strategy
+    result = strategy.apply(region_only_uk_data, ["benunit", "household"], 2026)
+
+    for entity, id_column, ids in (
+        ("household", "household_id", expected_households),
+        ("person", "person_household_id", expected_households),
+        ("benunit", "benunit_id", {hid * 100 for hid in expected_households}),
+    ):
+        expected = originals[entity][originals[entity][id_column].isin(ids)]
+        pd.testing.assert_frame_equal(
+            pd.DataFrame(result[entity]), expected.reset_index(drop=True)
+        )
+        assert result[entity].weights.tolist() == expected[f"{entity}_weight"].tolist()
+        pd.testing.assert_frame_equal(
+            pd.DataFrame(region_only_uk_data[entity]), originals[entity]
+        )
+
+
+def test_england_scoping_allows_unrepresented_english_regions(region_only_uk_data):
+    """Missing English regions must not prevent selecting those present."""
+    # Only North West (household 2) and Scotland (household 10) are represented.
+    selected = {
+        entity: MicroDataFrame(
+            pd.DataFrame(frame)[frame[column].isin(ids)], weights=f"{entity}_weight"
+        )
+        for entity, frame, column, ids in (
+            ("household", region_only_uk_data["household"], "household_id", [2, 10]),
+            ("person", region_only_uk_data["person"], "person_household_id", [2, 10]),
+            ("benunit", region_only_uk_data["benunit"], "benunit_id", [200, 1000]),
+        )
+    }
+
+    result = uk_region_registry.get("country/england").scoping_strategy.apply(
+        selected, ["benunit", "household"], 2026
+    )
+
+    assert result["household"]["household_id"].tolist() == [2]
+    assert result["person"]["person_id"].tolist() == [21, 22]
+    assert result["benunit"]["benunit_id"].tolist() == [200]
+
+
+@pytest.mark.parametrize("country", UK_COUNTRIES)
+def test_country_scoping_json_round_trip(country, region_only_uk_data):
+    strategy = uk_region_registry.get(f"country/{country}").scoping_strategy
+    restored = TypeAdapter(ScopingStrategy).validate_json(strategy.model_dump_json())
+
+    assert restored == strategy
+    assert restored.cache_key == strategy.cache_key
+    expected = strategy.apply(region_only_uk_data, ["benunit", "household"], 2026)
+    actual = restored.apply(region_only_uk_data, ["benunit", "household"], 2026)
+    for entity in expected:
+        pd.testing.assert_frame_equal(
+            pd.DataFrame(actual[entity]), pd.DataFrame(expected[entity])
+        )
+
+
+def test_country_filters_can_be_combined_without_duplicate_households(
+    region_only_uk_data,
+):
+    """The worker composes country groups from RowFilterStrategy members."""
+    members = [
+        uk_region_registry.get(f"country/{country}").scoping_strategy
+        for country in ("england", "scotland", "england")
+    ]
+    assert all(isinstance(member, RowFilterStrategy) for member in members)
+
+    result = RegionGroupStrategy(members=members).apply(
+        region_only_uk_data, ["benunit", "household"], 2026
+    )
+
+    assert set(result["household"]["household_id"]) == set(range(1, 11))
+    assert result["household"]["household_id"].is_unique
