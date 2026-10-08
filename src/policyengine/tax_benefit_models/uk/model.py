@@ -288,8 +288,9 @@ def _policyengine_uk_input(dataset: PolicyEngineUKDataset):
     from policyengine_uk.data import UKMultiYearDataset, UKSingleYearDataset
 
     year = int(dataset.year)
-    # Copies: policyengine-uk encodes enum columns in place on the tables it
-    # is given, which would change the caller's dataset.
+    # Copies: policyengine-uk encodes enum columns in place on the tables of a
+    # multi-year dataset it is given (a single-year dataset is copied when
+    # policyengine-uk projects it), which would change the caller's dataset.
     simulated = UKSingleYearDataset(
         person=pd.DataFrame(dataset.data.person).copy(),
         benunit=pd.DataFrame(dataset.data.benunit).copy(),
