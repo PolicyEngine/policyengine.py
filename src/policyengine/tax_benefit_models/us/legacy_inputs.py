@@ -146,8 +146,9 @@ def apply_legacy_input_renames(
     Every mapped table is checked before anything is set. Its ``{entity}_id``
     column must list the simulation's entity IDs in the simulation's order,
     and its stored values must be complete and, for a boolean live input,
-    boolean. Otherwise this raises ``ValueError`` rather than set misaligned
-    or invented values.
+    boolean. A temporary WIC-only exception assumes claiming for missing
+    decisions on explicitly identified ACS people. Missing donor decisions
+    and malformed stored values still raise ``ValueError``.
 
     Applying the mapping again sets the same values, so it is idempotent.
 
@@ -165,7 +166,15 @@ def apply_legacy_input_renames(
                 continue
             context = f"Cannot map stored {legacy!r} onto {live!r} for {year}"
             _check_order(simulation, table, entity, context)
-            values = _live_values(table[legacy], variable, context)
+            stored = table[legacy]
+            if (
+                legacy == "would_claim_wic"
+                and live == "takes_up_wic_if_eligible"
+                and entity == "person"
+                and variable.value_type is bool
+            ):
+                stored = _temporary_acs_wic_values(table, context)
+            values = _live_values(stored, variable, context)
             periods = _periods_of_year(int(year), variable.definition_period, context)
             planned.append((legacy, live, periods, values))
 
@@ -347,6 +356,30 @@ def _check_order(simulation, table: pd.DataFrame, entity: str, context: str) -> 
         )
 
 
+def _temporary_acs_wic_values(table: pd.DataFrame, context: str) -> pd.Series:
+    """Preserve stored decisions; assume claiming only for missing ACS cells."""
+    stored = table["would_claim_wic"]
+    missing = stored.isna()
+    if not missing.any():
+        return stored
+    channel = "person_support_channel"
+    if channel not in table or not (
+        table.loc[missing, channel].eq("acs_2024_1yr").fillna(False).all()
+    ):
+        raise ValueError(
+            f"{context}: the stored column has missing values outside "
+            "explicitly identified ACS people."
+        )
+    # TEMPORARY ACS WIC COMPATIBILITY — REMOVE AS SOON AS POSSIBLE.
+    # The currently certified ACS-local dataset did not generate WIC
+    # participation decisions for ACS people. For missing ACS decisions only,
+    # assume that every eligible person claims WIC.
+    # This is an explicit modelling assumption, not observed participation.
+    # Replace the dataset with a corrected Microcosm release and DELETE
+    # this exception immediately after that replacement is certified.
+    return stored.mask(missing, True)
+
+
 def _live_values(stored: pd.Series, variable: Any, context: str) -> np.ndarray:
     if stored.isna().any():
         raise ValueError(f"{context}: the stored column has missing values.")
@@ -355,6 +388,15 @@ def _live_values(stored: pd.Series, variable: Any, context: str) -> np.ndarray:
     if pd.api.types.is_bool_dtype(stored.dtype):
         return np.asarray(stored.to_numpy(dtype=bool))
     if pd.api.types.is_numeric_dtype(stored.dtype) and stored.isin((0, 1)).all():
+        return np.asarray(stored.to_numpy(), dtype=bool)
+    # Nullable legacy H5 columns may contain genuine booleans and numeric 0/1
+    # as objects. Validate each value before casting: bool("False") is True.
+    if stored.map(
+        lambda value: isinstance(
+            value, bool | np.bool_ | int | np.integer | float | np.floating
+        )
+        and value in (0, 1)
+    ).all():
         return np.asarray(stored.to_numpy(), dtype=bool)
     raise ValueError(f"{context}: the stored values are not boolean.")
 
