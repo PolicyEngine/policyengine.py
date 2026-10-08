@@ -201,31 +201,32 @@ US Populace certification uses the Populace release manifest directly:
 ```bash
 python scripts/bundle.py certify-data --country us --data-producer populace \
   --manifest-uri "hf://dataset/policyengine/populace-us@<tag>/releases/<tag>/release_manifest.json" \
+  --regional-manifest-uri "hf://dataset/policyengine/populace-us@<local-area-tag>/releases/<local-area-tag>/release_manifest.json" \
   --model-version "<policyengine-us-version>"
 ```
 
 That produces one US bundle manifest entry containing the Populace national
-default dataset. State and congressional-district regions are runtime row
-filters over that national dataset, so derived `states/*.h5` or
-`districts/*.h5` files are not vendored into `data_releases.us.datasets`.
+default dataset and the certified ACS-local regional dataset. State and
+congressional-district simulations use the latter with runtime row filters, so
+derived `states/*.h5` or `districts/*.h5` files are not vendored into
+`data_releases.us.datasets`.
 
 ### Non-default dataset overlays
 
 `certify_data_release` rewrites `data_releases.{country}` wholesale from the
-certified release manifest, so that block only ever holds datasets from the
-certified release. A staged artifact published in its own release — one that is
-deliberately not the certified default — is registered instead under the
+certified release manifest or manifests. A staged artifact that is not part of
+that certification and is deliberately not a default is registered under the
 sibling `dataset_overlays.{country}` map:
 
 ```json
 "dataset_overlays": {
-  "us": {
-    "populace_us_2024_acs_local": {
+  "uk": {
+    "populace_uk_2023": {
       "data_package_name": "populace-data",
-      "path": "populace_us_2024_acs_local.h5",
-      "repo_id": "policyengine/populace-us",
+      "path": "populace_uk_2023.h5",
+      "repo_id": "policyengine/populace-uk-private",
       "repo_type": "dataset",
-      "revision": "populace-us-2024-buildo-acs-local-...",
+      "revision": "populace-uk-2023-...",
       "sha256": "..."
     }
   }
@@ -237,8 +238,15 @@ sibling `dataset_overlays.{country}` map:
 their own pinned, sha-verified revision. Overlays are strictly additive: an
 overlay may not shadow the certified default or any certified dataset, so
 default resolution is untouched. Because certification only rewrites
-`data_releases`, overlays survive re-certification without any manual
-re-add step.
+`data_releases`, overlays survive re-certification without any manual re-add
+step.
+
+Datasets used automatically for a region type are not overlays. They are
+certified into `data_releases.{country}.datasets`, and
+`data_releases.{country}.region_datasets` maps each region type to its artifact
+path. The national `default_dataset` remains unchanged. Ordinary bundle
+installation downloads only that national default; a regional runtime is
+responsible for materializing the additional certified dataset.
 
 Cross-package overlays must declare `data_package_name` and `repo_type`
 explicitly. Ordinary artifacts inherit these values from the country release's

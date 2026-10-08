@@ -1807,7 +1807,7 @@ wheels = [
 
 [[package]]
 name = "policyengine"
-version = "6.2.1"
+version = "6.2.2"
 source = { editable = "." }
 dependencies = [
     { name = "h5py" },

@@ -106,6 +106,7 @@ class DataReleaseArtifact(BaseModel):
     path: str
     repo_id: str
     revision: str
+    repo_type: Optional[Literal["model", "dataset"]] = None
     sha256: Optional[str] = None
     size_bytes: Optional[int] = None
     preservation_mirrors: list[PreservationMirror] = Field(default_factory=list)
@@ -125,6 +126,10 @@ class DataReleaseArtifact(BaseModel):
 class DataReleaseManifest(BaseModel):
     schema_version: int
     data_package: PackageVersion
+    dataset_role: Optional[str] = None
+    """Producer-declared role for a release that supplements a default release."""
+    is_default: Optional[bool] = None
+    """Whether the producer intends this release to provide default datasets."""
     compatible_model_packages: list[CompatiblePackage] = Field(default_factory=list)
     compatible_core_packages: list[CompatiblePackage] = Field(default_factory=list)
     default_datasets: dict[str, str] = Field(default_factory=dict)
@@ -324,7 +329,6 @@ def get_release_manifest(country_id: str) -> CountryReleaseManifest:
         release_payload = bundle["data_releases"][country_id]
     except KeyError as exc:
         raise ValueError(f"No bundled data release for country '{country_id}'") from exc
-
     release_payload = _apply_dataset_overlays(country_id, release_payload, bundle)
     manifest = CountryReleaseManifest.model_validate(release_payload)
     manifest.source_sha256 = hashlib.sha256(source_bytes).hexdigest()

@@ -1,10 +1,10 @@
 {
-  "bundle_version": "6.2.1",
+  "bundle_version": "6.2.2",
   "citation": {
     "publisher": "PolicyEngine",
-    "title": "PolicyEngine bundle 6.2.1",
+    "title": "PolicyEngine bundle 6.2.2",
     "type": "software-bundle",
-    "version": "6.2.1"
+    "version": "6.2.2"
   },
   "countries": {
     "uk": {
@@ -17,7 +17,7 @@
   "data_releases": {
     "uk": {
       "build_id": "policyengine-uk-data-1.58.0",
-      "bundle_id": "uk-6.2.1",
+      "bundle_id": "uk-6.2.2",
       "certification": {
         "built_with_model_git_sha": "4cbedbecca352f52dffe47e849553c2759a00711",
         "built_with_model_version": "2.122.2",
@@ -99,7 +99,7 @@
         "version": "2.123.4",
         "wheel_url": "https://files.pythonhosted.org/packages/6b/4c/bd5e453ffe516752a171b4ca27cfa036eefc8108aa9bfd0e364eb73c672f/policyengine_uk-2.123.4-py3-none-any.whl"
       },
-      "policyengine_version": "6.2.1",
+      "policyengine_version": "6.2.2",
       "region_datasets": {
         "national": {
           "path_template": "enhanced_frs_2024_25.h5"
@@ -112,7 +112,7 @@
     },
     "us": {
       "build_id": "populace-us-2024-spm-20260915",
-      "bundle_id": "us-6.2.1",
+      "bundle_id": "us-6.2.2",
       "certification": {
         "built_with_model_version": "2.2.1",
         "certified_by": "policyengine.py bundle certification",
@@ -171,6 +171,13 @@
           "revision": "populace-us-2024-spm-20260915",
           "sha256": "6496cc4393d4d3c6574f76eca231de5898c803b9067645591fd5c4d3e65aee84"
         },
+        "populace_us_2024_acs_local": {
+          "path": "populace_us_2024_acs_local.h5",
+          "repo_id": "policyengine/populace-us",
+          "repo_type": "dataset",
+          "revision": "populace-us-2024-buildo-acs-local-767312d60-20260923T074941Z",
+          "sha256": "769756c31f3ca646d12c272511744dec04c0e68870c6946dd945fbba65b6a7ec"
+        },
         "source_enrichment": {
           "path": "releases/populace-us-2024-spm-20260915/source_enrichment.json",
           "repo_id": "policyengine/populace-us",
@@ -210,12 +217,20 @@
         "version": "2.2.1",
         "wheel_url": "https://files.pythonhosted.org/packages/5e/09/86ac3968d2a18e28fce3ba1186fc21728e9f299b96a806d6f204f1e0aaed/policyengine_us-2.2.1-py3-none-any.whl"
       },
-      "policyengine_version": "6.2.1",
+      "policyengine_version": "6.2.2",
       "region_datasets": {
+        "congressional_district": {
+          "path_template": "populace_us_2024_acs_local.h5"
+        },
         "national": {
           "path_template": "populace_us_2024.h5"
+        },
+        "state": {
+          "path_template": "populace_us_2024_acs_local.h5"
         }
       },
+      "regional_release_manifest_uri": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-buildo-acs-local-767312d60-20260923T074941Z/releases/populace-us-2024-buildo-acs-local-767312d60-20260923T074941Z/release_manifest.json",
+      "regional_source_manifest_uri": "hf://dataset/policyengine/populace-us@populace-us-2024-buildo-acs-local-767312d60-20260923T074941Z/releases/populace-us-2024-buildo-acs-local-767312d60-20260923T074941Z/release_manifest.json",
       "release_manifest_uri": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-spm-20260915/releases/populace-us-2024-spm-20260915/release_manifest.json",
       "schema_version": 1,
       "source_manifest_uri": "hf://dataset/policyengine/populace-us@populace-us-2024-spm-20260915/releases/populace-us-2024-spm-20260915/release_manifest.json",
@@ -247,16 +262,6 @@
         "repo_type": "dataset",
         "revision": "populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z",
         "sha256": "f17306ccb2aad7ff0130be3589b560afb2e2a12a943570911cd0c77f07934833"
-      }
-    },
-    "us": {
-      "populace_us_2024_acs_local": {
-        "data_package_name": "populace-data",
-        "path": "populace_us_2024_acs_local.h5",
-        "repo_id": "policyengine/populace-us",
-        "repo_type": "dataset",
-        "revision": "populace-us-2024-buildo-acs-local-77e2061-20260724T110908Z",
-        "sha256": "71763290ded993789af0ad818fd833a6aabb9ca7ff7d14f78315340d8617c6f4"
       }
     }
   },
@@ -290,10 +295,10 @@
   "packages": {
     "policyengine": {
       "import_name": "policyengine",
-      "install_requirement": "policyengine==6.2.1",
+      "install_requirement": "policyengine==6.2.2",
       "name": "policyengine",
       "role": "bundle_carrier",
-      "version": "6.2.1"
+      "version": "6.2.2"
     },
     "policyengine-core": {
       "import_name": "policyengine_core",
@@ -329,6 +334,6 @@
       "wheel_url": "https://files.pythonhosted.org/packages/19/a0/c484f69a0ebf88a9b9fd0ac28176f8df66550f46714f1b0c5ec0b360824e/spm_calculator-1.0.0-py3-none-any.whl"
     }
   },
-  "policyengine_version": "6.2.1",
+  "policyengine_version": "6.2.2",
   "schema_version": 2
 }

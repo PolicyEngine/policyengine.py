@@ -31,21 +31,30 @@ For US Populace certification, certify the Populace release manifest directly:
 ```bash
 python scripts/bundle.py certify-data --country us --data-producer populace \
   --manifest-uri "hf://dataset/policyengine/populace-us@<tag>/releases/<tag>/release_manifest.json" \
+  --regional-manifest-uri "hf://dataset/policyengine/populace-us@<local-area-tag>/releases/<local-area-tag>/release_manifest.json" \
   --model-version "<policyengine-us-version>"
 ```
 
-US state and congressional-district regions are row filters over the certified
-national Populace dataset. Certification writes:
+US state and congressional-district regions are row filters over one shared,
+certified ACS-local Populace dataset. Its release manifest must declare
+`dataset_role: non_default_local_area`, `is_default: false`, no default
+datasets, and exactly one pinned H5 microdata artifact. Certification writes:
 
 ```json
 "region_datasets": {
-  "national": {"path_template": "populace_us_2024.h5"}
+  "national": {"path_template": "populace_us_2024.h5"},
+  "state": {"path_template": "populace_us_2024_acs_local.h5"},
+  "congressional_district": {"path_template": "populace_us_2024_acs_local.h5"}
 }
 ```
 
+The ACS-local artifact is a second entry in `data_releases.us.datasets`; it is
+not a dataset overlay and it never replaces the national `default_dataset`.
+
 If the Populace release publishes derived `states/*.h5` or `districts/*.h5`
 files for compatibility checks, certification omits them from the runtime
-bundle. The national H5 is the canonical `.py` dataset.
+bundle. The country-wide default and ACS-local dataset are each single shared
+files; region registries select one and then filter its rows.
 
 The script fetches and validates the manifest (every artifact must carry a
 revision pin; the certified dataset must be reachable), writes the canonical
@@ -74,8 +83,9 @@ A certification PR should normally change only:
 Hard failures (certification refuses): missing national default dataset,
 default dataset absent from artifacts, any artifact without a revision pin,
 unreachable certified dataset, missing required supplemental release files
-(for example Populace-US `us_source_coverage.json`), missing or malformed US
-state overlay artifacts when `--regional-manifest-uri` is used, unknown country.
+(for example Populace-US `us_source_coverage.json`), a malformed shared
+local-area release or malformed legacy per-state artifacts when
+`--regional-manifest-uri` is used, unknown country.
 
 Certification gate: the model version must either exactly match the
 build-time model (`compatibility_basis: built_with_model_package`) or be
@@ -92,8 +102,9 @@ publisher-claim basis above.
 
 Concrete, fill-in-the-id runbooks that replay a specific certification live
 under `docs/engineering/runbooks/`. See
-`runbooks/build-m-us-populace-certification.md` for the next US Populace
-`sparse-rmloss100` default.
+`runbooks/build-m-us-populace-certification.md` for the reusable US national
+and local-area certification procedure. The historical filename is retained
+so existing links remain valid.
 
 ## Legacy paths
 
