@@ -278,6 +278,8 @@ def create_datasets(
         from policyengine_uk import Microsimulation
 
         sim = Microsimulation(dataset=source.path)
+        if not years:
+            continue
         # policyengine-uk takes a dataset's first year as observed data and
         # projects the rest from it (see PolicyEngineUKDataset.data_year).
         # Each year file keeps that year and its tables, so a run of the
