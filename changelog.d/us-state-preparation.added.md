@@ -1,0 +1,1 @@
+Add opt-in, hash-verified US state input partitioning and shared state/year preparation for precompute benchmarks. Preserve native entity relationships, source periods, weights, and geography without changing dataset defaults.
