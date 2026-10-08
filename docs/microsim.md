@@ -248,9 +248,11 @@ Each projected year file therefore keeps its data year, `dataset.data_year`
 forward as policyengine-uk does, and uses the file's own tables for the
 simulated year. A run of a year file then gives the same result, record by
 record, as `policyengine_uk.Microsimulation` on the certified file. Region
-scoping applies to both sets of tables, matched by entity ID. A dataset built
-in memory without a data year is observed data for its own year, which is how
-policyengine-uk treats a single-year dataset.
+scoping applies to both sets of tables, matched by entity ID. Keeping the data
+year's tables doubles a projected file: the Enhanced FRS 2026 file is 226 MB,
+against 113 MB for its own tables. A dataset built in memory without a data
+year is observed data for its own year, which is how policyengine-uk treats a
+single-year dataset.
 
 Year files written by earlier releases have no recorded data year.
 `ensure_datasets` writes them again and `load_datasets` refuses them. A year
