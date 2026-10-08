@@ -1,5 +1,8 @@
 on:
+  # Feature branches get the pull_request run below; building the draft again
+  # on every branch push duplicated it.
   push:
+    branches: [main]
     paths:
       - paper.md
       - paper.bib
