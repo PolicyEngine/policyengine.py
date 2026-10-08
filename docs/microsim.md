@@ -231,6 +231,32 @@ not need repository-specific download logic. Authentication or authorization
 failures are reported directly and do not cause a retry against another
 repository type.
 
+### UK year files and the data year
+
+`ensure_datasets` and `create_datasets` cut one file per requested year from
+the projection policyengine-uk makes of the certified dataset. policyengine-uk
+takes the first year of a dataset as observed data. Its State Pension formulas
+split each person's reported State Pension against that year's legislated
+rates, and scale the share to the simulated year's rates, which follow the
+triple lock. The projection uprates the reported amount by CPI, so handing a
+projected year's tables to policyengine-uk as observed data would make the
+State Pension follow CPI instead.
+
+Each projected year file therefore keeps its data year, `dataset.data_year`
+(2024 for Enhanced FRS 2024–25), and that year's tables,
+`dataset.data_year_data`. `Simulation.run()` projects the data year's tables
+forward as policyengine-uk does, and uses the file's own tables for the
+simulated year. A run of a year file then gives the same result, record by
+record, as `policyengine_uk.Microsimulation` on the certified file. Region
+scoping applies to both sets of tables, matched by entity ID. A dataset built
+in memory without a data year is observed data for its own year, which is how
+policyengine-uk treats a single-year dataset.
+
+Year files written by earlier releases have no recorded data year.
+`ensure_datasets` writes them again and `load_datasets` refuses them. A year
+file opened directly, as `PolicyEngineUKDataset(filepath=...)`, is not
+checked.
+
 ## Simulations
 
 A `Simulation` needs a dataset, a tax-benefit model version, and optionally a policy (reform):
