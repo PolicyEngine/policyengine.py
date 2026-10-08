@@ -4,7 +4,7 @@ import json
 import warnings
 from importlib import metadata as importlib_metadata
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import h5py
 import pandas as pd
@@ -33,6 +33,9 @@ from policyengine.tax_benefit_models.us.legacy_inputs import (
     write_renames_record,
 )
 from policyengine.utils.hashing import sha256_file
+
+if TYPE_CHECKING:
+    from policyengine_us import Microsimulation
 
 
 class USYearData(YearData):
@@ -399,167 +402,175 @@ def create_datasets(
         legacy_input_renames = apply_legacy_input_renames_to_microsimulation(sim)
 
         for year in years:
-            # Get all input variables from the simulation
-            # We'll calculate each input variable for the specified year
-            entity_data = {
-                "person": {},
-                "household": {},
-                "marital_unit": {},
-                "family": {},
-                "spm_unit": {},
-                "tax_unit": {},
-            }
-
-            # First, get ID columns which are structural (not input variables)
-            # These define entity membership and relationships
-            # For person-level links to group entities, use person_X_id naming
-            id_variables = {
-                "person": [
-                    "person_id",
-                    "person_household_id",
-                    "person_marital_unit_id",
-                    "person_family_id",
-                    "person_spm_unit_id",
-                    "person_tax_unit_id",
-                ],
-                "household": ["household_id"],
-                "marital_unit": ["marital_unit_id"],
-                "family": ["family_id"],
-                "spm_unit": ["spm_unit_id"],
-                "tax_unit": ["tax_unit_id"],
-            }
-
-            for entity_key, var_names in id_variables.items():
-                for id_var in var_names:
-                    if id_var in sim.tax_benefit_system.variables:
-                        values = sim.calculate(id_var, period=year).values
-                        entity_data[entity_key][id_var] = values
-
-            # Get input variables and calculate them for this year
-            for variable_name in sim.input_variables:
-                variable = sim.tax_benefit_system.variables[variable_name]
-                entity_key = variable.entity.key
-
-                # Calculate the variable for the given year
-                values = sim.calculate(variable_name, period=year).values
-
-                # Store in the appropriate entity dictionary
-                entity_data[entity_key][variable_name] = values
-
-            # Build entity DataFrames
-            person_df = pd.DataFrame(entity_data["person"])
-            household_df = pd.DataFrame(entity_data["household"])
-            marital_unit_df = pd.DataFrame(entity_data["marital_unit"])
-            family_df = pd.DataFrame(entity_data["family"])
-            spm_unit_df = pd.DataFrame(entity_data["spm_unit"])
-            tax_unit_df = pd.DataFrame(entity_data["tax_unit"])
-
-            # Add weight columns - household weights are primary, map to all entities
-            # Person weights = household weights (mapped via person_household_id)
-            if "household_weight" in household_df.columns:
-                # Only add person_weight if it doesn't already exist
-                if "person_weight" not in person_df.columns:
-                    person_df = person_df.merge(
-                        household_df[["household_id", "household_weight"]],
-                        left_on="person_household_id",
-                        right_on="household_id",
-                        how="left",
-                    )
-                    person_df = person_df.rename(
-                        columns={"household_weight": "person_weight"}
-                    )
-                    person_df = person_df.drop(
-                        columns=["household_id"], errors="ignore"
-                    )
-
-                # Map household weights to other group entities via person table
-                for entity_name, entity_df, person_id_col, entity_id_col in [
-                    (
-                        "marital_unit",
-                        marital_unit_df,
-                        "person_marital_unit_id",
-                        "marital_unit_id",
-                    ),
-                    ("family", family_df, "person_family_id", "family_id"),
-                    (
-                        "spm_unit",
-                        spm_unit_df,
-                        "person_spm_unit_id",
-                        "spm_unit_id",
-                    ),
-                    (
-                        "tax_unit",
-                        tax_unit_df,
-                        "person_tax_unit_id",
-                        "tax_unit_id",
-                    ),
-                ]:
-                    # Only add entity weight if it doesn't already exist
-                    if f"{entity_name}_weight" not in entity_df.columns:
-                        # Get household_id for each entity from person table
-                        entity_household_map = person_df[
-                            [person_id_col, "person_household_id"]
-                        ].drop_duplicates()
-                        entity_df = entity_df.merge(
-                            entity_household_map,
-                            left_on=entity_id_col,
-                            right_on=person_id_col,
-                            how="left",
-                        )
-                        entity_df = entity_df.merge(
-                            household_df[["household_id", "household_weight"]],
-                            left_on="person_household_id",
-                            right_on="household_id",
-                            how="left",
-                        )
-                        entity_df = entity_df.rename(
-                            columns={"household_weight": f"{entity_name}_weight"}
-                        )
-                        entity_df = entity_df.drop(
-                            columns=[
-                                "household_id",
-                                "person_household_id",
-                                person_id_col,
-                            ],
-                            errors="ignore",
-                        )
-
-                    # Update the entity_data
-                    if entity_name == "marital_unit":
-                        marital_unit_df = entity_df
-                    elif entity_name == "family":
-                        family_df = entity_df
-                    elif entity_name == "spm_unit":
-                        spm_unit_df = entity_df
-                    elif entity_name == "tax_unit":
-                        tax_unit_df = entity_df
-
-            us_dataset = PolicyEngineUSDataset(
-                id=f"{dataset_stem}_year_{year}",
-                name=f"{dataset_stem}-year-{year}",
-                description=f"US Dataset for year {year} based on {dataset_stem}",
-                filepath=f"{data_folder}/{dataset_stem}_year_{year}.h5",
-                year=int(year),
-                metadata={
-                    RENAMES_RECORD_KEY: dict(sorted(legacy_input_renames.items()))
-                },
-                data=USYearData(
-                    person=MicroDataFrame(person_df, weights="person_weight"),
-                    household=MicroDataFrame(household_df, weights="household_weight"),
-                    marital_unit=MicroDataFrame(
-                        marital_unit_df, weights="marital_unit_weight"
-                    ),
-                    family=MicroDataFrame(family_df, weights="family_weight"),
-                    spm_unit=MicroDataFrame(spm_unit_df, weights="spm_unit_weight"),
-                    tax_unit=MicroDataFrame(tax_unit_df, weights="tax_unit_weight"),
-                ),
+            us_dataset = _prepare_us_year(
+                sim,
+                year=year,
+                dataset_stem=dataset_stem,
+                filepath=Path(data_folder) / f"{dataset_stem}_year_{year}.h5",
+                legacy_input_renames=legacy_input_renames,
             )
             us_dataset.save()
-
-            dataset_key = f"{dataset_stem}_{year}"
-            result[dataset_key] = us_dataset
-
+            result[f"{dataset_stem}_{year}"] = us_dataset
     return result
+
+
+def _prepare_us_year(
+    sim: "Microsimulation",
+    *,
+    year: int,
+    dataset_stem: str,
+    filepath: Path,
+    legacy_input_renames: dict[str, str],
+) -> PolicyEngineUSDataset:
+    """Extract one year identically for national inputs and verified state inputs."""
+    # Get all input variables from the simulation
+    # We'll calculate each input variable for the specified year
+    entity_data = {
+        "person": {},
+        "household": {},
+        "marital_unit": {},
+        "family": {},
+        "spm_unit": {},
+        "tax_unit": {},
+    }
+
+    # First, get ID columns which are structural (not input variables)
+    # These define entity membership and relationships
+    # For person-level links to group entities, use person_X_id naming
+    id_variables = {
+        "person": [
+            "person_id",
+            "person_household_id",
+            "person_marital_unit_id",
+            "person_family_id",
+            "person_spm_unit_id",
+            "person_tax_unit_id",
+        ],
+        "household": ["household_id"],
+        "marital_unit": ["marital_unit_id"],
+        "family": ["family_id"],
+        "spm_unit": ["spm_unit_id"],
+        "tax_unit": ["tax_unit_id"],
+    }
+
+    for entity_key, var_names in id_variables.items():
+        for id_var in var_names:
+            if id_var in sim.tax_benefit_system.variables:
+                values = sim.calculate(id_var, period=year).values
+                entity_data[entity_key][id_var] = values
+
+    # Get input variables and calculate them for this year
+    for variable_name in sim.input_variables:
+        variable = sim.tax_benefit_system.variables[variable_name]
+        entity_key = variable.entity.key
+
+        # Calculate the variable for the given year
+        values = sim.calculate(variable_name, period=year).values
+
+        # Store in the appropriate entity dictionary
+        entity_data[entity_key][variable_name] = values
+
+    # Build entity DataFrames
+    person_df = pd.DataFrame(entity_data["person"])
+    household_df = pd.DataFrame(entity_data["household"])
+    marital_unit_df = pd.DataFrame(entity_data["marital_unit"])
+    family_df = pd.DataFrame(entity_data["family"])
+    spm_unit_df = pd.DataFrame(entity_data["spm_unit"])
+    tax_unit_df = pd.DataFrame(entity_data["tax_unit"])
+
+    # Add weight columns - household weights are primary, map to all entities
+    # Person weights = household weights (mapped via person_household_id)
+    if "household_weight" in household_df.columns:
+        # Only add person_weight if it doesn't already exist
+        if "person_weight" not in person_df.columns:
+            person_df = person_df.merge(
+                household_df[["household_id", "household_weight"]],
+                left_on="person_household_id",
+                right_on="household_id",
+                how="left",
+            )
+            person_df = person_df.rename(columns={"household_weight": "person_weight"})
+            person_df = person_df.drop(columns=["household_id"], errors="ignore")
+
+        # Map household weights to other group entities via person table
+        for entity_name, entity_df, person_id_col, entity_id_col in [
+            (
+                "marital_unit",
+                marital_unit_df,
+                "person_marital_unit_id",
+                "marital_unit_id",
+            ),
+            ("family", family_df, "person_family_id", "family_id"),
+            (
+                "spm_unit",
+                spm_unit_df,
+                "person_spm_unit_id",
+                "spm_unit_id",
+            ),
+            (
+                "tax_unit",
+                tax_unit_df,
+                "person_tax_unit_id",
+                "tax_unit_id",
+            ),
+        ]:
+            # Only add entity weight if it doesn't already exist
+            if f"{entity_name}_weight" not in entity_df.columns:
+                # Get household_id for each entity from person table
+                entity_household_map = person_df[
+                    [person_id_col, "person_household_id"]
+                ].drop_duplicates()
+                entity_df = entity_df.merge(
+                    entity_household_map,
+                    left_on=entity_id_col,
+                    right_on=person_id_col,
+                    how="left",
+                )
+                entity_df = entity_df.merge(
+                    household_df[["household_id", "household_weight"]],
+                    left_on="person_household_id",
+                    right_on="household_id",
+                    how="left",
+                )
+                entity_df = entity_df.rename(
+                    columns={"household_weight": f"{entity_name}_weight"}
+                )
+                entity_df = entity_df.drop(
+                    columns=[
+                        "household_id",
+                        "person_household_id",
+                        person_id_col,
+                    ],
+                    errors="ignore",
+                )
+
+            # Update the entity_data
+            if entity_name == "marital_unit":
+                marital_unit_df = entity_df
+            elif entity_name == "family":
+                family_df = entity_df
+            elif entity_name == "spm_unit":
+                spm_unit_df = entity_df
+            elif entity_name == "tax_unit":
+                tax_unit_df = entity_df
+
+    us_dataset = PolicyEngineUSDataset(
+        id=f"{dataset_stem}_year_{year}",
+        name=f"{dataset_stem}-year-{year}",
+        description=f"US Dataset for year {year} based on {dataset_stem}",
+        filepath=str(filepath),
+        year=int(year),
+        metadata={RENAMES_RECORD_KEY: dict(sorted(legacy_input_renames.items()))},
+        data=USYearData(
+            person=MicroDataFrame(person_df, weights="person_weight"),
+            household=MicroDataFrame(household_df, weights="household_weight"),
+            marital_unit=MicroDataFrame(marital_unit_df, weights="marital_unit_weight"),
+            family=MicroDataFrame(family_df, weights="family_weight"),
+            spm_unit=MicroDataFrame(spm_unit_df, weights="spm_unit_weight"),
+            tax_unit=MicroDataFrame(tax_unit_df, weights="tax_unit_weight"),
+        ),
+    )
+    return us_dataset
 
 
 def _year_file_records_renames(path: Path) -> bool:

@@ -55,6 +55,13 @@ if find_spec("policyengine_us") is not None:
         us_latest,
     )
     from .spm import SPMProvenance, SPMSelection
+    from .state_preparation import (
+        USPartitionManifest,
+        USStatePartition,
+        USStateYearArtifact,
+        partition_certified_us_source,
+        prepare_us_state_year,
+    )
 
     model = us_latest
     """The pinned US ``TaxBenefitModelVersion`` for this policyengine release."""
@@ -68,6 +75,11 @@ if find_spec("policyengine_us") is not None:
 
     __all__ = [
         "USYearData",
+        "USPartitionManifest",
+        "USStatePartition",
+        "USStateYearArtifact",
+        "partition_certified_us_source",
+        "prepare_us_state_year",
         "PolicyEngineUSDataset",
         "create_datasets",
         "load_datasets",

@@ -21,6 +21,9 @@ def write_source(path: Path, *, include_nulls: bool = False) -> MaterializedData
     person["age"] = 40
     person["employment_income"] = 40000.0
     person["is_tax_unit_head"] = True
+    # Certified inputs still use this legacy name. Both preparation paths must
+    # preserve the draw under its current model name, including later years.
+    person["would_claim_wic"] = [index % 2 == 0 for index in range(len(ids))]
     household = frames["household"]
     household["household_weight"] = [float(index + 1) for index in range(len(ids))]
     household["state_fips"] = [fips for _, fips in states]

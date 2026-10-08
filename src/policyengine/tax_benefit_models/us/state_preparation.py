@@ -7,6 +7,8 @@ Neither partitioning nor year preparation permits an unmanaged dataset bypass.
 
 from __future__ import annotations
 
+import hashlib
+from importlib.metadata import version
 from pathlib import Path
 from typing import Literal
 
@@ -19,7 +21,12 @@ from policyengine.provenance.dataset_materialization import MaterializedDataset
 from policyengine.tax_benefit_models.us.datasets import (
     US_ENTITY_KEYS,
     US_PERSON_ENTITY_ID_COLUMNS,
+    PolicyEngineUSDataset,
+    _prepare_us_year,
     _validate_entity_ids,
+)
+from policyengine.tax_benefit_models.us.legacy_inputs import (
+    apply_legacy_input_renames_to_microsimulation,
 )
 from policyengine.utils.hashing import sha256_file
 
@@ -86,6 +93,22 @@ class USPartitionManifest(_StrictModel):
                     f"Partition counts do not cover the source {entity} table"
                 )
         return self
+
+
+class USPreparationIdentity(_StrictModel):
+    package_versions: dict[str, str]
+    code_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class USStateYearArtifact(_StrictModel):
+    format_version: Literal[1] = 1
+    partition: USStatePartition
+    year: int = Field(gt=0)
+    path: Path
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    bytes: int = Field(gt=0)
+    counts: EntityCounts
+    identity: USPreparationIdentity
 
 
 def _load_native(path: Path) -> tuple[dict[str, pd.DataFrame], int]:
@@ -225,4 +248,103 @@ def partition_certified_us_source(
     except BaseException:
         for path in created:
             path.unlink(missing_ok=True)
+        raise
+
+
+def prepare_us_state_year(
+    partition: USStatePartition, year: int, output_dir: Path
+) -> USStateYearArtifact:
+    """Run the existing country year preparation on a verified state derivative.
+
+    Input records are passed in memory to the country API, not accepted as an
+    arbitrary unmanaged source. The helper also used by national preparation
+    retains the installed bundle's SPM selection and legacy input mapping.
+    """
+    from policyengine_us import Microsimulation
+    from policyengine_us.data.dataset_schema import USSingleYearDataset
+
+    from policyengine.tax_benefit_models.us.spm import resolve_spm_selection
+
+    if isinstance(year, bool) or not isinstance(year, int) or year <= 0:
+        raise ValueError("Preparation year must be a positive integer")
+    if sha256_file(partition.path) != partition.sha256:
+        raise ValueError("State partition SHA-256 does not match the file")
+    frames, source_year = _load_native(partition.path)
+    states = _entity_states(frames)
+    if source_year != partition.source_year:
+        raise ValueError("Partition source period does not match its manifest")
+    if (
+        EntityCounts(**{entity: len(frame) for entity, frame in frames.items()})
+        != partition.counts
+    ):
+        raise ValueError("Partition entity counts do not match its manifest")
+    if any(not values.eq(partition.state_fips).all() for values in states.values()):
+        raise ValueError("Partition includes records from a different state")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / f"state-{partition.state_code.lower()}-year-{year}.h5"
+    partial = path.with_suffix(".partial")
+    if path.exists() or partial.exists():
+        raise FileExistsError(f"Year output already exists: {path}")
+    inputs = USSingleYearDataset(**frames, time_period=source_year)
+    sim = Microsimulation(dataset=inputs, spm=resolve_spm_selection())
+    renames = apply_legacy_input_renames_to_microsimulation(sim)
+    dataset = _prepare_us_year(
+        sim,
+        year=year,
+        dataset_stem=f"state-{partition.state_code.lower()}",
+        filepath=partial,
+        legacy_input_renames=renames,
+    )
+    try:
+        dataset.save()
+        reloaded = PolicyEngineUSDataset(
+            name=dataset.name,
+            description=dataset.description,
+            year=year,
+            filepath=str(partial),
+        )
+        if dataset.data is None or reloaded.data is None:
+            raise ValueError("Year preparation did not materialize entity tables")
+        for entity, expected in dataset.data.entity_data.items():
+            pd.testing.assert_frame_equal(
+                pd.DataFrame(reloaded.data.entity_data[entity]), pd.DataFrame(expected)
+            )
+            if set(expected[f"{entity}_id"]) != set(frames[entity][f"{entity}_id"]):
+                raise ValueError(f"Year preparation changed {entity} membership")
+        if reloaded.metadata != dataset.metadata:
+            raise ValueError("Year output did not preserve its input-rename record")
+        artifact = USStateYearArtifact(
+            partition=partition,
+            year=year,
+            path=path,
+            sha256=sha256_file(partial),
+            bytes=partial.stat().st_size,
+            counts=EntityCounts(
+                **{
+                    entity: len(frame)
+                    for entity, frame in dataset.data.entity_data.items()
+                }
+            ),
+            identity=USPreparationIdentity(
+                package_versions={
+                    name: version(name)
+                    for name in (
+                        "policyengine",
+                        "policyengine-us",
+                        "policyengine-core",
+                        "spm-calculator",
+                    )
+                },
+                code_sha256=hashlib.sha256(
+                    (
+                        sha256_file(Path(__file__))
+                        + sha256_file(Path(__file__).with_name("datasets.py"))
+                    ).encode()
+                ).hexdigest(),
+            ),
+        )
+        partial.rename(path)
+        return artifact
+    except BaseException:
+        partial.unlink(missing_ok=True)
         raise
