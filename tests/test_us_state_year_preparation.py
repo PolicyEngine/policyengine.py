@@ -18,10 +18,12 @@ from policyengine.tax_benefit_models.us.state_preparation import (
 from tests.us_partition_fixtures import write_source
 
 
-@pytest.fixture(scope="module")
-def prepared(tmp_path_factory):
+@pytest.fixture(
+    scope="module", params=[False, True], ids=["stored-wic", "missing-acs-wic"]
+)
+def prepared(tmp_path_factory, request):
     directory = tmp_path_factory.mktemp("state_year")
-    source = write_source(directory / "source.h5")
+    source = write_source(directory / "source.h5", acs_wic_gaps=request.param)
     manifest = partition_certified_us_source(source, directory / "states")
     return directory, source, manifest
 
@@ -60,6 +62,12 @@ def test_state_first_equals_national_first_for_every_entity(
             households.state_fips == partition.state_fips, "household_id"
         ]
         selected_people = people.loc[people.person_household_id.isin(household_ids)]
+        source_people = pd.read_hdf(partition.path, "person")
+        if source_people.would_claim_wic.isna().any():
+            # Source records remain missing; both preparation paths apply the
+            # explicitly temporary ACS assumption before materializing outputs.
+            assert source_people.person_support_channel.eq("acs_2024_1yr").all()
+            assert selected_people.takes_up_wic_if_eligible.all()
         for entity in US_ENTITY_KEYS:
             frame = pd.DataFrame(national.data.entity_data[entity])
             ids = (

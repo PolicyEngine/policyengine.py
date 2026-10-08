@@ -10,7 +10,9 @@ from policyengine.tax_benefit_models.us.datasets import US_ENTITY_KEYS
 from policyengine.utils.hashing import sha256_file
 
 
-def write_source(path: Path, *, include_nulls: bool = False) -> MaterializedDataset:
+def write_source(
+    path: Path, *, include_nulls: bool = False, acs_wic_gaps: bool = False
+) -> MaterializedDataset:
     states = list(US_STATE_FIPS.items())
     ids = list(range(100, 100 + len(states)))
     frames = {entity: pd.DataFrame({f"{entity}_id": ids}) for entity in US_ENTITY_KEYS}
@@ -24,6 +26,13 @@ def write_source(path: Path, *, include_nulls: bool = False) -> MaterializedData
     # Certified inputs still use this legacy name. Both preparation paths must
     # preserve the draw under its current model name, including later years.
     person["would_claim_wic"] = [index % 2 == 0 for index in range(len(ids))]
+    if acs_wic_gaps:
+        person["person_support_channel"] = "asec"
+        person["would_claim_wic"] = person["would_claim_wic"].astype(object)
+        for index, (code, _) in enumerate(states):
+            if code in ("CA", "UT"):
+                person.loc[index, "person_support_channel"] = "acs_2024_1yr"
+                person.loc[index, "would_claim_wic"] = None
     household = frames["household"]
     household["household_weight"] = [float(index + 1) for index in range(len(ids))]
     household["state_fips"] = [fips for _, fips in states]

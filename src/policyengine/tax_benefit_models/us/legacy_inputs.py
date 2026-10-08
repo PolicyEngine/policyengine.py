@@ -377,6 +377,7 @@ def _temporary_acs_wic_values(table: pd.DataFrame, context: str) -> pd.Series:
     # This is an explicit modelling assumption, not observed participation.
     # Replace the dataset with a corrected Microcosm release and DELETE
     # this exception immediately after that replacement is certified.
+    # Replacement tracking: https://github.com/PolicyEngine/microcosm/issues/1154
     return stored.mask(missing, True)
 
 
