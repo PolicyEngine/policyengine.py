@@ -322,6 +322,103 @@ def test_a_draw_that_is_not_a_complete_boolean_is_refused(draw, message):
     assert simulation.inputs == {}
 
 
+@pytest.mark.parametrize(
+    "draw",
+    [
+        [False, np.bool_(True), None, False],
+        [0, 1.0, np.nan, np.bool_(False)],
+        pd.array([False, True, pd.NA, False], dtype="boolean"),
+    ],
+)
+def test_missing_acs_wic_decisions_assume_claiming_without_changing_stored_draws(draw):
+    """Only a missing ACS decision uses the temporary 100% take-up assumption."""
+    ids = [1, 2, 3, 4]
+    person = _person(
+        ids,
+        draw,
+        person_support_channel=[
+            "asec",
+            "puf_tax_detail",
+            "acs_2024_1yr",
+            "acs_2024_1yr",
+        ],
+    )
+    original = person.copy(deep=True)
+    simulation = FakeSimulation(_variables(LIVE), ids)
+
+    assert apply_legacy_input_renames(simulation, _tables({2024: person})) == {
+        LEGACY: LIVE
+    }
+    for month in _months(2024):
+        assert simulation.inputs[(LIVE, month)].tolist() == [False, True, True, False]
+        assert simulation.inputs[(LIVE, month)].dtype == bool
+    pd.testing.assert_frame_equal(person, original)
+
+
+@pytest.mark.parametrize("channel", ["asec", "puf_tax_detail", "acs", "unknown", None])
+def test_missing_wic_decisions_outside_identified_acs_people_are_refused(channel):
+    person = _person(
+        [1, 2], [None, None], person_support_channel=["acs_2024_1yr", channel]
+    )
+    simulation = FakeSimulation(_variables(LIVE), [1, 2])
+    with pytest.raises(ValueError, match="missing values"):
+        apply_legacy_input_renames(simulation, _tables({2024: person}))
+    assert simulation.inputs == {}
+
+
+@pytest.mark.parametrize("invalid", ["False", "True", "0", 2, -1, np.inf])
+def test_acs_missing_value_does_not_hide_an_invalid_stored_wic_decision(invalid):
+    person = _person(
+        [1, 2], [invalid, None], person_support_channel=["asec", "acs_2024_1yr"]
+    )
+    simulation = FakeSimulation(_variables(LIVE), [1, 2])
+    with pytest.raises(ValueError, match="not boolean"):
+        apply_legacy_input_renames(simulation, _tables({2024: person}))
+    assert simulation.inputs == {}
+
+
+def test_a_later_invalid_year_prevents_earlier_acs_assignments():
+    valid = _person([1], [None], person_support_channel=["acs_2024_1yr"])
+    invalid = _person([1], [None], person_support_channel=["asec"])
+    simulation = FakeSimulation(_variables(LIVE), [1])
+    with pytest.raises(ValueError, match="missing values"):
+        apply_legacy_input_renames(simulation, _tables({2024: valid, 2025: invalid}))
+    assert simulation.inputs == {}
+
+
+def test_the_temporary_acs_assumption_reaches_each_existing_branch_idempotently():
+    person = _person(
+        [1, 2], [False, None], person_support_channel=["asec", "acs_2024_1yr"]
+    )
+    dataset = _multi_year_dataset({2024: person})
+    simulation = FakeSimulation(_variables(LIVE), [1, 2], dataset=dataset)
+    baseline = FakeSimulation(_variables(LIVE), [1, 2], dataset=dataset)
+    simulation.branches["baseline"] = baseline
+    apply_legacy_input_renames_to_microsimulation(simulation)
+    before = _snapshot(simulation)
+    apply_legacy_input_renames_to_microsimulation(simulation)
+    assert _snapshot(simulation) == _snapshot(baseline) == before
+    for month in _months(2024):
+        assert simulation.inputs[(LIVE, month)].tolist() == [False, True]
+
+
+def test_current_name_wic_decisions_are_not_overridden_by_the_acs_assumption():
+    person = _person(
+        [1], [None], person_support_channel=["acs_2024_1yr"], **{LIVE: [False]}
+    )
+    simulation = FakeSimulation(_variables(LIVE), [1])
+    assert apply_legacy_input_renames(simulation, _tables({2024: person})) == {}
+    assert simulation.inputs == {}
+
+
+def test_boolean_values_in_an_object_column_are_preserved():
+    person = _person([1, 2], pd.Series([False, np.bool_(True)], dtype=object))
+    person[LEGACY] = person[LEGACY].astype(object)
+    simulation = FakeSimulation(_variables(LIVE), [1, 2])
+    apply_legacy_input_renames(simulation, _tables({2024: person}))
+    assert simulation.inputs[(LIVE, "2024-01")].tolist() == [False, True]
+
+
 def test_a_non_boolean_live_input_keeps_the_stored_values():
     variables = {LIVE: _variable(value_type=float)}
     simulation = FakeSimulation(variables, [1, 2])
