@@ -259,6 +259,12 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
             filepath=str(_output_dataset_filepath(simulation)),
             year=simulation.dataset.year,
             is_output_dataset=True,
+            # The observed year the run anchored on. Saved with the output,
+            # it also marks the output as calculated with that anchoring
+            # (see ``load()`` in common/model_version.py).
+            data_year=(
+                dataset.data_year if dataset.data_year is not None else dataset.year
+            ),
             data=UKYearData(
                 person=data["person"],
                 benunit=data["benunit"],
@@ -312,6 +318,14 @@ def _policyengine_uk_input(dataset: PolicyEngineUKDataset):
         data_year=data_year,
         year=year,
     )
+    # Person and benefit-unit weights are policyengine.py's additions to the
+    # tables; a direct run calculates them from household weights. Kept as
+    # inputs, the projection would carry them unuprated into the years
+    # between the data year and the simulated year.
+    for entity, column in (("person", "person_weight"), ("benunit", "benunit_weight")):
+        observed_tables[entity] = observed_tables[entity].drop(
+            columns=[column], errors="ignore"
+        )
     observed = UKSingleYearDataset(**observed_tables, fiscal_year=data_year)
     projected = extend_single_year_dataset(observed, system.parameters)
     if year not in projected.years:
@@ -319,7 +333,9 @@ def _policyengine_uk_input(dataset: PolicyEngineUKDataset):
             observed, system.parameters, end_year=year
         )
     return UKMultiYearDataset(
-        datasets=[projected[y] for y in projected.years if y != year] + [simulated]
+        datasets=[
+            simulated if y == year else projected[y] for y in sorted(projected.years)
+        ]
     )
 
 

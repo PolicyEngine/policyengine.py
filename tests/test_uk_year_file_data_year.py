@@ -19,15 +19,21 @@ Invariants exercised:
 
 - Differential: for any source dataset and any year the source projects to,
   every output of a policyengine.py run of the year file equals the direct
-  policyengine-uk run of the source, record by record. Under region scoping
-  this holds, for the records kept, for person and benefit-unit outputs.
-  Outputs normalised over the whole dataset, such as business-rates
-  incidence through ``shareholding``, deciles and relative poverty lines,
-  become region-relative when rows are filtered. That is a separate issue
+  policyengine-uk run of the source, record by record. This holds with or
+  without a reform, applied the same way to both, and for a year file loaded
+  back from disk. Under row filtering (``RowFilterStrategy``) it holds, for
+  the records kept, for person and benefit-unit variables that do not depend
+  on dataset-wide normalisation. Variables normalised over the whole dataset,
+  such as business-rates incidence through ``shareholding``, deciles, and
+  relative poverty lines (including household flags mapped to people),
+  become region-relative under scoping. That is a separate issue
   (PolicyEngine/policyengine.py#567).
 - Round trip: saving and loading a year file preserves its data year and
   the data year's tables.
 - No aliasing: a run leaves the caller's dataset tables unchanged.
+- Saved outputs: a saved UK output records the data year its run anchored
+  on, and an output saved without one is refused, so ``Simulation.ensure()``
+  runs it again.
 """
 
 from __future__ import annotations
@@ -54,6 +60,9 @@ from policyengine.tax_benefit_models.uk.datasets import (  # noqa: E402
 )
 from policyengine.tax_benefit_models.uk.model import (  # noqa: E402
     _policyengine_uk_input,
+)
+from policyengine.utils.parametric_reforms import (  # noqa: E402
+    simulation_modifier_from_parameter_values,
 )
 
 DATA_YEAR = 2024
@@ -463,11 +472,116 @@ def test_ensure_datasets_regenerates_a_year_file_without_a_data_year(
         allow_unmanaged=True,
     )
 
-    dataset = ensured["tiny_uk_2024_2026"]
-    assert dataset.data_year == DATA_YEAR
+    assert ensured["tiny_uk_2024_2026"].data_year == DATA_YEAR
     reloaded = load_datasets(datasets=[source], years=[2026], data_folder=str(tmp_path))
     assert reloaded["tiny_uk_2024_2026"].data_year == DATA_YEAR
-    _assert_matches_direct(_run(dataset), direct, 2026)
+    _assert_matches_direct(_run(reloaded["tiny_uk_2024_2026"]), direct, 2026)
+
+
+def test_year_file_loaded_from_disk_matches_direct_run(source, tmp_path, direct):
+    """The production path: a second ensure_datasets() loads the files.
+
+    Both tables come back through the HDF5 round trip, which stores object
+    columns as categoricals (depending on the pandas version).
+    """
+    _cut(source, tmp_path, [2025, 2026])
+
+    loaded = load_datasets(
+        datasets=[source], years=[2025, 2026], data_folder=str(tmp_path)
+    )
+
+    for year in (2025, 2026):
+        dataset = loaded[f"tiny_uk_2024_{year}"]
+        assert dataset.data_year == DATA_YEAR
+        assert dataset.data_year_data is not None
+        _assert_matches_direct(_run(dataset), direct, year)
+
+
+REFORM = {
+    "gov.dwp.state_pension.new_state_pension.amount": 260.0,
+    "gov.dwp.state_pension.basic_state_pension.amount": 200.0,
+}
+
+
+def test_reformed_year_file_run_matches_direct_run_with_the_same_reform(
+    year_files, source, direct
+):
+    """A State Pension reform reaches the year-file run as it does the direct.
+
+    policyengine.py applies a policy from the start of the simulated year.
+    Before #556 the simulated year was also the data year, so the reform set
+    the rate both numerator and denominator are taken from. With the data
+    year anchored on the survey year, the reform scales the State Pension.
+    """
+    simulation = _run(year_files["tiny_uk_2024_2026"], policy=REFORM)
+    reformed = _direct(source)
+    simulation_modifier_from_parameter_values(simulation.policy.parameter_values)(
+        reformed
+    )
+
+    _assert_matches_direct(simulation, reformed, 2026)
+    # The reform raises every recipient's State Pension above the baseline.
+    baseline = direct.calculate("state_pension", 2026).values
+    raised = reformed.calculate("state_pension", 2026).values
+    assert (raised[baseline > 0] > baseline[baseline > 0] + 1).all()
+
+
+def test_projected_input_is_ordered_and_leaves_weights_to_the_model(year_files):
+    dataset = year_files["tiny_uk_2024_2026"]
+
+    built = _policyengine_uk_input(dataset)
+
+    assert built.years == [2024, 2025, 2026, 2027, 2028, 2029, 2030]
+    for year in built.years:
+        if year == 2026:
+            continue
+        # A direct run calculates person and benefit-unit weights.
+        assert "person_weight" not in built[year].person.columns
+        assert "benunit_weight" not in built[year].benunit.columns
+    assert "person_weight" in built[2026].person.columns
+
+
+def test_saved_output_records_its_data_year_and_old_outputs_are_rerun(year_files):
+    import uuid
+
+    from policyengine.tax_benefit_models.common.model_version import (
+        output_dataset_filepath,
+    )
+
+    dataset = year_files["tiny_uk_2024_2026"]
+    run_id = f"uk-data-year-{uuid.uuid4().hex}"
+    first = Simulation(
+        id=run_id, dataset=dataset, tax_benefit_model_version=pe.uk.model
+    )
+    first.run()
+    first.save()
+
+    reloaded = Simulation(
+        id=run_id, dataset=dataset, tax_benefit_model_version=pe.uk.model
+    )
+    reloaded.load()
+    assert reloaded.output_dataset.data_year == DATA_YEAR
+
+    # An output saved before #556 records no data year.
+    path = output_dataset_filepath(first)
+    PolicyEngineUKDataset(
+        name="legacy-output",
+        description="legacy-output",
+        filepath=str(path),
+        year=2026,
+        is_output_dataset=True,
+        data=first.output_dataset.data,
+    ).save()
+    legacy = Simulation(
+        id=run_id, dataset=dataset, tax_benefit_model_version=pe.uk.model
+    )
+    with pytest.raises(ValueError, match="records none"):
+        legacy.load()
+
+    legacy.ensure()
+    assert legacy.output_dataset.data_year == DATA_YEAR
+    with pd.HDFStore(path, mode="r") as store:
+        assert f"/{DATA_YEAR_KEY}" in store.keys()
 
 
 @settings(

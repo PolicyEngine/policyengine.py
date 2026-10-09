@@ -109,10 +109,13 @@ class PolicyEngineUKDataset(Dataset):
                 "`data` holds the observed tables and data_year_data must be "
                 "None."
             )
+        # An output records the data year its run anchored on, without the
+        # tables.
         if (
             self.data_year < self.year
             and self.data is not None
             and self.data_year_data is None
+            and not self.is_output_dataset
         ):
             raise ValueError(
                 f"PolicyEngineUKDataset for {self.year} was projected from "
@@ -139,10 +142,11 @@ class PolicyEngineUKDataset(Dataset):
 
         with pd.HDFStore(filepath, mode="w") as store:
             _put_year_data(store, self.data)
-            if self.data_year is not None:
-                store.put(DATA_YEAR_KEY, pd.Series([int(self.data_year)]))
             if self.data_year_data is not None:
                 _put_year_data(store, self.data_year_data, DATA_YEAR_TABLE_PREFIX)
+            # Written last: its presence marks a complete file.
+            if self.data_year is not None:
+                store.put(DATA_YEAR_KEY, pd.Series([int(self.data_year)]))
 
     def load(self) -> None:
         """Load dataset from HDF5 file into this instance."""
@@ -251,12 +255,12 @@ def _year_data_with_weights(year_dataset) -> UKYearData:
 
 
 def _year_file_records_data_year(path: Path) -> bool:
-    """Return whether a UK year file records its data year (``DATA_YEAR_KEY``)."""
-    try:
-        with pd.HDFStore(path, mode="r") as store:
-            return f"/{DATA_YEAR_KEY}" in store.keys()
-    except OSError:
-        return False
+    """Return whether a UK file records its data year (``DATA_YEAR_KEY``).
+
+    A missing or unreadable file raises rather than reading as unrecorded.
+    """
+    with pd.HDFStore(path, mode="r") as store:
+        return f"/{DATA_YEAR_KEY}" in store.keys()
 
 
 def create_datasets(
@@ -337,13 +341,13 @@ def load_datasets(
                     "State Pension by CPI rather than the triple lock. "
                     "Regenerate it with ensure_datasets() or create_datasets()."
                 )
+            # Constructing with a filepath loads the file.
             uk_dataset = PolicyEngineUKDataset(
                 name=f"{dataset_stem}-year-{year}",
                 description=f"UK Dataset for year {year} based on {dataset_stem}",
                 filepath=filepath,
                 year=int(year),
             )
-            uk_dataset.load()
 
             dataset_key = f"{dataset_stem}_{year}"
             result[dataset_key] = uk_dataset

@@ -247,17 +247,26 @@ Each projected year file therefore keeps its data year, `dataset.data_year`
 `dataset.data_year_data`. `Simulation.run()` projects the data year's tables
 forward as policyengine-uk does, and uses the file's own tables for the
 simulated year. A run of a year file then gives the same result, record by
-record, as `policyengine_uk.Microsimulation` on the certified file. Region
-scoping applies to both sets of tables, matched by entity ID. Keeping the data
-year's tables doubles a projected file: the Enhanced FRS 2026 file is 226 MB,
-against 113 MB for its own tables. A dataset built in memory without a data
-year is observed data for its own year, which is how policyengine-uk treats a
-single-year dataset.
+record, as `policyengine_uk.Microsimulation` on the certified file, with or
+without a reform. Keeping the data year's tables doubles a projected file: the
+Enhanced FRS 2026 file is 226 MB, against 113 MB for its own tables. A dataset
+built in memory without a data year is observed data for its own year, which
+is how policyengine-uk treats a single-year dataset.
+
+Region scoping applies to both sets of tables, matched by entity ID. A
+row-filtered run is a simulation of the region's households alone, so
+variables that policyengine-uk calculates over every household in the
+simulation are calculated over the region: income deciles, the relative
+poverty median, and `shareholding`, which spreads corporate taxes across
+households (PolicyEngine/policyengine.py#567). Variables of a person or
+benefit unit that do not depend on those match the national run.
 
 Year files written by earlier releases have no recorded data year.
 `ensure_datasets` writes them again and `load_datasets` refuses them. A year
 file opened directly, as `PolicyEngineUKDataset(filepath=...)`, is not
-checked.
+checked. A saved UK simulation output records the data year its run anchored
+on; `Simulation.load()` refuses an output saved without one, and
+`Simulation.ensure()` runs it again.
 
 ## Simulations
 
