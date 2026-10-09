@@ -379,7 +379,9 @@ def _temporary_acs_wic_values(table: pd.DataFrame, context: str) -> pd.Series:
     # This is an explicit modelling assumption, not observed participation.
     # Replace the dataset with a corrected Microcosm release and DELETE
     # this exception immediately after that replacement is certified.
-    return stored.mask(missing, True)
+    # Nullable numeric columns reject boolean replacement values. Preserve the
+    # original decisions as objects; _live_values still validates before casting.
+    return stored.astype(object).mask(missing, True)
 
 
 def _live_values(stored: pd.Series, variable: Any, context: str) -> np.ndarray:

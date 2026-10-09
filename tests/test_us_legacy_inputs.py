@@ -751,3 +751,91 @@ def test_a_part_year_period_is_refused(period):
 def test_yearly_periods_are_accepted():
     check_yearly_periods(LEGACY, ["2024", 2025, np.int64(2026)], "source.h5")
     check_yearly_periods(LEGACY, [], "source.h5")
+
+
+@pytest.mark.parametrize("dtype", ["Int64", "Float64"])
+@pytest.mark.parametrize(
+    ("draw", "channels", "expected"),
+    [
+        ([0, pd.NA], ["asec", "acs_2024_1yr"], [False, True]),
+        (
+            [0, 1, pd.NA, 0, 1],
+            ["asec", "puf_tax_detail", "acs_2024_1yr", "acs_2024_1yr", "acs_2024_1yr"],
+            [False, True, True, False, True],
+        ),
+    ],
+)
+def test_nullable_numeric_wic_decisions_fill_only_missing_acs_cells(
+    dtype, draw, channels, expected
+):
+    """Keep nullable numeric storage and preserve existing donor/ACS decisions."""
+    ids = list(range(1, len(draw) + 1))
+    person = pd.DataFrame(
+        {
+            "person_id": ids,
+            LEGACY: pd.Series(draw, dtype=dtype),
+            "person_support_channel": channels,
+        }
+    )
+    original = person.copy(deep=True)
+    assert str(person[LEGACY].dtype) == dtype
+    simulation = FakeSimulation(_variables(LIVE), ids)
+
+    assert apply_legacy_input_renames(simulation, _tables({2024: person})) == {
+        LEGACY: LIVE
+    }
+    for month in _months(2024):
+        assert simulation.inputs[(LIVE, month)].tolist() == expected
+        assert simulation.inputs[(LIVE, month)].dtype == bool
+    pd.testing.assert_frame_equal(person, original)
+
+
+@pytest.mark.parametrize(
+    ("dtype", "invalid"),
+    [
+        ("Int64", 2),
+        ("Int64", -1),
+        ("Float64", 2),
+        ("Float64", -1),
+        ("Float64", 0.5),
+        ("Float64", np.inf),
+    ],
+)
+def test_nullable_numeric_acs_fill_does_not_hide_invalid_wic_decisions(dtype, invalid):
+    person = pd.DataFrame(
+        {
+            "person_id": [1, 2],
+            LEGACY: pd.Series([invalid, pd.NA], dtype=dtype),
+            "person_support_channel": ["asec", "acs_2024_1yr"],
+        }
+    )
+    original = person.copy(deep=True)
+    simulation = FakeSimulation(_variables(LIVE), [1, 2])
+
+    with pytest.raises(ValueError, match="not boolean"):
+        apply_legacy_input_renames(simulation, _tables({2024: person}))
+    assert simulation.inputs == {}
+    assert simulation.input_variables == []
+    pd.testing.assert_frame_equal(person, original)
+
+
+@pytest.mark.parametrize("dtype", ["Int64", "Float64"])
+@pytest.mark.parametrize("channel", ["asec", None])
+def test_nullable_numeric_missing_non_acs_wic_decisions_fail_before_writes(
+    dtype, channel
+):
+    person = pd.DataFrame(
+        {
+            "person_id": [1, 2],
+            LEGACY: pd.Series([pd.NA, pd.NA], dtype=dtype),
+            "person_support_channel": ["acs_2024_1yr", channel],
+        }
+    )
+    original = person.copy(deep=True)
+    simulation = FakeSimulation(_variables(LIVE), [1, 2])
+
+    with pytest.raises(ValueError, match="missing values"):
+        apply_legacy_input_renames(simulation, _tables({2024: person}))
+    assert simulation.inputs == {}
+    assert simulation.input_variables == []
+    pd.testing.assert_frame_equal(person, original)
