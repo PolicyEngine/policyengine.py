@@ -312,6 +312,13 @@ def _policyengine_uk_input(dataset: PolicyEngineUKDataset):
     from policyengine_uk.system import system
 
     data_year = int(dataset.data_year)
+    if dataset.data_year_data is None:
+        raise ValueError(
+            f"Dataset {dataset.id} for {year} records data year {data_year} "
+            "but not its tables, as a simulation output does, so it cannot be "
+            "simulated. Run the year file it came from, or set data_year=None "
+            f"to treat its tables as observed data for {year}."
+        )
     observed_tables = _match_records(
         dataset.data_year_data.entity_data,
         dataset.data.entity_data,

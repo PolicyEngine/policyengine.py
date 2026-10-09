@@ -437,6 +437,15 @@ def test_records_missing_from_the_data_year_are_refused(year_files):
         _policyengine_uk_input(dataset)
 
 
+def test_an_output_dataset_cannot_be_simulated(year_files):
+    output = _run(year_files["tiny_uk_2024_2026"]).output_dataset
+    assert output.data_year == DATA_YEAR
+    assert output.data_year_data is None
+
+    with pytest.raises(ValueError, match="cannot be simulated"):
+        _policyengine_uk_input(output)
+
+
 def _write_legacy_year_file(dataset: PolicyEngineUKDataset) -> None:
     """Rewrite a year file as policyengine.py wrote it before #556."""
     legacy = PolicyEngineUKDataset(

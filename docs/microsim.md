@@ -253,8 +253,10 @@ Enhanced FRS 2026 file is 226 MB, against 113 MB for its own tables. A dataset
 built in memory without a data year is observed data for its own year, which
 is how policyengine-uk treats a single-year dataset.
 
-Region scoping applies to both sets of tables, matched by entity ID. A
-row-filtered run is a simulation of the region's households alone, so
+Row filtering applies to both sets of tables, matched by entity ID. Weight
+replacement changes the simulated year's weights only; the data year and the
+years between keep national weights. A row-filtered run is a simulation of the
+region's households alone, so
 variables that policyengine-uk calculates over every household in the
 simulation are calculated over the region: income deciles, the relative
 poverty median, and `shareholding`, which spreads corporate taxes across
