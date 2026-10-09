@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "policyengine"
-version = "6.2.4"
+version = "6.2.5"
 description = "A package to conduct policy analysis using PolicyEngine tax-benefit models."
 readme = "README.md"
 authors = [

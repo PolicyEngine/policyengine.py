@@ -1,3 +1,10 @@
+## [6.2.5] - 2026-10-09
+
+### Fixed
+
+- Add opt-in verified US state/year preparation and temporarily assume WIC claiming only for missing participation decisions on identified ACS people, preserving donor decisions and country-model eligibility.
+
+
 ## [6.2.4] - 2026-10-09
 
 ### Fixed
