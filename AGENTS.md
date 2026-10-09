@@ -33,3 +33,16 @@ round-trip is a documented property of the public surface.
 
 Do not cache arbitrary Python objects in public result structures. The
 `core.Simulation` output must stay serialisable.
+
+## UK country filtering
+
+Select Scotland, Wales, and Northern Ireland through the stored household
+`region` column: `SCOTLAND`, `WALES`, and `NORTHERN_IRELAND`, respectively.
+Never require a `country` column when filtering raw UK household inputs;
+`country` is derived by the UK model after loading the data. The public selector
+`country/scotland` describes the requested area, not an input column name.
+
+England must select the nine English `region` values, not `ENGLAND` and not
+the complement of the other countries. Preserve these rules in new filters,
+refactors, and tests. Read the UK country filtering section in
+`docs/engineering/skills/repository-guidance.md` before changing this behavior.

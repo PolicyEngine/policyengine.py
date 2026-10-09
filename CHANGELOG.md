@@ -1,3 +1,14 @@
+## [6.2.3] - 2026-10-09
+
+### Changed
+
+- Give every lint, test, docs and paper CI job a timeout, so a hung job frees its shared GitHub Actions runner instead of holding it for six hours.
+
+### Fixed
+
+- Filter UK country simulations using stored household regions, selecting all nine English regions for England and preserving entity relationships and weights without requiring a derived country column.
+
+
 ## [6.2.2] - 2026-10-07
 
 ### Changed

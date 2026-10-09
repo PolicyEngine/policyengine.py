@@ -39,6 +39,21 @@ UK_COUNTRIES = {
     "northern_ireland": "Northern Ireland",
 }
 
+# Stored names from policyengine_uk's Region enum. England spans nine ITL1
+# regions; each other UK country is itself one ITL1 region.
+# https://www.ons.gov.uk/methodology/geography/ukgeographies/eurostat
+ENGLISH_REGIONS = (
+    "NORTH_EAST",
+    "NORTH_WEST",
+    "YORKSHIRE",
+    "EAST_MIDLANDS",
+    "WEST_MIDLANDS",
+    "EAST_OF_ENGLAND",
+    "LONDON",
+    "SOUTH_EAST",
+    "SOUTH_WEST",
+)
+
 
 def _load_constituencies_from_csv() -> list[dict]:
     """Load UK constituency data from CSV.
@@ -135,18 +150,19 @@ def build_uk_region_registry(
         )
     )
 
-    # 2. Country regions (filter from national by 'country' variable)
+    # 2. Countries scope the stored region input; country is a derived variable.
     for code, name in UK_COUNTRIES.items():
+        scoping_strategy = RowFilterStrategy(
+            variable_name="region",
+            variable_value=list(ENGLISH_REGIONS) if code == "england" else code.upper(),
+        )
         regions.append(
             Region(
                 code=f"country/{code}",
                 label=name,
                 region_type="country",
                 parent_code="uk",
-                scoping_strategy=RowFilterStrategy(
-                    variable_name="country",
-                    variable_value=code.upper(),
-                ),
+                scoping_strategy=scoping_strategy,
             )
         )
 
