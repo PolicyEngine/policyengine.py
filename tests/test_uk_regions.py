@@ -80,7 +80,7 @@ class TestUKRegionRegistry:
         assert (
             national.dataset_path
             == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2024_25.h5"
-            "@1.56.16"
+            "@1.58.0"
         )
         assert not national.requires_filter
 

@@ -75,12 +75,12 @@ US_LOCAL_AREA_DATASET_URI = (
     "hf://policyengine/populace-us/populace_us_2024_acs_local.h5"
     f"@{US_LOCAL_AREA_RELEASE_ID}"
 )
-UK_MODEL_VERSION = "2.102.3"
-UK_BUILT_WITH_MODEL_VERSION = "2.89.2"
-UK_DATA_RELEASE_VERSION = "1.56.16"
-UK_DATA_RELEASE_ID = "policyengine-uk-data-1.56.16"
-UK_DATA_RELEASE_REVISION = "78788372fec47fc8df835bd32307ef61eaed83c2"
-UK_DATA_RELEASE_PATH = "releases/1.56.16/release_manifest.json"
+UK_MODEL_VERSION = "2.125.1"
+UK_BUILT_WITH_MODEL_VERSION = "2.122.2"
+UK_DATA_RELEASE_VERSION = "1.58.0"
+UK_DATA_RELEASE_ID = "policyengine-uk-data-1.58.0"
+UK_DATA_RELEASE_REVISION = "fdeba38517bd86067f34c0a5d8ed8923efb3b10a"
+UK_DATA_RELEASE_PATH = "releases/1.58.0/release_manifest.json"
 # The prior certified default, kept resolvable via dataset_overlays.
 UK_POPULACE_RELEASE_ID = "populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z"
 UK_POPULACE_DATASET_URI = (
@@ -89,7 +89,7 @@ UK_POPULACE_DATASET_URI = (
 )
 UK_CERTIFICATION_SOURCE = "policyengine.py bundle certification"
 UK_CERTIFIED_DATASET_URI = (
-    "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2024_25.h5@1.56.16"
+    "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2024_25.h5@1.58.0"
 )
 
 

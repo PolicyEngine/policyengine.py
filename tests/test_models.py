@@ -43,13 +43,13 @@ class TestUKModel:
         assert uk_latest.release_manifest is not None
         assert uk_latest.release_manifest.country_id == "uk"
         assert uk_latest.model_package.name == "policyengine-uk"
-        assert uk_latest.model_package.version == "2.102.3"
+        assert uk_latest.model_package.version == "2.125.1"
         assert uk_latest.data_package.name == "policyengine-uk-data"
-        assert uk_latest.data_package.version == "1.56.16"
+        assert uk_latest.data_package.version == "1.58.0"
         assert (
             uk_latest.default_dataset_uri
             == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2024_25.h5"
-            "@1.56.16"
+            "@1.58.0"
         )
 
     def test_has_hundreds_of_parameters(self):
