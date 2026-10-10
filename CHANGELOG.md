@@ -1,3 +1,10 @@
+## [6.2.6] - 2026-10-10
+
+### Changed
+
+- Certify policyengine-uk-data 1.58.0 (`enhanced_frs_2024_25`) as the UK default, and pin policyengine-uk 2.125.1 and policyengine-core 3.33.0. The data was built with policyengine-uk 2.122.2 and core 3.32.13; the publisher's compatibility claim in the 1.58.0 release manifest covers the newer versions. UK results change with the new data release and with the policyengine-uk updates since 2.102.3, including Housing Benefit's Guarantee Credit passport now keyed on receipt.
+
+
 ## [6.2.5] - 2026-10-09
 
 ### Fixed

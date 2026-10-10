@@ -1,10 +1,10 @@
 {
-  "bundle_version": "6.2.5",
+  "bundle_version": "6.2.6",
   "citation": {
     "publisher": "PolicyEngine",
-    "title": "PolicyEngine bundle 6.2.5",
+    "title": "PolicyEngine bundle 6.2.6",
     "type": "software-bundle",
-    "version": "6.2.5"
+    "version": "6.2.6"
   },
   "countries": {
     "uk": {
@@ -17,7 +17,7 @@
   "data_releases": {
     "uk": {
       "build_id": "policyengine-uk-data-1.58.0",
-      "bundle_id": "uk-6.2.5",
+      "bundle_id": "uk-6.2.6",
       "certification": {
         "built_with_model_git_sha": "4cbedbecca352f52dffe47e849553c2759a00711",
         "built_with_model_version": "2.122.2",
@@ -99,7 +99,7 @@
         "version": "2.125.1",
         "wheel_url": "https://files.pythonhosted.org/packages/ec/3a/1d90bad4346d1a8c2715be211ed3d3d7f48917da0d90405b8257b7304091/policyengine_uk-2.125.1-py3-none-any.whl"
       },
-      "policyengine_version": "6.2.5",
+      "policyengine_version": "6.2.6",
       "region_datasets": {
         "national": {
           "path_template": "enhanced_frs_2024_25.h5"
@@ -112,7 +112,7 @@
     },
     "us": {
       "build_id": "populace-us-2024-spm-20260915",
-      "bundle_id": "us-6.2.5",
+      "bundle_id": "us-6.2.6",
       "certification": {
         "built_with_model_version": "2.2.1",
         "certified_by": "policyengine.py bundle certification",
@@ -217,7 +217,7 @@
         "version": "2.2.1",
         "wheel_url": "https://files.pythonhosted.org/packages/5e/09/86ac3968d2a18e28fce3ba1186fc21728e9f299b96a806d6f204f1e0aaed/policyengine_us-2.2.1-py3-none-any.whl"
       },
-      "policyengine_version": "6.2.5",
+      "policyengine_version": "6.2.6",
       "region_datasets": {
         "congressional_district": {
           "path_template": "populace_us_2024_acs_local.h5"
@@ -295,10 +295,10 @@
   "packages": {
     "policyengine": {
       "import_name": "policyengine",
-      "install_requirement": "policyengine==6.2.5",
+      "install_requirement": "policyengine==6.2.6",
       "name": "policyengine",
       "role": "bundle_carrier",
-      "version": "6.2.5"
+      "version": "6.2.6"
     },
     "policyengine-core": {
       "import_name": "policyengine_core",
@@ -334,6 +334,6 @@
       "wheel_url": "https://files.pythonhosted.org/packages/19/a0/c484f69a0ebf88a9b9fd0ac28176f8df66550f46714f1b0c5ec0b360824e/spm_calculator-1.0.0-py3-none-any.whl"
     }
   },
-  "policyengine_version": "6.2.5",
+  "policyengine_version": "6.2.6",
   "schema_version": 2
 }
