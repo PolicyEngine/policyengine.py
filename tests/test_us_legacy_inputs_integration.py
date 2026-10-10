@@ -177,6 +177,28 @@ def test_run_keeps_a_stored_false_draw(mapped_run):
     assert mapped_run.release_bundle["legacy_input_renames"] == RENAME
 
 
+def test_missing_acs_claim_decisions_do_not_make_ineligible_people_wic_eligible(
+    tmp_path,
+):
+    frames = _frames()
+    # Keep the donor infant's False and the ACS toddler's existing True.
+    # Only the ACS adult is missing a participation decision.
+    frames["person"][LEGACY] = pd.Series([None, False, True], dtype=object)
+    frames["person"]["person_support_channel"] = [
+        "acs_2024_1yr",
+        "asec",
+        "acs_2024_1yr",
+    ]
+    person = _person_outputs(_run(_in_memory_dataset(tmp_path, frames)))
+
+    assert person[LIVE].tolist() == [True, False, True]
+    assert not person["is_wic_eligible"].iloc[0]
+    assert person["wic"].iloc[0] == 0
+    assert person["is_wic_eligible"].iloc[INFANT]
+    assert person["wic"].iloc[INFANT] == 0
+    assert person["wic"].iloc[TODDLER] > 0
+
+
 def test_run_over_a_core_h5_keeps_a_stored_false_draw(tmp_path):
     """Path 1 over a policyengine-core ``variable/period`` file.
 

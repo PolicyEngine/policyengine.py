@@ -6,6 +6,6 @@
   "has_region_registry": true,
   "model_package_name": "policyengine-uk",
   "num_parameters_bucketed_100s": 32,
-  "num_variables_bucketed_100s": 10,
+  "num_variables_bucketed_100s": 11,
   "region_registry_country": "uk"
 }

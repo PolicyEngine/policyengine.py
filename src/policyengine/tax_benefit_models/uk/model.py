@@ -1,6 +1,7 @@
 import datetime
 from typing import TYPE_CHECKING, Optional
 
+import numpy as np
 import pandas as pd
 from microdf import MicroDataFrame
 
@@ -22,6 +23,11 @@ if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
 
 UK_GROUP_ENTITIES = ["benunit", "household"]
+UK_ENTITY_ID_COLUMNS = {
+    "person": "person_id",
+    "benunit": "benunit_id",
+    "household": "household_id",
+}
 UK_HOUSEHOLD_PASSTHROUGH_COLUMNS = [
     "oa_code",
     "lsoa_code",
@@ -159,7 +165,6 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
     # --- run -------------------------------------------------------------
     def run(self, simulation: "Simulation") -> "Simulation":
         from policyengine_uk import Microsimulation
-        from policyengine_uk.data import UKSingleYearDataset
 
         from policyengine.utils.parametric_reforms import (
             simulation_modifier_from_parameter_values,
@@ -197,15 +202,13 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
                     benunit=scoped_data["benunit"],
                     household=scoped_data["household"],
                 ),
+                # The data year's tables stay whole; they are matched to the
+                # scoped records by ID when the input is built.
+                data_year=dataset.data_year,
+                data_year_data=dataset.data_year_data,
             )
 
-        input_data = UKSingleYearDataset(
-            person=dataset.data.person,
-            benunit=dataset.data.benunit,
-            household=dataset.data.household,
-            fiscal_year=dataset.year,
-        )
-        microsim = Microsimulation(dataset=input_data)
+        microsim = Microsimulation(dataset=_policyengine_uk_input(dataset))
 
         if simulation.policy and simulation.policy.simulation_modifier is not None:
             simulation.policy.simulation_modifier(microsim)
@@ -256,12 +259,139 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
             filepath=str(_output_dataset_filepath(simulation)),
             year=simulation.dataset.year,
             is_output_dataset=True,
+            # The observed year the run anchored on. Saved with the output,
+            # it also marks the output as calculated with that anchoring
+            # (see ``load()`` in common/model_version.py).
+            data_year=(
+                dataset.data_year if dataset.data_year is not None else dataset.year
+            ),
             data=UKYearData(
                 person=data["person"],
                 benunit=data["benunit"],
                 household=data["household"],
             ),
         )
+
+
+def _policyengine_uk_input(dataset: PolicyEngineUKDataset):
+    """Build the policyengine-uk dataset a run of ``dataset`` simulates.
+
+    policyengine-uk takes the first year of its dataset as observed data:
+    the State Pension formulas split each person's reported State Pension
+    against that year's legislated rates and scale the share to the
+    simulated year's rates. A dataset projected from an earlier observed
+    year (``data_year`` before ``year``) therefore gets the input a direct
+    policyengine-uk run on its source builds: the data year's tables
+    projected forward by policyengine-uk, with ``dataset.data`` as the
+    simulated year. Passing ``dataset.data`` alone would make the simulated
+    year the observed year, and the State Pension would follow the CPI
+    uprating of its reported amount instead of the triple lock
+    (PolicyEngine/policyengine.py#556).
+
+    Any other dataset is passed as observed data for its year, as
+    policyengine-uk treats a single-year dataset.
+    """
+    from policyengine_uk.data import UKMultiYearDataset, UKSingleYearDataset
+
+    year = int(dataset.year)
+    # Copies: policyengine-uk encodes enum columns in place on the tables of a
+    # multi-year dataset it is given (a single-year dataset is copied when
+    # policyengine-uk projects it), which would change the caller's dataset.
+    simulated = UKSingleYearDataset(
+        person=pd.DataFrame(dataset.data.person).copy(),
+        benunit=pd.DataFrame(dataset.data.benunit).copy(),
+        household=pd.DataFrame(dataset.data.household).copy(),
+        fiscal_year=year,
+    )
+    if dataset.data_year is None or int(dataset.data_year) >= year:
+        return simulated
+
+    from policyengine_uk.data.economic_assumptions import (
+        extend_single_year_dataset,
+    )
+    from policyengine_uk.system import system
+
+    data_year = int(dataset.data_year)
+    if dataset.data_year_data is None:
+        raise ValueError(
+            f"Dataset {dataset.id} for {year} records data year {data_year} "
+            "but not its tables, as a simulation output does, so it cannot be "
+            "simulated. Run the year file it came from, or set data_year=None "
+            f"to treat its tables as observed data for {year}."
+        )
+    observed_tables = _match_records(
+        dataset.data_year_data.entity_data,
+        dataset.data.entity_data,
+        data_year=data_year,
+        year=year,
+    )
+    # Person and benefit-unit weights are policyengine.py's additions to the
+    # tables; a direct run calculates them from household weights. Kept as
+    # inputs, the projection would carry them unuprated into the years
+    # between the data year and the simulated year.
+    for entity, column in (("person", "person_weight"), ("benunit", "benunit_weight")):
+        observed_tables[entity] = observed_tables[entity].drop(
+            columns=[column], errors="ignore"
+        )
+    observed = UKSingleYearDataset(**observed_tables, fiscal_year=data_year)
+    projected = extend_single_year_dataset(observed, system.parameters)
+    if year not in projected.years:
+        projected = extend_single_year_dataset(
+            observed, system.parameters, end_year=year
+        )
+    return UKMultiYearDataset(
+        datasets=[
+            simulated if y == year else projected[y] for y in sorted(projected.years)
+        ]
+    )
+
+
+def _match_records(
+    observed: dict[str, pd.DataFrame],
+    simulated: dict[str, pd.DataFrame],
+    *,
+    data_year: int,
+    year: int,
+) -> dict[str, pd.DataFrame]:
+    """Return the observed tables for the simulated records, in their order.
+
+    policyengine-uk builds its entities from the first year of a dataset and
+    sets each year's inputs by position, so the observed year must hold the
+    same records in the same order as the simulated year. Records are
+    matched by ID, which carries region scoping (a subset of households)
+    over to the observed year.
+    """
+    matched = {}
+    for entity, id_column in UK_ENTITY_ID_COLUMNS.items():
+        table = pd.DataFrame(observed[entity])
+        ids = pd.Index(table[id_column].to_numpy())
+        if not ids.is_unique:
+            raise ValueError(
+                f"The {data_year} {entity} table repeats {id_column} values, "
+                "so its records cannot be matched to the simulated year."
+            )
+        positions = ids.get_indexer(pd.DataFrame(simulated[entity])[id_column])
+        missing = int((positions < 0).sum())
+        if missing:
+            raise ValueError(
+                f"{missing} {entity} record(s) of the {year} tables are not in "
+                f"the {data_year} tables they were projected from, so "
+                "policyengine-uk has no observed data for them. Keep the data "
+                "year's tables in step with `data`, or set data_year=None to "
+                f"treat `data` as observed data for {year}."
+            )
+        matched[entity] = table.iloc[positions].reset_index(drop=True).copy()
+    simulated_person = pd.DataFrame(simulated["person"])
+    for link in ("person_benunit_id", "person_household_id"):
+        if not np.array_equal(
+            matched["person"][link].to_numpy(), simulated_person[link].to_numpy()
+        ):
+            raise ValueError(
+                f"People belong to different units ({link}) in the {data_year} "
+                f"and {year} tables, so the {year} tables were not projected "
+                f"from the {data_year} ones."
+            )
+    return matched
 
 
 def managed_microsimulation(

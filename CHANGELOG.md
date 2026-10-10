@@ -1,3 +1,28 @@
+## [6.2.5] - 2026-10-09
+
+### Fixed
+
+- Add opt-in verified US state/year preparation and temporarily assume WIC claiming only for missing participation decisions on identified ACS people, preserving donor decisions and country-model eligibility.
+
+
+## [6.2.4] - 2026-10-09
+
+### Fixed
+
+- UK population runs now anchor the State Pension on the survey year their data was projected from, as policyengine-uk does, so a run of a UK year file matches policyengine-uk on the certified dataset, with or without a reform. Before, it took the projected year as the survey year: the State Pension was uprated by CPI rather than the triple lock, and State Pension rate reforms had no effect on it under policyengine-uk 2.102.3 and were understated under 2.123. Projected year files now also store the survey year's tables, which doubles their size. `ensure_datasets` regenerates year files from earlier releases and `load_datasets` refuses them; `Simulation.load()` refuses UK outputs saved by earlier releases, and `Simulation.ensure()` runs them again.
+
+
+## [6.2.3] - 2026-10-09
+
+### Changed
+
+- Give every lint, test, docs and paper CI job a timeout, so a hung job frees its shared GitHub Actions runner instead of holding it for six hours.
+
+### Fixed
+
+- Filter UK country simulations using stored household regions, selecting all nine English regions for England and preserving entity relationships and weights without requiring a derived country column.
+
+
 ## [6.2.2] - 2026-10-07
 
 ### Changed

@@ -28,6 +28,7 @@ jobs:
   Lint:
     if: github.event.head_commit.message != 'Update package version'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
       - name: Install ruff
@@ -40,6 +41,8 @@ jobs:
   Test:
     if: github.event.head_commit.message != 'Update package version'
     runs-on: ubuntu-latest
+    # Slowest observed 2026-10-06..08: 26 minutes.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:

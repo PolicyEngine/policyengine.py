@@ -24,6 +24,7 @@ from microdf import MicroDataFrame
 from pydantic import BaseModel, Discriminator, Field
 
 from policyengine.utils.entity_utils import (
+    HouseholdFilterValue,
     filter_dataset_by_household_ids,
     filter_dataset_by_household_variable,
     matching_household_ids,
@@ -69,12 +70,13 @@ class RowFilterStrategy(RegionScopingStrategy):
     """Scoping strategy that filters dataset rows by a household variable.
 
     Used for regions where we want to keep only households matching a
-    specific variable value (e.g., US states or congressional districts).
+    specific variable value or any value in a list (e.g., the nine English
+    regions). Additional filters must also match.
     """
 
     strategy_type: Literal["row_filter"] = "row_filter"
     variable_name: str
-    variable_value: Union[str, int, float]
+    variable_value: HouseholdFilterValue
     additional_filters: dict[str, Union[str, int, float]] = Field(default_factory=dict)
 
     def apply(

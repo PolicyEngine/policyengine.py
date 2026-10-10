@@ -443,6 +443,21 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     "stored inputs (it has no record of them); run it again"
                 )
 
+        if self.country_code == "uk":
+            from policyengine.tax_benefit_models.uk.datasets import (
+                _year_file_records_data_year,
+            )
+
+            # UK outputs saved before runs anchored on the observed data year
+            # (PolicyEngine/policyengine.py#556) took a projected year as
+            # observed and uprated the State Pension by CPI, so they are not
+            # reused. ``Simulation.ensure()`` runs such a simulation again.
+            if not _year_file_records_data_year(Path(filepath)):
+                raise ValueError(
+                    "Saved UK simulation predates anchoring on the observed "
+                    "data year (it records none); run it again"
+                )
+
         simulation.output_dataset = self._dataset_class(
             id=simulation.id,
             name=simulation.dataset.name,

@@ -22,6 +22,7 @@ jobs:
   check-changelog:
     name: Check changelog fragment
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
         with:
@@ -32,6 +33,7 @@ jobs:
         run: .github/check-changelog.sh
   Lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
         - uses: actions/checkout@v6
         - name: Install ruff
@@ -44,6 +46,7 @@ jobs:
           run: ruff check .
   Mypy:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
         - uses: actions/checkout@v6
         - name: Install uv
@@ -61,6 +64,7 @@ jobs:
   Python-Compat:
     name: Install + smoke-import (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -85,6 +89,7 @@ jobs:
     # Private manifest credentials are available only to trusted repository PRs.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       POLICYENGINE_SKIP_COUNTRY_IMPORTS: "1"
     steps:
@@ -136,6 +141,9 @@ jobs:
         run: policyengine bundle verify --country us --country uk --packages-only --json
   Test:
     runs-on: ubuntu-latest
+    # Slowest observed 2026-10-06..08: 28 minutes. Fail a hung job instead of
+    # holding a shared org runner for the 6-hour default.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
