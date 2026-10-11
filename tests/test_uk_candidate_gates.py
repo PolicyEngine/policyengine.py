@@ -684,21 +684,9 @@ def _recount(report: dict) -> dict:
 
 
 def _passing_report() -> dict:
-    """W1's population run, with its cases and properties all passing."""
+    """W1's real full run: every route, 20 examples, the certified dataset."""
 
-    report = _fixture("population_pass_max_examples_0.json")
-    defects = _fixture("pinned_uk_2.125.1_defects.json")
-    report["cases"] = [
-        {**case, "status": "pass"}
-        for case in defects["cases"]
-        if case["status"] in ("pass", "fail", "error")
-    ]
-    report["properties"] = [
-        {"property_id": row["property_id"], "status": "pass", "examples_run": 20}
-        for row in report["properties"]
-    ]
-    report["max_examples"] = 20
-    return _recount(report)
+    return _fixture("full_allpass_uk_2.126.8.json")
 
 
 def _run_contract(report, *, versions=None, dataset_sha=CERTIFIED_SHA, **kwargs):
@@ -743,10 +731,14 @@ def test_w1_population_run_alone_is_incomplete():
     assert any("annual_values_match_the_oracle did not run" in p for p in problems)
 
 
-def test_a_full_passing_report_passes():
+def test_w1_full_run_passes():
+    """W1's real all-pass report: 267 pass, 6 pending d1344, 67 unsupported."""
+
     result = _run_contract(_passing_report())
     assert result.status == "pass", result.summary
-    assert "every case, property and population check passed" in result.summary
+    assert "every case, property and population check passed (267)" in result.summary
+    assert "6 pending a methodology call" in result.summary
+    assert result.details["problems"] == []
 
 
 REPORT_TAMPERING = {
