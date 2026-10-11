@@ -101,6 +101,59 @@
       "title": "CertificateIdentity",
       "type": "object"
     },
+    "CoreIdentity": {
+      "additionalProperties": false,
+      "description": "The policyengine-core distribution.",
+      "properties": {
+        "name": {
+          "const": "policyengine-core",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "description": "Installed version (importlib.metadata).",
+          "title": "Version",
+          "type": "string"
+        },
+        "wheel_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "SHA-256 of the wheel the installed files came from. Present only when verified by the receipt builder: by checking the installed files against the wheel's RECORD, or from the installer's recorded archive hash.",
+          "title": "Wheel Sha256"
+        },
+        "wheel_sha256_evidence": {
+          "anyOf": [
+            {
+              "enum": [
+                "installed_record_verified",
+                "installer_archive_hash"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How wheel_sha256 was established.",
+          "title": "Wheel Sha256 Evidence"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "title": "CoreIdentity",
+      "type": "object"
+    },
     "DataIdentity": {
       "additionalProperties": false,
       "description": "The data release and the exact dataset bytes that were simulated.",
@@ -183,20 +236,6 @@
           "description": "Hugging Face commit of the release manifest.",
           "title": "Release Manifest Revision"
         },
-        "release_manifest_sha256": {
-          "anyOf": [
-            {
-              "pattern": "^[0-9a-f]{64}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "SHA-256 of the fetched release manifest bytes.",
-          "title": "Release Manifest Sha256"
-        },
         "release_version": {
           "description": "Data release version or artifact revision.",
           "title": "Release Version",
@@ -216,13 +255,10 @@
     },
     "FiscalYearConvention": {
       "additionalProperties": false,
-      "description": "What an annual period label means in this result.",
+      "description": "What an annual period label means in this result.\n\nv1 receipts are UK results, so the convention is the UK fiscal year: year\nY is the period from 6 April Y to 5 April Y+1. Another convention needs a\nnew schema version.",
       "properties": {
         "convention": {
-          "enum": [
-            "uk_fiscal_year",
-            "calendar_year"
-          ],
+          "const": "uk_fiscal_year",
           "title": "Convention",
           "type": "string"
         },
@@ -232,18 +268,15 @@
           "type": "string"
         },
         "period_start": {
-          "description": "Month-day the labelled period starts: 04-06 (UK), 01-01 (calendar).",
-          "enum": [
-            "04-06",
-            "01-01"
-          ],
+          "const": "04-06",
+          "description": "Month-day the labelled period starts (6 April).",
           "title": "Period Start",
           "type": "string"
         },
         "year_label": {
           "const": "start_year",
           "default": "start_year",
-          "description": "Year Y labels the period that starts in Y (UK: 2027 is 2027-28).",
+          "description": "Year Y labels the period that starts in Y (2027 is 2027-28).",
           "title": "Year Label",
           "type": "string"
         }
@@ -256,13 +289,12 @@
       "title": "FiscalYearConvention",
       "type": "object"
     },
-    "PackageIdentity": {
+    "ModelIdentity": {
       "additionalProperties": false,
-      "description": "A Python distribution that took part in the execution.",
+      "description": "The country model distribution (v1: policyengine-uk).",
       "properties": {
         "name": {
-          "description": "PEP 503 normalized distribution name, e.g. policyengine-uk.",
-          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "const": "policyengine-uk",
           "title": "Name",
           "type": "string"
         },
@@ -307,7 +339,7 @@
         "name",
         "version"
       ],
-      "title": "PackageIdentity",
+      "title": "ModelIdentity",
       "type": "object"
     },
     "ReformIdentity": {
@@ -316,7 +348,7 @@
       "properties": {
         "binding": {
           "default": "content",
-          "description": "content: the digest determines the reform's behaviour. code_revision: the reform runs a module-level Python function, bound by its source and bytecode and the caller's code revision.",
+          "description": "content: the digest determines the reform's behaviour. code_revision: the reform runs a module-level Python function, bound by its source, its module's source, its default arguments and the caller's code revision.",
           "enum": [
             "content",
             "code_revision"
@@ -437,8 +469,7 @@
           "title": "Git Sha"
         },
         "name": {
-          "description": "PEP 503 normalized distribution name, e.g. policyengine-uk.",
-          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "const": "policyengine",
           "title": "Name",
           "type": "string"
         },
@@ -515,7 +546,7 @@
       "type": "string"
     },
     "core": {
-      "$ref": "#/$defs/PackageIdentity"
+      "$ref": "#/$defs/CoreIdentity"
     },
     "country_id": {
       "const": "uk",
@@ -529,7 +560,7 @@
       "$ref": "#/$defs/FiscalYearConvention"
     },
     "model": {
-      "$ref": "#/$defs/PackageIdentity"
+      "$ref": "#/$defs/ModelIdentity"
     },
     "outputs_sha256": {
       "anyOf": [
@@ -606,9 +637,7 @@
     "reform.reform_sha256": "{representation, payload} where payload is the reform exactly as given in that representation"
   },
   "x-policyengine-rules": [
-    "years is sorted ascending with no duplicates.",
-    "fiscal_year.period_start is 04-06 for uk_fiscal_year and 01-01 for calendar_year; UK receipts use uk_fiscal_year.",
-    "wrapper.name is policyengine, model.name is policyengine-uk and core.name is policyengine-core.",
+    "years is sorted ascending with no duplicates, and each year is written as an integer (2027, not 2027.0).",
     "certification_status certified requires certificate; uncertified forbids it.",
     "certificate.country_id equals country_id.",
     "certificate.certified_for_model_version equals model.version.",
@@ -617,6 +646,6 @@
     "certificate.bundle_version equals wrapper.version.",
     "reform/baseline kind current_law has no representation or reform_sha256 and binding content; kind reform has both.",
     "wheel_sha256 and wheel_sha256_evidence are present together or not at all.",
-    "A consumer that trusts a certificate checks certificate.certificate_sha256 against the data_releases.<country_id> record of the published policyengine manifest for certificate.bundle_version, or requires certificate_source packaged."
+    "A consumer trusts a certificate only after checking it against the data_releases.<country_id> record of the published policyengine manifest for certificate.bundle_version (verify_certificate()): certificate_sha256 is that record's digest, every other member of certificate except certificate_source, qualification_receipt_sha256 and tro_composition_fingerprint equals what the record states, and data equals the data identity the record determines. certificate_source is the producer's statement and proves nothing."
   ]
 }

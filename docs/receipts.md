@@ -10,9 +10,9 @@ Schema v1 covers UK results and is defined by `policyengine.provenance.receipt.E
 |---|---|
 | `wrapper`, `model`, `core` | The `policyengine`, `policyengine-uk` and `policyengine-core` versions that actually ran, read from the installed distributions rather than from the bundle manifest. `wheel_sha256` appears only when the receipt builder verified it: either by checking the installed files against a wheel's RECORD (`wheel_paths=`, evidence `installed_record_verified`), or from the installer's recorded archive hash (`installer_archive_hash`). |
 | `data` | The data release and build, and the model version the data was built with (`build_model_version`, distinct from `model.version`). Also the dataset's logical name, URI, revision and the SHA-256 of the bytes that were simulated. |
-| `certification_status`, `certificate` | `certified` only when the bundle certifies all of: the installed model and core versions, that dataset name and those bytes, and the running `policyengine` version. Otherwise the receipt says `uncertified` and carries no certificate. `certificate_source` says whether the certificate came from the installed bundle (`packaged`) or from a manifest the caller passed (`caller_supplied`). With the packaged bundle, the composition fingerprint of its TRACE TRO is recorded as well. |
+| `certification_status`, `certificate` | `certified` only when the bundle certifies all of: the installed model and core versions, that dataset name and those bytes, and the running `policyengine` version. Otherwise the receipt says `uncertified` and carries no certificate. `certificate_source` records whether the builder read the certificate from the installed bundle (`packaged`) or from a manifest the caller passed (`caller_supplied`). It is the producer's statement, not evidence: trust a certificate only after `verify_certificate` (below). With the packaged bundle, the composition fingerprint of its TRACE TRO is recorded as well. |
 | `reform`, `baseline` | Both are required. Each is `current_law` or a digest of the reform bound to its representation (see below). |
-| `fiscal_year` | What a year label means: year 2027 is the fiscal year from 6 April 2027 to 5 April 2028, shown as `2027-28`. |
+| `fiscal_year` | What a year label means: year 2027 is the fiscal year from 6 April 2027 to 5 April 2028, shown as `2027-28`. v1 allows only this convention. |
 | `years` | The reported years, sorted and unique. |
 | `outputs_sha256` | Optional digest of the output payload the receipt binds. |
 | `runtime` | Python version, platform and CI run URL. It is for diagnosis and is part of no digest. |
@@ -46,9 +46,15 @@ There are two ways to bind a policyengine-uk `Scenario`:
 - A scenario built from `parameter_changes` is bound by content with `scenario_reform_identity(scenario)`.
 - `Scenario.from_reform(d)` wraps `d` in a closure that cannot be bound by its code, so bind `d` itself with `reform_identity(d, "policyengine-uk.reform_dict/v1")`.
 
-A scenario with a module-level `simulation_modifier` needs `code_revision={"repository": ..., "git_sha": ...}`. The modifier is then bound by its source, its loaded bytecode and that revision, and the identity says `binding: "code_revision"`. Closures, lambdas, `functools.partial`, bound methods and builtins are refused: their behaviour depends on values the digest cannot bind.
+A scenario with a module-level `simulation_modifier` needs `code_revision={"repository": ..., "git_sha": <full commit sha>}`. The identity then says `binding: "code_revision"` and binds:
+- the function's module and qualified name;
+- the SHA-256 of its source and of its module's source file;
+- its default arguments, which must have an exact JSON form;
+- that revision.
 
-To check a certificate, call `verify_certificate(receipt, bundle)` with the policyengine manifest for `certificate.bundle_version`. It confirms that `certificate_sha256` matches that manifest's certification record.
+None of these depends on where the code is checked out or which Python version runs it, so CI, a laptop and the server compute the same digest for the same code. Before binding, the function's source is recompiled and compared with the code that was imported, ignoring file names and line numbers. A file edited after import is therefore refused rather than misdescribed. Closures, lambdas, nested functions, `functools.partial`, bound methods and builtins are refused, because their behaviour depends on values the digest cannot bind. Anything that is not a `Scenario` is refused too, rather than read as current law. The digest does not cover module state changed while the process runs, such as a global reassigned after import: `code_revision` names the code, not the process.
+
+To check a certificate, call `verify_certificate(receipt, bundle)` with the policyengine manifest for `certificate.bundle_version`. It rebuilds the certificate from that manifest's certification record, the same way the builder does. Then it compares every identity member: the record digest, the basis, the certified model, core and dataset digest, the certifier and the bundle version. It also checks that the receipt's whole `data` identity is the certified dataset with the certified bytes. An empty list means the bundle certifies exactly what the receipt claims, and through the receipt's own rules that pins `model.version`, `core.version` and `wrapper.version` too. `certificate_source`, `qualification_receipt_sha256`, `tro_composition_fingerprint` and wheel hashes are not determined by the bundle, so it does not check them.
 
 Pass the release artifact that was loaded as `dataset_path`. A derived per-year file such as `enhanced_frs_2024_25_year_2026.h5` has different bytes, so a receipt built from it is `uncertified`.
 
@@ -88,12 +94,13 @@ Reform digests are never normalized across representations. The same keys can le
 
 Consumers that validate with the JSON Schema rather than the Python model must also check the rules listed under `x-policyengine-rules` in the schema file:
 
-- `years` is sorted with no duplicates;
-- UK receipts report UK fiscal years, which start on 6 April;
-- the three package names are `policyengine`, `policyengine-uk` and `policyengine-core`;
+- `years` is sorted with no duplicates, and each year is written as an integer (`2027`, not `2027.0`);
 - a certificate is present exactly when the receipt is certified, and it names the receipt's country, model and core versions, dataset digest and `policyengine` version;
 - a `current_law` reform has no digest, while any other reform has both a representation and a digest;
-- a wheel digest always comes with its evidence.
+- a wheel digest always comes with its evidence;
+- a certificate is trusted only after it, and the receipt's `data`, have been checked against the published manifest it names (`verify_certificate`).
+
+The schema itself fixes the package names (`policyengine`, `policyengine-uk`, `policyengine-core`) and the UK fiscal-year convention, which starts on 6 April.
 
 ## Compatibility
 

@@ -5,14 +5,20 @@ Invariants tested here:
 - a receipt claims certification only when the certificate covers the
   installed model and core versions, the simulated dataset bytes and name,
   and the running wrapper version;
+- verify_certificate accepts exactly the receipts the bundle certifies: a
+  receipt built from a bundle verifies against it, and changing any certified
+  member of the certificate or data, however consistently, is reported
+  (differential with the builder);
 - a wheel hash is recorded only when the builder verified it;
 - the execution identity depends only on runtime, data and certificate
   content, never on how the builder was called; the receipt digest adds
   reform, baseline, years and outputs, never runtime context or labels;
 - digests are over strict JSON: nothing is silently stringified, member
   order and null-versus-omitted do not matter, and colliding keys are refused;
-- a reform digest binds content, or a module-level modifier's code plus a
-  revision; closures, lambdas, partials and methods are refused;
+- a reform digest binds content, or a module-level modifier's source,
+  module source and defaults plus a revision, independent of where the code
+  is checked out; code edited after import, closures, lambdas, partials,
+  methods and non-Scenario objects are refused;
 - the Pydantic model and the published JSON Schema accept the same valid
   receipts and reject the same malformed ones (differential test).
 """
@@ -25,7 +31,10 @@ import decimal
 import enum
 import functools
 import hashlib
+import importlib.util
 import json
+import linecache
+import sys
 from importlib import metadata
 from pathlib import Path
 from types import SimpleNamespace
@@ -297,6 +306,135 @@ def test_verify_certificate_against_a_published_bundle(certified_receipt, datase
     assert verify_certificate(_build(dataset_file, _bundle_for(b"x")), bundle) == [
         "the receipt is uncertified"
     ]
+    assert verify_certificate(certified_receipt, {"data_releases": {}}) == [
+        "the bundle has no uk data release"
+    ]
+
+
+def _forge(receipt: ExecutionReceipt, **changes) -> ExecutionReceipt:
+    """A receipt edited consistently, so the model's own rules still accept it."""
+
+    payload = copy.deepcopy(receipt.model_dump(mode="json"))
+    for path, value in changes.items():
+        target = payload
+        *parents, last = path.split("__")
+        for key in parents:
+            target = target[key]
+        target[last] = value
+    return ExecutionReceipt.model_validate(payload)
+
+
+def test_a_forged_receipt_with_the_genuine_record_digest_does_not_verify(
+    certified_receipt, dataset_file
+):
+    """Round-2 review N1: the forgery kept certificate_sha256 and changed the rest."""
+
+    bundle = _bundle_for(dataset_file.read_bytes())
+    forged = _forge(
+        certified_receipt,
+        model__version="2.199.0",
+        certificate__certified_for_model_version="2.199.0",
+        data__dataset_sha256="e" * 64,
+        certificate__certified_dataset_sha256="e" * 64,
+        certificate__compatibility_basis="trust me",
+        certificate__certificate_source="packaged",
+    )
+    assert forged.certification_status == "certified"
+    assert forged.certificate.certificate_sha256 == (
+        certified_receipt.certificate.certificate_sha256
+    )
+    problems = verify_certificate(forged, bundle)
+    assert any("certified_for_model_version" in p for p in problems)
+    assert any("certified_dataset_sha256" in p for p in problems)
+    assert any("compatibility_basis" in p for p in problems)
+    assert any("data.dataset_sha256" in p for p in problems)
+
+
+#: Consistent edits a forger could make, each of which the model accepts.
+FORGERIES = {
+    "bundle version": {
+        "wrapper__version": "9.9.9",
+        "certificate__bundle_version": "9.9.9",
+    },
+    "model version": {
+        "model__version": "9.9.9",
+        "certificate__certified_for_model_version": "9.9.9",
+    },
+    "core version": {
+        "core__version": "9.9.9",
+        "certificate__certified_for_core_version": "9.9.9",
+    },
+    "dataset bytes": {
+        "data__dataset_sha256": "e" * 64,
+        "certificate__certified_dataset_sha256": "e" * 64,
+    },
+    "record digest": {"certificate__certificate_sha256": "e" * 64},
+    "basis": {"certificate__compatibility_basis": "built_with_model_package"},
+    "certifier": {"certificate__certified_by": "someone else"},
+    "dataset name": {"data__dataset": "frs_2024_25"},
+    "data release": {"data__release_version": "9.9.9"},
+    "data package": {"data__data_package": "policyengine-uk-data-public"},
+    "data build": {"data__build_id": "policyengine-uk-data-9.9.9"},
+    "build fingerprint": {"data__build_fingerprint": "sha256:" + "e" * 64},
+    "build model": {"data__build_model_version": "9.9.9"},
+    "manifest revision": {"data__release_manifest_revision": "e" * 40},
+    "dataset uri": {"data__dataset_uri": "hf://someone/else.h5@1.58.0"},
+    "dataset revision": {"data__dataset_revision": "main"},
+}
+
+
+@settings(max_examples=40, deadline=None)
+@given(
+    names=st.lists(
+        st.sampled_from(sorted(FORGERIES)), min_size=1, max_size=4, unique=True
+    )
+)
+def test_every_consistent_forgery_is_reported(tmp_path_factory, names):
+    dataset = tmp_path_factory.mktemp("forgery") / "data.h5"
+    dataset.write_bytes(b"forgery bytes")
+    bundle = _bundle_for(dataset.read_bytes())
+    genuine = _build(dataset, bundle)
+    assert verify_certificate(genuine, bundle) == []
+    changes = {path: value for name in names for path, value in FORGERIES[name].items()}
+    assert verify_certificate(_forge(genuine, **changes), bundle)
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        lambda b: b["data_releases"]["uk"]["certification"].update(
+            certified_by="someone else"
+        ),
+        lambda b: b["data_releases"]["uk"]["data_package"].update(version="9.9.9"),
+        lambda b: b["data_releases"]["uk"]["certified_data_artifact"].update(
+            dataset="frs_2024_25"
+        ),
+        lambda b: b["data_releases"]["uk"].update(policyengine_version="0.0.0"),
+        lambda b: b.update(policyengine_version="0.0.0"),
+        lambda b: b["packages"]["policyengine-core"].update(version="0.0.1"),
+    ],
+    ids=[
+        "certifier",
+        "data version",
+        "certified dataset",
+        "record version",
+        "bundle version",
+        "core",
+    ],
+)
+def test_verification_and_building_agree_on_each_bundle(dataset_file, edit):
+    """Differential: a receipt verifies against a bundle iff that bundle built it."""
+
+    bundle = _bundle_for(dataset_file.read_bytes())
+    other = copy.deepcopy(bundle)
+    edit(other)
+    receipt = _build(dataset_file, bundle)
+    assert verify_certificate(receipt, bundle) == []
+    assert verify_certificate(receipt, other)
+    rebuilt = _build(dataset_file, other)
+    if rebuilt.certification_status == "certified":
+        assert verify_certificate(rebuilt, other) == []
+        assert verify_certificate(rebuilt, bundle)
 
 
 # --- Wheel hashes ----------------------------------------------------------------
@@ -327,7 +465,7 @@ def test_wheel_hashes_need_the_builder_to_verify_them(dataset_file, monkeypatch)
         _build(dataset_file, wheel_paths={"policyengine-uk": Path("uk.whl")})
 
 
-def test_installer_archive_hash_is_read_from_direct_url():
+def test_installer_archive_hash_is_read_from_direct_url(monkeypatch):
     class Distribution:
         version = INSTALLED_UK
 
@@ -343,11 +481,23 @@ def test_installer_archive_hash_is_read_from_direct_url():
     fake = SimpleNamespace(
         version=lambda name: INSTALLED_UK, distribution=lambda name: Distribution()
     )
-    identity = installed_package_identity("policyengine-uk", metadata_module=fake)
+    monkeypatch.setattr(receipt_module, "metadata", fake)
+    identity = installed_package_identity("policyengine-uk")
     assert (identity.wheel_sha256, identity.wheel_sha256_evidence) == (
         "b" * 64,
         "installer_archive_hash",
     )
+
+
+def test_callers_cannot_supply_the_versions_a_receipt_records(dataset_file):
+    """Round-2 review N5: there is no public way to inject package metadata."""
+
+    import inspect
+
+    for function in (build_execution_receipt, installed_package_identity):
+        assert "metadata_module" not in inspect.signature(function).parameters
+    with pytest.raises(TypeError):
+        _build(dataset_file, metadata_module=SimpleNamespace())
 
 
 def test_hash_without_evidence_is_refused():
@@ -529,6 +679,26 @@ def test_strict_json_refuses_values_without_one_json_form(value):
         strict_json_value(value)
 
 
+def test_strict_json_refuses_rather_than_overflowing_the_stack():
+    """Round-2 review N8: longdouble and deep nesting raise ReceiptError."""
+
+    longdouble = np.longdouble("0.1")
+    if isinstance(longdouble.item(), float):  # pragma: no cover - platform
+        assert strict_json_value(longdouble) == longdouble.item()
+    else:
+        with pytest.raises(ReceiptError):
+            strict_json_value(longdouble)
+    nested: list = []
+    for _ in range(sys.getrecursionlimit() + 100):
+        nested = [nested]
+    with pytest.raises(ReceiptError):
+        strict_json_value(nested)
+    with pytest.raises(ReceiptError):
+        content_sha256(nested)
+    with pytest.raises(ReceiptError):
+        content_sha256({"total": 2**53})
+
+
 def test_numpy_scalars_digest_like_the_published_json():
     assert content_sha256({"budgetary_impact": np.int64(1234)}) == content_sha256(
         {"budgetary_impact": 1234}
@@ -565,6 +735,59 @@ def _scenario(parameter_changes=None, simulation_modifier=None, early=False):
         simulation_modifier=simulation_modifier,
         applied_before_data_load=early,
     )
+
+
+class _ReformClass:
+    """Stands in for a policyengine-core Reform subclass."""
+
+    parameter_changes = None
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        {"gov.hmrc.income_tax.rates.uk[0].rate": {"2027": 0.21}},
+        [{"parameter": "gov.x", "value": 1}],
+        "gov.hmrc.income_tax.rates.uk[0].rate",
+        _ReformClass,
+        SimpleNamespace(parameter_values=[], name="policyengine.py Policy"),
+        SimpleNamespace(parameter_changes={"a": {"2027": 1}}),
+        _scenario(early="yes"),
+        _scenario(parameter_changes=[("a", 1)]),
+        _scenario(simulation_modifier="raise_basic_rate"),
+    ],
+    ids=[
+        "reform dict",
+        "list",
+        "string",
+        "reform class",
+        "policy",
+        "partial scenario",
+        "non-bool timing",
+        "non-mapping changes",
+        "non-callable modifier",
+    ],
+)
+def test_objects_that_are_not_scenarios_are_refused_not_read_as_current_law(value):
+    """Round-2 review N6."""
+
+    with pytest.raises(ReceiptError):
+        scenario_reform_identity(value, code_revision=REVISION)
+
+
+def test_real_scenarios_are_accepted():
+    from policyengine_uk.utils.scenario import Scenario
+
+    changes = {"gov.hmrc.income_tax.rates.uk[0].rate": {"2027-04-06": 0.21}}
+    assert scenario_reform_identity(Scenario()).kind == "current_law"
+    assert scenario_reform_identity(
+        Scenario(parameter_changes=changes)
+    ).reform_sha256 == (scenario_reform_identity(_scenario(changes)).reform_sha256)
+    bound = scenario_reform_identity(
+        Scenario(simulation_modifier=receipt_modifiers.raise_basic_rate),
+        code_revision=REVISION,
+    )
+    assert bound.binding == "code_revision"
 
 
 def test_parameter_scenarios_are_bound_by_content():
@@ -625,6 +848,116 @@ def test_modifiers_whose_behaviour_the_digest_cannot_bind_are_refused(modifier):
         scenario_reform_identity(
             _scenario(simulation_modifier=modifier), code_revision=REVISION
         )
+
+
+@pytest.mark.parametrize(
+    "revision",
+    [
+        None,
+        {},
+        {"repository": "PolicyEngine/x"},
+        {"repository": "", "git_sha": "a" * 40},
+        {"repository": "PolicyEngine/x", "git_sha": "main"},
+        {"repository": "PolicyEngine/x", "git_sha": "A" * 40},
+    ],
+)
+def test_modifiers_need_a_full_code_revision(revision):
+    with pytest.raises(ReceiptError):
+        scenario_reform_identity(
+            _scenario(simulation_modifier=receipt_modifiers.raise_basic_rate),
+            code_revision=revision,
+        )
+
+
+MEASURE_SOURCE = """
+RATE = {rate}
+
+
+def raise_rate(simulation):
+    simulation.rate = RATE
+"""
+
+
+def _import_measures(directory: Path, name: str, rate: float = 0.21):
+    """Import a measures module from ``directory`` as top-level ``name``."""
+
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{name}.py"
+    path.write_text(MEASURE_SOURCE.format(rate=rate))
+    linecache.checkcache(str(path))
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module, path
+
+
+def _measure_identity(module):
+    return scenario_reform_identity(
+        _scenario(simulation_modifier=module.raise_rate), code_revision=REVISION
+    )
+
+
+def test_modifier_digest_does_not_depend_on_the_checkout_location(tmp_path):
+    """Round-2 review N2: the same code and revision give the same digest anywhere."""
+
+    name = "w4_receipt_measures_location"
+    try:
+        first, _ = _import_measures(tmp_path / "checkout_a", name)
+        a = _measure_identity(first)
+        del sys.modules[name]
+        second, _ = _import_measures(tmp_path / "elsewhere" / "checkout_b", name)
+        b = _measure_identity(second)
+        assert first.raise_rate.__code__.co_filename != (
+            second.raise_rate.__code__.co_filename
+        )
+        assert a.reform_sha256 == b.reform_sha256
+        del sys.modules[name]
+        third, _ = _import_measures(tmp_path / "checkout_c", name, rate=0.99)
+        # The function is unchanged, but its module's source is not.
+        assert _measure_identity(third).reform_sha256 != a.reform_sha256
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_modifier_edited_after_import_is_refused(tmp_path):
+    name = "w4_receipt_measures_edited"
+    try:
+        module, path = _import_measures(tmp_path, name)
+        _measure_identity(module)
+        path.write_text(
+            path.read_text().replace(
+                "simulation.rate = RATE", "simulation.rate = RATE * 2  # edited"
+            )
+        )
+        with pytest.raises(ReceiptError, match="no longer matches"):
+            _measure_identity(module)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_modifier_defaults_are_bound():
+    """Round-2 review N7: defaults change behaviour, so they change the digest."""
+
+    def identity(modifier):
+        return scenario_reform_identity(
+            _scenario(simulation_modifier=modifier), code_revision=REVISION
+        ).reform_sha256
+
+    to_rate = receipt_modifiers.raise_basic_rate_to
+    from_year = receipt_modifiers.raise_basic_rate_from
+    original = identity(to_rate), identity(from_year)
+    try:
+        to_rate.__defaults__ = (0.99,)
+        from_year.__kwdefaults__ = {"start": 2030}
+        assert identity(to_rate) != original[0]
+        assert identity(from_year) != original[1]
+    finally:
+        to_rate.__defaults__ = (0.21,)
+        from_year.__kwdefaults__ = {"start": 2027}
+    assert (identity(to_rate), identity(from_year)) == original
+    with pytest.raises(ReceiptError, match="default arguments"):
+        identity(receipt_modifiers.raise_with_object_default)
 
 
 def test_from_reform_scenarios_are_refused_in_favour_of_their_dictionary():
@@ -767,6 +1100,17 @@ MUTATIONS = [
     ("empty years", lambda r: r.update(years=[])),
     ("string year", lambda r: r.update(years=["2026"])),
     ("bad period start", lambda r: r["fiscal_year"].update(period_start="April")),
+    ("calendar period start", lambda r: r["fiscal_year"].update(period_start="01-01")),
+    (
+        "calendar convention",
+        lambda r: r["fiscal_year"].update(
+            convention="calendar_year", period_start="01-01"
+        ),
+    ),
+    ("US model", lambda r: r["model"].update(name="policyengine-us")),
+    ("wrong core", lambda r: r["core"].update(name="numpy")),
+    ("wrong wrapper", lambda r: r["wrapper"].update(name="policyengine-uk")),
+    ("manifest digest", lambda r: r["data"].update(release_manifest_sha256="a" * 64)),
     ("bad wheel digest", lambda r: r["model"].update(wheel_sha256="1234")),
     ("unnormalized name", lambda r: r["model"].update(name="Policyengine_UK")),
     ("bad git sha", lambda r: r["wrapper"].update(git_sha="abc")),
@@ -801,8 +1145,18 @@ def test_schema_and_model_reject_the_same_malformed_receipts(
 def test_schema_publishes_the_rules_it_cannot_express(schema_validator):
     rules = schema_validator.schema["x-policyengine-rules"]
     assert "certificate.certified_for_core_version equals core.version." in rules
-    assert any("period_start is 04-06" in rule for rule in rules)
-    assert any("model.name is policyengine-uk" in rule for rule in rules)
+    assert any("verify_certificate()" in rule for rule in rules)
+    assert any(
+        "certificate_source is the producer's statement" in rule for rule in rules
+    )
+    assert not any("requires certificate_source packaged" in rule for rule in rules)
+    properties = schema_validator.schema["$defs"]
+    assert properties["ModelIdentity"]["properties"]["name"]["const"] == (
+        "policyengine-uk"
+    )
+    assert properties["FiscalYearConvention"]["properties"]["period_start"][
+        "const"
+    ] == ("04-06")
     assert (
         "RFC 8785"
         in schema_validator.schema["x-policyengine-digests"]["canonicalization"]

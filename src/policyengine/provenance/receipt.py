@@ -31,32 +31,42 @@ Rules every valid v1 receipt satisfies:
   receipt digest also covers reform, baseline, years, convention and
   outputs, but not runtime context or human labels.
 - A reform digest binds content (``binding="content"``) unless the reform
-  runs Python code, in which case it binds that code's source and bytecode
-  plus the caller's code revision and says so (``binding="code_revision"``).
+  runs Python code, in which case it binds that function's source, its
+  module's source and its default arguments plus the caller's code revision,
+  and says so (``binding="code_revision"``). The digest is the same wherever
+  the code is checked out and whichever Python runs it.
+- A certificate is trusted only after :func:`verify_certificate` has checked
+  it, and the receipt's data identity, against the published bundle manifest
+  it names. ``certificate_source`` is the producer's statement, not evidence.
 
 Adding an optional field is a compatible v1 change. Removing or redefining a
 field, or changing what a digest covers, requires schema v2.
 """
 
 from __future__ import annotations
+import __future__
 
 import datetime
 import functools
 import hashlib
 import inspect
 import json
-import marshal
 import math
+import operator
 import platform
+import re
 import sys
 from collections.abc import Mapping, Sequence
 from importlib import metadata
+from importlib.metadata import PackageNotFoundError
 from pathlib import Path
+from types import CodeType
 from typing import Any, ClassVar, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from policyengine.provenance.canonical import (
+    CanonicalJSONError,
     canonical_json,
     canonical_sha256,
     drop_null_members,
@@ -66,9 +76,11 @@ from policyengine.utils.hashing import sha256_file
 __all__ = [
     "RECEIPT_SCHEMA_VERSION",
     "CertificateIdentity",
+    "CoreIdentity",
     "DataIdentity",
     "ExecutionReceipt",
     "FiscalYearConvention",
+    "ModelIdentity",
     "PackageIdentity",
     "ReceiptError",
     "ReformIdentity",
@@ -123,9 +135,7 @@ ReformRepresentation = Literal[
 
 #: v1 rules that JSON Schema cannot express. Published in the schema file.
 CROSS_FIELD_RULES: tuple[str, ...] = (
-    "years is sorted ascending with no duplicates.",
-    "fiscal_year.period_start is 04-06 for uk_fiscal_year and 01-01 for calendar_year; UK receipts use uk_fiscal_year.",
-    "wrapper.name is policyengine, model.name is policyengine-uk and core.name is policyengine-core.",
+    "years is sorted ascending with no duplicates, and each year is written as an integer (2027, not 2027.0).",
     "certification_status certified requires certificate; uncertified forbids it.",
     "certificate.country_id equals country_id.",
     "certificate.certified_for_model_version equals model.version.",
@@ -134,7 +144,7 @@ CROSS_FIELD_RULES: tuple[str, ...] = (
     "certificate.bundle_version equals wrapper.version.",
     "reform/baseline kind current_law has no representation or reform_sha256 and binding content; kind reform has both.",
     "wheel_sha256 and wheel_sha256_evidence are present together or not at all.",
-    "A consumer that trusts a certificate checks certificate.certificate_sha256 against the data_releases.<country_id> record of the published policyengine manifest for certificate.bundle_version, or requires certificate_source packaged.",
+    "A consumer trusts a certificate only after checking it against the data_releases.<country_id> record of the published policyengine manifest for certificate.bundle_version (verify_certificate()): certificate_sha256 is that record's digest, every other member of certificate except certificate_source, qualification_receipt_sha256 and tro_composition_fingerprint equals what the record states, and data equals the data identity the record determines. certificate_source is the producer's statement and proves nothing.",
 )
 
 #: How each digest is computed.
@@ -203,11 +213,24 @@ class PackageIdentity(_Contract):
 class WrapperIdentity(PackageIdentity):
     """The policyengine.py distribution, optionally pinned to a source commit."""
 
+    name: Literal["policyengine"]
     git_sha: Optional[str] = Field(
         default=None,
         pattern=GIT_SHA_PATTERN,
         description="policyengine.py commit, when running from a checkout.",
     )
+
+
+class ModelIdentity(PackageIdentity):
+    """The country model distribution (v1: policyengine-uk)."""
+
+    name: Literal["policyengine-uk"]
+
+
+class CoreIdentity(PackageIdentity):
+    """The policyengine-core distribution."""
+
+    name: Literal["policyengine-core"]
 
 
 class DataIdentity(_Contract):
@@ -230,11 +253,6 @@ class DataIdentity(_Contract):
     )
     release_manifest_revision: Optional[str] = Field(
         default=None, description="Hugging Face commit of the release manifest."
-    )
-    release_manifest_sha256: Optional[str] = Field(
-        default=None,
-        pattern=SHA256_PATTERN,
-        description="SHA-256 of the fetched release manifest bytes.",
     )
     dataset: str = Field(description="Logical dataset name, e.g. enhanced_frs_2024_25.")
     dataset_uri: str = Field(description="Pinned dataset URI, e.g. hf://...@1.58.0.")
@@ -313,7 +331,8 @@ class ReformIdentity(_Contract):
         description=(
             "content: the digest determines the reform's behaviour. "
             "code_revision: the reform runs a module-level Python function, "
-            "bound by its source and bytecode and the caller's code revision."
+            "bound by its source, its module's source, its default arguments "
+            "and the caller's code revision."
         ),
     )
     name: Optional[str] = Field(
@@ -333,15 +352,20 @@ class ReformIdentity(_Contract):
 
 
 class FiscalYearConvention(_Contract):
-    """What an annual period label means in this result."""
+    """What an annual period label means in this result.
 
-    convention: Literal["uk_fiscal_year", "calendar_year"]
+    v1 receipts are UK results, so the convention is the UK fiscal year: year
+    Y is the period from 6 April Y to 5 April Y+1. Another convention needs a
+    new schema version.
+    """
+
+    convention: Literal["uk_fiscal_year"]
     year_label: Literal["start_year"] = Field(
         default="start_year",
-        description="Year Y labels the period that starts in Y (UK: 2027 is 2027-28).",
+        description="Year Y labels the period that starts in Y (2027 is 2027-28).",
     )
-    period_start: Literal["04-06", "01-01"] = Field(
-        description="Month-day the labelled period starts: 04-06 (UK), 01-01 (calendar)."
+    period_start: Literal["04-06"] = Field(
+        description="Month-day the labelled period starts (6 April)."
     )
     parameter_annualisation: str = Field(
         description=(
@@ -349,17 +373,6 @@ class FiscalYearConvention(_Contract):
             "implements, e.g. policyengine-uk/fiscal-year-parameters."
         )
     )
-
-    @model_validator(mode="after")
-    def _consistent(self) -> FiscalYearConvention:
-        expected = {"uk_fiscal_year": "04-06", "calendar_year": "01-01"}[
-            self.convention
-        ]
-        if self.period_start != expected:
-            raise ValueError(
-                f"{self.convention} periods start on {expected}, not {self.period_start}."
-            )
-        return self
 
 
 class RuntimeContext(_Contract):
@@ -381,8 +394,8 @@ class ExecutionReceipt(_Contract):
     receipt_type: Literal["policyengine.execution_receipt"]
     country_id: Literal["uk"]
     wrapper: WrapperIdentity
-    model: PackageIdentity
-    core: PackageIdentity
+    model: ModelIdentity
+    core: CoreIdentity
     data: DataIdentity
     certification_status: Literal["certified", "uncertified"]
     certificate: Optional[CertificateIdentity] = None
@@ -406,12 +419,6 @@ class ExecutionReceipt(_Contract):
 
     @model_validator(mode="after")
     def _identity_rules(self) -> ExecutionReceipt:
-        if self.fiscal_year.convention != "uk_fiscal_year":
-            raise ValueError("UK receipts report uk_fiscal_year periods.")
-        for role, expected in UK_PACKAGES.items():
-            actual = getattr(self, role).name
-            if actual != expected:
-                raise ValueError(f"{role} must be {expected}, not {actual}.")
         if self.certification_status == "uncertified":
             if self.certificate is not None:
                 raise ValueError("An uncertified receipt carries no certificate.")
@@ -519,14 +526,28 @@ def strict_json_value(value: Any, path: str = "$") -> Any:
     ``datetime.date`` (as ISO 8601, ``YYYY-MM-DD``), lists and tuples, and
     mappings whose keys are strings or integers (integers become their
     decimal string; a key collision is refused). Everything else (sets,
-    ``Decimal``, bytes, arrays, objects) raises :class:`ReceiptError`, so no
-    value is silently stringified.
+    ``Decimal``, bytes, arrays, objects, numpy ``longdouble``, values nested
+    too deeply to walk) raises :class:`ReceiptError`, so no value is silently
+    stringified.
     """
 
+    try:
+        return _strict_json_value(value, path)
+    except RecursionError as exc:
+        raise ReceiptError(f"{path}: the value is nested too deeply.") from exc
+
+
+def _strict_json_value(value: Any, path: str) -> Any:
     if value is None or isinstance(value, (bool, str)):
         return value
     if _numpy_scalar(value):
-        return strict_json_value(value.item(), path)
+        item = value.item()
+        if _numpy_scalar(item):
+            # longdouble (and similar) has no Python equivalent to unwrap to.
+            raise ReceiptError(
+                f"{path}: {type(value).__name__} has no exact JSON form; convert it first."
+            )
+        return _strict_json_value(item, path)
     if isinstance(value, int):
         return int(value)
     if isinstance(value, float):
@@ -546,11 +567,11 @@ def strict_json_value(value: Any, path: str = "$") -> Any:
             text = key if isinstance(key, str) else str(int(key))
             if text in result:
                 raise ReceiptError(f"{path}: keys {key!r} and {text!r} collide.")
-            result[text] = strict_json_value(item, f"{path}.{text}")
+            result[text] = _strict_json_value(item, f"{path}.{text}")
         return result
     if isinstance(value, (list, tuple)):
         return [
-            strict_json_value(item, f"{path}[{index}]")
+            _strict_json_value(item, f"{path}[{index}]")
             for index, item in enumerate(value)
         ]
     raise ReceiptError(
@@ -559,9 +580,19 @@ def strict_json_value(value: Any, path: str = "$") -> Any:
 
 
 def content_sha256(value: Any) -> str:
-    """Receipt digest of a value: strict JSON, nulls dropped, RFC 8785, SHA-256."""
+    """Receipt digest of a value: strict JSON, nulls dropped, RFC 8785, SHA-256.
 
-    return canonical_sha256(drop_null_members(strict_json_value(value)))
+    Raises :class:`ReceiptError` for anything without one exact JSON form,
+    including integers outside +/-(2**53 - 1).
+    """
+
+    converted = strict_json_value(value)
+    try:
+        return canonical_sha256(drop_null_members(converted))
+    except RecursionError as exc:
+        raise ReceiptError("The value is nested too deeply.") from exc
+    except CanonicalJSONError as exc:
+        raise ReceiptError(str(exc)) from exc
 
 
 # --- Helpers -------------------------------------------------------------
@@ -569,8 +600,6 @@ def content_sha256(value: Any) -> str:
 
 def normalize_distribution_name(name: str) -> str:
     """PEP 503 normalization: lowercase, runs of -_. become -."""
-
-    import re
 
     return re.sub(r"[-_.]+", "-", name).lower()
 
@@ -586,11 +615,11 @@ def uk_fiscal_year_convention() -> FiscalYearConvention:
 
 
 def fiscal_year_label(year: int, convention: FiscalYearConvention) -> str:
-    """Display label for a reported year: ``2027-28`` (UK) or ``2027``."""
+    """Display label for a reported year under ``convention``: ``2027-28``."""
 
-    if convention.convention == "uk_fiscal_year":
-        return f"{year}-{(year + 1) % 100:02d}"
-    return str(year)
+    if convention.convention != "uk_fiscal_year":  # pragma: no cover - v1 is UK
+        raise ReceiptError(f"Unknown fiscal year convention {convention.convention}.")
+    return f"{year}-{(year + 1) % 100:02d}"
 
 
 def certificate_sha256(certification_record: Mapping[str, Any]) -> str:
@@ -635,15 +664,89 @@ def reform_identity(
     )
 
 
+#: Compiler flags ``from __future__`` imports set. A function's source is
+#: recompiled with the flags its module was compiled with.
+_FUTURE_FLAGS = functools.reduce(
+    operator.or_,
+    (getattr(__future__, name).compiler_flag for name in __future__.all_feature_names),
+    0,
+)
+
+_SCENARIO_ATTRIBUTES = (
+    "applied_before_data_load",
+    "parameter_changes",
+    "simulation_modifier",
+)
+
+
+def _code_shape(code: CodeType) -> tuple[Any, ...]:
+    """A code object without where it was compiled: no file, no line numbers."""
+
+    return (
+        code.co_name,
+        code.co_qualname,
+        code.co_argcount,
+        code.co_posonlyargcount,
+        code.co_kwonlyargcount,
+        code.co_flags,
+        code.co_stacksize,
+        code.co_code,
+        code.co_names,
+        code.co_varnames,
+        code.co_freevars,
+        code.co_cellvars,
+        code.co_exceptiontable,
+        tuple(
+            _code_shape(const) if isinstance(const, CodeType) else (type(const), const)
+            for const in code.co_consts
+        ),
+    )
+
+
+def _source_matches_loaded_code(source: str, code: CodeType, qualname: str) -> bool:
+    """Whether compiling ``source`` reproduces the loaded code (nested code too)."""
+
+    try:
+        module_code = compile(
+            source,
+            code.co_filename,
+            "exec",
+            flags=code.co_flags & _FUTURE_FLAGS,
+            dont_inherit=True,
+        )
+    except SyntaxError:
+        return False
+    compiled = [
+        const
+        for const in module_code.co_consts
+        if isinstance(const, CodeType) and const.co_qualname == qualname
+    ]
+    return len(compiled) == 1 and _code_shape(compiled[0]) == _code_shape(code)
+
+
+def _sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def _modifier_identity(
     modifier: Any, code_revision: Mapping[str, str]
 ) -> dict[str, Any]:
-    """Source, bytecode and revision of a module-level function, or refuse it.
+    """What binds a module-level function's behaviour, or refuse it.
 
-    Closures, lambdas, partials, bound methods and builtins are refused: their
-    behaviour depends on values or objects the digest cannot bind (two
+    The identity is the function's module and qualified name, the SHA-256 of
+    its source and of its module's source, its default arguments, and
+    ``code_revision``. None of these depends on where the code is checked out
+    or which Python runs it. The source is recompiled and compared with the
+    loaded code (ignoring file name and line numbers, recursing into nested
+    code), so a file edited after import is refused rather than misdescribed.
+
+    Closures, lambdas, nested functions, partials, bound methods, builtins
+    and functions whose defaults have no exact JSON form are refused: their
+    behaviour depends on values the digest cannot bind (two
     ``Scenario.from_reform`` closures share one source but apply different
-    reforms).
+    reforms). What the identity cannot bind is module state changed at run
+    time (a global reassigned after import); ``code_revision`` names the code,
+    not the process.
     """
 
     if isinstance(modifier, functools.partial):
@@ -665,20 +768,46 @@ def _modifier_identity(
         raise ReceiptError(
             "Lambdas and nested functions cannot be bound; define it at module level."
         )
+    module = sys.modules.get(modifier.__module__)
+    if module is None or modifier.__globals__ is not vars(module):
+        raise ReceiptError(
+            "The modifier does not belong to an imported module, so it cannot be bound."
+        )
     try:
         source = inspect.getsource(modifier)
+        module_source = inspect.getsource(module)
     except (OSError, TypeError) as exc:
         raise ReceiptError(
             "The modifier's source is unavailable, so it cannot be bound."
         ) from exc
+    if not _source_matches_loaded_code(source, code, modifier.__qualname__):
+        raise ReceiptError(
+            f"{modifier.__module__}.{modifier.__qualname__} no longer matches its "
+            "source file (edited after import?), so it cannot be bound."
+        )
+    try:
+        defaults = (
+            strict_json_value(list(modifier.__defaults__))
+            if modifier.__defaults__
+            else None
+        )
+        kwdefaults = (
+            strict_json_value(dict(modifier.__kwdefaults__))
+            if modifier.__kwdefaults__
+            else None
+        )
+    except ReceiptError as exc:
+        raise ReceiptError(
+            f"The modifier's default arguments cannot be bound: {exc}"
+        ) from exc
     return {
         "module": modifier.__module__,
         "qualname": modifier.__qualname__,
-        "source_sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
-        # The loaded bytecode, so a source file edited after import is caught.
-        "code_sha256": hashlib.sha256(marshal.dumps(code)).hexdigest(),
-        "python": f"{sys.version_info.major}.{sys.version_info.minor}",
-        "code_revision": dict(code_revision),
+        "source_sha256": _sha256_text(source),
+        "module_source_sha256": _sha256_text(module_source),
+        "defaults": defaults,
+        "kwdefaults": kwdefaults,
+        "code_revision": strict_json_value(dict(code_revision)),
     }
 
 
@@ -692,21 +821,39 @@ def scenario_reform_identity(
 
     The payload is ``{applied_before_data_load, parameter_changes,
     simulation_modifier}``. A ``simulation_modifier`` must be a module-level
-    function: it is bound by its source and loaded bytecode together with
-    ``code_revision`` (``{"repository": ..., "git_sha": ...}``) and marked
-    ``binding="code_revision"``. Closures, lambdas, partials and bound methods
-    are refused, which includes ``Scenario.from_reform(d)``: bind ``d`` with
-    :func:`reform_identity` and ``"policyengine-uk.reform_dict/v1"``.
+    function: it is bound as :func:`_modifier_identity` describes, together
+    with ``code_revision`` (``{"repository": ..., "git_sha": ...}``), and
+    marked ``binding="code_revision"``. Closures, lambdas, partials and bound
+    methods are refused, which includes ``Scenario.from_reform(d)``: bind
+    ``d`` with :func:`reform_identity` and ``"policyengine-uk.reform_dict/v1"``.
+    Anything that is not a Scenario (a dictionary, a ``Reform`` class, a
+    policyengine.py ``Policy``) is refused rather than read as current law.
     """
 
-    parameter_changes = getattr(scenario, "parameter_changes", None) or None
-    modifier = getattr(scenario, "simulation_modifier", None)
-    if parameter_changes is None and modifier is None:
+    missing = [
+        attribute
+        for attribute in _SCENARIO_ATTRIBUTES
+        if not hasattr(scenario, attribute)
+    ]
+    if missing or isinstance(scenario, (Mapping, str, bytes, list, tuple, type)):
+        raise ReceiptError(
+            "scenario_reform_identity binds a policyengine-uk Scenario, not "
+            f"{type(scenario).__name__}; bind a reform dictionary with "
+            "reform_identity()."
+        )
+    applied_before_data_load = scenario.applied_before_data_load
+    parameter_changes = scenario.parameter_changes
+    modifier = scenario.simulation_modifier
+    if not isinstance(applied_before_data_load, bool):
+        raise ReceiptError("Scenario.applied_before_data_load must be a bool.")
+    if parameter_changes is not None and not isinstance(parameter_changes, Mapping):
+        raise ReceiptError("Scenario.parameter_changes must be a mapping or None.")
+    if modifier is not None and not callable(modifier):
+        raise ReceiptError("Scenario.simulation_modifier must be callable or None.")
+    if not parameter_changes and modifier is None:
         return ReformIdentity(kind="current_law", name=name)
     payload: dict[str, Any] = {
-        "applied_before_data_load": bool(
-            getattr(scenario, "applied_before_data_load", False)
-        ),
+        "applied_before_data_load": applied_before_data_load,
         "parameter_changes": strict_json_value(parameter_changes)
         if parameter_changes
         else None,
@@ -714,11 +861,17 @@ def scenario_reform_identity(
     }
     binding: Literal["content", "code_revision"] = "content"
     if modifier is not None:
-        if not code_revision or not {"repository", "git_sha"} <= set(code_revision):
+        if (
+            not code_revision
+            or not isinstance(code_revision.get("repository"), str)
+            or not code_revision["repository"]
+            or not isinstance(code_revision.get("git_sha"), str)
+            or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", code_revision["git_sha"])
+        ):
             raise ReceiptError(
                 "A scenario with a simulation_modifier can only be receipted with "
-                "code_revision={'repository': ..., 'git_sha': ...} naming the code "
-                "that defines the modifier."
+                "code_revision={'repository': ..., 'git_sha': <full commit sha>} "
+                "naming the code that defines the modifier."
             )
         payload["simulation_modifier"] = _modifier_identity(modifier, code_revision)
         binding = "code_revision"
@@ -738,7 +891,6 @@ def installed_package_identity(
     name: str,
     *,
     wheel_path: Optional[Path] = None,
-    metadata_module: Any = metadata,
 ) -> PackageIdentity:
     """Identity of an installed distribution, with a hash only when verified.
 
@@ -747,16 +899,17 @@ def installed_package_identity(
     the wheel's SHA-256 as ``installed_record_verified``. Otherwise the
     installer's PEP 610 ``direct_url.json`` archive hash is used when present.
     A bundle manifest's wheel hash is never assumed to describe installed
-    files.
+    files. Versions always come from :mod:`importlib.metadata`; a caller
+    cannot supply them.
     """
 
     normalized = normalize_distribution_name(name)
-    version = metadata_module.version(name)
+    version = metadata.version(name)
     if wheel_path is not None:
         from policyengine.provenance.wheels import verify_installed_against_wheel
 
         evidence = verify_installed_against_wheel(
-            name, Path(wheel_path), metadata=metadata_module
+            name, Path(wheel_path), metadata=metadata
         )
         if evidence["problems"]:
             raise ReceiptError(
@@ -769,7 +922,7 @@ def installed_package_identity(
             wheel_sha256=evidence["wheel_sha256"],
             wheel_sha256_evidence="installed_record_verified",
         )
-    archive_hash = _installer_archive_sha256(name, metadata_module)
+    archive_hash = _installer_archive_sha256(name)
     return PackageIdentity(
         name=normalized,
         version=version,
@@ -778,14 +931,10 @@ def installed_package_identity(
     )
 
 
-def _installer_archive_sha256(
-    name: str, metadata_module: Any = metadata
-) -> Optional[str]:
-    import re
-
+def _installer_archive_sha256(name: str) -> Optional[str]:
     try:
-        text = metadata_module.distribution(name).read_text("direct_url.json")
-    except metadata.PackageNotFoundError:
+        text = metadata.distribution(name).read_text("direct_url.json")
+    except PackageNotFoundError:
         return None
     if not text:
         return None
@@ -831,7 +980,6 @@ def build_execution_receipt(
     qualification_receipt_sha256: Optional[str] = None,
     bundle: Optional[Mapping[str, Any]] = None,
     ci_run_url: Optional[str] = None,
-    metadata_module: Any = metadata,
 ) -> ExecutionReceipt:
     """Build a receipt for a UK result computed in this process.
 
@@ -878,12 +1026,98 @@ def build_execution_receipt(
             source=source,
             tro_fingerprint=tro_fingerprint,
             ci_run_url=ci_run_url,
-            metadata_module=metadata_module,
         )
     except KeyError as exc:
         raise ReceiptError(
             f"The bundle manifest lacks {exc}; it cannot back a receipt."
         ) from exc
+
+
+def _certificate_fields(
+    country_id: str, record: Mapping[str, Any], bundle: Mapping[str, Any]
+) -> dict[str, Any]:
+    """The certificate identity a bundle's certification record determines.
+
+    One derivation for both :func:`build_execution_receipt` and
+    :func:`verify_certificate`, keyed by ``CertificateIdentity.IDENTITY_FIELDS``.
+    """
+
+    certification = record.get("certification") or {}
+    certified_artifact = record.get("certified_data_artifact") or {}
+    core = ((bundle.get("packages") or {}).get(UK_PACKAGES["core"]) or {}).get(
+        "version"
+    )
+    return {
+        "bundle_version": bundle.get("policyengine_version"),
+        "country_id": country_id,
+        "certificate_sha256": certificate_sha256(record),
+        "compatibility_basis": certification.get("compatibility_basis"),
+        "certified_for_model_version": certification.get("certified_for_model_version"),
+        "certified_for_core_version": certification.get("certified_for_core_version")
+        or core,
+        "certified_dataset_sha256": certified_artifact.get("sha256"),
+        "certified_by": certification.get("certified_by"),
+    }
+
+
+def _data_identity(
+    country_id: str,
+    record: Mapping[str, Any],
+    bundle: Mapping[str, Any],
+    dataset_name: str,
+    dataset_sha256: str,
+) -> DataIdentity:
+    """The data identity of ``dataset_name`` with those bytes, from the bundle.
+
+    Release-level members (build, fingerprint, manifest revision) are filled
+    only for datasets in the certified release, never for overlays.
+    """
+
+    from policyengine.provenance.manifest import _apply_dataset_overlays
+
+    resolved = _apply_dataset_overlays(country_id, dict(record), dict(bundle))
+    reference = (resolved.get("datasets") or {}).get(dataset_name)
+    if reference is None:
+        raise ReceiptError(
+            f"Dataset {dataset_name!r} is not in the {country_id} bundle."
+        )
+    is_certified_release = dataset_name in (record.get("datasets") or {})
+    data_package = record["data_package"]
+    certified_artifact = record.get("certified_data_artifact") or {}
+    certification = record.get("certification") or {}
+    revision = reference.get("revision") or data_package.get("version")
+    repo_id = reference.get("repo_id") or data_package.get("repo_id")
+    if not revision or not repo_id:
+        raise ReceiptError(
+            f"Dataset {dataset_name!r} has no repository or revision pin."
+        )
+    release = is_certified_release
+    return DataIdentity(
+        data_package=(
+            data_package["name"]
+            if release
+            else reference.get("data_package_name") or data_package["name"]
+        ),
+        release_version=data_package["version"] if release else revision,
+        build_id=(
+            certification.get("data_build_id") or certified_artifact.get("build_id")
+            if release
+            else None
+        ),
+        build_fingerprint=certification.get("data_build_fingerprint")
+        if release
+        else None,
+        build_model_version=certification.get("built_with_model_version")
+        if release
+        else None,
+        release_manifest_revision=data_package.get("release_manifest_revision")
+        if release
+        else None,
+        dataset=dataset_name,
+        dataset_uri=f"hf://{repo_id}/{reference['path']}@{revision}",
+        dataset_revision=revision,
+        dataset_sha256=dataset_sha256,
+    )
 
 
 def _build(
@@ -902,94 +1136,43 @@ def _build(
     source: Literal["packaged", "caller_supplied"],
     tro_fingerprint: Optional[str],
     ci_run_url: Optional[str],
-    metadata_module: Any,
 ) -> ExecutionReceipt:
-    from policyengine.provenance.manifest import _apply_dataset_overlays
-
     record = bundle["data_releases"][country_id]
     wheels = {normalize_distribution_name(k): Path(v) for k, v in wheel_paths.items()}
 
-    def identity(name: str) -> PackageIdentity:
+    def identity(name: str) -> dict[str, Any]:
         return installed_package_identity(
-            name,
-            wheel_path=wheels.get(normalize_distribution_name(name)),
-            metadata_module=metadata_module,
-        )
+            name, wheel_path=wheels.get(normalize_distribution_name(name))
+        ).model_dump()
 
-    wrapper_package = identity(UK_PACKAGES["wrapper"])
-    wrapper = WrapperIdentity(**wrapper_package.model_dump(), git_sha=wrapper_git_sha)
-    model = identity(UK_PACKAGES["model"])
-    core = identity(UK_PACKAGES["core"])
+    wrapper = WrapperIdentity(
+        **identity(UK_PACKAGES["wrapper"]), git_sha=wrapper_git_sha
+    )
+    model = ModelIdentity(**identity(UK_PACKAGES["model"]))
+    core = CoreIdentity(**identity(UK_PACKAGES["core"]))
 
-    resolved = _apply_dataset_overlays(country_id, dict(record), dict(bundle))
     dataset_name = dataset or record["default_dataset"]
-    reference = (resolved.get("datasets") or {}).get(dataset_name)
-    if reference is None:
-        raise ReceiptError(
-            f"Dataset {dataset_name!r} is not in the {country_id} bundle."
-        )
-    is_certified_release = dataset_name in (record.get("datasets") or {})
-    data_package = record["data_package"]
-    certified_artifact = record.get("certified_data_artifact") or {}
-    certification = record.get("certification") or {}
-    revision = reference.get("revision") or data_package.get("version")
-    repo_id = reference.get("repo_id") or data_package.get("repo_id")
-    if not revision or not repo_id:
-        raise ReceiptError(
-            f"Dataset {dataset_name!r} has no repository or revision pin."
-        )
     actual_sha256 = sha256_file(dataset_path)
-    data = DataIdentity(
-        data_package=(
-            data_package["name"]
-            if is_certified_release
-            else reference.get("data_package_name") or data_package["name"]
-        ),
-        release_version=data_package["version"] if is_certified_release else revision,
-        build_id=(
-            certification.get("data_build_id") or certified_artifact.get("build_id")
-            if is_certified_release
-            else None
-        ),
-        build_fingerprint=certification.get("data_build_fingerprint")
-        if is_certified_release
-        else None,
-        build_model_version=certification.get("built_with_model_version")
-        if is_certified_release
-        else None,
-        release_manifest_revision=data_package.get("release_manifest_revision")
-        if is_certified_release
-        else None,
-        dataset=dataset_name,
-        dataset_uri=f"hf://{repo_id}/{reference['path']}@{revision}",
-        dataset_revision=revision,
-        dataset_sha256=actual_sha256,
-    )
+    data = _data_identity(country_id, record, bundle, dataset_name, actual_sha256)
 
-    certified_model = certification.get("certified_for_model_version")
-    certified_core = certification.get("certified_for_core_version") or (
-        (bundle.get("packages") or {}).get(UK_PACKAGES["core"], {}).get("version")
-    )
-    certified_sha = certified_artifact.get("sha256")
+    fields = _certificate_fields(country_id, record, bundle)
+    certified_artifact = record.get("certified_data_artifact") or {}
     certificate = None
     status: Literal["certified", "uncertified"] = "uncertified"
     if (
-        certified_model == model.version
-        and certified_core == core.version
-        and certified_sha == actual_sha256
+        fields["certified_for_model_version"] == model.version
+        and fields["certified_for_core_version"] == core.version
+        and fields["certified_dataset_sha256"] == actual_sha256
         and dataset_name == certified_artifact.get("dataset")
-        and bundle.get("policyengine_version") == wrapper.version
+        and fields["bundle_version"] == wrapper.version
         and record.get("policyengine_version", wrapper.version) == wrapper.version
     ):
+        if not fields["compatibility_basis"]:
+            raise ReceiptError(
+                "The bundle certifies this run but states no compatibility_basis."
+            )
         certificate = CertificateIdentity(
-            bundle_version=wrapper.version,
-            country_id=country_id,
-            certificate_sha256=certificate_sha256(record),
-            compatibility_basis=certification["compatibility_basis"],
-            certified_for_model_version=certified_model,
-            certified_for_core_version=certified_core,
-            certified_dataset_sha256=certified_sha,
-            certified_by=certification.get("certified_by"),
+            **fields,
             certificate_source=source,
             qualification_receipt_sha256=qualification_receipt_sha256,
             tro_composition_fingerprint=tro_fingerprint,
@@ -1025,34 +1208,68 @@ def verify_certificate(
     """Problems with a receipt's certificate against a published bundle manifest.
 
     ``bundle`` is the policyengine manifest for ``certificate.bundle_version``
-    (for example from the release assets or the installed wheel). An empty
-    list means the certificate is the one that bundle carries.
+    (from the release assets, or the installed wheel of that version). The
+    certificate is rebuilt from that bundle's certification record exactly as
+    :func:`build_execution_receipt` builds it, and compared member by member:
+
+    - every member in ``CertificateIdentity.IDENTITY_FIELDS``, including the
+      record digest, the basis and the certified model, core and dataset;
+    - the receipt's whole ``data`` identity, which must be the certified
+      dataset with the certified bytes.
+
+    Through the receipt's own rules, that also pins ``model.version``,
+    ``core.version`` and ``wrapper.version``. ``certificate_source``,
+    ``qualification_receipt_sha256``, ``tro_composition_fingerprint`` and
+    wheel hashes are not determined by the bundle and are not checked here.
+    An empty list means the receipt's certificate and data are what the bundle
+    certifies.
     """
 
     certificate = receipt.certificate
     if certificate is None:
         return ["the receipt is uncertified"]
-    problems = []
-    if bundle.get("policyengine_version") != certificate.bundle_version:
-        problems.append(
-            f"the bundle is for {bundle.get('policyengine_version')}, "
-            f"the certificate for {certificate.bundle_version}"
-        )
     record = (bundle.get("data_releases") or {}).get(receipt.country_id)
-    if record is None:
-        return problems + [f"the bundle has no {receipt.country_id} data release"]
-    if certificate_sha256(record) != certificate.certificate_sha256:
+    if not isinstance(record, Mapping):
+        return [f"the bundle has no {receipt.country_id} data release"]
+    problems = []
+    expected = _certificate_fields(receipt.country_id, record, bundle)
+    claimed = certificate.model_dump(include=set(CertificateIdentity.IDENTITY_FIELDS))
+    for field in CertificateIdentity.IDENTITY_FIELDS:
+        if claimed.get(field) != expected[field]:
+            problems.append(
+                f"certificate.{field} is {claimed.get(field)!r}, "
+                f"but the bundle states {expected[field]!r}"
+            )
+    record_version = record.get("policyengine_version", expected["bundle_version"])
+    if record_version != certificate.bundle_version:
         problems.append(
-            "certificate_sha256 differs from the bundle's certification record"
+            f"the bundle's {receipt.country_id} record belongs to policyengine "
+            f"{record_version}, not {certificate.bundle_version}"
         )
-    core = ((bundle.get("packages") or {}).get(UK_PACKAGES["core"]) or {}).get(
-        "version"
-    )
-    expected_core = (record.get("certification") or {}).get(
-        "certified_for_core_version"
-    ) or core
-    if expected_core != certificate.certified_for_core_version:
-        problems.append("the certified core version differs from the bundle's")
+    certified_dataset = (record.get("certified_data_artifact") or {}).get("dataset")
+    if receipt.data.dataset != certified_dataset:
+        problems.append(
+            f"data.dataset is {receipt.data.dataset!r}, "
+            f"but the bundle certifies {certified_dataset!r}"
+        )
+        return problems
+    try:
+        expected_data = _data_identity(
+            receipt.country_id,
+            record,
+            bundle,
+            certified_dataset,
+            expected["certified_dataset_sha256"] or receipt.data.dataset_sha256,
+        )
+    except (KeyError, ReceiptError, ValueError) as exc:
+        return problems + [f"the bundle cannot determine the data identity: {exc}"]
+    claimed_data = receipt.data.model_dump()
+    for field, value in expected_data.model_dump().items():
+        if claimed_data[field] != value:
+            problems.append(
+                f"data.{field} is {claimed_data[field]!r}, "
+                f"but the bundle determines {value!r}"
+            )
     return problems
 
 
