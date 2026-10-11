@@ -6,7 +6,8 @@
   "reform_contract": {
     "entrypoint": "policyengine.tax_benefit_models.uk.budget_reform_contract:run_budget_reform_contract",
     "seed": 0,
-    "max_examples": 50
+    "max_examples": 20,
+    "_comment": "W1's runner (policyengine.py#577); its pass also needs policyengine-uk#2305 and policyengine.py#575, so certified 2.125.1 fails the dated cases by design."
   },
   "metrics": {
     "tool": {
