@@ -84,7 +84,9 @@ def _number(value: float) -> str:
     sign = "-" if value < 0 else ""
     # ``repr`` gives the shortest digit string that round-trips, which is the
     # digit string ECMAScript uses; only the layout around it differs.
-    mantissa, _, exponent_text = repr(abs(value)).partition("e")
+    # ``float(...)`` first: subclasses such as ``numpy.float64`` have their own
+    # ``repr`` (``np.float64(1.5)``), which is not a JSON number.
+    mantissa, _, exponent_text = repr(float(abs(value))).partition("e")
     integer_part, _, fraction_part = mantissa.partition(".")
     all_digits = integer_part + fraction_part
     # ``point`` counts digits before the decimal point in ``all_digits``.
@@ -125,7 +127,9 @@ def _serialize(value: Any, out: list[str]) -> None:
                 f"Integer {value} is outside +/-(2**53 - 1); write it as a "
                 "string or a float."
             )
-        out.append(str(value))
+        # ``int.__repr__`` ignores an int subclass's own ``__str__``/``__repr__``
+        # (``IntEnum`` members are written as their value).
+        out.append(int.__repr__(int(value)))
     elif isinstance(value, float):
         out.append(_number(value))
     elif isinstance(value, Mapping):
@@ -162,7 +166,12 @@ def canonical_json(value: Any) -> bytes:
     """Return the RFC 8785 canonical UTF-8 bytes of a JSON value."""
 
     out: list[str] = []
-    _serialize(value, out)
+    try:
+        _serialize(value, out)
+    except RecursionError as exc:
+        raise CanonicalJSONError(
+            "The value is nested too deeply to serialize."
+        ) from exc
     return "".join(out).encode("utf-8")
 
 

@@ -102,6 +102,9 @@ from .receipt import (
 from .receipt import (
     reform_identity as reform_identity,
 )
+from .receipt import (
+    verify_certificate as verify_certificate,
+)
 from .trace import (
     build_simulation_trace_tro as build_simulation_trace_tro,
 )

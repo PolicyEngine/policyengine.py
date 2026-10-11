@@ -186,3 +186,46 @@ def test_reproduces_the_scorecard_golden_bytes(name, digest_key, drop):
     digests = json.loads((FIXTURES / "DIGESTS.json").read_text())
     assert canonical_sha256(value) == digests[f"{name}.json"][digest_key]
     assert hashlib.sha256(expected).hexdigest() == digests[f"{name}.json"][digest_key]
+
+
+def test_line_separators_are_written_literally():
+    # RFC 8785 escapes only the JSON-mandatory characters; ECMAScript writes
+    # U+2028 and U+2029 literally.
+    assert canonical_json("  ") == '"  "'.encode()
+    assert canonical_json("\x7f") == b'"\x7f"'
+
+
+def test_dropping_nulls_keeps_array_elements():
+    assert drop_null_members([None, {"a": None, "b": [None]}]) == [None, {"b": [None]}]
+
+
+def test_numeric_subclasses_are_written_as_their_values():
+    import enum
+
+    import numpy as np
+
+    class Rate(enum.IntEnum):
+        BASIC = 20
+
+    class Loud(int):
+        def __str__(self):
+            return "twenty"
+
+        __repr__ = __str__
+
+    value = {
+        "a": np.float64(6.1e9),
+        "b": np.float64(1e22),
+        "c": Rate.BASIC,
+        "d": Loud(20),
+    }
+    plain = {"a": 6.1e9, "b": 1e22, "c": 20, "d": 20}
+    assert canonical_json(value) == canonical_json(plain) == rfc8785.dumps(plain)
+
+
+def test_deep_nesting_raises_a_canonical_error():
+    value: list = []
+    for _ in range(5000):
+        value = [value]
+    with pytest.raises(CanonicalJSONError):
+        canonical_json(value)
