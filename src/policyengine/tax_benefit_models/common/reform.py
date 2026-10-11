@@ -52,7 +52,6 @@ suggestion; pass ``model_version`` to enable the check.
 from __future__ import annotations
 
 import datetime
-import re
 from collections.abc import Mapping
 from difflib import get_close_matches
 from typing import TYPE_CHECKING, Any, Optional
@@ -133,16 +132,14 @@ def _reform_dict_to_parameter_values(
     for path, date_to_value in compiled.items():
         for effective_date, value in date_to_value.items():
             try:
-                if not re.fullmatch(
-                    r"[0-9]{4}-[0-9]{2}-[0-9]{2}"
-                    r"(?:\.[0-9]{4}-[0-9]{2}-[0-9]{2})?",
-                    effective_date,
-                ):
-                    raise ValueError("Invalid date format")
-                start, *stops = effective_date.split(".")
-                start_date = datetime.datetime.strptime(start, "%Y-%m-%d")
+                parts = str(effective_date).split(".")
+                if len(parts) > 2:
+                    raise ValueError("Too many dates")
+                start_date = datetime.datetime.strptime(parts[0], "%Y-%m-%d")
                 end_date = (
-                    datetime.datetime.strptime(stops[0], "%Y-%m-%d") if stops else None
+                    datetime.datetime.strptime(parts[1], "%Y-%m-%d")
+                    if len(parts) == 2
+                    else None
                 )
             except ValueError as exc:
                 raise ValueError(

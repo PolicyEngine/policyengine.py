@@ -182,7 +182,6 @@ class TestReformDictDates:
     @pytest.mark.parametrize(
         "key",
         [
-            "2027-4-6",
             "2027-02-29",
             "2027-04-06.2028-02-30",
             "2027-04-06.2028-04-05.2029-04-05",
@@ -205,3 +204,21 @@ class TestReformDictDates:
         assert values[0].start_date == datetime.datetime(2027, 1, 1)
         assert values[0].end_date is None
         assert values[0].value == 3_000
+
+    @pytest.mark.parametrize(
+        "key, start, end",
+        [
+            ("2027-4-6", datetime.datetime(2027, 4, 6), None),
+            (
+                "2027-4-6.2028-4-5",
+                datetime.datetime(2027, 4, 6),
+                datetime.datetime(2028, 4, 5),
+            ),
+        ],
+    )
+    def test__unpadded_dates__then_accepted_as_before(self, key, start, end):
+        # The compiler has always accepted what strptime("%Y-%m-%d") does.
+        (value,) = _reform_dict_to_parameter_values(
+            {self.path: {key: 3_000}}, year=2027, model_version=pe.us.model
+        )
+        assert (value.start_date, value.end_date) == (start, end)

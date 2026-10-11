@@ -131,7 +131,8 @@ def merge_reform_dicts(
     """Merge two reform dicts, with override values taking precedence.
 
     Either or both dicts can be None. When both have entries for the same
-    parameter, period-level values from override replace those in base.
+    parameter, period-level values from override replace those in base, and
+    every override period comes after the base's periods.
 
     Args:
         base: The base reform dict (e.g., from policy).
@@ -147,7 +148,13 @@ def merge_reform_dicts(
 
     merged = {k: dict(v) for k, v in base.items()}
     for param_name, period_values in override.items():
-        if param_name not in merged:
-            merged[param_name] = {}
-        merged[param_name].update(period_values)
+        # Override values go after the base's, so a country model that
+        # applies a parameter's periods in order lets them win where they
+        # overlap a base period with a different key.
+        kept = {
+            period: value
+            for period, value in merged.get(param_name, {}).items()
+            if period not in period_values
+        }
+        merged[param_name] = {**kept, **period_values}
     return merged
