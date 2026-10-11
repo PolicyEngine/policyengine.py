@@ -34,6 +34,7 @@ dict uses the bracket-head path instead of ``[0].amount`` the
 
 The parameter-value compiler accepts ``YYYY-MM-DD`` as an effective date
 with no end date, or ``YYYY-MM-DD.YYYY-MM-DD`` as an inclusive interval.
+Months and days may be unpadded (``2027-4-6``), as ``strptime`` reads them.
 Other keys, including bare years, are rejected: policyengine-uk interprets
 a bare year as one fiscal year, while policyengine-core interprets it as
 an effective year continuing onward. Use ``2027-04-06.2028-04-05`` for one
@@ -145,7 +146,8 @@ def _reform_dict_to_parameter_values(
                 raise ValueError(
                     f"Invalid reform date key {effective_date!r}. Accepted formats are "
                     "'YYYY-MM-DD' (effective date) and "
-                    "'YYYY-MM-DD.YYYY-MM-DD' (inclusive interval). Bare years are "
+                    "'YYYY-MM-DD.YYYY-MM-DD' (inclusive interval); months and "
+                    "days may be unpadded. Bare years are "
                     "ambiguous: policyengine-uk's reform dict reads '2027' as fiscal "
                     "year 2027 only, while policyengine-core's Reform.from_dict "
                     "reads it as from 2027 on. Use '2027-04-06.2028-04-05' for one "
