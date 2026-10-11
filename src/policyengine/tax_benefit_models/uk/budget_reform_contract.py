@@ -1241,7 +1241,8 @@ def expected_annual(
 
     Prior law is current law's annual value outside the change. Blended
     parameters are sampled only from 2025 on, where current law holds one
-    value through each fiscal year.
+    value through each fiscal year, so each day of the year takes the
+    change's value inside the change and prior law's outside it.
     """
     blend, _ = SAMPLED_PARAMETERS[change.path]
     stop = change.stop or FLAT_STOP
@@ -1249,10 +1250,15 @@ def expected_annual(
     if not blend:
         sample = datetime.date(year, 4, 30)
         return change.value if change.start <= sample <= stop else prior
-    pieces = [(datetime.date(year, 4, 6), prior), (change.start, change.value)]
-    if stop < datetime.date(year + 1, 4, 5):
-        pieces.append((stop + datetime.timedelta(days=1), prior))
-    return fiscal_year_average(pieces, year)
+    day = datetime.date(year, 4, 6)
+    end = datetime.date(year + 1, 4, 6)
+    total = 0.0
+    days = 0
+    while day < end:
+        total += change.value if change.start <= day <= stop else prior
+        days += 1
+        day += datetime.timedelta(days=1)
+    return total / days
 
 
 def _property_annual_values(change: Change, routes: Sequence[str], cache: dict) -> None:
@@ -1269,7 +1275,13 @@ def _property_annual_values(change: Change, routes: Sequence[str], cache: dict) 
                 )
             )
             expected = expected_annual(change, year, baseline)
-            assert abs(actual - expected) <= 1e-9, (route, year, actual, expected)
+            assert abs(actual - expected) <= 1e-9, (
+                route,
+                change,
+                year,
+                actual,
+                expected,
+            )
 
 
 def _property_routes_agree(

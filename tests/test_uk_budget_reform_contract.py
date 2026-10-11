@@ -313,3 +313,17 @@ def test_population_checks_hold_on_a_tiny_dataset(tmp_path):
         _tiny_dataset_file(tmp_path), list(contract.COUNTRY_ROUTES), seed=0
     )
     assert rows and all(row["status"] == "pass" for row in rows), rows
+
+
+def test_expected_annual_for_a_blended_change_that_started_earlier():
+    def baseline(path, year):
+        return 0.18
+
+    cgt = "gov.hmrc.cgt.basic_rate"
+    earlier = Change(cgt, datetime.date(2025, 6, 1), 0.20)
+    assert expected_annual(earlier, 2026, baseline) == pytest.approx(0.20)
+    ends = Change(cgt, datetime.date(2025, 6, 1), 0.20, datetime.date(2026, 10, 29))
+    # 6 April to 29 October 2026 is 207 days of 365.
+    assert expected_annual(ends, 2026, baseline) == pytest.approx(
+        (0.20 * 207 + 0.18 * 158) / 365
+    )
