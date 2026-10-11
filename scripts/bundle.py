@@ -50,6 +50,10 @@ def _certify_data(args: argparse.Namespace) -> int:
         argv.append("--no-changelog")
     if args.skip_artifact_check:
         argv.append("--skip-artifact-check")
+    if args.core_version:
+        argv.extend(["--core-version", args.core_version])
+    if args.qualified_pair_id:
+        argv.extend(["--qualified-pair-id", args.qualified_pair_id])
     return certify_data_release_main(argv)
 
 
@@ -225,6 +229,14 @@ def _parser() -> argparse.ArgumentParser:
             "Skip reachability checks for the certified dataset and any "
             "vendored/regional artifacts."
         ),
+    )
+    certify.add_argument(
+        "--core-version",
+        help="policyengine-core version to check against core claims and pin.",
+    )
+    certify.add_argument(
+        "--qualified-pair-id",
+        help="Admit the exact pair on automated qualification (needs --core-version).",
     )
     certify.set_defaults(func=_certify_data)
 

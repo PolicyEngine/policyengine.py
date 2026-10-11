@@ -1,0 +1,74 @@
+{
+  "_comment": "Proposed per-kind review bounds for qualification metrics, pending cos d1344. A move needs review when |candidate - previous| exceeds max(relative * |previous|, absolute). Units follow the metric report: gbp (pounds), count (people or units), rate and share (fractions, so 0.005 is half a percentage point). They are review triggers, not acceptance criteria: a move inside the bounds is still in the evidence.",
+  "default": {
+    "relative": 0.02,
+    "absolute": 500000000.0
+  },
+  "kinds": {
+    "receipt": {
+      "relative": 0.02,
+      "absolute": 500000000.0,
+      "why": "2% or \u00a30.5bn: the Budget scorecard reports measures to \u00a30.1bn, and model fixes moving a head by more than 2% should be explained."
+    },
+    "spending": {
+      "relative": 0.02,
+      "absolute": 500000000.0,
+      "why": "As receipts."
+    },
+    "balance": {
+      "relative": 0.02,
+      "absolute": 500000000.0,
+      "why": "As receipts."
+    },
+    "model_total": {
+      "relative": 0.02,
+      "absolute": 500000000.0,
+      "why": "As receipts."
+    },
+    "household_total": {
+      "relative": 0.02,
+      "absolute": 500000000.0,
+      "why": "As receipts."
+    },
+    "caseload": {
+      "relative": 0.03,
+      "absolute": 50000.0,
+      "why": "3% or 50,000 claimants: caseloads are calibrated targets; larger moves signal data or eligibility changes."
+    },
+    "population": {
+      "relative": 0.01,
+      "absolute": 100000.0,
+      "why": "Population totals should barely move between pairs."
+    },
+    "poverty": {
+      "relative": 0.0,
+      "absolute": 0.005,
+      "why": "Half a percentage point on a rate."
+    },
+    "poverty_count": {
+      "relative": 0.03,
+      "absolute": 100000.0,
+      "why": "3% or 100,000 people."
+    },
+    "inequality": {
+      "relative": 0.0,
+      "absolute": 0.005,
+      "why": "0.005 on a Gini-type index."
+    },
+    "decile": {
+      "relative": 0.0,
+      "absolute": 0.005,
+      "why": "Half a point on a decile share."
+    },
+    "double_count": {
+      "relative": 0.0,
+      "absolute": 1.0,
+      "why": "Any change in a counted-once check needs review."
+    },
+    "reform": {
+      "relative": 0.05,
+      "absolute": 100000000.0,
+      "why": "5% or \u00a30.1bn on a reference reform costing."
+    }
+  }
+}

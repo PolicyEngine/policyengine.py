@@ -69,6 +69,14 @@ BASIS_BUILT_WITH = "built_with_model_package"
 # fallback there exempts exactly this string from the fingerprint identity
 # check, so a claims-certified bundle stays importable without network access.
 BASIS_PUBLISHER_CLAIM = "legacy_compatible_model_package"
+# The pair passed policyengine.py's automated candidate qualification. The
+# claim is exact (``==`` model and core versions, one data release) and is
+# valid only with a promotable qualification receipt for ``qualification_pair_id``
+# in the ledger; ``tests/test_certification_evidence.py`` refuses it otherwise.
+BASIS_QUALIFIED_PAIR = "qualified_exact_pair"
+QUALIFICATION_LEDGER_URL = (
+    "https://github.com/PolicyEngine/policyengine.py/tree/uk-qualification-ledger"
+)
 POPULACE_US_SOURCE_COVERAGE_FILE = "us_source_coverage.json"
 # The Populace US producer publishes under `microcosm-data` since the
 # source-enrichment releases; `populace-data` is its earlier name. Both denote
@@ -226,15 +234,24 @@ def validate_release_manifest(
     manifest: DataReleaseManifest,
     model_package: str,
     model_version: str,
+    *,
+    core_version: Optional[str] = None,
+    qualified_pair_id: Optional[str] = None,
 ) -> tuple[str, list[str]]:
     """Hard checks raise; returns ``(compatibility_basis, warnings)``.
 
     The certification gate (docs/release-bundles.md): a data release may
     be certified for a model version only when the model exactly matches
-    the build-time model, or the publisher's ``compatible_model_packages``
-    covers it. The publisher-claim basis is recorded and warned about —
-    it is the data publisher's assertion, made good only by this repo's
-    test suite passing on the pinned pair.
+    the build-time model, the publisher's ``compatible_model_packages``
+    covers it, or (``qualified_pair_id``) policyengine.py's automated
+    qualification tested exactly this model, core and data release. The
+    publisher-claim basis is recorded and warned about — it is the data
+    publisher's assertion, made good only by this repo's test suite passing
+    on the pinned pair. A qualified pair is never widened into a range.
+
+    When ``core_version`` is given, the core must also be the build-time
+    core, be covered by ``compatible_core_packages``, or be part of the
+    qualified pair.
     """
     warnings: list[str] = []
     if "national" not in manifest.default_datasets:
@@ -267,6 +284,9 @@ def validate_release_manifest(
         _specifier_matches(model_version, specifier) for specifier in claim_specifiers
     )
 
+    if core_version is not None:
+        _check_core_compatibility(manifest, core_version, qualified_pair_id, warnings)
+
     if built_with == model_version:
         return BASIS_BUILT_WITH, warnings
     if claim_matches:
@@ -277,11 +297,61 @@ def validate_release_manifest(
             "suite is the arbiter"
         )
         return BASIS_PUBLISHER_CLAIM, warnings
+    if qualified_pair_id is not None:
+        if core_version is None:
+            raise CertificationError(
+                "A qualified exact pair names its core version; pass core_version."
+            )
+        warnings.append(
+            f"certifying exactly {model_package}=={model_version} with "
+            f"policyengine-core=={core_version} on automated qualification of "
+            f"pair {qualified_pair_id}; the certificate stands only with a "
+            "promotable qualification receipt for that pair in the ledger"
+        )
+        return BASIS_QUALIFIED_PAIR, warnings
     raise CertificationError(
         f"{model_package} {model_version} matches neither the build-time "
         f"model ({built_with or 'unrecorded'}) nor any publisher "
         f"compatibility claim {claim_specifiers or '(none declared)'}; "
-        "a new data build or a published compatibility claim is required."
+        "a new data build, a published compatibility claim or an automated "
+        "qualification of the exact pair is required."
+    )
+
+
+def _check_core_compatibility(
+    manifest: DataReleaseManifest,
+    core_version: str,
+    qualified_pair_id: Optional[str],
+    warnings: list[str],
+) -> None:
+    """The core must be the build core, publisher-claimed, or qualified."""
+
+    build = manifest.build
+    built_with_core = (
+        build.built_with_core_package.version
+        if build is not None and build.built_with_core_package is not None
+        else None
+    )
+    core_claims = [
+        package.specifier
+        for package in manifest.compatible_core_packages
+        if package.name == "policyengine-core"
+    ]
+    if built_with_core == core_version or any(
+        _specifier_matches(core_version, specifier) for specifier in core_claims
+    ):
+        return
+    if qualified_pair_id is not None:
+        warnings.append(
+            f"policyengine-core {core_version} is outside the publisher's core "
+            f"claims {core_claims or '(none declared)'}; covered by qualification "
+            f"of pair {qualified_pair_id}"
+        )
+        return
+    raise CertificationError(
+        f"policyengine-core {core_version} matches neither the build-time core "
+        f"({built_with_core or 'unrecorded'}) nor any publisher core claim "
+        f"{core_claims or '(none declared)'}."
     )
 
 
@@ -591,6 +661,8 @@ def build_country_manifest_payload(
     model_version: str,
     model_wheel: dict,
     compatibility_basis: str = BASIS_BUILT_WITH,
+    core_version: Optional[str] = None,
+    qualified_pair_id: Optional[str] = None,
 ) -> dict:
     """Map the data release manifest to the vendored country manifest."""
     default_dataset = manifest.default_datasets["national"]
@@ -651,6 +723,13 @@ def build_country_manifest_payload(
         "certified_for_model_version": model_version,
         "certified_by": CERTIFIED_BY,
     }
+    if core_version is not None:
+        certification["certified_for_core_version"] = core_version
+    if qualified_pair_id is not None:
+        certification["qualification_pair_id"] = qualified_pair_id
+        certification["qualification_ledger_url"] = (
+            f"{QUALIFICATION_LEDGER_URL}/{country}/{qualified_pair_id}"
+        )
     certified_artifact: dict = {
         "data_package": {
             "name": manifest.data_package.name,
@@ -747,6 +826,8 @@ class DataProducerCertificationStrategy:
         regional_manifest_uri: Optional[str] = None,
         regional_artifact_prefix: str = "states/",
         regional_path_template: str = "states/{state_code}.h5",
+        core_version: Optional[str] = None,
+        qualified_pair_id: Optional[str] = None,
     ) -> tuple[dict, str, list[str]]:
         raise NotImplementedError
 
@@ -766,6 +847,8 @@ class LegacyDataProducerCertificationStrategy(DataProducerCertificationStrategy)
         regional_manifest_uri: Optional[str] = None,
         regional_artifact_prefix: str = "states/",
         regional_path_template: str = "states/{state_code}.h5",
+        core_version: Optional[str] = None,
+        qualified_pair_id: Optional[str] = None,
     ) -> tuple[dict, str, list[str]]:
         raise CertificationError(
             "Legacy data-producer certification updates are not implemented in "
@@ -788,6 +871,8 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
         regional_manifest_uri: Optional[str] = None,
         regional_artifact_prefix: str = "states/",
         regional_path_template: str = "states/{state_code}.h5",
+        core_version: Optional[str] = None,
+        qualified_pair_id: Optional[str] = None,
     ) -> tuple[dict, str, list[str]]:
         manifest, manifest_sha256, uri_parts = fetch_release_manifest(
             manifest_uri, token=token
@@ -810,7 +895,11 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
                 path_template=regional_path_template,
             )
         compatibility_basis, warnings = validate_release_manifest(
-            manifest, model_package, model_version
+            manifest,
+            model_package,
+            model_version,
+            core_version=core_version,
+            qualified_pair_id=qualified_pair_id,
         )
 
         for filename in required_supplemental_release_files(
@@ -838,6 +927,12 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
             model_version=model_version,
             model_wheel=model_wheel or {},
             compatibility_basis=compatibility_basis,
+            core_version=core_version,
+            qualified_pair_id=(
+                qualified_pair_id
+                if compatibility_basis == BASIS_QUALIFIED_PAIR
+                else None
+            ),
         )
         if check_artifacts and should_validate_vendored_artifacts(
             country, manifest, uri_parts
@@ -898,7 +993,17 @@ def certify_data_release(
     regional_manifest_uri: Optional[str] = None,
     regional_artifact_prefix: str = "states/",
     regional_path_template: str = "states/{state_code}.h5",
+    core_version: Optional[str] = None,
+    qualified_pair_id: Optional[str] = None,
 ) -> CertificationResult:
+    """Certify a data release into the bundle manifest.
+
+    ``core_version`` adds the core compatibility check and pins the core in
+    the bundle's ``packages``. ``qualified_pair_id`` admits the exact model,
+    core and data release when neither the build-time model nor a publisher
+    claim covers them; the certificate then names the pair, whose promotable
+    qualification receipt must be in the ledger.
+    """
     if country not in COUNTRY_MODEL_PACKAGES:
         raise CertificationError(f"Unknown country {country!r}.")
     model_package = COUNTRY_MODEL_PACKAGES[country]
@@ -915,6 +1020,8 @@ def certify_data_release(
         regional_manifest_uri=regional_manifest_uri,
         regional_artifact_prefix=regional_artifact_prefix,
         regional_path_template=regional_path_template,
+        core_version=core_version,
+        qualified_pair_id=qualified_pair_id,
     )
     bundle_path = bundle_path or default_bundle_source_path()
     bundle = json.loads(bundle_path.read_text())
@@ -924,6 +1031,8 @@ def certify_data_release(
     )
     if model_package in bundle.get("packages", {}):
         bundle["packages"][model_package]["version"] = model_version
+    if core_version is not None and "policyengine-core" in bundle.get("packages", {}):
+        bundle["packages"]["policyengine-core"]["version"] = core_version
     bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n")
 
     return CertificationResult(

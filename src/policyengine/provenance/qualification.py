@@ -623,6 +623,11 @@ class ResultsLocation(_Mirror):
     ref: str = Field(min_length=1)
     commit: Optional[str] = Field(default=None, pattern=_SHA1)
     path: str = Field(min_length=1)
+    manifest_sha256: Optional[str] = Field(
+        default=None,
+        pattern=SHA256_PATTERN,
+        description="Digest of NAMESPACE_MANIFEST.json for the sealed result namespace.",
+    )
 
 
 class ReplayReceipt(_Mirror):

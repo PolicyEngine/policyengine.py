@@ -7,8 +7,11 @@
 # Phase 2 (sentinel commit): Publish to PyPI + GitHub Release
 #   Skips Lint + Test since the code is identical to Phase 1.
 #   After Publish, NotifyConsumers waits for the release to be visible on
-#   PyPI and sends a policyengine-release repository dispatch to consumer
-#   repos so they open version-bump PRs.
+#   PyPI and sends a policyengine-release repository dispatch (version plus
+#   the certified UK bundle identity and qualification digests) to consumer
+#   repos so they open version-bump PRs, then a released-bundle replay
+#   request to policyengine-scorecard. New consumers are dispatched in
+#   separate, non-blocking steps.
 
 name: Push to main
 
@@ -247,6 +250,19 @@ jobs:
         run: bash .github/wait-for-pypi.sh
       - name: Validate published SPM bundle before consumer updates
         run: python -S scripts/bundle.py check --published-spm
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "0.12.14"
+      - name: Install policyengine without country models
+        run: uv pip install -e . --system
+      # The payload carries the certified UK bundle identity and, for an
+      # automatically qualified pair, the qualification receipt digest.
+      # client_payload.version stays first, as existing updaters read only it.
+      - name: Build the release dispatch payload
+        env:
+          VERSION: ${{ needs.Publish.outputs.version }}
+        run: python scripts/release_consumers.py payload --version "$VERSION" > "$RUNNER_TEMP/release-payload.json"
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v1
@@ -259,4 +275,58 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           VERSION: ${{ needs.Publish.outputs.version }}
+          PAYLOAD_FILE: ${{ runner.temp }}/release-payload.json
+        run: bash .github/dispatch-policyengine-release.sh
+      # New consumers are dispatched separately, so a missing App
+      # installation on one of them can never block the consumers above.
+      - name: Generate GitHub App token for the Budget dashboard
+        id: dashboard-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: PolicyEngine
+          repositories: uk-autumn-budget-dashboard-2026
+      - name: Dispatch policyengine-release to the Budget dashboard
+        if: steps.dashboard-token.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.dashboard-token.outputs.token }}
+          VERSION: ${{ needs.Publish.outputs.version }}
+          PAYLOAD_FILE: ${{ runner.temp }}/release-payload.json
+          CONSUMER_REPOS: uk-autumn-budget-dashboard-2026
+        run: bash .github/dispatch-policyengine-release.sh
+      - name: Install the released bundle for the replay request
+        continue-on-error: true
+        id: released
+        env:
+          VERSION: ${{ needs.Publish.outputs.version }}
+        run: uv pip install --system "policyengine[uk]==$VERSION"
+      - name: Build the scorecard's released-bundle replay request
+        if: steps.released.outcome == 'success'
+        id: scorecard-request
+        continue-on-error: true
+        env:
+          VERSION: ${{ needs.Publish.outputs.version }}
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+        run: python scripts/release_consumers.py scorecard-request --version "$VERSION" > "$RUNNER_TEMP/scorecard-request.json"
+      - name: Generate GitHub App token for the scorecard
+        if: steps.scorecard-request.outcome == 'success'
+        id: scorecard-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: PolicyEngine
+          repositories: policyengine-scorecard
+      - name: Send the scorecard a released-bundle replay request
+        if: steps.scorecard-token.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.scorecard-token.outputs.token }}
+          VERSION: ${{ needs.Publish.outputs.version }}
+          PAYLOAD_FILE: ${{ runner.temp }}/scorecard-request.json
+          CONSUMER_REPOS: policyengine-scorecard
         run: bash .github/dispatch-policyengine-release.sh

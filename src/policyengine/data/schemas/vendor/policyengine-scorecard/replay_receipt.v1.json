@@ -5,69 +5,178 @@
  "description": "Returned by policyengine-scorecard for one qualification request. receipt_sha256 is the SHA-256 of the RFC 8785 (JCS) bytes of the receipt without that field. Flags describe movements against the base variant; they carry no verdict.",
  "type": "object",
  "additionalProperties": false,
- "required": ["schema", "request_id", "status", "rejection", "variant_id", "variant_identity_sha256", "execution", "corpus", "integrity", "diff", "results", "receipt_sha256"],
+ "required": [
+  "schema",
+  "request_id",
+  "status",
+  "rejection",
+  "variant_id",
+  "variant_identity_sha256",
+  "execution",
+  "corpus",
+  "integrity",
+  "diff",
+  "results",
+  "receipt_sha256"
+ ],
  "properties": {
-  "schema": {"const": "policyengine.uk-replay-receipt/v1"},
-  "request_id": {"$ref": "#/$defs/sha256"},
-  "status": {"enum": ["complete", "rejected", "failed"]},
+  "schema": {
+   "const": "policyengine.uk-replay-receipt/v1"
+  },
+  "request_id": {
+   "$ref": "#/$defs/sha256"
+  },
+  "status": {
+   "enum": [
+    "complete",
+    "rejected",
+    "failed"
+   ]
+  },
   "rejection": {
    "oneOf": [
-    {"type": "null"},
+    {
+     "type": "null"
+    },
     {
      "type": "object",
      "additionalProperties": false,
-     "required": ["code", "detail"],
+     "required": [
+      "code",
+      "detail"
+     ],
      "properties": {
-      "code": {"enum": ["schema_invalid", "artifact_hash_mismatch", "release_bundle_mismatch", "incompatible_pair", "data_access_failed", "no_supported_years"]},
-      "detail": {"type": "string", "minLength": 1}
+      "code": {
+       "enum": [
+        "schema_invalid",
+        "artifact_hash_mismatch",
+        "release_bundle_mismatch",
+        "incompatible_pair",
+        "data_access_failed",
+        "no_supported_years"
+       ]
+      },
+      "detail": {
+       "type": "string",
+       "minLength": 1
+      }
      }
     }
    ]
   },
-  "variant_id": {"type": ["string", "null"], "minLength": 1},
-  "variant_identity_sha256": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/sha256"}]},
+  "variant_id": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "minLength": 1
+  },
+  "variant_identity_sha256": {
+   "oneOf": [
+    {
+     "type": "null"
+    },
+    {
+     "$ref": "#/$defs/sha256"
+    }
+   ]
+  },
   "execution": {
    "oneOf": [
-    {"type": "null"},
+    {
+     "type": "null"
+    },
     {
      "type": "object",
      "additionalProperties": false,
-     "required": ["packages", "packaged_bundle_manifest_sha256", "release_bundle", "dataset_sha256", "requirements_sha256", "python", "platform", "runner"],
+     "required": [
+      "packages",
+      "packaged_bundle_manifest_sha256",
+      "release_bundle",
+      "dataset_sha256",
+      "requirements_sha256",
+      "python",
+      "platform",
+      "runner"
+     ],
      "properties": {
       "packages": {
        "type": "object",
        "additionalProperties": false,
-       "required": ["policyengine", "policyengine-uk", "policyengine-core"],
+       "required": [
+        "policyengine",
+        "policyengine-uk",
+        "policyengine-core"
+       ],
        "properties": {
-        "policyengine": {"$ref": "#/$defs/installed_package"},
-        "policyengine-uk": {"$ref": "#/$defs/installed_package"},
-        "policyengine-core": {"$ref": "#/$defs/installed_package"}
+        "policyengine": {
+         "$ref": "#/$defs/installed_package"
+        },
+        "policyengine-uk": {
+         "$ref": "#/$defs/installed_package"
+        },
+        "policyengine-core": {
+         "$ref": "#/$defs/installed_package"
+        }
        }
       },
-      "packaged_bundle_manifest_sha256": {"$ref": "#/$defs/sha256"},
-      "release_bundle": {"type": "object", "additionalProperties": {"type": ["string", "null"]}},
-      "dataset_sha256": {"$ref": "#/$defs/sha256"},
-      "requirements_sha256": {"$ref": "#/$defs/sha256"},
-      "python": {"type": "string", "pattern": "^3\\.[0-9]+\\.[0-9]+"},
-      "platform": {"type": "string", "minLength": 1},
-      "runner": {"type": "string", "minLength": 1}
+      "packaged_bundle_manifest_sha256": {
+       "$ref": "#/$defs/sha256"
+      },
+      "release_bundle": {
+       "type": "object",
+       "additionalProperties": {
+        "type": [
+         "string",
+         "null"
+        ]
+       }
+      },
+      "dataset_sha256": {
+       "$ref": "#/$defs/sha256"
+      },
+      "requirements_sha256": {
+       "$ref": "#/$defs/sha256"
+      },
+      "python": {
+       "type": "string",
+       "pattern": "^3\\.[0-9]+\\.[0-9]+"
+      },
+      "platform": {
+       "type": "string",
+       "minLength": 1
+      },
+      "runner": {
+       "type": "string",
+       "minLength": 1
+      }
      }
     }
    ]
   },
   "corpus": {
    "oneOf": [
-    {"type": "null"},
+    {
+     "type": "null"
+    },
     {
      "type": "object",
      "additionalProperties": false,
-     "required": ["corpus_version", "events"],
+     "required": [
+      "corpus_version",
+      "events"
+     ],
      "properties": {
-      "corpus_version": {"type": "string", "minLength": 1},
+      "corpus_version": {
+       "type": "string",
+       "minLength": 1
+      },
       "events": {
        "type": "object",
        "minProperties": 1,
-       "additionalProperties": {"$ref": "#/$defs/event_result"}
+       "additionalProperties": {
+        "$ref": "#/$defs/event_result"
+       }
       }
      }
     }
@@ -76,24 +185,47 @@
   "integrity": {
    "type": "object",
    "additionalProperties": false,
-   "required": ["status", "failures"],
+   "required": [
+    "status",
+    "failures"
+   ],
    "properties": {
     "status": {
      "description": "complete: every supported measure-year ran and every receipt verified. incomplete: some supported pairs are missing. failed: a crash, a non-finite value, an identity mismatch after the run started, or a broken accounting identity.",
-     "enum": ["complete", "incomplete", "failed", "not_run"]
+     "enum": [
+      "complete",
+      "incomplete",
+      "failed",
+      "not_run"
+     ]
     },
     "failures": {
      "type": "array",
      "items": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["code", "detail"],
+      "required": [
+       "code",
+       "detail"
+      ],
       "properties": {
-       "code": {"type": "string", "minLength": 1},
-       "detail": {"type": "string", "minLength": 1},
-       "event": {"type": "string"},
-       "measure_key": {"type": "string"},
-       "year": {"type": "integer"}
+       "code": {
+        "type": "string",
+        "minLength": 1
+       },
+       "detail": {
+        "type": "string",
+        "minLength": 1
+       },
+       "event": {
+        "type": "string"
+       },
+       "measure_key": {
+        "type": "string"
+       },
+       "year": {
+        "type": "integer"
+       }
       }
      }
     }
@@ -101,26 +233,67 @@
   },
   "diff": {
    "oneOf": [
-    {"type": "null"},
+    {
+     "type": "null"
+    },
     {
      "type": "object",
      "additionalProperties": false,
-     "required": ["base_variant_id", "diff_sha256", "flag_counts", "flagged_rows"],
+     "required": [
+      "base_variant_id",
+      "diff_sha256",
+      "flag_counts",
+      "flagged_rows"
+     ],
      "properties": {
-      "base_variant_id": {"type": "string", "minLength": 1},
-      "diff_sha256": {"$ref": "#/$defs/sha256"},
+      "base_variant_id": {
+       "type": "string",
+       "minLength": 1
+      },
+      "diff_sha256": {
+       "$ref": "#/$defs/sha256"
+      },
       "flag_counts": {
        "type": "object",
        "additionalProperties": false,
-       "required": ["numerical", "structural", "coverage", "mapping", "support", "inertness", "construction"],
+       "required": [
+        "numerical",
+        "structural",
+        "coverage",
+        "mapping",
+        "support",
+        "inertness",
+        "construction"
+       ],
        "properties": {
-        "numerical": {"type": "integer", "minimum": 0},
-        "structural": {"type": "integer", "minimum": 0},
-        "coverage": {"type": "integer", "minimum": 0},
-        "mapping": {"type": "integer", "minimum": 0},
-        "support": {"type": "integer", "minimum": 0},
-        "inertness": {"type": "integer", "minimum": 0},
-        "construction": {"type": "integer", "minimum": 0}
+        "numerical": {
+         "type": "integer",
+         "minimum": 0
+        },
+        "structural": {
+         "type": "integer",
+         "minimum": 0
+        },
+        "coverage": {
+         "type": "integer",
+         "minimum": 0
+        },
+        "mapping": {
+         "type": "integer",
+         "minimum": 0
+        },
+        "support": {
+         "type": "integer",
+         "minimum": 0
+        },
+        "inertness": {
+         "type": "integer",
+         "minimum": 0
+        },
+        "construction": {
+         "type": "integer",
+         "minimum": 0
+        }
        }
       },
       "flagged_rows": {
@@ -128,21 +301,67 @@
        "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["event", "measure_key", "year", "level", "key", "flags", "base_gbp", "head_gbp"],
+        "required": [
+         "event",
+         "measure_key",
+         "year",
+         "level",
+         "key",
+         "flags",
+         "base_gbp",
+         "head_gbp"
+        ],
         "properties": {
-         "event": {"type": "string", "minLength": 1},
-         "measure_key": {"type": "string", "minLength": 1},
-         "year": {"type": "integer"},
-         "level": {"enum": ["source_row", "measure_year", "head"]},
-         "key": {"type": "string", "minLength": 1},
+         "event": {
+          "type": "string",
+          "minLength": 1
+         },
+         "measure_key": {
+          "type": "string",
+          "minLength": 1
+         },
+         "year": {
+          "type": "integer"
+         },
+         "level": {
+          "enum": [
+           "source_row",
+           "measure_year",
+           "head"
+          ]
+         },
+         "key": {
+          "type": "string",
+          "minLength": 1
+         },
          "flags": {
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": {"enum": ["numerical", "structural", "coverage", "mapping", "support", "inertness", "construction"]}
+          "items": {
+           "enum": [
+            "numerical",
+            "structural",
+            "coverage",
+            "mapping",
+            "support",
+            "inertness",
+            "construction"
+           ]
+          }
          },
-         "base_gbp": {"type": ["number", "null"]},
-         "head_gbp": {"type": ["number", "null"]}
+         "base_gbp": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "head_gbp": {
+          "type": [
+           "number",
+           "null"
+          ]
+         }
         }
        }
       }
@@ -153,74 +372,220 @@
   "results": {
    "type": "object",
    "additionalProperties": false,
-   "required": ["repository", "ref", "path"],
+   "required": [
+    "repository",
+    "ref",
+    "path"
+   ],
    "properties": {
-    "repository": {"const": "PolicyEngine/policyengine-scorecard"},
-    "ref": {"type": "string", "minLength": 1},
-    "commit": {"$ref": "#/$defs/sha1"},
-    "path": {"type": "string", "minLength": 1}
+    "repository": {
+     "const": "PolicyEngine/policyengine-scorecard"
+    },
+    "ref": {
+     "type": "string",
+     "minLength": 1
+    },
+    "commit": {
+     "$ref": "#/$defs/sha1"
+    },
+    "path": {
+     "type": "string",
+     "minLength": 1
+    },
+    "manifest_sha256": {
+     "description": "SHA-256 of NAMESPACE_MANIFEST.json, which lists the SHA-256 of every file in the sealed result namespace except itself and the receipt.",
+     "$ref": "#/$defs/sha256"
+    }
    }
   },
-  "receipt_sha256": {"$ref": "#/$defs/sha256"}
+  "receipt_sha256": {
+   "$ref": "#/$defs/sha256"
+  }
  },
  "allOf": [
   {
-   "if": {"properties": {"status": {"const": "rejected"}}},
-   "then": {"properties": {"rejection": {"type": "object"}, "corpus": {"type": "null"}, "diff": {"type": "null"}}}
+   "if": {
+    "properties": {
+     "status": {
+      "const": "rejected"
+     }
+    }
+   },
+   "then": {
+    "properties": {
+     "rejection": {
+      "type": "object"
+     },
+     "corpus": {
+      "type": "null"
+     },
+     "diff": {
+      "type": "null"
+     }
+    }
+   }
   },
   {
-   "if": {"properties": {"status": {"enum": ["complete", "failed"]}}},
-   "then": {"properties": {"rejection": {"type": "null"}, "variant_id": {"type": "string"}, "execution": {"type": "object"}}}
+   "if": {
+    "properties": {
+     "status": {
+      "enum": [
+       "complete",
+       "failed"
+      ]
+     }
+    }
+   },
+   "then": {
+    "properties": {
+     "rejection": {
+      "type": "null"
+     },
+     "variant_id": {
+      "type": "string"
+     },
+     "execution": {
+      "type": "object"
+     }
+    }
+   }
   },
   {
-   "if": {"properties": {"status": {"const": "complete"}}},
-   "then": {"properties": {"integrity": {"properties": {"status": {"enum": ["complete", "incomplete"]}}}, "corpus": {"type": "object"}}}
+   "if": {
+    "properties": {
+     "status": {
+      "const": "complete"
+     }
+    }
+   },
+   "then": {
+    "properties": {
+     "integrity": {
+      "properties": {
+       "status": {
+        "enum": [
+         "complete",
+         "incomplete"
+        ]
+       }
+      }
+     },
+     "corpus": {
+      "type": "object"
+     }
+    }
+   }
   }
  ],
  "$defs": {
-  "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-  "sha1": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+  "sha256": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{64}$"
+  },
+  "sha1": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{40}$"
+  },
   "installed_package": {
    "type": "object",
    "additionalProperties": false,
-   "required": ["version", "record_sha256"],
+   "required": [
+    "version",
+    "record_sha256"
+   ],
    "properties": {
-    "version": {"type": "string", "minLength": 1},
-    "record_sha256": {"$ref": "#/$defs/sha256"},
-    "wheel_sha256": {"$ref": "#/$defs/sha256"}
+    "version": {
+     "type": "string",
+     "minLength": 1
+    },
+    "record_sha256": {
+     "$ref": "#/$defs/sha256"
+    },
+    "wheel_sha256": {
+     "$ref": "#/$defs/sha256"
+    }
    }
   },
   "event_result": {
    "type": "object",
    "additionalProperties": false,
-   "required": ["registry_sha256", "supported_years", "unsupported_years", "run_manifest_sha256", "staging_manifest_sha256", "comparison_provenance_sha256", "artifacts", "full_supported_grid_complete", "inert_measure_years"],
+   "required": [
+    "registry_sha256",
+    "supported_years",
+    "unsupported_years",
+    "run_manifest_sha256",
+    "staging_manifest_sha256",
+    "comparison_provenance_sha256",
+    "artifacts",
+    "full_supported_grid_complete",
+    "inert_measure_years"
+   ],
    "properties": {
-    "registry_sha256": {"$ref": "#/$defs/sha256"},
-    "supported_years": {"type": "array", "items": {"type": "integer"}, "uniqueItems": true},
+    "registry_sha256": {
+     "$ref": "#/$defs/sha256"
+    },
+    "supported_years": {
+     "type": "array",
+     "items": {
+      "type": "integer"
+     },
+     "uniqueItems": true
+    },
     "unsupported_years": {
      "type": "array",
      "items": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["year", "reason"],
+      "required": [
+       "year",
+       "reason"
+      ],
       "properties": {
-       "year": {"type": "integer"},
-       "reason": {"enum": ["before_data_year", "after_extension_end"]}
+       "year": {
+        "type": "integer"
+       },
+       "reason": {
+        "enum": [
+         "before_data_year",
+         "after_extension_end"
+        ]
+       }
       }
      }
     },
-    "run_manifest_sha256": {"$ref": "#/$defs/sha256"},
-    "staging_manifest_sha256": {"$ref": "#/$defs/sha256"},
-    "comparison_provenance_sha256": {"$ref": "#/$defs/sha256"},
-    "artifacts": {"type": "integer", "minimum": 0},
-    "full_supported_grid_complete": {"type": "boolean"},
+    "run_manifest_sha256": {
+     "$ref": "#/$defs/sha256"
+    },
+    "staging_manifest_sha256": {
+     "$ref": "#/$defs/sha256"
+    },
+    "comparison_provenance_sha256": {
+     "$ref": "#/$defs/sha256"
+    },
+    "artifacts": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "full_supported_grid_complete": {
+     "type": "boolean"
+    },
     "inert_measure_years": {
      "type": "array",
      "items": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["measure_key", "year"],
-      "properties": {"measure_key": {"type": "string"}, "year": {"type": "integer"}}
+      "required": [
+       "measure_key",
+       "year"
+      ],
+      "properties": {
+       "measure_key": {
+        "type": "string"
+       },
+       "year": {
+        "type": "integer"
+       }
+      }
      }
     }
    }
