@@ -1,7 +1,7 @@
 # UK metrics tool fixtures
 
 `standard_reforms.yaml` is copied unchanged from PolicyEngine/policyengine-uk at
-commit `fd944159ee27bd1a0f6a664bf537cb98d4b976ae`
+commit `c7a6c963991b4873a51042bda640f28eb914e34e`
 (`policyengine_uk/utils/aggregate_impact/standard_reforms.yaml`), the commit the
 qualification config pins the metrics tool to. It is the tool's standard reform
 set: ten reforms, each with the model variable it must move, the direction and

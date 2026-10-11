@@ -882,6 +882,46 @@ def _checks(**statuses):
         ),
         ({"sign__vat": "fail"}, {}, "fail"),
         ({"bounds__uc": "fail"}, {"bounds__uc": "fail"}, "pass"),
+        # The overlap guard fails on main for a known defect: no-worsening.
+        (
+            {"overlap_guard__property_transaction_tax_geography": "fail"},
+            {"overlap_guard__property_transaction_tax_geography": "fail"},
+            "pass",
+        ),
+        (
+            {"overlap_guard__property_transaction_tax_geography": "fail"},
+            {"overlap_guard__property_transaction_tax_geography": "pass"},
+            "fail",
+        ),
+        # A check skipped before that fails now has worsened.
+        (
+            {"counted_once__statutory_sick_pay": "fail"},
+            {"counted_once__statutory_sick_pay": "skipped"},
+            "fail",
+        ),
+        # Skipped is neither a pass nor a failure, but losing a passing
+        # check needs a look.
+        (
+            {"counted_once__winter_fuel": "skipped"},
+            {"counted_once__winter_fuel": "skipped"},
+            "pass",
+        ),
+        (
+            {"counted_once__winter_fuel": "skipped"},
+            {"counted_once__winter_fuel": "pass"},
+            "needs_review",
+        ),
+        # The reform checks are hard, whatever the previous pair did.
+        (
+            {"responsive__state_pension_plus_10pc": "fail"},
+            {"responsive__state_pension_plus_10pc": "fail"},
+            "fail",
+        ),
+        (
+            {"reform_runs__uc_taper_20pc": "fail"},
+            {"reform_runs__uc_taper_20pc": "fail"},
+            "fail",
+        ),
         # Warnings are recorded; a check that newly warns needs review.
         ({"inert__tobacco_duty": "warn"}, {"inert__tobacco_duty": "warn"}, "pass"),
         (
@@ -898,6 +938,37 @@ def test_check_classification(candidate, previous, status):
         BOUNDS,
     )
     assert result[0] == status, result[1]
+
+
+def test_a_known_failure_that_spreads_to_more_years_has_worsened():
+    """No-worsening by scope: the failing scopes must be a subset of the previous pair's."""
+
+    def check(scopes):
+        return _report(
+            BASE,
+            identities=[
+                {
+                    "identity_id": "sign:vat",
+                    "status": "fail",
+                    "failing_scopes": scopes,
+                }
+            ],
+        )
+
+    same = compare_metric_reports(
+        check(["2026", "2027"]), check(["2026", "2027"]), BOUNDS
+    )
+    fewer = compare_metric_reports(check(["2026"]), check(["2026", "2027"]), BOUNDS)
+    more = compare_metric_reports(
+        check(["2026", "2028"]), check(["2026", "2027"]), BOUNDS
+    )
+    assert (same[0], fewer[0], more[0]) == ("pass", "pass", "fail")
+    assert "sign:vat (fails in more scopes)" in more[1]
+    # Without scopes on both sides the failures cannot be told apart.
+    unscoped = _report(BASE, identities=[{"identity_id": "sign:vat", "status": "fail"}])
+    assert (
+        compare_metric_reports(check(["2026", "2028"]), unscoped, BOUNDS)[0] == "pass"
+    )
 
 
 @settings(max_examples=150, deadline=None)

@@ -806,6 +806,7 @@ HARD_CHECK_PREFIXES = (
 REGRESSION_CHECK_PREFIXES = (
     "counted_once:",
     "double_count_present:",
+    "overlap_guard:",
     "sign:",
     "bounds:",
 )
@@ -819,6 +820,20 @@ def classify_check(identity_id: str) -> str:
     return "hard"
 
 
+def _wider_failure(candidate: Mapping[str, Any], previous: Mapping[str, Any]) -> bool:
+    """Whether a check failing in both reports fails in a scope it did not before.
+
+    Scopes are years, or ``""`` for a check with no year. Without
+    ``failing_scopes`` on both rows the two failures cannot be told apart, so
+    the failure counts as carried over.
+    """
+
+    now, before = candidate.get("failing_scopes"), previous.get("failing_scopes")
+    if not isinstance(now, list) or not isinstance(before, list):
+        return False
+    return not {str(scope) for scope in now} <= {str(scope) for scope in before}
+
+
 def compare_metric_reports(
     candidate: Mapping[str, Any],
     previous: Mapping[str, Any],
@@ -827,41 +842,47 @@ def compare_metric_reports(
     """``(status, summary, evidence)`` for a candidate against a previous report.
 
     Checks (``identities``) follow the metric tool's classification: hard
-    checks fail outright; known-defect checks fail only as regressions from
-    the previous pair; ``warn`` is recorded, and a check that newly warns
-    where the previous pair passed needs review.
+    checks fail outright; known-defect checks fail only when they worsen
+    against the previous pair, meaning the previous pair did not fail them,
+    or failed them in fewer scopes (``failing_scopes``, when the tool reports
+    them); ``warn`` is recorded, and a check that newly warns, or is skipped
+    where the previous pair passed it, needs review. ``skipped`` is neither a
+    pass nor a failure.
     """
 
     problems: list[str] = []
     review: list[str] = []
     if candidate.get("status") not in (None, "ok"):
         problems.append(f"the candidate report status is {candidate.get('status')!r}")
-    previous_checks = {
-        str(row.get("identity_id")): row.get("status")
-        for row in previous.get("identities", [])
+    previous_rows = {
+        str(row.get("identity_id")): row for row in previous.get("identities", [])
     }
-    hard_failures, regressions, preexisting, new_warnings, warnings_ = (
-        [],
-        [],
-        [],
-        [],
-        [],
-    )
+    hard_failures: list[str] = []
+    regressions: list[str] = []
+    preexisting: list[str] = []
+    new_warnings: list[str] = []
+    warnings_: list[str] = []
+    newly_skipped: list[str] = []
     for row in candidate.get("identities", []):
         check_id = str(row.get("identity_id"))
         status = row.get("status")
-        before = previous_checks.get(check_id)
+        earlier = previous_rows.get(check_id) or {}
+        before = earlier.get("status")
         if status == "fail":
             if classify_check(check_id) == "hard":
                 hard_failures.append(check_id)
-            elif before == "pass" or before is None:
+            elif before != "fail":
                 regressions.append(check_id)
+            elif _wider_failure(row, earlier):
+                regressions.append(f"{check_id} (fails in more scopes)")
             else:
                 preexisting.append(check_id)
         elif status == "warn":
             warnings_.append(check_id)
             if before == "pass":
                 new_warnings.append(check_id)
+        elif status == "skipped" and before == "pass":
+            newly_skipped.append(check_id)
     if hard_failures:
         problems.append(f"checks failed: {', '.join(hard_failures[:8])}")
     if regressions:
@@ -870,6 +891,11 @@ def compare_metric_reports(
         )
     if new_warnings:
         review.append(f"checks newly warn: {', '.join(new_warnings[:8])}")
+    if newly_skipped:
+        review.append(
+            "checks the previous pair passed were skipped: "
+            + ", ".join(newly_skipped[:8])
+        )
     if candidate.get("metrics_version") != previous.get("metrics_version"):
         problems.append(
             "metric definitions differ between the reports "
@@ -930,6 +956,7 @@ def compare_metric_reports(
         "preexisting_check_failures": preexisting,
         "warn_identities": warnings_,
         "new_warnings": new_warnings,
+        "newly_skipped_checks": newly_skipped,
         "moves_beyond_bounds": moves,
         "candidate_report_sha256": evidence_sha256(candidate),
         "previous_report_sha256": evidence_sha256(previous),
