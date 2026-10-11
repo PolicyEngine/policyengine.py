@@ -710,7 +710,7 @@ def _compile_module_source(source: str, code: CodeType) -> Optional[CodeType]:
     """``source`` compiled as a module, with the flags ``code`` was compiled with."""
 
     try:
-        return compile(
+        compiled: CodeType = compile(
             source,
             code.co_filename,
             "exec",
@@ -719,6 +719,7 @@ def _compile_module_source(source: str, code: CodeType) -> Optional[CodeType]:
         )
     except SyntaxError:
         return None
+    return compiled
 
 
 def _top_level_code(module_code: CodeType) -> dict[str, list[CodeType]]:
@@ -775,7 +776,7 @@ def _literal_assignments(tree: ast.Module) -> dict[str, Any]:
             isinstance(target, ast.Name) for target in node.targets
         ):
             names = [target.id for target in node.targets]  # type: ignore[attr-defined]
-            value: Optional[ast.expr] = node.value
+            value: ast.expr = node.value
         elif (
             isinstance(node, ast.AnnAssign)
             and isinstance(node.target, ast.Name)
