@@ -14,6 +14,7 @@
       "repository": "PolicyEngine/policyengine-uk",
       "commit": "073e80809141852eda42127b9e692b17e81343eb",
       "path": "policyengine_uk/utils/aggregate_impact",
+      "reforms_path": "policyengine_uk/tests/microsimulation/reforms_config.yaml",
       "_comment": "W3's aggregate-impact tool, pinned so both pairs use the same definitions (draft policyengine-uk#2335). Move the pin to the merged commit when it lands."
     },
     "years": [2025, 2026, 2027, 2028, 2029, 2030, 2031],
@@ -28,6 +29,13 @@
     "state_ref": "replay-state",
     "compare_to": "latest_certified",
     "poll_timeout_minutes": 360
+  },
+  "reform_responsiveness": {
+    "_comment": "Plan invariant 'Reform responsiveness' (11 Oct 2026): each standard reform must move the government balance in the expected direction by a non-trivial amount, or the candidate fails. The standard set is the metrics tool's own reform list (metrics.tool.reforms_path, whose expected impacts come from real runs on the certified pair) plus additional_reforms. A reform passes when it runs and, in every horizon year, its change in gov_balance has the sign of expected_impact and is at least floor_gbp in size (the tool's reform_gbp review threshold); in reference_year it must also be at least min_share_of_expected of |expected_impact|. The share is a proposal pending cos d1344.",
+    "reference_year": 2029,
+    "floor_gbp": 100000000,
+    "min_share_of_expected": 0.25,
+    "additional_reforms": []
   },
   "promotion": {
     "automatic": false,

@@ -87,6 +87,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     "budget_inputs",
     "reform_contract",
     "metrics_review",
+    "reform_responsiveness",
     "replay",
 )
 

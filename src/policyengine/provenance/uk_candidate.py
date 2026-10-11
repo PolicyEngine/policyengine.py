@@ -986,9 +986,163 @@ def metrics_review(
     )
 
 
+# --- Reform responsiveness -------------------------------------------------------
+
+
+def _fiscal_year(year: int) -> str:
+    return f"{year}-{(year + 1) % 100:02d}"
+
+
+def reform_responsiveness(
+    *,
+    report: Optional[Mapping[str, Any]],
+    standard_reforms: Sequence[Mapping[str, Any]],
+    years: Sequence[int],
+    reference_year: int,
+    floor_gbp: float,
+    min_share_of_expected: float,
+    unavailable_reason: Optional[str] = None,
+) -> GateOutcome:
+    """Every standard reform moves the government balance as expected, or fail.
+
+    ``report`` is the candidate's metrics report, whose ``reforms.<id>``
+    metrics are each reform's change in weighted ``gov_balance`` from a full
+    run. A standard reform passes when all of these hold:
+
+    - it ran (``reform_runs:<id>`` passed) and has a finite value in every
+      year of ``years``;
+    - in every year the change has the sign of its ``expected_impact`` and is
+      at least ``floor_gbp`` in size;
+    - in ``reference_year`` it is at least ``min_share_of_expected`` of
+      ``|expected_impact|`` (given in GBP bn).
+
+    Any failure fails the gate: a reform that silently does nothing is a
+    defect, never a small number to review. The gate is monotone in each
+    reform's response: shrinking a value toward zero or flipping its sign
+    never turns a failure into a pass.
+    """
+
+    if unavailable_reason or report is None:
+        return _result(
+            "reform_responsiveness",
+            "unavailable",
+            unavailable_reason or "No candidate metrics report is available.",
+            {},
+        )
+    if not standard_reforms:
+        return _result(
+            "reform_responsiveness",
+            "unavailable",
+            "No standard reform set is configured.",
+            {},
+        )
+    if reference_year not in years:
+        return _result(
+            "reform_responsiveness",
+            "error",
+            f"The reference year {reference_year} is outside the measured years.",
+            {},
+        )
+    ids: Mapping[str, str] = report.get("reform_ids") or {}
+    checks = {
+        str(row.get("identity_id")): row.get("status")
+        for row in report.get("identities") or []
+    }
+    values = {
+        (str(row.get("metric_id")), row.get("year")): row.get("value")
+        for row in report.get("metrics") or []
+    }
+    problems: list[str] = []
+    configuration: list[str] = []
+    table: list[dict[str, Any]] = []
+    for reform in standard_reforms:
+        name = str(reform.get("name"))
+        expected = reform.get("expected_impact")
+        if (
+            isinstance(expected, bool)
+            or not isinstance(expected, (int, float))
+            or not math.isfinite(expected)
+            or expected == 0
+        ):
+            configuration.append(f"{name!r} has no non-zero expected_impact")
+            continue
+        direction = 1.0 if expected > 0 else -1.0
+        row: dict[str, Any] = {
+            "name": name,
+            "expected_impact_bn": float(expected),
+            "values": {},
+            "problems": [],
+        }
+        table.append(row)
+        reform_id = ids.get(name)
+        if reform_id is None:
+            row["problems"].append("was not run")
+        elif checks.get(f"reform_runs:{reform_id}") != "pass":
+            row["problems"].append("did not run to completion")
+        else:
+            for year in years:
+                value = values.get((f"reforms.{reform_id}", year))
+                if (
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not math.isfinite(value)
+                ):
+                    row["problems"].append(f"has no costing for {_fiscal_year(year)}")
+                    continue
+                row["values"][str(year)] = float(value)
+                if value * direction <= 0:
+                    row["problems"].append(
+                        f"moved the balance by £{value:,.0f} in {_fiscal_year(year)}; "
+                        f"expected a {'gain' if direction > 0 else 'cost'}"
+                    )
+                elif abs(value) < floor_gbp:
+                    row["problems"].append(
+                        f"moved the balance by only £{value:,.0f} in "
+                        f"{_fiscal_year(year)} (floor £{floor_gbp:,.0f})"
+                    )
+                elif (
+                    year == reference_year
+                    and abs(value) < min_share_of_expected * abs(expected) * 1e9
+                ):
+                    row["problems"].append(
+                        f"moved the balance by £{value / 1e9:,.2f}bn in "
+                        f"{_fiscal_year(year)}, under {min_share_of_expected:.0%} of "
+                        f"the expected £{expected:,.1f}bn"
+                    )
+        problems.extend(f"{name}: {problem}" for problem in row["problems"])
+    evidence = {
+        "reference_year": reference_year,
+        "floor_gbp": floor_gbp,
+        "min_share_of_expected": min_share_of_expected,
+        "years": list(years),
+        "reforms": table,
+        "candidate_report_sha256": evidence_sha256(report),
+    }
+    if configuration:
+        return _result(
+            "reform_responsiveness", "error", "; ".join(configuration[:8]), evidence
+        )
+    if problems:
+        return _result(
+            "reform_responsiveness",
+            "fail",
+            f"{len(problems)} responsiveness failure(s): " + "; ".join(problems[:6]),
+            evidence,
+        )
+    return _result(
+        "reform_responsiveness",
+        "pass",
+        f"All {len(table)} standard reforms move the government balance in the "
+        f"expected direction in every year from {_fiscal_year(years[0])} to "
+        f"{_fiscal_year(years[-1])}.",
+        evidence,
+    )
+
+
 # --- Metrics tool (W3's aggregate-impact report) ---------------------------------
 
 VENDORED_TOOL_PACKAGE = "pe_uk_aggregate_impact"
+VENDORED_REFORMS_FILE = "reforms_config.yaml"
 PARTITION_PATH_IN_REPO = "policyengine_uk/data/fiscal_partition.yaml"
 
 #: Self-contained runner, executed in any environment that has a policyengine
@@ -1011,15 +1165,23 @@ if not dataset:
     from policyengine.provenance.dataset_materialization import materialize_dataset
     dataset = materialize_dataset("uk", data_dir=Path(settings["data_dir"])).path
 from policyengine_uk import Microsimulation
+reforms = [
+    {"name": reform["name"], "parameters": reform["parameters"]}
+    for reform in settings.get("reforms") or []
+]
 report = api.compute_budget_metrics(
     Microsimulation(dataset=str(dataset)),
     years=settings["years"],
     partition=partition_module.load_partition(partition_path),
+    reforms=reforms,
     run_guard=settings.get("run_guard", True),
     label=settings.get("label", "candidate"),
 )
 report["partition_source"] = source
 report["dataset_path"] = str(dataset)
+# The tool names each reform's metrics by its own slug of the reform's name.
+slug = importlib.import_module("pe_uk_aggregate_impact.measure").slug
+report["reform_ids"] = {reform["name"]: slug(reform["name"]) for reform in reforms}
 out.write_text(json.dumps(report))
 """
 
@@ -1134,9 +1296,12 @@ def vendor_metrics_tool(
     repository = tool["repository"]
     commit = tool["commit"]
     tool_path = tool["path"].rstrip("/")
+    reforms_path = tool.get("reforms_path")
     root = destination / f"metrics-tool-{commit[:12]}"
     package = root / VENDORED_TOOL_PACKAGE
-    if (package / "api.py").exists():
+    if (package / "api.py").exists() and (
+        not reforms_path or (root / VENDORED_REFORMS_FILE).exists()
+    ):
         return root
     response = get(
         f"https://codeload.github.com/{repository}/tar.gz/{commit}", timeout=120
@@ -1152,6 +1317,8 @@ def vendor_metrics_tool(
                 target = package / relative[len(tool_path) + 1 :]
             elif relative == PARTITION_PATH_IN_REPO:
                 target = root / "fiscal_partition.yaml"
+            elif reforms_path and relative == reforms_path:
+                target = root / VENDORED_REFORMS_FILE
             else:
                 continue
             if ".." in Path(relative).parts:
@@ -1162,7 +1329,34 @@ def vendor_metrics_tool(
             target.write_bytes(extracted.read())
     if not (package / "api.py").exists():
         raise ValueError(f"{repository}@{commit} has no {tool_path}/api.py.")
+    if reforms_path and not (root / VENDORED_REFORMS_FILE).exists():
+        raise ValueError(f"{repository}@{commit} has no {reforms_path}.")
     return root
+
+
+def load_standard_reforms(
+    vendor_root: Optional[Path], settings: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    """The standard reform set: the tool's own list, then ``additional_reforms``.
+
+    Each entry has ``name``, ``parameters`` and ``expected_impact`` (the
+    change in government balance in the reference year, in GBP bn, from a real
+    run). Names must be unique, so one reform has one definition.
+    """
+
+    reforms: list[dict[str, Any]] = []
+    path = vendor_root / VENDORED_REFORMS_FILE if vendor_root is not None else None
+    if path is not None and path.exists():
+        import yaml  # type: ignore[import-untyped]
+
+        document = yaml.safe_load(path.read_text()) or {}
+        reforms.extend(dict(reform) for reform in document.get("reforms") or [])
+    reforms.extend(dict(reform) for reform in settings.get("additional_reforms") or [])
+    names = [str(reform.get("name")) for reform in reforms]
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        raise ValueError(f"Standard reforms are defined twice: {duplicates}")
+    return reforms
 
 
 def run_metrics_report(
@@ -1175,9 +1369,14 @@ def run_metrics_report(
     data_dir: Optional[Path] = None,
     run_guard: bool = True,
     label: str = "candidate",
+    reforms: Sequence[Mapping[str, Any]] = (),
     run: Optional[Callable[..., Any]] = None,
 ) -> dict[str, Any]:
-    """Compute a metrics report with ``python`` (any environment) via the runner."""
+    """Compute a metrics report with ``python`` (any environment) via the runner.
+
+    ``reforms`` (``name`` and ``parameters``) are costed against the same
+    baseline, each as a full run over ``years``.
+    """
 
     import subprocess
 
@@ -1188,6 +1387,10 @@ def run_metrics_report(
         "data_dir": str(data_dir) if data_dir else None,
         "run_guard": run_guard,
         "label": label,
+        "reforms": [
+            {"name": reform["name"], "parameters": reform["parameters"]}
+            for reform in reforms
+        ],
     }
     run(
         [
@@ -1460,6 +1663,68 @@ def run_candidate_gates(
             expected_dataset_sha256=pair.data.dataset_sha256,
         )
 
+    def metrics_tool() -> Path:
+        if "metrics_tool" not in state:
+            state["metrics_tool"] = vendor_metrics_tool(
+                config["metrics"]["tool"], work_dir, get=requests.get
+            )
+        tool_root: Path = state["metrics_tool"]
+        return tool_root
+
+    def standard_reforms() -> list[dict[str, Any]]:
+        if "standard_reforms" not in state:
+            state["standard_reforms"] = load_standard_reforms(
+                metrics_tool(), config.get("reform_responsiveness") or {}
+            )
+        reforms: list[dict[str, Any]] = state["standard_reforms"]
+        return reforms
+
+    def candidate_metrics() -> dict[str, Any]:
+        """The candidate's report, computed once for both metric gates."""
+
+        import sys
+
+        if "candidate_metrics" not in state:
+            state["candidate_metrics"] = run_metrics_report(
+                sys.executable,
+                metrics_tool(),
+                years=config["metrics"]["years"],
+                out=work_dir / "metrics-candidate.json",
+                dataset_path=dataset(),
+                label="candidate",
+                reforms=standard_reforms(),
+            )
+            state.setdefault("metrics_reports", {})["candidate"] = state[
+                "candidate_metrics"
+            ]
+        report: dict[str, Any] = state["candidate_metrics"]
+        return report
+
+    def gate_responsiveness() -> GateOutcome:
+        settings = config.get("reform_responsiveness")
+        if not settings or not config["metrics"].get("tool"):
+            return reform_responsiveness(
+                report=None,
+                standard_reforms=[],
+                years=[],
+                reference_year=0,
+                floor_gbp=0.0,
+                min_share_of_expected=0.0,
+                unavailable_reason=(
+                    "No reform responsiveness settings or metrics tool is configured."
+                ),
+            )
+        result, evidence = reform_responsiveness(
+            report=candidate_metrics(),
+            standard_reforms=standard_reforms(),
+            years=config["metrics"]["years"],
+            reference_year=int(settings["reference_year"]),
+            floor_gbp=float(settings["floor_gbp"]),
+            min_share_of_expected=float(settings["min_share_of_expected"]),
+        )
+        evidence["tool"] = dict(config["metrics"]["tool"])
+        return result, evidence
+
     def gate_metrics() -> GateOutcome:
         import sys
 
@@ -1480,16 +1745,9 @@ def run_candidate_gates(
                 unavailable_reason="No previous certificate to compare against.",
             )
         bounds = json.loads((qualification_dir / settings["bounds"]).read_text())
-        vendor_root = vendor_metrics_tool(tool, work_dir, get=requests.get)
+        vendor_root = metrics_tool()
         years = settings["years"]
-        candidate_report = run_metrics_report(
-            sys.executable,
-            vendor_root,
-            years=years,
-            out=work_dir / "metrics-candidate.json",
-            dataset_path=dataset(),
-            label="candidate",
-        )
+        candidate_report = candidate_metrics()
         previous_report = run_metrics_report(
             previous_pair_python(previous_certificate, work_dir),
             vendor_root,
@@ -1497,6 +1755,7 @@ def run_candidate_gates(
             out=work_dir / "metrics-previous.json",
             data_dir=work_dir / "previous-data",
             label="previous",
+            reforms=standard_reforms(),
         )
         cross_report = None
         if previous_certificate.get("dataset_sha256") != pair.data.dataset_sha256:
@@ -1507,12 +1766,12 @@ def run_candidate_gates(
                 out=work_dir / "metrics-candidate-model-previous-data.json",
                 dataset_path=Path(previous_report["dataset_path"]),
                 label="candidate model, previous data",
+                reforms=standard_reforms(),
             )
-        state["metrics_reports"] = {
-            "candidate": candidate_report,
-            "previous": previous_report,
-            "candidate_model_previous_data": cross_report,
-        }
+        state.setdefault("metrics_reports", {}).update(
+            previous=previous_report,
+            candidate_model_previous_data=cross_report,
+        )
         result, evidence = metrics_review(
             candidate_report=candidate_report,
             previous_report=previous_report,
@@ -1536,6 +1795,7 @@ def run_candidate_gates(
         ("budget_inputs", gate_inputs),
         ("reform_contract", gate_contract),
         ("metrics_review", gate_metrics),
+        ("reform_responsiveness", gate_responsiveness),
     ]
     results, evidence = run_gates(gates)
     for name, report in (state.get("metrics_reports") or {}).items():
