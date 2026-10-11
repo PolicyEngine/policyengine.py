@@ -14,15 +14,12 @@ implementations for the qualification workflow.
 
 from __future__ import annotations
 
-import base64
-import csv
 import hashlib
 import importlib
 import io
 import json
 import math
 import traceback
-import zipfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from importlib import metadata as importlib_metadata
 from pathlib import Path
@@ -39,15 +36,14 @@ from policyengine.provenance.qualification import (
     QualificationHarness,
 )
 from policyengine.provenance.receipt import content_sha256
+from policyengine.provenance.wheels import (
+    verify_installed_against_wheel,
+)
 from policyengine.utils.hashing import sha256_file
 
 Evidence = dict[str, Any]
 GateOutcome = tuple[GateResult, Evidence]
 
-#: Files an installer adds to a distribution that are not in the wheel RECORD.
-INSTALLER_FILES = frozenset(
-    {"INSTALLER", "REQUESTED", "direct_url.json", "uv_cache.json"}
-)
 UK_SINGLE_YEAR_KEYS = ("time_period", "person", "benunit", "household")
 ENTITY_TABLES = ("person", "benunit", "household")
 
@@ -156,89 +152,6 @@ def installed_versions(
 # --- 2. Wheel hashes -----------------------------------------------------------
 
 
-def record_digest_to_hex(value: str) -> str:
-    """Convert a RECORD ``sha256=<urlsafe base64, no padding>`` digest to hex."""
-
-    algorithm, _, encoded = value.partition("=")
-    if algorithm != "sha256":
-        raise ValueError(f"Unsupported RECORD hash {algorithm!r}.")
-    padded = encoded + "=" * (-len(encoded) % 4)
-    return base64.urlsafe_b64decode(padded).hex()
-
-
-def parse_record(text: str) -> dict[str, Optional[str]]:
-    """``{path: hex sha256 or None}`` from a RECORD file."""
-
-    entries: dict[str, Optional[str]] = {}
-    for row in csv.reader(io.StringIO(text)):
-        if not row:
-            continue
-        path, digest = row[0], (row[1] if len(row) > 1 else "")
-        entries[path] = record_digest_to_hex(digest) if digest else None
-    return entries
-
-
-def wheel_record(wheel_path: Path) -> dict[str, Optional[str]]:
-    with zipfile.ZipFile(wheel_path) as archive:
-        names = [
-            name for name in archive.namelist() if name.endswith(".dist-info/RECORD")
-        ]
-        if len(names) != 1:
-            raise ValueError(f"{wheel_path.name} has {len(names)} RECORD files.")
-        return parse_record(archive.read(names[0]).decode("utf-8"))
-
-
-def verify_installed_against_wheel(
-    name: str, wheel_path: Path, *, metadata: Any = importlib_metadata
-) -> Evidence:
-    """Check every hashed wheel file is installed with the same bytes.
-
-    Returns evidence; raises nothing. ``problems`` lists every mismatch.
-    """
-
-    expected = wheel_record(wheel_path)
-    distribution = metadata.distribution(name)
-    installed: dict[str, Optional[str]] = {}
-    for file in distribution.files or []:
-        installed[str(file)] = (
-            record_digest_to_hex(f"{file.hash.mode}={file.hash.value}")
-            if file.hash is not None
-            else None
-        )
-    problems: list[str] = []
-    verified = 0
-    for path, digest in sorted(expected.items()):
-        if digest is None:
-            continue
-        if installed.get(path, "absent") != digest:
-            problems.append(f"{path}: installed RECORD differs from the wheel")
-            continue
-        located = Path(distribution.locate_file(path))
-        if not located.is_file():
-            problems.append(f"{path}: missing on disk")
-            continue
-        if sha256_file(located) != digest:
-            problems.append(f"{path}: bytes differ from the wheel")
-            continue
-        verified += 1
-    extra = sorted(
-        path
-        for path in installed
-        if path not in expected
-        and not path.endswith(".pyc")
-        and Path(path).name not in INSTALLER_FILES
-        and not path.endswith(".dist-info/RECORD")
-    )
-    problems.extend(f"{path}: installed but not in the wheel" for path in extra)
-    return {
-        "wheel": wheel_path.name,
-        "wheel_sha256": sha256_file(wheel_path),
-        "files_verified": verified,
-        "unexpected_installed_files": extra,
-        "problems": problems,
-    }
-
-
 def wheel_hashes(
     pair: CandidatePair,
     *,
@@ -280,12 +193,15 @@ def wheel_hashes(
     )
 
 
-def verified_package_hashes(pair: CandidatePair) -> dict[str, tuple[str, str]]:
-    """``package_hashes`` for ``build_execution_receipt`` after ``wheel_hashes`` passes."""
+def receipt_wheel_paths(
+    pair: CandidatePair, wheel_paths: Mapping[str, Path]
+) -> dict[str, Path]:
+    """``wheel_paths`` for ``build_execution_receipt``, which re-verifies them."""
 
     return {
-        pair.model.name: (pair.model.wheel_sha256, "installed_record_verified"),
-        pair.core.name: (pair.core.wheel_sha256, "installed_record_verified"),
+        package.name: Path(wheel_paths[package.name])
+        for package in (pair.model, pair.core)
+        if package.name in wheel_paths
     }
 
 

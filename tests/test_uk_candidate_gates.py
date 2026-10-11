@@ -36,13 +36,15 @@ from policyengine.provenance.uk_candidate import (
     dataset_bytes,
     installed_versions,
     metrics_review,
-    parse_record,
-    record_digest_to_hex,
     reform_contract,
     run_gates,
     supported_years,
-    verify_installed_against_wheel,
     wheel_hashes,
+)
+from policyengine.provenance.wheels import (
+    parse_record,
+    record_digest_to_hex,
+    verify_installed_against_wheel,
 )
 from tests.qualification_fixtures import HARNESS, make_pair
 
