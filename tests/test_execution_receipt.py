@@ -19,6 +19,10 @@ Invariants tested here:
   module source and defaults plus a revision, independent of where the code
   is checked out; code edited after import, closures, lambdas, partials,
   methods and non-Scenario objects are refused;
+- a composition's digest covers its members' representation, digest and
+  binding in application order and nothing else: reordering distinct members
+  changes it, current-law members and labels do not, and it is code-bound
+  exactly when a member is;
 - the Pydantic model and the published JSON Schema accept the same valid
   receipts and reject the same malformed ones (differential test).
 """
@@ -57,6 +61,7 @@ from policyengine.provenance.receipt import (
     build_execution_receipt,
     build_execution_receipt_for_microsimulation,
     certificate_sha256,
+    composed_reform_identity,
     content_sha256,
     fiscal_year_label,
     installed_package_identity,
@@ -919,6 +924,142 @@ def test_reform_identity_accepts_only_json_payloads():
         ReformIdentity(kind="reform", representation="policyengine.reform_dict/v1")
     with pytest.raises(ValidationError):
         ReformIdentity(kind="current_law", binding="code_revision")
+
+
+# --- Compositions ------------------------------------------------------------------
+
+
+def _member(index: int, *, code: bool = False, name=None) -> ReformIdentity:
+    return ReformIdentity(
+        kind="reform",
+        representation="policyengine-uk.scenario/v1",
+        reform_sha256=f"{index:064x}",
+        binding="code_revision" if code else "content",
+        name=name,
+    )
+
+
+def test_composition_digest_is_its_ordered_member_identities():
+    basic = reform_identity(
+        {"gov.hmrc.income_tax.rates.uk[0].rate": {"2027-04-06": 0.21}},
+        "policyengine-uk.reform_dict/v1",
+        name="basic rate",
+    )
+    structural = scenario_reform_identity(
+        _scenario(simulation_modifier=receipt_modifiers.raise_higher_rate),
+        code_revision=REVISION,
+        name="higher rate",
+    )
+    package = composed_reform_identity([basic, structural], name="Budget package")
+    assert package.representation == "policyengine-uk.scenario_composition/v1"
+    assert package.binding == "code_revision"
+    assert package.name == "Budget package"
+    assert package.reform_sha256 == content_sha256(
+        {
+            "representation": "policyengine-uk.scenario_composition/v1",
+            "payload": {
+                "members": [
+                    {
+                        "representation": "policyengine-uk.reform_dict/v1",
+                        "reform_sha256": basic.reform_sha256,
+                        "binding": "content",
+                    },
+                    {
+                        "representation": "policyengine-uk.scenario/v1",
+                        "reform_sha256": structural.reform_sha256,
+                        "binding": "code_revision",
+                    },
+                ]
+            },
+        }
+    )
+    assert composed_reform_identity([basic]).binding == "content"
+    assert composed_reform_identity([basic]).reform_sha256 != basic.reform_sha256
+    nested = composed_reform_identity([package, basic])
+    assert nested.binding == "code_revision"
+    assert nested.reform_sha256 != package.reform_sha256
+
+
+@settings(max_examples=100, deadline=None)
+@given(
+    indices=st.lists(st.integers(1, 50), min_size=2, max_size=6, unique=True),
+    code=st.lists(st.booleans(), min_size=6, max_size=6),
+    random=st.randoms(),
+    gaps=st.lists(st.integers(0, 6), max_size=4),
+    labels=st.lists(st.text(max_size=5), min_size=6, max_size=6),
+)
+def test_composition_order_matters_and_current_law_and_labels_do_not(
+    indices, code, random, gaps, labels
+):
+    members = [_member(i, code=code[n]) for n, i in enumerate(indices)]
+    composed = composed_reform_identity(members)
+    assert composed.binding == (
+        "code_revision" if any(code[: len(members)]) else "content"
+    )
+    shuffled = list(members)
+    random.shuffle(shuffled)
+    same_order = shuffled == members
+    assert (
+        composed_reform_identity(shuffled).reform_sha256 == composed.reform_sha256
+    ) == same_order
+    padded = list(members)
+    for gap in gaps:
+        padded.insert(min(gap, len(padded)), CURRENT_LAW)
+    assert composed_reform_identity(padded).reform_sha256 == composed.reform_sha256
+    relabelled = [
+        member.model_copy(update={"name": labels[n] or None})
+        for n, member in enumerate(members)
+    ]
+    assert (
+        composed_reform_identity(relabelled, name="x").reform_sha256
+        == composed.reform_sha256
+    )
+    # Dropping or duplicating a member changes what ran, so it changes the digest.
+    assert composed_reform_identity(members[1:]).reform_sha256 != composed.reform_sha256
+    assert (
+        composed_reform_identity([*members, members[0]]).reform_sha256
+        != composed.reform_sha256
+    )
+
+
+def test_a_composition_of_nothing_is_current_law():
+    assert composed_reform_identity([]).kind == "current_law"
+    assert composed_reform_identity([CURRENT_LAW, CURRENT_LAW]).kind == "current_law"
+
+
+@pytest.mark.parametrize(
+    "members",
+    [
+        {"gov.x": {"2027": 1}},
+        "abc",
+        [{"gov.x": {"2027": 1}}],
+        [_member(1), "member"],
+        [_member(1), None],
+        _member(1),
+    ],
+    ids=["dict", "string", "raw payload", "string member", "none member", "bare"],
+)
+def test_compositions_take_only_bound_identities(members):
+    with pytest.raises(ReceiptError):
+        composed_reform_identity(members)
+
+
+def test_reform_identity_refuses_the_composition_representation():
+    with pytest.raises(ReceiptError, match="composed_reform_identity"):
+        reform_identity({"members": []}, "policyengine-uk.scenario_composition/v1")
+
+
+def test_a_composed_reform_makes_a_valid_receipt(dataset_file, schema_validator):
+    package = composed_reform_identity([_member(1), _member(2, code=True)])
+    receipt = _build(dataset_file, reform=package)
+    schema_validator.validate(json.loads(receipt.model_dump_json()))
+    assert ExecutionReceipt.model_validate_json(receipt.to_canonical_json()) == receipt
+    other = _build(
+        dataset_file,
+        reform=composed_reform_identity([_member(2, code=True), _member(1)]),
+    )
+    assert other.receipt_sha256 != receipt.receipt_sha256
+    assert other.execution_identity_sha256 == receipt.execution_identity_sha256
 
 
 # --- Scenario binding -------------------------------------------------------------

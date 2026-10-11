@@ -92,6 +92,17 @@ A measures file edited after import, or a constant, default, import or function 
 
 Some modifiers are refused outright because their behaviour depends on values the digest cannot bind: closures, lambdas, nested functions, methods, `functools.partial` and builtins. Anything that is not a `Scenario` is refused too, rather than read as current law.
 
+### Several reforms in one run
+
+A combined run, such as a whole Budget package, applies several measures in one simulation. Bind each measure on its own, then bind the package with `composed_reform_identity(members)`, passing the members' identities in application order. Its representation is `policyengine-uk.scenario_composition/v1`, and its digest covers each member's representation, digest and binding, in that order.
+
+The representation means one policyengine-uk `Scenario` whose `parameter_changes` are the members' changes merged, and whose `simulation_modifier` applies the members' modifiers in the listed order, after the parameter changes. Three rules follow:
+- The composer must check that no two members set one parameter to different values. `composed_reform_identity` sees only identities, so it cannot.
+- Order is part of the digest: the same members in another order give a different digest.
+- `current_law` members are dropped, and a composition with no remaining member is `current_law`. The binding is `code_revision` if any member's is.
+
+A reader who holds the members' identities can recompute the composition's digest and compare.
+
 To check a certificate, call `verify_certificate(receipt, bundle)` with the policyengine manifest for `certificate.bundle_version`. It rebuilds the certificate from that manifest's certification record, the same way the builder does. Then it compares every identity member: the record digest, the basis, the certified model, core and dataset digest, the certifier and the bundle version. It also checks that the receipt's whole `data` identity is the certified dataset with the certified bytes. An empty list means the bundle certifies exactly what the receipt claims, and through the receipt's own rules that pins `model.version`, `core.version` and `wrapper.version` too. `certificate_source`, `qualification_receipt_sha256`, `tro_composition_fingerprint` and wheel hashes are not determined by the bundle, so it does not check them.
 
 Pass the release artifact that was loaded as `dataset_path`. A derived per-year file such as `enhanced_frs_2024_25_year_2026.h5` has different bytes from the artifact the bundle pins, so a receipt for it is refused.
@@ -125,10 +136,10 @@ The pre-promotion replay interface with policyengine-scorecard follows a differe
 | `execution_identity_sha256` | `schema_version`, `country_id`, `wrapper`, `model`, `core`, `data`, `certification_status`, and the certificate's content: bundle version, record digest, basis, certified versions, dataset digest and certifier. Results with the same execution identity ran on the same runtime and data under the same certificate, however the receipt was built. |
 | `receipt_sha256` | The whole receipt except `runtime` and the reform and baseline `name` labels. Renaming a measure therefore does not change it. |
 | `certificate.certificate_sha256` | The bundle manifest's `data_releases.uk` record. |
-| `reform.reform_sha256` | `{"representation": ..., "payload": ...}`, with the payload exactly as given, nulls kept (strict JSON conversion, then RFC 8785, with no null removal). |
+| `reform.reform_sha256` | `{"representation": ..., "payload": ...}`, with the payload exactly as given, nulls kept (strict JSON conversion, then RFC 8785, with no null removal). For a composition the payload is `{"members": [{"representation", "reform_sha256", "binding"}, ...]}` in application order. |
 | `outputs_sha256` | The output payload. |
 
-Reform digests are never normalized across representations. The same keys can legitimately mean different things in different representations: for example, a bare year in a policyengine-uk country dictionary changes that one year only. So each digest is tied to the representation that was submitted. The v1 representations are `policyengine.parameter_values/v1`, `policyengine.reform_dict/v1`, `policyengine-uk.reform_dict/v1`, `policyengine-uk.scenario/v1` and `policyengine-sim-api.policy/v1`.
+Reform digests are never normalized across representations. The same keys can legitimately mean different things in different representations: for example, a bare year in a policyengine-uk country dictionary changes that one year only. So each digest is tied to the representation that was submitted. The v1 representations are `policyengine.parameter_values/v1`, `policyengine.reform_dict/v1`, `policyengine-uk.reform_dict/v1`, `policyengine-uk.scenario/v1`, `policyengine-uk.scenario_composition/v1` and `policyengine-sim-api.policy/v1`.
 
 ## Rules JSON Schema cannot express
 

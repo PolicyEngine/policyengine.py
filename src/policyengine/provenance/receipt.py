@@ -48,6 +48,8 @@ Rules every valid v1 receipt satisfies:
   caller's code revision,
   and says so (``binding="code_revision"``). The digest is the same wherever
   the code is checked out and whichever Python runs it.
+- Several reforms applied in one run are bound as an ordered composition of
+  their identities (:func:`composed_reform_identity`).
 - A certificate is trusted only after :func:`verify_certificate` has checked
   it, and the receipt's data identity, against the published bundle manifest
   it names. ``certificate_source`` is the producer's statement, not evidence.
@@ -112,6 +114,7 @@ __all__ = [
     "build_execution_receipt",
     "build_execution_receipt_for_microsimulation",
     "certificate_sha256",
+    "composed_reform_identity",
     "content_sha256",
     "fiscal_year_label",
     "installed_package_identity",
@@ -154,7 +157,15 @@ ReformRepresentation = Literal[
     # A policyengine-uk ``Scenario`` built from parameter changes and, at
     # most, a module-level modifier: see scenario_reform_identity().
     "policyengine-uk.scenario/v1",
+    # Several reforms applied in one policyengine-uk ``Scenario``, in a stated
+    # order: see composed_reform_identity().
+    "policyengine-uk.scenario_composition/v1",
 ]
+
+#: Representation of a composition of member reforms.
+COMPOSITION_REPRESENTATION: Literal["policyengine-uk.scenario_composition/v1"] = (
+    "policyengine-uk.scenario_composition/v1"
+)
 
 #: v1 rules that JSON Schema cannot express. Published in the schema file.
 CROSS_FIELD_RULES: tuple[str, ...] = (
@@ -177,7 +188,7 @@ DIGEST_RULES: dict[str, str] = {
     "execution_identity_sha256": "{schema_version, country_id, wrapper, model, core, data, certification_status, certificate?} where certificate keeps only bundle_version, country_id, certificate_sha256, compatibility_basis, certified_for_model_version, certified_for_core_version, certified_dataset_sha256 and certified_by",
     "receipt_sha256": "the whole receipt without runtime and without reform.name and baseline.name",
     "certificate.certificate_sha256": "the bundle manifest's data_releases.<country_id> record",
-    "reform.reform_sha256": "RFC 8785 over {representation, payload} where payload is the reform exactly as given in that representation, nulls kept (a null in a reform can mean something, unlike an absent receipt field)",
+    "reform.reform_sha256": "RFC 8785 over {representation, payload} where payload is the reform exactly as given in that representation, nulls kept (a null in a reform can mean something, unlike an absent receipt field); for policyengine-uk.scenario_composition/v1 the payload is {members: [{representation, reform_sha256, binding}, ...]} in application order",
     "outputs_sha256": "the canonical output payload the receipt binds",
 }
 
@@ -731,6 +742,8 @@ def reform_identity(
         raise ReceiptError("A non-empty reform needs its representation.")
     if representation == "policyengine-uk.scenario/v1":
         raise ReceiptError("Bind a Scenario with scenario_reform_identity().")
+    if representation == COMPOSITION_REPRESENTATION:
+        raise ReceiptError("Bind a composition with composed_reform_identity().")
     digest = _payload_sha256({"representation": representation, "payload": payload})
     return ReformIdentity(
         kind="reform", representation=representation, reform_sha256=digest, name=name
@@ -1974,6 +1987,68 @@ def scenario_reform_identity(
     return ReformIdentity(
         kind="reform",
         representation="policyengine-uk.scenario/v1",
+        reform_sha256=digest,
+        binding=binding,
+        name=name,
+    )
+
+
+def composed_reform_identity(
+    members: Sequence[ReformIdentity],
+    *,
+    name: Optional[str] = None,
+) -> ReformIdentity:
+    """Bind several reforms applied together in one run, in a stated order.
+
+    ``members`` are complete identities from :func:`reform_identity`,
+    :func:`scenario_reform_identity` or this function, in application order.
+    The digest covers each member's representation, digest and binding, in
+    that order, and nothing else: member labels are not part of it.
+
+    What ``policyengine-uk.scenario_composition/v1`` means: one policyengine-uk
+    ``Scenario`` whose ``parameter_changes`` are the members' changes merged
+    and whose ``simulation_modifier`` applies the members' modifiers in the
+    listed order, after the parameter changes. The composer must make sure
+    no two members set one parameter to different values; this function sees
+    only identities and cannot check that.
+
+    - ``current_law`` members change nothing and are dropped; if none
+      remains the result is ``current_law``.
+    - A single remaining member still gets the composition representation,
+      so its digest differs from the member's own, as across any two
+      representations.
+    - The binding is ``code_revision`` if any member's is, else ``content``.
+    """
+
+    if isinstance(members, (str, bytes, Mapping)) or not isinstance(members, Sequence):
+        raise ReceiptError("A composition is a sequence of reform identities.")
+    bound: list[dict[str, Any]] = []
+    binding: Literal["content", "code_revision"] = "content"
+    for index, member in enumerate(members):
+        if not isinstance(member, ReformIdentity):
+            raise ReceiptError(
+                f"Member {index} is {type(member).__name__}, not a ReformIdentity; "
+                "bind it with reform_identity() or scenario_reform_identity() first."
+            )
+        if member.kind == "current_law":
+            continue
+        bound.append(
+            {
+                "representation": member.representation,
+                "reform_sha256": member.reform_sha256,
+                "binding": member.binding,
+            }
+        )
+        if member.binding == "code_revision":
+            binding = "code_revision"
+    if not bound:
+        return ReformIdentity(kind="current_law", name=name)
+    digest = content_sha256(
+        {"representation": COMPOSITION_REPRESENTATION, "payload": {"members": bound}}
+    )
+    return ReformIdentity(
+        kind="reform",
+        representation=COMPOSITION_REPRESENTATION,
         reform_sha256=digest,
         binding=binding,
         name=name,
