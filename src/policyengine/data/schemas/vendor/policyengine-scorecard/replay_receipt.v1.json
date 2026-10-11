@@ -429,10 +429,7 @@
    "if": {
     "properties": {
      "status": {
-      "enum": [
-       "complete",
-       "failed"
-      ]
+      "const": "complete"
      }
     }
    },
@@ -472,6 +469,29 @@
      },
      "corpus": {
       "type": "object"
+     }
+    }
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "status": {
+      "const": "failed"
+     }
+    }
+   },
+   "then": {
+    "properties": {
+     "rejection": {
+      "type": "null"
+     },
+     "integrity": {
+      "properties": {
+       "status": {
+        "const": "failed"
+       }
+      }
      }
     }
    }

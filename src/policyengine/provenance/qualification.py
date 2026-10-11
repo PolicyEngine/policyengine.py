@@ -440,7 +440,7 @@ class RequestCandidate(_Mirror):
 
 class RequestedBy(_Open):
     repository: str = Field(pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-    workflow_run_id: int = Field(ge=1)
+    workflow_run_id: Optional[int] = Field(default=None, ge=1)
     run_attempt: Optional[int] = Field(default=None, ge=1)
     commit: str = Field(pattern=_SHA1)
 
@@ -690,15 +690,19 @@ class ReplayReceipt(_Mirror):
                 raise ValueError(
                     "A rejected receipt has a rejection and no corpus or diff."
                 )
-        else:
+        elif self.status == "complete":
             if (
                 self.rejection is not None
                 or self.variant_id is None
                 or self.execution is None
             ):
-                raise ValueError(
-                    f"A {self.status} receipt has a variant and an execution."
-                )
+                raise ValueError("A complete receipt has a variant and an execution.")
+        # A failed receipt can come from a step before the candidate's
+        # identity was known (for example a download error).
+        elif self.rejection is not None or self.integrity.status != "failed":
+            raise ValueError(
+                "A failed receipt has no rejection and a failed integrity."
+            )
         if self.status == "complete" and (
             self.integrity.status not in ("complete", "incomplete")
             or self.corpus is None
@@ -759,7 +763,20 @@ def evaluate_replay_receipt(
         )
 
     execution = receipt.execution
-    assert execution is not None
+    if execution is None:
+        codes = sorted({failure.code for failure in receipt.integrity.failures})
+        return GateResult(
+            gate_id="replay",
+            status="fail",
+            summary="Replay failed before the candidate was identified: "
+            + (", ".join(codes) or "no failure codes"),
+            details={
+                **details,
+                "integrity_failures": [
+                    failure.document() for failure in receipt.integrity.failures
+                ],
+            },
+        )
     candidate = request.candidate
     mismatches: list[str] = []
     packages = {

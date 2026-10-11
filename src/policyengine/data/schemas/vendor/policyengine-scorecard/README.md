@@ -1,7 +1,7 @@
 # Vendored policyengine-scorecard schemas
 
 Copied unchanged from PolicyEngine/policyengine-scorecard, branch
-`w6/replay-variants`, commit `62704be` (`docs/uk_replay/schemas/`): the v1
+`w6/replay-variants`, commit `91f46c1` (`docs/uk_replay/schemas/`): the v1
 pre-promotion replay interface between policyengine.py qualification (W4)
 and the replay corpus (W6). `policyengine.provenance.qualification` mirrors
 them, and `tests/test_qualification_contracts.py` checks the mirrors and the

@@ -286,6 +286,7 @@ REQUEST_MUTATIONS = [
         lambda r: r["candidate"]["expected_release_bundle"].pop("model_version"),
     ),
     ("bad commit", lambda r: r["requested_by"].update(commit="abc")),
+    ("missing commit", lambda r: r["requested_by"].pop("commit")),
 ]
 
 
@@ -444,3 +445,32 @@ def test_status_must_name_terminal_receipt():
                 ],
             }
         )
+
+
+def test_requests_without_a_run_id_are_valid_as_in_the_schema():
+    raw = copy.deepcopy(golden("qualification_request_golden"))
+    raw["requested_by"].pop("workflow_run_id")
+    _validator("qualification_request.v1.json").validate(raw)
+    assert ReplayQualificationRequest.model_validate(raw).document() == raw
+
+
+def test_early_failure_receipt_fails_the_gate():
+    doc = copy.deepcopy(golden("replay_receipt_golden"))
+    doc.update(
+        status="failed",
+        variant_id=None,
+        variant_identity_sha256=None,
+        execution=None,
+        corpus=None,
+        diff=None,
+    )
+    doc["integrity"] = {
+        "status": "failed",
+        "failures": [
+            {"code": "wheel_download_failed", "detail": "pip download failed"}
+        ],
+    }
+    sealed = _sealed(doc)
+    _validator("replay_receipt.v1.json").validate(sealed)
+    gate = _gate(sealed)
+    assert gate.status == "fail" and "wheel_download_failed" in gate.summary
