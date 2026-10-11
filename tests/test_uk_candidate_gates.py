@@ -1557,6 +1557,34 @@ def test_the_real_report_fits_the_metrics_review_classification():
     assert compare_metric_reports(report, clean, bounds)[0] == "fail"
 
 
+def test_a_real_failure_that_spread_to_a_new_year_has_worsened():
+    """Scope-based no-worsening on the tool's real failing_scopes."""
+
+    bounds = json.loads(
+        (
+            Path(__file__).parents[1]
+            / "src/policyengine/data/qualification/uk_review_bounds.json"
+        ).read_text()
+    )
+    report = _real_report()
+    scopes = {
+        row["identity_id"]: row["failing_scopes"]
+        for row in report["identities"]
+        if row["status"] == "fail"
+    }
+    assert scopes["sign:vat"] == [str(year) for year in RESPONSE_YEARS]
+    assert scopes["counted_once:statutory_sick_pay"] == [""]
+    # The previous pair failed sign:vat in every year but the last.
+    earlier = _real_report()
+    for row in earlier["identities"]:
+        if row["identity_id"] == "sign:vat":
+            row["failing_scopes"] = row["failing_scopes"][:-1]
+    status, summary, _ = compare_metric_reports(report, earlier, bounds)
+    assert status == "fail" and "sign:vat (fails in more scopes)" in summary
+    # A candidate that fails it in fewer years than before has not worsened.
+    assert compare_metric_reports(earlier, report, bounds)[0] == "pass"
+
+
 def test_reform_checks_are_hard_in_the_metrics_review():
     from policyengine.provenance.uk_candidate import classify_check
 

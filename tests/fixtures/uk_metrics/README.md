@@ -12,10 +12,8 @@ pinned commit; never edit them by hand.
   the least it must move it in every year. The reform responsiveness gate
   reads the same file from the vendored tool.
 - `budget_metrics_report.json`: a real `compute_budget_metrics` report from
-  the tool's owner (workstream W3), run on 11 October 2026 on uk-data 1.58.0
-  (`enhanced_frs_2024_25`) with policyengine-uk main, for 2025-26 to 2031-32,
-  with the overlap guard and the ten standard reforms. It holds aggregates
-  only: 1,470 metric rows and 346 checks (327 pass, 15 warn, 4 fail). It was
-  produced at tool commit `c7a6c963991b4873a51042bda640f28eb914e34e`, one
-  commit before the pin; the only change since adds `failing_scopes` to each
-  check row, so this report has no `failing_scopes`.
+  the tool's owner (workstream W3), run on 11 October 2026 at the pinned tool
+  commit on uk-data 1.58.0 (`enhanced_frs_2024_25`) with policyengine-uk main,
+  for 2025-26 to 2031-32, with the overlap guard and the ten standard reforms.
+  It holds aggregates only: 1,470 metric rows and 346 checks (327 pass,
+  15 warn, 4 fail), each check with its `failing_scopes`.
