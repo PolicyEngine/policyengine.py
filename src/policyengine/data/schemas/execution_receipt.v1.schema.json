@@ -1,0 +1,601 @@
+{
+  "$defs": {
+    "CertificateIdentity": {
+      "additionalProperties": false,
+      "description": "The bundle certification that admitted this model and data pair.",
+      "properties": {
+        "bundle_version": {
+          "description": "policyengine.py version carrying the certificate.",
+          "title": "Bundle Version",
+          "type": "string"
+        },
+        "certificate_sha256": {
+          "description": "RFC 8785 SHA-256 of the bundle manifest's data_releases.<country> record (see certificate_sha256()).",
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Certificate Sha256",
+          "type": "string"
+        },
+        "certified_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Certified By"
+        },
+        "certified_dataset_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Certified Dataset Sha256",
+          "type": "string"
+        },
+        "certified_for_model_version": {
+          "title": "Certified For Model Version",
+          "type": "string"
+        },
+        "compatibility_basis": {
+          "description": "How the pair was admitted, e.g. built_with_model_package.",
+          "title": "Compatibility Basis",
+          "type": "string"
+        },
+        "country_id": {
+          "title": "Country Id",
+          "type": "string"
+        },
+        "qualification_receipt_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Digest of the candidate qualification receipt, when one exists.",
+          "title": "Qualification Receipt Sha256"
+        },
+        "tro_composition_fingerprint": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Composition fingerprint of the packaged bundle TRACE TRO (<country>.trace.tro.jsonld), when the packaged bundle was used.",
+          "title": "Tro Composition Fingerprint"
+        }
+      },
+      "required": [
+        "bundle_version",
+        "country_id",
+        "certificate_sha256",
+        "compatibility_basis",
+        "certified_for_model_version",
+        "certified_dataset_sha256"
+      ],
+      "title": "CertificateIdentity",
+      "type": "object"
+    },
+    "DataIdentity": {
+      "additionalProperties": false,
+      "description": "The data release and the exact dataset bytes that were simulated.",
+      "properties": {
+        "build_fingerprint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Producer data-build fingerprint, when published.",
+          "title": "Build Fingerprint"
+        },
+        "build_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Producer build identity, e.g. policyengine-uk-data-1.58.0.",
+          "title": "Build Id"
+        },
+        "build_model_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Country model version the data was built with. Distinct from model.version, the version that ran.",
+          "title": "Build Model Version"
+        },
+        "data_package": {
+          "description": "Data package name, e.g. policyengine-uk-data.",
+          "title": "Data Package",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "Logical dataset name, e.g. enhanced_frs_2024_25.",
+          "title": "Dataset",
+          "type": "string"
+        },
+        "dataset_revision": {
+          "description": "Revision the dataset was read at.",
+          "title": "Dataset Revision",
+          "type": "string"
+        },
+        "dataset_sha256": {
+          "description": "SHA-256 of the dataset bytes that were simulated.",
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Dataset Sha256",
+          "type": "string"
+        },
+        "dataset_uri": {
+          "description": "Pinned dataset URI, e.g. hf://...@1.58.0.",
+          "title": "Dataset Uri",
+          "type": "string"
+        },
+        "release_manifest_revision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Hugging Face commit of the release manifest.",
+          "title": "Release Manifest Revision"
+        },
+        "release_manifest_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "SHA-256 of the fetched release manifest bytes.",
+          "title": "Release Manifest Sha256"
+        },
+        "release_version": {
+          "description": "Data release version, e.g. 1.58.0.",
+          "title": "Release Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "data_package",
+        "release_version",
+        "dataset",
+        "dataset_uri",
+        "dataset_revision",
+        "dataset_sha256"
+      ],
+      "title": "DataIdentity",
+      "type": "object"
+    },
+    "FiscalYearConvention": {
+      "additionalProperties": false,
+      "description": "What an annual period label means in this result.",
+      "properties": {
+        "convention": {
+          "enum": [
+            "uk_fiscal_year",
+            "calendar_year"
+          ],
+          "title": "Convention",
+          "type": "string"
+        },
+        "parameter_annualisation": {
+          "description": "Identifier of the annualisation rule the recorded model version implements, e.g. policyengine-uk/fiscal-year-parameters.",
+          "title": "Parameter Annualisation",
+          "type": "string"
+        },
+        "period_start": {
+          "description": "Month-day the labelled period starts: 04-06 (UK), 01-01 (calendar).",
+          "pattern": "^\\d{2}-\\d{2}$",
+          "title": "Period Start",
+          "type": "string"
+        },
+        "year_label": {
+          "const": "start_year",
+          "default": "start_year",
+          "description": "Year Y labels the period that starts in Y (UK: 2027 is 2027-28).",
+          "title": "Year Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "convention",
+        "period_start",
+        "parameter_annualisation"
+      ],
+      "title": "FiscalYearConvention",
+      "type": "object"
+    },
+    "PackageIdentity": {
+      "additionalProperties": false,
+      "description": "A Python distribution that took part in the execution.",
+      "properties": {
+        "name": {
+          "description": "Normalized distribution name, e.g. policyengine-uk.",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "description": "Installed version (importlib.metadata).",
+          "title": "Version",
+          "type": "string"
+        },
+        "wheel_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "SHA-256 of the wheel the installed files came from. Present only when verified: by checking the installed files against the wheel's RECORD, or by the installer's recorded archive hash.",
+          "title": "Wheel Sha256"
+        },
+        "wheel_sha256_evidence": {
+          "anyOf": [
+            {
+              "enum": [
+                "installed_record_verified",
+                "installer_archive_hash"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How ``wheel_sha256`` was established.",
+          "title": "Wheel Sha256 Evidence"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "title": "PackageIdentity",
+      "type": "object"
+    },
+    "ReformIdentity": {
+      "additionalProperties": false,
+      "description": "A reform or baseline, bound by the digest of its canonical form.",
+      "properties": {
+        "binding": {
+          "default": "content",
+          "description": "content: the digest determines the reform's behaviour. code_revision: the reform runs Python code (a simulation modifier) bound only by its source digest and the caller's code revision; values captured in closures are not bound.",
+          "enum": [
+            "content",
+            "code_revision"
+          ],
+          "title": "Binding",
+          "type": "string"
+        },
+        "kind": {
+          "description": "current_law means no parameter or structural change.",
+          "enum": [
+            "current_law",
+            "reform"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human label; not part of the digest.",
+          "title": "Name"
+        },
+        "reform_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "RFC 8785 SHA-256 of {'representation': ..., 'payload': ...}; see reform_identity().",
+          "title": "Reform Sha256"
+        },
+        "representation": {
+          "anyOf": [
+            {
+              "enum": [
+                "policyengine.parameter_values/v1",
+                "policyengine.reform_dict/v1",
+                "policyengine-uk.reform_dict/v1",
+                "policyengine-sim-api.policy/v1",
+                "policyengine-uk.scenario/v1"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Representation"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "ReformIdentity",
+      "type": "object"
+    },
+    "RuntimeContext": {
+      "additionalProperties": false,
+      "description": "Where the execution ran. Not part of the execution identity.",
+      "properties": {
+        "ci_run_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ci Run Url"
+        },
+        "platform": {
+          "title": "Platform",
+          "type": "string"
+        },
+        "python_version": {
+          "title": "Python Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "python_version",
+        "platform"
+      ],
+      "title": "RuntimeContext",
+      "type": "object"
+    },
+    "WrapperIdentity": {
+      "additionalProperties": false,
+      "description": "The policyengine.py distribution, optionally pinned to a source commit.",
+      "properties": {
+        "git_sha": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{40}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "policyengine.py commit, when running from a checkout.",
+          "title": "Git Sha"
+        },
+        "name": {
+          "description": "Normalized distribution name, e.g. policyengine-uk.",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "description": "Installed version (importlib.metadata).",
+          "title": "Version",
+          "type": "string"
+        },
+        "wheel_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "SHA-256 of the wheel the installed files came from. Present only when verified: by checking the installed files against the wheel's RECORD, or by the installer's recorded archive hash.",
+          "title": "Wheel Sha256"
+        },
+        "wheel_sha256_evidence": {
+          "anyOf": [
+            {
+              "enum": [
+                "installed_record_verified",
+                "installer_archive_hash"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How ``wheel_sha256`` was established.",
+          "title": "Wheel Sha256 Evidence"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "title": "WrapperIdentity",
+      "type": "object"
+    }
+  },
+  "$id": "https://policyengine.org/schemas/execution_receipt.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Schema v1 execution receipt. See the module docstring for its rules.",
+  "properties": {
+    "baseline": {
+      "$ref": "#/$defs/ReformIdentity"
+    },
+    "certificate": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CertificateIdentity"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "certification_status": {
+      "enum": [
+        "certified",
+        "uncertified"
+      ],
+      "title": "Certification Status",
+      "type": "string"
+    },
+    "core": {
+      "$ref": "#/$defs/PackageIdentity"
+    },
+    "country_id": {
+      "enum": [
+        "uk",
+        "us"
+      ],
+      "title": "Country Id",
+      "type": "string"
+    },
+    "data": {
+      "$ref": "#/$defs/DataIdentity"
+    },
+    "fiscal_year": {
+      "$ref": "#/$defs/FiscalYearConvention"
+    },
+    "model": {
+      "$ref": "#/$defs/PackageIdentity"
+    },
+    "outputs_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "RFC 8785 SHA-256 of the canonical output payload this receipt binds.",
+      "title": "Outputs Sha256"
+    },
+    "receipt_type": {
+      "const": "policyengine.execution_receipt",
+      "title": "Receipt Type",
+      "type": "string"
+    },
+    "reform": {
+      "$ref": "#/$defs/ReformIdentity"
+    },
+    "runtime": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RuntimeContext"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema_version": {
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "wrapper": {
+      "$ref": "#/$defs/WrapperIdentity"
+    },
+    "years": {
+      "items": {
+        "type": "integer"
+      },
+      "minItems": 1,
+      "title": "Years",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "receipt_type",
+    "country_id",
+    "wrapper",
+    "model",
+    "core",
+    "data",
+    "certification_status",
+    "reform",
+    "baseline",
+    "fiscal_year",
+    "years"
+  ],
+  "title": "ExecutionReceipt",
+  "type": "object",
+  "x-policyengine-digests": {
+    "canonicalization": "RFC 8785 (JSON Canonicalization Scheme); object members whose value is null are removed before canonicalizing.",
+    "certificate.certificate_sha256": "the bundle manifest's data_releases.<country_id> record",
+    "execution_identity_sha256": "{schema_version, country_id, wrapper, model, core, data, certification_status, certificate?}",
+    "outputs_sha256": "the canonical output payload the receipt binds",
+    "receipt_sha256": "the whole receipt without runtime",
+    "reform.reform_sha256": "{representation, payload} where payload is the reform exactly as given in that representation"
+  },
+  "x-policyengine-rules": [
+    "years is sorted ascending with no duplicates.",
+    "country_id uk reports fiscal_year.convention uk_fiscal_year; us reports calendar_year.",
+    "certification_status certified requires certificate; uncertified forbids it.",
+    "certificate.country_id equals country_id.",
+    "certificate.certified_for_model_version equals model.version.",
+    "certificate.certified_dataset_sha256 equals data.dataset_sha256.",
+    "certificate.bundle_version equals wrapper.version.",
+    "reform/baseline kind current_law has no representation or reform_sha256 and binding content; kind reform has both.",
+    "wheel_sha256 and wheel_sha256_evidence are present together or not at all."
+  ]
+}

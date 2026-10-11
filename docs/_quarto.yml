@@ -54,6 +54,7 @@ website:
           - reference/index.md
           - countries.md
           - release-bundles.md
+          - receipts.md
           - data-publishing-design.md
           - examples.md
           - dev.md
