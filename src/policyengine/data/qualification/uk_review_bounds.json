@@ -69,6 +69,11 @@
       "relative": 0.05,
       "absolute": 100000000.0,
       "why": "5% or \u00a30.1bn on a reference reform costing."
+    },
+    "reform_target": {
+      "relative": 0.05,
+      "absolute": 100000000.0,
+      "why": "5% or \u00a30.1bn on a standard reform's change in its target variable."
     }
   }
 }

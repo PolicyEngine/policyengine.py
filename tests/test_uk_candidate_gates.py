@@ -1037,10 +1037,9 @@ def test_inputs_runner_agrees_with_the_gates(
     assert snapshot["supported_years"] == years["supported_years"]
 
 
-REFORMS_FIXTURE = (
-    Path(__file__).parent / "fixtures" / "uk_metrics" / "reforms_config.yaml"
+STANDARD_REFORMS_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "uk_metrics" / "standard_reforms.yaml"
 )
-REFORMS_PATH = "policyengine_uk/tests/microsimulation/reforms_config.yaml"
 
 
 def _tool_tarball(commit="c" * 40, include_partition=True, include_reforms=True):
@@ -1056,9 +1055,9 @@ def _tool_tarball(commit="c" * 40, include_partition=True, include_reforms=True)
     if include_partition:
         files[f"{prefix}/policyengine_uk/data/fiscal_partition.yaml"] = b"heads: []\n"
     if include_reforms:
-        files[f"{prefix}/policyengine_uk/tests/microsimulation/reforms_config.yaml"] = (
-            REFORMS_FIXTURE.read_bytes()
-        )
+        files[
+            f"{prefix}/policyengine_uk/utils/aggregate_impact/standard_reforms.yaml"
+        ] = STANDARD_REFORMS_FIXTURE.read_bytes()
     with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
         for name, data in files.items():
             info = tarfile.TarInfo(name)
@@ -1091,6 +1090,7 @@ def test_metrics_tool_is_vendored_from_one_commit(tmp_path):
     assert sorted(p.name for p in (root / "pe_uk_aggregate_impact").iterdir()) == [
         "__init__.py",
         "api.py",
+        "standard_reforms.yaml",
     ]
     assert (root / "fiscal_partition.yaml").read_text() == "heads: []\n"
     assert (
@@ -1125,45 +1125,12 @@ def test_metrics_report_runner_command(tmp_path):
     assert (python, flag, code) == ("/venv/bin/python", "-c", METRICS_RUNNER)
     assert _json.loads(settings)["years"] == [2026, 2027]
     assert _json.loads(settings)["run_guard"] is True
-    assert _json.loads(settings)["reforms"] == []
+    # The runner must not pass ``reforms``: the tool then costs its own
+    # standard set, whereas an empty list would cost none.
+    assert "reforms=" not in METRICS_RUNNER
 
 
-def test_metrics_report_runner_passes_only_name_and_parameters(tmp_path):
-    import json as _json
-
-    from policyengine.provenance.uk_candidate import (
-        METRICS_RUNNER,
-        load_standard_reforms,
-        run_metrics_report,
-    )
-
-    seen = {}
-
-    def run(command, check, cwd):
-        seen["settings"] = _json.loads(command[-2])
-        Path(command[-1]).write_text(_json.dumps({"status": "ok"}))
-
-    (tmp_path / "reforms_config.yaml").write_bytes(REFORMS_FIXTURE.read_bytes())
-    reforms = load_standard_reforms(tmp_path, {})
-    run_metrics_report(
-        "python",
-        tmp_path,
-        years=[2029],
-        out=tmp_path / "report.json",
-        reforms=reforms,
-        run=run,
-    )
-    assert len(seen["settings"]["reforms"]) == 8
-    assert seen["settings"]["reforms"][0] == {
-        "name": "Raise basic rate by 1pp",
-        "parameters": {"gov.hmrc.income_tax.rates.uk[0].rate": 0.21},
-    }
-    # The runner hands the tool the reforms and reports the tool's own ids.
-    assert "reforms=reforms" in METRICS_RUNNER
-    assert 'report["reform_ids"]' in METRICS_RUNNER
-
-
-def test_the_reform_list_is_vendored_with_the_tool(tmp_path):
+def test_the_standard_reforms_are_read_from_the_vendored_tool(tmp_path):
     from policyengine.provenance.uk_candidate import (
         load_standard_reforms,
         vendor_metrics_tool,
@@ -1173,48 +1140,57 @@ def test_the_reform_list_is_vendored_with_the_tool(tmp_path):
         "repository": "PolicyEngine/policyengine-uk",
         "commit": "c" * 40,
         "path": "policyengine_uk/utils/aggregate_impact",
-        "reforms_path": REFORMS_PATH,
     }
+    root = vendor_metrics_tool(
+        tool,
+        tmp_path,
+        get=lambda url, timeout=None: SimpleNamespace(
+            content=_tool_tarball(), raise_for_status=lambda: None
+        ),
+    )
+    reforms = load_standard_reforms(root, "standard_reforms.yaml")
+    assert len(reforms) == 10
+    assert reforms[0] == {
+        "id": "basic_rate_plus_1pp",
+        "name": "Raise basic rate by 1pp",
+        "variable": "income_tax",
+        "direction": "up",
+        "minimum": 1.5e9,
+    }
+    assert {reform["id"] for reform in reforms} >= {
+        "uc_standard_allowance_plus_10pc",
+        "state_pension_plus_10pc",
+    }
+    with pytest.raises(ValueError, match="ships no"):
+        load_standard_reforms(root, "missing.yaml")
 
-    def get(url, timeout=None):
-        return SimpleNamespace(content=_tool_tarball(), raise_for_status=lambda: None)
 
-    root = vendor_metrics_tool(tool, tmp_path, get=get)
-    reforms = load_standard_reforms(root, {})
-    assert [reform["name"] for reform in reforms][:2] == [
-        "Raise basic rate by 1pp",
-        "Raise higher rate by 1pp",
-    ]
-    assert len(reforms) == 8
-    missing = tmp_path / "missing"
-    with pytest.raises(ValueError, match="reforms_config.yaml"):
-        vendor_metrics_tool(
-            tool,
-            missing,
-            get=lambda url, timeout=None: SimpleNamespace(
-                content=_tool_tarball(include_reforms=False),
-                raise_for_status=lambda: None,
-            ),
-        )
+@pytest.mark.parametrize(
+    "entry",
+    [
+        {
+            "name": "No id",
+            "responds": {"variable": "x", "direction": "up", "minimum": 1},
+        },
+        {"id": "no_response", "name": "No response"},
+        {
+            "id": "bad",
+            "responds": {"variable": "x", "direction": "sideways", "minimum": 1},
+        },
+        {"id": "zero", "responds": {"variable": "x", "direction": "up", "minimum": 0}},
+    ],
+    ids=["no id", "no response", "bad direction", "zero minimum"],
+)
+def test_a_standard_reform_without_a_stated_response_is_refused(tmp_path, entry):
+    import yaml
 
-
-def test_a_standard_reform_has_one_definition(tmp_path):
     from policyengine.provenance.uk_candidate import load_standard_reforms
 
-    (tmp_path / "reforms_config.yaml").write_bytes(REFORMS_FIXTURE.read_bytes())
-    extra = {
-        "name": "Raise the State Pension by 10%",
-        "parameters": {"gov.dwp.state_pension.new_state_pension.amount": 253.3},
-        "expected_impact": -12.0,
-    }
-    reforms = load_standard_reforms(tmp_path, {"additional_reforms": [extra]})
-    assert len(reforms) == 9 and reforms[-1]["name"] == extra["name"]
-    with pytest.raises(ValueError, match="defined twice"):
-        load_standard_reforms(
-            tmp_path,
-            {"additional_reforms": [{**extra, "name": "Raise basic rate by 1pp"}]},
-        )
-    assert load_standard_reforms(None, {}) == []
+    package = tmp_path / "pe_uk_aggregate_impact"
+    package.mkdir()
+    (package / "standard_reforms.yaml").write_text(yaml.safe_dump({"reforms": [entry]}))
+    with pytest.raises(ValueError):
+        load_standard_reforms(tmp_path, "standard_reforms.yaml")
 
 
 # --- Reform responsiveness -----------------------------------------------------------
@@ -1222,147 +1198,196 @@ def test_a_standard_reform_has_one_definition(tmp_path):
 RESPONSE_YEARS = [2025, 2026, 2027, 2028, 2029, 2030, 2031]
 
 
-def _standard_reforms():
+def _standard_reforms(tmp_path_factory=None):
     import yaml
 
-    return yaml.safe_load(REFORMS_FIXTURE.read_text())["reforms"]
+    return [
+        {
+            "id": entry["id"],
+            "name": entry["name"],
+            "variable": entry["responds"]["variable"],
+            "direction": entry["responds"]["direction"],
+            "minimum": float(entry["responds"]["minimum"]),
+        }
+        for entry in yaml.safe_load(STANDARD_REFORMS_FIXTURE.read_text())["reforms"]
+    ]
 
 
-def _slug(name):
-    import re
+def _tool_check(reform, changes):
+    """The tool's responsive verdict, restated from reforms.responsiveness()."""
 
-    return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+    sign = 1.0 if reform["direction"] == "up" else -1.0
+    return bool(changes) and all(
+        sign * change >= reform["minimum"] for change in changes.values()
+    )
 
 
-def _responsive_report(scale=1.0, overrides=None, years=RESPONSE_YEARS):
-    """A report in which each reform moves the balance by scale x its expected impact."""
+def _responsive_report(scale=5.0, overrides=None, years=RESPONSE_YEARS, lie=None):
+    """A report in which each reform moves its target by scale x its minimum.
+
+    ``overrides`` replaces single values (None removes the row). The
+    ``responsive`` checks follow the tool's rule, unless ``lie`` names a
+    reform id whose check is inverted.
+    """
 
     overrides = overrides or {}
-    metrics, identities, ids = [], [], {}
+    metrics, identities = [], []
     for reform in _standard_reforms():
-        reform_id = _slug(reform["name"])
-        ids[reform["name"]] = reform_id
-        identities.append({"identity_id": f"reform_runs:{reform_id}", "status": "pass"})
+        sign = 1.0 if reform["direction"] == "up" else -1.0
+        changes = {}
         for year in years:
             value = overrides.get(
-                (reform_id, year), reform["expected_impact"] * 1e9 * scale
+                (reform["id"], year), sign * reform["minimum"] * scale
             )
             if value is not None:
+                changes[year] = value
                 metrics.append(
                     {
-                        "metric_id": f"reforms.{reform_id}",
+                        "metric_id": f"reform_targets.{reform['id']}",
                         "year": year,
                         "value": value,
-                        "kind": "reform",
+                        "kind": "reform_target",
                     }
                 )
+        finite = {y: v for y, v in changes.items() if v == v}
+        ok = len(finite) == len(years) and _tool_check(reform, finite)
+        if lie == reform["id"]:
+            ok = not ok
+        identities.append(
+            {"identity_id": f"reform_runs:{reform['id']}", "status": "pass"}
+        )
+        identities.append(
+            {
+                "identity_id": f"responsive:{reform['id']}",
+                "status": "pass" if ok else "fail",
+                "detail": "" if ok else f"expected {reform['variable']} to move",
+            }
+        )
     return {
         "status": "ok",
+        "years": list(years),
         "metrics": metrics,
         "identities": identities,
-        "reform_ids": ids,
     }
 
 
-def _responsiveness(report, reforms=None, **kwargs):
+def _responsiveness(report, reforms=None, years=RESPONSE_YEARS):
     from policyengine.provenance.uk_candidate import reform_responsiveness
 
-    kwargs.setdefault("years", RESPONSE_YEARS)
-    kwargs.setdefault("reference_year", 2029)
-    kwargs.setdefault("floor_gbp", 1e8)
-    kwargs.setdefault("min_share_of_expected", 0.25)
     return reform_responsiveness(
         report=report,
         standard_reforms=_standard_reforms() if reforms is None else reforms,
-        **kwargs,
+        years=years,
     )[0]
 
 
-def test_reforms_that_respond_as_recorded_pass():
+def test_reforms_that_all_respond_pass():
     result = _responsiveness(_responsive_report())
     assert result.status == "pass", result.summary
-    assert "All 8 standard reforms" in result.summary
+    assert "All 10 standard reforms" in result.summary
     assert "2025-26 to 2031-32" in result.summary
 
 
-UC_TAPER = "reduce_universal_credit_taper_rate_to_20"
-BASIC_RATE = "raise_basic_rate_by_1pp"
+UC_ALLOWANCE = "uc_standard_allowance_plus_10pc"
+STATE_PENSION = "state_pension_plus_10pc"
 
 
 @pytest.mark.parametrize(
-    ("overrides", "fragment"),
+    ("overrides", "reform_id"),
     [
-        (
-            {(UC_TAPER, 2027): 0.0},
-            "moved the balance by £0 in 2027-28; expected a cost",
-        ),
-        ({(UC_TAPER, 2027): -4.0e7}, "by only £-40,000,000 in 2027-28"),
-        ({(BASIC_RATE, 2026): -7.1e9}, "expected a gain"),
-        ({(BASIC_RATE, 2029): 1.0e9}, "under 25% of the expected £7.1bn"),
-        ({(BASIC_RATE, 2030): None}, "has no costing for 2030-31"),
-        ({(BASIC_RATE, 2030): float("nan")}, "has no costing for 2030-31"),
+        ({(UC_ALLOWANCE, year): 0.0 for year in RESPONSE_YEARS}, UC_ALLOWANCE),
+        ({(STATE_PENSION, year): 4.0e7 for year in RESPONSE_YEARS}, STATE_PENSION),
+        ({(UC_ALLOWANCE, 2027): 0.0}, UC_ALLOWANCE),
+        ({(STATE_PENSION, 2031): -1.3e10}, STATE_PENSION),
+        ({("basic_rate_plus_1pp", 2030): None}, "basic_rate_plus_1pp"),
+        ({("basic_rate_plus_1pp", 2030): float("nan")}, "basic_rate_plus_1pp"),
     ],
     ids=[
         "exactly zero",
         "nearly inert",
+        "one inert year",
         "wrong sign",
-        "small at reference",
         "missing",
         "nan",
     ],
 )
-def test_a_reform_that_does_not_respond_fails_qualification(overrides, fragment):
+def test_a_reform_that_does_not_respond_fails_qualification(overrides, reform_id):
     """The backtest's two modes (exactly £0, nearly inert) and their neighbours."""
 
     result = _responsiveness(_responsive_report(overrides=overrides))
     assert result.status == "fail"
-    assert fragment in result.summary, result.summary
+    assert f"({reform_id}) did not respond" in result.summary, result.summary
 
 
-def test_a_reform_that_did_not_run_fails():
+def test_a_run_that_costed_no_reforms_cannot_pass():
+    """Presence is required: an empty or partial check set is a failure."""
+
+    report = _responsive_report()
+    report["identities"] = []
+    result = _responsiveness(report)
+    assert result.status == "fail" and "did not run" in result.summary
+    report = _responsive_report()
+    report["identities"] = [
+        row
+        for row in report["identities"]
+        if row["identity_id"] != f"responsive:{STATE_PENSION}"
+    ]
+    result = _responsiveness(report)
+    assert result.status == "fail"
+    assert "no responsive check in the report" in result.summary
     report = _responsive_report()
     for row in report["identities"]:
-        if row["identity_id"] == f"reform_runs:{UC_TAPER}":
+        if row["identity_id"] == f"reform_runs:{UC_ALLOWANCE}":
             row["status"] = "fail"
-    assert "did not run to completion" in _responsiveness(report).summary
-    report = _responsive_report()
-    del report["reform_ids"]["Raise VAT standard rate by 2pp"]
-    result = _responsiveness(report)
-    assert result.status == "fail" and "was not run" in result.summary
+    assert f"({UC_ALLOWANCE}) did not run" in _responsiveness(report).summary
+
+
+def test_the_tools_verdict_is_checked_against_its_own_numbers():
+    """Differential: a pass the reform_targets values do not support is an error."""
+
+    inert = {(UC_ALLOWANCE, year): 0.0 for year in RESPONSE_YEARS}
+    lying_pass = _responsive_report(overrides=inert, lie=UC_ALLOWANCE)
+    result = _responsiveness(lying_pass)
+    assert result.status == "error"
+    assert "do not meet the minimum" in result.summary
+    lying_fail = _responsive_report(lie=STATE_PENSION)
+    assert _responsiveness(lying_fail).status == "fail"
+    short = _responsive_report(years=RESPONSE_YEARS[:-1])
+    assert _responsiveness(short).status in ("fail", "error")
 
 
 def test_responsiveness_is_never_skipped_or_guessed():
-    assert _responsiveness(None).status == "unavailable"
-    assert _responsiveness(_responsive_report(), reforms=[]).status == "unavailable"
-    assert _responsiveness(_responsive_report(), reference_year=2040).status == "error"
-    unsigned = [{**_standard_reforms()[0], "expected_impact": 0}]
-    assert _responsiveness(_responsive_report(), reforms=unsigned).status == "error"
-    assert qualification_verdict_for("reform_responsiveness", "unavailable") == (
-        "incomplete"
-    )
-    assert qualification_verdict_for("reform_responsiveness", "fail") == "rejected"
-
-
-def qualification_verdict_for(gate_id, status):
     from policyengine.provenance.qualification import (
         REQUIRED_GATES,
         GateResult,
         qualification_verdict,
     )
 
-    assert gate_id in REQUIRED_GATES
-    return qualification_verdict(
-        GateResult(
-            gate_id=name, status=status if name == gate_id else "pass", summary="x"
-        )
+    assert _responsiveness(None).status == "unavailable"
+    assert _responsiveness(_responsive_report(), reforms=[]).status == "unavailable"
+    assert "reform_responsiveness" in REQUIRED_GATES
+    for status, verdict in (("unavailable", "incomplete"), ("fail", "rejected")):
+        gates = [
+            GateResult(
+                gate_id=name,
+                status=status if name == "reform_responsiveness" else "pass",
+                summary="x",
+            )
+            for name in REQUIRED_GATES
+        ]
+        assert qualification_verdict(gates) == verdict
+    missing = [
+        GateResult(gate_id=name, status="pass", summary="x")
         for name in REQUIRED_GATES
-    )
+        if name != "reform_responsiveness"
+    ]
+    assert qualification_verdict(missing) == "incomplete"
 
 
 @settings(max_examples=100, deadline=None)
 @given(
-    low=st.floats(min_value=-2.0, max_value=3.0),
-    high=st.floats(min_value=-2.0, max_value=3.0),
+    low=st.floats(min_value=-3.0, max_value=6.0),
+    high=st.floats(min_value=-3.0, max_value=6.0),
 )
 def test_responsiveness_is_monotone_in_the_size_of_the_response(low, high):
     """Shrinking every response, or flipping its sign, never turns fail into pass."""
@@ -1372,10 +1397,15 @@ def test_responsiveness_is_monotone_in_the_size_of_the_response(low, high):
     weaker = _responsiveness(_responsive_report(scale=low)).status
     stronger = _responsiveness(_responsive_report(scale=high)).status
     assert order[weaker] <= order[stronger]
-    if low <= 0:
-        assert weaker == "fail"
-    if high >= 0.25:
-        assert stronger == "pass"
+    assert (weaker == "pass") == (low >= 1.0)
+    assert (stronger == "pass") == (high >= 1.0)
+
+
+def test_reform_checks_are_hard_in_the_metrics_review():
+    from policyengine.provenance.uk_candidate import classify_check
+
+    assert classify_check("reform_runs:basic_rate_plus_1pp") == "hard"
+    assert classify_check("responsive:state_pension_plus_10pc") == "hard"
 
 
 def test_metrics_with_nan_values_fail_rather_than_crash():

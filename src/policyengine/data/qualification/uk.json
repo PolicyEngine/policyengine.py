@@ -12,9 +12,8 @@
   "metrics": {
     "tool": {
       "repository": "PolicyEngine/policyengine-uk",
-      "commit": "073e80809141852eda42127b9e692b17e81343eb",
+      "commit": "fd944159ee27bd1a0f6a664bf537cb98d4b976ae",
       "path": "policyengine_uk/utils/aggregate_impact",
-      "reforms_path": "policyengine_uk/tests/microsimulation/reforms_config.yaml",
       "_comment": "W3's aggregate-impact tool, pinned so both pairs use the same definitions (draft policyengine-uk#2335). Move the pin to the merged commit when it lands."
     },
     "years": [2025, 2026, 2027, 2028, 2029, 2030, 2031],
@@ -31,11 +30,8 @@
     "poll_timeout_minutes": 360
   },
   "reform_responsiveness": {
-    "_comment": "Plan invariant 'Reform responsiveness' (11 Oct 2026): each standard reform must move the government balance in the expected direction by a non-trivial amount, or the candidate fails. The standard set is the metrics tool's own reform list (metrics.tool.reforms_path, whose expected impacts come from real runs on the certified pair) plus additional_reforms. A reform passes when it runs and, in every horizon year, its change in gov_balance has the sign of expected_impact and is at least floor_gbp in size (the tool's reform_gbp review threshold); in reference_year it must also be at least min_share_of_expected of |expected_impact|. The share is a proposal pending cos d1344.",
-    "reference_year": 2029,
-    "floor_gbp": 100000000,
-    "min_share_of_expected": 0.25,
-    "additional_reforms": []
+    "_comment": "Plan invariant 'Reform responsiveness' (11 Oct 2026): a reform the model silently ignores must fail qualification. The standard set, each reform's target variable, direction and yearly minimum are the metrics tool's own (standard_reforms.yaml in the pinned tool; the minimums are W3's proposals pending cos d1344). The tool costs the set by default and emits reform_runs:<id> and responsive:<id> checks. This gate requires both checks to be present and passing for every standard reform in the candidate's report, and recomputes each responsive verdict from the report's reform_targets.<id> values.",
+    "standard_reforms_file": "standard_reforms.yaml"
   },
   "promotion": {
     "automatic": false,
