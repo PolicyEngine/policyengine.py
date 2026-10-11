@@ -250,3 +250,66 @@ def test_the_april_rate_case_holds_on_the_country_routes():
     )
     failures = [row for row in report["cases"] if row["status"] in ("fail", "error")]
     assert failures == []
+
+
+# Population checks.
+
+
+def _tiny_dataset_file(tmp_path, households=5):
+    import pandas as pd
+    from policyengine_uk.data import UKSingleYearDataset
+
+    ids = list(range(1, households + 1))
+    person = pd.DataFrame(
+        {
+            "person_id": ids,
+            "person_benunit_id": ids,
+            "person_household_id": ids,
+            "age": [40] * households,
+            "employment_income": [10_000.0 * i for i in ids],
+            "person_weight": [1.0] * households,
+        }
+    )
+    benunit = pd.DataFrame({"benunit_id": ids, "benunit_weight": [1.0] * households})
+    household = pd.DataFrame(
+        {
+            "household_id": ids,
+            "household_weight": [1.0] * households,
+            "region": ["LONDON"] * households,
+            "tenure_type": ["OWNED_OUTRIGHT"] * households,
+            "council_tax": [0.0] * households,
+            "rent": [0.0] * households,
+        }
+    )
+    path = tmp_path / "tiny.h5"
+    UKSingleYearDataset(
+        person=person, benunit=benunit, household=household, fiscal_year=2025
+    ).save(str(path))
+    return str(path)
+
+
+def test_the_subsample_is_deterministic_and_keeps_whole_households(tmp_path):
+    from policyengine.tax_benefit_models.uk.budget_reform_population import subsample
+
+    path = _tiny_dataset_file(tmp_path, households=5)
+    first = subsample(path, 3, seed=7)
+    again = subsample(path, 3, seed=7)
+    kept = sorted(first.household["household_id"])
+    assert kept == sorted(again.household["household_id"])
+    assert len(kept) == 3
+    assert set(first.person["person_household_id"]) == set(kept)
+    assert set(first.benunit["benunit_id"]) == set(first.person["person_benunit_id"])
+    everything = subsample(path, 50, seed=7)
+    assert len(everything.household) == 5
+
+
+def test_population_checks_hold_on_a_tiny_dataset(tmp_path):
+    pytest.importorskip("policyengine_uk.utils.dated_reforms")
+    from policyengine.tax_benefit_models.uk.budget_reform_population import (
+        run_population_checks,
+    )
+
+    rows = run_population_checks(
+        _tiny_dataset_file(tmp_path), list(contract.COUNTRY_ROUTES), seed=0
+    )
+    assert rows and all(row["status"] == "pass" for row in rows), rows
