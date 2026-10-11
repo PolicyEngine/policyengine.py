@@ -52,7 +52,15 @@ A scenario with a module-level `simulation_modifier` needs `code_revision={"repo
 - its default arguments, which must have an exact JSON form;
 - that revision.
 
-None of these depends on where the code is checked out or which Python version runs it, so CI, a laptop and the server compute the same digest for the same code. Before binding, the function's source is recompiled and compared with the code that was imported, ignoring file names and line numbers. A file edited after import is therefore refused rather than misdescribed. Closures, lambdas, nested functions, `functools.partial`, bound methods and builtins are refused, because their behaviour depends on values the digest cannot bind. Anything that is not a `Scenario` is refused too, rather than read as current law. The digest does not cover module state changed while the process runs, such as a global reassigned after import: `code_revision` names the code, not the process.
+None of these depends on where the code is checked out or which Python version runs it, so CI, a laptop and the server compute the same digest for the same code.
+
+A digest must only name code that ran, so before binding, the module's source as read now is compiled and checked against what was imported, ignoring file names and line numbers:
+- the modifier, and every other function defined at module scope in that file, must compile to the loaded code, nested code included;
+- every module-scope name bound once to a literal, such as `RATE = 0.21`, must still hold that value.
+
+A measures file edited after import, or a literal constant reassigned while the process runs, is therefore refused rather than misdescribed. The check does not cover other module state, such as objects built at import, imported modules, class bodies and methods, or data the code reads at run time: `code_revision` names the code, not the process.
+
+Some modifiers are refused outright because their behaviour depends on values the digest cannot bind: closures, lambdas, nested functions, methods, `functools.partial` and builtins. Anything that is not a `Scenario` is refused too, rather than read as current law.
 
 To check a certificate, call `verify_certificate(receipt, bundle)` with the policyengine manifest for `certificate.bundle_version`. It rebuilds the certificate from that manifest's certification record, the same way the builder does. Then it compares every identity member: the record digest, the basis, the certified model, core and dataset digest, the certifier and the bundle version. It also checks that the receipt's whole `data` identity is the certified dataset with the certified bytes. An empty list means the bundle certifies exactly what the receipt claims, and through the receipt's own rules that pins `model.version`, `core.version` and `wrapper.version` too. `certificate_source`, `qualification_receipt_sha256`, `tro_composition_fingerprint` and wheel hashes are not determined by the bundle, so it does not check them.
 

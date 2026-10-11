@@ -383,6 +383,29 @@ FORGERIES = {
 }
 
 
+@pytest.mark.parametrize("name", sorted(FORGERIES))
+def test_each_consistent_forgery_alone_is_reported(dataset_file, name):
+    bundle = _bundle_for(dataset_file.read_bytes())
+    genuine = _build(dataset_file, bundle)
+    assert verify_certificate(_forge(genuine, **FORGERIES[name]), bundle)
+
+
+def test_a_record_from_another_policyengine_version_is_named(
+    certified_receipt, dataset_file
+):
+    bundle = _bundle_for(dataset_file.read_bytes())
+    bundle["data_releases"]["uk"]["policyengine_version"] = "0.0.0"
+    problems = verify_certificate(certified_receipt, bundle)
+    assert any("record belongs to policyengine 0.0.0" in p for p in problems)
+
+
+def test_a_certifying_bundle_must_state_its_basis(dataset_file):
+    bundle = _bundle_for(dataset_file.read_bytes())
+    del bundle["data_releases"]["uk"]["certification"]["compatibility_basis"]
+    with pytest.raises(ReceiptError, match="compatibility_basis"):
+        _build(dataset_file, bundle)
+
+
 @settings(max_examples=40, deadline=None)
 @given(
     names=st.lists(
@@ -463,6 +486,22 @@ def test_wheel_hashes_need_the_builder_to_verify_them(dataset_file, monkeypatch)
     )
     with pytest.raises(ReceiptError, match="differs"):
         _build(dataset_file, wheel_paths={"policyengine-uk": Path("uk.whl")})
+
+
+@pytest.mark.parametrize("content", [b"not a zip", None])
+def test_unreadable_wheels_raise_receipt_errors(tmp_path, content):
+    """Round-3 review R4: no ValueError or BadZipFile escapes."""
+
+    import zipfile
+
+    wheel = tmp_path / "policyengine_uk-0-py3-none-any.whl"
+    if content is not None:
+        wheel.write_bytes(content)
+    else:
+        with zipfile.ZipFile(wheel, "w") as archive:
+            archive.writestr("x.dist-info/RECORD", "a.py,,\na.py,,\n")
+    with pytest.raises(ReceiptError, match="cannot be verified"):
+        installed_package_identity("policyengine-uk", wheel_path=wheel)
 
 
 def test_installer_archive_hash_is_read_from_direct_url(monkeypatch):
@@ -934,6 +973,133 @@ def test_a_modifier_edited_after_import_is_refused(tmp_path):
             _measure_identity(module)
     finally:
         sys.modules.pop(name, None)
+
+
+HELPER_SOURCE = """
+RATE = 0.21
+LABELS = ("basic", "higher")
+
+
+def _helper(value):
+    return value * 2
+
+
+def raise_rate(simulation):
+    simulation.rate = _helper(RATE)
+    simulation.labels = list(label for label in LABELS if label)
+"""
+
+
+def _import_source(directory: Path, name: str, source: str):
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{name}.py"
+    path.write_text(source)
+    linecache.checkcache(str(path))
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module, path
+
+
+def _edit(path: Path, old: str, new: str) -> None:
+    """Edit a file so linecache sees it even when the size is unchanged."""
+
+    import os
+
+    stat = path.stat()
+    path.write_text(path.read_text().replace(old, new))
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 10**9))
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("return value * 2", "return value * 3"),  # a helper the modifier calls
+        ("RATE = 0.21", "RATE = 0.30"),  # a literal constant
+        ('LABELS = ("basic", "higher")', 'LABELS = ("basic", "additional")'),
+        ("value * 2", "value + 2"),  # an operator only: same names and constants
+        ("label for label", "label.upper() for label"),  # nested code only
+    ],
+    ids=["helper", "constant", "tuple", "operator", "nested"],
+)
+def test_module_code_that_did_not_run_is_never_named(tmp_path, old, new):
+    """Round-3 review R1: edits anywhere in the module after import are refused."""
+
+    name = "w4_receipt_measures_module"
+    try:
+        module, path = _import_source(tmp_path, name, HELPER_SOURCE)
+        _measure_identity(module)
+        _edit(path, old, new)
+        with pytest.raises(ReceiptError, match="no longer matches"):
+            _measure_identity(module)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_constant_reassigned_at_run_time_is_refused(tmp_path):
+    name = "w4_receipt_measures_runtime"
+    try:
+        module, _ = _import_source(tmp_path, name, HELPER_SOURCE)
+        _measure_identity(module)
+        module.RATE = 0.99
+        with pytest.raises(ReceiptError, match="RATE is 0.99 at run time"):
+            _measure_identity(module)
+        module.RATE = 0.21
+        _measure_identity(module)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_rebound_names_are_not_treated_as_constants(tmp_path):
+    source = (
+        HELPER_SOURCE
+        + "\nimport os\nDEBUG = False\nif os.environ.get('W4_X'):\n    DEBUG = True\n"
+    )
+    name = "w4_receipt_measures_rebound"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        module.DEBUG = True  # rebinding a non-constant is not a mismatch
+        _measure_identity(module)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_functions_defined_in_module_level_blocks_bind(tmp_path):
+    source = "import sys\nif sys.version_info >= (3,):\n    def raise_rate(simulation):\n        simulation.rate = 0.21\n"
+    name = "w4_receipt_measures_block"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert _measure_identity(module).binding == "code_revision"
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_methods_are_refused_with_a_clear_reason():
+    class Holder:
+        @staticmethod
+        def apply(simulation):
+            simulation.rate = 0.21
+
+    Holder.apply.__qualname__ = "Holder.apply"  # as if defined at module level
+    with pytest.raises(ReceiptError, match="is a method"):
+        scenario_reform_identity(
+            _scenario(simulation_modifier=Holder.apply), code_revision=REVISION
+        )
+
+
+def test_a_function_with_foreign_globals_is_refused():
+    import types
+
+    forged = types.FunctionType(
+        receipt_modifiers.raise_basic_rate.__code__, {}, "raise_basic_rate"
+    )
+    forged.__module__ = receipt_modifiers.__name__
+    forged.__qualname__ = "raise_basic_rate"
+    with pytest.raises(ReceiptError, match="does not belong to an imported module"):
+        scenario_reform_identity(
+            _scenario(simulation_modifier=forged), code_revision=REVISION
+        )
 
 
 def test_modifier_defaults_are_bound():

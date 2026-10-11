@@ -46,6 +46,7 @@ field, or changing what a digest covers, requires schema v2.
 from __future__ import annotations
 import __future__
 
+import ast
 import datetime
 import functools
 import hashlib
@@ -56,6 +57,8 @@ import operator
 import platform
 import re
 import sys
+import textwrap
+import zipfile
 from collections.abc import Mapping, Sequence
 from importlib import metadata
 from importlib.metadata import PackageNotFoundError
@@ -703,11 +706,11 @@ def _code_shape(code: CodeType) -> tuple[Any, ...]:
     )
 
 
-def _source_matches_loaded_code(source: str, code: CodeType, qualname: str) -> bool:
-    """Whether compiling ``source`` reproduces the loaded code (nested code too)."""
+def _compile_module_source(source: str, code: CodeType) -> Optional[CodeType]:
+    """``source`` compiled as a module, with the flags ``code`` was compiled with."""
 
     try:
-        module_code = compile(
+        return compile(
             source,
             code.co_filename,
             "exec",
@@ -715,13 +718,118 @@ def _source_matches_loaded_code(source: str, code: CodeType, qualname: str) -> b
             dont_inherit=True,
         )
     except SyntaxError:
+        return None
+
+
+def _top_level_code(module_code: CodeType) -> dict[str, list[CodeType]]:
+    """Code objects of the functions a module defines at module scope."""
+
+    found: dict[str, list[CodeType]] = {}
+    for const in module_code.co_consts:
+        if isinstance(const, CodeType):
+            found.setdefault(const.co_qualname, []).append(const)
+    return found
+
+
+def _source_matches_loaded_code(source: str, code: CodeType, qualname: str) -> bool:
+    """Whether compiling ``source`` reproduces the loaded code (nested code too)."""
+
+    module_code = _compile_module_source(textwrap.dedent(source), code)
+    if module_code is None:
         return False
-    compiled = [
-        const
-        for const in module_code.co_consts
-        if isinstance(const, CodeType) and const.co_qualname == qualname
-    ]
+    compiled = _top_level_code(module_code).get(qualname, [])
     return len(compiled) == 1 and _code_shape(compiled[0]) == _code_shape(code)
+
+
+def _module_scope_bindings(node: ast.AST) -> list[str]:
+    """Names a module-scope statement binds, without entering function or class bodies."""
+
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return [node.name]
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        return [(alias.asname or alias.name).split(".")[0] for alias in node.names]
+    if isinstance(node, ast.Name):
+        return [node.id] if isinstance(node.ctx, ast.Store) else []
+    if isinstance(node, ast.Lambda):
+        return []
+    names: list[str] = []
+    for child in ast.iter_child_nodes(node):
+        names.extend(_module_scope_bindings(child))
+    return names
+
+
+def _literal_assignments(tree: ast.Module) -> dict[str, Any]:
+    """Module-scope names bound exactly once: by a top-level assignment of a literal.
+
+    A name bound anywhere else at module scope (a second assignment, an
+    ``if`` block, a loop, an import) is not a constant and is not checked.
+    """
+
+    bindings: dict[str, int] = {}
+    for node in tree.body:
+        for name in _module_scope_bindings(node):
+            bindings[name] = bindings.get(name, 0) + 1
+    literals: dict[str, Any] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and all(
+            isinstance(target, ast.Name) for target in node.targets
+        ):
+            names = [target.id for target in node.targets]  # type: ignore[attr-defined]
+            value: Optional[ast.expr] = node.value
+        elif (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.value is not None
+        ):
+            names, value = [node.target.id], node.value
+        else:
+            continue
+        try:
+            literal = ast.literal_eval(value)
+        except (ValueError, TypeError, SyntaxError, MemoryError, RecursionError):
+            continue
+        for name in names:
+            if bindings.get(name) == 1:
+                literals[name] = literal
+    return literals
+
+
+def _module_differs_from_source(
+    module: Any, module_source: str, code: CodeType
+) -> Optional[str]:
+    """How the imported module differs from its source as read now, if it does.
+
+    Every function defined at module scope in that file must compile to the
+    loaded code (ignoring file and line numbers), and every module-scope name
+    bound once to a literal (``RATE = 0.21``) must still hold that value.
+    """
+
+    module_code = _compile_module_source(module_source, code)
+    if module_code is None:
+        return "its source no longer compiles"
+    compiled = _top_level_code(module_code)
+    for name, value in vars(module).items():
+        if (
+            not inspect.isfunction(value)
+            or value.__module__ != module.__name__
+            or value.__code__.co_filename != code.co_filename
+            or "." in value.__qualname__
+            or "<" in value.__qualname__
+        ):
+            continue
+        candidates = compiled.get(value.__qualname__, [])
+        if not any(
+            _code_shape(item) == _code_shape(value.__code__) for item in candidates
+        ):
+            return f"function {value.__qualname__} no longer matches it"
+    namespace = vars(module)
+    for name, literal in _literal_assignments(ast.parse(module_source)).items():
+        if name not in namespace:
+            return f"{name} is no longer defined"
+        current = namespace[name]
+        if type(current) is not type(literal) or current != literal:
+            return f"{name} is {current!r} at run time but {literal!r} in the source"
+    return None
 
 
 def _sha256_text(text: str) -> str:
@@ -734,19 +842,26 @@ def _modifier_identity(
     """What binds a module-level function's behaviour, or refuse it.
 
     The identity is the function's module and qualified name, the SHA-256 of
-    its source and of its module's source, its default arguments, and
-    ``code_revision``. None of these depends on where the code is checked out
-    or which Python runs it. The source is recompiled and compared with the
-    loaded code (ignoring file name and line numbers, recursing into nested
-    code), so a file edited after import is refused rather than misdescribed.
+    its source and of its module's source as read now, its default arguments,
+    and ``code_revision``. None of these depends on where the code is checked
+    out or which Python runs it.
 
-    Closures, lambdas, nested functions, partials, bound methods, builtins
-    and functions whose defaults have no exact JSON form are refused: their
+    The digest may only name code that ran, so the module's source is checked
+    against what was imported (ignoring file names and line numbers):
+    - the modifier, and every other function defined at module scope in that
+      file, must compile to the loaded code, nested code included;
+    - every module-scope name bound once to a literal (``RATE = 0.21``) must
+      still hold that value.
+    A file edited after import, or a literal constant reassigned at run time,
+    is refused. Not covered: other module state (objects built at import,
+    imported modules, class bodies and methods) and data read at run time;
+    ``code_revision`` names the code, not the process.
+
+    Closures, lambdas, nested functions, methods, partials, builtins and
+    functions whose defaults have no exact JSON form are refused: their
     behaviour depends on values the digest cannot bind (two
     ``Scenario.from_reform`` closures share one source but apply different
-    reforms). What the identity cannot bind is module state changed at run
-    time (a global reassigned after import); ``code_revision`` names the code,
-    not the process.
+    reforms).
     """
 
     if isinstance(modifier, functools.partial):
@@ -768,6 +883,11 @@ def _modifier_identity(
         raise ReceiptError(
             "Lambdas and nested functions cannot be bound; define it at module level."
         )
+    if "." in modifier.__qualname__:
+        raise ReceiptError(
+            f"{modifier.__qualname__} is a method, not a module-level function, so "
+            "it cannot be bound; define it at module level."
+        )
     module = sys.modules.get(modifier.__module__)
     if module is None or modifier.__globals__ is not vars(module):
         raise ReceiptError(
@@ -784,6 +904,12 @@ def _modifier_identity(
         raise ReceiptError(
             f"{modifier.__module__}.{modifier.__qualname__} no longer matches its "
             "source file (edited after import?), so it cannot be bound."
+        )
+    difference = _module_differs_from_source(module, module_source, code)
+    if difference is not None:
+        raise ReceiptError(
+            f"{modifier.__module__} no longer matches its source file: {difference} "
+            "(edited or reassigned after import?), so it cannot be bound."
         )
     try:
         defaults = (
@@ -908,9 +1034,15 @@ def installed_package_identity(
     if wheel_path is not None:
         from policyengine.provenance.wheels import verify_installed_against_wheel
 
-        evidence = verify_installed_against_wheel(
-            name, Path(wheel_path), metadata=metadata
-        )
+        try:
+            evidence = verify_installed_against_wheel(
+                name, Path(wheel_path), metadata=metadata
+            )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            raise ReceiptError(
+                f"{Path(wheel_path).name} cannot be verified against installed "
+                f"{name}: {exc}"
+            ) from exc
         if evidence["problems"]:
             raise ReceiptError(
                 f"Installed {name} differs from {Path(wheel_path).name}: "

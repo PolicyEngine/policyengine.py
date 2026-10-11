@@ -233,6 +233,23 @@ def test_any_edit_to_the_archive_fails(tmp_path_factory, edit, index, extra):
     assert verify_wheel_archive(wheel)["problems"]
 
 
+def test_a_duplicated_member_fails(tmp_path):
+    import warnings
+
+    record = [_line(path, data) for path, data in FILES.items()]
+    record.append(f"{DIST_INFO}/RECORD,,")
+    wheel = tmp_path / "w-1-py3-none-any.whl"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # zipfile warns about the duplicate
+        with zipfile.ZipFile(wheel, "w") as archive:
+            for name, data in FILES.items():
+                archive.writestr(name, data)
+            archive.writestr("policyengine_uk/system.py", b"system = object()\n")
+            archive.writestr(f"{DIST_INFO}/RECORD", "\n".join(record) + "\n")
+    problems = verify_wheel_archive(wheel)["problems"]
+    assert "policyengine_uk/system.py: the wheel holds it twice" in problems
+
+
 def test_an_untouched_archive_verifies(tmp_path):
     wheel, _, _ = build_wheel(tmp_path)
     archive = verify_wheel_archive(wheel)
