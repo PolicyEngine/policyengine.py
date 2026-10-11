@@ -183,12 +183,14 @@ def wheel_hashes(
     if problems:
         return _result("wheel_hashes", "fail", "; ".join(problems[:10]), evidence)
     counts = ", ".join(
-        f"{name} {item['files_verified']} files" for name, item in evidence.items()
+        f"{name}: {item['archive_members_verified']} wheel members, "
+        f"{item['files_verified']} installed files"
+        for name, item in evidence.items()
     )
     return _result(
         "wheel_hashes",
         "pass",
-        f"Installed files match the pinned PyPI wheels ({counts}).",
+        f"The pinned PyPI wheels match their RECORDs and the installed files ({counts}).",
         evidence,
     )
 
@@ -617,15 +619,38 @@ def _load_entrypoint(
     return function
 
 
+#: Report sections: the key that names each row, and what a row is called.
+_CONTRACT_SECTIONS = (
+    ("cases", "case_id", "case"),
+    ("properties", "property_id", "property"),
+    ("population", "check_id", "population check"),
+)
+_CONTRACT_STATUSES = ("pass", "fail", "error", "unsupported", "pending")
+
+
 def reform_contract(
     *,
     entrypoint: Optional[str],
     dataset_path: Optional[Path],
     seed: int,
     max_examples: int,
+    expected_versions: Optional[Mapping[str, str]] = None,
+    expected_dataset_sha256: Optional[str] = None,
     importer: Callable[[str], Any] = importlib.import_module,
 ) -> GateOutcome:
-    """Run the Budget reform contract (W1) and gate on its cases."""
+    """Run the Budget reform contract (W1) on every route and gate on its report.
+
+    ``fail`` when any case, sampled property or population check fails or
+    errors. ``error`` when the report cannot be trusted as a full run of this
+    candidate:
+    - a pending row lacks its ``decision_id``, or an unsupported case or
+      population check lacks its ``reason``;
+    - a sampled property did not run;
+    - population checks are missing although a dataset was given;
+    - the report names other versions, another dataset, seed or sample size
+      than requested;
+    - its own ``holds`` or ``summary`` disagrees with its rows.
+    """
 
     if not entrypoint:
         return _result(
@@ -657,40 +682,81 @@ def reform_contract(
             f"The reform contract raised {type(exc).__name__}: {exc}",
             {"entrypoint": entrypoint, "traceback": traceback.format_exc()},
         )
-    report = json.loads(json.dumps(report, default=str))
-    failures, malformed, pending, unsupported = [], [], [], []
-    for case in report.get("cases", []):
-        status = case.get("status")
-        label = f"{case.get('case_id')}@{case.get('route')}"
-        if status in ("fail", "error"):
-            failures.append(label)
-        elif status == "unsupported":
-            if not case.get("reason"):
-                malformed.append(f"{label} is unsupported without a reason")
-            unsupported.append(label)
-        elif status == "pending":
-            if not case.get("decision_id"):
-                malformed.append(f"{label} is pending without a decision_id")
-            pending.append(label)
-        elif status != "pass":
-            malformed.append(f"{label} has unknown status {status!r}")
-    for prop in report.get("properties", []):
-        if prop.get("status") not in ("pass", "pending"):
-            failures.append(f"property {prop.get('property_id')}")
+    report = json.loads(json.dumps(_json_safe(report), default=str))
+    failures: list[str] = []
+    malformed: list[str] = []
+    pending: list[str] = []
+    unsupported: list[str] = []
+    counts = dict.fromkeys(_CONTRACT_STATUSES, 0)
+    for section, key, noun in _CONTRACT_SECTIONS:
+        for row in report.get(section) or []:
+            status = row.get("status")
+            label = f"{noun} {row.get(key)}" + (
+                f"@{row['route']}" if row.get("route") else ""
+            )
+            if status in counts:
+                counts[status] += 1
+            if status in ("fail", "error"):
+                failures.append(label)
+            elif status == "pending":
+                if not row.get("decision_id"):
+                    malformed.append(f"{label} is pending without a decision_id")
+                pending.append(label)
+            elif status == "unsupported":
+                if section == "properties":
+                    malformed.append(
+                        f"{label} did not run: {row.get('reason') or 'no reason given'}"
+                    )
+                elif not row.get("reason"):
+                    malformed.append(f"{label} is unsupported without a reason")
+                unsupported.append(label)
+            elif status != "pass":
+                malformed.append(f"{label} has unknown status {status!r}")
     if not report.get("cases"):
         malformed.append("the report has no cases")
+    if dataset_path is not None and not report.get("population"):
+        malformed.append("a dataset was given but no population checks ran")
+    for field, requested in (("seed", seed), ("max_examples", max_examples)):
+        if field in report and report[field] != requested:
+            malformed.append(f"the report ran {field}={report[field]}, not {requested}")
+    reported_versions = report.get("versions") or {}
+    for package, version in (expected_versions or {}).items():
+        if reported_versions.get(package) != version:
+            malformed.append(
+                f"the report ran {package} {reported_versions.get(package)}, "
+                f"not the candidate's {version}"
+            )
+    if expected_dataset_sha256 is not None:
+        reported = (report.get("dataset") or {}).get("sha256")
+        if reported != expected_dataset_sha256:
+            malformed.append(
+                f"the report ran dataset {reported}, not the candidate's "
+                f"{expected_dataset_sha256}"
+            )
+    if "holds" in report and report["holds"] != (
+        counts["fail"] == 0 and counts["error"] == 0
+    ):
+        malformed.append("the report's holds disagrees with its rows")
+    summary = report.get("summary")
+    if (
+        isinstance(summary, Mapping)
+        and {status: summary.get(status, 0) for status in _CONTRACT_STATUSES} != counts
+    ):
+        malformed.append("the report's summary disagrees with its rows")
     details = {
         "contract_id": report.get("contract_id"),
         "contract_version": report.get("contract_version"),
         "report_sha256": evidence_sha256(report),
+        "counts": counts,
         "pending": pending,
         "unsupported": unsupported,
+        "problems": malformed,
     }
     if failures:
         return _result(
             "reform_contract",
             "fail",
-            f"{len(failures)} contract case(s) failed: {', '.join(failures[:8])}",
+            f"{len(failures)} contract row(s) failed: {', '.join(failures[:8])}",
             report,
             details,
         )
@@ -701,7 +767,8 @@ def reform_contract(
     return _result(
         "reform_contract",
         "pass",
-        f"Contract {details['contract_version']}: every case passed"
+        f"Contract {details['contract_version']}: every case, property and "
+        f"population check passed ({counts['pass']})"
         + (f"; {len(pending)} pending a methodology call" if pending else "")
         + (f"; {len(unsupported)} unsupported by design" if unsupported else "")
         + ".",
@@ -1386,6 +1453,11 @@ def run_candidate_gates(
             dataset_path=dataset(),
             seed=int(settings.get("seed", 0)),
             max_examples=int(settings.get("max_examples", 50)),
+            expected_versions={
+                pair.model.name: pair.model.version,
+                pair.core.name: pair.core.version,
+            },
+            expected_dataset_sha256=pair.data.dataset_sha256,
         )
 
     def gate_metrics() -> GateOutcome:

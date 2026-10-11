@@ -15,8 +15,10 @@ Invariants:
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
 import io
+import json
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -658,6 +660,142 @@ def test_no_contract_configured_is_unavailable():
         ].status
         == "unavailable"
     )
+
+
+CONTRACT_FIXTURES = Path(__file__).parent / "fixtures" / "uk_contract"
+CERTIFIED_SHA = "5ba399ea5ab9a6c7d4e9aaf6c623080beb34d9ad5f330f6244dbad72b8d960b6"
+STATUS_RANK = {"pass": 0, "error": 1, "fail": 2}
+
+
+def _fixture(name: str) -> dict:
+    return json.loads((CONTRACT_FIXTURES / name).read_text())
+
+
+def _recount(report: dict) -> dict:
+    """Make a hand-edited report's summary and holds match its rows again."""
+
+    summary = dict.fromkeys(("pass", "fail", "error", "unsupported", "pending"), 0)
+    for section in ("cases", "properties", "population"):
+        for row in report.get(section) or []:
+            summary[row["status"]] += 1
+    report["summary"] = summary
+    report["holds"] = summary["fail"] == 0 and summary["error"] == 0
+    return report
+
+
+def _passing_report() -> dict:
+    """W1's population run, with its cases and properties all passing."""
+
+    report = _fixture("population_pass_max_examples_0.json")
+    defects = _fixture("pinned_uk_2.125.1_defects.json")
+    report["cases"] = [
+        {**case, "status": "pass"}
+        for case in defects["cases"]
+        if case["status"] in ("pass", "fail", "error")
+    ]
+    report["properties"] = [
+        {"property_id": row["property_id"], "status": "pass", "examples_run": 20}
+        for row in report["properties"]
+    ]
+    report["max_examples"] = 20
+    return _recount(report)
+
+
+def _run_contract(report, *, versions=None, dataset_sha=CERTIFIED_SHA, **kwargs):
+    kwargs.setdefault("seed", 0)
+    kwargs.setdefault("max_examples", 20)
+    kwargs.setdefault("dataset_path", Path("enhanced_frs_2024_25.h5"))
+    return reform_contract(
+        entrypoint=ENTRY,
+        importer=_importer(report=report),
+        expected_versions=versions
+        or {"policyengine-uk": "2.126.8", "policyengine-core": "3.33.0"},
+        expected_dataset_sha256=dataset_sha,
+        **kwargs,
+    )[0]
+
+
+def test_w1_report_on_the_pinned_model_fails_on_its_defects():
+    """W1's real report on policyengine-uk 2.125.1: 66 failures and 35 errors."""
+
+    report = _fixture("pinned_uk_2.125.1_defects.json")
+    result = _run_contract(
+        report,
+        versions={"policyengine-uk": "2.125.1", "policyengine-core": "3.33.0"},
+        dataset_sha=None,
+        dataset_path=None,
+        max_examples=report["max_examples"],
+    )
+    assert result.status == "fail"
+    assert result.summary.startswith("101 contract row(s) failed")
+    assert result.details["problems"] == []
+
+
+def test_w1_population_run_alone_is_incomplete():
+    """W1's real population-only run has no cases and no sampled properties."""
+
+    result = _run_contract(
+        _fixture("population_pass_max_examples_0.json"), max_examples=0
+    )
+    assert result.status == "error"
+    problems = result.details["problems"]
+    assert "the report has no cases" in problems
+    assert any("annual_values_match_the_oracle did not run" in p for p in problems)
+
+
+def test_a_full_passing_report_passes():
+    result = _run_contract(_passing_report())
+    assert result.status == "pass", result.summary
+    assert "every case, property and population check passed" in result.summary
+
+
+REPORT_TAMPERING = {
+    "other model": lambda r: r["versions"].update({"policyengine-uk": "2.125.1"}),
+    "other core": lambda r: r["versions"].update({"policyengine-core": "3.30.0"}),
+    "other dataset": lambda r: r["dataset"].update(sha256="0" * 64),
+    "no population": lambda r: _recount({**r, "population": []}),
+    "other seed": lambda r: r.update(seed=7),
+    "fewer examples": lambda r: r.update(max_examples=5),
+    "summary": lambda r: r["summary"].update(
+        unsupported=r["summary"]["unsupported"] + 1
+    ),
+    "holds": lambda r: r.update(holds=False),
+    "pending without decision": lambda r: _recount(
+        {**r, "cases": [{**r["cases"][0], "status": "pending"}, *r["cases"][1:]]}
+    ),
+    "unsupported without reason": lambda r: _recount(
+        {
+            **r,
+            "population": [
+                {**r["population"][0], "status": "unsupported"},
+                *r["population"][1:],
+            ],
+        }
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(REPORT_TAMPERING))
+def test_a_report_that_is_not_a_full_run_of_this_candidate_is_an_error(name):
+    report = copy.deepcopy(_passing_report())
+    tampered = REPORT_TAMPERING[name](report) or report
+    assert _run_contract(tampered).status == "error"
+
+
+@settings(max_examples=40, deadline=None)
+@given(
+    data=st.data(),
+    worse=st.sampled_from(["fail", "error"]),
+    section=st.sampled_from(["cases", "properties", "population"]),
+)
+def test_a_worse_row_never_improves_the_gate(data, worse, section):
+    """Monotone: turning any row into a failure fails the gate."""
+
+    report = _passing_report()
+    index = data.draw(st.integers(0, len(report[section]) - 1))
+    report[section][index] = {**report[section][index], "status": worse}
+    result = _run_contract(_recount(report))
+    assert STATUS_RANK[result.status] >= STATUS_RANK["fail"]
 
 
 # --- Metrics review ------------------------------------------------------------------
