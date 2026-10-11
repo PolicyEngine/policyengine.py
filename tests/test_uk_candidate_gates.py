@@ -1472,6 +1472,91 @@ def test_responsiveness_is_monotone_in_the_size_of_the_response(low, high):
     assert (stronger == "pass") == (high >= 1.0)
 
 
+REAL_REPORT = (
+    Path(__file__).parent / "fixtures" / "uk_metrics" / "budget_metrics_report.json"
+)
+
+
+def _real_report():
+    return json.loads(REAL_REPORT.read_text())
+
+
+def test_the_real_report_on_the_certified_data_passes_responsiveness():
+    """W3's real report: ten reforms, each clearing its minimum in every year."""
+
+    report = _real_report()
+    result, evidence = reform_responsiveness_gate(report)
+    assert result.status == "pass", result.summary
+    assert "All 10 standard reforms" in result.summary
+    rows = {row["id"]: row for row in evidence["reforms"]}
+    uc = rows["uc_standard_allowance_plus_10pc"]["target_changes"]
+    pension = rows["state_pension_plus_10pc"]["target_changes"]
+    assert all(3.0e9 < value < 3.4e9 for value in uc.values())
+    assert all(12.3e9 < value < 14.5e9 for value in pension.values())
+
+
+def reform_responsiveness_gate(report):
+    from policyengine.provenance.uk_candidate import reform_responsiveness
+
+    return reform_responsiveness(
+        report=report, standard_reforms=_standard_reforms(), years=RESPONSE_YEARS
+    )
+
+
+@pytest.mark.parametrize("reform_id", [UC_ALLOWANCE, STATE_PENSION])
+def test_the_backtest_failures_fail_on_the_real_report(reform_id):
+    """Nikhil's backtest: UC allowance +10% returned exactly £0; State Pension +10% barely moved."""
+
+    report = _real_report()
+    for row in report["metrics"]:
+        if row["metric_id"] == f"reform_targets.{reform_id}":
+            row["value"] = 0.0 if reform_id == UC_ALLOWANCE else row["value"] * 0.01
+    # The tool's own check would say fail; a report that still says pass is an error.
+    assert reform_responsiveness_gate(report)[0].status == "error"
+    for row in report["identities"]:
+        if row["identity_id"] == f"responsive:{reform_id}":
+            row["status"] = "fail"
+            row["detail"] = "did not move"
+    result = reform_responsiveness_gate(report)[0]
+    assert result.status == "fail"
+    assert f"({reform_id}) did not respond" in result.summary
+
+
+def test_the_real_report_fits_the_metrics_review_classification():
+    """Every check that fails on main is a no-worsening check, and every
+    metric kind has a review bound, so a pair compared with itself passes."""
+
+    from policyengine.provenance.uk_candidate import classify_check
+
+    report = _real_report()
+    bounds = json.loads(
+        (
+            Path(__file__).parents[1]
+            / "src/policyengine/data/qualification/uk_review_bounds.json"
+        ).read_text()
+    )
+    failing = sorted(
+        row["identity_id"] for row in report["identities"] if row["status"] == "fail"
+    )
+    assert failing == [
+        "counted_once:statutory_maternity_pay",
+        "counted_once:statutory_sick_pay",
+        "overlap_guard:property_transaction_tax_geography",
+        "sign:vat",
+    ]
+    assert {classify_check(check_id) for check_id in failing} == {"regression"}
+    assert {row["kind"] for row in report["metrics"]} <= set(bounds["kinds"])
+    status, summary, evidence = compare_metric_reports(report, report, bounds)
+    assert status == "pass", summary
+    assert sorted(evidence["preexisting_check_failures"]) == failing
+    # The same failures against a pair that passed them are regressions.
+    clean = _real_report()
+    for row in clean["identities"]:
+        if row["status"] == "fail":
+            row["status"] = "pass"
+    assert compare_metric_reports(report, clean, bounds)[0] == "fail"
+
+
 def test_reform_checks_are_hard_in_the_metrics_review():
     from policyengine.provenance.uk_candidate import classify_check
 
