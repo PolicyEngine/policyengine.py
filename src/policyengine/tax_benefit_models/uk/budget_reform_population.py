@@ -76,8 +76,6 @@ def _h5_path(dataset_path: str, directory: str) -> str:
 
 def subsample(dataset_path: str, households: int, seed: int):
     """A deterministic subsample of a policyengine-uk dataset file."""
-    from policyengine_uk.data import UKMultiYearDataset, UKSingleYearDataset
-
     with tempfile.TemporaryDirectory() as directory:
         return _subsample(_h5_path(dataset_path, directory), households, seed)
 
