@@ -747,51 +747,55 @@ class _CountryRoute:
             reform=Reform.from_dict(representation, country_id="uk"),
         )
 
+    @staticmethod
+    def _value(simulation, request: tuple[str, str, int]) -> float:
+        kind, name, year = request
+        if kind == "parameter":
+            parameter = simulation.tax_benefit_system.parameters.get_child(name)
+            return float(parameter(f"{year}-01-01"))
+        return _total(simulation.calculate(name, year))
+
     def run(self, case: Case, representation, cache: dict) -> RouteRun:
         from policyengine_uk import Simulation
 
         years = _years(case)
         situation = _situation(case.household, years)
-        key = (self.route, json.dumps(situation, sort_keys=True, default=str))
-        if key not in cache:
-            cache[key] = Simulation(situation=situation)
-        unreformed = cache[key]
-        reformed = self.simulation(representation, situation)
-        run = RouteRun()
+        situation_key = json.dumps(situation, sort_keys=True, default=str)
+        requests: list[tuple[str, str, int]] = []
         for check in case.checks:
-            names = [check.name]
+            kind = "parameter" if check.target == "parameter" else "variable"
+            requests.append((kind, check.name, check.year))
             if check.target == "baseline_equals":
-                names.append(check.expected)
-            for name in names:
-                if check.target == "parameter":
-                    for simulation, store in (
-                        (reformed, run.reformed),
-                        (unreformed, run.unreformed),
-                    ):
-                        parameter = simulation.tax_benefit_system.parameters.get_child(
-                            name
-                        )
-                        store[("parameter", name, check.year)] = float(
-                            parameter(f"{check.year}-01-01")
-                        )
-                    continue
-                for simulation, store in (
-                    (reformed, run.reformed),
-                    (unreformed, run.unreformed),
-                ):
-                    store[("variable", name, check.year)] = _total(
-                        simulation.calculate(name, check.year)
+                requests.append(("variable", check.expected, check.year))
+        # Unreformed values are cached, not simulations, so each simulation
+        # can be released as soon as its case is done.
+        missing = [
+            request
+            for request in requests
+            if (self.route, situation_key, request) not in cache
+        ]
+        if missing:
+            unreformed = Simulation(situation=situation)
+            for request in missing:
+                cache[(self.route, situation_key, request)] = self._value(
+                    unreformed, request
+                )
+            del unreformed
+        reformed = self.simulation(representation, situation)
+        baseline = getattr(reformed, "baseline", None)
+        run = RouteRun()
+        for request in requests:
+            run.reformed[request] = self._value(reformed, request)
+            run.unreformed[request] = cache[(self.route, situation_key, request)]
+            if request[0] == "variable" and baseline is not None:
+                run.isolation.append(
+                    (
+                        request[1],
+                        request[2],
+                        self._value(baseline, request),
+                        run.unreformed[request],
                     )
-                baseline = getattr(reformed, "baseline", None)
-                if baseline is not None:
-                    run.isolation.append(
-                        (
-                            name,
-                            check.year,
-                            _total(baseline.calculate(name, check.year)),
-                            run.unreformed[("variable", name, check.year)],
-                        )
-                    )
+                )
         return run
 
 
@@ -823,7 +827,7 @@ class _WrapperHouseholdRoute:
         for year, names in by_year.items():
             names = sorted(names)
             reformed = self._call(case, year, representation, names)
-            key = (self.route, case.household, year, tuple(names))
+            key = (self.route, _household_key(case.household), year, tuple(names))
             if key not in cache:
                 cache[key] = self._call(case, year, None, names)
             unreformed = cache[key]
@@ -833,6 +837,18 @@ class _WrapperHouseholdRoute:
                     unreformed, name
                 )
         return run
+
+
+def _household_key(household: Household) -> str:
+    return json.dumps(
+        {
+            "people": list(household.people),
+            "benunit": dict(household.benunit),
+            "household": dict(household.household),
+        },
+        sort_keys=True,
+        default=str,
+    )
 
 
 def _result_total(result, name: str) -> float:
@@ -872,8 +888,20 @@ class _WrapperPolicyRoute:
         benunit = pd.DataFrame(
             [{"benunit_id": 1, "benunit_weight": 1.0, **household.benunit}]
         )
+        # A UK dataset's household table carries a region (the run fails
+        # without one) and housing costs; these are neutral defaults.
         household_frame = pd.DataFrame(
-            [{"household_id": 1, "household_weight": 1.0, **household.household}]
+            [
+                {
+                    "household_id": 1,
+                    "household_weight": 1.0,
+                    "region": "LONDON",
+                    "tenure_type": "OWNED_OUTRIGHT",
+                    "rent": 0.0,
+                    "council_tax": 0.0,
+                    **household.household,
+                }
+            ]
         )
         return PolicyEngineUKDataset(
             id=f"budget-reform-contract-{year}",
@@ -922,7 +950,12 @@ class _WrapperPolicyRoute:
             )
             dataset = self._dataset(case.household, year)
             reformed = self._run(dataset, policy, variables)
-            key = (self.route, case.household, year, tuple(sorted(names)))
+            key = (
+                self.route,
+                _household_key(case.household),
+                year,
+                tuple(sorted(names)),
+            )
             if key not in cache:
                 cache[key] = self._run(
                     self._dataset(case.household, year), None, variables
@@ -1136,7 +1169,8 @@ def evaluate_case(case: Case, route: str, cache: Optional[dict] = None) -> list[
                     route,
                     digest,
                     check=label,
-                    status=ERROR,
+                    status=PENDING if check.pending is not None else ERROR,
+                    decision_id=check.pending,
                     detail=repr(error)[:500],
                 )
             )
