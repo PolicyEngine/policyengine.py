@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "country_id": "uk",
+  "required_years": [2025, 2026, 2027, 2028, 2029, 2030],
+  "budget_horizon_years": [2026, 2027, 2028, 2029, 2030, 2031],
+  "reform_contract": {
+    "entrypoint": "policyengine.tax_benefit_models.uk.budget_reform_contract:run_budget_reform_contract",
+    "seed": 0,
+    "max_examples": 50
+  },
+  "metrics": {
+    "entrypoint": null,
+    "years": [2025, 2026, 2027, 2028, 2029, 2030],
+    "bounds": "uk_review_bounds.json"
+  },
+  "budget_inputs": {
+    "critical": "uk_budget_critical_inputs.json"
+  },
+  "replay": {
+    "repository": "PolicyEngine/policyengine-scorecard",
+    "event_type": "uk-replay-qualification-request",
+    "state_ref": "replay-state",
+    "compare_to": "latest_certified",
+    "poll_timeout_minutes": 360
+  },
+  "promotion": {
+    "automatic": false,
+    "decision": "cos d1344: automatic promotion and review bounds are methodology calls; until ruled, promotion is a reviewed PR merge."
+  }
+}

@@ -1,0 +1,145 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://github.com/PolicyEngine/policyengine-scorecard/blob/main/docs/uk_replay/schemas/qualification_request.v1.json",
+ "title": "UK fiscal-event replay qualification request, v1",
+ "description": "Sent by policyengine.py release qualification (W4) to policyengine-scorecard (W6). request_id is the SHA-256 of the RFC 8785 (JCS) bytes of the whole request; it is never a field. Additive optional fields keep v1; renamed or removed fields bump the version.",
+ "type": "object",
+ "additionalProperties": false,
+ "required": ["schema", "kind", "attempt", "candidate", "compare_to", "requested_by"],
+ "properties": {
+  "schema": {"const": "policyengine.uk-replay-qualification-request/v1"},
+  "kind": {
+   "description": "candidate: a pair not yet promoted; released_bundle: a published policyengine.py release.",
+   "enum": ["candidate", "released_bundle"]
+  },
+  "attempt": {
+   "description": "A retry of a failed request is a new request with a higher attempt.",
+   "type": "integer",
+   "minimum": 1
+  },
+  "candidate": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["policyengine", "policyengine_uk", "policyengine_core", "data", "expected_release_bundle"],
+   "properties": {
+    "policyengine": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": ["version", "source", "packaged_bundle_manifest_sha256"],
+     "properties": {
+      "version": {"$ref": "#/$defs/version"},
+      "source": {
+       "oneOf": [
+        {
+         "type": "object",
+         "additionalProperties": false,
+         "required": ["git"],
+         "properties": {
+          "git": {
+           "type": "object",
+           "additionalProperties": false,
+           "required": ["repository", "commit"],
+           "properties": {
+            "repository": {"const": "PolicyEngine/policyengine.py"},
+            "commit": {"$ref": "#/$defs/sha1"}
+           }
+          }
+         }
+        },
+        {
+         "type": "object",
+         "additionalProperties": false,
+         "required": ["pypi"],
+         "properties": {
+          "pypi": {
+           "type": "object",
+           "additionalProperties": false,
+           "required": ["wheel_sha256"],
+           "properties": {"wheel_sha256": {"$ref": "#/$defs/sha256"}}
+          }
+         }
+        }
+       ]
+      },
+      "packaged_bundle_manifest_sha256": {"$ref": "#/$defs/sha256"}
+     }
+    },
+    "policyengine_uk": {"$ref": "#/$defs/pypi_package"},
+    "policyengine_core": {"$ref": "#/$defs/pypi_package"},
+    "data": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": ["build_id", "dataset", "repo_id", "repo_type", "revision", "path", "sha256", "size_bytes", "release_manifest_sha256"],
+     "properties": {
+      "build_id": {"type": "string", "minLength": 1},
+      "dataset": {"type": "string", "minLength": 1},
+      "repo_id": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
+      "repo_type": {"enum": ["model", "dataset"]},
+      "revision": {"type": "string", "minLength": 1},
+      "path": {"type": "string", "minLength": 1, "pattern": "^[^/][^\\\\]*$"},
+      "sha256": {"$ref": "#/$defs/sha256"},
+      "size_bytes": {"type": "integer", "minimum": 1},
+      "release_manifest_sha256": {"$ref": "#/$defs/sha256"}
+     }
+    },
+    "expected_release_bundle": {
+     "description": "The exact dict(pe.uk.uk_latest.release_bundle) under packaged certification, computed with HF_TOKEN, HUGGING_FACE_TOKEN and HUGGINGFACE_HUB_TOKEN removed from the environment.",
+     "type": "object",
+     "required": ["policyengine_version", "model_version", "certified_data_build_id", "certified_data_artifact_sha256", "default_dataset_uri"],
+     "additionalProperties": {"type": ["string", "null"]},
+     "properties": {
+      "policyengine_version": {"$ref": "#/$defs/version"},
+      "model_version": {"$ref": "#/$defs/version"},
+      "certified_data_build_id": {"type": "string", "minLength": 1},
+      "certified_data_artifact_sha256": {"$ref": "#/$defs/sha256"},
+      "default_dataset_uri": {"type": "string", "pattern": "^hf://"}
+     }
+    }
+   }
+  },
+  "compare_to": {
+   "description": "latest_certified, or an explicit scorecard variant_id.",
+   "type": "string",
+   "minLength": 1
+  },
+  "requested_by": {
+   "type": "object",
+   "additionalProperties": true,
+   "required": ["repository", "workflow_run_id", "commit"],
+   "properties": {
+    "repository": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
+    "workflow_run_id": {"type": "integer", "minimum": 1},
+    "run_attempt": {"type": "integer", "minimum": 1},
+    "commit": {"$ref": "#/$defs/sha1"}
+   }
+  }
+ },
+ "allOf": [
+  {
+   "if": {"properties": {"kind": {"const": "released_bundle"}}},
+   "then": {
+    "properties": {
+     "candidate": {
+      "properties": {
+       "policyengine": {"properties": {"source": {"required": ["pypi"]}}}
+      }
+     }
+    }
+   }
+  }
+ ],
+ "$defs": {
+  "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+  "sha1": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+  "version": {"type": "string", "pattern": "^[0-9]+(\\.[0-9]+)*([a-z0-9.+-]*)$"},
+  "pypi_package": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["version", "wheel_sha256"],
+   "properties": {
+    "version": {"$ref": "#/$defs/version"},
+    "wheel_sha256": {"$ref": "#/$defs/sha256"}
+   }
+  }
+ }
+}
