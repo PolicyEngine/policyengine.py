@@ -167,7 +167,8 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
         from policyengine_uk import Microsimulation
 
         from policyengine.utils.parametric_reforms import (
-            simulation_modifier_from_parameter_values,
+            build_reform_dict,
+            merge_reform_dicts,
         )
 
         assert isinstance(simulation.dataset, PolicyEngineUKDataset)
@@ -208,23 +209,29 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
                 data_year_data=dataset.data_year_data,
             )
 
-        microsim = Microsimulation(dataset=_policyengine_uk_input(dataset))
+        policy = simulation.policy
+        dynamic = simulation.dynamic
+        reform_dict = merge_reform_dicts(
+            build_reform_dict(policy)
+            if policy and policy.simulation_modifier is None
+            else None,
+            build_reform_dict(dynamic)
+            if dynamic and dynamic.simulation_modifier is None
+            else None,
+        )
+        # Construction lets policyengine-uk reprocess dated parameter changes.
+        # It also builds an internal baseline that its formulas read through
+        # simulation.baseline. _policyengine_uk_input gives this run fresh
+        # tables, so enum encoding cannot mutate the caller's dataset.
+        microsim = Microsimulation(
+            dataset=_policyengine_uk_input(dataset), reform=reform_dict
+        )
 
-        if simulation.policy and simulation.policy.simulation_modifier is not None:
-            simulation.policy.simulation_modifier(microsim)
-        elif simulation.policy:
-            modifier = simulation_modifier_from_parameter_values(
-                simulation.policy.parameter_values
-            )
-            modifier(microsim)
+        if policy and policy.simulation_modifier is not None:
+            policy.simulation_modifier(microsim)
 
-        if simulation.dynamic and simulation.dynamic.simulation_modifier is not None:
-            simulation.dynamic.simulation_modifier(microsim)
-        elif simulation.dynamic:
-            modifier = simulation_modifier_from_parameter_values(
-                simulation.dynamic.parameter_values
-            )
-            modifier(microsim)
+        if dynamic and dynamic.simulation_modifier is not None:
+            dynamic.simulation_modifier(microsim)
 
         data = {
             "person": pd.DataFrame(),

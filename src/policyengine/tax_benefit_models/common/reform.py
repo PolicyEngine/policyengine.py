@@ -1,4 +1,4 @@
-"""Compile a simple reform dict into the format policyengine_core expects.
+"""Compile a simple reform dict into country-model inputs or parameter values.
 
 Accepted shapes for the agent-facing API:
 
@@ -9,6 +9,13 @@ Accepted shapes for the agent-facing API:
 
     # With explicit effective date(s).
     reform = {"gov.irs.deductions.salt.cap": {"2026-01-01": 0}}
+
+    # With an inclusive start and end date.
+    reform = {
+        "gov.hmrc.income_tax.rates.uk[0].rate": {
+            "2027-04-06.2028-04-05": 0.21,
+        },
+    }
 
     # Multiple parameters.
     reform = {
@@ -25,9 +32,16 @@ the top-bracket SS wage base is ``gov.ssa.payroll.cap``. If a reform
 dict uses the bracket-head path instead of ``[0].amount`` the
 ``ValueError`` will list the close match.
 
-The compiled form is ``{param_path: {period: value}}`` — exactly what
-``policyengine_us.Simulation(reform=...)`` /
-``policyengine_uk.Simulation(reform=...)`` accept at construction.
+The parameter-value compiler accepts ``YYYY-MM-DD`` as an effective date
+with no end date, or ``YYYY-MM-DD.YYYY-MM-DD`` as an inclusive interval.
+Other keys, including bare years, are rejected: policyengine-uk interprets
+a bare year as one fiscal year, while policyengine-core interprets it as
+an effective year continuing onward. Use ``2027-04-06.2028-04-05`` for one
+UK fiscal year, or ``2027-01-01`` for an effective date.
+
+The low-level :func:`compile_reform` returns ``{param_path: {period: value}}``
+without interpreting period keys. Parameter-value routes convert values
+to explicit intervals before passing them to the country model.
 
 Scalar reforms default to ``{year}-01-01`` so a caller running
 mid-year does not accidentally get a blended partial-year result.
@@ -38,6 +52,7 @@ suggestion; pass ``model_version`` to enable the check.
 from __future__ import annotations
 
 import datetime
+import re
 from collections.abc import Mapping
 from difflib import get_close_matches
 from typing import TYPE_CHECKING, Any, Optional
@@ -103,8 +118,8 @@ def _reform_dict_to_parameter_values(
     """Compile a flat reform dict into a list of ``ParameterValue`` objects.
 
     Uses :func:`compile_reform` for path validation and effective-date
-    defaulting, then materialises each ``{path: {date: value}}`` pair
-    as an open-ended ``ParameterValue`` bound to a
+    defaulting, then materialises each effective date or inclusive interval
+    as a ``ParameterValue`` bound to a
     ``Parameter(name=path, tax_benefit_model_version=model_version)``.
     """
     from policyengine.core.parameter import Parameter
@@ -117,6 +132,33 @@ def _reform_dict_to_parameter_values(
     parameter_values: list[ParameterValue] = []
     for path, date_to_value in compiled.items():
         for effective_date, value in date_to_value.items():
+            try:
+                if not re.fullmatch(
+                    r"[0-9]{4}-[0-9]{2}-[0-9]{2}"
+                    r"(?:\.[0-9]{4}-[0-9]{2}-[0-9]{2})?",
+                    effective_date,
+                ):
+                    raise ValueError("Invalid date format")
+                start, *stops = effective_date.split(".")
+                start_date = datetime.datetime.strptime(start, "%Y-%m-%d")
+                end_date = (
+                    datetime.datetime.strptime(stops[0], "%Y-%m-%d") if stops else None
+                )
+            except ValueError as exc:
+                raise ValueError(
+                    f"Invalid reform date key {effective_date!r}. Accepted formats are "
+                    "'YYYY-MM-DD' (effective date) and "
+                    "'YYYY-MM-DD.YYYY-MM-DD' (inclusive interval). Bare years are "
+                    "ambiguous: policyengine-uk's reform dict reads '2027' as fiscal "
+                    "year 2027 only, while policyengine-core's Reform.from_dict "
+                    "reads it as from 2027 on. Use '2027-04-06.2028-04-05' for one "
+                    "UK fiscal year, or '2027-01-01' for an effective date."
+                ) from exc
+            if end_date is not None and end_date < start_date:
+                raise ValueError(
+                    f"Reform interval {effective_date!r} has an end date before "
+                    "its start date."
+                )
             data_type = type(value) if isinstance(value, (int, float, bool)) else float
             parameter_values.append(
                 ParameterValue(
@@ -125,8 +167,8 @@ def _reform_dict_to_parameter_values(
                         tax_benefit_model_version=model_version,
                         data_type=data_type,
                     ),
-                    start_date=datetime.datetime.strptime(effective_date, "%Y-%m-%d"),
-                    end_date=None,
+                    start_date=start_date,
+                    end_date=end_date,
                     value=value,
                 )
             )
@@ -160,7 +202,7 @@ def compile_reform_to_policy(
     """Compile a flat reform dict into a fully-assembled ``Policy``.
 
     Accepts the same ``{param.path: value}`` /
-    ``{param.path: {date: value}}`` shape as :func:`compile_reform`,
+    ``{param.path: {date_or_interval: value}}`` shape as :func:`compile_reform`,
     but returns a ready-to-use ``Policy`` with ``ParameterValue``
     objects so ``Simulation(policy={...})`` works without hand-building
     ``Parameter`` / ``ParameterValue``.

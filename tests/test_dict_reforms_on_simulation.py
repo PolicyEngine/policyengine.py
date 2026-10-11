@@ -10,12 +10,19 @@ the tests are fast and don't need HF credentials.
 
 from __future__ import annotations
 
+import datetime
+
 import pytest
 
 pytest.importorskip("policyengine_us")
 
 import policyengine as pe
 from policyengine.core import Dynamic, Policy, Simulation
+from policyengine.tax_benefit_models.common.reform import (
+    _reform_dict_to_parameter_values,
+    compile_reform_to_dynamic,
+    compile_reform_to_policy,
+)
 
 # ``us_test_dataset`` is registered globally via ``tests/conftest.py``.
 
@@ -45,6 +52,7 @@ class TestDictPolicyCoercion:
         # Scalar reforms default the effective date to {year}-01-01.
         assert pv.start_date.year == 2026
         assert pv.start_date.month == 1
+        assert pv.end_date is None
 
     def test__dict_policy_with_effective_date__then_start_date_matches(
         self, tiny_dataset
@@ -66,6 +74,7 @@ class TestDictPolicyCoercion:
             "2026-07-01",
             "2027-01-01",
         ]
+        assert all(pv.end_date is None for pv in sim.policy.parameter_values)
 
     def test__unknown_parameter_path__raises_with_suggestion(self, tiny_dataset):
         with pytest.raises(ValueError) as exc:
@@ -81,8 +90,6 @@ class TestDictPolicyCoercion:
         assert "did you mean" in str(exc.value)
 
     def test__existing_policy_object_passes_through_unchanged(self, tiny_dataset):
-        import datetime
-
         from policyengine.core import Parameter, ParameterValue
 
         existing = Policy(
@@ -126,3 +133,75 @@ class TestDictDynamicCoercion:
         assert isinstance(sim.dynamic, Dynamic)
         assert len(sim.dynamic.parameter_values) == 1
         assert sim.dynamic.parameter_values[0].value == 2_800
+
+
+class TestReformDictDates:
+    path = "gov.irs.credits.ctc.amount.base[0].amount"
+
+    @pytest.mark.parametrize(
+        "compiler", [compile_reform_to_policy, compile_reform_to_dynamic]
+    )
+    @pytest.mark.parametrize("stop", ["2027-04-06", "2028-04-05"])
+    def test__interval__then_dates_are_preserved(self, compiler, stop):
+        reform = compiler(
+            {self.path: {f"2027-04-06.{stop}": 3_000}},
+            year=2027,
+            model_version=pe.us.model,
+        )
+        assert len(reform.parameter_values) == 1
+        pv = reform.parameter_values[0]
+        assert pv.start_date == datetime.datetime(2027, 4, 6)
+        assert pv.end_date == datetime.datetime.strptime(stop, "%Y-%m-%d")
+        assert pv.value == 3_000
+
+    def test__interval_end_before_start__raises(self):
+        with pytest.raises(ValueError, match="end date before its start date"):
+            _reform_dict_to_parameter_values(
+                {self.path: {"2028-04-06.2027-04-05": 3_000}},
+                year=2027,
+                model_version=pe.us.model,
+            )
+
+    @pytest.mark.parametrize("key", ["2027", 2027])
+    def test__bare_year__raises_with_country_semantics(self, key):
+        with pytest.raises(ValueError) as exc:
+            _reform_dict_to_parameter_values(
+                {self.path: {key: 3_000}}, year=2027, model_version=pe.us.model
+            )
+        message = str(exc.value)
+        assert "'YYYY-MM-DD'" in message
+        assert "'YYYY-MM-DD.YYYY-MM-DD'" in message
+        assert "Bare years are ambiguous" in message
+        assert "policyengine-uk's reform dict" in message
+        assert "fiscal year 2027 only" in message
+        assert "policyengine-core's Reform.from_dict" in message
+        assert "from 2027 on" in message
+        assert "'2027-04-06.2028-04-05'" in message
+        assert "'2027-01-01'" in message
+
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "2027-4-6",
+            "2027-02-29",
+            "2027-04-06.2028-02-30",
+            "2027-04-06.2028-04-05.2029-04-05",
+            "2027-04",
+            "not-a-date",
+        ],
+    )
+    def test__other_date_keys__raise_with_accepted_formats(self, key):
+        with pytest.raises(ValueError, match="Accepted formats"):
+            _reform_dict_to_parameter_values(
+                {self.path: {key: 3_000}}, year=2027, model_version=pe.us.model
+            )
+
+    @pytest.mark.parametrize("spec", [3_000, {"2027-01-01": 3_000}])
+    def test__scalar_or_effective_date__then_value_is_open_ended(self, spec):
+        values = _reform_dict_to_parameter_values(
+            {self.path: spec}, year=2027, model_version=pe.us.model
+        )
+        assert len(values) == 1
+        assert values[0].start_date == datetime.datetime(2027, 1, 1)
+        assert values[0].end_date is None
+        assert values[0].value == 3_000
