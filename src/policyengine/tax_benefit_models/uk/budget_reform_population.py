@@ -25,6 +25,8 @@ Checks:
 
 from __future__ import annotations
 
+import os
+import tempfile
 import traceback
 from collections.abc import Sequence
 from typing import Any
@@ -59,8 +61,28 @@ def _filter_year(single_year, households: np.ndarray):
     )
 
 
+def _h5_path(dataset_path: str, directory: str) -> str:
+    """The file under a name ending in .h5, which policyengine-uk requires.
+
+    A content-addressed cache stores the certified file without an
+    extension, so link it under one.
+    """
+    if dataset_path.endswith(".h5"):
+        return dataset_path
+    linked = os.path.join(directory, "dataset.h5")
+    os.symlink(os.path.abspath(dataset_path), linked)
+    return linked
+
+
 def subsample(dataset_path: str, households: int, seed: int):
     """A deterministic subsample of a policyengine-uk dataset file."""
+    from policyengine_uk.data import UKMultiYearDataset, UKSingleYearDataset
+
+    with tempfile.TemporaryDirectory() as directory:
+        return _subsample(_h5_path(dataset_path, directory), households, seed)
+
+
+def _subsample(dataset_path: str, households: int, seed: int):
     from policyengine_uk.data import UKMultiYearDataset, UKSingleYearDataset
 
     if UKMultiYearDataset.validate_file_path(dataset_path, False):

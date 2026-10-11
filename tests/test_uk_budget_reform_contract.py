@@ -327,3 +327,13 @@ def test_expected_annual_for_a_blended_change_that_started_earlier():
     assert expected_annual(ends, 2026, baseline) == pytest.approx(
         (0.20 * 207 + 0.18 * 158) / 365
     )
+
+
+def test_the_subsample_reads_a_file_without_an_h5_extension(tmp_path):
+    import shutil
+
+    from policyengine.tax_benefit_models.uk.budget_reform_population import subsample
+
+    blob = tmp_path / "6a842565bc10"
+    shutil.copy(_tiny_dataset_file(tmp_path), blob)
+    assert len(subsample(str(blob), 3, seed=7).household) == 3
