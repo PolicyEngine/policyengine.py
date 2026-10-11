@@ -156,8 +156,10 @@ def _run_population_route(monkeypatch, policy, dynamic, events):
     monkeypatch.setattr(
         parametric_reforms,
         "simulation_modifier_from_parameter_values",
-        lambda values: lambda sim: events.append(
-            ("late parameter values", [(v.parameter.name, v.value) for v in values])
+        lambda values: (
+            lambda sim: events.append(
+                ("late parameter values", [(v.parameter.name, v.value) for v in values])
+            )
         ),
     )
 
