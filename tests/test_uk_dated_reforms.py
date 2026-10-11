@@ -80,9 +80,9 @@ def test_household_april_effective_date_changes_fiscal_year_income_tax():
         reform={INCOME_TAX_RATE: {"2027-04-06": 0.21}},
     )
 
-    assert reformed.person[0].income_tax - baseline.person[0].income_tax == pytest.approx(
-        174.30, abs=0.01
-    )
+    assert reformed.person[0].income_tax - baseline.person[
+        0
+    ].income_tax == pytest.approx(174.30, abs=0.01)
 
 
 @pytest.mark.parametrize(("year", "expected_change"), [(2027, 174.30), (2028, 0.0)])
@@ -96,6 +96,6 @@ def test_household_interval_reform_expires_after_fiscal_year(year, expected_chan
         reform={INCOME_TAX_RATE: {"2027-04-06.2028-04-05": 0.21}},
     )
 
-    assert reformed.person[0].income_tax - baseline.person[0].income_tax == pytest.approx(
-        expected_change, abs=0.01
-    )
+    assert reformed.person[0].income_tax - baseline.person[
+        0
+    ].income_tax == pytest.approx(expected_change, abs=0.01)
