@@ -907,19 +907,22 @@ def _household_key(household: Household) -> str:
 
 
 def _result_total(result, name: str) -> float:
-    total = 0.0
-    found = False
-    for entity in ("person", "benunit", "household"):
-        rows = result[entity] if entity in result else []
-        if isinstance(rows, Mapping):
-            rows = [rows]
-        for row in rows:
-            if name in row:
-                total += float(row[name])
-                found = True
-    if not found:
-        raise KeyError(f"{name} is not in the household result")
-    return total
+    """The household's total of a variable, read from the variable's entity.
+
+    The household result can also carry a variable aggregated to another
+    entity (a benefit-unit award under the household too), so reading every
+    entity would count it twice.
+    """
+    from policyengine_uk.system import system
+
+    entity = system.variables[name].entity.key
+    rows = result[entity] if entity in result else []
+    if isinstance(rows, Mapping):
+        rows = [rows]
+    values = [float(row[name]) for row in rows if name in row]
+    if not values:
+        raise KeyError(f"{name} is not in the household result's {entity} rows")
+    return sum(values)
 
 
 class _WrapperPolicyRoute:

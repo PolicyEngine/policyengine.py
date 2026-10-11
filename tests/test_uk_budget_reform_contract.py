@@ -337,3 +337,21 @@ def test_the_subsample_reads_a_file_without_an_h5_extension(tmp_path):
     blob = tmp_path / "6a842565bc10"
     shutil.copy(_tiny_dataset_file(tmp_path), blob)
     assert len(subsample(str(blob), 3, seed=7).household) == 3
+
+
+def test_household_result_totals_read_each_variable_from_its_own_entity():
+    from policyengine.tax_benefit_models.uk.budget_reform_contract import (
+        _result_total,
+    )
+
+    # universal_credit is a benefit-unit variable; the household result can
+    # also carry it aggregated to the household.
+    result = {
+        "person": [{"income_tax": 100.0}, {"income_tax": 50.0}],
+        "benunit": {"universal_credit": 6_000.0},
+        "household": {"universal_credit": 6_000.0},
+    }
+    assert _result_total(result, "universal_credit") == 6_000.0
+    assert _result_total(result, "income_tax") == 150.0
+    with pytest.raises(KeyError, match="benunit"):
+        _result_total({"household": {"universal_credit": 1.0}}, "universal_credit")
