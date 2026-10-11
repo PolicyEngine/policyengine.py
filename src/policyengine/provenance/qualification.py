@@ -413,6 +413,15 @@ class RequestData(_Mirror):
     size_bytes: int = Field(ge=1)
     release_manifest_sha256: str = Field(pattern=SHA256_PATTERN)
 
+    @field_validator("path")
+    @classmethod
+    def _no_parent_segments(cls, path: str) -> str:
+        # The schema says ^(?!.*(^|/)\.\.(/|$))[^/][^\\]*$; pydantic's regex
+        # engine has no look-ahead, so the '..' rule is checked here.
+        if ".." in path.split("/"):
+            raise ValueError("data.path must not contain '..' segments.")
+        return path
+
 
 class RequestCandidate(_Mirror):
     policyengine: RequestWrapper
@@ -534,7 +543,7 @@ class Execution(_Mirror):
     release_bundle: dict[str, Optional[str]]
     dataset_sha256: str = Field(pattern=SHA256_PATTERN)
     requirements_sha256: str = Field(pattern=SHA256_PATTERN)
-    python: str = Field(pattern=r"^3\.[0-9]+\.[0-9]+")
+    python: str = Field(pattern=r"^3\.[0-9]+\.[0-9]+$")
     platform: str = Field(min_length=1)
     runner: str = Field(min_length=1)
 
@@ -686,17 +695,27 @@ class ReplayReceipt(_Mirror):
                 self.rejection is None
                 or self.corpus is not None
                 or self.diff is not None
+                or self.variant_id is not None
+                or self.variant_identity_sha256 is not None
+                or self.execution is not None
+                or self.integrity.status != "not_run"
             ):
                 raise ValueError(
-                    "A rejected receipt has a rejection and no corpus or diff."
+                    "A rejected receipt has a rejection, no variant, execution, "
+                    "corpus or diff, and integrity not_run."
                 )
         elif self.status == "complete":
             if (
                 self.rejection is not None
                 or self.variant_id is None
+                or self.variant_identity_sha256 is None
                 or self.execution is None
+                or self.results.manifest_sha256 is None
             ):
-                raise ValueError("A complete receipt has a variant and an execution.")
+                raise ValueError(
+                    "A complete receipt has a variant and its identity, an "
+                    "execution and a sealed results manifest."
+                )
         # A failed receipt can come from a step before the candidate's
         # identity was known (for example a download error).
         elif self.rejection is not None or self.integrity.status != "failed":

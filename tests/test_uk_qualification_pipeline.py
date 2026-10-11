@@ -509,6 +509,7 @@ def test_release_payload_names_the_qualification_receipt():
         "uk": {
             "pair_id": receipt.pair_id,
             "verdict": "qualified",
+            "promotable": True,
             "receipt_sha256": receipt.receipt_sha256,
         }
     }
@@ -564,3 +565,71 @@ def test_released_bundle_request_is_valid_for_the_scorecard():
     assert request.document()["candidate"]["policyengine"]["source"] == {
         "pypi": {"wheel_sha256": sha("7")}
     }
+
+
+def test_expected_release_bundle_uses_the_scorecard_certification_environment(
+    monkeypatch, tmp_path
+):
+    """W6 interface point 4: no tokens, no proxy exceptions, no network."""
+
+    from policyengine.provenance import uk_qualification
+
+    environ = {
+        "PATH": "/usr/bin",
+        "HF_TOKEN": "t",
+        "HUGGING_FACE_TOKEN": "t",
+        "HUGGINGFACE_HUB_TOKEN": "t",
+        "NO_PROXY": "huggingface.co",
+        "no_proxy": "huggingface.co",
+        "HTTPS_PROXY": "http://corporate:3128",
+    }
+    env = uk_qualification.certification_environment(environ)
+    assert env["PATH"] == "/usr/bin"
+    for name in ("HF_TOKEN", "HUGGING_FACE_TOKEN", "HUGGINGFACE_HUB_TOKEN"):
+        assert name not in env
+    assert "NO_PROXY" not in env and "no_proxy" not in env
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+        assert env[name] == env[name.lower()] == "http://127.0.0.1:9"
+    assert env["HF_HUB_OFFLINE"] == "1"
+
+    seen = {}
+
+    def run(args, *, cwd, env, check, capture_output, text):
+        seen["env"] = env
+        return type("Done", (), {"stdout": '{"policyengine_version": "6.2.6"}\n'})()
+
+    monkeypatch.setattr(uk_qualification.subprocess, "run", run)
+    monkeypatch.setattr(uk_qualification.os, "environ", environ)
+    assert uk_qualification.expected_release_bundle("python", cwd=tmp_path) == {
+        "policyengine_version": "6.2.6"
+    }
+    assert seen["env"] == env
+
+
+def test_the_certification_environment_falls_back_to_the_packaged_certificate():
+    """Executed: with the proxies, the manifest request fails and the bundled
+    certification is used (the mechanism W6's recipe relies on)."""
+
+    import os
+    import subprocess
+    import sys
+
+    from policyengine.provenance import uk_qualification
+
+    script = (
+        "import json\n"
+        "from policyengine.provenance import manifest\n"
+        "try:\n"
+        "    manifest.get_data_release_manifest('uk')\n"
+        "    print('reached')\n"
+        "except manifest.DataReleaseManifestUnavailableError:\n"
+        "    print('unavailable')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        env=uk_qualification.certification_environment(os.environ),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.stdout.strip().splitlines()[-1] == "unavailable", result.stderr

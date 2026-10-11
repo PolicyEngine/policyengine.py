@@ -82,6 +82,46 @@ CORE_PACKAGE = "policyengine-core"
 UK_DATA_REPO_ID = "policyengine/policyengine-uk-data-private"
 UK_DATA_REPO_TYPE: Literal["model"] = "model"
 TOKEN_VARIABLES = ("HF_TOKEN", "HUGGING_FACE_TOKEN", "HUGGINGFACE_HUB_TOKEN")
+#: The scorecard's certification recipe (policyengine-scorecard
+#: pipeline/uk_replay_variants.py, isolate_certification_environment), which
+#: expected_release_bundle must reproduce exactly. policyengine.py 6.x fetches
+#: the data release manifest with requests, which ignores HF_HUB_OFFLINE; with
+#: these proxies the fetch fails at once for a private or public data repo and
+#: certify_data_release_compatibility falls back to the packaged certification.
+PROXY_EXCEPTIONS = ("NO_PROXY", "no_proxy")
+OFFLINE_VARIABLES = {
+    "HF_HUB_OFFLINE": "1",
+    "HF_DATASETS_OFFLINE": "1",
+    "TRANSFORMERS_OFFLINE": "1",
+    "HF_HUB_DISABLE_TELEMETRY": "1",
+    "HF_HUB_DISABLE_IMPLICIT_TOKEN": "1",
+}
+NO_NETWORK = {
+    name: "http://127.0.0.1:9"
+    for name in (
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+    )
+}
+
+
+def certification_environment(environ: Mapping[str, str]) -> dict[str, str]:
+    """``environ`` as the scorecard isolates it before reading release_bundle."""
+
+    env = {
+        key: value
+        for key, value in environ.items()
+        if key not in TOKEN_VARIABLES and key not in PROXY_EXCEPTIONS
+    }
+    env.update(OFFLINE_VARIABLES)
+    env.update(NO_NETWORK)
+    return env
+
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 Action = Literal["qualify", "already_certified", "stale", "duplicate"]
@@ -533,13 +573,12 @@ def packaged_manifest_sha256(repo_root: Path) -> str:
 def expected_release_bundle(python: str, *, cwd: Path) -> dict[str, Optional[str]]:
     """``dict(pe.uk.uk_latest.release_bundle)`` under packaged certification.
 
-    Runs in a subprocess with every Hugging Face token removed, as the
-    scorecard does, so the bundled certification is what is reported.
+    Runs in a subprocess in the scorecard's certification environment (no
+    tokens, no network for the release-manifest request), so the bundled
+    certification is what is reported for a private or public data repo.
     """
 
-    env = {
-        key: value for key, value in os.environ.items() if key not in TOKEN_VARIABLES
-    }
+    env = certification_environment(os.environ)
     output = subprocess.run(
         [
             python,
@@ -982,6 +1021,9 @@ def release_dispatch_payload(
             "uk": {
                 "pair_id": pair_id,
                 "verdict": receipt.verdict if receipt is not None else None,
+                # needs_review pairs are promotable only with an acceptance of
+                # exactly that receipt; consumers refuse promotable=false.
+                "promotable": receipt.promotable if receipt is not None else None,
                 "receipt_sha256": receipt.receipt_sha256
                 if receipt is not None
                 else None,

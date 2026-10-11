@@ -76,14 +76,14 @@
       "repo_id": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
       "repo_type": {"enum": ["model", "dataset"]},
       "revision": {"type": "string", "minLength": 1},
-      "path": {"type": "string", "minLength": 1, "pattern": "^[^/][^\\\\]*$"},
+      "path": {"type": "string", "minLength": 1, "pattern": "^(?!.*(^|/)\\.\\.(/|$))[^/][^\\\\]*$"},
       "sha256": {"$ref": "#/$defs/sha256"},
       "size_bytes": {"type": "integer", "minimum": 1},
       "release_manifest_sha256": {"$ref": "#/$defs/sha256"}
      }
     },
     "expected_release_bundle": {
-     "description": "The exact dict(pe.uk.uk_latest.release_bundle) under packaged certification, computed with HF_TOKEN, HUGGING_FACE_TOKEN and HUGGINGFACE_HUB_TOKEN removed from the environment.",
+     "description": "The exact dict(pe.uk.uk_latest.release_bundle) under packaged certification: computed in a subprocess with HF_TOKEN, HUGGING_FACE_TOKEN, HUGGINGFACE_HUB_TOKEN, NO_PROXY and no_proxy removed and HTTP_PROXY, HTTPS_PROXY, ALL_PROXY (and their lowercase forms) set to http://127.0.0.1:9, so the wrapper's release-manifest request cannot reach the network and the packaged certification is used for a private or public data repository (pipeline/uk_replay_variants.py, isolate_certification_environment).",
      "type": "object",
      "required": ["policyengine_version", "model_version", "certified_data_build_id", "certified_data_artifact_sha256", "default_dataset_uri"],
      "additionalProperties": {"type": ["string", "null"]},

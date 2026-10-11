@@ -301,6 +301,100 @@ def test_request_mirror_and_schema_reject_the_same_requests(label, mutate):
         ReplayQualificationRequest.model_validate(raw)
 
 
+REQUEST_MUTATIONS_V1_TIGHTENED = [
+    ("parent segment", "../enhanced_frs_2024_25.h5"),
+    ("nested parent", "a/../b.h5"),
+    ("trailing parent", "a/.."),
+]
+
+
+@pytest.mark.parametrize(
+    ("label", "path"),
+    REQUEST_MUTATIONS_V1_TIGHTENED,
+    ids=[m[0] for m in REQUEST_MUTATIONS_V1_TIGHTENED],
+)
+def test_request_mirror_and_schema_refuse_parent_segments(label, path):
+    raw = copy.deepcopy(golden("qualification_request_golden"))
+    raw["candidate"]["data"]["path"] = path
+    assert not _validator("qualification_request.v1.json").is_valid(raw), label
+    with pytest.raises(ValidationError):
+        ReplayQualificationRequest.model_validate(raw)
+
+
+def test_request_mirror_and_schema_accept_dotted_names():
+    raw = copy.deepcopy(golden("qualification_request_golden"))
+    raw["candidate"]["data"]["path"] = "releases/1.58.0/..hidden.h5"
+    _validator("qualification_request.v1.json").validate(raw)
+    ReplayQualificationRequest.model_validate(raw)
+
+
+def _rejected_receipt():
+    doc = copy.deepcopy(golden("replay_receipt_golden"))
+    doc.update(
+        status="rejected",
+        rejection={"code": "artifact_hash_mismatch", "detail": "dataset bytes differ"},
+        corpus=None,
+        diff=None,
+        variant_id=None,
+        variant_identity_sha256=None,
+        execution=None,
+    )
+    doc["integrity"] = {"status": "not_run", "failures": []}
+    return _sealed(doc)
+
+
+RECEIPT_MUTATIONS = [
+    (
+        "complete without manifest",
+        "complete",
+        lambda r: r["results"].pop("manifest_sha256"),
+    ),
+    (
+        "complete without identity",
+        "complete",
+        lambda r: r.update(variant_identity_sha256=None),
+    ),
+    (
+        "unanchored python",
+        "complete",
+        lambda r: r["execution"].update(python="3.12.14+local"),
+    ),
+    ("rejected with variant", "rejected", lambda r: r.update(variant_id="pe6.2.6")),
+    (
+        "rejected with identity",
+        "rejected",
+        lambda r: r.update(variant_identity_sha256="0" * 64),
+    ),
+    (
+        "rejected with integrity",
+        "rejected",
+        lambda r: r.update(integrity={"status": "failed", "failures": []}),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("label", "base", "mutate"),
+    RECEIPT_MUTATIONS,
+    ids=[m[0] for m in RECEIPT_MUTATIONS],
+)
+def test_receipt_mirror_and_schema_reject_the_same_receipts(label, base, mutate):
+    """Differential against W6's tightened replay_receipt.v1.json (dc040de)."""
+
+    raw = (
+        copy.deepcopy(golden("replay_receipt_golden"))
+        if base == "complete"
+        else _rejected_receipt()
+    )
+    _validator("replay_receipt.v1.json").validate(raw)
+    ReplayReceipt.from_document(raw)
+    mutate(raw)
+    raw = _sealed(raw)
+    assert not _validator("replay_receipt.v1.json").is_valid(raw), label
+    with pytest.raises(ValidationError):
+        ReplayReceipt.from_document(raw)
+
+
 def test_requested_by_is_open_as_in_the_schema():
     raw = copy.deepcopy(golden("qualification_request_golden"))
     raw["requested_by"]["pair_id"] = sha("a")
@@ -422,6 +516,9 @@ def test_rejected_receipt_fails_with_its_code():
         rejection={"code": "artifact_hash_mismatch", "detail": "dataset bytes differ"},
         corpus=None,
         diff=None,
+        variant_id=None,
+        variant_identity_sha256=None,
+        execution=None,
     )
     doc["integrity"] = {"status": "not_run", "failures": []}
     gate = _gate(_sealed(doc))

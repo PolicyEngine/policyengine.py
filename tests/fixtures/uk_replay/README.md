@@ -1,7 +1,7 @@
 # UK replay interface golden fixtures
 
 Vendored unchanged from PolicyEngine/policyengine-scorecard at commit
-`7cfa3f9` (`tests/fixtures/uk_replay/`), the W6 side of the pre-promotion
+`dc040de` (`tests/fixtures/uk_replay/`), the W6 side of the pre-promotion
 replay interface. The scorecard computes digests with `rfc8785==0.1.4`;
 `tests/test_canonical_json.py` checks that
 `policyengine.provenance.canonical` produces the same bytes and digests.

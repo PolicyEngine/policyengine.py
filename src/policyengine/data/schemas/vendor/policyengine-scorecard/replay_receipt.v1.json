@@ -140,7 +140,7 @@
       },
       "python": {
        "type": "string",
-       "pattern": "^3\\.[0-9]+\\.[0-9]+"
+       "pattern": "^3\\.[0-9]+\\.[0-9]+$"
       },
       "platform": {
        "type": "string",
@@ -421,6 +421,22 @@
      },
      "diff": {
       "type": "null"
+     },
+     "variant_id": {
+      "type": "null"
+     },
+     "variant_identity_sha256": {
+      "type": "null"
+     },
+     "execution": {
+      "type": "null"
+     },
+     "integrity": {
+      "properties": {
+       "status": {
+        "const": "not_run"
+       }
+      }
      }
     }
    }
@@ -443,6 +459,14 @@
      },
      "execution": {
       "type": "object"
+     },
+     "variant_identity_sha256": {
+      "$ref": "#/$defs/sha256"
+     },
+     "results": {
+      "required": [
+       "manifest_sha256"
+      ]
      }
     }
    }
