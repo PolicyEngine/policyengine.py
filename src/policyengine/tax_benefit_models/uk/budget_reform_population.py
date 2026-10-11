@@ -21,6 +21,18 @@ Checks:
     lowers anyone's income tax in 2027.
 ``population_finite_change_expires``
     The same rate for 2027-28 only leaves 2028 identical to the baseline.
+``population_uc_standard_allowance_plus_10``
+    Every Universal Credit standard allowance 10% higher in 2027-28 raises
+    each benefit unit's standard allowance by exactly 10%, lowers no award
+    and raises total Universal Credit.
+``population_state_pension_plus_10``
+    The basic and new State Pension rates 10% higher in 2027-28 raise each
+    person's basic and new State Pension by exactly 10% and raise total
+    State Pension.
+
+The last two are responsiveness checks: a reform that reaches the parameter
+but not the award (as when an award is fixed before the reform applies)
+fails them.
 """
 
 from __future__ import annotations
@@ -39,6 +51,28 @@ YEARS = (2026, 2027, 2028)
 BASIC_RATE = "gov.hmrc.income_tax.rates.uk[0].rate"
 APRIL = {BASIC_RATE: {"2027-04-06.2100-12-31": 0.21}}
 FINITE = {BASIC_RATE: {"2027-04-06.2028-04-05": 0.21}}
+UC_STANDARD_ALLOWANCES = tuple(
+    f"gov.dwp.universal_credit.standard_allowance.amount.{claimant_type}"
+    for claimant_type in ("SINGLE_YOUNG", "SINGLE_OLD", "COUPLE_YOUNG", "COUPLE_OLD")
+)
+STATE_PENSION_RATES = (
+    "gov.dwp.state_pension.basic_state_pension.amount",
+    "gov.dwp.state_pension.new_state_pension.amount",
+)
+RESPONSE_YEAR = 2027
+
+
+def plus_ten_percent(paths: Sequence[str]) -> dict:
+    """Each parameter 10% above current law for the response year."""
+    from policyengine_uk.system import system
+
+    return {
+        path: {
+            f"{RESPONSE_YEAR}-04-06.{RESPONSE_YEAR + 1}-04-05": 1.1
+            * float(system.parameters.get_child(path)(f"{RESPONSE_YEAR}-01-01"))
+        }
+        for path in paths
+    }
 
 
 def _filter_year(single_year, households: np.ndarray):
@@ -231,6 +265,67 @@ def run_population_checks(
                     "population_finite_change_expires",
                     route,
                     "pass" if same else "fail",
+                )
+            )
+
+        def values(simulation, variable):
+            return np.asarray(
+                simulation.calculate(variable, RESPONSE_YEAR), dtype=float
+            )
+
+        unreformed = build(None, None)
+        base = {
+            variable: values(unreformed, variable)
+            for variable in (
+                "uc_standard_allowance",
+                "universal_credit",
+                "basic_state_pension",
+                "new_state_pension",
+                "state_pension",
+            )
+        }
+        for route in country:
+            simulation = build(route, plus_ten_percent(UC_STANDARD_ALLOWANCES))
+            allowance = values(simulation, "uc_standard_allowance")
+            award = values(simulation, "universal_credit")
+            scaled = bool(
+                np.allclose(allowance, 1.1 * base["uc_standard_allowance"], rtol=1e-6)
+            )
+            lower = int(np.sum(award < base["universal_credit"] - 1e-3))
+            higher = int(np.sum(award > base["universal_credit"] + 1e-3))
+            rows.append(
+                _row(
+                    "population_uc_standard_allowance_plus_10",
+                    route,
+                    "pass" if scaled and lower == 0 and higher > 0 else "fail",
+                    detail={
+                        "standard_allowance_scaled_10_percent": scaled,
+                        "awards_lower": lower,
+                        "awards_higher": higher,
+                    },
+                )
+            )
+        for route in country:
+            simulation = build(route, plus_ten_percent(STATE_PENSION_RATES))
+            scaled = all(
+                np.allclose(
+                    values(simulation, variable), 1.1 * base[variable], rtol=1e-6
+                )
+                for variable in ("basic_state_pension", "new_state_pension")
+            )
+            pension = values(simulation, "state_pension")
+            lower = int(np.sum(pension < base["state_pension"] - 1e-3))
+            higher = int(np.sum(pension > base["state_pension"] + 1e-3))
+            rows.append(
+                _row(
+                    "population_state_pension_plus_10",
+                    route,
+                    "pass" if scaled and lower == 0 and higher > 0 else "fail",
+                    detail={
+                        "basic_and_new_scaled_10_percent": bool(scaled),
+                        "pensions_lower": lower,
+                        "pensions_higher": higher,
+                    },
                 )
             )
     except Exception as error:  # noqa: BLE001 - reported, never swallowed

@@ -114,6 +114,7 @@ BASIC_RATE = "gov.hmrc.income_tax.rates.uk[0].rate"
 PERSONAL_ALLOWANCE = "gov.hmrc.income_tax.allowances.personal_allowance.amount"
 BASIC_RATE_LIMIT = "gov.hmrc.income_tax.rates.uk[1].threshold"
 UC_SINGLE_OLD = "gov.dwp.universal_credit.standard_allowance.amount.SINGLE_OLD"
+NEW_STATE_PENSION = "gov.dwp.state_pension.new_state_pension.amount"
 CGT_BASIC_RATE = "gov.hmrc.cgt.basic_rate"
 VAT_STANDARD_RATE = "gov.hmrc.vat.standard_rate"
 PROTECTED_LCWRA = "gov.dwp.universal_credit.rebalancing.protected_health_element"
@@ -478,6 +479,60 @@ CASES: tuple[Case, ...] = (
                 0.0,
                 "prior law's uprated path resumes",
             ),
+        ),
+    ),
+    Case(
+        id="uc_award_follows_the_standard_allowance",
+        title="A claimant with no income is awarded the reformed standard allowance",
+        changes=(Change(UC_SINGLE_OLD, _date("2027-04-06"), 500, _date("2028-04-05")),),
+        household=adult(0),
+        checks=(
+            Check(
+                "variable",
+                "universal_credit",
+                2027,
+                6_000.0,
+                "with no income or other elements, the award is the standard "
+                "allowance: £500 x 12",
+                0.01,
+            ),
+            Check("change", "universal_credit", 2026, 0.0, "before the change", 0.01),
+            Check(
+                "change",
+                "universal_credit",
+                2028,
+                0.0,
+                "prior law's uprated path resumes",
+                0.01,
+            ),
+        ),
+    ),
+    Case(
+        id="new_state_pension_rate",
+        title="New State Pension £280 a week for 2027-28",
+        changes=(
+            Change(NEW_STATE_PENSION, _date("2027-04-06"), 280.0, _date("2028-04-05")),
+        ),
+        household=Household(
+            people=(
+                {
+                    "age": 68,
+                    "state_pension_type": "NEW",
+                    # Above the full rate, so the person gets the full rate.
+                    "state_pension_reported": 20_000,
+                },
+            )
+        ),
+        checks=(
+            Check(
+                "variable",
+                "new_state_pension",
+                2027,
+                14_560.0,
+                "the full weekly rate x 52: £280 x 52",
+                0.01,
+            ),
+            Check("change", "new_state_pension", 2026, 0.0, "before the change", 0.01),
         ),
     ),
     Case(
