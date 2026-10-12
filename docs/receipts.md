@@ -100,6 +100,7 @@ The representation means one simulation, in the stated phase, that applies every
 - The phase has no default. The composition's phase is the one that runs, whatever phase a member scenario had on its own.
 - No two members may change the same parameter, in any form, not even to the same value. With disjoint changes the result does not depend on grouping or order. The composer must check this; `composed_reform_identity` sees only identities, so it cannot.
 - Order is part of the digest: the same members in another order give a different digest. A nested composition's members are applied as if listed in its place.
+- A baseline shared by several members (one that applies parameter changes only) appears once, at the position of the first member that shares it; being parameter changes, its position does not affect the run.
 - Each member is revalidated, so an identity edited past its rules is refused rather than dropped or hashed.
 - `current_law` members are dropped, and a composition with no remaining member is `current_law`. The binding is `code_revision` if any member's is.
 

@@ -2070,7 +2070,7 @@ def composed_reform_identity(
             binding = "code_revision"
     if not bound:
         return ReformIdentity(kind="current_law", name=name)
-    digest = content_sha256(
+    digest = _payload_sha256(
         {
             "representation": COMPOSITION_REPRESENTATION,
             "payload": {

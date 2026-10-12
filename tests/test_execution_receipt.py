@@ -946,7 +946,7 @@ def _compose(members, *, early: bool = False, name=None) -> ReformIdentity:
 def _composition_digest(early: bool, *members: ReformIdentity) -> str:
     """The published preimage, restated: phase plus ordered member identities."""
 
-    return content_sha256(
+    return canonical_sha256(
         {
             "representation": "policyengine-uk.scenario_composition/v1",
             "payload": {
@@ -1148,6 +1148,20 @@ def test_members_edited_past_their_rules_are_refused(update):
 def test_compositions_take_only_bound_identities(members):
     with pytest.raises(ReceiptError):
         _compose(members)
+
+
+def test_a_tuple_and_a_list_of_members_are_the_same_composition():
+    members = [_member(1), _member(2, code=True)]
+    assert _compose(tuple(members)) == _compose(list(members))
+
+
+@pytest.mark.parametrize("members", [[], [CURRENT_LAW], [CURRENT_LAW, CURRENT_LAW]])
+@pytest.mark.parametrize("phase", [0, 1, None, "True"])
+def test_the_phase_is_checked_even_when_nothing_changes(members, phase):
+    """Round-3 review: an invalid phase is refused before members are read."""
+
+    with pytest.raises(ReceiptError, match="applied_before_data_load"):
+        composed_reform_identity(members, applied_before_data_load=phase)
 
 
 def test_reform_identity_refuses_the_composition_representation():
