@@ -14,6 +14,7 @@ Schema v1 covers UK results and is defined by `policyengine.provenance.receipt.E
 | `reform`, `baseline` | Both are required. Each is `current_law` or a digest of the reform bound to its representation (see below). |
 | `fiscal_year` | What a year label means: year 2027 is the fiscal year from 6 April 2027 to 5 April 2028, shown as `2027-28`. v1 allows only this convention. |
 | `years` | The reported years, sorted and unique. |
+| `supported_years` | The years the installed model projects the dataset to, from the dataset's own year (policyengine-uk's `extend_single_year_dataset`, without running a formula; the same rule as the qualification `supported_years` gate). A reported year outside them is unsupported: policyengine-core fills it by carrying or uprating the latest inputs, so its results are not evidence. `unsupported_years` lists them. The certified 1.58.0 dataset projects to 2024–2030, so a 2031-32 figure on it is unsupported. |
 | `outputs_sha256` | Optional digest of the output payload the receipt binds. |
 | `runtime` | Python version, platform and CI run URL. It is for diagnosis and is part of no digest. |
 
@@ -105,6 +106,7 @@ Reform digests are never normalized across representations. The same keys can le
 Consumers that validate with the JSON Schema rather than the Python model must also check the rules listed under `x-policyengine-rules` in the schema file:
 
 - `years` is sorted with no duplicates, and each year is written as an integer (`2027`, not `2027.0`);
+- `supported_years` is sorted with no duplicates, and a year in `years` but not in `supported_years` must be shown as provisional or not at all;
 - a certificate is present exactly when the receipt is certified, and it names the receipt's country, model and core versions, dataset digest and `policyengine` version;
 - a `current_law` reform has no digest, while any other reform has both a representation and a digest;
 - a wheel digest always comes with its evidence;

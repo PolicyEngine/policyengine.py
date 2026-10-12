@@ -600,6 +600,14 @@
       "title": "Schema Version",
       "type": "integer"
     },
+    "supported_years": {
+      "description": "Years the installed model projects this dataset to, from its data year (policyengine-uk's extend_single_year_dataset, no formula run). A year in years that is not here is unsupported: policyengine-core fills it by carrying or uprating the latest inputs, so its results are not evidence and must be shown as provisional or not at all.",
+      "items": {
+        "type": "integer"
+      },
+      "title": "Supported Years",
+      "type": "array"
+    },
     "wrapper": {
       "$ref": "#/$defs/WrapperIdentity"
     },
@@ -624,7 +632,8 @@
     "reform",
     "baseline",
     "fiscal_year",
-    "years"
+    "years",
+    "supported_years"
   ],
   "title": "ExecutionReceipt",
   "type": "object",
@@ -638,6 +647,7 @@
   },
   "x-policyengine-rules": [
     "years is sorted ascending with no duplicates, and each year is written as an integer (2027, not 2027.0).",
+    "supported_years is sorted ascending with no duplicates. A year in years that is not in supported_years is unsupported: the model does not project the dataset to it, so a consumer must show its results as provisional or not at all.",
     "certification_status certified requires certificate; uncertified forbids it.",
     "certificate.country_id equals country_id.",
     "certificate.certified_for_model_version equals model.version.",

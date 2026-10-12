@@ -26,7 +26,9 @@ Rules every valid v1 receipt satisfies:
   model and core versions, the simulated dataset bytes and the running
   wrapper version; otherwise the receipt is ``uncertified``.
 - ``years`` is sorted and unique, and each reported year has the meaning
-  ``fiscal_year`` gives it.
+  ``fiscal_year`` gives it. ``supported_years`` are the years the installed
+  model projects the dataset to; a reported year outside them is
+  unsupported, and its results are provisional.
 - ``data`` names the artifact the bundle resolves for ``data.dataset``, and
   ``data.dataset_sha256`` is the hash the bundle pins for it: a receipt
   never gives an artifact's name to other bytes. A receipt built from a
@@ -154,6 +156,7 @@ ReformRepresentation = Literal[
 #: v1 rules that JSON Schema cannot express. Published in the schema file.
 CROSS_FIELD_RULES: tuple[str, ...] = (
     "years is sorted ascending with no duplicates, and each year is written as an integer (2027, not 2027.0).",
+    "supported_years is sorted ascending with no duplicates. A year in years that is not in supported_years is unsupported: the model does not project the dataset to it, so a consumer must show its results as provisional or not at all.",
     "certification_status certified requires certificate; uncertified forbids it.",
     "certificate.country_id equals country_id.",
     "certificate.certified_for_model_version equals model.version.",
@@ -421,6 +424,15 @@ class ExecutionReceipt(_Contract):
     baseline: ReformIdentity
     fiscal_year: FiscalYearConvention
     years: list[int] = Field(min_length=1)
+    supported_years: list[int] = Field(
+        description=(
+            "Years the installed model projects this dataset to, from its data "
+            "year (policyengine-uk's extend_single_year_dataset, no formula run). "
+            "A year in years that is not here is unsupported: policyengine-core "
+            "fills it by carrying or uprating the latest inputs, so its results "
+            "are not evidence and must be shown as provisional or not at all."
+        ),
+    )
     outputs_sha256: Optional[str] = Field(
         default=None,
         pattern=SHA256_PATTERN,
@@ -436,12 +448,18 @@ class ExecutionReceipt(_Contract):
             raise ValueError("schema_version must be the integer 1, not a boolean.")
         return value
 
-    @field_validator("years")
+    @field_validator("years", "supported_years")
     @classmethod
     def _sorted_unique_years(cls, years: list[int]) -> list[int]:
         if years != sorted(set(years)):
             raise ValueError("years must be sorted and unique.")
         return years
+
+    @property
+    def unsupported_years(self) -> list[int]:
+        """Reported years outside the dataset's projection (see supported_years)."""
+
+        return sorted(set(self.years) - set(self.supported_years))
 
     @model_validator(mode="after")
     def _identity_rules(self) -> ExecutionReceipt:
@@ -1375,6 +1393,31 @@ def _receipt_years(years: Any) -> list[int]:
     return sorted(result)
 
 
+@functools.lru_cache(maxsize=8)
+def _projected_years(
+    dataset_path: str, dataset_sha256: str, model_version: str
+) -> tuple[int, ...]:
+    """Years the installed policyengine-uk projects a single-year dataset to.
+
+    The same rule as the qualification ``supported_years`` gate: build the
+    multi-year dataset as ``policyengine_uk.Simulation`` does for a
+    single-year file, without running a formula, and keep the years from the
+    dataset's own year onwards. Cached by file bytes and model version.
+    """
+
+    from policyengine_uk.data.dataset_schema import UKSingleYearDataset
+    from policyengine_uk.data.economic_assumptions import extend_single_year_dataset
+    from policyengine_uk.system import system
+
+    dataset = UKSingleYearDataset(dataset_path)
+    first = int(str(dataset.time_period)[:4])
+    multi_year = extend_single_year_dataset(dataset, system.parameters)
+    years = getattr(multi_year, "years", None)
+    if years is None:
+        years = list(multi_year.datasets)
+    return tuple(sorted(int(year) for year in years if int(year) >= first))
+
+
 def _certificate_fields(
     country_id: str, record: Mapping[str, Any], bundle: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -1547,6 +1590,9 @@ def _build(
         baseline=baseline,
         fiscal_year=uk_fiscal_year_convention(),
         years=_receipt_years(years),
+        supported_years=list(
+            _projected_years(str(dataset_path), actual_sha256, model.version)
+        ),
         outputs_sha256=content_sha256(outputs) if outputs is not None else None,
         runtime=RuntimeContext(
             python_version=platform.python_version(),

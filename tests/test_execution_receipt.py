@@ -89,6 +89,24 @@ REVISION = {
 }
 
 
+#: What the certified 1.58.0 dataset projects to under policyengine-uk 2.125.1
+#: and 2.126.12 (measured with extend_single_year_dataset, 12 Oct 2026).
+PROJECTED_YEARS = tuple(range(2024, 2031))
+
+
+@pytest.fixture(autouse=True)
+def _projection(monkeypatch, request):
+    """Builder tests use a fixed projection; the real one needs the real file."""
+
+    if request.node.originalname == "test_the_certified_dataset_projects_to_2030":
+        return
+    monkeypatch.setattr(
+        receipt_module,
+        "_projected_years",
+        lambda path, sha256, model_version: PROJECTED_YEARS,
+    )
+
+
 def _bundle_for(
     dataset_bytes: bytes, *, model_version=INSTALLED_UK, core_version=INSTALLED_CORE
 ) -> dict:
@@ -1792,3 +1810,67 @@ def test_execution_identity_preimage(certified_receipt):
     }
     assert "certificate_source" not in identity["certificate"]
     assert certified_receipt.execution_identity_sha256 == canonical_sha256(identity)
+
+
+# --- Supported years ----------------------------------------------------------------
+
+
+def test_years_outside_the_projection_are_unsupported(dataset_file):
+    """A 2031-32 figure on data projected to 2030 is not evidence."""
+
+    receipt = _build(dataset_file, years=[2029, 2030, 2031])
+    assert receipt.supported_years == list(PROJECTED_YEARS)
+    assert receipt.unsupported_years == [2031]
+    assert _build(dataset_file, years=[2026, 2027]).unsupported_years == []
+
+
+def test_supported_years_are_part_of_the_receipt_digest(dataset_file, monkeypatch):
+    receipt = _build(dataset_file, years=[2026])
+    monkeypatch.setattr(
+        receipt_module,
+        "_projected_years",
+        lambda path, sha256, model_version: tuple(range(2024, 2032)),
+    )
+    longer = _build(dataset_file, years=[2026])
+    assert longer.receipt_sha256 != receipt.receipt_sha256
+    assert longer.execution_identity_sha256 == receipt.execution_identity_sha256
+
+
+@pytest.mark.parametrize(
+    "supported", [[2027, 2026], [2026, 2026], ["2026"], [2026.0], None]
+)
+def test_supported_years_must_be_sorted_unique_integers(certified_receipt, supported):
+    payload = json.loads(certified_receipt.model_dump_json())
+    if supported is None:
+        del payload["supported_years"]
+    else:
+        payload["supported_years"] = supported
+    with pytest.raises(ValidationError):
+        ExecutionReceipt.model_validate(payload)
+
+
+def test_the_projection_is_computed_once_per_file_and_model(dataset_file, monkeypatch):
+    calls = []
+
+    def projected(path, sha256, model_version):
+        calls.append((path, sha256, model_version))
+        return PROJECTED_YEARS
+
+    monkeypatch.setattr(receipt_module, "_projected_years", projected)
+    receipt = _build(dataset_file, years=[2026])
+    assert calls == [
+        (str(dataset_file), receipt.data.dataset_sha256, receipt.model.version)
+    ]
+
+
+def test_the_certified_dataset_projects_to_2030():
+    """Runs only with the certified 1.58.0 file: POLICYENGINE_UK_CERTIFIED_DATASET."""
+
+    import os
+
+    path = os.environ.get("POLICYENGINE_UK_CERTIFIED_DATASET")
+    if not path:
+        pytest.skip("set POLICYENGINE_UK_CERTIFIED_DATASET to the 1.58.0 file")
+    sha256 = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    years = receipt_module._projected_years(path, sha256, INSTALLED_UK)
+    assert years == PROJECTED_YEARS
