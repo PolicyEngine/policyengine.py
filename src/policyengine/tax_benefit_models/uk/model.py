@@ -214,24 +214,22 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
         dynamic = simulation.dynamic
         policy_modifier = policy.simulation_modifier if policy else None
         dynamic_modifier = dynamic.simulation_modifier if dynamic else None
+        # Each object's parameter values come before its modifier, and the
+        # policy before the dynamic: policy values, policy modifier, dynamic
+        # values, dynamic modifier. A modifier never replaces its object's
+        # parameter values (a Policy or Dynamic sum can carry both).
         # Parameter values reach policyengine-uk as a reform dict at
         # construction, which writes them onto the statutory timeline and
-        # reprocesses the parameters. Policy comes before dynamic, as it
-        # always has: a parametric dynamic joins the construction reform
-        # (merge_reform_dicts puts its values last, so they win) unless a
-        # custom policy modifier must run before it; then it is applied after
-        # that modifier, to the annualised parameters, as before.
-        reform_dict = (
-            build_reform_dict(policy) if policy and policy_modifier is None else None
-        )
-        late_dynamic = None
-        if dynamic and dynamic_modifier is None:
-            if policy_modifier is None:
-                reform_dict = merge_reform_dicts(
-                    reform_dict, build_reform_dict(dynamic)
-                )
-            else:
-                late_dynamic = dynamic
+        # reprocesses the parameters. The dynamic's values join that reform
+        # (merge_reform_dicts puts them last, so they win) unless a policy
+        # modifier must run before them; then they are applied after that
+        # modifier, to the annualised parameters, as before.
+        reform_dict = build_reform_dict(policy)
+        late_dynamic_values = None
+        if policy_modifier is None:
+            reform_dict = merge_reform_dicts(reform_dict, build_reform_dict(dynamic))
+        elif dynamic is not None and dynamic.parameter_values:
+            late_dynamic_values = dynamic.parameter_values
         # policyengine-uk also builds an internal baseline from the same
         # input, which its formulas read through simulation.baseline.
         # _policyengine_uk_input gives this run fresh tables, so enum
@@ -243,12 +241,11 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
         if policy_modifier is not None:
             policy_modifier(microsim)
 
+        if late_dynamic_values is not None:
+            simulation_modifier_from_parameter_values(late_dynamic_values)(microsim)
+
         if dynamic_modifier is not None:
             dynamic_modifier(microsim)
-        elif late_dynamic is not None and late_dynamic.parameter_values:
-            simulation_modifier_from_parameter_values(late_dynamic.parameter_values)(
-                microsim
-            )
 
         data = {
             "person": pd.DataFrame(),

@@ -231,6 +231,43 @@ def _run_population_route(monkeypatch, policy, dynamic, events):
             "custom",
             [("construct", None), "policy modifier", "dynamic modifier"],
         ),
+        # A modifier never replaces its object's parameter values (#572: a
+        # Policy or Dynamic sum carrying both lost its values).
+        (
+            "both",
+            "none",
+            [
+                ("construct", {INCOME_TAX_RATE: {"2027-04-06.2100-12-31": 0.21}}),
+                "policy modifier",
+            ],
+        ),
+        (
+            "both",
+            "parametric",
+            [
+                ("construct", {INCOME_TAX_RATE: {"2027-04-06.2100-12-31": 0.21}}),
+                "policy modifier",
+                ("late parameter values", [(INCOME_TAX_RATE, 0.30)]),
+            ],
+        ),
+        (
+            "parametric",
+            "both",
+            [
+                ("construct", {INCOME_TAX_RATE: {"2027-04-06.2100-12-31": 0.30}}),
+                "dynamic modifier",
+            ],
+        ),
+        (
+            "both",
+            "both",
+            [
+                ("construct", {INCOME_TAX_RATE: {"2027-04-06.2100-12-31": 0.21}}),
+                "policy modifier",
+                ("late parameter values", [(INCOME_TAX_RATE, 0.30)]),
+                "dynamic modifier",
+            ],
+        ),
     ],
 )
 def test_population_route_applies_policy_before_dynamic(
@@ -244,9 +281,12 @@ def test_population_route_applies_policy_before_dynamic(
     events = []
 
     def make(cls, kind, value, name):
+        if kind == "none":
+            return None
+        modifier = cls(name=name, simulation_modifier=lambda sim: events.append(name))
         if kind == "custom":
-            return cls(name=name, simulation_modifier=lambda sim: events.append(name))
-        return cls(
+            return modifier
+        parametric = cls(
             name=name,
             parameter_values=_reform_dict_to_parameter_values(
                 {INCOME_TAX_RATE: {"2027-04-06": value}},
@@ -254,6 +294,7 @@ def test_population_route_applies_policy_before_dynamic(
                 model_version=pe.uk.model,
             ),
         )
+        return parametric + modifier if kind == "both" else parametric
 
     _run_population_route(
         monkeypatch,
