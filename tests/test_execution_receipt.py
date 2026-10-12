@@ -939,7 +939,32 @@ def _member(index: int, *, code: bool = False, name=None) -> ReformIdentity:
     )
 
 
-def test_composition_digest_is_its_ordered_member_identities():
+def _compose(members, *, early: bool = False, name=None) -> ReformIdentity:
+    return composed_reform_identity(members, applied_before_data_load=early, name=name)
+
+
+def _composition_digest(early: bool, *members: ReformIdentity) -> str:
+    """The published preimage, restated: phase plus ordered member identities."""
+
+    return content_sha256(
+        {
+            "representation": "policyengine-uk.scenario_composition/v1",
+            "payload": {
+                "applied_before_data_load": early,
+                "members": [
+                    {
+                        "representation": member.representation,
+                        "reform_sha256": member.reform_sha256,
+                        "binding": member.binding,
+                    }
+                    for member in members
+                ],
+            },
+        }
+    )
+
+
+def test_composition_digest_is_its_phase_and_ordered_member_identities():
     basic = reform_identity(
         {"gov.hmrc.income_tax.rates.uk[0].rate": {"2027-04-06": 0.21}},
         "policyengine-uk.reform_dict/v1",
@@ -950,34 +975,32 @@ def test_composition_digest_is_its_ordered_member_identities():
         code_revision=REVISION,
         name="higher rate",
     )
-    package = composed_reform_identity([basic, structural], name="Budget package")
+    package = _compose([basic, structural], name="Budget package")
     assert package.representation == "policyengine-uk.scenario_composition/v1"
     assert package.binding == "code_revision"
     assert package.name == "Budget package"
-    assert package.reform_sha256 == content_sha256(
-        {
-            "representation": "policyengine-uk.scenario_composition/v1",
-            "payload": {
-                "members": [
-                    {
-                        "representation": "policyengine-uk.reform_dict/v1",
-                        "reform_sha256": basic.reform_sha256,
-                        "binding": "content",
-                    },
-                    {
-                        "representation": "policyengine-uk.scenario/v1",
-                        "reform_sha256": structural.reform_sha256,
-                        "binding": "code_revision",
-                    },
-                ]
-            },
-        }
-    )
-    assert composed_reform_identity([basic]).binding == "content"
-    assert composed_reform_identity([basic]).reform_sha256 != basic.reform_sha256
-    nested = composed_reform_identity([package, basic])
+    assert package.reform_sha256 == _composition_digest(False, basic, structural)
+    assert _compose([basic]).binding == "content"
+    assert _compose([basic]).reform_sha256 == _composition_digest(False, basic)
+    assert _compose([basic]).reform_sha256 != basic.reform_sha256
+    nested = _compose([package, basic], early=True)
     assert nested.binding == "code_revision"
-    assert nested.reform_sha256 != package.reform_sha256
+    assert nested.reform_sha256 == _composition_digest(True, package, basic)
+
+
+def test_the_phase_the_combined_scenario_runs_in_is_bound():
+    """#579 review: Scenario.__add__ resets the phase, so it must be stated."""
+
+    members = [_member(1), _member(2)]
+    early = _compose(members, early=True)
+    late = _compose(members, early=False)
+    assert early.reform_sha256 != late.reform_sha256
+    assert early.reform_sha256 == _composition_digest(True, *members)
+    with pytest.raises(TypeError):
+        composed_reform_identity(members)  # the phase has no default
+    for phase in (0, 1, None, "False"):
+        with pytest.raises(ReceiptError, match="applied_before_data_load"):
+            composed_reform_identity(members, applied_before_data_load=phase)
 
 
 @settings(max_examples=100, deadline=None)
@@ -987,12 +1010,14 @@ def test_composition_digest_is_its_ordered_member_identities():
     random=st.randoms(),
     gaps=st.lists(st.integers(0, 6), max_size=4),
     labels=st.lists(st.text(max_size=5), min_size=6, max_size=6),
+    early=st.booleans(),
 )
 def test_composition_order_matters_and_current_law_and_labels_do_not(
-    indices, code, random, gaps, labels
+    indices, code, random, gaps, labels, early
 ):
     members = [_member(i, code=code[n]) for n, i in enumerate(indices)]
-    composed = composed_reform_identity(members)
+    composed = _compose(members, early=early)
+    assert composed.reform_sha256 == _composition_digest(early, *members)
     assert composed.binding == (
         "code_revision" if any(code[: len(members)]) else "content"
     )
@@ -1000,31 +1025,94 @@ def test_composition_order_matters_and_current_law_and_labels_do_not(
     random.shuffle(shuffled)
     same_order = shuffled == members
     assert (
-        composed_reform_identity(shuffled).reform_sha256 == composed.reform_sha256
+        _compose(shuffled, early=early).reform_sha256 == composed.reform_sha256
     ) == same_order
     padded = list(members)
     for gap in gaps:
-        padded.insert(min(gap, len(padded)), CURRENT_LAW)
-    assert composed_reform_identity(padded).reform_sha256 == composed.reform_sha256
+        padded.insert(
+            min(gap, len(padded)),
+            ReformIdentity(kind="current_law", name=labels[gap % 6] or None),
+        )
+    assert _compose(padded, early=early).reform_sha256 == composed.reform_sha256
     relabelled = [
         member.model_copy(update={"name": labels[n] or None})
         for n, member in enumerate(members)
     ]
     assert (
-        composed_reform_identity(relabelled, name="x").reform_sha256
+        _compose(relabelled, early=early, name="x").reform_sha256
         == composed.reform_sha256
     )
     # Dropping or duplicating a member changes what ran, so it changes the digest.
-    assert composed_reform_identity(members[1:]).reform_sha256 != composed.reform_sha256
+    assert _compose(members[1:], early=early).reform_sha256 != composed.reform_sha256
     assert (
-        composed_reform_identity([*members, members[0]]).reform_sha256
+        _compose([*members, members[0]], early=early).reform_sha256
         != composed.reform_sha256
     )
 
 
-def test_a_composition_of_nothing_is_current_law():
-    assert composed_reform_identity([]).kind == "current_law"
-    assert composed_reform_identity([CURRENT_LAW, CURRENT_LAW]).kind == "current_law"
+@settings(max_examples=50, deadline=None)
+@given(
+    indices=st.lists(st.integers(1, 50), min_size=1, max_size=5, unique=True),
+    position=st.integers(0, 4),
+    change=st.sampled_from(["digest", "representation", "binding"]),
+)
+def test_changing_any_one_member_changes_the_composition(indices, position, change):
+    """A nested identity's every bound member reaches the composition digest."""
+
+    members = [_member(i) for i in indices]
+    inner = _compose(members)
+    target = position % len(members)
+    edited = list(members)
+    if change == "digest":
+        edited[target] = _member(indices[target] + 100)
+    elif change == "representation":
+        edited[target] = edited[target].model_copy(
+            update={"representation": "policyengine-uk.reform_dict/v1"}
+        )
+    else:
+        edited[target] = _member(indices[target], code=True)
+    assert _compose(edited).reform_sha256 != inner.reform_sha256
+    # The same holds one level down, through a nested composition.
+    assert (
+        _compose([_compose(edited), _member(99)]).reform_sha256
+        != _compose([inner, _member(99)]).reform_sha256
+    )
+
+
+def test_a_composition_of_nothing_is_current_law_with_its_own_name():
+    named = ReformIdentity(kind="current_law", name="no change")
+    assert _compose([]).kind == "current_law"
+    assert _compose([CURRENT_LAW, named]) == ReformIdentity(kind="current_law")
+    assert _compose([named], name="package") == ReformIdentity(
+        kind="current_law", name="package"
+    )
+    assert (
+        _compose([named, _member(1)]).reform_sha256
+        == _compose([_member(1)]).reform_sha256
+    )
+
+
+@pytest.mark.parametrize(
+    "update",
+    [
+        {"kind": "current_law"},  # a reform's digest kept under current law
+        {"reform_sha256": "XYZ"},
+        {"reform_sha256": None},
+        {"representation": "not-a-representation"},
+        {"binding": "anything"},
+    ],
+    ids=["kind", "digest", "no-digest", "representation", "binding"],
+)
+def test_members_edited_past_their_rules_are_refused(update):
+    """#579 review: an invalid member is refused, never dropped or hashed."""
+
+    real = reform_identity(
+        {"gov.hmrc.income_tax.rates.uk[0].rate": {"2027-04-06": 0.21}},
+        "policyengine-uk.reform_dict/v1",
+    )
+    forged = real.model_copy(update=update)
+    with pytest.raises(ReceiptError, match="Member 1 is not a valid identity"):
+        _compose([_member(1), forged])
 
 
 @pytest.mark.parametrize(
@@ -1041,7 +1129,7 @@ def test_a_composition_of_nothing_is_current_law():
 )
 def test_compositions_take_only_bound_identities(members):
     with pytest.raises(ReceiptError):
-        composed_reform_identity(members)
+        _compose(members)
 
 
 def test_reform_identity_refuses_the_composition_representation():
@@ -1050,14 +1138,11 @@ def test_reform_identity_refuses_the_composition_representation():
 
 
 def test_a_composed_reform_makes_a_valid_receipt(dataset_file, schema_validator):
-    package = composed_reform_identity([_member(1), _member(2, code=True)])
+    package = _compose([_member(1), _member(2, code=True)])
     receipt = _build(dataset_file, reform=package)
     schema_validator.validate(json.loads(receipt.model_dump_json()))
     assert ExecutionReceipt.model_validate_json(receipt.to_canonical_json()) == receipt
-    other = _build(
-        dataset_file,
-        reform=composed_reform_identity([_member(2, code=True), _member(1)]),
-    )
+    other = _build(dataset_file, reform=_compose([_member(2, code=True), _member(1)]))
     assert other.receipt_sha256 != receipt.receipt_sha256
     assert other.execution_identity_sha256 == receipt.execution_identity_sha256
 
