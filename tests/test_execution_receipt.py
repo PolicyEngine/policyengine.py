@@ -1150,9 +1150,14 @@ def test_compositions_take_only_bound_identities(members):
         _compose(members)
 
 
-def test_a_tuple_and_a_list_of_members_are_the_same_composition():
+def test_any_sequence_of_members_is_the_same_composition():
+    """Round-4 review: a tuple, a list and a UserList are one composition."""
+
+    from collections import UserList
+
     members = [_member(1), _member(2, code=True)]
     assert _compose(tuple(members)) == _compose(list(members))
+    assert _compose(UserList(members)) == _compose(list(members))
 
 
 @pytest.mark.parametrize("members", [[], [CURRENT_LAW], [CURRENT_LAW, CURRENT_LAW]])
