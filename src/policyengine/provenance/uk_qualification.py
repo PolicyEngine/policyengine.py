@@ -437,7 +437,46 @@ def rewrite_certified_constants(
 
 
 def candidate_branch(pair: CandidatePair) -> str:
-    return f"candidate/uk/{pair.model.version}-{pair.data.release_version}"
+    """The pair's own branch.
+
+    The pair id is part of the name: two pairs that share model and data
+    versions (another core, another wheel, re-published bytes) must never
+    share a branch, or one pair's qualification could promote the other's
+    commit.
+    """
+
+    return (
+        f"candidate/uk/{pair.model.version}-{pair.data.release_version}"
+        f"-{pair.pair_id[:12]}"
+    )
+
+
+def attempt_key(
+    pair: CandidatePair,
+    ledger_root: Optional[Path],
+    *,
+    base_commit: str,
+    force: bool = False,
+) -> str:
+    """The ledger key of the attempt a qualification run would stage.
+
+    One attempt per base commit, so concurrent runs for the same pair and
+    base deduplicate. A forced run after such an attempt gets the next free
+    key instead, so it stages a fresh attempt and is not mistaken for the
+    old one.
+    """
+
+    key = base_commit[:12]
+    if not force or ledger_root is None:
+        return key
+    if not attempt_directory(ledger_root, "uk", pair.pair_id, key).exists():
+        return key
+    repeat = 2
+    while attempt_directory(
+        ledger_root, "uk", pair.pair_id, f"{key}-{repeat}"
+    ).exists():
+        repeat += 1
+    return f"{key}-{repeat}"
 
 
 def changelog_fragment(pair: CandidatePair, basis_note: str) -> str:
@@ -889,14 +928,23 @@ class PromotionPlan:
     ready_branch: Optional[str]
     close_branches: list[str] = field(default_factory=list)
     reason: str = ""
+    #: The qualified commit the ready branch must still be at when promoted.
+    ready_commit: Optional[str] = None
 
 
 def plan_promotion(
     receipts: Iterable[QualificationReceipt],
     bundle: Mapping[str, Any],
-    open_candidate_branches: Iterable[str],
+    open_candidate_branches: Mapping[str, str],
 ) -> PromotionPlan:
-    """What to do with candidate PRs given the ledger and ``main``'s certificate."""
+    """What to do with candidate PRs given the ledger and ``main``'s certificate.
+
+    ``open_candidate_branches`` maps each open candidate branch to its head
+    commit. The target's branch is readied only while its head is exactly
+    the commit the target's qualification ran on
+    (``receipt.harness.git_commit``): the replayed and tested bytes are the
+    promoted bytes. A branch that moved since is left alone and reported.
+    """
 
     receipts = list(receipts)
     current = certified_order_key(bundle)
@@ -920,9 +968,34 @@ def plan_promotion(
             close_branches=sorted(close),
             reason=f"no promotable pair advances {current}",
         )
+    branch = candidate_branch(target.pair)
+    qualified_commit = target.harness.git_commit
+    head = open_candidate_branches.get(branch)
+    if head is None:
+        return PromotionPlan(
+            target=target,
+            ready_branch=None,
+            close_branches=sorted(close),
+            reason=(
+                f"{target.pair.order_key} advances {current}, but its branch "
+                f"{branch} has no open pull request"
+            ),
+        )
+    if head != qualified_commit:
+        return PromotionPlan(
+            target=target,
+            ready_branch=None,
+            close_branches=sorted(close),
+            reason=(
+                f"{target.pair.order_key} advances {current}, but {branch} is at "
+                f"{head[:12]}, not the qualified commit {qualified_commit[:12]}; "
+                "nothing is promoted"
+            ),
+        )
     return PromotionPlan(
         target=target,
-        ready_branch=candidate_branch(target.pair),
+        ready_branch=branch,
+        ready_commit=qualified_commit,
         close_branches=sorted(close),
         reason=f"{target.pair.order_key} advances {current}",
     )

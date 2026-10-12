@@ -63,6 +63,7 @@ from policyengine.provenance.uk_qualification import (  # noqa: E402
     WheelFile,
     accept_review,
     attempt_is_waiting_for_replay,
+    attempt_key,
     build_replay_request,
     candidate_action,
     candidate_branch,
@@ -218,6 +219,12 @@ def cmd_resolve(args: argparse.Namespace) -> int:
         base_commit=base_commit,
         force=args.force,
     )
+    key = attempt_key(
+        resolved.pair,
+        Path(args.ledger) if args.ledger else None,
+        base_commit=base_commit,
+        force=args.force,
+    )
     payload = {
         "pair": resolved.pair.canonical_payload(),
         "pair_id": resolved.pair.pair_id,
@@ -226,7 +233,7 @@ def cmd_resolve(args: argparse.Namespace) -> int:
         "manifest_uri": resolved.manifest_uri,
         "model_requires_core": resolved.model_requires_core,
         "base_commit": base_commit,
-        "attempt_key": base_commit[:12],
+        "attempt_key": key,
         "branch": candidate_branch(resolved.pair),
         "action": action,
         "reason": reason,
@@ -241,7 +248,7 @@ def cmd_resolve(args: argparse.Namespace) -> int:
         pair_id=resolved.pair.pair_id,
         branch=candidate_branch(resolved.pair),
         base_commit=base_commit,
-        attempt_key=base_commit[:12],
+        attempt_key=key,
     )
     return 0
 
@@ -404,7 +411,9 @@ def cmd_waiting(args: argparse.Namespace) -> int:
     return 0
 
 
-def _open_candidate_branches() -> list[str]:
+def _open_candidate_branches() -> dict[str, str]:
+    """Open candidate branches and the commit each one's pull request is at."""
+
     listing = subprocess.run(
         [
             "gh",
@@ -417,23 +426,26 @@ def _open_candidate_branches() -> list[str]:
             "--search",
             "head:candidate/uk/",
             "--json",
-            "headRefName",
+            "headRefName,headRefOid",
         ],
         check=True,
         capture_output=True,
         text=True,
     ).stdout
-    return [item["headRefName"] for item in json.loads(listing)]
+    return {item["headRefName"]: item["headRefOid"] for item in json.loads(listing)}
 
 
 def cmd_promote(args: argparse.Namespace) -> int:
     bundle = json.loads(BUNDLE_PATH.read_text())
     receipts = latest_receipts(Path(args.ledger))
-    branches = _open_candidate_branches() if args.apply else []
+    branches = _open_candidate_branches() if args.apply else {}
     plan = plan_promotion(receipts, bundle, branches)
     print(f"promotion: {plan.reason}")
     if plan.target is not None:
-        print(f"target {plan.ready_branch} (pair {plan.target.pair_id[:12]})")
+        print(
+            f"target {plan.ready_branch or 'not promotable now'} "
+            f"(pair {plan.target.pair_id[:12]}, commit {plan.ready_commit})"
+        )
     for branch in plan.close_branches:
         print(f"superseded {branch}")
     if not args.apply:
@@ -452,12 +464,14 @@ def cmd_promote(args: argparse.Namespace) -> int:
             ],
             check=False,
         )
-    if plan.ready_branch is not None and plan.ready_branch in branches:
+    if plan.ready_branch is not None and plan.ready_commit is not None:
         subprocess.run(
             ["gh", "pr", "ready", plan.ready_branch, "--repo", LEDGER_REPOSITORY],
             check=False,
         )
         if config()["promotion"]["automatic"]:
+            # GitHub refuses the merge if the branch moved off the qualified
+            # commit between the plan and the merge.
             subprocess.run(
                 [
                     "gh",
@@ -468,6 +482,8 @@ def cmd_promote(args: argparse.Namespace) -> int:
                     LEDGER_REPOSITORY,
                     "--auto",
                     "--squash",
+                    "--match-head-commit",
+                    plan.ready_commit,
                 ],
                 check=False,
             )

@@ -8,7 +8,8 @@
 # The ledger is an orphan branch that only grows: each candidate pair writes
 # its own directory, so concurrent publishes never touch the same file and a
 # rejected push is retried by replaying the single new commit on the latest
-# tip.
+# tip. The new commit may be the branch's first (two runs can both find no
+# ledger yet), so it is replayed with cherry-pick, which needs no parent.
 set -euo pipefail
 
 BRANCH="${LEDGER_BRANCH:-uk-qualification-ledger}"
@@ -44,17 +45,28 @@ README
       echo "Ledger unchanged."
       exit 0
     fi
-    git -c user.name="policyengine-qualification[bot]" \
-        -c user.email="qualification@policyengine.org" \
-        commit --quiet -m "$message"
+    identity=(-c user.name="policyengine-qualification[bot]"
+              -c user.email="qualification@policyengine.org")
+    git "${identity[@]}" commit --quiet -m "$message"
+    new_commit="$(git rev-parse HEAD)"
+    delay="${LEDGER_RETRY_DELAY:-5}"
     for attempt in 1 2 3 4 5 6; do
       if git push --quiet origin "HEAD:refs/heads/$BRANCH"; then
         echo "Published ledger: $message"
         exit 0
       fi
-      git fetch --quiet origin "$BRANCH"
-      git rebase --quiet --onto FETCH_HEAD HEAD~1 HEAD
-      sleep $((attempt * 5))
+      # Someone else published first: replay this one commit on their tip.
+      if ! git fetch --quiet origin "$BRANCH"; then
+        sleep $((attempt * delay))
+        continue
+      fi
+      git reset --quiet --hard FETCH_HEAD
+      if ! git "${identity[@]}" cherry-pick --allow-empty "$new_commit" >/dev/null; then
+        git cherry-pick --abort || true
+        echo "::error::The ledger commit conflicts with a concurrent publish."
+        exit 1
+      fi
+      sleep $((attempt * delay))
     done
     echo "::error::Could not publish the qualification ledger after 6 attempts."
     exit 1

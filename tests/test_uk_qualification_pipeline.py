@@ -20,6 +20,7 @@ import hashlib
 import json
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import jsonschema
 import pytest
@@ -393,16 +394,108 @@ def test_promotion_plan():
         gate_results=gates(replay="fail"),
     )
     stale = make_receipt(pair=make_pair(model="2.0.0", data="1.0.0", core="3.0.0"))
-    branches = [candidate_branch(r.pair) for r in (newest, older, rejected, stale)] + [
-        "candidate/uk/unknown"
-    ]
+    branches = {
+        candidate_branch(r.pair): r.harness.git_commit
+        for r in (newest, older, rejected, stale)
+    }
+    branches["candidate/uk/unknown"] = "0" * 40
     plan = plan_promotion([newest, older, rejected, stale], BUNDLE, branches)
     assert plan.target == newest
     assert plan.ready_branch == candidate_branch(newest.pair)
+    assert plan.ready_commit == newest.harness.git_commit
     assert plan.close_branches == sorted(
         [candidate_branch(older.pair), candidate_branch(stale.pair)]
     )
     assert candidate_branch(rejected.pair) not in plan.close_branches
+
+
+def _promotable_pair_and_branch(core=None):
+    current = BUNDLE["data_releases"]["uk"]["data_package"]["version"]
+    core = core or BUNDLE["packages"]["policyengine-core"]["version"]
+    return make_pair(model="2.200.0", data=current, core=core)
+
+
+def test_pairs_that_share_versions_never_share_a_branch():
+    """Interrupted review of #574: a qualified pair readied the branch of an
+    incomplete pair with the same model and data but another core."""
+
+    qualified_pair = _promotable_pair_and_branch()
+    other_core = _promotable_pair_and_branch(core="3.99.0")
+    assert qualified_pair.pair_id != other_core.pair_id
+    assert candidate_branch(qualified_pair) != candidate_branch(other_core)
+    assert qualified_pair.pair_id[:12] in candidate_branch(qualified_pair)
+    qualified = make_receipt(pair=qualified_pair)
+    incomplete = make_receipt(pair=other_core, gate_results=gates(replay="unavailable"))
+    plan = plan_promotion(
+        [qualified, incomplete],
+        BUNDLE,
+        {candidate_branch(other_core): incomplete.harness.git_commit},
+    )
+    assert plan.target == qualified
+    assert plan.ready_branch is None
+    assert "has no open pull request" in plan.reason
+
+
+def test_a_branch_that_moved_off_the_qualified_commit_is_not_promoted():
+    """The replayed and tested commit must be the promoted commit."""
+
+    qualified = make_receipt(pair=_promotable_pair_and_branch())
+    branch = candidate_branch(qualified.pair)
+    plan = plan_promotion([qualified], BUNDLE, {branch: "f" * 40})
+    assert plan.target == qualified and plan.ready_branch is None
+    assert "not the qualified commit" in plan.reason
+    plan = plan_promotion([qualified], BUNDLE, {branch: qualified.harness.git_commit})
+    assert plan.ready_branch == branch
+
+
+def test_promote_readies_and_merges_only_the_qualified_commit(monkeypatch, tmp_path):
+    import argparse
+    import importlib.util
+
+    qualified = make_receipt(pair=_promotable_pair_and_branch())
+    branch = candidate_branch(qualified.pair)
+    spec = importlib.util.spec_from_file_location(
+        "check_uk_candidate_for_test",
+        Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
+    )
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    calls = []
+    monkeypatch.setattr(cli, "latest_receipts", lambda root: [qualified])
+    monkeypatch.setattr(
+        cli, "subprocess", SimpleNamespace(run=lambda argv, **k: calls.append(argv))
+    )
+    monkeypatch.setattr(cli, "config", lambda: {"promotion": {"automatic": True}})
+    monkeypatch.setattr(cli, "_open_candidate_branches", lambda: {branch: "f" * 40})
+    assert cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True)) == 0
+    assert calls == []
+    monkeypatch.setattr(
+        cli,
+        "_open_candidate_branches",
+        lambda: {branch: qualified.harness.git_commit},
+    )
+    assert cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True)) == 0
+    assert calls[0][:3] == ["gh", "pr", "ready"] and calls[0][3] == branch
+    assert calls[1][-2:] == ["--match-head-commit", qualified.harness.git_commit]
+
+
+def test_a_forced_rerun_stages_a_new_attempt(tmp_path):
+    """Interrupted review of #574: a forced run reused the existing attempt key,
+    so the workflow's duplicate guard stopped it."""
+
+    from policyengine.provenance.qualification_ledger import attempt_directory
+    from policyengine.provenance.uk_qualification import attempt_key
+
+    pair = _promotable_pair_and_branch()
+    base = "a" * 40
+    assert attempt_key(pair, tmp_path, base_commit=base, force=True) == base[:12]
+    attempt_directory(tmp_path, "uk", pair.pair_id, base[:12]).mkdir(parents=True)
+    assert attempt_key(pair, tmp_path, base_commit=base) == base[:12]
+    assert attempt_key(pair, tmp_path, base_commit=base, force=True) == f"{base[:12]}-2"
+    attempt_directory(tmp_path, "uk", pair.pair_id, f"{base[:12]}-2").mkdir(
+        parents=True
+    )
+    assert attempt_key(pair, tmp_path, base_commit=base, force=True) == f"{base[:12]}-3"
 
 
 # --- Attempt lifecycle -----------------------------------------------------------------
