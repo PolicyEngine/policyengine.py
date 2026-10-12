@@ -167,6 +167,8 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
         from policyengine_uk import Microsimulation
 
         from policyengine.utils.parametric_reforms import (
+            build_reform_dict,
+            merge_reform_dicts,
             simulation_modifier_from_parameter_values,
         )
 
@@ -208,23 +210,42 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
                 data_year_data=dataset.data_year_data,
             )
 
-        microsim = Microsimulation(dataset=_policyengine_uk_input(dataset))
+        policy = simulation.policy
+        dynamic = simulation.dynamic
+        policy_modifier = policy.simulation_modifier if policy else None
+        dynamic_modifier = dynamic.simulation_modifier if dynamic else None
+        # Each object's parameter values come before its modifier, and the
+        # policy before the dynamic: policy values, policy modifier, dynamic
+        # values, dynamic modifier. A modifier never replaces its object's
+        # parameter values (a Policy or Dynamic sum can carry both).
+        # Parameter values reach policyengine-uk as a reform dict at
+        # construction, which writes them onto the statutory timeline and
+        # reprocesses the parameters. The dynamic's values join that reform
+        # (merge_reform_dicts puts them last, so they win) unless a policy
+        # modifier must run before them; then they are applied after that
+        # modifier, to the annualised parameters, as before.
+        reform_dict = build_reform_dict(policy)
+        late_dynamic_values = None
+        if policy_modifier is None:
+            reform_dict = merge_reform_dicts(reform_dict, build_reform_dict(dynamic))
+        elif dynamic is not None and dynamic.parameter_values:
+            late_dynamic_values = dynamic.parameter_values
+        # policyengine-uk also builds an internal baseline from the same
+        # input, which its formulas read through simulation.baseline.
+        # _policyengine_uk_input gives this run fresh tables, so enum
+        # encoding cannot mutate the caller's dataset.
+        microsim = Microsimulation(
+            dataset=_policyengine_uk_input(dataset), reform=reform_dict
+        )
 
-        if simulation.policy and simulation.policy.simulation_modifier is not None:
-            simulation.policy.simulation_modifier(microsim)
-        elif simulation.policy:
-            modifier = simulation_modifier_from_parameter_values(
-                simulation.policy.parameter_values
-            )
-            modifier(microsim)
+        if policy_modifier is not None:
+            policy_modifier(microsim)
 
-        if simulation.dynamic and simulation.dynamic.simulation_modifier is not None:
-            simulation.dynamic.simulation_modifier(microsim)
-        elif simulation.dynamic:
-            modifier = simulation_modifier_from_parameter_values(
-                simulation.dynamic.parameter_values
-            )
-            modifier(microsim)
+        if late_dynamic_values is not None:
+            simulation_modifier_from_parameter_values(late_dynamic_values)(microsim)
+
+        if dynamic_modifier is not None:
+            dynamic_modifier(microsim)
 
         data = {
             "person": pd.DataFrame(),
