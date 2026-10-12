@@ -406,18 +406,33 @@ def test_modifier_cases_differ_only_in_order_and_skip_the_household_route():
 # Population checks.
 
 
-def _tiny_dataset_file(tmp_path, households=5):
+def _tiny_dataset_file(tmp_path, households=5, recipients=False):
+    """Earners on £10,000 to £50,000, one household each.
+
+    With ``recipients``, two more households: a pensioner above the full
+    State Pension and a working-age adult with no income, who claims
+    Universal Credit, so the responsiveness checks have awards to move.
+    """
     import pandas as pd
     from policyengine_uk.data import UKSingleYearDataset
 
+    ages = [40] * households
+    earnings = [10_000.0 * i for i in range(1, households + 1)]
+    pensions = [0.0] * households
+    if recipients:
+        ages += [70, 30]
+        earnings += [0.0, 0.0]
+        pensions += [20_000.0, 0.0]
+        households += 2
     ids = list(range(1, households + 1))
     person = pd.DataFrame(
         {
             "person_id": ids,
             "person_benunit_id": ids,
             "person_household_id": ids,
-            "age": [40] * households,
-            "employment_income": [10_000.0 * i for i in ids],
+            "age": ages,
+            "employment_income": earnings,
+            "state_pension_reported": pensions,
             "person_weight": [1.0] * households,
         }
     )
@@ -461,9 +476,26 @@ def test_population_checks_hold_on_a_tiny_dataset(tmp_path):
     )
 
     rows = run_population_checks(
-        _tiny_dataset_file(tmp_path), list(contract.COUNTRY_ROUTES), seed=0
+        _tiny_dataset_file(tmp_path, recipients=True),
+        list(contract.COUNTRY_ROUTES),
+        seed=0,
     )
     assert rows and all(row["status"] == "pass" for row in rows), rows
+
+
+def test_responsiveness_checks_fail_with_no_award_to_move(tmp_path):
+    pytest.importorskip("policyengine_uk.utils.dated_reforms")
+    from policyengine.tax_benefit_models.uk.budget_reform_population import (
+        run_population_checks,
+    )
+
+    rows = run_population_checks(
+        _tiny_dataset_file(tmp_path), ["country.reform_dict"], seed=0
+    )
+    status = {row["check_id"]: row["status"] for row in rows}
+    # Earners only: no award to show a reform reaching it.
+    assert status["population_state_pension_plus_10"] == "fail"
+    assert status["population_april_rate_change"] == "pass"
 
 
 def test_expected_annual_for_a_blended_change_that_started_earlier():
