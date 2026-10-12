@@ -19,6 +19,7 @@ import copy
 import hashlib
 import io
 import json
+import sys
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -48,7 +49,7 @@ from policyengine.provenance.wheels import (
     record_digest_to_hex,
     verify_installed_against_wheel,
 )
-from tests.qualification_fixtures import HARNESS, make_pair
+from tests.qualification_fixtures import HARNESS, make_pair, make_receipt
 
 # --- Installed versions --------------------------------------------------------
 
@@ -549,16 +550,61 @@ def _declared_coverage(source):
     source = source or {}
     by_case = {}
     for row in source.get("cases") or []:
-        by_case.setdefault(row.get("case_id"), []).append(row.get("route"))
+        by_case.setdefault(row.get("case_id"), []).append(row)
     return {
         "ROUTES": tuple(source.get("routes") or ()),
         "CASES": tuple(
-            SimpleNamespace(id=case, routes=tuple(dict.fromkeys(routes)))
-            for case, routes in by_case.items()
+            SimpleNamespace(
+                id=case,
+                routes=tuple(dict.fromkeys(row.get("route") for row in rows)),
+                checks=tuple(
+                    SimpleNamespace(
+                        target=label.split(":")[0],
+                        name=label.split(":")[1],
+                        year=int(label.split(":")[2]),
+                        pending=next(
+                            (
+                                row.get("decision_id")
+                                for row in rows
+                                if row.get("check") == label
+                            ),
+                            None,
+                        ),
+                    )
+                    for label in dict.fromkeys(row.get("check") for row in rows)
+                    if label
+                    and len(label.split(":")) == 3
+                    and label.split(":")[0]
+                    not in ("baseline_isolation", "unreformed_after_reform")
+                ),
+                expect_error="rejected"
+                if any(row.get("check") == "rejected" for row in rows)
+                else None,
+            )
+            for case, rows in by_case.items()
         ),
         "PROPERTIES": {
             row.get("property_id"): "" for row in source.get("properties") or []
         },
+        "UNSUPPORTED_ROUTES": {
+            row["route"]: row.get("reason", "")
+            for row in source.get("cases") or []
+            if row.get("status") == "unsupported"
+            and row.get("check") is None
+            and all(
+                other.get("status") == "unsupported" and other.get("check") is None
+                for other in source.get("cases") or []
+                if other.get("route") == row["route"]
+            )
+        },
+        "PENDING_DECISIONS": {
+            row["decision_id"]
+            for row in source.get("cases") or []
+            if row.get("decision_id")
+        },
+        "POPULATION_CHECKS": tuple(
+            dict.fromkeys(row["check_id"] for row in source.get("population") or [])
+        ),
     }
 
 
@@ -787,6 +833,20 @@ def _drop(report, **sections):
 
 
 COVERAGE_GAPS = {
+    "each case reduced to one check per route": lambda r: _drop(
+        r,
+        cases=list(
+            {(row["case_id"], row["route"]): row for row in r["cases"]}.values()
+        ),
+    ),
+    "all but one population check": lambda r: _drop(r, population=r["population"][:1]),
+    "pending properties with invented decisions": lambda r: _drop(
+        r,
+        properties=[
+            {**row, "status": "pending", "decision_id": "invented", "examples_run": 0}
+            for row in r["properties"]
+        ],
+    ),
     "one case on one route": lambda r: (
         _drop(r, cases=r["cases"][:1], population=r["population"][:1], properties=[])
         | {"routes": r["routes"][:1]}
@@ -842,7 +902,42 @@ def test_a_runner_that_declares_no_coverage_cannot_qualify():
     assert "declares no ROUTES, CASES and PROPERTIES" in result.summary
 
 
+def test_population_coverage_uses_the_population_runners_declarations():
+    """A check added by the runner must be required without a gate-side list."""
+
+    report = _passing_report()
+    importer = _importer(report=report, coverage=report)
+    module = importer("contract")
+    del module.POPULATION_CHECKS
+    population = SimpleNamespace()
+    population.__doc__ = (
+        "Checks:\n\n``new_population_check``\n    Declared by the population runner."
+    )
+    result = reform_contract(
+        entrypoint=ENTRY,
+        dataset_path=Path("dataset.h5"),
+        seed=0,
+        max_examples=20,
+        importer=lambda name: (
+            population if name.endswith("budget_reform_population") else module
+        ),
+    )[0]
+    assert result.status == "error"
+    assert "new_population_check" in result.summary
+
+
 REPORT_TAMPERING = {
+    "invented pending decision": lambda r: _recount(
+        {
+            **r,
+            "cases": [
+                {**row, "decision_id": "invented"}
+                if row["status"] == "pending"
+                else row
+                for row in r["cases"]
+            ],
+        }
+    ),
     "other model": lambda r: r["versions"].update({"policyengine-uk": "2.125.1"}),
     "other core": lambda r: r["versions"].update({"policyengine-core": "3.30.0"}),
     "other dataset": lambda r: r["dataset"].update(sha256="0" * 64),
@@ -1195,6 +1290,234 @@ def test_run_gates_returns_one_result_per_gate(outcomes):
 
 
 # --- Previous-pair runners -----------------------------------------------------------
+
+
+def _write_previous_receipt(root, pair, evidence, *, attempt="a"):
+    from policyengine.provenance.qualification_ledger import write_json
+
+    receipt = make_receipt(pair)
+    receipt = receipt.model_copy(
+        update={
+            "gates": [
+                gate.model_copy(
+                    update={
+                        "evidence_sha256": gates_module.evidence_sha256(
+                            evidence[gate.gate_id]
+                        )
+                    }
+                )
+                if gate.gate_id in evidence
+                else gate
+                for gate in receipt.gates
+            ]
+        }
+    )
+    pair_dir = root / "uk" / pair.pair_id
+    write_json(pair_dir / "qualification_receipt.json", receipt.canonical_payload())
+    attempt_dir = pair_dir / "attempts" / attempt
+    write_json(attempt_dir / "qualification_receipt.json", receipt.canonical_payload())
+    write_json(attempt_dir / "harness.json", receipt.harness.canonical_payload())
+    for gate_id, value in evidence.items():
+        write_json(attempt_dir / "gates" / f"{gate_id}.json", value)
+    return receipt, attempt_dir
+
+
+def _previous_identity(pair):
+    return {
+        "bundle_version": HARNESS.policyengine_version,
+        "model_version": pair.model.version,
+        "core_version": pair.core.version,
+        "data_release_version": pair.data.release_version,
+        "dataset_sha256": pair.data.dataset_sha256,
+        "qualification_pair_id": pair.pair_id,
+        "model_wheel_sha256": pair.model.wheel_sha256,
+        "core_wheel_sha256": pair.core.wheel_sha256,
+    }
+
+
+def test_previous_evidence_matches_the_exact_certified_core_and_wheels(tmp_path):
+    wrong = make_pair(core="3.32.0")
+    certified = make_pair(core="3.33.0")
+    wrong_evidence = {
+        "supported_years": {"supported_years": [2025]},
+        "budget_inputs": {"missing_inputs": ["age"], "unusable_critical": []},
+    }
+    expected = {
+        "supported_years": {"supported_years": [2025, 2026]},
+        "budget_inputs": {"missing_inputs": [], "unusable_critical": []},
+    }
+    _write_previous_receipt(tmp_path, wrong, wrong_evidence)
+    _write_previous_receipt(tmp_path, certified, expected)
+    assert (
+        gates_module._previous_gate_evidence(tmp_path, _previous_identity(certified))
+        == expected
+    )
+    for wheel in ("core_wheel_sha256", "model_wheel_sha256"):
+        altered = {**_previous_identity(certified), wheel: "0" * 64}
+        assert gates_module._previous_gate_evidence(tmp_path, altered) == {}
+
+
+def test_previous_evidence_belongs_to_the_receipts_attempt(tmp_path):
+    from policyengine.provenance.qualification_ledger import write_json
+
+    pair = make_pair()
+    expected = {
+        "supported_years": {"supported_years": [2025, 2026]},
+        "budget_inputs": {"missing_inputs": [], "unusable_critical": []},
+    }
+    receipt, attempt = _write_previous_receipt(tmp_path, pair, expected)
+    unrelated = attempt.parent / "z"
+    other_receipt = receipt.model_copy(
+        update={"harness": HARNESS.model_copy(update={"git_commit": "1" * 40})}
+    )
+    write_json(
+        unrelated / "qualification_receipt.json", other_receipt.canonical_payload()
+    )
+    for name in expected:
+        write_json(unrelated / "gates" / f"{name}.json", {"untrusted": True})
+    assert (
+        gates_module._previous_gate_evidence(tmp_path, _previous_identity(pair))
+        == expected
+    )
+
+
+@pytest.mark.parametrize(
+    "corruption", ["digest", "shape", "receipt", "missing identity"]
+)
+def test_unverified_previous_evidence_is_recomputed(tmp_path, corruption):
+    from policyengine.provenance.qualification_ledger import write_json
+
+    pair = make_pair()
+    expected = {
+        "supported_years": {"supported_years": [2025, 2026]},
+        "budget_inputs": {"missing_inputs": [], "unusable_critical": []},
+    }
+    receipt, attempt = _write_previous_receipt(tmp_path, pair, expected)
+    previous = _previous_identity(pair)
+    if corruption == "digest":
+        write_json(
+            attempt / "gates" / "supported_years.json", {"supported_years": [2025]}
+        )
+    elif corruption == "shape":
+        invalid = {**expected, "supported_years": {"supported_years": [True]}}
+        _write_previous_receipt(tmp_path, pair, invalid)
+    elif corruption == "receipt":
+        payload = receipt.canonical_payload() | {"verdict": "needs_review"}
+        write_json(attempt.parent.parent / "qualification_receipt.json", payload)
+    else:
+        previous.pop("qualification_pair_id")
+        previous.pop("core_wheel_sha256")
+    assert gates_module._previous_gate_evidence(tmp_path, previous) == {}
+
+
+@pytest.mark.parametrize("corrupt_baseline", [False, True])
+def test_orchestration_hashes_every_finalized_gate_evidence(
+    tmp_path, monkeypatch, corrupt_baseline
+):
+    from policyengine.provenance import dataset_materialization
+    from policyengine.provenance.qualification_ledger import write_json
+
+    pair = make_pair()
+    config = json.loads(
+        (
+            Path(__file__).parents[1] / "src/policyengine/data/qualification/uk.json"
+        ).read_text()
+    )
+    monkeypatch.setattr(
+        dataset_materialization,
+        "materialize_dataset",
+        lambda *a, **k: SimpleNamespace(path=tmp_path / "dataset.h5"),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "policyengine_uk.system",
+        SimpleNamespace(system=SimpleNamespace(variables={})),
+    )
+    baseline = {
+        "budget_inputs": {"missing_inputs": [], "unusable_critical": []},
+        "supported_years": {"supported_years": [2025]},
+    }
+    _, attempt = _write_previous_receipt(tmp_path, pair, baseline)
+    if corrupt_baseline:
+        write_json(
+            attempt / "gates" / "supported_years.json", {"supported_years": [2024]}
+        )
+    snapshots = []
+
+    def snapshot(*args, **kwargs):
+        snapshots.append(args[0])
+        return {
+            "missing_inputs": [],
+            "unusable_critical": [],
+            "supported_years": [2025],
+        }
+
+    monkeypatch.setattr(gates_module, "run_inputs_snapshot", snapshot)
+    monkeypatch.setattr(gates_module, "vendor_metrics_tool", lambda *a, **k: tmp_path)
+    monkeypatch.setattr(gates_module, "load_standard_reforms", lambda *a: [])
+    monkeypatch.setattr(gates_module, "previous_pair_python", lambda *a: "python")
+    monkeypatch.setattr(
+        gates_module,
+        "run_metrics_report",
+        lambda *a, **k: {"partition_source": "test", "dataset_path": "dataset.h5"},
+    )
+    monkeypatch.setattr(
+        gates_module, "_download", lambda *a, **k: tmp_path / "wheel.whl"
+    )
+    for name in (
+        "installed_versions",
+        "wheel_hashes",
+        "core_compatibility",
+        "dataset_bytes",
+        "supported_years",
+        "budget_inputs",
+        "reform_contract",
+        "metrics_review",
+        "reform_responsiveness",
+    ):
+        monkeypatch.setattr(
+            gates_module,
+            name,
+            lambda *a, _name=name, **k: gates_module._result(
+                _name, "pass", "test", {"before_metadata": _name}
+            ),
+        )
+    monkeypatch.setattr(
+        gates_module,
+        "data_access",
+        lambda *a, **k: (*gates_module._result("data_access", "pass", "test", {}), {}),
+    )
+    resolved = SimpleNamespace(
+        pair=pair,
+        model_wheel=SimpleNamespace(
+            url="model", filename="model.whl", sha256=pair.model.wheel_sha256
+        ),
+        core_wheel=SimpleNamespace(
+            url="core", filename="core.whl", sha256=pair.core.wheel_sha256
+        ),
+        model_requires_core=">=3.0",
+    )
+    results, evidence = gates_module.run_candidate_gates(
+        resolved,
+        HARNESS,
+        config=config,
+        work_dir=tmp_path,
+        previous_certificate=_previous_identity(pair),
+        ledger_root=tmp_path,
+    )
+    mismatches = [
+        result.gate_id
+        for result in results
+        if result.evidence_sha256
+        != gates_module.evidence_sha256(evidence[result.gate_id])
+    ]
+    assert mismatches == []
+    assert snapshots == (["python"] if corrupt_baseline else [])
+    assert evidence["budget_inputs"]["previous_source"] == (
+        f"computed with policyengine {HARNESS.policyengine_version}"
+        if corrupt_baseline
+        else "ledger"
+    )
 
 
 @settings(max_examples=15, deadline=None)
