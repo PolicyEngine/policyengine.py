@@ -121,6 +121,8 @@ and Anthropic credentials. `narrate()` and `narrate_async()` default to
 `claude-sonnet-5-5`, low effort, and a 4,096-token budget including thinking.
 They omit temperature; the `temperature` keyword is only available when selecting
 another model. Narration text can vary between calls.
+Keep `LITELLM_DROP_PARAMS` unset or `false`; narration rejects parameter dropping
+for Sonnet 5.5 because it would discard the required low-effort setting.
 
 ### For development
 

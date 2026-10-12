@@ -19,10 +19,18 @@ DEFAULT_MODEL = "claude-sonnet-5-5"
 DEFAULT_MAX_TOKENS = 4096
 
 
-def _model_options(model: str, temperature: float | None) -> dict[str, Any]:
+def _model_options(
+    model: str, temperature: float | None, *, drop_params: bool = False
+) -> dict[str, Any]:
     if model in (DEFAULT_MODEL, f"anthropic/{DEFAULT_MODEL}"):
         if temperature is not None:
             raise ValueError("Sonnet 5.5 narration does not support temperature.")
+        if drop_params:
+            raise ValueError(
+                "LiteLLM would drop Sonnet 5.5's low-effort output_config. "
+                "Disable LITELLM_DROP_PARAMS and set litellm.drop_params=False "
+                "before requesting narration."
+            )
         return {
             "custom_llm_provider": "anthropic",
             # Pass the native option: reasoning_effort can add legacy thinking
@@ -101,8 +109,9 @@ def narrate(
     LLM dependency. Install ``policyengine[narration]`` to enable this feature.
     Defaults to Sonnet 5.5 with low effort and a 4096-token total budget.
     Temperature is omitted by default and only supported with other models.
-    Returns the model's response text; raises ``ValueError`` on refusal or an
-    empty response.
+    LiteLLM's ``drop_params`` must remain false so it preserves low effort.
+    Returns the model's response text; raises ``ValueError`` on refusal, an
+    empty response, or incompatible Sonnet options.
     """
     import litellm  # noqa: PLC0415 — lazy import keeps the base module light
 
@@ -117,7 +126,9 @@ def narrate(
         model=model,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=max_tokens,
-        **_model_options(model, temperature),
+        **_model_options(
+            model, temperature, drop_params=getattr(litellm, "drop_params", False)
+        ),
     )
     return _response_text(response)
 
@@ -147,6 +158,8 @@ async def narrate_async(
         model=model,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=max_tokens,
-        **_model_options(model, temperature),
+        **_model_options(
+            model, temperature, drop_params=getattr(litellm, "drop_params", False)
+        ),
     )
     return _response_text(response)

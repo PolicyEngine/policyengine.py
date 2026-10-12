@@ -259,9 +259,20 @@ def test_narration_rejects_temperature_for_sonnet_55(
     assert fake_narration_client.kwargs is None
 
 
+@pytest.mark.parametrize("model", ["claude-sonnet-5-5", "anthropic/claude-sonnet-5-5"])
+def test_narration_rejects_litellm_dropping_effort(
+    call_narration, narration_derivation, fake_narration_client, model
+):
+    fake_narration_client.drop_params = True
+    with pytest.raises(ValueError, match="Disable LITELLM_DROP_PARAMS"):
+        call_narration(narration_derivation, model=model)
+    assert fake_narration_client.kwargs is None
+
+
 def test_narration_preserves_custom_model_options(
     call_narration, narration_derivation, fake_narration_client
 ):
+    fake_narration_client.drop_params = True
     result = call_narration(
         narration_derivation,
         model="custom-provider/custom-model",
@@ -300,7 +311,8 @@ def test_narration_raises_when_response_has_no_text(
 def test_narration_litellm_provider_translation_offline(
     monkeypatch, call_narration, narration_derivation, stop_reason, model
 ):
-    """Exercise the pinned wrapper's request and response mapping without HTTP."""
+    """Exercise the pinned wrapper through HTTPX's local mocked transport."""
+    import json
     import socket
 
     def no_network(*args, **kwargs):
@@ -312,25 +324,23 @@ def test_narration_litellm_provider_translation_offline(
 
     import httpx
     import litellm
-    from litellm.llms.anthropic.chat.transformation import AnthropicConfig
-    from litellm.utils import get_optional_params
+    from litellm.llms.custom_httpx.http_handler import AsyncHTTPHandler, HTTPHandler
 
-    def completion(model, messages, **kwargs):
-        model, provider, _, _ = litellm.get_llm_provider(
-            model=model, custom_llm_provider=kwargs["custom_llm_provider"]
-        )
-        assert (model, provider) == ("claude-sonnet-5-5", "anthropic")
-        config = AnthropicConfig()
-        request = config.transform_request(
-            model=model,
-            messages=messages,
-            optional_params=get_optional_params(model=model, **kwargs),
-            litellm_params={},
-            headers={},
-        )
+    monkeypatch.setattr(litellm, "drop_params", False)
+    monkeypatch.delenv("LITELLM_ANTHROPIC_DISABLE_URL_SUFFIX", raising=False)
+    real_completion = litellm.completion
+    real_acompletion = litellm.acompletion
+    requests = []
+
+    def handle_http_request(http_request):
+        assert http_request.method == "POST"
+        assert str(http_request.url) == "https://offline.invalid/v1/messages"
+        request = json.loads(http_request.content)
+        requests.append(request)
         assert request["model"] == "claude-sonnet-5-5"
         assert request["max_tokens"] == 4096
         assert request["output_config"] == {"effort": "low"}
+        assert [message["role"] for message in request["messages"]] == ["user"]
         assert not {
             "temperature",
             "top_p",
@@ -338,12 +348,13 @@ def test_narration_litellm_provider_translation_offline(
             "thinking",
             "tool_choice",
             "tools",
+            "extra_body",
         }.intersection(request)
         raw = {
             "id": "msg_offline_test",
             "type": "message",
             "role": "assistant",
-            "model": model,
+            "model": "claude-sonnet-5-5",
             "content": [
                 {"type": "thinking", "thinking": "", "signature": "mock-signature"},
                 {"type": "text", "text": "First sentence. "},
@@ -353,14 +364,32 @@ def test_narration_litellm_provider_translation_offline(
             "stop_sequence": None,
             "usage": {"input_tokens": 10, "output_tokens": 20},
         }
-        return config.transform_parsed_response(
-            completion_response=raw,
-            raw_response=httpx.Response(200, json=raw),
-            model_response=litellm.ModelResponse(),
-        )
+        return httpx.Response(200, json=raw)
+
+    def completion(**kwargs):
+        with httpx.Client(transport=httpx.MockTransport(handle_http_request)) as client:
+            return real_completion(
+                **kwargs,
+                api_key="offline-dummy-credential",
+                api_base="https://offline.invalid",
+                num_retries=0,
+                client=HTTPHandler(client=client),
+            )
 
     async def acompletion(**kwargs):
-        return completion(**kwargs)
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handle_http_request)
+        ) as client:
+            handler = AsyncHTTPHandler()
+            await handler.close()
+            handler.client = client
+            return await real_acompletion(
+                **kwargs,
+                api_key="offline-dummy-credential",
+                api_base="https://offline.invalid",
+                num_retries=0,
+                client=handler,
+            )
 
     monkeypatch.setattr(litellm, "completion", completion)
     monkeypatch.setattr(litellm, "acompletion", acompletion)
@@ -372,3 +401,4 @@ def test_narration_litellm_provider_translation_offline(
             call_narration(narration_derivation, model=model)
             == "First sentence. Second sentence."
         )
+    assert len(requests) == 1
