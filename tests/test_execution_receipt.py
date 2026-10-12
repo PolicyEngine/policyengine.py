@@ -986,11 +986,32 @@ def test_real_scenarios_are_accepted():
     assert bound.binding == "code_revision"
 
 
+def test_a_null_in_a_reform_is_part_of_its_digest():
+    """Round-5 review: policyengine-uk reads {"2027": None} unlike {}."""
+
+    removes = reform_identity(
+        {"gov.hmrc.income_tax.rates.uk[0].rate": {"2027": None}},
+        "policyengine-uk.reform_dict/v1",
+    )
+    keeps = reform_identity(
+        {"gov.hmrc.income_tax.rates.uk[0].rate": {}},
+        "policyengine-uk.reform_dict/v1",
+    )
+    assert removes.reform_sha256 != keeps.reform_sha256
+    assert removes.reform_sha256 == canonical_sha256(
+        {
+            "representation": "policyengine-uk.reform_dict/v1",
+            "payload": {"gov.hmrc.income_tax.rates.uk[0].rate": {"2027": None}},
+        }
+    )
+
+
 def test_parameter_scenarios_are_bound_by_content():
     changes = {"gov.hmrc.income_tax.rates.uk[0].rate": {"2027-04-06": 0.21}}
     identity = scenario_reform_identity(_scenario(changes))
     assert identity.binding == "content"
-    assert identity.reform_sha256 == content_sha256(
+    # Reform payloads keep their nulls (canonical_sha256, not content_sha256).
+    assert identity.reform_sha256 == canonical_sha256(
         {
             "representation": "policyengine-uk.scenario/v1",
             "payload": {
@@ -1874,3 +1895,193 @@ def test_the_certified_dataset_projects_to_2030():
     sha256 = hashlib.sha256(Path(path).read_bytes()).hexdigest()
     years = receipt_module._projected_years(path, sha256, INSTALLED_UK)
     assert years == PROJECTED_YEARS
+
+
+# --- Round-5 review findings ------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [
+        ("(1,)", "(1.0,)"),
+        ("(True,)", "(1,)"),
+        ("0.0", "-0.0"),
+        ("((1, 2),)", "((1.0, 2),)"),
+        ("frozenset({1})", "frozenset({1.0})"),
+        ("1j", "-1j"),
+    ],
+)
+def test_code_constants_compare_with_exact_types(first, second):
+    """Round-5 review: equal-but-different constants are different code."""
+
+    from policyengine.provenance.bytecode import code_shape
+
+    left = compile(f"value = {first}", "x", "exec", dont_inherit=True)
+    right = compile(f"value = {second}", "x", "exec", dont_inherit=True)
+    assert code_shape(left) != code_shape(right)
+    assert code_shape(left) == code_shape(
+        compile(f"value = {first}", "elsewhere", "exec", dont_inherit=True)
+    )
+
+
+def test_a_helper_rebound_to_another_modules_function_is_refused(tmp_path):
+    """Round-5 review: a source-defined helper may not silently change owner."""
+
+    import types
+
+    name = "w4_receipt_r5_rebound_helper"
+    try:
+        module, _ = _import_source(tmp_path, name, HELPER_SOURCE)
+        _measure_identity(module)
+        foreign = types.ModuleType("w4_receipt_r5_foreign")
+        exec("def _helper(value):\n    return value * 99\n", foreign.__dict__)
+        module._helper = foreign._helper
+        with pytest.raises(ReceiptError, match="no longer the function its source"):
+            _measure_identity(module)
+        module._helper = 7
+        with pytest.raises(ReceiptError, match="no longer the function its source"):
+            _measure_identity(module)
+        del module._helper
+        with pytest.raises(ReceiptError, match="no longer defined"):
+            _measure_identity(module)
+    finally:
+        sys.modules.pop(name, None)
+
+
+WRAPPED_SOURCE = """
+import functools
+
+RATE = 0.21
+
+
+def _logged(function):
+    @functools.wraps(function)
+    def wrapper(*args, **kwargs):
+        return function(*args, **kwargs)
+
+    return wrapper
+
+
+@_logged
+def _helper(value):
+    return value * 2
+
+
+def raise_rate(simulation):
+    simulation.rate = _helper(RATE)
+"""
+
+
+def test_a_wrapped_helper_is_checked_through_its_wrapper(tmp_path):
+    name = "w4_receipt_r5_wrapped_helper"
+    try:
+        module, path = _import_source(tmp_path, name, WRAPPED_SOURCE)
+        assert _measure_identity(module).binding == "code_revision"
+        _edit(path, "return value * 2", "return value * 3")
+        with pytest.raises(ReceiptError, match="no longer matches"):
+            _measure_identity(module)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_lambda_walrus_does_not_unbind_a_module_constant(tmp_path):
+    """Round-5 review: a lambda body is its own scope."""
+
+    source = (
+        "RATE = 0.21\nmapper = lambda value: (RATE := value)\n\n\n"
+        "def raise_rate(simulation):\n    simulation.rate = RATE\n"
+    )
+    name = "w4_receipt_r5_lambda_walrus"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        _identity(module.raise_rate)
+        module.RATE = 0.30
+        with pytest.raises(ReceiptError, match="RATE is 0.3 at run time"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_walrus_in_a_default_binds_the_module(tmp_path):
+    """Round-5 review: defaults are evaluated in the enclosing scope."""
+
+    source = (
+        "RATE = 0.21\n\n\ndef _helper(value=(RATE := 0.30)):\n    return value\n\n\n"
+        "def raise_rate(simulation):\n    simulation.rate = RATE\n"
+    )
+    name = "w4_receipt_r5_default_walrus"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert module.RATE == 0.30
+        assert _identity(module.raise_rate)  # not a false rejection
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_signed_zero_defaults_differ(tmp_path, monkeypatch):
+    """Round-5 review: copysign tells 0.0 from -0.0, so the digest must too."""
+
+    plus = _computed_default_identity(tmp_path / "a", monkeypatch, "0.0")
+    minus = _computed_default_identity(tmp_path / "b", monkeypatch, "-0.0")
+    assert plus != minus
+    source = "def raise_rate(simulation, value=0.0):\n    simulation.value = value\n"
+    name = "w4_receipt_r5_literal_zero"
+    try:
+        module, _ = _import_source(tmp_path / "c", name, source)
+        module.raise_rate.__defaults__ = (-0.0,)
+        with pytest.raises(ReceiptError, match="default arguments differ"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_module_that_imports_what_its_modifier_calls_binds(tmp_path):
+    """Round-5 review: compiled alone, math.copysign compiled differently."""
+
+    source = (
+        "import math\n\n\ndef raise_rate(simulation):\n"
+        "    simulation.rate = math.copysign(0.21, 1.0)\n"
+    )
+    name = "w4_receipt_r5_import_math"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_numpy_booleans_are_neither_years_nor_schema_versions(
+    dataset_file, certified_receipt
+):
+    """Round-5 review: np.bool_ is a boolean, not 1 or 0."""
+
+    with pytest.raises(ReceiptError, match="years must be integers"):
+        _build(dataset_file, years=[np.bool_(True)])
+    payload = certified_receipt.model_dump()
+    payload["schema_version"] = np.bool_(True)
+    with pytest.raises(ValidationError):
+        ExecutionReceipt.model_validate(payload)
+
+
+def test_default_dictionary_keys_must_be_exact_strings(tmp_path, monkeypatch):
+    class Key(str):
+        pass
+
+    with pytest.raises(ReceiptError, match="keys must be strings"):
+        receipt_module._typed_value({Key("rate"): 0.21})
+
+
+def test_a_method_bound_to_a_module_name_is_not_a_module_function(tmp_path):
+    """Only code compiled at module scope is compared with the module's code."""
+
+    source = (
+        "class Holder:\n    def apply(self, simulation):\n        simulation.rate = 0.21\n\n\n"
+        "apply_holder = Holder.apply\n\n\n"
+        "def raise_rate(simulation):\n    simulation.rate = 0.21\n"
+    )
+    name = "w4_receipt_r5_bound_method"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)

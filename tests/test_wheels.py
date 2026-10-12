@@ -23,6 +23,7 @@ import base64
 import hashlib
 import importlib.util
 import marshal
+import os
 import sys
 import zipfile
 from pathlib import Path
@@ -293,6 +294,76 @@ def test_bytecode_that_would_run_instead_of_the_source_fails(
     problems = _verify(site, wheel, record)["problems"]
     assert len(problems) == 1
     assert "does not compile from the verified source" in problems[0]
+
+
+def test_a_timestamp_cache_with_the_check_source_bit_is_still_compared(tmp_path):
+    """Round-5 review: importlib reads flags 2 as a timestamp cache."""
+
+    wheel, site, record = build_wheel(tmp_path)
+    path = _write_cache(site, TAMPERED, flags=0)
+    data = bytearray(path.read_bytes())
+    data[4:8] = (2).to_bytes(4, "little")
+    path.write_bytes(bytes(data))
+    problems = _verify(site, wheel, record)["problems"]
+    assert problems == [
+        f"{_relative(site, path)}: does not compile from the verified source"
+    ]
+
+
+def test_a_stale_cache_with_the_check_source_bit_is_inert(tmp_path):
+    """Flags 2 is timestamp-based: a stale one is ignored, not compared."""
+
+    wheel, site, record = build_wheel(tmp_path)
+    path = _write_cache(site, TAMPERED, mtime=12345)
+    data = bytearray(path.read_bytes())
+    data[4:8] = (2).to_bytes(4, "little")
+    path.write_bytes(bytes(data))
+    evidence = _verify(site, wheel, record)
+    assert evidence["problems"] == []
+    assert evidence["inert_bytecode"] == [f"{_relative(site, path)}: stale timestamp"]
+
+
+def test_a_cache_linked_from_two_sources_must_match_each(tmp_path):
+    """Round-5 review: one cache standing for two sources is checked for both.
+
+    Two wheel sources of equal length and modification time but different
+    code share one cache through a link; the interpreter would run the
+    first's code for both.
+    """
+
+    other = b"system = 'abcdef'\n"
+    assert len(other) == len(SYSTEM)
+    files = {**FILES, "policyengine_uk/other.py": other}
+    wheel, site, record = build_wheel(tmp_path, files=files)
+    first = site / "policyengine_uk/other.py"  # checked first (sorted)
+    second = site / "policyengine_uk/system.py"
+    stat = first.stat()
+    os.utime(second, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    cache = Path(importlib.util.cache_from_source(str(first)))
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_bytes(_pyc(other, mtime=int(stat.st_mtime), size=stat.st_size))
+    linked = Path(importlib.util.cache_from_source(str(second)))
+    linked.symlink_to(cache.name)
+    problems = _verify(site, wheel, record)["problems"]
+    assert problems == [
+        f"{_relative(site, linked)}: does not compile from the verified source"
+    ]
+
+
+def test_an_unreadable_cache_is_inert(tmp_path):
+    """Round-5 review: the interpreter ignores a cache it cannot read."""
+
+    wheel, site, record = build_wheel(tmp_path)
+    path = _write_cache(site, TAMPERED)
+    path.chmod(0)
+    try:
+        evidence = _verify(site, wheel, record)
+    finally:
+        path.chmod(0o644)
+    if os.geteuid() == 0:  # pragma: no cover - root can read anything
+        pytest.skip("root reads unreadable files")
+    assert evidence["problems"] == []
+    assert any("unreadable" in item for item in evidence["inert_bytecode"])
 
 
 def test_bytecode_the_interpreter_would_ignore_is_inert(tmp_path):

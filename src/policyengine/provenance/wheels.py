@@ -260,18 +260,20 @@ def _verify_bytecode(
     """Check every bytecode cache this interpreter would load for ``sources``."""
 
     problems: list[str] = []
-    checked: dict[Path, str] = {}
+    # One check per cache *and* the source it stands for: a cache reached
+    # through a link can stand for several sources, and must match each.
+    checked: dict[tuple[Path, str, str], str] = {}
     inert: list[str] = []
     verified = set(sources)
 
     def check(pyc: Path, source: str, optimization: str, label: str) -> None:
-        resolved = pyc.resolve()
-        if resolved in checked:
+        key = (pyc.resolve(), source, optimization)
+        if key in checked:
             return
         result = compiled_file(
             pyc, Path(distribution.locate_file(source)), optimization
         )
-        checked[resolved] = result.status
+        checked[key] = result.status
         if result.status == "inert":
             inert.append(f"{label}: {result.detail}")
         elif result.status != "matches":

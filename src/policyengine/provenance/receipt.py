@@ -70,7 +70,6 @@ import operator
 import platform
 import re
 import sys
-import textwrap
 import zipfile
 from collections.abc import Mapping, Sequence
 from importlib import metadata
@@ -174,7 +173,7 @@ DIGEST_RULES: dict[str, str] = {
     "execution_identity_sha256": "{schema_version, country_id, wrapper, model, core, data, certification_status, certificate?} where certificate keeps only bundle_version, country_id, certificate_sha256, compatibility_basis, certified_for_model_version, certified_for_core_version, certified_dataset_sha256 and certified_by",
     "receipt_sha256": "the whole receipt without runtime and without reform.name and baseline.name",
     "certificate.certificate_sha256": "the bundle manifest's data_releases.<country_id> record",
-    "reform.reform_sha256": "{representation, payload} where payload is the reform exactly as given in that representation",
+    "reform.reform_sha256": "RFC 8785 over {representation, payload} where payload is the reform exactly as given in that representation, nulls kept (a null in a reform can mean something, unlike an absent receipt field)",
     "outputs_sha256": "the canonical output payload the receipt binds",
 }
 
@@ -444,7 +443,7 @@ class ExecutionReceipt(_Contract):
     @classmethod
     def _schema_version_is_an_integer(cls, value: Any) -> Any:
         # ``True == 1``, so a Literal[1] alone would accept a boolean.
-        if isinstance(value, bool):
+        if _is_boolean(value):
             raise ValueError("schema_version must be the integer 1, not a boolean.")
         return value
 
@@ -644,6 +643,24 @@ def content_sha256(value: Any) -> str:
         raise ReceiptError(str(exc)) from exc
 
 
+def _payload_sha256(value: Any) -> str:
+    """Digest of a reform payload: strict JSON with nulls kept, RFC 8785, SHA-256.
+
+    Unlike :func:`content_sha256`, nulls are not removed: in a reform a null
+    can mean something (``Scenario.from_reform({"p": {"2027": None}})``
+    removes a value that ``{"p": {}}`` keeps), so the payload is digested
+    exactly as given.
+    """
+
+    converted = strict_json_value(value)
+    try:
+        return canonical_sha256(converted)
+    except RecursionError as exc:
+        raise ReceiptError("The value is nested too deeply.") from exc
+    except CanonicalJSONError as exc:
+        raise ReceiptError(str(exc)) from exc
+
+
 # --- Helpers -------------------------------------------------------------
 
 
@@ -707,7 +724,7 @@ def reform_identity(
         raise ReceiptError("A non-empty reform needs its representation.")
     if representation == "policyengine-uk.scenario/v1":
         raise ReceiptError("Bind a Scenario with scenario_reform_identity().")
-    digest = content_sha256({"representation": representation, "payload": payload})
+    digest = _payload_sha256({"representation": representation, "payload": payload})
     return ReformIdentity(
         kind="reform", representation=representation, reform_sha256=digest, name=name
     )
@@ -744,16 +761,6 @@ def _top_level_code(module_code: CodeType) -> dict[str, list[CodeType]]:
     return found
 
 
-def _source_matches_loaded_code(source: str, code: CodeType, qualname: str) -> bool:
-    """Whether compiling ``source`` reproduces the loaded code (nested code too)."""
-
-    module_code = _compile_module_source(textwrap.dedent(source), code)
-    if module_code is None:
-        return False
-    compiled = _top_level_code(module_code).get(qualname, [])
-    return len(compiled) == 1 and _code_shape(compiled[0]) == _code_shape(code)
-
-
 #: Value types a typed encoding preserves exactly. Subclasses (enums, named
 #: tuples, bool-like ints) are refused rather than flattened.
 _TYPED_SCALARS = (type(None), bool, int, float, str)
@@ -779,7 +786,8 @@ def _typed_value(value: Any, path: str = "$") -> dict[str, Any]:
     if kind is float:
         if not math.isfinite(value):
             raise ReceiptError(f"{path}: {value} is not a finite number.")
-        return {"type": "float", "value": value}
+        # By its bits: 0.0 and -0.0 compare equal but behave differently.
+        return {"type": "float", "hex": value.hex()}
     if kind is str:
         return {"type": "str", "value": value}
     if kind in (tuple, list):
@@ -807,27 +815,80 @@ _COMPREHENSIONS = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
 _SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
 
 
+def _walrus_targets(node: ast.AST) -> list[str]:
+    """``:=`` targets inside a comprehension, which bind its enclosing scope.
+
+    A lambda inside it is a scope of its own: only its default values are
+    evaluated outside it.
+    """
+
+    names: list[str] = []
+    if isinstance(node, ast.NamedExpr) and isinstance(node.target, ast.Name):
+        names.append(node.target.id)
+    if isinstance(node, ast.Lambda):
+        for default in [*node.args.defaults, *node.args.kw_defaults]:
+            if default is not None:
+                names.extend(_walrus_targets(default))
+        return names
+    for child in ast.iter_child_nodes(node):
+        names.extend(_walrus_targets(child))
+    return names
+
+
 def _expression_bindings(node: Optional[ast.AST]) -> list[str]:
     """Names an expression binds in its enclosing scope.
 
-    Plain targets bind; inside a comprehension or lambda only ``:=`` targets
-    reach the enclosing scope (a comprehension's loop variable is its own).
+    Plain targets bind. A comprehension's own loop variables do not, but a
+    ``:=`` inside it binds the enclosing scope (PEP 572). A lambda's body is
+    its own scope; only its default values are evaluated outside it.
     """
 
     if node is None:
         return []
     if isinstance(node, ast.Name):
         return [node.id] if isinstance(node.ctx, ast.Store) else []
-    if isinstance(node, _COMPREHENSIONS + (ast.Lambda,)):
-        return [
-            child.target.id
-            for child in ast.walk(node)
-            if isinstance(child, ast.NamedExpr) and isinstance(child.target, ast.Name)
-        ]
-    names: list[str] = []
+    if isinstance(node, ast.Lambda):
+        names: list[str] = []
+        for default in [*node.args.defaults, *node.args.kw_defaults]:
+            names.extend(_expression_bindings(default))
+        return names
+    if isinstance(node, _COMPREHENSIONS):
+        return _walrus_targets(node)
+    names = []
     for child in ast.iter_child_nodes(node):
         names.extend(_expression_bindings(child))
     return names
+
+
+def _definition_time_expressions(statement: ast.stmt) -> list[ast.AST]:
+    """What a ``def`` or ``class`` evaluates in its enclosing scope."""
+
+    if isinstance(statement, ast.ClassDef):
+        return [
+            *statement.decorator_list,
+            *statement.bases,
+            *(keyword.value for keyword in statement.keywords),
+        ]
+    if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        arguments = statement.args
+        annotations = [
+            argument.annotation
+            for argument in [
+                *arguments.posonlyargs,
+                *arguments.args,
+                *arguments.kwonlyargs,
+                *(item for item in (arguments.vararg, arguments.kwarg) if item),
+            ]
+            if argument.annotation is not None
+        ]
+        return [
+            *statement.decorator_list,
+            *arguments.defaults,
+            *(default for default in arguments.kw_defaults if default is not None),
+            *annotations,
+            *([statement.returns] if statement.returns is not None else []),
+        ]
+    return []
 
 
 def _scope_statements(body: Sequence[ast.stmt]) -> list[ast.stmt]:
@@ -851,7 +912,10 @@ def _statement_bindings(statement: ast.stmt) -> list[str]:
     """Names a module-scope statement itself binds (not its nested statements)."""
 
     if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-        return [statement.name]
+        names = [statement.name]
+        for expression in _definition_time_expressions(statement):
+            names += _expression_bindings(expression)
+        return names
     if isinstance(statement, (ast.Import, ast.ImportFrom)):
         return [(alias.asname or alias.name).split(".")[0] for alias in statement.names]
     if isinstance(statement, (ast.For, ast.AsyncFor)):
@@ -952,30 +1016,62 @@ def _function_defaults(function: Any) -> dict[str, Any]:
 
 
 def _module_functions(module: Any, filename: str) -> list[Any]:
-    """The functions an imported module defines at module scope in ``filename``."""
+    """The functions an imported module defines at module scope in ``filename``.
 
-    return [
-        value
-        for value in vars(module).values()
-        if inspect.isfunction(value)
+    Includes those a decorator wrapped (found through ``__wrapped__``). A
+    function counts as module-level by its code object's own qualified name,
+    which ``functools.wraps`` cannot copy onto a wrapper.
+    """
+
+    found: dict[int, Any] = {}
+    for value in vars(module).values():
+        function = _unwrapped(value, module, filename)
+        if function is not None:
+            found[id(function)] = function
+    return list(found.values())
+
+
+def _from_this_file(value: Any, module: Any, filename: str) -> bool:
+    """A function defined at module scope in ``filename`` (not a wrapper)."""
+
+    return (
+        inspect.isfunction(value)
         and value.__module__ == module.__name__
         and value.__code__.co_filename == filename
-        and "." not in value.__qualname__
-        and "<" not in value.__qualname__
-    ]
+        and "." not in value.__code__.co_qualname
+        and "<" not in value.__code__.co_qualname
+    )
+
+
+def _unwrapped(value: Any, module: Any, filename: str) -> Any:
+    """The function a decorator wrapped (``__wrapped__``), when there is one."""
+
+    for _ in range(16):
+        if _from_this_file(value, module, filename):
+            return value
+        value = getattr(value, "__wrapped__", None)
+        if value is None:
+            return None
+    return None
 
 
 def _module_differs_from_source(
-    module: Any, module_source: str, code: CodeType
+    module: Any, module_source: str, code: CodeType, *, also_check: Any = None
 ) -> Optional[str]:
     """How the imported module differs from its source as read now, if it does.
 
-    For every function defined at module scope in that file: it must use the
-    module's own globals, compile from the source to the loaded code
-    (ignoring file and line numbers), and, where the source's defaults are
-    literals, hold those defaults. Every module-scope name all of whose
-    bindings assign literals (``RATE = 0.21``, in a block or not) must still
-    hold one of those values, with the same type.
+    The source is compiled as a whole module (so a function compiles in its
+    module's context, imports included) and compared with what was imported,
+    ignoring file names and line numbers:
+    - every function defined at module scope in that file, and ``also_check``
+      (the modifier), must use the module's own globals, match that code, and,
+      where the source's defaults are literals, hold those defaults;
+    - a name the source binds only with ``def`` must still be that function
+      (or a decorator's wrapper of it, through ``__wrapped__``), not another
+      module's function or any other object;
+    - every module-scope name all of whose bindings assign literals
+      (``RATE = 0.21``, in a block or not) must still hold one of those
+      values, with the same type.
     """
 
     module_code = _compile_module_source(module_source, code)
@@ -983,13 +1079,32 @@ def _module_differs_from_source(
         return "its source no longer compiles"
     tree = ast.parse(module_source)
     compiled = _top_level_code(module_code)
+    filename = code.co_filename
     definitions: dict[str, list[ast.FunctionDef]] = {}
+    otherwise_bound: set[str] = set()
     for statement in _scope_statements(tree.body):
         if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
             definitions.setdefault(statement.name, []).append(statement)  # type: ignore[arg-type]
+            for expression in _definition_time_expressions(statement):
+                otherwise_bound.update(_expression_bindings(expression))
+        else:
+            otherwise_bound.update(_statement_bindings(statement))
     namespace = vars(module)
-    for function in _module_functions(module, code.co_filename):
-        name = function.__qualname__
+    for name in definitions:
+        if name in otherwise_bound:
+            continue
+        if name not in namespace:
+            return f"function {name} is no longer defined"
+        if _unwrapped(namespace[name], module, filename) is None:
+            return (
+                f"{name} is no longer the function its source defines "
+                f"(it is {type(namespace[name]).__name__})"
+            )
+    functions = _module_functions(module, filename)
+    if also_check is not None and all(item is not also_check for item in functions):
+        functions.append(also_check)
+    for function in functions:
+        name = function.__code__.co_qualname
         if function.__globals__ is not namespace:
             return f"function {name} does not use its module's globals"
         shapes = {_code_shape(item) for item in compiled.get(name, [])}
@@ -1099,12 +1214,9 @@ def _modifier_identity(
         raise ReceiptError(
             "The modifier's source is unavailable, so it cannot be bound."
         ) from exc
-    if not _source_matches_loaded_code(source, code, modifier.__qualname__):
-        raise ReceiptError(
-            f"{modifier.__module__}.{modifier.__qualname__} no longer matches its "
-            "source file (edited after import?), so it cannot be bound."
-        )
-    difference = _module_differs_from_source(module, module_source, code)
+    difference = _module_differs_from_source(
+        module, module_source, code, also_check=modifier
+    )
     if difference is not None:
         raise ReceiptError(
             f"{modifier.__module__} no longer matches its source file: {difference} "
@@ -1114,17 +1226,18 @@ def _modifier_identity(
     # their types, for the modifier and every function in its module.
     module_defaults: dict[str, Any] = {}
     for function in sorted(
-        _module_functions(module, code.co_filename), key=lambda f: f.__qualname__
+        _module_functions(module, code.co_filename),
+        key=lambda f: f.__code__.co_qualname,
     ):
         if not function.__defaults__ and not function.__kwdefaults__:
             continue
         try:
-            module_defaults[function.__qualname__] = _typed_value(
-                _function_defaults(function), function.__qualname__
+            module_defaults[function.__code__.co_qualname] = _typed_value(
+                _function_defaults(function), function.__code__.co_qualname
             )
         except ReceiptError as exc:
             raise ReceiptError(
-                f"{function.__qualname__}'s default arguments cannot be bound: {exc}"
+                f"{function.__code__.co_qualname}'s default arguments cannot be bound: {exc}"
             ) from exc
     return {
         "module": modifier.__module__,
@@ -1200,7 +1313,7 @@ def scenario_reform_identity(
             )
         payload["simulation_modifier"] = _modifier_identity(modifier, code_revision)
         binding = "code_revision"
-    digest = content_sha256(
+    digest = _payload_sha256(
         {"representation": "policyengine-uk.scenario/v1", "payload": payload}
     )
     return ReformIdentity(
@@ -1374,6 +1487,13 @@ def build_execution_receipt(
         ) from exc
 
 
+def _is_boolean(value: Any) -> bool:
+    numpy = sys.modules.get("numpy")
+    return isinstance(value, bool) or (
+        numpy is not None and isinstance(value, numpy.bool_)
+    )
+
+
 def _receipt_years(years: Any) -> list[int]:
     """Sorted unique years, refusing anything that is not a sequence of integers."""
 
@@ -1381,7 +1501,7 @@ def _receipt_years(years: Any) -> list[int]:
         raise ReceiptError(f"years must be a sequence of integers, not {years!r}.")
     result = set()
     for year in years:
-        if isinstance(year, bool) or not (
+        if _is_boolean(year) or not (
             isinstance(year, int)
             or _numpy_scalar(year)
             and isinstance(year.item(), int)

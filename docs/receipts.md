@@ -50,15 +50,16 @@ There are two ways to bind a policyengine-uk `Scenario`:
 A scenario with a module-level `simulation_modifier` needs `code_revision={"repository": ..., "git_sha": <full commit sha>}`. The identity then says `binding: "code_revision"` and binds:
 - the function's module and qualified name;
 - the SHA-256 of its source and of its module's source file;
-- the default arguments of every function in that module, encoded with their types, so `1` and `1.0`, a tuple and a list, or `None` and a missing key never share a digest (defaults with no exact encoding, such as objects, are refused);
+- the default arguments of every function in that module, encoded with their types and floats by their bits, so `1` and `1.0`, `0.0` and `-0.0`, a tuple and a list, or `None` and a missing key never share a digest (defaults with no exact encoding, such as objects, are refused);
 - that revision.
 
 None of these depends on where the code is checked out or which Python version runs it, so CI, a laptop and the server compute the same digest for the same code.
 
 A digest must only name code that ran, so before binding, the module's source as read now is compiled and checked against what was imported, ignoring file names and line numbers:
-- the modifier, and every other function defined at module scope in that file (in blocks such as `if` too), must use the module's own globals and compile to the loaded code, nested code included;
+- the module's source is compiled as a whole (so each function compiles in its module's context, imports included), and the modifier and every other function defined at module scope in that file (in blocks such as `if` too, or wrapped by a decorator that sets `__wrapped__`) must use the module's own globals and match that code, nested code and constants included, with constants compared by exact type and float bits;
+- a name the source binds only with `def` must still be that function (or a wrapper of it), not another module's function or any other object;
 - literal default arguments in the source, such as `rate=0.21`, must still be the function's defaults, with the same type;
-- every module-scope name all of whose bindings assign a literal, such as `RATE = 0.21`, at top level or in a block, must still hold one of those values, with the same type (a comprehension's own loop variable is not a binding; a `:=` is);
+- every module-scope name all of whose bindings assign a literal, such as `RATE = 0.21`, at top level or in a block, must still hold one of those values, with the same type (scopes are followed: a comprehension's own loop variable is not a binding but a `:=` in it is, a lambda's body is its own scope, and a function's defaults and decorators bind in the module);
 - a function name defined more than once with different code, as in `if FLAG: def helper(): ...` / `else: def helper(): ...`, is refused, because which definition the source selects now cannot be checked.
 
 A measures file edited after import, or a literal constant or default reassigned while the process runs, is therefore refused rather than misdescribed. The check does not cover other module state, such as objects built at import, imported modules, class bodies and methods, or data the code reads at run time: `code_revision` names the code, not the process.
@@ -89,6 +90,8 @@ const dropNulls = (v) =>
 const digest = (value) => createHash("sha256").update(canonicalize(dropNulls(value)), "utf8").digest("hex");
 ```
 
+Reform digests are the exception: a reform payload is digested with its nulls kept, because there a null can mean something. `Scenario.from_reform({"p": {"2027": None}})` removes a value that `{"p": {}}` keeps, so the two must not share a digest.
+
 The pre-promotion replay interface with policyengine-scorecard follows a different rule, set by its own schemas: plain RFC 8785 over the document as sent, nulls included. `policyengine.provenance.canonical.canonical_sha256` computes that.
 
 | Digest | Value hashed |
@@ -96,7 +99,7 @@ The pre-promotion replay interface with policyengine-scorecard follows a differe
 | `execution_identity_sha256` | `schema_version`, `country_id`, `wrapper`, `model`, `core`, `data`, `certification_status`, and the certificate's content: bundle version, record digest, basis, certified versions, dataset digest and certifier. Results with the same execution identity ran on the same runtime and data under the same certificate, however the receipt was built. |
 | `receipt_sha256` | The whole receipt except `runtime` and the reform and baseline `name` labels. Renaming a measure therefore does not change it. |
 | `certificate.certificate_sha256` | The bundle manifest's `data_releases.uk` record. |
-| `reform.reform_sha256` | `{"representation": ..., "payload": ...}`, with the payload exactly as given. |
+| `reform.reform_sha256` | `{"representation": ..., "payload": ...}`, with the payload exactly as given, nulls kept (strict JSON conversion, then RFC 8785, with no null removal). |
 | `outputs_sha256` | The output payload. |
 
 Reform digests are never normalized across representations. The same keys can legitimately mean different things in different representations: for example, a bare year in a policyengine-uk country dictionary changes that one year only. So each digest is tied to the representation that was submitted. The v1 representations are `policyengine.parameter_values/v1`, `policyengine.reform_dict/v1`, `policyengine-uk.reform_dict/v1`, `policyengine-uk.scenario/v1` and `policyengine-sim-api.policy/v1`.

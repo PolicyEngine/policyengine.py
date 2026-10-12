@@ -26,6 +26,30 @@ _HASH_BASED = 0b01
 _CHECK_SOURCE = 0b10
 
 
+def _constant(value: Any) -> tuple[Any, ...]:
+    """A code constant with its exact type, so equal-but-different values differ.
+
+    ``(1,) == (1.0,)``, ``True == 1`` and ``0.0 == -0.0`` in Python, but code
+    holding one behaves differently from code holding the other, so tuples
+    and frozensets are encoded item by item and floats by their bits.
+    """
+
+    kind = type(value)
+    if kind is float:
+        return (kind, value.hex())
+    if kind is complex:
+        return (kind, value.real.hex(), value.imag.hex())
+    if kind is tuple:
+        return (kind, tuple(_constant(item) for item in value))
+    if kind is frozenset:
+        return (kind, tuple(sorted((_constant(item) for item in value), key=repr)))
+    if isinstance(value, CodeType):
+        return (CodeType, code_shape(value))
+    if kind in (type(None), type(Ellipsis)):
+        return (kind,)
+    return (kind, value)
+
+
 def code_shape(code: CodeType) -> tuple[Any, ...]:
     """A code object without where it was compiled: no file, no line numbers."""
 
@@ -43,10 +67,7 @@ def code_shape(code: CodeType) -> tuple[Any, ...]:
         code.co_freevars,
         code.co_cellvars,
         code.co_exceptiontable,
-        tuple(
-            code_shape(const) if isinstance(const, CodeType) else (type(const), const)
-            for const in code.co_consts
-        ),
+        tuple(_constant(const) for const in code.co_consts),
     )
 
 
@@ -91,12 +112,21 @@ def compiled_file(pyc: Path, source: Path, optimization: str) -> CompiledFile:
     level = OPTIMIZATION_LEVELS.get(optimization)
     if level is None:
         return CompiledFile("invalid", f"optimisation level {optimization!r}")
-    data = pyc.read_bytes()
-    source_bytes = source.read_bytes()
+    try:
+        data = pyc.read_bytes()
+        source_bytes = source.read_bytes()
+    except OSError as exc:
+        # The interpreter ignores a cache it cannot read and compiles the source.
+        return CompiledFile("inert", f"unreadable ({type(exc).__name__})")
     if len(data) < _HEADER or data[:4] != importlib.util.MAGIC_NUMBER:
         return CompiledFile("inert", "written for another interpreter")
     flags = int.from_bytes(data[4:8], "little")
-    if flags == 0:
+    if flags & ~(_HASH_BASED | _CHECK_SOURCE):
+        # importlib refuses unknown flag bits and falls back to the source.
+        return CompiledFile("inert", "unknown header flags")
+    if not flags & _HASH_BASED:
+        # Timestamp-based, whatever the check-source bit says (importlib
+        # reads that bit only for hash-based caches).
         stat = os.stat(source)
         recorded = (
             int.from_bytes(data[8:12], "little"),
@@ -105,8 +135,6 @@ def compiled_file(pyc: Path, source: Path, optimization: str) -> CompiledFile:
         current = (int(stat.st_mtime) & 0xFFFFFFFF, stat.st_size & 0xFFFFFFFF)
         if recorded != current:
             return CompiledFile("inert", "stale timestamp")
-    elif flags not in (_HASH_BASED, _HASH_BASED | _CHECK_SOURCE):
-        return CompiledFile("inert", "unknown header flags")
     try:
         loaded = marshal.loads(data[_HEADER:])
     except (EOFError, ValueError, TypeError):
