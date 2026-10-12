@@ -188,7 +188,7 @@ DIGEST_RULES: dict[str, str] = {
     "execution_identity_sha256": "{schema_version, country_id, wrapper, model, core, data, certification_status, certificate?} where certificate keeps only bundle_version, country_id, certificate_sha256, compatibility_basis, certified_for_model_version, certified_for_core_version, certified_dataset_sha256 and certified_by",
     "receipt_sha256": "the whole receipt without runtime and without reform.name and baseline.name",
     "certificate.certificate_sha256": "the bundle manifest's data_releases.<country_id> record",
-    "reform.reform_sha256": "RFC 8785 over {representation, payload} where payload is the reform exactly as given in that representation, nulls kept (a null in a reform can mean something, unlike an absent receipt field); for policyengine-uk.scenario_composition/v1 the payload is {applied_before_data_load, members: [{representation, reform_sha256, binding}, ...]} with members in application order",
+    "reform.reform_sha256": "RFC 8785 over {representation, payload} where payload is the reform exactly as given in that representation, nulls kept (a null in a reform can mean something, unlike an absent receipt field); for policyengine-uk.scenario_composition/v1 the payload is {applied_before_data_load, application: parameter_changes_then_modifiers, members: [{representation, reform_sha256, binding}, ...]} with members in application order",
     "outputs_sha256": "the canonical output payload the receipt binds",
 }
 
@@ -1993,6 +1993,11 @@ def scenario_reform_identity(
     )
 
 
+#: The order a ``policyengine-uk.scenario_composition/v1`` run applies its
+#: members in. It is part of the payload, so the digest states it.
+COMPOSITION_APPLICATION = "parameter_changes_then_modifiers"
+
+
 def composed_reform_identity(
     members: Sequence[ReformIdentity],
     *,
@@ -2003,26 +2008,26 @@ def composed_reform_identity(
 
     ``members`` are complete identities from :func:`reform_identity`,
     :func:`scenario_reform_identity` or this function, in application order.
-    The digest covers ``applied_before_data_load`` and each member's
-    representation, digest and binding, in that order, and nothing else:
-    member labels are not part of it.
+    The digest covers ``applied_before_data_load``, the application order and
+    each member's representation, digest and binding, in member order, and
+    nothing else: member labels are not part of it.
 
-    What ``policyengine-uk.scenario_composition/v1`` means: the members
-    combined into one policyengine-uk ``Scenario`` that runs with
-    ``applied_before_data_load`` as given. Its ``parameter_changes`` are the
-    members' changes merged, and its ``simulation_modifier`` runs the
-    members' modifiers in the listed order. The combined Scenario's phase is
-    the one that runs, whatever phase a member scenario had on its own (a
-    member's digest names the measure, not the phase it ran in). In
-    policyengine-uk 2.125.1, ``Simulation.__init__`` runs a Scenario's
-    modifier and then its parameter changes, before data load or after the
-    baseline is built according to the phase; the receipt's
-    ``model.version`` names the policyengine-uk that ran. ``Scenario.__add__``
-    returns a Scenario with ``applied_before_data_load=False``, so a composer
-    that adds scenarios must set the phase on the result and pass the same
-    value here. The composer must also make sure no two members set one
-    parameter to different values; this function sees only identities and
-    cannot check that.
+    What ``policyengine-uk.scenario_composition/v1`` means, whatever the
+    policyengine-uk version: one simulation, in the phase given by
+    ``applied_before_data_load``, that applies every member's parameter
+    changes (a reform dictionary member's entries, a scenario member's
+    ``parameter_changes``) and then runs each member's simulation modifier in
+    member order. This is what the composer must run, for example as a
+    single simulation modifier; it is not ``Scenario.__add__``, whose merge
+    depends on how members are grouped and which leaves the order to the
+    engine (policyengine-uk 2.125.1 runs a Scenario's modifier before its
+    parameter changes). The composer must also make sure no two members
+    change the same parameter, in any form: with disjoint changes the merged
+    result does not depend on grouping or order. This function sees only
+    identities and cannot check either.
+
+    A member's own phase is overridden by the composition's, and a nested
+    composition's members are applied as if listed in its place.
 
     - Each member is revalidated, so an identity edited past its model's
       rules (``model_copy(update=...)``) is refused rather than dropped.
@@ -2070,6 +2075,7 @@ def composed_reform_identity(
             "representation": COMPOSITION_REPRESENTATION,
             "payload": {
                 "applied_before_data_load": applied_before_data_load,
+                "application": COMPOSITION_APPLICATION,
                 "members": bound,
             },
         }

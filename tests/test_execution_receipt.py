@@ -951,6 +951,7 @@ def _composition_digest(early: bool, *members: ReformIdentity) -> str:
             "representation": "policyengine-uk.scenario_composition/v1",
             "payload": {
                 "applied_before_data_load": early,
+                "application": "parameter_changes_then_modifiers",
                 "members": [
                     {
                         "representation": member.representation,
@@ -1124,8 +1125,25 @@ def test_members_edited_past_their_rules_are_refused(update):
         [_member(1), "member"],
         [_member(1), None],
         _member(1),
+        {},
+        "",
+        b"",
+        (member for member in [_member(1)]),
+        frozenset(),
     ],
-    ids=["dict", "string", "raw payload", "string member", "none member", "bare"],
+    ids=[
+        "dict",
+        "string",
+        "raw payload",
+        "string member",
+        "none member",
+        "bare",
+        "empty dict",
+        "empty string",
+        "empty bytes",
+        "generator",
+        "set",
+    ],
 )
 def test_compositions_take_only_bound_identities(members):
     with pytest.raises(ReceiptError):
