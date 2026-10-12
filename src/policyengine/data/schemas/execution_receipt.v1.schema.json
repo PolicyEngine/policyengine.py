@@ -389,7 +389,7 @@
             }
           ],
           "default": null,
-          "description": "content_sha256 of {'representation': ..., 'payload': ...}.",
+          "description": "SHA-256 of the RFC 8785 serialisation of {'representation': ..., 'payload': ...}, nulls kept (unlike content_sha256).",
           "title": "Reform Sha256"
         },
         "representation": {

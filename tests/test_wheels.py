@@ -23,6 +23,7 @@ import base64
 import hashlib
 import importlib.util
 import marshal
+import math
 import os
 import sys
 import zipfile
@@ -304,6 +305,52 @@ def test_a_timestamp_cache_with_the_check_source_bit_is_still_compared(tmp_path)
     data = bytearray(path.read_bytes())
     data[4:8] = (2).to_bytes(4, "little")
     path.write_bytes(bytes(data))
+    problems = _verify(site, wheel, record)["problems"]
+    assert problems == [
+        f"{_relative(site, path)}: does not compile from the verified source"
+    ]
+
+
+def test_a_cache_with_unknown_header_flags_is_inert(tmp_path):
+    """importlib refuses flag bits beyond 0b11 and compiles the source."""
+
+    wheel, site, record = build_wheel(tmp_path)
+    path = _write_cache(site, TAMPERED)
+    data = bytearray(path.read_bytes())
+    data[4:8] = (0b100).to_bytes(4, "little")
+    path.write_bytes(bytes(data))
+    evidence = _verify(site, wheel, record)
+    assert evidence["problems"] == []
+    assert evidence["inert_bytecode"] == [
+        f"{_relative(site, path)}: unknown header flags"
+    ]
+
+
+def _with_nan_sign_flipped(code):
+    return code.replace(
+        co_consts=tuple(
+            -constant
+            if isinstance(constant, float) and math.isnan(constant)
+            else constant
+            for constant in code.co_consts
+        )
+    )
+
+
+def test_a_cache_whose_nan_constant_has_the_other_sign_fails(tmp_path):
+    """Round-6 review H1: float.hex() writes both signs of NaN as "nan"."""
+
+    source = b"import math\nvalue = 1e999 - 1e999\nsystem = math.copysign(1.0, value)\n"
+    files = {**FILES, "policyengine_uk/system.py": source}
+    wheel, site, record = build_wheel(tmp_path, files=files)
+    path = _write_cache(site, source)
+    code = compile(source, "system.py", "exec", dont_inherit=True, optimize=0)
+    assert any(isinstance(c, float) and math.isnan(c) for c in code.co_consts)
+    namespace: dict = {}
+    exec(_with_nan_sign_flipped(code), namespace)
+    assert namespace["system"] == -1.0  # it behaves differently
+    data = path.read_bytes()
+    path.write_bytes(data[:16] + marshal.dumps(_with_nan_sign_flipped(code)))
     problems = _verify(site, wheel, record)["problems"]
     assert problems == [
         f"{_relative(site, path)}: does not compile from the verified source"

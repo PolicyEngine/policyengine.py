@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib.util
 import marshal
 import os
+import struct
 from pathlib import Path
 from types import CodeType
 from typing import Any, Optional
@@ -26,19 +27,27 @@ _HASH_BASED = 0b01
 _CHECK_SOURCE = 0b10
 
 
+def _float_bits(value: float) -> bytes:
+    """A float's binary64 bytes: its sign, NaN payload and zero sign included."""
+
+    return struct.pack("<d", value)
+
+
 def _constant(value: Any) -> tuple[Any, ...]:
     """A code constant with its exact type, so equal-but-different values differ.
 
     ``(1,) == (1.0,)``, ``True == 1`` and ``0.0 == -0.0`` in Python, but code
     holding one behaves differently from code holding the other, so tuples
-    and frozensets are encoded item by item and floats by their bits.
+    and frozensets are encoded item by item and floats by their IEEE 754
+    bytes (``float.hex`` writes every NaN as ``nan``, but ``math.copysign``
+    tells a NaN's sign apart).
     """
 
     kind = type(value)
     if kind is float:
-        return (kind, value.hex())
+        return (kind, _float_bits(value))
     if kind is complex:
-        return (kind, value.real.hex(), value.imag.hex())
+        return (kind, _float_bits(value.real), _float_bits(value.imag))
     if kind is tuple:
         return (kind, tuple(_constant(item) for item in value))
     if kind is frozenset:

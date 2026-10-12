@@ -70,6 +70,7 @@ import math
 import operator
 import platform
 import re
+import struct
 import sys
 import zipfile
 from collections.abc import Iterator, Mapping, Sequence
@@ -345,7 +346,10 @@ class ReformIdentity(_Contract):
     reform_sha256: Optional[str] = Field(
         default=None,
         pattern=SHA256_PATTERN,
-        description="content_sha256 of {'representation': ..., 'payload': ...}.",
+        description=(
+            "SHA-256 of the RFC 8785 serialisation of {'representation': ..., "
+            "'payload': ...}, nulls kept (unlike content_sha256)."
+        ),
     )
     binding: Literal["content", "code_revision"] = Field(
         default="content",
@@ -971,6 +975,9 @@ def _literal_bindings(tree: ast.Module) -> dict[str, list[Any]]:
             and statement.value is not None
         ):
             names, value = [statement.target.id], statement.value
+            # Module annotations run unless postponed; counting a := in one
+            # when it does not run only refuses more.
+            computed.update(_expression_bindings(statement.annotation))
         if value is not None:
             try:
                 literal = ast.literal_eval(value)
@@ -1002,11 +1009,38 @@ def _literal_defaults(definition: ast.FunctionDef) -> Optional[dict[str, Any]]:
     return {"defaults": defaults, "kwdefaults": kwdefaults}
 
 
-def _same_typed(left: Any, right: Any) -> bool:
-    try:
-        return _typed_value(left) == _typed_value(right)
-    except ReceiptError:
+def _same_literal(left: Any, right: Any) -> bool:
+    """Whether two literal values are the same value of the same types.
+
+    Covers everything ``ast.literal_eval`` returns. Unlike ``==``, ``1`` is
+    not ``1.0`` or ``True``, a tuple is not a list, floats compare by their
+    bits (``0.0`` is not ``-0.0``) and a dictionary's key order counts.
+    """
+
+    kind = type(left)
+    if kind is not type(right):
         return False
+    if kind is float:
+        return struct.pack("<d", left) == struct.pack("<d", right)
+    if kind is complex:
+        return _same_literal(left.real, right.real) and _same_literal(
+            left.imag, right.imag
+        )
+    if kind in (tuple, list):
+        return len(left) == len(right) and all(map(_same_literal, left, right))
+    if kind is dict:
+        return len(left) == len(right) and all(
+            _same_literal(left_key, right_key) and _same_literal(left_item, right_item)
+            for (left_key, left_item), (right_key, right_item) in zip(
+                left.items(), right.items()
+            )
+        )
+    if kind in (set, frozenset):
+        # Set members are distinct, so a match for each one is a bijection.
+        return len(left) == len(right) and all(
+            any(_same_literal(item, other) for other in right) for item in left
+        )
+    return bool(left == right)
 
 
 def _function_defaults(function: Any) -> dict[str, Any]:
@@ -1014,6 +1048,44 @@ def _function_defaults(function: Any) -> dict[str, Any]:
         "defaults": list(function.__defaults__ or ()),
         "kwdefaults": dict(function.__kwdefaults__ or {}),
     }
+
+
+def _shared_default_object(functions: Sequence[Any]) -> Optional[str]:
+    """Where two default values are one mutable object, if any are.
+
+    ``first=[], second=[]`` makes two lists, but ``__defaults__`` can be set
+    to one list twice, and code that mutates one or tests ``first is
+    second`` then behaves differently under the same digest. Looks through
+    every default of every function given, inside tuples, lists and
+    dictionaries too (a container holding itself counts).
+    """
+
+    owners: dict[int, str] = {}
+    for function in functions:
+        name = function.__code__.co_qualname
+        defaults = list(enumerate(function.__defaults__ or ()))
+        kwdefaults = list((function.__kwdefaults__ or {}).items())
+        pending: list[tuple[str, Any]] = [
+            (f"{name} default {key}", value) for key, value in defaults + kwdefaults
+        ]
+        while pending:
+            path, value = pending.pop()
+            if isinstance(value, (list, dict, set, bytearray)):
+                if id(value) in owners:
+                    return (
+                        f"{path} and {owners[id(value)]} are one "
+                        f"{type(value).__name__} object"
+                    )
+                owners[id(value)] = path
+            if isinstance(value, dict):
+                pending.extend(
+                    (f"{path}[{key!r}]", item) for key, item in value.items()
+                )
+            elif isinstance(value, (list, tuple)):
+                pending.extend(
+                    (f"{path}[{index}]", item) for index, item in enumerate(value)
+                )
+    return None
 
 
 def _module_functions(module: Any, filename: str) -> list[Any]:
@@ -1096,11 +1168,15 @@ def _module_differs_from_source(
             continue
         if name not in namespace:
             return f"function {name} is no longer defined"
-        if _unwrapped(namespace[name], module, filename) is None:
+        function = _unwrapped(namespace[name], module, filename)
+        if function is None:
             return (
                 f"{name} is no longer the function its source defines "
                 f"(it is {type(namespace[name]).__name__})"
             )
+        if function.__code__.co_qualname != name:
+            # Another function from the file, each still matching its source.
+            return f"{name} is bound to {function.__code__.co_qualname}"
     functions = _module_functions(module, filename)
     if also_check is not None and all(item is not also_check for item in functions):
         functions.append(also_check)
@@ -1121,7 +1197,7 @@ def _module_differs_from_source(
         literal_sources = [item for item in sources if item is not None]
         if literal_sources and len(literal_sources) == len(sources):
             if not any(
-                _same_typed(item, _function_defaults(function))
+                _same_literal(item, _function_defaults(function))
                 for item in literal_sources
             ):
                 return f"function {name}'s default arguments differ from the source"
@@ -1129,7 +1205,7 @@ def _module_differs_from_source(
         if name not in namespace:
             return f"{name} is no longer defined"
         current = namespace[name]
-        if not any(_same_typed(current, value) for value in values):
+        if not any(_same_literal(current, value) for value in values):
             shown = values[0] if len(values) == 1 else values
             return f"{name} is {current!r} at run time but {shown!r} in the source"
     return None
@@ -1339,7 +1415,9 @@ def _modifier_identity(
     A file edited after import, or a literal constant reassigned at run time,
     is refused. The default arguments of every function in the module are
     bound by value, with their types (``1`` is not ``1.0``, a tuple is not a
-    list, ``None`` is not a missing key).
+    list, ``None`` is not a missing key); two defaults that are one mutable
+    object are refused, since that encoding cannot tell them from two equal
+    objects.
 
     A module that defines one function name more than once with different
     code (``if FLAG: def helper(): ... else: def helper(): ...``) is refused,
@@ -1419,11 +1497,18 @@ def _modifier_identity(
         )
     # Default arguments are runtime values, so they are bound by value, with
     # their types, for the modifier and every function in its module.
-    module_defaults: dict[str, Any] = {}
-    for function in sorted(
+    functions = sorted(
         _module_functions(module, code.co_filename),
         key=lambda f: f.__code__.co_qualname,
-    ):
+    )
+    shared = _shared_default_object(functions)
+    if shared is not None:
+        raise ReceiptError(
+            f"{shared}; a digest of default values cannot tell one shared object "
+            "from two equal ones, so the modifier cannot be bound."
+        )
+    module_defaults: dict[str, Any] = {}
+    for function in functions:
         if not function.__defaults__ and not function.__kwdefaults__:
             continue
         try:

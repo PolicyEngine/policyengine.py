@@ -2361,3 +2361,264 @@ def test_a_method_bound_to_a_module_name_is_not_a_module_function(tmp_path):
         assert _identity(module.raise_rate)
     finally:
         sys.modules.pop(name, None)
+
+
+# --- Round-6 review findings ------------------------------------------------------
+
+
+def _flip_nan_signs(code):
+    import math
+
+    def flipped(constant):
+        if isinstance(constant, float) and math.isnan(constant):
+            return -constant
+        if isinstance(constant, complex) and math.isnan(constant.real):
+            return complex(-constant.real, constant.imag)
+        return constant
+
+    return code.replace(co_consts=tuple(flipped(c) for c in code.co_consts))
+
+
+@pytest.mark.parametrize(
+    "source",
+    ["value = 1e999 - 1e999", "value = complex(1e999 - 1e999, 1)"],
+    ids=["float", "complex"],
+)
+def test_a_nan_constant_of_the_other_sign_is_other_code(source):
+    """Round-6 review H1: float.hex() writes both signs of NaN as "nan"."""
+
+    from policyengine.provenance.bytecode import code_shape
+
+    if "complex" in source:
+        source = "value = (1e999 - 1e999) + 1j"
+    code = compile(source, "x", "exec", dont_inherit=True)
+    assert code_shape(_flip_nan_signs(code)) != code_shape(code)
+    assert code_shape(code) == code_shape(
+        compile(source, "y", "exec", dont_inherit=True)
+    )
+
+
+def test_code_differing_only_in_its_exception_table_is_other_code():
+    """A survivor of round-6 mutation testing: the table decides what is caught."""
+
+    from policyengine.provenance.bytecode import code_shape
+
+    source = "try:\n    value = int('x')\nexcept ValueError:\n    value = 0\n"
+    code = compile(source, "x", "exec", dont_inherit=True)
+    assert code.co_exceptiontable
+    assert code_shape(code.replace(co_exceptiontable=b"")) != code_shape(code)
+
+
+REBINDING_SOURCE = """
+def helper():
+    return 0.21
+
+
+def alternative():
+    return 0.99
+
+
+def raise_rate(simulation):
+    simulation.rate = helper()
+"""
+
+
+def test_a_helper_rebound_to_another_function_of_the_file_is_refused(tmp_path):
+    """Round-6 review M2: each function still matches its source, but helper
+    now names alternative's code, which returns 0.99."""
+
+    name = "w4_receipt_r6_rebound_helper"
+    try:
+        module, _ = _import_source(tmp_path, name, REBINDING_SOURCE)
+        _identity(module.raise_rate)
+        module.original_helper = module.helper
+        module.helper = module.alternative
+        with pytest.raises(ReceiptError, match="helper is bound to alternative"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_constant_bound_by_unpacking_is_not_read_unchecked(tmp_path):
+    """Round-6 review M3: ``RATE, UNUSED = 0.21, 1`` is not a checked literal
+    binding, so a modifier reading RATE is refused rather than bound."""
+
+    source = (
+        "RATE, UNUSED = 0.21, 1\n\n\n"
+        "def raise_rate(simulation):\n    simulation.rate = RATE\n"
+    )
+    name = "w4_receipt_r6_unpacked_constant"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match="reads RATE, a value of type float"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+# ``first=list()`` is computed, so its function's defaults are bound by
+# value without a literal comparison, and a list holding itself reaches the
+# encoder (which would recurse without end).
+SHARED_DEFAULTS_SOURCE = """
+def _helper(value, scales=[2.0]):
+    return value * scales[0]
+
+
+def raise_rate(simulation, first=list(), second=[], scales=[2.0]):
+    simulation.rate = 0.99 if first is second else _helper(0.21, scales)
+"""
+
+
+def _shared_lists(module):
+    shared = []
+    module.raise_rate.__defaults__ = (shared, shared, [2.0])
+
+
+def _list_holding_itself(module):
+    loop = []
+    loop.append(loop)
+    module.raise_rate.__defaults__ = (loop, [], [2.0])
+
+
+def _shared_across_functions(module):
+    module._helper.__defaults__ = (module.raise_rate.__defaults__[2],)
+
+
+@pytest.mark.parametrize(
+    "share",
+    [_shared_lists, _list_holding_itself, _shared_across_functions],
+    ids=["two-defaults", "itself", "two-functions"],
+)
+def test_defaults_that_are_one_mutable_object_are_refused(tmp_path, share):
+    """Round-6 review M4: one shared list and two equal lists encode alike."""
+
+    name = "w4_receipt_r6_shared_defaults"
+    try:
+        module, _ = _import_source(tmp_path, name, SHARED_DEFAULTS_SOURCE)
+        _identity(module.raise_rate)
+        share(module)
+        with pytest.raises(ReceiptError, match="are one list object"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_bytes_set_and_complex_constants_bind_and_are_checked(tmp_path):
+    """Round-6 review L5: exact literal comparison, not the defaults encoder."""
+
+    source = (
+        "TOKEN = b'publication'\nYEARS = {2026, 2027}\nPHASE = 1j\n"
+        "ZEROS = {0.0}\n\n\n"
+        "def raise_rate(simulation):\n"
+        "    simulation.rate = 0.21 if TOKEN and 2026 in YEARS else 0.0\n"
+        "    simulation.phase = (PHASE, ZEROS)\n"
+    )
+    name = "w4_receipt_r6_literal_kinds"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        _identity(module.raise_rate)
+        for attribute, value in [
+            ("YEARS", {2026, 2028}),
+            ("TOKEN", bytearray(b"publication")),
+            ("PHASE", -1j),
+            ("ZEROS", {-0.0}),  # equal under ==, another bit pattern
+        ]:
+            original = getattr(module, attribute)
+            setattr(module, attribute, value)
+            with pytest.raises(ReceiptError, match=f"{attribute} is"):
+                _identity(module.raise_rate)
+            setattr(module, attribute, original)
+        _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+LITERALS = st.recursive(
+    st.none()
+    | st.booleans()
+    | st.integers(-(2**70), 2**70)
+    | st.floats(allow_nan=False)
+    | st.complex_numbers(allow_nan=False)
+    | st.text(max_size=5)
+    | st.binary(max_size=5)
+    | st.just(Ellipsis),
+    lambda children: (
+        st.lists(children, max_size=3)
+        | st.lists(children, max_size=3).map(tuple)
+        | st.dictionaries(st.text(max_size=3), children, max_size=3)
+        | st.frozensets(st.integers(-3, 3) | st.text(max_size=2), max_size=3)
+    ),
+    max_leaves=8,
+)
+
+
+@settings(max_examples=300, deadline=None)
+@given(left=LITERALS, right=LITERALS)
+def test_same_literal_is_exact_equality(left, right):
+    """Invariants: a value is the same as itself and as its own round trip
+    through source; values the same are equal under ``==``; and changing one
+    float's sign of zero or one int to float makes them differ."""
+
+    import ast as _ast
+
+    same = receipt_module._same_literal
+    assert same(left, left)
+    try:
+        written = _ast.literal_eval(repr(left))
+    except (ValueError, SyntaxError):
+        written = None  # inf, frozenset() and Ellipsis have no literal form
+    else:
+        assert same(left, written)
+    if same(left, right):
+        assert left == right or left != left  # a complex NaN cannot occur
+    assert not same(0.0, -0.0)
+    assert not same([1], [1.0])
+    assert not same((1,), [1])
+    assert not same({"a": 1, "b": 2}, {"b": 2, "a": 1})
+
+
+def test_a_walrus_in_an_evaluated_module_annotation_unbinds_a_constant(tmp_path):
+    """Round-6 review L6: ``x: (RATE := 0.30) = 1`` runs at module scope, so
+    an unedited module is not mistaken for a reassigned constant."""
+
+    source = "RATE = 0.21\nx: (RATE := 0.30) = 1\n\n\ndef raise_rate(simulation):\n    simulation.rate = 0.21\n"
+    try:
+        compile(source, "x", "exec", dont_inherit=True)
+    except SyntaxError:
+        pytest.skip("this Python refuses := in annotations")
+    name = "w4_receipt_r6_annotation_walrus"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert module.RATE == 0.30
+        assert _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+_REAL_PROJECTED_YEARS = receipt_module._projected_years
+
+
+def test_projected_years_start_at_the_datasets_own_year(monkeypatch):
+    """A survivor of round-6 mutation testing: an extension that also holds
+    earlier years must not make them supported."""
+
+    import types
+
+    stubs = {
+        "policyengine_uk": types.ModuleType("policyengine_uk"),
+        "policyengine_uk.data": types.ModuleType("policyengine_uk.data"),
+        "policyengine_uk.data.dataset_schema": types.ModuleType("schema"),
+        "policyengine_uk.data.economic_assumptions": types.ModuleType("assumptions"),
+        "policyengine_uk.system": types.ModuleType("system"),
+    }
+    stubs["policyengine_uk.data.dataset_schema"].UKSingleYearDataset = lambda path: (
+        types.SimpleNamespace(time_period=2023)
+    )
+    stubs["policyengine_uk.data.economic_assumptions"].extend_single_year_dataset = (
+        lambda dataset, parameters: types.SimpleNamespace(years=[2022, 2023, 2024])
+    )
+    stubs["policyengine_uk.system"].system = types.SimpleNamespace(parameters=None)
+    for module_name, module in stubs.items():
+        monkeypatch.setitem(sys.modules, module_name, module)
+    unwrapped = getattr(_REAL_PROJECTED_YEARS, "__wrapped__", _REAL_PROJECTED_YEARS)
+    assert unwrapped("unused.h5", "0" * 64, "0.0.0") == (2023, 2024)
