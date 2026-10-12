@@ -298,6 +298,43 @@ def test_module_parameters_unchanged_compares_the_shared_state():
     assert row["status"] == "fail" and f"{tree}:{RATE}" in row["actual"]
 
 
+def _fake_shared_tree(monkeypatch, data):
+    from policyengine_core.parameters import ParameterNode
+
+    tree = ParameterNode("", data=data)
+    monkeypatch.setattr(contract, "_shared_trees", lambda: {"system": tree})
+    return tree
+
+
+def test_a_list_value_changed_in_place_is_caught(monkeypatch):
+    tree = _fake_shared_tree(
+        monkeypatch, {"sources": {"values": {"2000-01-01": ["earnings"]}}}
+    )
+    before = contract.shared_state()
+    tree.sources.values_list[0].value.append("pensions")
+    row = contract.module_parameters_unchanged(before)
+    assert row["status"] == "fail" and "system:sources" in row["actual"]
+
+
+def test_a_scale_metadata_or_band_change_is_caught(monkeypatch):
+    band = {
+        "threshold": {"values": {"2000-01-01": 0}},
+        "amount": {"values": {"2000-01-01": 100}},
+    }
+    tree = _fake_shared_tree(
+        monkeypatch,
+        {"scale": {"metadata": {"type": "single_amount"}, "brackets": [band]}},
+    )
+    before = contract.shared_state()
+    tree.scale.metadata["type"] = "marginal_amount"
+    row = contract.module_parameters_unchanged(before)
+    assert row["status"] == "fail" and "system:scale#node" in row["actual"]
+    tree.scale.metadata["type"] = "single_amount"
+    assert contract.module_parameters_unchanged(before)["status"] == "pass"
+    tree.scale.brackets.append(tree.scale.brackets[0].clone())
+    assert contract.module_parameters_unchanged(before)["status"] == "fail"
+
+
 def test_module_parameters_unchanged_compares_projected_timelines():
     before = contract.shared_state()
     if "projected" not in before:
