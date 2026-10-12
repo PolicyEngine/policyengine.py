@@ -120,9 +120,10 @@ def test_case_ids_are_unique_and_every_check_has_an_oracle():
 
 
 class FakeRoute:
-    def __init__(self, reformed, unreformed, isolation=(), error=None):
+    def __init__(self, reformed, unreformed, isolation=(), error=None, after=()):
         self.reformed, self.unreformed = reformed, unreformed
         self.isolation, self.error = list(isolation), error
+        self.after = list(after)
 
     def run(self, case, representation, cache):
         if self.error is not None:
@@ -131,6 +132,7 @@ class FakeRoute:
         run.reformed.update(self.reformed)
         run.unreformed.update(self.unreformed)
         run.isolation.extend(self.isolation)
+        run.after.extend(self.after)
         return run
 
 
@@ -230,12 +232,115 @@ def test_report_shape_for_an_unsupported_route():
     assert report["contract_id"] == contract.CONTRACT_ID
     assert report["contract_version"] == contract.CONTRACT_VERSION
     assert report["prior_law_option"] == "projected"
-    assert {row["status"] for row in report["cases"]} == {"unsupported"}
-    assert all(row["reason"] for row in report["cases"])
-    assert report["summary"]["fail"] == 0 and report["summary"]["error"] == 0
-    assert report["holds"] is True
-    with pytest.raises(ValueError, match="Unknown routes"):
-        run_budget_reform_contract(routes=["country.typo"])
+    unsupported = [row for row in report["cases"] if row["case_id"] != "run"]
+    assert {row["status"] for row in unsupported} == {"unsupported"}
+    assert all(row["reason"] for row in unsupported)
+    # Nothing passed, so the run certifies nothing.
+    (run,) = [row for row in report["cases"] if row["case_id"] == "run"]
+    assert run["status"] == "error"
+    assert report["summary"]["error"] == 1
+    assert report["holds"] is False
+
+
+@pytest.mark.parametrize(
+    "selection, message",
+    [
+        ({"routes": ["country.typo"]}, "Unknown routes"),
+        ({"routes": []}, "No routes"),
+        ({"cases": ["april_rate_chagne"]}, "Unknown cases"),
+        ({"cases": []}, "No cases"),
+    ],
+)
+def test_a_selection_that_would_certify_nothing_is_rejected(selection, message):
+    with pytest.raises(ValueError, match=message):
+        run_budget_reform_contract(max_examples=0, **selection)
+
+
+def test_an_unreformed_run_that_moves_after_the_reform_fails(monkeypatch):
+    fake(
+        monkeypatch,
+        FakeRoute(
+            reformed={("variable", "income_tax", 2027): 3_660.30},
+            unreformed={("variable", "income_tax", 2027): 3_486.00},
+            after=[("income_tax", 2027, 3_660.30, 3_486.00)],
+        ),
+    )
+    rows = {row["check"]: row for row in evaluate_case(CASE, "wrapper.household")}
+    assert rows["change:income_tax:2027"]["status"] == "pass"
+    assert rows["unreformed_after_reform:income_tax:2027"]["status"] == "fail"
+
+
+def test_expected_values_read_the_reference_they_are_given(monkeypatch):
+    fake(
+        monkeypatch,
+        FakeRoute(
+            reformed={("variable", "income_tax", 2027): 3_660.30},
+            unreformed={("variable", "income_tax", 2027): 3_486.00},
+        ),
+    )
+    case = next(case for case in CASES if case.id == "april_rate_change")
+    # A reference that a leak had moved to 21% would expect no change.
+    rows = evaluate_case(case, "wrapper.household", reference=lambda path, year: 0.21)
+    (row,) = [row for row in rows if row["check"] == "change:income_tax:2027"]
+    assert row["status"] == "fail" and row["expected"] == 0.0
+
+
+def test_module_parameters_unchanged_compares_with_the_reference():
+    reference = contract.reference_parameters()
+    assert contract.module_parameters_unchanged(reference)["status"] == "pass"
+    # Changing the copy (never the shared system) stands in for a leak.
+    reference.get_child(RATE).update(period="year:2027:1", value=0.5)
+    row = contract.module_parameters_unchanged(reference)
+    assert row["status"] == "fail" and RATE in row["actual"]
+
+
+def _failing_property(monkeypatch, error):
+    def check(change, income, routes, cache, reference):
+        raise error
+
+    monkeypatch.setattr(contract, "_property_routes_agree", check)
+    return contract.run_property(
+        "routes_agree_and_baselines_hold",
+        ["country.reform_dict", "wrapper.household"],
+        seed=0,
+        max_examples=3,
+        cache={},
+        reference=lambda path, year: 0.20,
+    )
+
+
+def _without_hypothesis(monkeypatch):
+    import builtins
+
+    real_import = builtins.__import__
+
+    def guarded(name, *args, **kwargs):
+        if name == "hypothesis" or name.startswith("hypothesis."):
+            raise ImportError(name)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", guarded)
+
+
+@pytest.mark.parametrize("hypothesis_installed", [True, False])
+@pytest.mark.parametrize(
+    "error, status",
+    [(AssertionError("routes disagree"), "fail"), (RuntimeError("crashed"), "error")],
+)
+def test_both_property_engines_report_failures_with_their_inputs(
+    monkeypatch, hypothesis_installed, error, status
+):
+    if hypothesis_installed:
+        pytest.importorskip("hypothesis")
+    else:
+        _without_hypothesis(monkeypatch)
+    result = _failing_property(monkeypatch, error)
+    assert result["status"] == status
+    assert result["engine"] == ("hypothesis" if hypothesis_installed else "random")
+    counterexample = result["counterexample"]
+    assert counterexample["change"].startswith("Change(")
+    assert isinstance(counterexample["income"], int)
+    assert str(error) in counterexample["detail"]
 
 
 # Integration: one case on the installed model.
@@ -250,6 +355,52 @@ def test_the_april_rate_case_holds_on_the_country_routes():
     )
     failures = [row for row in report["cases"] if row["status"] in ("fail", "error")]
     assert failures == []
+    checks = {row["check"] for row in report["cases"]}
+    assert "unreformed_after_reform:income_tax:2027" in checks
+    assert any(
+        row["case_id"] == "module_parameters_unchanged" for row in report["cases"]
+    )
+
+
+def test_a_parameter_modifier_writes_the_annualised_parameters():
+    from policyengine_uk import Simulation
+
+    simulation = Simulation(situation=contract._situation(adult(), [2027]))
+    contract.parameter_modifier(
+        [
+            Change(RATE, datetime.date(2027, 1, 1), 0.25, datetime.date(2027, 12, 31)),
+            Change(
+                "gov.hmrc.income_tax.rates.dividends[0].rate",
+                datetime.date(2026, 1, 1),
+                0.0875,
+            ),
+        ]
+    )(simulation)
+    parameters = simulation.tax_benefit_system.parameters
+    assert parameters.get_child(RATE)("2027-01-01") == 0.25
+    assert parameters.get_child(RATE)("2028-01-01") == 0.20
+    dividends = parameters.get_child("gov.hmrc.income_tax.rates.dividends[0].rate")
+    assert dividends("2030-01-01") == 0.0875
+
+
+def test_modifier_cases_differ_only_in_order_and_skip_the_household_route():
+    first, second = (
+        next(case for case in CASES if case.id == case_id)
+        for case_id in (
+            "modifier_then_parameter_changes",
+            "parameter_changes_then_modifier",
+        )
+    )
+    assert first.modifier and first.modifier == second.modifier
+    assert first.changes == second.changes
+    assert first.modifier_first and not second.modifier_first
+    assert "wrapper.household" not in first.routes
+    assert contract.reform_digest({}, "wrapper.policy", first) != (
+        contract.reform_digest({}, "wrapper.policy", second)
+    )
+    # Cases without a modifier keep their digests.
+    plain = next(case for case in CASES if case.id == "april_rate_change")
+    assert contract.reform_digest({}, "r", plain) == contract.reform_digest({}, "r")
 
 
 # Population checks.

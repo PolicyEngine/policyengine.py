@@ -17,8 +17,10 @@ Checks:
     A basic rate of 21% from 6 April 2027 gives identical income tax arrays
     through the reform dict, ``parameter_changes`` and ``Reform.from_dict``.
 ``population_april_rate_change``
-    That reform leaves 2026 income tax unchanged for every person and never
-    lowers anyone's income tax in 2027.
+    That reform leaves 2026 income tax unchanged for every person and raises
+    total 2027 income tax. (It can lower one person's tax: in Scotland a
+    higher UK basic rate grosses up Gift Aid by more, restoring more of a
+    tapered personal allowance.)
 ``population_finite_change_expires``
     The same rate for 2027-28 only leaves 2028 identical to the baseline.
 ``population_uc_standard_allowance_plus_10``
@@ -241,7 +243,12 @@ def run_population_checks(
         for route in country:
             unchanged_2026 = np.array_equal(tax[route][2026], before["income_tax:2026"])
             change_2027 = tax[route][2027] - before["income_tax:2027"]
-            ok = unchanged_2026 and bool(np.all(change_2027 >= -1e-6))
+            # Some people's tax can fall: in Scotland a higher UK basic rate
+            # grosses up Gift Aid by more, which restores more of a tapered
+            # personal allowance while Scottish rates stay put. So the check
+            # is on the total, and the counts are reported.
+            total_rises = bool(np.sum(change_2027) > 1e-6)
+            ok = unchanged_2026 and total_rises
             rows.append(
                 _row(
                     "population_april_rate_change",
@@ -249,6 +256,7 @@ def run_population_checks(
                     "pass" if ok else "fail",
                     detail={
                         "2026_unchanged": unchanged_2026,
+                        "2027_total_change": float(np.sum(change_2027)),
                         "2027_people_with_lower_tax": int(np.sum(change_2027 < -1e-6)),
                         "2027_people_with_higher_tax": int(np.sum(change_2027 > 1e-6)),
                     },

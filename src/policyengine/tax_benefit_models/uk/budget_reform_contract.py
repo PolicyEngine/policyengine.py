@@ -60,8 +60,20 @@ A JSON-serialisable dict: ``contract_id``, ``contract_version``,
 ``prior_law_option``, installed ``versions``, the dataset's sha256 when one
 is given, ``cases`` (one row per case, route and check, with ``status`` of
 ``pass``, ``fail``, ``error``, ``unsupported`` or ``pending``),
-``properties`` and ``summary`` counts. Any ``fail`` or ``error`` means the
-contract does not hold.
+``properties``, ``population`` and ``summary`` counts. ``cases`` also
+holds two run-level rows: ``module_parameters_unchanged`` (the shared
+system's parameters still equal a copy taken before the run) and, when no
+check passed at all, an ``error`` row with case id ``run``. Any ``fail`` or
+``error`` means the contract does not hold.
+
+Isolation
+---------
+
+Expected values read a copy of current law's parameters taken before any
+reform runs. Every route's unreformed reference is built before its reform,
+and after each reform a fresh unreformed simulation must reproduce it
+(``unreformed_after_reform`` rows); the country routes also check each
+reformed simulation's own baseline (``baseline_isolation`` rows).
 """
 
 from __future__ import annotations
@@ -111,12 +123,16 @@ PASS, FAIL, ERROR, UNSUPPORTED, PENDING = (
 )
 
 BASIC_RATE = "gov.hmrc.income_tax.rates.uk[0].rate"
+DIVIDEND_BASIC_RATE = "gov.hmrc.income_tax.rates.dividends[0].rate"
+DIVIDEND_ALLOWANCE = "gov.hmrc.income_tax.allowances.dividend_allowance"
 PERSONAL_ALLOWANCE = "gov.hmrc.income_tax.allowances.personal_allowance.amount"
 BASIC_RATE_LIMIT = "gov.hmrc.income_tax.rates.uk[1].threshold"
 UC_SINGLE_OLD = "gov.dwp.universal_credit.standard_allowance.amount.SINGLE_OLD"
 NEW_STATE_PENSION = "gov.dwp.state_pension.new_state_pension.amount"
 CGT_BASIC_RATE = "gov.hmrc.cgt.basic_rate"
+CGT_ANNUAL_EXEMPT_AMOUNT = "gov.hmrc.cgt.annual_exempt_amount"
 VAT_STANDARD_RATE = "gov.hmrc.vat.standard_rate"
+VAT_COVERAGE = "gov.simulation.microdata_vat_coverage"
 PROTECTED_LCWRA = "gov.dwp.universal_credit.rebalancing.protected_health_element"
 CPI_SEPTEMBER = "gov.economic_assumptions.statutory_uprating_inputs.cpi_september"
 MA_INCOME_CONDITION = (
@@ -195,7 +211,10 @@ class Case:
     ``representations`` overrides the representation a route receives, for
     the reading cases; ``routes`` limits the routes a case runs on.
     ``expect_error`` is a regular expression the error must match for a
-    reform every route must reject.
+    reform every route must reject. ``modifier`` holds changes a simulation
+    modifier writes onto the annualised parameters, combined with the
+    route's reform in one scenario or policy: modifier first when
+    ``modifier_first``, else reform first.
     """
 
     id: str
@@ -206,6 +225,8 @@ class Case:
     expect_error: Optional[str] = None
     routes: Optional[tuple[str, ...]] = None
     representations: Mapping[str, Any] = field(default_factory=dict)
+    modifier: tuple[Change, ...] = ()
+    modifier_first: bool = True
 
 
 class Context:
@@ -302,6 +323,107 @@ def _statutory_resumption(path: str) -> Callable[[Context], float]:
 
 def _baseline_value(path: str, year: int) -> Callable[[Context], float]:
     return lambda context: context.baseline(path, year)
+
+
+GAINS = 10_000
+
+
+def _gains_uplift(year: int, share_of_year: float) -> Callable[[Context], float]:
+    """Extra CGT on gains taxed wholly at the basic rate, at 20% for part of a year."""
+
+    def expected(context: Context) -> float:
+        taxable = GAINS - context.baseline(CGT_ANNUAL_EXEMPT_AMOUNT, year)
+        rise = 0.20 - context.baseline(CGT_BASIC_RATE, year)
+        return taxable * rise * share_of_year
+
+    return expected
+
+
+GAINS_UPLIFT_ORACLE = (
+    "(£10,000 of gains - the annual exempt amount) x (20% - current rate) x "
+    "the share of the tax year at 20%; the gains sit wholly in the basic rate "
+    "band, and the exempt amount and current rate are read from current law"
+)
+
+DIVIDENDS = 10_000
+
+
+def _dividends_and_earnings(
+    year: int, rate: Optional[float]
+) -> Callable[[Context], float]:
+    """The change in tax when dividends are taxed at 8.75%, and earnings at ``rate``.
+
+    The dividends sit wholly in the basic rate band.
+    """
+
+    def expected(context: Context) -> float:
+        taxed = DIVIDENDS - context.baseline(DIVIDEND_ALLOWANCE, year)
+        change = taxed * (0.0875 - context.baseline(DIVIDEND_BASIC_RATE, year))
+        if rate is not None:
+            change += _uplift(year, rate)(context)
+        return change
+
+    return expected
+
+
+MODIFIER_ORACLE = (
+    "(£10,000 of dividends - the dividend allowance) x (8.75% - current "
+    "dividend rate), all within the basic rate band"
+)
+
+
+def _modifier_case(case_id: str, modifier_first: bool) -> Case:
+    order = "then" if modifier_first else "after"
+    return Case(
+        id=case_id,
+        title=(
+            "One scenario or policy with a modifier setting the dividend "
+            f"rate to 8.75% {order} a basic rate of 21% from 6 April 2027"
+        ),
+        changes=(Change(BASIC_RATE, _date("2027-04-06"), 0.21),),
+        modifier=(Change(DIVIDEND_BASIC_RATE, _date("2026-01-01"), 0.0875),),
+        modifier_first=modifier_first,
+        household=adult(dividend_income=DIVIDENDS),
+        checks=(
+            Check(
+                "parameter", DIVIDEND_BASIC_RATE, 2026, 0.0875, "set by the modifier"
+            ),
+            Check(
+                "parameter", DIVIDEND_BASIC_RATE, 2027, 0.0875, "set by the modifier"
+            ),
+            Check("parameter", BASIC_RATE, 2026, 0.20, "before the change"),
+            Check("parameter", BASIC_RATE, 2027, 0.21, "in force on 30 April 2027"),
+            Check(
+                "change",
+                "income_tax",
+                2026,
+                _dividends_and_earnings(2026, None),
+                MODIFIER_ORACLE,
+                0.005,
+            ),
+            Check(
+                "change",
+                "income_tax",
+                2027,
+                _dividends_and_earnings(2027, 0.21),
+                MODIFIER_ORACLE + ", plus " + INCOME_UPLIFT_ORACLE,
+                0.005,
+            ),
+        ),
+        # policyengine.uk.calculate_household takes a reform dict only.
+        routes=COUNTRY_ROUTES + ("wrapper.policy",),
+    )
+
+
+FULL_RATE_CONSUMPTION = 10_000
+
+
+def _vat_uplift(year: int, rate: float) -> Callable[[Context], float]:
+    def expected(context: Context) -> float:
+        rise = rate - context.baseline(VAT_STANDARD_RATE, year)
+        return FULL_RATE_CONSUMPTION * rise / context.baseline(VAT_COVERAGE, year)
+
+    return expected
 
 
 INCOME_UPLIFT_ORACLE = (
@@ -539,7 +661,9 @@ CASES: tuple[Case, ...] = (
         id="mid_year_blended_rate",
         title="CGT basic rate 20% from 30 October 2027",
         changes=(Change(CGT_BASIC_RATE, _date("2027-10-30"), 0.20),),
-        household=adult(),
+        # £20,000 of earnings and £10,000 of gains: the taxable gains sit
+        # wholly in the basic rate band.
+        household=adult(20_000, capital_gains=GAINS),
         checks=(
             Check(
                 "parameter",
@@ -553,6 +677,23 @@ CASES: tuple[Case, ...] = (
             ),
             Check("parameter", CGT_BASIC_RATE, 2028, 0.20, "in force all year"),
             Check("parameter", CGT_BASIC_RATE, 2026, 0.18, "before the change"),
+            Check("change", "capital_gains_tax", 2026, 0.0, "before the change", 0.005),
+            Check(
+                "change",
+                "capital_gains_tax",
+                2027,
+                _gains_uplift(2027, 159 / 366),
+                GAINS_UPLIFT_ORACLE + "; 159 of 2027-28's 366 days",
+                0.005,
+            ),
+            Check(
+                "change",
+                "capital_gains_tax",
+                2028,
+                _gains_uplift(2028, 1.0),
+                GAINS_UPLIFT_ORACLE + "; all of 2028-29",
+                0.005,
+            ),
         ),
     ),
     Case(
@@ -626,7 +767,7 @@ CASES: tuple[Case, ...] = (
         household=Household(
             people=({"age": 40},),
             household={
-                "full_rate_vat_consumption": 10_000,
+                "full_rate_vat_consumption": FULL_RATE_CONSUMPTION,
                 "reduced_rate_vat_consumption": 0,
             },
         ),
@@ -638,9 +779,22 @@ CASES: tuple[Case, ...] = (
                 "vat",
                 "baseline_vat is the unreformed vat",
             ),
+            Check(
+                "change",
+                "vat",
+                2026,
+                _vat_uplift(2026, 0.22),
+                "£10,000 of full-rate consumption x (22% - current rate), over "
+                "the share of consumption the microdata covers; the current "
+                "rate and coverage are read from current law",
+                0.005,
+            ),
         ),
-        routes=COUNTRY_ROUTES + ("wrapper.household",),
     ),
+    # A scenario's parameter changes used to rebuild the parameters after its
+    # modifier had run, so whatever the modifier set reverted.
+    _modifier_case("modifier_then_parameter_changes", True),
+    _modifier_case("parameter_changes_then_modifier", False),
     Case(
         id="unknown_path",
         title="A parameter no certified model defines",
@@ -735,11 +889,38 @@ def represent(case: Case, route: str) -> Any:
     return wrapper_reform_dict(case.changes)
 
 
-def reform_digest(representation: Any, route: str) -> str:
-    payload = json.dumps(
-        {"route": route, "reform": representation}, sort_keys=True, default=str
-    )
+def reform_digest(representation: Any, route: str, case: Optional[Case] = None) -> str:
+    content: dict = {"route": route, "reform": representation}
+    if case is not None and case.modifier:
+        content["modifier"] = [
+            [change.path, str(change.start), str(change.stop), change.value]
+            for change in case.modifier
+        ]
+        content["modifier_first"] = case.modifier_first
+    payload = json.dumps(content, sort_keys=True, default=str)
     return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def parameter_modifier(changes: Sequence[Change]) -> Callable:
+    """A simulation modifier writing ``changes`` onto the annualised parameters."""
+
+    def modify(simulation):
+        from policyengine_core.periods import instant
+
+        parameters = simulation.tax_benefit_system.parameters
+        for change in changes:
+            parameter = parameters.get_child(change.path)
+            if change.stop is None:
+                parameter.update(start=instant(str(change.start)), value=change.value)
+            else:
+                parameter.update(
+                    start=instant(str(change.start)),
+                    stop=instant(str(change.stop)),
+                    value=change.value,
+                )
+        return simulation
+
+    return modify
 
 
 # Routes.
@@ -769,12 +950,19 @@ def _situation(household: Household, years: Sequence[int]) -> dict:
 
 
 class RouteRun:
-    """Values a route produced for a case: reformed and unreformed."""
+    """Values a route produced for a case.
+
+    ``unreformed`` values come from simulations built before the reform.
+    ``isolation`` pairs the reformed simulation's own baseline with them and
+    ``after`` pairs a fresh unreformed simulation built after the reform with
+    them, as (name, year, value, unreformed value).
+    """
 
     def __init__(self):
         self.reformed: dict[tuple[str, str, int], float] = {}
         self.unreformed: dict[tuple[str, str, int], float] = {}
         self.isolation: list[tuple[str, int, float, float]] = []
+        self.after: list[tuple[str, int, float, float]] = []
 
 
 def _total(values) -> float:
@@ -785,11 +973,24 @@ class _CountryRoute:
     def __init__(self, route: str):
         self.route = route
 
-    def simulation(self, representation, situation):
+    def simulation(self, representation, situation, case: Optional[Case] = None):
         from policyengine_core.reforms import Reform
         from policyengine_uk import Simulation
         from policyengine_uk.utils.scenario import Scenario
 
+        if case is not None and case.modifier:
+            # One scenario carrying the route's reform and the modifier.
+            if self.route == "country.reform_dict":
+                reform = Scenario.from_reform(representation)
+            elif self.route == "country.scenario_parameter_changes":
+                reform = Scenario(parameter_changes=representation)
+            else:
+                reform = Scenario.from_reform(
+                    Reform.from_dict(representation, country_id="uk")
+                )
+            modifier = Scenario(simulation_modifier=parameter_modifier(case.modifier))
+            scenario = modifier + reform if case.modifier_first else reform + modifier
+            return Simulation(situation=situation, scenario=scenario)
         if self.route == "country.reform_dict":
             return Simulation(situation=situation, reform=representation)
         if self.route == "country.scenario_parameter_changes":
@@ -836,7 +1037,7 @@ class _CountryRoute:
                     unreformed, request
                 )
             del unreformed
-        reformed = self.simulation(representation, situation)
+        reformed = self.simulation(representation, situation, case)
         baseline = getattr(reformed, "baseline", None)
         run = RouteRun()
         for request in requests:
@@ -851,6 +1052,17 @@ class _CountryRoute:
                         run.unreformed[request],
                     )
                 )
+        del reformed, baseline
+        after = Simulation(situation=situation)
+        for request in requests:
+            run.after.append(
+                (
+                    request[1],
+                    request[2],
+                    self._value(after, request),
+                    run.unreformed[request],
+                )
+            )
         return run
 
 
@@ -879,17 +1091,26 @@ class _WrapperHouseholdRoute:
             by_year.setdefault(check.year, set()).add(check.name)
             if check.target == "baseline_equals":
                 by_year[check.year].add(check.expected)
+        if case.modifier:
+            raise ValueError(
+                "policyengine.uk.calculate_household takes a reform dict, not a "
+                "simulation modifier"
+            )
         for year, names in by_year.items():
             names = sorted(names)
-            reformed = self._call(case, year, representation, names)
             key = (self.route, _household_key(case.household), year, tuple(names))
+            # The unreformed reference is built before the reform runs.
             if key not in cache:
                 cache[key] = self._call(case, year, None, names)
             unreformed = cache[key]
+            reformed = self._call(case, year, representation, names)
+            after = self._call(case, year, None, names)
             for name in names:
-                run.reformed[("variable", name, year)] = _result_total(reformed, name)
-                run.unreformed[("variable", name, year)] = _result_total(
-                    unreformed, name
+                request = ("variable", name, year)
+                run.reformed[request] = _result_total(reformed, name)
+                run.unreformed[request] = _result_total(unreformed, name)
+                run.after.append(
+                    (name, year, _result_total(after, name), run.unreformed[request])
                 )
         return run
 
@@ -1003,29 +1224,43 @@ class _WrapperPolicyRoute:
             by_year.setdefault(check.year, set()).add(check.name)
         for year, names in by_year.items():
             variables = _by_entity(sorted(names))
-            policy = compile_reform_to_policy(
-                representation, year=year, model_version=uk_latest
-            )
-            dataset = self._dataset(case.household, year)
-            reformed = self._run(dataset, policy, variables)
             key = (
                 self.route,
                 _household_key(case.household),
                 year,
                 tuple(sorted(names)),
             )
+            # The unreformed reference is built before the reform runs.
             if key not in cache:
                 cache[key] = self._run(
                     self._dataset(case.household, year), None, variables
                 )
             unreformed = cache[key]
+            policy = compile_reform_to_policy(
+                representation, year=year, model_version=uk_latest
+            )
+            if case.modifier:
+                from policyengine.core import Policy
+
+                modifier = Policy(
+                    name="modifier",
+                    simulation_modifier=parameter_modifier(case.modifier),
+                )
+                policy = modifier + policy if case.modifier_first else policy + modifier
+            reformed = self._run(self._dataset(case.household, year), policy, variables)
+            after = self._run(self._dataset(case.household, year), None, variables)
             for entity, entity_names in variables.items():
                 for name in entity_names:
-                    run.reformed[("variable", name, year)] = _total(
-                        getattr(reformed, entity)[name]
-                    )
-                    run.unreformed[("variable", name, year)] = _total(
-                        getattr(unreformed, entity)[name]
+                    request = ("variable", name, year)
+                    run.reformed[request] = _total(getattr(reformed, entity)[name])
+                    run.unreformed[request] = _total(getattr(unreformed, entity)[name])
+                    run.after.append(
+                        (
+                            name,
+                            year,
+                            _total(getattr(after, entity)[name]),
+                            run.unreformed[request],
+                        )
                     )
         return run
 
@@ -1085,13 +1320,67 @@ def release_dead_variable_modules(max_owners: int = 8) -> int:
 # Evaluation.
 
 
-def _baseline_parameter_reader() -> Callable[[str, int], float]:
+def reference_parameters():
+    """A copy of current law's parameters, taken before any reform runs.
+
+    Expected values read this copy, so a reform that leaks into the shared
+    system cannot move the reference it is checked against.
+    """
     from policyengine_uk.system import system
 
+    return system.parameters.clone()
+
+
+def parameter_reader(parameters) -> Callable[[str, int], float]:
     def read(path: str, year: int) -> float:
-        return float(system.parameters.get_child(path)(f"{year}-01-01"))
+        return float(parameters.get_child(path)(f"{year}-01-01"))
 
     return read
+
+
+def _baseline_parameter_reader() -> Callable[[str, int], float]:
+    return parameter_reader(reference_parameters())
+
+
+REFERENCE_YEARS = range(2024, 2037)
+
+
+def _parameter_values(parameters) -> dict[str, list[tuple]]:
+    """Each parameter's annual values, by name.
+
+    A name can occur more than once (``parameters.baseline`` repeats the
+    tree), so every occurrence is kept, in tree order.
+    """
+    from policyengine_core.parameters import Parameter
+
+    values: dict[str, list[tuple]] = {}
+    for parameter in parameters.get_descendants():
+        if isinstance(parameter, Parameter):
+            values.setdefault(parameter.name, []).append(
+                tuple(parameter(f"{year}-01-01") for year in REFERENCE_YEARS)
+            )
+    return values
+
+
+def module_parameters_unchanged(reference) -> dict:
+    """A report row: the shared system's parameters still equal the reference."""
+    from policyengine_uk.system import system
+
+    before = _parameter_values(reference)
+    now = _parameter_values(system.parameters)
+    changed = sorted(
+        path for path in before.keys() | now.keys() if before.get(path) != now.get(path)
+    )
+    return {
+        "case_id": "module_parameters_unchanged",
+        "route": "all",
+        "reform_digest": None,
+        "check": f"every parameter on 1 January {REFERENCE_YEARS[0]}-{REFERENCE_YEARS[-1]}",
+        "status": FAIL if changed else PASS,
+        "expected": "current law's parameters as they were before the run",
+        "actual": f"{len(changed)} changed: {changed[:10]}" if changed else "unchanged",
+        "oracle": "a copy of the shared system's parameters taken before any reform",
+    }
 
 
 def _row(case: Case, route: str, digest: Optional[str], **fields) -> dict:
@@ -1104,8 +1393,17 @@ def _close(actual: float, expected: float, tolerance: float) -> bool:
     return math.isfinite(actual) and abs(actual - expected) <= tolerance
 
 
-def evaluate_case(case: Case, route: str, cache: Optional[dict] = None) -> list[dict]:
-    """Run one case through one route; one report row per check."""
+def evaluate_case(
+    case: Case,
+    route: str,
+    cache: Optional[dict] = None,
+    reference: Optional[Callable[[str, int], float]] = None,
+) -> list[dict]:
+    """Run one case through one route; one report row per check.
+
+    ``reference`` reads current law's annual parameters for expected values;
+    by default, a copy taken now.
+    """
     cache = {} if cache is None else cache
     if route in UNSUPPORTED_ROUTES:
         return [
@@ -1119,8 +1417,8 @@ def evaluate_case(case: Case, route: str, cache: Optional[dict] = None) -> list[
             )
         ]
     representation = represent(case, route)
-    digest = reform_digest(representation, route)
-    context = Context(_baseline_parameter_reader())
+    digest = reform_digest(representation, route, case)
+    context = Context(reference or _baseline_parameter_reader())
     if case.expect_error is not None:
         try:
             _route(route).run(
@@ -1264,6 +1562,22 @@ def evaluate_case(case: Case, route: str, cache: Optional[dict] = None) -> list[
                 oracle="the reformed simulation's baseline equals an unreformed simulation",
             )
         )
+    for name, year, after, unreformed in run.after:
+        rows.append(
+            _row(
+                case,
+                route,
+                digest,
+                check=f"unreformed_after_reform:{name}:{year}",
+                status=PASS if after == unreformed else FAIL,
+                expected=unreformed,
+                actual=after,
+                oracle=(
+                    "an unreformed simulation built after the reform equals one "
+                    "built before it"
+                ),
+            )
+        )
     return rows
 
 
@@ -1319,8 +1633,12 @@ def expected_annual(
     return total / days
 
 
-def _property_annual_values(change: Change, routes: Sequence[str], cache: dict) -> None:
-    baseline = _baseline_parameter_reader()
+def _property_annual_values(
+    change: Change,
+    routes: Sequence[str],
+    cache: dict,
+    reference: Callable[[str, int], float],
+) -> None:
     representation = country_reform_dict([change])
     for route in routes:
         simulation = _CountryRoute(route).simulation(
@@ -1332,50 +1650,87 @@ def _property_annual_values(change: Change, routes: Sequence[str], cache: dict) 
                     f"{year}-01-01"
                 )
             )
-            expected = expected_annual(change, year, baseline)
+            expected = expected_annual(change, year, reference)
             assert abs(actual - expected) <= 1e-9, (
-                route,
-                change,
-                year,
-                actual,
-                expected,
+                f"{route}: {change.path} in {year} is {actual}, expected {expected}"
             )
 
 
+SAMPLED_OUTPUTS = (
+    "income_tax",
+    "capital_gains_tax",
+    "uc_standard_allowance",
+    "universal_credit",
+)
+SAMPLED_GAINS = 10_000
+
+
 def _property_routes_agree(
-    change: Change, income: int, routes: Sequence[str], cache: dict
+    change: Change,
+    income: int,
+    routes: Sequence[str],
+    cache: dict,
+    reference: Callable[[str, int], float],
 ) -> None:
-    household = adult(income)
+    household = adult(income, capital_gains=SAMPLED_GAINS)
     case = Case(
         "sampled",
         "sampled",
         (change,),
         household,
         tuple(
-            Check("change", "income_tax", year, 0.0, "") for year in (2026, 2028, 2031)
+            Check("change", name, year, 0.0, "")
+            for name in SAMPLED_OUTPUTS
+            for year in (2026, 2028, 2031)
         ),
     )
     results = {}
     for route in routes:
         run = _route(route).run(case, represent(case, route), cache)
-        results[route] = {key: run.reformed[key] for key in run.reformed}
-        for name, year, from_baseline, unreformed in run.isolation:
-            assert from_baseline == unreformed, (route, name, year)
-    first = next(iter(results.values()))
+        results[route] = dict(run.reformed)
+        for name, year, value, unreformed in run.isolation + run.after:
+            assert value == unreformed, (
+                f"{route}: unreformed {name} in {year} is {value} after the "
+                f"reform, {unreformed} before it"
+            )
+    first_route = next(iter(results))
+    first = results[first_route]
     for route, values in results.items():
         for key, value in values.items():
-            assert abs(value - first[key]) <= 1e-6, (route, key, value, first[key])
+            assert abs(value - first[key]) <= 1e-6, (
+                f"{key[1]} in {key[2]} is {value} through {route} and "
+                f"{first[key]} through {first_route}"
+            )
 
 
 PROPERTIES = {
     "annual_values_match_the_oracle": "Random single changes on the country routes give the annual values of an independent fiscal-year annualisation.",
-    "routes_agree_and_baselines_hold": "Random changes give the same household income tax on every in-process route, and leave each route's baseline unchanged.",
+    "routes_agree_and_baselines_hold": "Random changes give the same household income tax, capital gains tax, Universal Credit standard allowance and award on every in-process route, and leave each route's baseline and later unreformed simulations unchanged.",
 }
 
 
+def _counterexample(change: Optional[Change], income: Optional[int], detail) -> dict:
+    return {
+        "change": repr(change),
+        "income": income,
+        "detail": str(detail)[:2000],
+    }
+
+
 def run_property(
-    property_id: str, routes: Sequence[str], seed: int, max_examples: int, cache: dict
+    property_id: str,
+    routes: Sequence[str],
+    seed: int,
+    max_examples: int,
+    cache: dict,
+    reference: Optional[Callable[[str, int], float]] = None,
 ) -> dict:
+    """Sample ``max_examples`` changes and check one property on each.
+
+    A failed check is ``fail`` and any other exception ``error``, under
+    Hypothesis or, when it is not installed, a seeded random sampler; both
+    report the change and income that broke the property.
+    """
     if max_examples <= 0:
         return {
             "property_id": property_id,
@@ -1383,6 +1738,7 @@ def run_property(
             "examples_run": 0,
             "reason": "max_examples is 0, so no examples were requested",
         }
+    reference = reference or _baseline_parameter_reader()
     country = [route for route in routes if route in COUNTRY_ROUTES]
     in_process = [route for route in routes if route not in UNSUPPORTED_ROUTES]
     if property_id == "annual_values_match_the_oracle":
@@ -1395,7 +1751,7 @@ def run_property(
             }
 
         def check(change, income):
-            _property_annual_values(change, country, cache)
+            _property_annual_values(change, country, cache, reference)
 
     else:
         if len(in_process) < 2:
@@ -1407,86 +1763,78 @@ def run_property(
             }
 
         def check(change, income):
-            _property_routes_agree(change, income, in_process, cache)
+            _property_routes_agree(change, income, in_process, cache, reference)
 
     examples = 0
+    current: list = [None, None]
+
+    def example(change, income):
+        nonlocal examples
+        examples += 1
+        current[:] = [change, income]
+        check(change, income)
+        release_dead_variable_modules()
+
     try:
         from hypothesis import HealthCheck, Phase, given, settings
         from hypothesis import seed as hypothesis_seed
         from hypothesis import strategies as st
-
+    except ImportError:
+        engine = "random"
+    else:
         engine = "hypothesis"
+    try:
+        if engine == "hypothesis":
 
-        @hypothesis_seed(seed)
-        @settings(
-            max_examples=max_examples,
-            deadline=None,
-            database=None,
-            suppress_health_check=list(HealthCheck),
-            # Shrinking reruns a failing example many times; each example
-            # builds several simulations, so it is left out to bound runtime.
-            phases=[Phase.explicit, Phase.generate],
-        )
-        @given(
-            change=st.randoms(use_true_random=False).map(_sampled_change),
-            income=st.integers(0, 150_000),
-        )
-        def sampled(change, income):
-            nonlocal examples
-            examples += 1
-            check(change, income)
-            release_dead_variable_modules()
+            @hypothesis_seed(seed)
+            @settings(
+                max_examples=max_examples,
+                deadline=None,
+                database=None,
+                suppress_health_check=list(HealthCheck),
+                # Shrinking reruns a failing example many times; each example
+                # builds several simulations, so it is left out to bound
+                # runtime. The first failure is reported as found.
+                phases=[Phase.explicit, Phase.generate],
+                report_multiple_bugs=False,
+            )
+            @given(
+                change=st.randoms(use_true_random=False).map(_sampled_change),
+                income=st.integers(0, 150_000),
+            )
+            def sampled(change, income):
+                example(change, income)
 
-        sampled()
+            sampled()
+        else:
+            rng = random.Random(seed)
+            for _ in range(max_examples):
+                example(_sampled_change(rng), rng.randrange(0, 150_001))
+    except AssertionError as failure:
         return {
             "property_id": property_id,
             "engine": engine,
             "examples_run": examples,
-            "status": PASS,
-        }
-    except ImportError:
-        rng = random.Random(seed)
-        for _ in range(max_examples):
-            change = _sampled_change(rng)
-            income = rng.randrange(0, 150_001)
-            examples += 1
-            try:
-                check(change, income)
-                release_dead_variable_modules()
-            except AssertionError as failure:
-                return {
-                    "property_id": property_id,
-                    "engine": "random",
-                    "examples_run": examples,
-                    "status": FAIL,
-                    "counterexample": {
-                        "change": repr(change),
-                        "income": income,
-                        "detail": str(failure),
-                    },
-                }
-        return {
-            "property_id": property_id,
-            "engine": "random",
-            "examples_run": examples,
-            "status": PASS,
-        }
-    except AssertionError as failure:
-        return {
-            "property_id": property_id,
-            "engine": "hypothesis",
-            "examples_run": examples,
             "status": FAIL,
-            "counterexample": str(failure)[:2000],
+            "counterexample": _counterexample(*current, failure),
         }
-    except Exception as error:  # noqa: BLE001
+    except Exception as error:  # noqa: BLE001 - a crash is a contract error
         return {
             "property_id": property_id,
-            "engine": "hypothesis",
+            "engine": engine,
             "examples_run": examples,
             "status": ERROR,
-            "detail": repr(error)[:2000],
+            "counterexample": _counterexample(
+                *current,
+                "".join(traceback.format_exception_only(type(error), error)).strip(),
+            ),
         }
+    return {
+        "property_id": property_id,
+        "engine": engine,
+        "examples_run": examples,
+        "status": PASS,
+    }
 
 
 # Entry point.
@@ -1530,20 +1878,32 @@ def run_budget_reform_contract(
         cases: Case ids to run; None runs every case.
     """
     selected_routes = list(routes) if routes is not None else list(ROUTES)
+    if not selected_routes:
+        raise ValueError(f"No routes selected; expected some of {ROUTES}.")
     unknown = [route for route in selected_routes if route not in ROUTES]
     if unknown:
         raise ValueError(f"Unknown routes {unknown}; expected some of {ROUTES}.")
+    case_ids = [case.id for case in CASES]
+    if cases is not None:
+        if not cases:
+            raise ValueError("No cases selected; pass None to run every case.")
+        unknown = [case_id for case_id in cases if case_id not in case_ids]
+        if unknown:
+            raise ValueError(f"Unknown cases {unknown}; expected some of {case_ids}.")
     selected_cases = [case for case in CASES if cases is None or case.id in cases]
+    # Expected values read current law as it is before any reform runs.
+    reference_tree = reference_parameters()
+    reference = parameter_reader(reference_tree)
     cache: dict = {}
     rows: list[dict] = []
     for case in selected_cases:
         for route in selected_routes:
             if case.routes is not None and route not in case.routes:
                 continue
-            rows.extend(evaluate_case(case, route, cache))
+            rows.extend(evaluate_case(case, route, cache, reference))
             release_dead_variable_modules()
     properties = [
-        run_property(property_id, selected_routes, seed, max_examples, cache)
+        run_property(property_id, selected_routes, seed, max_examples, cache, reference)
         for property_id in PROPERTIES
     ]
     population: list[dict] = []
@@ -1553,6 +1913,20 @@ def run_budget_reform_contract(
         )
 
         population = run_population_checks(dataset_path, selected_routes, seed)
+    if any(route not in UNSUPPORTED_ROUTES for route in selected_routes):
+        rows.append(module_parameters_unchanged(reference_tree))
+    if not any(row["status"] == PASS for row in rows + properties + population):
+        # A run in which nothing passed certifies nothing.
+        rows.append(
+            {
+                "case_id": "run",
+                "route": "all",
+                "reform_digest": None,
+                "check": "at least one check passed",
+                "status": ERROR,
+                "detail": "no case, property or population check passed",
+            }
+        )
     summary = {status: 0 for status in (PASS, FAIL, ERROR, UNSUPPORTED, PENDING)}
     for row in rows + properties + population:
         summary[row["status"]] = summary.get(row["status"], 0) + 1
