@@ -1501,7 +1501,9 @@ def test_a_walrus_in_a_comprehension_unbinds_a_constant(tmp_path):
     try:
         module, _ = _import_source(tmp_path, name, source)
         assert module.RATE == 2
-        _identity(module.raise_rate)  # RATE is computed, so not checked
+        # RATE is computed, so it is not a constant, and reading it is refused.
+        with pytest.raises(ReceiptError, match="reads RATE, a value of type int"):
+            _identity(module.raise_rate)
     finally:
         sys.modules.pop(name, None)
 
@@ -2013,9 +2015,283 @@ def test_a_walrus_in_a_default_binds_the_module(tmp_path):
     try:
         module, _ = _import_source(tmp_path, name, source)
         assert module.RATE == 0.30
-        assert _identity(module.raise_rate)  # not a false rejection
+        # Not mistaken for a reassigned constant ("RATE is 0.3 at run time but
+        # 0.21"): RATE is computed, and reading it is refused for that reason.
+        with pytest.raises(ReceiptError, match="reads RATE, a value of type float"):
+            _identity(module.raise_rate)
     finally:
         sys.modules.pop(name, None)
+
+
+# --- Module globals the modifier reads -------------------------------------------
+
+PARTIAL_SOURCE = """
+from functools import partial
+
+
+def apply_payment(simulation, *, amount, year):
+    simulation.payment = (amount, year)
+
+
+PAYMENT = partial(apply_payment, amount=120, year=2027)
+
+
+def modifier(simulation):
+    return PAYMENT(simulation)
+"""
+
+
+def test_a_module_level_partial_the_modifier_calls_is_refused(tmp_path):
+    """W5's review of uk-autumn-budget-dashboard-2026#23: editing the partial's
+    captured amount from 120 to 240 changed the payment under one digest."""
+
+    name = "w4_receipt_globals_partial"
+    try:
+        module, _ = _import_source(tmp_path, name, PARTIAL_SOURCE)
+        with pytest.raises(
+            ReceiptError,
+            match=r"modifier reads PAYMENT, a value of type functools\.partial",
+        ):
+            _identity(module.modifier)
+        module.PAYMENT.keywords["amount"] = 240
+        with pytest.raises(ReceiptError, match="reads PAYMENT"):
+            _identity(module.modifier)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize(
+    ("source", "match"),
+    [
+        pytest.param(
+            "import os\nRATE = float(os.environ.get('W4_RATE', '0.21'))\n\n\n"
+            "def raise_rate(simulation):\n    simulation.rate = RATE\n",
+            r"raise_rate reads RATE, a value of type float computed by the module",
+            id="computed-from-the-environment",
+        ),
+        pytest.param(
+            "from functools import partial\n\n\n"
+            "def _pay(simulation, amount):\n    simulation.paid = amount\n\n\n"
+            "PAY = partial(_pay, amount=120)\n\n\n"
+            "def _helper(simulation):\n    PAY(simulation)\n\n\n"
+            "def raise_rate(simulation):\n    _helper(simulation)\n",
+            r"_helper reads PAY, a value of type functools\.partial",
+            id="partial-through-a-helper",
+        ),
+        pytest.param(
+            "import functools\nSCALE = float('2')\n\n\n"
+            "def scaled(function):\n    @functools.wraps(function)\n"
+            "    def wrapper(value):\n        return function(value) * SCALE\n"
+            "    return wrapper\n\n\n"
+            "@scaled\ndef _helper(value):\n    return value\n\n\n"
+            "def raise_rate(simulation):\n    simulation.rate = _helper(0.21)\n",
+            r"scaled\.<locals>\.wrapper reads SCALE",
+            id="computed-global-in-a-decorator-wrapper",
+        ),
+        pytest.param(
+            "import os\nSCALE = len(os.sep)\n\n\n"
+            "def raise_rate(simulation):\n    scale = lambda rate: rate * SCALE\n"
+            "    simulation.rate = scale(0.21)\n",
+            r"raise_rate reads SCALE",
+            id="computed-global-in-nested-code",
+        ),
+        pytest.param(
+            "class Measure:\n    rate = 0.21\n\n\n"
+            "def raise_rate(simulation):\n    simulation.rate = Measure.rate\n",
+            r"reads Measure, a class defined in the file",
+            id="class-in-the-file",
+        ),
+        pytest.param(
+            "from math import pi\n\n\n"
+            "def raise_rate(simulation):\n    simulation.rate = pi / 10\n",
+            r"reads pi, an imported value of type float",
+            id="imported-value",
+        ),
+        pytest.param(
+            "from functools import partial\nfrom operator import mul\n"
+            "from math import floor as PAY\n"
+            "PAY = partial(mul, 2)\n\n\n"
+            "def raise_rate(simulation):\n    simulation.rate = PAY(0.21)\n",
+            r"reads PAY, a value of type functools\.partial",
+            id="import-rebound-to-a-partial",
+        ),
+        pytest.param(
+            "from math import *\n\n\n"
+            "def raise_rate(simulation):\n    simulation.rate = floor(e)\n",
+            r"reads e, an imported value of type float",
+            id="star-imported-value",
+        ),
+        pytest.param(
+            "COUNT = 0\n\n\n"
+            "def raise_rate(simulation):\n    global COUNT\n    COUNT += 1\n"
+            "    simulation.rate = 0.21\n",
+            r"raise_rate assigns or deletes the module global COUNT",
+            id="assigns-a-global",
+        ),
+    ],
+)
+def test_modifiers_reading_module_state_the_digest_cannot_bind_are_refused(
+    tmp_path, source, match
+):
+    name = "w4_receipt_globals_refused"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match=match) as refused:
+            _identity(module.raise_rate)
+        assert "literal constant or a default argument" in str(refused.value)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_partial_imported_from_another_module_is_refused(tmp_path):
+    """``from params import PAY`` puts the partial in the modifier's module."""
+
+    params = "w4_receipt_globals_params"
+    name = "w4_receipt_globals_imports_partial"
+    try:
+        _import_source(
+            tmp_path,
+            params,
+            "from functools import partial\nfrom operator import mul\n\n"
+            "PAY = partial(mul, 120)\n",
+        )
+        module, _ = _import_source(
+            tmp_path,
+            name,
+            f"from {params} import PAY\n\n\n"
+            "def raise_rate(simulation):\n    simulation.paid = PAY(1)\n",
+        )
+        with pytest.raises(
+            ReceiptError,
+            match=r"reads PAY, an imported value of type functools\.partial",
+        ):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+        sys.modules.pop(params, None)
+
+
+def test_a_name_set_on_the_module_after_import_is_refused(tmp_path):
+    source = "def raise_rate(simulation):\n    simulation.rate = EXTRA\n"
+    name = "w4_receipt_globals_injected"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        _identity(module.raise_rate)  # EXTRA is unbound: running it fails
+        module.EXTRA = 0.30
+        with pytest.raises(
+            ReceiptError, match="reads EXTRA, a value of type float set on the module"
+        ):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+ALLOWED_GLOBALS_SOURCE = """
+import math
+from functools import partial
+from math import floor
+
+RATE = 0.21
+UNREAD = partial(floor)  # computed, but nothing the modifier runs reads it
+
+
+def _countdown(depth):
+    return 0 if depth == 0 else _countdown(depth - 1)
+
+
+def raise_rate(simulation):
+    class Local:
+        value = RATE
+
+    simulation.rate = floor(Local.value * 100) / 100 + _countdown(2)
+    simulation.tau = math.tau
+    simulation.module = __name__
+    simulation.count = len([RATE])
+"""
+
+
+def test_literals_functions_imports_and_builtins_bind(tmp_path):
+    """Recursion terminates, a class inside the modifier reads its own body, a
+    module attribute is bound by the code revision, and unread state is not
+    the modifier's."""
+
+    name = "w4_receipt_globals_allowed"
+    try:
+        module, _ = _import_source(tmp_path, name, ALLOWED_GLOBALS_SOURCE)
+        identity = scenario_reform_identity(
+            _scenario(simulation_modifier=module.raise_rate), code_revision=REVISION
+        )
+        assert identity.binding == "code_revision"
+    finally:
+        sys.modules.pop(name, None)
+
+
+#: Each kind of module global, as (definition, expression reading it, bindable).
+GLOBAL_KINDS = {
+    "literal": ("K_LITERAL = 0.21", "K_LITERAL", True),
+    "function": ("def k_function():\n    return 1", "k_function()", True),
+    "imported_callable": ("from math import floor as k_floor", "k_floor(1.5)", True),
+    "module": ("import math as k_math", "k_math.tau", True),
+    "builtin": ("", "len(())", True),
+    "partial": (
+        "from functools import partial as _partial\nK_PARTIAL = _partial(abs)",
+        "K_PARTIAL(-1)",
+        False,
+    ),
+    "computed": ("K_COMPUTED = abs(-1)", "K_COMPUTED", False),
+    "class": ("class KClass:\n    pass", "KClass", False),
+    "imported_value": ("from math import e as k_e", "k_e", False),
+}
+_GLOBAL_MODULES = iter(range(10**9))
+
+
+@settings(max_examples=60, deadline=None)
+@given(
+    kinds=st.lists(
+        st.sampled_from(sorted(GLOBAL_KINDS)), min_size=1, max_size=5, unique=True
+    ),
+    through_helper=st.booleans(),
+)
+def test_a_modifier_binds_exactly_when_every_global_it_reads_binds(
+    kinds, through_helper
+):
+    """Invariant: an identity is issued if and only if every module global the
+    modifier's code reads, directly or through a function in the file, is a
+    literal, a function in the file, an imported callable or module, or a
+    builtin; otherwise the refusal names an unbindable global."""
+
+    import tempfile
+
+    definitions = "\n\n\n".join(
+        GLOBAL_KINDS[kind][0] for kind in kinds if GLOBAL_KINDS[kind][0]
+    )
+    reads = ", ".join(GLOBAL_KINDS[kind][1] for kind in kinds)
+    if through_helper:
+        body = (
+            f"def _reader():\n    return ({reads},)\n\n\n"
+            "def raise_rate(simulation):\n    simulation.values = _reader()\n"
+        )
+    else:
+        body = f"def raise_rate(simulation):\n    simulation.values = ({reads},)\n"
+    source = f"{definitions}\n\n\n{body}"
+    name = f"w4_receipt_globals_property_{next(_GLOBAL_MODULES)}"
+    unbindable = [kind for kind in kinds if not GLOBAL_KINDS[kind][2]]
+    with tempfile.TemporaryDirectory() as directory:
+        try:
+            module, _ = _import_source(Path(directory), name, source)
+            if not unbindable:
+                assert _identity(module.raise_rate)
+                return
+            with pytest.raises(ReceiptError) as refused:
+                _identity(module.raise_rate)
+            named = [
+                kind
+                for kind in unbindable
+                if f"reads {GLOBAL_KINDS[kind][1].split('(')[0]}," in str(refused.value)
+            ]
+            assert named, str(refused.value)
+        finally:
+            sys.modules.pop(name, None)
 
 
 def test_signed_zero_defaults_differ(tmp_path, monkeypatch):

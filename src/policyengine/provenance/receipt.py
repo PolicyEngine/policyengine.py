@@ -61,6 +61,7 @@ import __future__
 
 import ast
 import datetime
+import dis
 import functools
 import hashlib
 import inspect
@@ -71,7 +72,7 @@ import platform
 import re
 import sys
 import zipfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from importlib import metadata
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
@@ -1134,6 +1135,185 @@ def _module_differs_from_source(
     return None
 
 
+#: Names the import system sets on every module. Reading one reads nothing
+#: the module's source and location do not already fix.
+_MODULE_DUNDERS = frozenset(
+    {
+        "__builtins__",
+        "__cached__",
+        "__doc__",
+        "__file__",
+        "__loader__",
+        "__name__",
+        "__package__",
+        "__spec__",
+    }
+)
+#: Instructions that read a module global by name. ``LOAD_NAME`` and
+#: ``LOAD_FROM_DICT_OR_GLOBALS`` read a class body's own names first, so
+#: counting them may refuse more than needed, never less.
+_GLOBAL_READS = frozenset({"LOAD_GLOBAL", "LOAD_NAME", "LOAD_FROM_DICT_OR_GLOBALS"})
+_GLOBAL_WRITES = frozenset({"STORE_GLOBAL", "DELETE_GLOBAL"})
+
+
+def _code_objects(code: CodeType) -> Iterator[CodeType]:
+    """A code object and every code object nested in it."""
+
+    yield code
+    for constant in code.co_consts:
+        if isinstance(constant, CodeType):
+            yield from _code_objects(constant)
+
+
+def _wrapper_chain(value: Any, module: Any, filename: str) -> list[Any]:
+    """The functions from ``filename`` that calling ``value`` can run.
+
+    Follows ``__wrapped__`` from a decorator's wrapper to the function it
+    wraps, keeping each step whose code is in the file and runs with the
+    module's globals (a wrapper defined in another module is not this
+    module's state).
+    """
+
+    chain = []
+    for _ in range(16):
+        if value is None:
+            break
+        if (
+            inspect.isfunction(value)
+            and value.__code__.co_filename == filename
+            and value.__globals__ is vars(module)
+        ):
+            chain.append(value)
+        value = getattr(value, "__wrapped__", None)
+    return chain
+
+
+def _type_name(value: Any) -> str:
+    kind = type(value)
+    if kind.__module__ == "builtins":
+        return kind.__qualname__
+    return f"{kind.__module__}.{kind.__qualname__}"
+
+
+def _import_bindings(tree: ast.Module) -> tuple[set[str], bool]:
+    """Module-scope names every one of whose bindings is an import.
+
+    Also says whether the module has a star import, which binds names its
+    source does not list.
+    """
+
+    imported: set[str] = set()
+    other: set[str] = set()
+    star = False
+    for statement in _scope_statements(tree.body):
+        if isinstance(statement, (ast.Import, ast.ImportFrom)):
+            for alias in statement.names:
+                if alias.name == "*":
+                    star = True
+                else:
+                    imported.add((alias.asname or alias.name).split(".")[0])
+        else:
+            other.update(_statement_bindings(statement))
+    return imported - other, star
+
+
+def _unbindable_global(modifier: Any, module: Any, module_source: str) -> Optional[str]:
+    """A module global the modifier reads whose value the digest cannot bind.
+
+    Follows the modifier's code, nested code included, and the code of every
+    function defined in the file that it reads by name, and judges each
+    module global read:
+    - a name all of whose bindings assign literals is checked by value
+      elsewhere, and a name bound only with ``def`` is checked against the
+      source elsewhere and followed here;
+    - a name bound only by import must hold a module or a callable other
+      than a ``functools.partial``: code in another module is bound by the
+      code revision or the installed versions, but an imported value is not
+      bound at all;
+    - a name the source does not bind is a builtin, a name the import system
+      sets, or (after a star import) imported; any other such name was set on
+      the module after import;
+    - anything else (a ``functools.partial`` or other object built at import,
+      a value computed from the environment, a file or the clock, a class
+      defined in the file) is refused. So is code that assigns or deletes a
+      module global, since what it reads then depends on earlier calls.
+
+    Run after :func:`_module_differs_from_source`, which checks the literal
+    values and that each ``def`` name is still its function.
+    """
+
+    tree = ast.parse(module_source)
+    filename = modifier.__code__.co_filename
+    definitions: set[str] = set()
+    otherwise_bound: set[str] = set()
+    for statement in _scope_statements(tree.body):
+        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            definitions.add(statement.name)
+            for expression in _definition_time_expressions(statement):
+                otherwise_bound.update(_expression_bindings(expression))
+        else:
+            otherwise_bound.update(_statement_bindings(statement))
+    functions_only = definitions - otherwise_bound
+    literals = set(_literal_bindings(tree))
+    imports, star = _import_bindings(tree)
+    source_bound = definitions | otherwise_bound
+    namespace = vars(module)
+    missing = object()
+    pending = [modifier]
+    seen: set[int] = set()
+    while pending:
+        function = pending.pop()
+        if id(function) in seen:
+            continue
+        seen.add(id(function))
+        reader = function.__code__.co_qualname
+        for code in _code_objects(function.__code__):
+            for instruction in dis.get_instructions(code):
+                name = instruction.argval
+                if instruction.opname in _GLOBAL_WRITES:
+                    return (
+                        f"{reader} assigns or deletes the module global {name}, "
+                        "so what the module reads depends on earlier calls"
+                    )
+                if instruction.opname not in _GLOBAL_READS:
+                    continue
+                value = namespace.get(name, missing)
+                if name in functions_only:
+                    pending.extend(_wrapper_chain(value, module, filename))
+                    continue
+                if name in literals:
+                    continue
+                if name in imports or (
+                    star and name not in source_bound and value is not missing
+                ):
+                    if value is missing or inspect.ismodule(value):
+                        continue
+                    if callable(value) and not isinstance(value, functools.partial):
+                        continue
+                    return (
+                        f"{reader} reads {name}, an imported value of type "
+                        f"{_type_name(value)}, which no source the digest names fixes"
+                    )
+                if name not in source_bound:
+                    if value is missing or name in _MODULE_DUNDERS:
+                        continue
+                    return (
+                        f"{reader} reads {name}, a value of type "
+                        f"{_type_name(value)} set on the module after import"
+                    )
+                if inspect.isclass(value):
+                    return (
+                        f"{reader} reads {name}, a class defined in the file, whose "
+                        "attributes are module state the digest does not bind"
+                    )
+                return (
+                    f"{reader} reads {name}, a value of type {_type_name(value)} "
+                    "computed by the module rather than a literal constant, a "
+                    "function defined in the file or an import"
+                )
+    return None
+
+
 def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -1165,9 +1345,18 @@ def _modifier_identity(
     code (``if FLAG: def helper(): ... else: def helper(): ...``) is refused,
     because which definition the source selects now cannot be checked.
 
-    Not covered: other module state (objects built at import, imported
-    modules, class bodies and methods) and data read at run time;
-    ``code_revision`` names the code, not the process. Receipts are claims by
+    Every module global the modifier reads, directly or through functions
+    defined in the file, must be such a literal constant, such a function,
+    an imported module or callable, or a builtin. A ``functools.partial`` or
+    other object built at import, a value computed from the environment, a
+    file or the clock, a class defined in the file, an imported value, a name
+    set on the module after import, and code that assigns module globals are
+    refused: their values are not in the source the digest names.
+
+    Not covered: state in other modules (``params.PAYMENT`` read through
+    ``import params``), class bodies and methods, and data read at run time;
+    code in other modules is bound by ``code_revision`` or the installed
+    versions, and ``code_revision`` names the code, not the process. Receipts are claims by
     their producer: this protects an honest producer against mistakes, not a
     reader against a producer who builds code to mislead.
 
@@ -1221,6 +1410,12 @@ def _modifier_identity(
         raise ReceiptError(
             f"{modifier.__module__} no longer matches its source file: {difference} "
             "(edited or reassigned after import?), so it cannot be bound."
+        )
+    unbindable = _unbindable_global(modifier, module, module_source)
+    if unbindable is not None:
+        raise ReceiptError(
+            f"{modifier.__module__}: {unbindable}, so the modifier cannot be bound. "
+            "Put the value in a literal constant or a default argument in that file."
         )
     # Default arguments are runtime values, so they are bound by value, with
     # their types, for the modifier and every function in its module.
