@@ -788,6 +788,48 @@ def _run_contract(
     )[0]
 
 
+def test_the_released_models_full_run_passes_the_runners_own_declarations():
+    """W1's full run on released policyengine-uk 2.126.12, gated against the
+    coverage the merged runner module itself declares, so a stricter coverage
+    rule cannot reject a real full run unnoticed."""
+
+    import importlib
+    import types
+
+    from policyengine.tax_benefit_models.uk import budget_reform_contract as runner
+
+    report = _fixture("full_released_uk_2.126.12.json")
+    if runner.CONTRACT_VERSION != report["contract_version"]:
+        pytest.skip(
+            f"the runner declares contract {runner.CONTRACT_VERSION}; refresh "
+            "tests/fixtures/uk_contract with a real full run"
+        )
+    proxy = types.ModuleType(runner.__name__)
+    proxy.__dict__.update(vars(runner))
+    proxy.run_budget_reform_contract = lambda **kwargs: report
+
+    def importer(name):
+        return proxy if name == runner.__name__ else importlib.import_module(name)
+
+    result = reform_contract(
+        entrypoint=ENTRY,
+        importer=importer,
+        expected_versions=report["versions"],
+        expected_dataset_sha256=CERTIFIED_SHA,
+        seed=0,
+        max_examples=20,
+        dataset_path=Path("enhanced_frs_2024_25.h5"),
+    )[0]
+    assert result.status == "pass", result.summary
+    assert result.details["counts"] == {
+        "pass": 673,
+        "fail": 0,
+        "error": 0,
+        "unsupported": 79,
+        "pending": 6,
+    }
+
+
 def test_w1_report_on_the_pinned_model_fails_on_its_defects():
     """W1's real report on policyengine-uk 2.125.1: 66 failures and 35 errors."""
 
