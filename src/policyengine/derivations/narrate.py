@@ -20,16 +20,29 @@ DEFAULT_MAX_TOKENS = 4096
 
 
 def _model_options(
-    model: str, temperature: float | None, *, drop_params: bool = False
+    model: str, temperature: float | None, *, litellm: Any
 ) -> dict[str, Any]:
     if model in (DEFAULT_MODEL, f"anthropic/{DEFAULT_MODEL}"):
         if temperature is not None:
             raise ValueError("Sonnet 5.5 narration does not support temperature.")
-        if drop_params:
+        if getattr(litellm, "drop_params", False):
             raise ValueError(
                 "LiteLLM would drop Sonnet 5.5's low-effort output_config. "
                 "Disable LITELLM_DROP_PARAMS and set litellm.drop_params=False "
                 "before requesting narration."
+            )
+        # LiteLLM merges global Anthropic defaults after request arguments.
+        config = litellm.AnthropicConfig.get_config()
+        sampling_parameters = [
+            name
+            for name in ("temperature", "top_p", "top_k")
+            if config.get(name) is not None
+        ]
+        if sampling_parameters:
+            raise ValueError(
+                "Sonnet 5.5 narration does not support LiteLLM AnthropicConfig "
+                f"sampling settings: {', '.join(sampling_parameters)}. "
+                "Clear these settings before requesting narration."
             )
         return {
             "custom_llm_provider": "anthropic",
@@ -109,6 +122,7 @@ def narrate(
     LLM dependency. Install ``policyengine[narration]`` to enable this feature.
     Defaults to Sonnet 5.5 with low effort and a 4096-token total budget.
     Temperature is omitted by default and only supported with other models.
+    Global LiteLLM AnthropicConfig sampling settings must also be unset.
     LiteLLM's ``drop_params`` must remain false so it preserves low effort.
     Returns the model's response text; raises ``ValueError`` on refusal, an
     empty response, or incompatible Sonnet options.
@@ -126,9 +140,7 @@ def narrate(
         model=model,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=max_tokens,
-        **_model_options(
-            model, temperature, drop_params=getattr(litellm, "drop_params", False)
-        ),
+        **_model_options(model, temperature, litellm=litellm),
     )
     return _response_text(response)
 
@@ -158,8 +170,6 @@ async def narrate_async(
         model=model,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=max_tokens,
-        **_model_options(
-            model, temperature, drop_params=getattr(litellm, "drop_params", False)
-        ),
+        **_model_options(model, temperature, litellm=litellm),
     )
     return _response_text(response)

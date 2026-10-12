@@ -137,7 +137,10 @@ def test_narrate_passes_trace_to_litellm(monkeypatch):
     monkeypatch.setitem(
         __import__("sys").modules,
         "litellm",
-        types.SimpleNamespace(completion=fake_completion),
+        types.SimpleNamespace(
+            completion=fake_completion,
+            AnthropicConfig=types.SimpleNamespace(get_config=lambda: {}),
+        ),
     )
 
     derivation = Derivation(
@@ -186,7 +189,10 @@ def test_narrate_async_uses_litellm_acompletion(monkeypatch):
     monkeypatch.setitem(
         __import__("sys").modules,
         "litellm",
-        types.SimpleNamespace(acompletion=fake_acompletion),
+        types.SimpleNamespace(
+            acompletion=fake_acompletion,
+            AnthropicConfig=types.SimpleNamespace(get_config=lambda: {}),
+        ),
     )
 
     derivation = Derivation(
@@ -227,6 +233,7 @@ def call_narration(request):
 def fake_narration_client(monkeypatch):
     client = types.SimpleNamespace(
         kwargs=None,
+        AnthropicConfig=types.SimpleNamespace(get_config=lambda: {}),
         response=types.SimpleNamespace(
             choices=[
                 types.SimpleNamespace(
@@ -269,10 +276,61 @@ def test_narration_rejects_litellm_dropping_effort(
     assert fake_narration_client.kwargs is None
 
 
+@pytest.mark.parametrize("model", ["claude-sonnet-5-5", "anthropic/claude-sonnet-5-5"])
+@pytest.mark.parametrize(
+    ("sampling_parameter", "value"),
+    [
+        ("temperature", 0.2),
+        ("top_p", 0.5),
+        ("top_k", 10),
+        ("temperature", 0.0),
+        ("top_p", 0.0),
+        ("top_k", 0),
+    ],
+)
+def test_narration_rejects_global_anthropic_sampling(
+    monkeypatch, call_narration, narration_derivation, model, sampling_parameter, value
+):
+    """Global provider defaults must be rejected before calling LiteLLM."""
+    monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+    import litellm
+
+    monkeypatch.setattr(litellm, "drop_params", False)
+    monkeypatch.setattr(litellm.AnthropicConfig, sampling_parameter, value)
+    config_before = litellm.AnthropicConfig.get_config()
+    calls = []
+
+    def completion(**kwargs):
+        calls.append(kwargs)
+        return types.SimpleNamespace(
+            choices=[
+                types.SimpleNamespace(
+                    message=types.SimpleNamespace(content="Narrative."),
+                    finish_reason="stop",
+                )
+            ]
+        )
+
+    async def acompletion(**kwargs):
+        return completion(**kwargs)
+
+    monkeypatch.setattr(litellm, "completion", completion)
+    monkeypatch.setattr(litellm, "acompletion", acompletion)
+    with pytest.raises(ValueError, match=f"AnthropicConfig.*{sampling_parameter}"):
+        call_narration(narration_derivation, model=model)
+    assert calls == []
+    assert litellm.AnthropicConfig.get_config() == config_before
+
+
 def test_narration_preserves_custom_model_options(
     call_narration, narration_derivation, fake_narration_client
 ):
     fake_narration_client.drop_params = True
+    fake_narration_client.AnthropicConfig.get_config = lambda: {
+        "temperature": 0.2,
+        "top_p": 0.5,
+        "top_k": 10,
+    }
     result = call_narration(
         narration_derivation,
         model="custom-provider/custom-model",
@@ -327,6 +385,8 @@ def test_narration_litellm_provider_translation_offline(
     from litellm.llms.custom_httpx.http_handler import AsyncHTTPHandler, HTTPHandler
 
     monkeypatch.setattr(litellm, "drop_params", False)
+    monkeypatch.setattr(litellm.AnthropicConfig, "max_tokens", 17)
+    config_before = litellm.AnthropicConfig.get_config()
     monkeypatch.delenv("LITELLM_ANTHROPIC_DISABLE_URL_SUFFIX", raising=False)
     real_completion = litellm.completion
     real_acompletion = litellm.acompletion
@@ -402,3 +462,4 @@ def test_narration_litellm_provider_translation_offline(
             == "First sentence. Second sentence."
         )
     assert len(requests) == 1
+    assert litellm.AnthropicConfig.get_config() == config_before
