@@ -441,12 +441,20 @@ def _gate(receipt_doc, request=None, status=None):
     )
 
 
-def _with_counts(**counts):
+def _with_counts(sealed=True, **counts):
+    """The golden receipt with these flag counts and one flagged row per flag."""
+
     doc = copy.deepcopy(golden("replay_receipt_golden"))
     base = {key: 0 for key in doc["diff"]["flag_counts"]}
     base.update(counts)
     doc["diff"]["flag_counts"] = base
-    return _sealed(doc)
+    template = doc["diff"]["flagged_rows"][0]
+    doc["diff"]["flagged_rows"] = [
+        {**template, "flags": [kind], "year": 2024 + index}
+        for kind, count in counts.items()
+        for index in range(count)
+    ]
+    return _sealed(doc) if sealed else doc
 
 
 def test_golden_receipt_fails_on_its_structural_flag():
@@ -469,6 +477,87 @@ def test_golden_receipt_fails_on_its_structural_flag():
 )
 def test_flag_policy(counts, status):
     assert _gate(_with_counts(**counts)).status == status
+
+
+def _clean_receipt():
+    return _with_counts(sealed=False)
+
+
+def _edit(receipt, edit):
+    edit(receipt)
+    return _sealed(receipt)
+
+
+EVENT = "spring_budget_2023"
+
+CONTRADICTIONS = {
+    "a structural row with zero counts": lambda r: r["diff"].update(
+        flagged_rows=[{**golden("replay_receipt_golden")["diff"]["flagged_rows"][1]}]
+    ),
+    "a failure under complete integrity": lambda r: r["integrity"].update(
+        failures=[{"code": "construction", "detail": "measure failed"}]
+    ),
+    "supported years with no artifacts": lambda r: r["corpus"]["events"][EVENT].update(
+        artifacts=0
+    ),
+    "nothing replayed": lambda r: r["corpus"]["events"][EVENT].update(
+        artifacts=0, supported_years=[]
+    ),
+    "an event with no years": lambda r: r["corpus"]["events"][EVENT].update(
+        supported_years=[], unsupported_years=[]
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(CONTRADICTIONS))
+def test_a_receipt_that_contradicts_itself_fails(name):
+    """Interrupted review of #574: each of these was schema-valid, correctly
+    digested, and passed the gate because the summary counters were zero."""
+
+    receipt = _edit(_clean_receipt(), CONTRADICTIONS[name])
+    _validator("replay_receipt.v1.json").validate(receipt)
+    gate = _gate(receipt)
+    assert gate.status == "fail", (name, gate.summary)
+    assert "contradicts itself or the request" in gate.summary
+
+
+def test_blocking_flags_count_wherever_the_receipt_states_them():
+    """A row's flag blocks even when its counter is understated."""
+
+    receipt = _with_counts(sealed=False, numerical=1)
+    receipt["diff"]["flagged_rows"].append(
+        {**receipt["diff"]["flagged_rows"][0], "flags": ["mapping"], "year": 2030}
+    )
+    receipt["diff"]["flag_counts"]["mapping"] = 1
+    assert _gate(_sealed(receipt)).status == "fail"
+    assert "mapping" in _gate(_sealed(receipt)).summary
+
+
+def test_an_inert_measure_year_without_a_flag_needs_review():
+    receipt = _edit(
+        _clean_receipt(),
+        lambda r: r["corpus"]["events"][EVENT].update(
+            inert_measure_years=[{"measure_key": "uc_childcare", "year": 2026}]
+        ),
+    )
+    gate = _gate(receipt)
+    assert gate.status == "needs_review" and "inert" in gate.summary
+
+
+def test_the_comparison_base_must_be_the_one_requested():
+    raw = copy.deepcopy(golden("qualification_request_golden"))
+    base_variant = _clean_receipt()["diff"]["base_variant_id"]
+    raw["compare_to"] = base_variant
+    explicit = ReplayQualificationRequest.model_validate(raw)
+    receipt = _clean_receipt()
+    receipt["request_id"] = explicit.request_id
+    assert _gate(_sealed(receipt), request=explicit).status == "pass"
+    raw["compare_to"] = "pe6.2.6_uk2.125.1_policyengine-uk-data-1.58.0"
+    other = ReplayQualificationRequest.model_validate(raw)
+    receipt = _clean_receipt()
+    receipt["request_id"] = other.request_id
+    gate = _gate(_sealed(receipt), request=other)
+    assert gate.status == "fail" and "asked for a comparison" in gate.summary
 
 
 def test_incomplete_or_failed_integrity_fails():

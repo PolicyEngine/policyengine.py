@@ -610,13 +610,42 @@ def budget_inputs(
 
 def _load_entrypoint(
     entrypoint: str, importer: Callable[[str], Any]
-) -> Callable[..., Any]:
+) -> tuple[Callable[..., Any], Any]:
+    """The entrypoint's callable and the module that defines it."""
+
     module_name, _, attribute = entrypoint.partition(":")
     if not attribute:
         module_name, _, attribute = entrypoint.rpartition(".")
     module = importer(module_name)
     function: Callable[..., Any] = getattr(module, attribute)
-    return function
+    return function, module
+
+
+def _contract_coverage(module: Any) -> Optional[dict[str, list[Any]]]:
+    """What a full contract run covers, as the runner's own module declares it.
+
+    ``ROUTES`` (route ids), ``CASES`` (objects with an ``id`` and optional
+    ``routes`` limiting where the case runs) and ``PROPERTIES`` (keyed by
+    property id). ``None`` when the module does not declare them, so coverage
+    cannot be checked.
+    """
+
+    try:
+        routes = [str(route) for route in module.ROUTES]
+        pairs = [
+            (str(case.id), str(route))
+            for case in module.CASES
+            for route in (
+                case.routes if getattr(case, "routes", None) is not None else routes
+            )
+        ]
+        return {
+            "routes": routes,
+            "pairs": pairs,
+            "properties": [str(name) for name in module.PROPERTIES],
+        }
+    except AttributeError:
+        return None
 
 
 #: Report sections: the key that names each row, and what a row is called.
@@ -643,6 +672,10 @@ def reform_contract(
     ``fail`` when any case, sampled property or population check fails or
     errors. ``error`` when the report cannot be trusted as a full run of this
     candidate:
+    - it does not cover every route, every case on each of its routes and
+      every sampled property the runner's module declares (``ROUTES``,
+      ``CASES``, ``PROPERTIES``), or a property passed on fewer examples than
+      requested;
     - a pending row lacks its ``decision_id``, or an unsupported case or
       population check lacks its ``reason``;
     - a sampled property did not run;
@@ -660,7 +693,7 @@ def reform_contract(
             {},
         )
     try:
-        runner = _load_entrypoint(entrypoint, importer)
+        runner, runner_module = _load_entrypoint(entrypoint, importer)
     except (ImportError, AttributeError) as exc:
         return _result(
             "reform_contract",
@@ -714,6 +747,55 @@ def reform_contract(
                 malformed.append(f"{label} has unknown status {status!r}")
     if not report.get("cases"):
         malformed.append("the report has no cases")
+    # A full run covers what the runner itself declares: every route, every
+    # case on each route it runs on, and every sampled property with the
+    # examples asked for. A report that drops any of it does not qualify.
+    coverage = _contract_coverage(runner_module)
+    if coverage is None:
+        malformed.append(
+            "the runner declares no ROUTES, CASES and PROPERTIES, so the "
+            "report's coverage cannot be checked"
+        )
+    else:
+        reported_routes = [str(route) for route in report.get("routes") or []]
+        if sorted(reported_routes) != sorted(coverage["routes"]):
+            malformed.append(
+                f"the report covers routes {sorted(reported_routes)}, not "
+                f"{sorted(coverage['routes'])}"
+            )
+        covered = {
+            (str(row.get("case_id")), str(row.get("route")))
+            for row in report.get("cases") or []
+        }
+        absent = [
+            f"{case}@{route}"
+            for case, route in coverage["pairs"]
+            if (case, route) not in covered
+        ]
+        if absent:
+            malformed.append(
+                f"{len(absent)} case-route pair(s) have no row: "
+                + ", ".join(absent[:4])
+            )
+        properties = {
+            str(row.get("property_id")): row for row in report.get("properties") or []
+        }
+        for name in coverage["properties"]:
+            row = properties.get(name)
+            if row is None:
+                malformed.append(f"property {name} has no row")
+            elif row.get("status") == "pass":
+                examples = row.get("examples_run")
+                if (
+                    isinstance(examples, bool)
+                    or not isinstance(examples, int)
+                    or examples < max_examples
+                    or examples < 1
+                ):
+                    malformed.append(
+                        f"property {name} passed on {examples} example(s), "
+                        f"not the {max_examples} requested"
+                    )
     if dataset_path is not None and not report.get("population"):
         malformed.append("a dataset was given but no population checks ran")
     for field, requested in (("seed", seed), ("max_examples", max_examples)):
@@ -812,6 +894,10 @@ REGRESSION_CHECK_PREFIXES = (
 )
 
 
+#: The statuses the metrics tool gives a check. Anything else fails.
+CHECK_STATUSES = frozenset({"pass", "warn", "fail", "skipped"})
+
+
 def classify_check(identity_id: str) -> str:
     """``hard``, ``regression`` or ``hard`` for an unknown check (no skips)."""
 
@@ -848,12 +934,25 @@ def compare_metric_reports(
     them); ``warn`` is recorded, and a check that newly warns, or is skipped
     where the previous pair passed it, needs review. ``skipped`` is neither a
     pass nor a failure.
+
+    A report with a status other than ``ok``, no metrics or no checks fails,
+    as does any check with a status outside ``CHECK_STATUSES``. A hard check
+    the previous pair ran that is missing from the candidate fails (the two
+    reports share one tool and one set of definitions); other missing checks
+    need review.
     """
 
     problems: list[str] = []
     review: list[str] = []
-    if candidate.get("status") not in (None, "ok"):
-        problems.append(f"the candidate report status is {candidate.get('status')!r}")
+    # An empty or unfinished report measures nothing; it must never read as
+    # "no moves beyond the bounds".
+    for name, report in (("candidate", candidate), ("previous", previous)):
+        if report.get("status") != "ok":
+            problems.append(f"the {name} report status is {report.get('status')!r}")
+        if not report.get("metrics"):
+            problems.append(f"the {name} report has no metrics")
+        if not report.get("identities"):
+            problems.append(f"the {name} report has no checks")
     previous_rows = {
         str(row.get("identity_id")): row for row in previous.get("identities", [])
     }
@@ -863,12 +962,17 @@ def compare_metric_reports(
     new_warnings: list[str] = []
     warnings_: list[str] = []
     newly_skipped: list[str] = []
+    unknown_statuses: list[str] = []
+    candidate_checks = set()
     for row in candidate.get("identities", []):
         check_id = str(row.get("identity_id"))
+        candidate_checks.add(check_id)
         status = row.get("status")
         earlier = previous_rows.get(check_id) or {}
         before = earlier.get("status")
-        if status == "fail":
+        if status not in CHECK_STATUSES:
+            unknown_statuses.append(f"{check_id} ({status!r})")
+        elif status == "fail":
             if classify_check(check_id) == "hard":
                 hard_failures.append(check_id)
             elif before != "fail":
@@ -883,6 +987,24 @@ def compare_metric_reports(
                 new_warnings.append(check_id)
         elif status == "skipped" and before == "pass":
             newly_skipped.append(check_id)
+    if unknown_statuses:
+        # A status this gate does not know is not a pass.
+        problems.append(
+            f"checks with an unknown status: {', '.join(unknown_statuses[:8])}"
+        )
+    # A check the previous pair ran and the candidate did not: the tool and
+    # its definitions are the same (metrics_version), so coverage was lost.
+    lost_checks = sorted(set(previous_rows) - candidate_checks)
+    lost_hard = [
+        check_id
+        for check_id in lost_checks
+        if classify_check(check_id) == "hard"
+        and candidate.get("partition_version") == previous.get("partition_version")
+    ]
+    if lost_hard:
+        problems.append(f"checks disappeared: {', '.join(lost_hard[:8])}")
+    elif lost_checks:
+        review.append(f"checks disappeared: {', '.join(lost_checks[:8])}")
     if hard_failures:
         problems.append(f"checks failed: {', '.join(hard_failures[:8])}")
     if regressions:
@@ -957,6 +1079,8 @@ def compare_metric_reports(
         "warn_identities": warnings_,
         "new_warnings": new_warnings,
         "newly_skipped_checks": newly_skipped,
+        "unknown_status_checks": unknown_statuses,
+        "lost_checks": lost_checks,
         "moves_beyond_bounds": moves,
         "candidate_report_sha256": evidence_sha256(candidate),
         "previous_report_sha256": evidence_sha256(previous),

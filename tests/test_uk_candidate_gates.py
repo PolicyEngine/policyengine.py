@@ -542,7 +542,34 @@ def test_critical_inputs_file_lists_real_model_inputs():
 # --- Reform contract -----------------------------------------------------------------
 
 
-def _importer(report=None, raises=None, missing=False):
+def _declared_coverage(source):
+    """ROUTES, CASES and PROPERTIES as a runner module declares them, read
+    from a report of a full run (each case limited to the routes it ran on)."""
+
+    source = source or {}
+    by_case = {}
+    for row in source.get("cases") or []:
+        by_case.setdefault(row.get("case_id"), []).append(row.get("route"))
+    return {
+        "ROUTES": tuple(source.get("routes") or ()),
+        "CASES": tuple(
+            SimpleNamespace(id=case, routes=tuple(dict.fromkeys(routes)))
+            for case, routes in by_case.items()
+        ),
+        "PROPERTIES": {
+            row.get("property_id"): "" for row in source.get("properties") or []
+        },
+    }
+
+
+def _importer(report=None, raises=None, missing=False, coverage=None, declare=True):
+    """A runner module returning ``report``.
+
+    It declares the coverage of ``coverage`` (a report of a full run), by
+    default ``report`` itself, so a test of row statuses is not also a test
+    of coverage.
+    """
+
     def runner(**kwargs):
         if raises:
             raise raises
@@ -551,7 +578,12 @@ def _importer(report=None, raises=None, missing=False):
     def importer(name):
         if missing:
             raise ModuleNotFoundError(name)
-        return SimpleNamespace(run_budget_reform_contract=runner)
+        declared = (
+            _declared_coverage(coverage if coverage is not None else report)
+            if declare
+            else {}
+        )
+        return SimpleNamespace(run_budget_reform_contract=runner, **declared)
 
     return importer
 
@@ -689,13 +721,20 @@ def _passing_report() -> dict:
     return _fixture("full_allpass_uk_2.126.8.json")
 
 
-def _run_contract(report, *, versions=None, dataset_sha=CERTIFIED_SHA, **kwargs):
+def _run_contract(
+    report, *, versions=None, dataset_sha=CERTIFIED_SHA, coverage=None, **kwargs
+):
+    """Gate ``report`` against the coverage of W1's real full run (or ``coverage``)."""
+
     kwargs.setdefault("seed", 0)
     kwargs.setdefault("max_examples", 20)
     kwargs.setdefault("dataset_path", Path("enhanced_frs_2024_25.h5"))
     return reform_contract(
         entrypoint=ENTRY,
-        importer=_importer(report=report),
+        importer=_importer(
+            report=report,
+            coverage=coverage if coverage is not None else _passing_report(),
+        ),
         expected_versions=versions
         or {"policyengine-uk": "2.126.8", "policyengine-core": "3.33.0"},
         expected_dataset_sha256=dataset_sha,
@@ -713,6 +752,7 @@ def test_w1_report_on_the_pinned_model_fails_on_its_defects():
         dataset_sha=None,
         dataset_path=None,
         max_examples=report["max_examples"],
+        coverage=report,
     )
     assert result.status == "fail"
     assert result.summary.startswith("101 contract row(s) failed")
@@ -722,9 +762,8 @@ def test_w1_report_on_the_pinned_model_fails_on_its_defects():
 def test_w1_population_run_alone_is_incomplete():
     """W1's real population-only run has no cases and no sampled properties."""
 
-    result = _run_contract(
-        _fixture("population_pass_max_examples_0.json"), max_examples=0
-    )
+    population_only = _fixture("population_pass_max_examples_0.json")
+    result = _run_contract(population_only, max_examples=0, coverage=population_only)
     assert result.status == "error"
     problems = result.details["problems"]
     assert "the report has no cases" in problems
@@ -739,6 +778,68 @@ def test_w1_full_run_passes():
     assert "every case, property and population check passed (267)" in result.summary
     assert "6 pending a methodology call" in result.summary
     assert result.details["problems"] == []
+
+
+def _drop(report, **sections):
+    """``report`` with rows removed, its summary and holds recounted."""
+
+    return _recount({**report, **sections})
+
+
+COVERAGE_GAPS = {
+    "one case on one route": lambda r: (
+        _drop(r, cases=r["cases"][:1], population=r["population"][:1], properties=[])
+        | {"routes": r["routes"][:1]}
+    ),
+    "a route": lambda r: _drop(
+        r, cases=[row for row in r["cases"] if row["route"] != "wrapper.policy"]
+    ),
+    "a route from the route list": lambda r: {**r, "routes": r["routes"][:-1]},
+    "a case on one route": lambda r: _drop(
+        r,
+        cases=[
+            row
+            for row in r["cases"]
+            if (row["case_id"], row["route"])
+            != ("extended_freeze", "wrapper.household")
+        ],
+    ),
+    "a sampled property": lambda r: _drop(r, properties=r["properties"][:1]),
+    "every sampled property": lambda r: _drop(r, properties=[]),
+    "the sampled examples": lambda r: {
+        **r,
+        "properties": [{**row, "examples_run": 0} for row in r["properties"]],
+    },
+    "most sampled examples": lambda r: {
+        **r,
+        "properties": [{**row, "examples_run": 19} for row in r["properties"]],
+    },
+}
+
+
+@pytest.mark.parametrize("name", sorted(COVERAGE_GAPS))
+def test_a_report_that_drops_coverage_does_not_qualify(name):
+    """Interrupted review of #574: a recounted partial report passed, as did
+    properties that passed on zero examples."""
+
+    report = COVERAGE_GAPS[name](copy.deepcopy(_passing_report()))
+    result = _run_contract(report)
+    assert result.status == "error", (name, result.summary)
+
+
+def test_a_runner_that_declares_no_coverage_cannot_qualify():
+    report = _passing_report()
+    result = reform_contract(
+        entrypoint=ENTRY,
+        dataset_path=Path("enhanced_frs_2024_25.h5"),
+        seed=0,
+        max_examples=20,
+        expected_versions={"policyengine-uk": "2.126.8", "policyengine-core": "3.33.0"},
+        expected_dataset_sha256=CERTIFIED_SHA,
+        importer=_importer(report=report, declare=False),
+    )[0]
+    assert result.status == "error"
+    assert "declares no ROUTES, CASES and PROPERTIES" in result.summary
 
 
 REPORT_TAMPERING = {
@@ -807,7 +908,11 @@ def _report(values, **extra):
             {"metric_id": mid, "year": year, "value": value, "kind": kind}
             for (mid, year, kind), value in values.items()
         ],
-        "identities": extra.pop("identities", []),
+        # Every real report carries checks; one always passes here.
+        "identities": [
+            {"identity_id": "weights:household", "status": "pass"},
+            *extra.pop("identities", []),
+        ],
         **extra,
     }
 
@@ -846,6 +951,55 @@ def test_metric_comparison_rules():
     )
     status, _, evidence = compare_metric_reports(warned, _report(BASE), BOUNDS)
     assert status == "pass" and evidence["warn_identities"] == ["inert:alcohol_duty"]
+
+
+def test_reports_that_measure_nothing_fail():
+    """Interrupted review of #574: two empty reports compared as a pass."""
+
+    assert compare_metric_reports({}, {}, BOUNDS)[0] == "fail"
+    full = _report(BASE)
+    for broken in (
+        {**full, "metrics": []},
+        {**full, "identities": []},
+        {**full, "status": "error"},
+        {key: value for key, value in full.items() if key != "status"},
+    ):
+        assert compare_metric_reports(broken, full, BOUNDS)[0] == "fail"
+        assert compare_metric_reports(full, broken, BOUNDS)[0] == "fail"
+
+
+@pytest.mark.parametrize("status", ["error", "unsupported", "pending", None, "PASS"])
+def test_a_check_with_an_unknown_status_is_not_a_pass(status):
+    candidate = _report(BASE, identities=[{"identity_id": "closure", "status": status}])
+    previous = _report(BASE, identities=[{"identity_id": "closure", "status": "pass"}])
+    result = compare_metric_reports(candidate, previous, BOUNDS)
+    assert result[0] == "fail" and "unknown status" in result[1]
+
+
+def test_a_check_that_disappears_is_lost_coverage():
+    previous = _report(
+        BASE,
+        identities=[
+            {"identity_id": "closure", "status": "pass"},
+            {"identity_id": "sign:vat", "status": "pass"},
+        ],
+    )
+    # A hard check that vanished under the same partition fails.
+    no_closure = _report(
+        BASE, identities=[{"identity_id": "sign:vat", "status": "pass"}]
+    )
+    result = compare_metric_reports(no_closure, previous, BOUNDS)
+    assert result[0] == "fail" and "checks disappeared: closure" in result[1]
+    # A no-worsening check that vanished needs a look.
+    no_sign = _report(BASE, identities=[{"identity_id": "closure", "status": "pass"}])
+    assert compare_metric_reports(no_sign, previous, BOUNDS)[0] == "needs_review"
+    # When the model's partition changed, vanished per-head checks need review.
+    repartitioned = _report(
+        BASE,
+        partition_version="p2",
+        identities=[{"identity_id": "sign:vat", "status": "pass"}],
+    )
+    assert compare_metric_reports(repartitioned, previous, BOUNDS)[0] == "needs_review"
 
 
 def _checks(**statuses):

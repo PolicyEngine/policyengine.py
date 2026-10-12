@@ -743,6 +743,14 @@ def evaluate_replay_receipt(
     Rejected or failed replays, incomplete runs and blocking flags fail the
     gate; numerical and support flags need review. Unsupported years are
     reported, never failed on their own.
+
+    The receipt is read as a whole, not by its summary counters: a flag
+    counts when either ``flag_counts`` or a flagged row carries it, and a
+    receipt that contradicts itself fails (failures listed under a complete
+    integrity, more flagged rows of a kind than its count, supported years
+    with no artifacts, nothing replayed at all) or contradicts the request
+    (a comparison base other than the ``compare_to`` asked for). Inert
+    measure-years with no inertness flag need review.
     """
 
     request_id = request.request_id
@@ -889,31 +897,92 @@ def evaluate_replay_receipt(
             ),
             details={**details, "incomplete_events": incomplete_events},
         )
+    # A receipt whose parts disagree is not evidence of anything.
+    contradictions: list[str] = []
+    if receipt.integrity.failures:
+        codes = sorted({failure.code for failure in receipt.integrity.failures})
+        contradictions.append(
+            f"integrity is complete but lists failures ({', '.join(codes)})"
+        )
+    replayed = 0
+    for name, event in sorted(corpus.events.items()):
+        replayed += event.artifacts
+        if event.supported_years and event.artifacts == 0:
+            contradictions.append(f"{name} has supported years but no artifacts")
+        if not event.supported_years and not event.unsupported_years:
+            contradictions.append(f"{name} names no years at all")
+    if replayed == 0:
+        contradictions.append("no measure-year was replayed")
     counts = receipt.diff.flag_counts.document() if receipt.diff is not None else {}
+    rows = receipt.diff.flagged_rows if receipt.diff is not None else []
+    row_counts: dict[str, int] = {}
+    for row in rows:
+        for kind in row.flags:
+            row_counts[kind] = row_counts.get(kind, 0) + 1
+    for kind, seen in sorted(row_counts.items()):
+        if counts.get(kind, 0) < seen:
+            contradictions.append(
+                f"{seen} flagged row(s) carry {kind} but flag_counts says "
+                f"{counts.get(kind, 0)}"
+            )
     details["flag_counts"] = counts
+    details["flagged_row_counts"] = row_counts
     if receipt.diff is not None:
         details["base_variant_id"] = receipt.diff.base_variant_id
         details["diff_sha256"] = receipt.diff.diff_sha256
-    blocking = {
-        kind: n for kind, n in counts.items() if kind in BLOCKING_REPLAY_FLAGS and n
-    }
-    review = {
-        kind: n for kind, n in counts.items() if kind in REVIEW_REPLAY_FLAGS and n
-    }
+    if request.compare_to != "latest_certified":
+        base = receipt.diff.base_variant_id if receipt.diff is not None else None
+        if base != request.compare_to:
+            contradictions.append(
+                f"the request asked for a comparison with {request.compare_to}, "
+                f"but the receipt compares with {base}"
+            )
+    if contradictions:
+        return GateResult(
+            gate_id="replay",
+            status="fail",
+            summary="Replay receipt contradicts itself or the request: "
+            + "; ".join(contradictions),
+            details={**details, "contradictions": contradictions},
+        )
+    # Flags come from every place the receipt can state them, never from the
+    # summary counters alone.
+    present = {kind for kind, n in counts.items() if n} | set(row_counts)
+    blocking = sorted(present & BLOCKING_REPLAY_FLAGS)
+    review = sorted(present & REVIEW_REPLAY_FLAGS)
+
+    def tally(kinds: Sequence[str]) -> str:
+        return ", ".join(
+            f"{kind} {max(counts.get(kind, 0), row_counts.get(kind, 0))}"
+            for kind in kinds
+        )
+
     if blocking:
         return GateResult(
             gate_id="replay",
             status="fail",
-            summary="Blocking replay flags: "
-            + ", ".join(f"{kind} {n}" for kind, n in sorted(blocking.items())),
+            summary="Blocking replay flags: " + tally(blocking),
             details=details,
         )
     if review:
         return GateResult(
             gate_id="replay",
             status="needs_review",
-            summary="Replay moves need review: "
-            + ", ".join(f"{kind} {n}" for kind, n in sorted(review.items())),
+            summary="Replay moves need review: " + tally(review),
+            details=details,
+        )
+    if inert:
+        # A measure that does nothing in a supported year, with no inertness
+        # flag against the base: unchanged from the base, but still a measure
+        # the model does not respond to. A person decides whether it is known.
+        return GateResult(
+            gate_id="replay",
+            status="needs_review",
+            summary=(
+                f"{len(inert)} replayed measure-year(s) are inert, with no "
+                "inertness flag against the base: "
+                + ", ".join(f"{m} {y}" for _, m, y in inert[:6])
+            ),
             details=details,
         )
     if receipt.diff is None:
