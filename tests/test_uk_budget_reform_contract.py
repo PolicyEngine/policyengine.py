@@ -291,9 +291,21 @@ def test_module_parameters_unchanged_compares_the_shared_state():
     assert contract.module_parameters_unchanged(before)["status"] == "pass"
     # Changing the snapshot (never the shared state) stands in for a leak.
     tree = "processed" if "processed" in before else "system"
-    before[tree][RATE][0] = (0.5,) * len(contract.REFERENCE_YEARS)
+    entries, metadata = before[tree][RATE][0]
+    # A change on one date, 6 April 2027, that no 1 January reading sees.
+    before[tree][RATE][0] = (entries + (("2027-04-06", 0.5),), metadata)
     row = contract.module_parameters_unchanged(before)
     assert row["status"] == "fail" and f"{tree}:{RATE}" in row["actual"]
+
+
+def test_module_parameters_unchanged_compares_projected_timelines():
+    before = contract.shared_state()
+    if "projected" not in before:
+        pytest.skip("this policyengine-uk keeps no projected timelines")
+    name = next(iter(before["projected"]))
+    before["projected"][name] = before["projected"][name][1:]
+    row = contract.module_parameters_unchanged(before)
+    assert row["status"] == "fail" and f"projected:{name}" in row["actual"]
 
 
 def test_a_run_in_which_nothing_passed_errors_with_an_in_process_route():

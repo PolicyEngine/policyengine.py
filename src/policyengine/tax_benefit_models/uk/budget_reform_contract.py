@@ -1348,14 +1348,13 @@ def _baseline_parameter_reader() -> Callable[[str, int], float]:
     return parameter_reader(reference_parameters())
 
 
-REFERENCE_YEARS = range(2024, 2037)
-
-
 def _parameter_values(parameters) -> dict[str, list[tuple]]:
-    """Each parameter's annual values, by name.
+    """Each parameter's dated values and metadata, by name.
 
-    A name can occur more than once (``parameters.baseline`` repeats the
-    tree), so every occurrence is kept, in tree order.
+    Every entry of its timeline (date and value) and its metadata, so a
+    change on any date, or to how it is uprated, shows. A name can occur
+    more than once (``parameters.baseline`` repeats the tree), so every
+    occurrence is kept, in tree order.
     """
     from policyengine_core.parameters import Parameter
 
@@ -1363,7 +1362,13 @@ def _parameter_values(parameters) -> dict[str, list[tuple]]:
     for parameter in parameters.get_descendants():
         if isinstance(parameter, Parameter):
             values.setdefault(parameter.name, []).append(
-                tuple(parameter(f"{year}-01-01") for year in REFERENCE_YEARS)
+                (
+                    tuple(
+                        (entry.instant_str, entry.value)
+                        for entry in parameter.values_list
+                    ),
+                    json.dumps(parameter.metadata, sort_keys=True, default=str),
+                )
             )
     return values
 
@@ -1375,6 +1380,11 @@ def _shared_trees() -> dict:
     them) the cached processed tree every new simulation copies, the cached
     statutory tree reforms are written onto, and the cached projected
     timelines. The caches are module globals, read without building them.
+
+    Not watched: policyengine-uk's memo of rebuilt reform trees, which the
+    run itself fills, so there is no state from before the run to compare
+    it with. A leak into it would show in the reformed values the cases
+    check against their oracles.
     """
     import importlib
 
@@ -1430,8 +1440,8 @@ def module_parameters_unchanged(before: dict) -> dict:
         "route": "all",
         "reform_digest": None,
         "check": (
-            f"every parameter on 1 January {REFERENCE_YEARS[0]}-"
-            f"{REFERENCE_YEARS[-1]} in {', '.join(sorted(before))}"
+            "every parameter's dated values and metadata in "
+            f"{', '.join(sorted(before))}"
         ),
         "status": FAIL if changed else PASS,
         "expected": "policyengine-uk's shared parameters as they were before the run",
