@@ -441,10 +441,24 @@ def _gate(receipt_doc, request=None, status=None):
     )
 
 
+def _with_requested_wheels(doc):
+    """Add artifact evidence omitted by the scorecard's synthetic golden fixture."""
+
+    requested = golden("qualification_request_golden")["candidate"]
+    for package, request_key in (
+        ("policyengine-uk", "policyengine_uk"),
+        ("policyengine-core", "policyengine_core"),
+    ):
+        doc["execution"]["packages"][package]["wheel_sha256"] = requested[request_key][
+            "wheel_sha256"
+        ]
+    return doc
+
+
 def _with_counts(sealed=True, **counts):
     """The golden receipt with these flag counts and one flagged row per flag."""
 
-    doc = copy.deepcopy(golden("replay_receipt_golden"))
+    doc = _with_requested_wheels(copy.deepcopy(golden("replay_receipt_golden")))
     base = {key: 0 for key in doc["diff"]["flag_counts"]}
     base.update(counts)
     doc["diff"]["flag_counts"] = base
@@ -458,7 +472,8 @@ def _with_counts(sealed=True, **counts):
 
 
 def test_golden_receipt_fails_on_its_structural_flag():
-    gate = _gate(golden("replay_receipt_golden"))
+    doc = _with_requested_wheels(copy.deepcopy(golden("replay_receipt_golden")))
+    gate = _gate(_sealed(doc))
     assert gate.status == "fail"
     assert "structural" in gate.summary
 
@@ -583,6 +598,46 @@ def test_execution_of_other_artifacts_fails():
         doc = copy.deepcopy(_with_counts())
         mutate(doc)
         assert _gate(_sealed(doc)).status == "fail"
+
+
+@pytest.mark.parametrize("package", ["policyengine-uk", "policyengine-core"])
+@pytest.mark.parametrize("wheel_sha256", [None, "0" * 64])
+def test_replay_requires_exact_country_and_core_wheels(package, wheel_sha256):
+    doc = _clean_receipt()
+    installed = doc["execution"]["packages"][package]
+    if wheel_sha256 is None:
+        installed.pop("wheel_sha256")
+    else:
+        installed["wheel_sha256"] = wheel_sha256
+    gate = _gate(_sealed(doc))
+    assert gate.status == "fail"
+    assert f"{package} wheel hash" in gate.summary
+
+
+@pytest.mark.parametrize("wheel_sha256", [None, "0" * 64])
+def test_released_bundle_replay_requires_requested_wrapper_wheel(wheel_sha256):
+    raw = copy.deepcopy(golden("qualification_request_golden"))
+    raw["kind"] = "released_bundle"
+    raw["candidate"]["policyengine"]["source"] = {"pypi": {"wheel_sha256": "a" * 64}}
+    request = ReplayQualificationRequest.model_validate(raw)
+    doc = _clean_receipt()
+    doc["request_id"] = request.request_id
+    if wheel_sha256 is not None:
+        doc["execution"]["packages"]["policyengine"]["wheel_sha256"] = wheel_sha256
+    gate = _gate(_sealed(doc), request=request)
+    assert gate.status == "fail"
+    assert "policyengine wheel hash" in gate.summary
+
+
+def test_released_bundle_replay_accepts_exact_requested_wrapper_wheel():
+    raw = copy.deepcopy(golden("qualification_request_golden"))
+    raw["kind"] = "released_bundle"
+    raw["candidate"]["policyengine"]["source"] = {"pypi": {"wheel_sha256": "a" * 64}}
+    request = ReplayQualificationRequest.model_validate(raw)
+    doc = _clean_receipt()
+    doc["request_id"] = request.request_id
+    doc["execution"]["packages"]["policyengine"]["wheel_sha256"] = "a" * 64
+    assert _gate(_sealed(doc), request=request).status == "pass"
 
 
 def test_unbound_receipts_fail():

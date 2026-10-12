@@ -219,6 +219,9 @@ class PreviousCertificate(_Contract):
     data_release_version: str
     dataset_sha256: str = Field(pattern=SHA256_PATTERN)
     certificate_sha256: str = Field(pattern=SHA256_PATTERN)
+    qualification_pair_id: Optional[str] = Field(default=None, pattern=SHA256_PATTERN)
+    model_wheel_sha256: Optional[str] = Field(default=None, pattern=SHA256_PATTERN)
+    core_wheel_sha256: Optional[str] = Field(default=None, pattern=SHA256_PATTERN)
 
 
 class ReplayReference(_Contract):
@@ -811,7 +814,11 @@ def evaluate_replay_receipt(
         "policyengine": (
             execution.packages.policyengine,
             candidate.policyengine.version,
-            None,
+            (
+                candidate.policyengine.source.pypi.wheel_sha256
+                if candidate.policyengine.source.pypi is not None
+                else None
+            ),
         ),
         "policyengine-uk": (
             execution.packages.policyengine_uk,
@@ -827,8 +834,12 @@ def evaluate_replay_receipt(
     for name, (installed, version, wheel) in packages.items():
         if installed.version != version:
             mismatches.append(f"{name} {installed.version} ran, not {version}")
-        if wheel is not None and installed.wheel_sha256 not in (None, wheel):
-            mismatches.append(f"{name} wheel hash differs from the request")
+        if wheel is not None and installed.wheel_sha256 != wheel:
+            mismatches.append(
+                f"{name} wheel hash is missing from the receipt"
+                if installed.wheel_sha256 is None
+                else f"{name} wheel hash differs from the request"
+            )
     if (
         execution.packaged_bundle_manifest_sha256
         != candidate.policyengine.packaged_bundle_manifest_sha256
