@@ -59,28 +59,34 @@ None of these depends on where the code is checked out or which Python version r
 - docstrings and `pass`;
 - imports;
 - assignments of a literal to one name, annotated or not (`RATE = 0.21`, `YEARS: tuple = (2026, 2027)`);
-- undecorated `def` statements;
-- an `if __name__ == "__main__":` block with no `else` (it never runs on import).
+- undecorated `def` statements, none named like a dunder;
+- an `if __name__ == "__main__":` block with no `else` (it never runs on import, so what it binds is ignored).
 
-Each name is bound once, and defaults and annotations hold no `:=`, lambda, comprehension, `await` or `yield`. Anything else is refused, naming the line. That covers:
+Each name is bound once. Defaults hold no `:=`, lambda, comprehension, `await` or `yield`. Annotations may only name types: names, attributes, subscripts, constants and `X | Y`, with no calls. Anything else is refused, naming the line. That covers:
 - conditional, repeated or unpacked bindings;
 - objects built at import (`PAYMENT = partial(pay, amount=120)`, whose captured values can change without the source changing);
 - values computed from the environment, a file or the clock;
 - decorators, class definitions, and code run at import.
 
-Code anywhere in the module that tells equal values apart by identity is refused too. `is` is allowed only against `None`, `True`, `False`, `...` or `type(...)`, and `id()` is not allowed. The compiler may make equal immutable constants one object, and a digest of values cannot tell one object from two equal ones. Put measure values in literal constants or in default arguments.
+Anywhere in the module, code may not:
+- tell equal values apart by identity: `is` is allowed only against `None`, `True`, `False`, `...` or `type(...)`, and `type` may not be rebound. The compiler may make equal immutable constants one object, and a digest of values cannot tell one object from two equal ones.
+- use `id`, `operator.is_` or `is_not`, `globals`, `vars`, `locals`, `exec`, `eval`, `compile`, `__import__` or `breakpoint`, however imported, or import `builtins`.
+- declare a name `global`.
+- read dunder attributes other than `__init__` and `__name__`, or dunder names other than `__name__` and `__file__`. Reading a function's or module's own metadata is introspection.
+
+Put measure values in literal constants or in default arguments.
 
 **What was imported.** A digest must only name code that ran, so before binding, the module's source as read now is compiled and checked against what was imported, ignoring file names and line numbers:
-- **Functions.** The source is compiled as a whole, so each function compiles in its module's context, imports included. The modifier and every other function defined in that file must use the module's own globals and match that code, nested code and constants included. Constants are compared by exact type, by IEEE 754 bytes (so a NaN's sign counts) and by how they share objects.
-- **Function names.** A `def` name must still be bound to that function, not to another function of the same file or any other object. Functions must carry no attributes (`helper.amount = 240` is state).
+- **Functions.** The source is compiled as a whole, so each function compiles in its module's context, imports included. The modifier and every other function defined in that file must use the module's own globals and match that code, nested code and constants included. Constants are compared by exact type, by IEEE 754 bytes (so a NaN's sign counts) and by how they share objects. Annotation functions that Python 3.14 compiles (`__annotate__`) are the compiler's, not the module's.
+- **Function names.** A `def` name must still be bound to that function, not to another function of the same file or any other object.
+- **Function metadata.** Each function's name, qualified name and docstring must still be what its `def` made, compared as the compiler stores them. It must still annotate the names its source annotates, use the builtins module, and carry no other attributes (`helper.amount = 240` is state).
 - **Defaults.** Literal default arguments in the source, such as `rate=0.21`, must still be the function's defaults, with the same type.
 - **Literal constants.** Every literal constant must still hold its value, compared exactly: the same types throughout, floats by their bits, dictionary keys in order, for every literal kind including bytes, sets and complex numbers.
 - **No shared mutable objects.** No two literal constants or defaults may be one mutable object, which a value check cannot tell from two equal objects.
-- **Imports.** Every imported name must still be what its import binds: `from math import floor` must still be `math.floor`, and `import math` the loaded `math` module. It must hold a module or a callable other than a `functools.partial`; `from __future__` features are the exception. An imported value such as `from params import AMOUNT` is refused even when unused, since code can read a name without naming it. For the same reason, a star import of a module that exports data values is refused; import the callables you use by name.
-- **No other names.** The namespace may hold no name the source does not bind, other than the dunders the import system sets. A name set on the module after import is refused however the code would read it.
-- **What the modifier reads.** Every module global the modifier reads, directly or through functions in the file (found from the bytecode, nested code included), must be one of those names, a builtin or an import-system dunder. Code that assigns or deletes a module global is refused. So is a call to `globals()`, `vars()`, `locals()`, `exec()`, `eval()`, `compile()` or `__import__()`, which reach module state or run code without naming it.
+- **Imports.** Every imported name must still be what its import binds: `from math import floor` must still be `math.floor`, and `import math` the loaded `math` module. It must hold a module or a callable other than a `functools.partial`; `from __future__` features are the exception. An imported value such as `from params import AMOUNT` is refused even when unused, since code can read a name without naming it. For the same reason, a star import of a module that exports data values is refused; import the callables you use by name. Each name a star import provides must be that module's own.
+- **No other names.** The namespace may hold no name the source does not bind, other than the dunders the import system and annotations set. The module's docstring and builtins must be what importing it made. A name set on the module after import is refused however the code would read it.
 
-A measures file edited after import, or a constant, default, import or function reassigned while the process runs, is therefore refused rather than misdescribed. The check does not cover state in other modules (such as `params.PAYMENT` read through `import params`), or data the code reads at run time. Code in other modules is bound by `code_revision` or the installed versions, and `code_revision` names the code, not the process. Receipts are claims by their producer: these checks protect an honest producer against mistakes, not a reader against a producer who builds code to mislead.
+A measures file edited after import, or a constant, default, import or function reassigned while the process runs, is therefore refused rather than misdescribed. The check does not cover state in other modules (such as `params.PAYMENT` read through `import params`), or data the code reads at run time. Code in other modules is bound by `code_revision` or the installed versions, and `code_revision` names the code, not the process. Receipts are claims by their producer: these checks protect an honest producer against mistakes, not a reader against a producer who builds code to mislead. Code that assembles names from strings (`getattr(f, "__" + "doc__")`), or that reaches into frames, the garbage collector or other modules' namespaces, is beyond them.
 
 Some modifiers are refused outright because their behaviour depends on values the digest cannot bind: closures, lambdas, nested functions, methods, `functools.partial` and builtins. Anything that is not a `Scenario` is refused too, rather than read as current law.
 

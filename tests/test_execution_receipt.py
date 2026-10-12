@@ -32,12 +32,13 @@ import enum
 import functools
 import hashlib
 import importlib.util
+import inspect
 import json
 import linecache
 import sys
 from importlib import metadata
 from pathlib import Path
-from types import SimpleNamespace
+from types import CodeType, SimpleNamespace
 
 import jsonschema
 import numpy as np
@@ -649,8 +650,6 @@ def test_only_a_wheel_archive_hash_is_recorded(monkeypatch, direct_url):
 
 def test_callers_cannot_supply_the_versions_a_receipt_records(dataset_file):
     """Round-2 review N5: there is no public way to inject package metadata."""
-
-    import inspect
 
     for function in (build_execution_receipt, installed_package_identity):
         assert "metadata_module" not in inspect.signature(function).parameters
@@ -1940,7 +1939,7 @@ def test_a_module_level_partial_the_modifier_calls_is_refused(tmp_path):
             "COUNT = 0\n\n\n"
             "def raise_rate(simulation):\n    global COUNT\n    COUNT += 1\n"
             "    simulation.rate = 0.21\n",
-            r"raise_rate assigns or deletes the module global COUNT",
+            "line 5 declares COUNT global",
             id="assigns-a-global",
         ),
     ],
@@ -2487,6 +2486,10 @@ def test_module_shapes_a_digest_cannot_bind_are_refused(tmp_path, source, match)
     modifier's module may hold only imports, literals and undecorated
     functions, each name bound once."""
 
+    try:
+        compile(source, "x", "exec", dont_inherit=True)
+    except SyntaxError:
+        pytest.skip("this Python refuses the construct itself")
     name = "w4_receipt_r7_shape"
     try:
         module, _ = _import_source(tmp_path, name, source)
@@ -2557,19 +2560,73 @@ def test_names_set_on_the_module_are_refused_however_they_are_read(tmp_path):
         sys.modules.pop(name, None)
 
 
-@pytest.mark.parametrize("builtin", ["globals", "vars", "locals", "eval"])
-def test_builtins_that_reach_the_namespace_are_refused(tmp_path, builtin):
-    """Round-7 review M2: globals()['PAYMENT'] and vars(...) read the
-    namespace without naming what they read."""
+@pytest.mark.parametrize(
+    ("body", "match"),
+    [
+        ("globals()['RATE']", "uses globals"),
+        ("vars()['RATE']", "uses vars"),
+        ("locals().get('RATE', RATE)", "uses locals"),
+        ("eval('RATE')", "uses eval"),
+        ("exec('pass') or RATE", "uses exec"),
+        ("compile('RATE', 'x', 'eval') and RATE", "uses compile"),
+        ("__import__('math').floor(RATE)", "uses __import__"),
+        ("breakpoint() or RATE", "uses breakpoint"),
+        ("id(RATE) and RATE", "uses id"),
+    ],
+)
+def test_names_that_reach_the_namespace_or_identities_are_refused(
+    tmp_path, body, match
+):
+    """Round-7 review M2 and round-8 M4: refused by name anywhere."""
 
-    call = {"eval": "eval('RATE')"}.get(builtin, f"{builtin}()['RATE']")
     source = (
-        f"RATE = 0.21\n\n\ndef raise_rate(simulation):\n    simulation.rate = {call}\n"
+        f"RATE = 0.21\n\n\ndef raise_rate(simulation):\n    simulation.rate = {body}\n"
     )
-    name = "w4_receipt_r7_namespace_builtin"
+    name = "w4_receipt_r8_refused_names"
     try:
         module, _ = _import_source(tmp_path, name, source)
-        with pytest.raises(ReceiptError, match=f"calls {builtin}\\(\\)"):
+        with pytest.raises(ReceiptError, match=match):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize(
+    ("header", "body", "match"),
+    [
+        ("from builtins import eval as run\n", "run('RATE')", "imports builtins"),
+        ("import builtins\n", "builtins.eval('RATE')", "imports builtins"),
+        (
+            "from operator import is_\n",
+            "0.99 if is_(RATE, RATE) else RATE",
+            "imports is_",
+        ),
+        (
+            "import operator\n",
+            "0.99 if operator.is_(RATE, RATE) else RATE",
+            r"uses \.is_",
+        ),
+        ("import operator\n", "operator.is_not(RATE, None) and RATE", r"uses \.is_not"),
+    ],
+    ids=[
+        "builtins-alias",
+        "builtins-module",
+        "operator-is",
+        "operator-attribute",
+        "is-not",
+    ],
+)
+def test_aliases_of_refused_names_are_refused(tmp_path, header, body, match):
+    """Round-8 review M3/M4: from builtins import eval as run, operator.is_."""
+
+    source = (
+        header
+        + f"RATE = 0.21\n\n\ndef raise_rate(simulation):\n    simulation.rate = {body}\n"
+    )
+    name = "w4_receipt_r8_aliases"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match=match):
             _identity(module.raise_rate)
     finally:
         sys.modules.pop(name, None)
@@ -2711,27 +2768,17 @@ def test_a_class_inside_the_modifier_reads_its_own_names(tmp_path):
 @pytest.mark.parametrize(
     ("body", "match", "minimum"),
     [
-        (
-            "    class Local:\n        value = vars()\n",
-            r"calls vars\(\)",
-            (3, 11),
-        ),  # LOAD_NAME
-        (
-            "    class Local:\n        type Alias = vars\n",
-            r"calls vars\(\)",
-            (3, 12),
-        ),  # LOAD_FROM_DICT_OR_GLOBALS
-        (
-            "    global RATE\n    del RATE\n",
-            "assigns or deletes the module global RATE",
-            (3, 11),
-        ),  # DELETE_GLOBAL
+        ("    class Local:\n        value = vars()\n", "uses vars", (3, 11)),
+        ("    class Local:\n        type Alias = vars\n", "uses vars", (3, 12)),
+        ("    global RATE\n    del RATE\n", "declares RATE global", (3, 11)),
     ],
     ids=["class-body", "class-type-alias", "delete-global"],
 )
-def test_each_global_opcode_is_followed(tmp_path, body, match, minimum):
-    """Round-7 review L8: a survivor dropped LOAD_NAME, LOAD_FROM_DICT_OR_GLOBALS
-    and DELETE_GLOBAL together."""
+def test_refusals_reach_class_bodies_type_aliases_and_globals(
+    tmp_path, body, match, minimum
+):
+    """Round-7 review L8: these compile to LOAD_NAME, LOAD_FROM_DICT_OR_GLOBALS
+    and DELETE_GLOBAL; the module-wide rules see them in the source."""
 
     if sys.version_info < minimum:
         pytest.skip("this Python has no such construct")
@@ -2749,23 +2796,364 @@ def test_each_global_opcode_is_followed(tmp_path, body, match, minimum):
         sys.modules.pop(name, None)
 
 
-def test_shared_tuple_constants_are_other_code():
-    """Round-7 review H1: the compiler makes ((1,), (1,))'s inner tuples one
-    object, and a cache with two equal tuples answers ``is`` differently."""
+def _with_constants(code, constants):
+    return code.replace(co_consts=tuple(constants))
 
+
+def _skip_if_constants_are_merged():
+    """Python 3.14 merges equal constants whenever it makes a code object, a
+    loaded cache included, so two equal tuples cannot stay apart there."""
+
+    code = compile("x = None", "x", "exec", dont_inherit=True)
+    split = _with_constants(code, [((1,), tuple([1])), None]).co_consts[0]
+    if split[0] is split[1]:
+        pytest.skip("this Python merges equal constants in every code object")
+
+
+def test_shared_constants_are_other_code_than_equal_ones():
+    """Round-7 review H1: ``items[0] is items[1]`` differs between a shared
+    tuple and two equal tuples, so code_shape keeps sharing."""
+
+    _skip_if_constants_are_merged()
     from policyengine.provenance.bytecode import code_shape
 
-    source = "items = ((1,), (1,))\nsystem = items[0] is items[1]\n"
-    code = compile(source, "x", "exec", dont_inherit=True)
-    shared = next(c for c in code.co_consts if type(c) is tuple and len(c) == 2)
-    assert shared[0] is shared[1]
-    split = code.replace(
-        co_consts=tuple(
-            (tuple(list(c[0])), tuple(list(c[1]))) if c is shared else c
-            for c in code.co_consts
+    code = compile("items = None\n", "x", "exec", dont_inherit=True)
+    inner = (1,)
+    shared = _with_constants(code, [(inner, inner), None])
+    split = _with_constants(code, [((1,), tuple([1])), None])
+    assert code_shape(shared) != code_shape(split)
+    other = tuple([1])  # another object, shared the same way
+    assert code_shape(shared) == code_shape(
+        _with_constants(code, [(other, other), None])
+    )
+
+
+def test_sharing_counts_across_nested_code_and_in_frozensets():
+    """Round-8 review: a constant shared by a function and its module, or
+    inside a frozenset, is told apart from equal copies."""
+
+    _skip_if_constants_are_merged()
+    from policyengine.provenance.bytecode import code_shape
+
+    module = compile("def f():\n    return None\n", "x", "exec", dont_inherit=True)
+    function = next(c for c in module.co_consts if isinstance(c, CodeType))
+    item = (1, 2)
+    nested_shared = _with_constants(
+        module,
+        [
+            _with_constants(function, [item])
+            if c is function
+            else (item if c is None else c)
+            for c in module.co_consts
+        ],
+    )
+    nested_split = _with_constants(
+        module,
+        [
+            _with_constants(function, [tuple([1, 2])])
+            if c is function
+            else (item if c is None else c)
+            for c in module.co_consts
+        ],
+    )
+    assert code_shape(nested_shared) != code_shape(nested_split)
+
+    member = (3,)
+    frozen_shared = _with_constants(module, [frozenset({(member, member)}), None])
+    frozen_split = _with_constants(module, [frozenset({(member, tuple([3]))}), None])
+    assert code_shape(frozen_shared) != code_shape(frozen_split)
+
+
+# --- Round-8 review findings -------------------------------------------------------
+
+
+def test_annotated_constants_and_functions_bind_on_every_python(tmp_path):
+    """Round-8 review M5: Python 3.14 compiles annotations to __annotate__
+    functions, which are the compiler's, not the module's definitions."""
+
+    source = (
+        "RATE: float = 0.21\n\n\n"
+        "def raise_rate(simulation: object, cap: float = 1.0) -> None:\n"
+        "    simulation.rate = min(RATE, cap)\n"
+    )
+    name = "w4_receipt_r8_annotations"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_main_guard_binds_nothing_on_import(tmp_path):
+    """Round-8 review L6: names bound only in the guard are not missing."""
+
+    source = (
+        "RATE = 0.21\n\n\ndef raise_rate(simulation):\n    simulation.rate = RATE\n\n\n"
+        'if __name__ == "__main__":\n    DEMO = 1\n\n    def demo():\n        return DEMO\n'
+    )
+    name = "w4_receipt_r8_guard_bindings"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize(
+    ("guard", "allowed"),
+    [
+        ('if __name__ == "__main__":', True),
+        ('if "__main__" == __name__:', True),
+        ('if __name__ != "__main__":', False),
+        ('if __name__ == "measures":', False),
+        ('if __name__ == "__main__" and RATE:', False),
+    ],
+)
+def test_only_a_true_main_guard_is_allowed(tmp_path, guard, allowed):
+    source = "RATE = 0.21\n" + guard + "\n    pass\n" + MEASURE_TAIL
+    name = "w4_receipt_r8_guards"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        if allowed:
+            assert _identity(module.raise_rate)
+        else:
+            with pytest.raises(ReceiptError, match="module-level If statement"):
+                _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "def type(value):\n    return value\n\n\n"
+        "def raise_rate(simulation, first=(1,), second=(1,)):\n"
+        "    simulation.rate = 0.99 if first is type(second) else 0.21\n",
+        "def raise_rate(simulation, type=tuple):\n    simulation.rate = 0.21\n",
+        "def raise_rate(simulation):\n    type = str\n    simulation.rate = 0.21\n",
+    ],
+    ids=["def", "parameter", "local"],
+)
+def test_rebinding_type_is_refused(tmp_path, source):
+    """Round-8 review M3: is type(x) is safe only while type is the builtin."""
+
+    name = "w4_receipt_r8_type"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match="rebinds type"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize(
+    ("body", "match"),
+    [
+        ("_helper.__doc__", r"reads \.__doc__"),
+        ("raise_rate.__annotations__", r"reads \.__annotations__"),
+        ("simulation.__dict__", r"reads \.__dict__"),
+        ("__doc__", "reads __doc__"),
+        ("__builtins__", "reads __builtins__"),
+        ("__annotations__", "reads __annotations__"),
+    ],
+)
+def test_introspection_is_refused(tmp_path, body, match):
+    """Round-8 review M1/M2: what a function or module says about itself."""
+
+    source = (
+        '"""Doc."""\n\n\ndef _helper():\n    """0.21"""\n\n\n'
+        f"def raise_rate(simulation):\n    simulation.rate = {body}\n"
+    )
+    name = "w4_receipt_r8_introspection"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match=match):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_name_and_file_may_be_read(tmp_path):
+    source = (
+        "def raise_rate(simulation):\n"
+        "    simulation.where = (__name__, __file__, raise_rate.__name__)\n"
+    )
+    name = "w4_receipt_r8_name_file"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+FUNCTION_STATE_SOURCE = (
+    '"""Measures."""\n\n\ndef _helper(value: float) -> float:\n'
+    '    """Double it.\n\n        Indented.\n    """\n    return value * 2\n\n\n'
+    "def raise_rate(simulation):\n    simulation.rate = _helper(0.21)\n"
+)
+
+
+def _rename(module):
+    module._helper.__name__ = "other"
+
+
+def _redoc(module):
+    module._helper.__doc__ = "240"
+
+
+def _reannotate(module):
+    module._helper.__annotations__ = {"value": float}
+
+
+def _redoc_module(module):
+    module.__doc__ = "240"
+
+
+def _inject_dunder(module):
+    module.__payment__ = 240
+
+
+def _foreign_builtins(module):
+    import builtins
+
+    namespace = vars(module)
+    namespace["__builtins__"] = {**vars(builtins), "min": max}
+
+
+def _function_with_foreign_builtins(module):
+    import builtins
+    import types
+
+    namespace = vars(module)
+    original = namespace["__builtins__"]
+    namespace["__builtins__"] = {**vars(builtins), "min": max}
+    try:  # a function takes its builtins from its globals when it is made
+        helper = types.FunctionType(module._helper.__code__, namespace)
+    finally:
+        namespace["__builtins__"] = original
+    module._helper = helper
+
+
+@pytest.mark.parametrize(
+    ("change", "match"),
+    [
+        (_rename, "renamed"),
+        (_function_with_foreign_builtins, "_helper does not use the builtins module"),
+        (_redoc, "_helper's __doc__ is not its source docstring"),
+        (_reannotate, "annotations are not those its source declares"),
+        (_redoc_module, "module's __doc__ is not its source docstring"),
+        (_inject_dunder, "__payment__ is a value of type int set on the module"),
+        (_foreign_builtins, "__builtins__ is not the builtins module"),
+    ],
+)
+def test_metadata_changed_at_run_time_is_refused(tmp_path, change, match):
+    """Round-8 review M1/M2: names, docstrings, annotations, builtins and
+    dunder names are not in the code, so each must be what the source made.
+    A multi-line docstring compares as the compiler stores it."""
+
+    name = "w4_receipt_r8_metadata"
+    try:
+        module, _ = _import_source(tmp_path, name, FUNCTION_STATE_SOURCE)
+        assert _identity(module.raise_rate)
+        change(module)
+        with pytest.raises(ReceiptError, match=match):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize(
+    ("annotation", "match"),
+    [
+        ("int(1)", "computes the annotation of x"),
+        ("[t for t in (int,)]", "annotation of x"),
+        ("(lambda: int)", "annotation of x"),
+    ],
+    ids=["call", "comprehension", "lambda"],
+)
+def test_computed_annotations_are_refused(tmp_path, annotation, match):
+    """Round-8 review M2: a module annotation runs at import and computes
+    __annotations__; an annotation may only name types."""
+
+    source = f"x: {annotation} = 1\n" + MEASURE_TAIL
+    try:
+        compile(source, "x", "exec", dont_inherit=True)
+    except SyntaxError:
+        pytest.skip("this Python refuses the annotation itself")
+    name = "w4_receipt_r8_annotation"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match=match):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_computed_parameter_annotation_is_refused(tmp_path):
+    source = "def raise_rate(simulation: int(1)):\n    simulation.rate = 0.21\n"
+    name = "w4_receipt_r8_parameter_annotation"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match="computes an annotation of raise_rate"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_star_imported_name_rebound_at_run_time_is_refused(tmp_path):
+    """Round-8 review L7: a star-provided name must be that module's own and
+    judged like an explicit import."""
+
+    exporter = "w4_receipt_r8_star_source"
+    name = "w4_receipt_r8_star"
+    try:
+        _import_source(
+            tmp_path,
+            exporter,
+            '__all__ = ["double"]\n\n\ndef double(value):\n    return value * 2\n',
         )
-    )
-    assert code_shape(split) != code_shape(code)
-    assert code_shape(code) == code_shape(
-        compile(source, "y", "exec", dont_inherit=True)
-    )
+        module, _ = _import_source(
+            tmp_path,
+            name,
+            f"from {exporter} import *\n\n\n"
+            "def raise_rate(simulation):\n    simulation.rate = double(0.105)\n",
+        )
+        assert _identity(module.raise_rate)
+        module.double = lambda value: 0.99
+        with pytest.raises(
+            ReceiptError, match="double is a value of type function set on"
+        ):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+        sys.modules.pop(exporter, None)
+
+
+def test_a_star_import_of_data_values_is_refused(tmp_path):
+    source = "from math import *\n" + MEASURE_TAIL
+    name = "w4_receipt_r8_star_data"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match="an imported value of type float"):
+            _identity(module.raise_rate)  # math exports pi, e, tau, inf, nan
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize(
+    ("definition", "match"),
+    [
+        ("__measure__", "defines __measure__"),
+        # A module __getattr__ answers every attribute, inspect's included.
+        ("__getattr__", "cannot be bound"),
+    ],
+)
+def test_dunder_definitions_are_refused(tmp_path, definition, match):
+    source = f"def {definition}(name=None):\n    return 0.21\n" + MEASURE_TAIL
+    name = "w4_receipt_r8_dunder_def"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match=match):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
