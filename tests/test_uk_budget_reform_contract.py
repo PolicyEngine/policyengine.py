@@ -335,6 +335,38 @@ def test_a_scale_metadata_or_band_change_is_caught(monkeypatch):
     assert contract.module_parameters_unchanged(before)["status"] == "fail"
 
 
+def test_reordered_bands_and_root_metadata_are_caught(monkeypatch):
+    def band(rate):
+        return {
+            "threshold": {"values": {"2000-01-01": 0}},
+            "rate": {"values": {"2000-01-01": rate}},
+        }
+
+    tree = _fake_shared_tree(
+        monkeypatch, {"scale": {"brackets": [band(0.1), band(0.2)]}}
+    )
+    before = contract.shared_state()
+    tree.scale.brackets.reverse()
+    row = contract.module_parameters_unchanged(before)
+    assert row["status"] == "fail" and "system:scale#node" in row["actual"]
+    tree.scale.brackets.reverse()
+    assert contract.module_parameters_unchanged(before)["status"] == "pass"
+    tree.metadata["uprating"] = "wages"
+    row = contract.module_parameters_unchanged(before)
+    assert row["status"] == "fail" and "system:#node" in row["actual"]
+
+
+def test_an_unusual_value_is_compared_without_stopping_the_run(monkeypatch):
+    import datetime as dt
+
+    tree = _fake_shared_tree(monkeypatch, {"p": {"values": {"2000-01-01": 1}}})
+    tree.p.values_list[0].value = {dt.date(2020, 1, 1): 1}
+    before = contract.shared_state()
+    assert contract.module_parameters_unchanged(before)["status"] == "pass"
+    tree.p.values_list[0].value[dt.date(2020, 1, 1)] = 2
+    assert contract.module_parameters_unchanged(before)["status"] == "fail"
+
+
 def test_module_parameters_unchanged_compares_projected_timelines():
     before = contract.shared_state()
     if "projected" not in before:
