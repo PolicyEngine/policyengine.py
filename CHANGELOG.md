@@ -1,3 +1,10 @@
+## [6.2.7] - 2026-10-12
+
+### Fixed
+
+- Align UK household and population reform routes with policy effective dates and inclusive date intervals, reject ambiguous bare-year keys, and pass parameter reforms at country-model construction so dated changes are reprocessed when supported by policyengine-uk. A UK policy or dynamic carrying both parameter values and a simulation modifier (as a `Policy` or `Dynamic` sum does) now applies its values and then its modifier, where the modifier used to replace the values.
+
+
 ## [6.2.6] - 2026-10-10
 
 ### Changed
