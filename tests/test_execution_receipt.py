@@ -3604,3 +3604,87 @@ def test_is_against_a_call_other_than_type_is_refused(tmp_path):
             _identity(module.raise_rate)
     finally:
         sys.modules.pop(name, None)
+
+
+# --- Infinite parameter values in reform payloads ---------------------------------
+
+
+CAP = "gov.hmrc.pensions.salary_sacrifice_pension_cap"
+
+
+def _reform_digest(payload):
+    return reform_identity(payload, "policyengine-uk.reform_dict/v1").reform_sha256
+
+
+def test_an_infinite_parameter_value_binds_by_its_reserved_encoding():
+    """An uncapped threshold is ``inf`` in PolicyEngine; the digest names it."""
+
+    payload = {CAP: {"2026-04-06.2100-12-31": float("inf")}}
+    assert _reform_digest(payload) == canonical_sha256(
+        {
+            "representation": "policyengine-uk.reform_dict/v1",
+            "payload": {CAP: {"2026-04-06.2100-12-31": {"$nonfinite": "Infinity"}}},
+        }
+    )
+
+
+def test_infinities_differ_from_each_other_and_from_any_finite_cap():
+    values = [float("inf"), float("-inf"), 1e308, 2000.0, 0.0]
+    digests = {_reform_digest({CAP: {"2027": value}}) for value in values}
+    assert len(digests) == len(values)
+
+
+def test_a_numpy_infinity_binds_as_a_float_one():
+    numpy = pytest.importorskip("numpy")
+    for value in (numpy.float64("inf"), numpy.float32("-inf")):
+        assert _reform_digest({CAP: {"2027": value}}) == _reform_digest(
+            {CAP: {"2027": float(value)}}
+        )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {CAP: {"2027": {"$nonfinite": "Infinity"}}},
+        {"$nonfinite": "Infinity"},
+        [{"$nonfinite": "-Infinity"}],
+    ],
+    ids=["value", "top-level", "array-member"],
+)
+def test_a_payload_using_the_reserved_key_is_refused(payload):
+    """Otherwise the object would digest like the infinity it spells."""
+
+    with pytest.raises(ReceiptError, match=r"\$nonfinite is reserved"):
+        _reform_digest(payload)
+
+
+def test_nan_is_still_refused():
+    with pytest.raises(ReceiptError, match="not a finite number"):
+        _reform_digest({CAP: {"2027": float("nan")}})
+
+
+def test_a_scenario_with_an_infinite_parameter_change_binds():
+    identity = scenario_reform_identity(
+        _scenario(parameter_changes={CAP: {"2027": float("inf")}})
+    )
+    assert identity.binding == "content"
+    assert (
+        identity.reform_sha256
+        != scenario_reform_identity(
+            _scenario(parameter_changes={CAP: {"2027": 1e308}})
+        ).reform_sha256
+    )
+
+
+@settings(max_examples=200, deadline=None)
+@given(payload=REFORM_PAYLOADS)
+def test_payloads_without_infinities_digest_as_before(payload):
+    """Differential: allowing infinities changes no finite payload's digest."""
+
+    from policyengine.provenance.receipt import strict_json_value
+
+    assert _reform_digest(payload) == canonical_sha256(
+        strict_json_value(
+            {"representation": "policyengine-uk.reform_dict/v1", "payload": payload}
+        )
+    )

@@ -130,7 +130,7 @@ const dropNulls = (v) =>
 const digest = (value) => createHash("sha256").update(canonicalize(dropNulls(value)), "utf8").digest("hex");
 ```
 
-Reform digests are the exception: a reform payload is digested with its nulls kept, because there a null can mean something. `Scenario.from_reform({"p": {"2027": None}})` removes a value that `{"p": {}}` keeps, so the two must not share a digest.
+Reform digests are the exception: a reform payload is digested with its nulls kept, because there a null can mean something. `Scenario.from_reform({"p": {"2027": None}})` removes a value that `{"p": {}}` keeps, so the two must not share a digest. Reform payloads may also hold infinite numbers, which PolicyEngine parameters use for an uncapped threshold and JSON cannot hold. `inf` is digested as the object `{"$nonfinite": "Infinity"}` and `-inf` as `{"$nonfinite": "-Infinity"}`, and a payload that uses the key `$nonfinite` itself is refused, so no two payloads share a digest. NaN is refused, and a payload without infinities digests as before.
 
 The pre-promotion replay interface with policyengine-scorecard follows a different rule, set by its own schemas: plain RFC 8785 over the document as sent, nulls included. `policyengine.provenance.canonical.canonical_sha256` computes that.
 
@@ -139,7 +139,7 @@ The pre-promotion replay interface with policyengine-scorecard follows a differe
 | `execution_identity_sha256` | `schema_version`, `country_id`, `wrapper`, `model`, `core`, `data`, `certification_status`, and the certificate's content: bundle version, record digest, basis, certified versions, dataset digest and certifier. Results with the same execution identity ran on the same runtime and data under the same certificate, however the receipt was built. |
 | `receipt_sha256` | The whole receipt except `runtime` and the reform and baseline `name` labels. Renaming a measure therefore does not change it. |
 | `certificate.certificate_sha256` | The bundle manifest's `data_releases.uk` record. |
-| `reform.reform_sha256` | `{"representation": ..., "payload": ...}`, with the payload exactly as given, nulls kept (strict JSON conversion, then RFC 8785, with no null removal). For a composition the payload is `{"applied_before_data_load": ..., "application": "parameter_changes_then_modifiers", "members": [{"representation", "reform_sha256", "binding"}, ...]}`, with members in application order. |
+| `reform.reform_sha256` | `{"representation": ..., "payload": ...}`, with the payload exactly as given, nulls kept (strict JSON conversion with infinities as `{"$nonfinite": "Infinity"}` or `"-Infinity"`, then RFC 8785, with no null removal). For a composition the payload is `{"applied_before_data_load": ..., "application": "parameter_changes_then_modifiers", "members": [{"representation", "reform_sha256", "binding"}, ...]}`, with members in application order. |
 | `outputs_sha256` | The output payload. |
 
 Reform digests are never normalized across representations. The same keys can legitimately mean different things in different representations: for example, a bare year in a policyengine-uk country dictionary changes that one year only. So each digest is tied to the representation that was submitted. The v1 representations are `policyengine.parameter_values/v1`, `policyengine.reform_dict/v1`, `policyengine-uk.reform_dict/v1`, `policyengine-uk.scenario/v1`, `policyengine-uk.scenario_composition/v1` and `policyengine-sim-api.policy/v1`.

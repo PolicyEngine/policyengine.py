@@ -188,7 +188,7 @@ DIGEST_RULES: dict[str, str] = {
     "execution_identity_sha256": "{schema_version, country_id, wrapper, model, core, data, certification_status, certificate?} where certificate keeps only bundle_version, country_id, certificate_sha256, compatibility_basis, certified_for_model_version, certified_for_core_version, certified_dataset_sha256 and certified_by",
     "receipt_sha256": "the whole receipt without runtime and without reform.name and baseline.name",
     "certificate.certificate_sha256": "the bundle manifest's data_releases.<country_id> record",
-    "reform.reform_sha256": "RFC 8785 over {representation, payload} where payload is the reform exactly as given in that representation, nulls kept (a null in a reform can mean something, unlike an absent receipt field); for policyengine-uk.scenario_composition/v1 the payload is {applied_before_data_load, application: parameter_changes_then_modifiers, members: [{representation, reform_sha256, binding}, ...]} with members in application order",
+    "reform.reform_sha256": 'RFC 8785 over {representation, payload} where payload is the reform exactly as given in that representation, nulls kept (a null in a reform can mean something, unlike an absent receipt field); for policyengine-uk.scenario_composition/v1 the payload is {applied_before_data_load, application: parameter_changes_then_modifiers, members: [{representation, reform_sha256, binding}, ...]} with members in application order; an infinite number in a payload is the object {"$nonfinite": "Infinity"} or {"$nonfinite": "-Infinity"}, and a payload may not use the key $nonfinite itself',
     "outputs_sha256": "the canonical output payload the receipt binds",
 }
 
@@ -661,17 +661,54 @@ def content_sha256(value: Any) -> str:
         raise ReceiptError(str(exc)) from exc
 
 
+#: The reserved member that stands for an infinite number in a reform payload.
+NONFINITE_KEY = "$nonfinite"
+
+
+def _with_infinities_encoded(value: Any, path: str = "$") -> Any:
+    """A reform payload with each infinite number replaced by a reserved object.
+
+    PolicyEngine parameters take infinite values (an uncapped threshold is
+    ``.inf``), which JSON cannot hold. ``inf`` becomes ``{"$nonfinite":
+    "Infinity"}`` and ``-inf`` becomes ``{"$nonfinite": "-Infinity"}``. A payload
+    that uses the key ``$nonfinite`` itself is refused, so no other payload
+    encodes to the same JSON. NaN is left for :func:`strict_json_value` to
+    refuse: it has no one value to bind.
+    """
+
+    if isinstance(value, Mapping):
+        if any(key == NONFINITE_KEY for key in value):
+            raise ReceiptError(
+                f"{path}: the key {NONFINITE_KEY} is reserved for infinite numbers."
+            )
+        return {
+            key: _with_infinities_encoded(item, f"{path}.{key}")
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [
+            _with_infinities_encoded(item, f"{path}[{index}]")
+            for index, item in enumerate(value)
+        ]
+    number = value.item() if _numpy_scalar(value) else value
+    if isinstance(number, float) and math.isinf(number):
+        return {NONFINITE_KEY: "Infinity" if number > 0 else "-Infinity"}
+    return value
+
+
 def _payload_sha256(value: Any) -> str:
     """Digest of a reform payload: strict JSON with nulls kept, RFC 8785, SHA-256.
 
     Unlike :func:`content_sha256`, nulls are not removed: in a reform a null
     can mean something (``Scenario.from_reform({"p": {"2027": None}})``
     removes a value that ``{"p": {}}`` keeps), so the payload is digested
-    exactly as given.
+    exactly as given. Infinite numbers are encoded as reserved objects
+    (:func:`_with_infinities_encoded`); a payload without them digests as it
+    did before they were allowed.
     """
 
-    converted = strict_json_value(value)
     try:
+        converted = strict_json_value(_with_infinities_encoded(value))
         return canonical_sha256(converted)
     except RecursionError as exc:
         raise ReceiptError("The value is nested too deeply.") from exc
@@ -1960,9 +1997,8 @@ def scenario_reform_identity(
         return ReformIdentity(kind="current_law", name=name)
     payload: dict[str, Any] = {
         "applied_before_data_load": applied_before_data_load,
-        "parameter_changes": strict_json_value(parameter_changes)
-        if parameter_changes
-        else None,
+        # Converted once, with infinities encoded, when the payload is digested.
+        "parameter_changes": parameter_changes if parameter_changes else None,
         "simulation_modifier": None,
     }
     binding: Literal["content", "code_revision"] = "content"
