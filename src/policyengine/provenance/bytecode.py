@@ -33,7 +33,7 @@ def _float_bits(value: float) -> bytes:
     return struct.pack("<d", value)
 
 
-def _constant(value: Any) -> tuple[Any, ...]:
+def _constant(value: Any, seen: Optional[dict[int, int]]) -> tuple[Any, ...]:
     """A code constant with its exact type, so equal-but-different values differ.
 
     ``(1,) == (1.0,)``, ``True == 1`` and ``0.0 == -0.0`` in Python, but code
@@ -41,27 +41,48 @@ def _constant(value: Any) -> tuple[Any, ...]:
     and frozensets are encoded item by item and floats by their IEEE 754
     bytes (``float.hex`` writes every NaN as ``nan``, but ``math.copysign``
     tells a NaN's sign apart).
+
+    With ``seen``, an object met before in the same code tree is encoded as a
+    reference to its first occurrence, so sharing counts too: in
+    ``items = ((1,), (1,))`` the compiler makes the two inner tuples one
+    object, and ``items[0] is items[1]`` is true for it but false for a cache
+    holding two equal tuples. The compiler and marshal both keep sharing, so
+    a cache Python wrote numbers its objects as a fresh compilation does.
     """
 
+    if seen is not None:
+        if id(value) in seen:
+            return ("ref", seen[id(value)])
+        seen[id(value)] = len(seen)
     kind = type(value)
     if kind is float:
         return (kind, _float_bits(value))
     if kind is complex:
         return (kind, _float_bits(value.real), _float_bits(value.imag))
     if kind is tuple:
-        return (kind, tuple(_constant(item) for item in value))
+        return (kind, tuple(_constant(item, seen) for item in value))
     if kind is frozenset:
-        return (kind, tuple(sorted((_constant(item) for item in value), key=repr)))
+        # Members in an order fixed by their values alone, so two equal sets
+        # number their shared objects alike whatever their hash order.
+        members = sorted(value, key=lambda item: repr(_constant(item, None)))
+        return (kind, tuple(_constant(item, seen) for item in members))
     if isinstance(value, CodeType):
-        return (CodeType, code_shape(value))
+        return (CodeType, code_shape(value, _seen=seen))
     if kind in (type(None), type(Ellipsis)):
         return (kind,)
     return (kind, value)
 
 
-def code_shape(code: CodeType) -> tuple[Any, ...]:
-    """A code object without where it was compiled: no file, no line numbers."""
+def code_shape(
+    code: CodeType, *, _seen: Optional[dict[int, int]] = None
+) -> tuple[Any, ...]:
+    """A code object without where it was compiled: no file, no line numbers.
 
+    Constants are compared with their types, float bits and sharing across
+    the whole code tree (see :func:`_constant`).
+    """
+
+    seen: dict[int, int] = {} if _seen is None else _seen
     return (
         code.co_name,
         code.co_qualname,
@@ -76,7 +97,7 @@ def code_shape(code: CodeType) -> tuple[Any, ...]:
         code.co_freevars,
         code.co_cellvars,
         code.co_exceptiontable,
-        tuple(_constant(const) for const in code.co_consts),
+        tuple(_constant(const, seen) for const in code.co_consts),
     )
 
 

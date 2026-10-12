@@ -65,7 +65,7 @@ from policyengine.provenance.receipt import (
     uk_fiscal_year_convention,
     verify_certificate,
 )
-from tests import receipt_modifiers
+from tests import receipt_modifiers, receipt_unbindable_modifiers
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_DIR = REPO_ROOT / "src" / "policyengine" / "data" / "bundle"
@@ -1052,10 +1052,10 @@ def test_module_level_modifiers_are_bound_by_code_and_revision():
 @pytest.mark.parametrize(
     "modifier",
     [
-        receipt_modifiers.make_modifier(0.21),
+        receipt_unbindable_modifiers.make_modifier(0.21),
         lambda simulation: None,
         functools.partial(receipt_modifiers.raise_basic_rate),
-        receipt_modifiers.Measure(0.21).apply,
+        receipt_unbindable_modifiers.Measure(0.21).apply,
         print,
     ],
     ids=["closure", "lambda", "partial", "bound method", "builtin"],
@@ -1229,62 +1229,6 @@ def test_a_constant_reassigned_at_run_time_is_refused(tmp_path):
         sys.modules.pop(name, None)
 
 
-def test_rebound_names_are_not_treated_as_constants(tmp_path):
-    source = (
-        HELPER_SOURCE
-        + "\nimport os\nDEBUG = False\nif os.environ.get('W4_X'):\n    DEBUG = True\n"
-    )
-    name = "w4_receipt_measures_rebound"
-    try:
-        module, _ = _import_source(tmp_path, name, source)
-        module.DEBUG = True  # rebinding a non-constant is not a mismatch
-        _measure_identity(module)
-    finally:
-        sys.modules.pop(name, None)
-
-
-def test_functions_defined_in_module_level_blocks_bind(tmp_path):
-    source = "import sys\nif sys.version_info >= (3,):\n    def raise_rate(simulation):\n        simulation.rate = 0.21\n"
-    name = "w4_receipt_measures_block"
-    try:
-        module, _ = _import_source(tmp_path, name, source)
-        assert _measure_identity(module).binding == "code_revision"
-    finally:
-        sys.modules.pop(name, None)
-
-
-def test_conditionally_defined_functions_with_different_code_are_refused(tmp_path):
-    """Round-4 review M3: reversing a conditional definition changes what runs."""
-
-    source = (
-        "import os\n\nif os.environ.get('W4_ALT'):\n"
-        "    def _helper():\n        return 0.30\n"
-        "else:\n    def _helper():\n        return 0.21\n\n\n"
-        "def raise_rate(simulation):\n    simulation.rate = _helper()\n"
-    )
-    name = "w4_receipt_measures_conditional_definition"
-    try:
-        module, _ = _import_source(tmp_path, name, source)
-        with pytest.raises(ReceiptError, match="2 different definitions"):
-            _measure_identity(module)
-    finally:
-        sys.modules.pop(name, None)
-
-
-def test_identical_conditional_definitions_bind(tmp_path):
-    source = (
-        "import sys\n\nif sys.version_info >= (3,):\n"
-        "    def raise_rate(simulation):\n        simulation.rate = 0.21\n"
-        "else:\n    def raise_rate(simulation):\n        simulation.rate = 0.21\n"
-    )
-    name = "w4_receipt_measures_identical_definitions"
-    try:
-        module, _ = _import_source(tmp_path, name, source)
-        assert _measure_identity(module).binding == "code_revision"
-    finally:
-        sys.modules.pop(name, None)
-
-
 def test_methods_are_refused_with_a_clear_reason():
     class Holder:
         @staticmethod
@@ -1399,9 +1343,9 @@ def test_a_helpers_computed_default_is_bound(tmp_path, monkeypatch):
 
 def test_defaults_without_an_exact_encoding_are_refused(tmp_path):
     source = (
-        "class Measure:\n    rate = 0.21\n\n\n"
-        "def raise_rate(simulation, measure=Measure()):\n"
-        "    simulation.rate = measure.rate\n"
+        "import decimal\n\n\n"
+        "def raise_rate(simulation, measure=decimal.Decimal('0.21')):\n"
+        "    simulation.rate = measure\n"
     )
     name = "w4_receipt_measures_object_default"
     try:
@@ -1469,60 +1413,6 @@ def test_literal_constants_compare_with_their_types(
         _identity(module.raise_rate)
         module.ENABLED = runtime_value
         with pytest.raises(ReceiptError, match="ENABLED is"):
-            _identity(module.raise_rate)
-    finally:
-        sys.modules.pop(name, None)
-
-
-def test_a_comprehension_variable_does_not_unbind_a_constant(tmp_path):
-    """Round-4 review M3: a comprehension's own loop variable is not a binding."""
-
-    source = (
-        "RATE = 0.21\nRATES = [RATE for RATE in range(3)]\n\n\n"
-        "def raise_rate(simulation):\n    simulation.rate = RATE\n"
-    )
-    name = "w4_receipt_measures_comprehension"
-    try:
-        module, _ = _import_source(tmp_path, name, source)
-        _identity(module.raise_rate)
-        module.RATE = 0.99
-        with pytest.raises(ReceiptError, match="RATE is 0.99 at run time"):
-            _identity(module.raise_rate)
-    finally:
-        sys.modules.pop(name, None)
-
-
-def test_a_walrus_in_a_comprehension_unbinds_a_constant(tmp_path):
-    source = (
-        "RATE = 0.21\nRATES = [(RATE := x) for x in range(3)]\n\n\n"
-        "def raise_rate(simulation):\n    simulation.rate = RATE\n"
-    )
-    name = "w4_receipt_measures_walrus"
-    try:
-        module, _ = _import_source(tmp_path, name, source)
-        assert module.RATE == 2
-        # RATE is computed, so it is not a constant, and reading it is refused.
-        with pytest.raises(ReceiptError, match="reads RATE, a value of type int"):
-            _identity(module.raise_rate)
-    finally:
-        sys.modules.pop(name, None)
-
-
-def test_conditional_literals_admit_each_branch_only(tmp_path, monkeypatch):
-    source = (
-        "import os\n\nif os.environ.get('W4_HIGH'):\n    RATE = 0.30\n"
-        "else:\n    RATE = 0.21\n\n\n"
-        "def raise_rate(simulation):\n    simulation.rate = RATE\n"
-    )
-    name = "w4_receipt_measures_conditional"
-    monkeypatch.delenv("W4_HIGH", raising=False)
-    try:
-        module, _ = _import_source(tmp_path, name, source)
-        _identity(module.raise_rate)
-        module.RATE = 0.30
-        _identity(module.raise_rate)
-        module.RATE = 0.99
-        with pytest.raises(ReceiptError, match=r"RATE is 0.99 at run time but \["):
             _identity(module.raise_rate)
     finally:
         sys.modules.pop(name, None)
@@ -1950,81 +1840,6 @@ def test_a_helper_rebound_to_another_modules_function_is_refused(tmp_path):
         sys.modules.pop(name, None)
 
 
-WRAPPED_SOURCE = """
-import functools
-
-RATE = 0.21
-
-
-def _logged(function):
-    @functools.wraps(function)
-    def wrapper(*args, **kwargs):
-        return function(*args, **kwargs)
-
-    return wrapper
-
-
-@_logged
-def _helper(value):
-    return value * 2
-
-
-def raise_rate(simulation):
-    simulation.rate = _helper(RATE)
-"""
-
-
-def test_a_wrapped_helper_is_checked_through_its_wrapper(tmp_path):
-    name = "w4_receipt_r5_wrapped_helper"
-    try:
-        module, path = _import_source(tmp_path, name, WRAPPED_SOURCE)
-        assert _measure_identity(module).binding == "code_revision"
-        _edit(path, "return value * 2", "return value * 3")
-        with pytest.raises(ReceiptError, match="no longer matches"):
-            _measure_identity(module)
-    finally:
-        sys.modules.pop(name, None)
-
-
-def test_a_lambda_walrus_does_not_unbind_a_module_constant(tmp_path):
-    """Round-5 review: a lambda body is its own scope."""
-
-    source = (
-        "RATE = 0.21\nmapper = lambda value: (RATE := value)\n\n\n"
-        "def raise_rate(simulation):\n    simulation.rate = RATE\n"
-    )
-    name = "w4_receipt_r5_lambda_walrus"
-    try:
-        module, _ = _import_source(tmp_path, name, source)
-        _identity(module.raise_rate)
-        module.RATE = 0.30
-        with pytest.raises(ReceiptError, match="RATE is 0.3 at run time"):
-            _identity(module.raise_rate)
-    finally:
-        sys.modules.pop(name, None)
-
-
-def test_a_walrus_in_a_default_binds_the_module(tmp_path):
-    """Round-5 review: defaults are evaluated in the enclosing scope."""
-
-    source = (
-        "RATE = 0.21\n\n\ndef _helper(value=(RATE := 0.30)):\n    return value\n\n\n"
-        "def raise_rate(simulation):\n    simulation.rate = RATE\n"
-    )
-    name = "w4_receipt_r5_default_walrus"
-    try:
-        module, _ = _import_source(tmp_path, name, source)
-        assert module.RATE == 0.30
-        # Not mistaken for a reassigned constant ("RATE is 0.3 at run time but
-        # 0.21"): RATE is computed, and reading it is refused for that reason.
-        with pytest.raises(ReceiptError, match="reads RATE, a value of type float"):
-            _identity(module.raise_rate)
-    finally:
-        sys.modules.pop(name, None)
-
-
-# --- Module globals the modifier reads -------------------------------------------
-
 PARTIAL_SOURCE = """
 from functools import partial
 
@@ -2050,11 +1865,11 @@ def test_a_module_level_partial_the_modifier_calls_is_refused(tmp_path):
         module, _ = _import_source(tmp_path, name, PARTIAL_SOURCE)
         with pytest.raises(
             ReceiptError,
-            match=r"modifier reads PAYMENT, a value of type functools\.partial",
+            match="line 9 assigns PAYMENT something other than a literal",
         ):
             _identity(module.modifier)
         module.PAYMENT.keywords["amount"] = 240
-        with pytest.raises(ReceiptError, match="reads PAYMENT"):
+        with pytest.raises(ReceiptError, match="assigns PAYMENT"):
             _identity(module.modifier)
     finally:
         sys.modules.pop(name, None)
@@ -2066,7 +1881,7 @@ def test_a_module_level_partial_the_modifier_calls_is_refused(tmp_path):
         pytest.param(
             "import os\nRATE = float(os.environ.get('W4_RATE', '0.21'))\n\n\n"
             "def raise_rate(simulation):\n    simulation.rate = RATE\n",
-            r"raise_rate reads RATE, a value of type float computed by the module",
+            "assigns RATE something other than a literal",
             id="computed-from-the-environment",
         ),
         pytest.param(
@@ -2075,7 +1890,7 @@ def test_a_module_level_partial_the_modifier_calls_is_refused(tmp_path):
             "PAY = partial(_pay, amount=120)\n\n\n"
             "def _helper(simulation):\n    PAY(simulation)\n\n\n"
             "def raise_rate(simulation):\n    _helper(simulation)\n",
-            r"_helper reads PAY, a value of type functools\.partial",
+            "assigns PAY something other than a literal",
             id="partial-through-a-helper",
         ),
         pytest.param(
@@ -2085,26 +1900,26 @@ def test_a_module_level_partial_the_modifier_calls_is_refused(tmp_path):
             "    return wrapper\n\n\n"
             "@scaled\ndef _helper(value):\n    return value\n\n\n"
             "def raise_rate(simulation):\n    simulation.rate = _helper(0.21)\n",
-            r"scaled\.<locals>\.wrapper reads SCALE",
+            "assigns SCALE something other than a literal",
             id="computed-global-in-a-decorator-wrapper",
         ),
         pytest.param(
             "import os\nSCALE = len(os.sep)\n\n\n"
             "def raise_rate(simulation):\n    scale = lambda rate: rate * SCALE\n"
             "    simulation.rate = scale(0.21)\n",
-            r"raise_rate reads SCALE",
+            "assigns SCALE something other than a literal",
             id="computed-global-in-nested-code",
         ),
         pytest.param(
             "class Measure:\n    rate = 0.21\n\n\n"
             "def raise_rate(simulation):\n    simulation.rate = Measure.rate\n",
-            r"reads Measure, a class defined in the file",
+            "defines class Measure",
             id="class-in-the-file",
         ),
         pytest.param(
             "from math import pi\n\n\n"
             "def raise_rate(simulation):\n    simulation.rate = pi / 10\n",
-            r"reads pi, an imported value of type float",
+            r"pi\W.*an imported value of type float",
             id="imported-value",
         ),
         pytest.param(
@@ -2112,13 +1927,13 @@ def test_a_module_level_partial_the_modifier_calls_is_refused(tmp_path):
             "from math import floor as PAY\n"
             "PAY = partial(mul, 2)\n\n\n"
             "def raise_rate(simulation):\n    simulation.rate = PAY(0.21)\n",
-            r"reads PAY, a value of type functools\.partial",
+            "line 4 assigns PAY something other than a literal",
             id="import-rebound-to-a-partial",
         ),
         pytest.param(
             "from math import *\n\n\n"
             "def raise_rate(simulation):\n    simulation.rate = floor(e)\n",
-            r"reads e, an imported value of type float",
+            "an imported value of type float",
             id="star-imported-value",
         ),
         pytest.param(
@@ -2138,7 +1953,7 @@ def test_modifiers_reading_module_state_the_digest_cannot_bind_are_refused(
         module, _ = _import_source(tmp_path, name, source)
         with pytest.raises(ReceiptError, match=match) as refused:
             _identity(module.raise_rate)
-        assert "literal constant or a default argument" in str(refused.value)
+        assert "cannot be bound" in str(refused.value)
     finally:
         sys.modules.pop(name, None)
 
@@ -2163,7 +1978,7 @@ def test_a_partial_imported_from_another_module_is_refused(tmp_path):
         )
         with pytest.raises(
             ReceiptError,
-            match=r"reads PAY, an imported value of type functools\.partial",
+            match=r"PAY is an imported value of type functools\.partial",
         ):
             _identity(module.raise_rate)
     finally:
@@ -2179,7 +1994,7 @@ def test_a_name_set_on_the_module_after_import_is_refused(tmp_path):
         _identity(module.raise_rate)  # EXTRA is unbound: running it fails
         module.EXTRA = 0.30
         with pytest.raises(
-            ReceiptError, match="reads EXTRA, a value of type float set on the module"
+            ReceiptError, match="EXTRA is a value of type float set on the module"
         ):
             _identity(module.raise_rate)
     finally:
@@ -2192,7 +2007,6 @@ from functools import partial
 from math import floor
 
 RATE = 0.21
-UNREAD = partial(floor)  # computed, but nothing the modifier runs reads it
 
 
 def _countdown(depth):
@@ -2211,9 +2025,8 @@ def raise_rate(simulation):
 
 
 def test_literals_functions_imports_and_builtins_bind(tmp_path):
-    """Recursion terminates, a class inside the modifier reads its own body, a
-    module attribute is bound by the code revision, and unread state is not
-    the modifier's."""
+    """Recursion terminates, a class inside the modifier reads its own body,
+    and a module attribute is bound by the code revision."""
 
     name = "w4_receipt_globals_allowed"
     try:
@@ -2287,7 +2100,7 @@ def test_a_modifier_binds_exactly_when_every_global_it_reads_binds(
             named = [
                 kind
                 for kind in unbindable
-                if f"reads {GLOBAL_KINDS[kind][1].split('(')[0]}," in str(refused.value)
+                if GLOBAL_KINDS[kind][1].split("(")[0] in str(refused.value)
             ]
             assert named, str(refused.value)
         finally:
@@ -2345,25 +2158,6 @@ def test_default_dictionary_keys_must_be_exact_strings(tmp_path, monkeypatch):
 
     with pytest.raises(ReceiptError, match="keys must be strings"):
         receipt_module._typed_value({Key("rate"): 0.21})
-
-
-def test_a_method_bound_to_a_module_name_is_not_a_module_function(tmp_path):
-    """Only code compiled at module scope is compared with the module's code."""
-
-    source = (
-        "class Holder:\n    def apply(self, simulation):\n        simulation.rate = 0.21\n\n\n"
-        "apply_holder = Holder.apply\n\n\n"
-        "def raise_rate(simulation):\n    simulation.rate = 0.21\n"
-    )
-    name = "w4_receipt_r5_bound_method"
-    try:
-        module, _ = _import_source(tmp_path, name, source)
-        assert _identity(module.raise_rate)
-    finally:
-        sys.modules.pop(name, None)
-
-
-# --- Round-6 review findings ------------------------------------------------------
 
 
 def _flip_nan_signs(code):
@@ -2439,33 +2233,15 @@ def test_a_helper_rebound_to_another_function_of_the_file_is_refused(tmp_path):
         sys.modules.pop(name, None)
 
 
-def test_a_constant_bound_by_unpacking_is_not_read_unchecked(tmp_path):
-    """Round-6 review M3: ``RATE, UNUSED = 0.21, 1`` is not a checked literal
-    binding, so a modifier reading RATE is refused rather than bound."""
-
-    source = (
-        "RATE, UNUSED = 0.21, 1\n\n\n"
-        "def raise_rate(simulation):\n    simulation.rate = RATE\n"
-    )
-    name = "w4_receipt_r6_unpacked_constant"
-    try:
-        module, _ = _import_source(tmp_path, name, source)
-        with pytest.raises(ReceiptError, match="reads RATE, a value of type float"):
-            _identity(module.raise_rate)
-    finally:
-        sys.modules.pop(name, None)
-
-
-# ``first=list()`` is computed, so its function's defaults are bound by
-# value without a literal comparison, and a list holding itself reaches the
-# encoder (which would recurse without end).
 SHARED_DEFAULTS_SOURCE = """
 def _helper(value, scales=[2.0]):
     return value * scales[0]
 
 
 def raise_rate(simulation, first=list(), second=[], scales=[2.0]):
-    simulation.rate = 0.99 if first is second else _helper(0.21, scales)
+    first.append(1)  # visible through second only when they are one list
+    simulation.rate = 0.99 if second else _helper(0.21, scales)
+    first.clear()
 """
 
 
@@ -2567,7 +2343,8 @@ def test_same_literal_is_exact_equality(left, right):
         written = _ast.literal_eval(repr(left))
     except (ValueError, SyntaxError):
         written = None  # inf, frozenset() and Ellipsis have no literal form
-    else:
+    # repr writes complex(-0.0, 0.0) as "(-0+0j)", which reads back +0.0.
+    if written is not None and "j" not in repr(left):
         assert same(left, written)
     if same(left, right):
         assert left == right or left != left  # a complex NaN cannot occur
@@ -2575,24 +2352,6 @@ def test_same_literal_is_exact_equality(left, right):
     assert not same([1], [1.0])
     assert not same((1,), [1])
     assert not same({"a": 1, "b": 2}, {"b": 2, "a": 1})
-
-
-def test_a_walrus_in_an_evaluated_module_annotation_unbinds_a_constant(tmp_path):
-    """Round-6 review L6: ``x: (RATE := 0.30) = 1`` runs at module scope, so
-    an unedited module is not mistaken for a reassigned constant."""
-
-    source = "RATE = 0.21\nx: (RATE := 0.30) = 1\n\n\ndef raise_rate(simulation):\n    simulation.rate = 0.21\n"
-    try:
-        compile(source, "x", "exec", dont_inherit=True)
-    except SyntaxError:
-        pytest.skip("this Python refuses := in annotations")
-    name = "w4_receipt_r6_annotation_walrus"
-    try:
-        module, _ = _import_source(tmp_path, name, source)
-        assert module.RATE == 0.30
-        assert _identity(module.raise_rate)
-    finally:
-        sys.modules.pop(name, None)
 
 
 _REAL_PROJECTED_YEARS = receipt_module._projected_years
@@ -2622,3 +2381,391 @@ def test_projected_years_start_at_the_datasets_own_year(monkeypatch):
         monkeypatch.setitem(sys.modules, module_name, module)
     unwrapped = getattr(_REAL_PROJECTED_YEARS, "__wrapped__", _REAL_PROJECTED_YEARS)
     assert unwrapped("unused.h5", "0" * 64, "0.0.0") == (2023, 2024)
+
+
+# --- Round-7 review findings: the module shape a digest can bind ------------------
+
+
+MEASURE_TAIL = "\n\ndef raise_rate(simulation):\n    simulation.rate = 0.21\n"
+
+
+@pytest.mark.parametrize(
+    ("source", "match"),
+    [
+        pytest.param(
+            "import os\nDEBUG = False\nif os.environ.get('W4_X'):\n    DEBUG = True\n"
+            + MEASURE_TAIL,
+            "line 3 is a module-level If statement",
+            id="conditional-literal",
+        ),
+        pytest.param(
+            "import os\nif os.environ.get('W4_ALT'):\n    from math import ceil as pick\n"
+            "else:\n    from math import floor as pick\n" + MEASURE_TAIL,
+            "module-level If statement",
+            id="conditional-import",
+        ),
+        pytest.param(
+            "import sys\nif sys.version_info >= (3,):\n"
+            "    def raise_rate(simulation):\n        simulation.rate = 0.21\n",
+            "module-level If statement",
+            id="function-in-a-block",
+        ),
+        pytest.param(
+            "try:\n    import numpy\nexcept ImportError:\n    numpy = None\n"
+            + MEASURE_TAIL,
+            "module-level Try statement",
+            id="guarded-import",
+        ),
+        pytest.param(
+            "RATE = 0.21\nRATES = [RATE for RATE in range(3)]\n" + MEASURE_TAIL,
+            "line 2 assigns RATES something other than a literal",
+            id="comprehension",
+        ),
+        pytest.param(
+            "RATE = 0.21\nmapper = lambda value: (RATE := value)\n" + MEASURE_TAIL,
+            "assigns mapper something other than a literal",
+            id="lambda",
+        ),
+        pytest.param(
+            "RATE, UNUSED = 0.21, 1\n" + MEASURE_TAIL,
+            "line 1 assigns to something other than one name",
+            id="unpacking",
+        ),
+        pytest.param(
+            "FIRST = SECOND = []\n" + MEASURE_TAIL,
+            "assigns to something other than one name",
+            id="chained-assignment",
+        ),
+        pytest.param(
+            "RATE = 0.21\nRATE = 0.30\n" + MEASURE_TAIL,
+            "RATE is bound twice",
+            id="rebinding",
+        ),
+        pytest.param(
+            "RATE = 0.21\nRATE += 0.01\n" + MEASURE_TAIL,
+            "module-level AugAssign statement",
+            id="augmented-assignment",
+        ),
+        pytest.param(
+            "RATE = 0.21\nx: (RATE := 0.30) = 1\n" + MEASURE_TAIL,
+            "binds a name in the annotation of x",
+            id="annotation-walrus",
+        ),
+        pytest.param(
+            "RATE = 0.21\n\n\ndef _helper(value=(RATE := 0.30)):\n    return value\n"
+            + MEASURE_TAIL,
+            "a default or annotation of _helper binds a name",
+            id="default-walrus",
+        ),
+        pytest.param(
+            "import functools\n\n\n@functools.cache\ndef _helper():\n    return 0.21\n"
+            + MEASURE_TAIL,
+            "line 5 decorates _helper",
+            id="decorator",
+        ),
+        pytest.param(
+            "class Holder:\n    rate = 0.21\n" + MEASURE_TAIL,
+            "line 1 defines class Holder",
+            id="class",
+        ),
+        pytest.param(
+            "def _helper():\n    return _helper.amount\n\n\n_helper.amount = 120\n"
+            + MEASURE_TAIL,
+            "line 5 assigns to something other than one name",
+            id="function-attribute",
+        ),
+        pytest.param(
+            "import logging\nlogging.basicConfig()\n" + MEASURE_TAIL,
+            "line 2 is a module-level Expr statement",
+            id="call-at-import",
+        ),
+    ],
+)
+def test_module_shapes_a_digest_cannot_bind_are_refused(tmp_path, source, match):
+    """Rounds 4-7: conditional, repeated or computed bindings, decorators,
+    classes and code run at import hold state the source does not fix, so a
+    modifier's module may hold only imports, literals and undecorated
+    functions, each name bound once."""
+
+    name = "w4_receipt_r7_shape"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match=match) as refused:
+            _identity(module.raise_rate)
+        assert "cannot be bound" in str(refused.value)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_docstrings_annotations_and_a_main_guard_are_allowed(tmp_path):
+    source = (
+        '"""A measure."""\n\nfrom __future__ import annotations\n\nimport math\n'
+        "RATE: float = 0.21\nLIMIT: int\n\n\n"
+        "def raise_rate(simulation, cap: float = 1.0) -> None:\n"
+        '    """Raise the rate."""\n    simulation.rate = min(RATE, cap) * math.tau\n\n\n'
+        'if __name__ == "__main__":\n    raise_rate(object())\n'
+    )
+    name = "w4_receipt_r7_allowed_shape"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_main_guard_with_an_else_branch_is_refused(tmp_path):
+    """The else branch runs on import."""
+
+    source = (
+        'if __name__ == "__main__":\n    pass\nelse:\n    RATE = 0.30\n' + MEASURE_TAIL
+    )
+    name = "w4_receipt_r7_main_else"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match="module-level If statement"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+INDIRECT_SOURCE = """
+import sys
+
+RATE = 0.21
+
+
+def raise_rate(simulation):
+    module = sys.modules[__name__]
+    simulation.rate = getattr(module, "PAYMENT", lambda: RATE)()
+"""
+
+
+def test_names_set_on_the_module_are_refused_however_they_are_read(tmp_path):
+    """Round-7 review M2: getattr on the module reads PAYMENT without a
+    global load; every name in the namespace must be one the source binds."""
+
+    name = "w4_receipt_r7_indirect"
+    try:
+        module, _ = _import_source(tmp_path, name, INDIRECT_SOURCE)
+        _identity(module.raise_rate)
+        module.PAYMENT = functools.partial(float, "0.99")
+        with pytest.raises(
+            ReceiptError, match="PAYMENT is a value of type functools.partial set on"
+        ):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize("builtin", ["globals", "vars", "locals", "eval"])
+def test_builtins_that_reach_the_namespace_are_refused(tmp_path, builtin):
+    """Round-7 review M2: globals()['PAYMENT'] and vars(...) read the
+    namespace without naming what they read."""
+
+    call = {"eval": "eval('RATE')"}.get(builtin, f"{builtin}()['RATE']")
+    source = (
+        f"RATE = 0.21\n\n\ndef raise_rate(simulation):\n    simulation.rate = {call}\n"
+    )
+    name = "w4_receipt_r7_namespace_builtin"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match=f"calls {builtin}\\(\\)"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_an_import_rebound_at_run_time_is_refused(tmp_path):
+    """Round-7 review M4: the name must still be what its import binds."""
+
+    import math
+
+    source = "from math import floor\n\n\ndef raise_rate(simulation):\n    simulation.rate = floor(0.21)\n"
+    name = "w4_receipt_r7_import_rebound"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        _identity(module.raise_rate)
+        module.floor = math.ceil
+        with pytest.raises(
+            ReceiptError, match="floor is not what `from math import floor` binds"
+        ):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_an_imported_module_replaced_at_run_time_is_refused(tmp_path):
+    source = "import math\n\n\ndef raise_rate(simulation):\n    simulation.rate = math.floor(0.21)\n"
+    name = "w4_receipt_r7_module_rebound"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        _identity(module.raise_rate)
+        module.math = SimpleNamespace(floor=lambda value: 0.99)
+        with pytest.raises(ReceiptError, match="math is not what `import math` binds"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_an_unused_imported_value_is_refused(tmp_path):
+    """Indirect reads cannot be ruled out, so every imported name is judged."""
+
+    source = "from math import pi\n" + MEASURE_TAIL
+    name = "w4_receipt_r7_unused_import"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match="pi is an imported value of type float"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize("target", ["_helper", "raise_rate"])
+def test_functions_carrying_attributes_are_refused(tmp_path, target):
+    """Round-7 review M5: helper.amount set at run time is state."""
+
+    source = (
+        "def _helper():\n    return getattr(_helper, 'amount', 0.21)\n\n\n"
+        "def raise_rate(simulation):\n    simulation.rate = _helper()\n"
+    )
+    name = "w4_receipt_r7_function_attributes"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        _identity(module.raise_rate)
+        getattr(module, target).amount = 240
+        with pytest.raises(ReceiptError, match=f"function {target} carries attributes"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_literal_constants_that_are_one_mutable_object_are_refused(tmp_path):
+    """Round-7 review M6: rebinding B to A's list passes each value check."""
+
+    source = (
+        "A = []\nB = []\n\n\ndef raise_rate(simulation):\n"
+        "    A.append(1)\n    simulation.rate = 0.99 if B else 0.21\n    A.clear()\n"
+    )
+    name = "w4_receipt_r7_constant_alias"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        _identity(module.raise_rate)
+        module.B = module.A
+        with pytest.raises(ReceiptError, match="constant [AB] .*are one list object"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize(
+    ("expression", "refused"),
+    [
+        ("first is second", True),
+        ("first is not second", True),
+        ("id(first) == id(second)", True),
+        ("first is None", False),
+        ("second is not None", False),
+        ("type(first) is tuple", False),
+        ("first == second", False),
+    ],
+)
+def test_identity_comparisons_are_refused(tmp_path, expression, refused):
+    """Round-7 review M6: equal immutable values may or may not be one object
+    (the compiler merges equal constants), so code telling them apart by
+    identity cannot be bound by their values."""
+
+    source = (
+        "def raise_rate(simulation, first=(1,), second=(1,)):\n"
+        f"    simulation.rate = 0.99 if {expression} else 0.21\n"
+    )
+    name = "w4_receipt_r7_identity"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        if refused:
+            with pytest.raises(ReceiptError, match="compares identities|calls id"):
+                _identity(module.raise_rate)
+        else:
+            assert _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_class_inside_the_modifier_reads_its_own_names(tmp_path):
+    """Round-7 review L7: LOAD_NAME in a class body reads the class's own
+    binding; a module literal of the same name is checked by value too."""
+
+    for prefix in ("", "first = 5\n"):
+        source = (
+            prefix + "\n\ndef raise_rate(simulation):\n"
+            "    class Local:\n        first = 120\n        second = first * 2\n"
+            "    simulation.rate = Local.second\n"
+        )
+        name = "w4_receipt_r7_class_local"
+        try:
+            module, _ = _import_source(tmp_path, name, source)
+            assert _identity(module.raise_rate)
+        finally:
+            sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize(
+    ("body", "match", "minimum"),
+    [
+        (
+            "    class Local:\n        value = vars()\n",
+            r"calls vars\(\)",
+            (3, 11),
+        ),  # LOAD_NAME
+        (
+            "    class Local:\n        type Alias = vars\n",
+            r"calls vars\(\)",
+            (3, 12),
+        ),  # LOAD_FROM_DICT_OR_GLOBALS
+        (
+            "    global RATE\n    del RATE\n",
+            "assigns or deletes the module global RATE",
+            (3, 11),
+        ),  # DELETE_GLOBAL
+    ],
+    ids=["class-body", "class-type-alias", "delete-global"],
+)
+def test_each_global_opcode_is_followed(tmp_path, body, match, minimum):
+    """Round-7 review L8: a survivor dropped LOAD_NAME, LOAD_FROM_DICT_OR_GLOBALS
+    and DELETE_GLOBAL together."""
+
+    if sys.version_info < minimum:
+        pytest.skip("this Python has no such construct")
+    source = (
+        "RATE = 0.21\n\n\ndef raise_rate(simulation):\n"
+        + body
+        + "    simulation.rate = 0.21\n"
+    )
+    name = "w4_receipt_r7_opcodes"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match=match):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_shared_tuple_constants_are_other_code():
+    """Round-7 review H1: the compiler makes ((1,), (1,))'s inner tuples one
+    object, and a cache with two equal tuples answers ``is`` differently."""
+
+    from policyengine.provenance.bytecode import code_shape
+
+    source = "items = ((1,), (1,))\nsystem = items[0] is items[1]\n"
+    code = compile(source, "x", "exec", dont_inherit=True)
+    shared = next(c for c in code.co_consts if type(c) is tuple and len(c) == 2)
+    assert shared[0] is shared[1]
+    split = code.replace(
+        co_consts=tuple(
+            (tuple(list(c[0])), tuple(list(c[1]))) if c is shared else c
+            for c in code.co_consts
+        )
+    )
+    assert code_shape(split) != code_shape(code)
+    assert code_shape(code) == code_shape(
+        compile(source, "y", "exec", dont_inherit=True)
+    )
