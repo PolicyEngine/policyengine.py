@@ -29,8 +29,8 @@ os.environ.setdefault("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
 
 import requests  # noqa: E402
 
-from policyengine.provenance.qualification_ledger import (
-    fetch_ledger_receipt,  # noqa: E402
+from policyengine.provenance.qualification_ledger import (  # noqa: E402
+    fetch_ledger_receipt,
 )
 from policyengine.provenance.uk_qualification import (  # noqa: E402
     release_dispatch_payload,
