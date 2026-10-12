@@ -114,6 +114,35 @@ class TestValidateWithQualification:
         )
         assert basis == "legacy_compatible_model_package"
 
+    @pytest.mark.parametrize(
+        ("model_version", "model_claims"),
+        [("2.122.2", ("==2.122.2",)), ("2.126.8", ("==2.122.2", "==2.126.8"))],
+        ids=["build-time model", "publisher-claimed model"],
+    )
+    def test_an_unclaimed_core_makes_the_basis_the_exact_pair(
+        self, model_version, model_claims
+    ):
+        """Interrupted review of #574: with the model on a stronger basis, a
+        core the publisher never claimed was certified on that basis, and the
+        certificate named no pair, so no evidence was ever required."""
+
+        basis, warnings = validate_release_manifest(
+            _uk_manifest(model_claims=model_claims),
+            "policyengine-uk",
+            model_version,
+            core_version="9.99.0",
+            qualified_pair_id=PAIR_ID,
+        )
+        assert basis == BASIS_QUALIFIED_PAIR
+        assert any("policyengine-core==9.99.0" in item for item in warnings)
+        with pytest.raises(CertificationError, match="policyengine-core 9.99.0"):
+            validate_release_manifest(
+                _uk_manifest(model_claims=model_claims),
+                "policyengine-uk",
+                model_version,
+                core_version="9.99.0",
+            )
+
     def test_qualified_pair_needs_its_core_version(self):
         with pytest.raises(CertificationError, match="core"):
             validate_release_manifest(
@@ -197,7 +226,9 @@ class TestRuntimeAcceptance:
     def setup_method(self):
         get_data_release_manifest.cache_clear()
 
-    def _certify(self, bundled, runtime_model, remote=None, fingerprint=None):
+    def _certify(
+        self, bundled, runtime_model, remote=None, fingerprint=None, core="3.33.0"
+    ):
         manifest = MagicMock(certification=bundled)
         manifest.model_package.name = "policyengine-uk"
         manifest.data_package = MagicMock(
@@ -228,6 +259,7 @@ class TestRuntimeAcceptance:
                 "uk",
                 runtime_model_version=runtime_model,
                 runtime_data_build_fingerprint=fingerprint,
+                runtime_core_version=core,
             )
 
     def test_online_exact_model_and_build_is_honoured(self):
@@ -245,6 +277,36 @@ class TestRuntimeAcceptance:
                 "2.126.8",
                 remote=_uk_manifest(),
             )
+
+    def test_online_other_core_is_refused(self):
+        """Interrupted review of #574: an exact pair was honoured whatever core ran."""
+
+        with pytest.raises(ValueError, match="not certified"):
+            self._certify(_qualified(), "2.126.8", remote=_uk_manifest(), core="3.34.0")
+
+    def test_offline_other_core_is_not_certified(self):
+        certification = self._certify(_qualified(), "2.126.8", core="3.34.0")
+        assert certification.compatibility_basis == (
+            "unverified_data_release_manifest_unavailable"
+        )
+
+    def test_the_installed_core_is_read_when_none_is_given(self):
+        with patch("importlib.metadata.version", return_value="3.34.0") as installed:
+            with pytest.raises(ValueError, match="not certified"):
+                self._certify(_qualified(), "2.126.8", remote=_uk_manifest(), core=None)
+        installed.assert_called_with("policyengine-core")
+
+    def test_other_bases_make_no_runtime_core_claim(self):
+        legacy = DataCertification(
+            compatibility_basis="legacy_compatible_model_package",
+            certified_for_model_version="2.126.8",
+            certified_for_core_version="3.33.0",
+            data_build_id="policyengine-uk-data-1.58.0",
+        )
+        assert (
+            self._certify(legacy, "2.126.8", core="3.34.0").compatibility_basis
+            == "legacy_compatible_model_package"
+        )
 
     def test_offline_fingerprint_difference_is_expected(self):
         certification = self._certify(
@@ -275,7 +337,18 @@ def _record_for(receipt):
             "release_manifest_revision": pair.data.release_manifest_revision,
         },
         "default_dataset": pair.data.dataset,
-        "certified_data_artifact": {"sha256": pair.data.dataset_sha256},
+        "certified_data_artifact": {
+            "dataset": pair.data.dataset,
+            "sha256": pair.data.dataset_sha256,
+        },
+        "datasets": {
+            pair.data.dataset: {
+                "repo_id": pair.data.repo_id,
+                "path": pair.data.dataset_path,
+                "revision": pair.data.dataset_revision,
+                "sha256": pair.data.dataset_sha256,
+            }
+        },
     }
 
 
@@ -298,6 +371,31 @@ def test_matching_promotable_receipt_is_sufficient():
     assert verify_certification_evidence(_record_for(receipt), receipt) == []
 
 
+REFERENCE_FIELDS = ["repo_id", "path", "revision", "sha256"]
+
+
+@pytest.mark.parametrize("field", REFERENCE_FIELDS)
+def test_the_dataset_reference_the_runtime_resolves_is_evidence_too(field):
+    """Interrupted review of #574: a record pointing its default dataset at
+    another repository, path, revision or file verified against the receipt."""
+
+    receipt = make_receipt()
+    record = _record_for(receipt)
+    record["datasets"][receipt.pair.data.dataset][field] = "f" * 64
+    problems = verify_certification_evidence(record, receipt)
+    assert any("dataset reference" in problem for problem in problems)
+    del record["datasets"][receipt.pair.data.dataset]
+    assert verify_certification_evidence(record, receipt)
+
+
+def test_a_record_without_the_model_wheel_hash_is_refused():
+    receipt = make_receipt()
+    record = _record_for(receipt)
+    del record["model_package"]["sha256"]
+    problems = verify_certification_evidence(record, receipt)
+    assert any("model wheel sha256" in problem for problem in problems)
+
+
 def test_missing_or_unpromotable_receipt_is_refused():
     receipt = make_receipt()
     record = _record_for(receipt)
@@ -315,6 +413,7 @@ FIELDS = [
     ("data_package", "version"),
     ("data_package", "release_manifest_revision"),
     ("certified_data_artifact", "sha256"),
+    ("certified_data_artifact", "dataset"),
 ]
 
 

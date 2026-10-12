@@ -251,7 +251,9 @@ def validate_release_manifest(
 
     When ``core_version`` is given, the core must also be the build-time
     core, be covered by ``compatible_core_packages``, or be part of the
-    qualified pair.
+    qualified pair. A core admitted only by the qualification makes the
+    basis ``qualified_exact_pair`` whatever the model's own claim, so the
+    certificate names the pair and its ledger evidence is enforced.
     """
     warnings: list[str] = []
     if "national" not in manifest.default_datasets:
@@ -284,8 +286,20 @@ def validate_release_manifest(
         _specifier_matches(model_version, specifier) for specifier in claim_specifiers
     )
 
-    if core_version is not None:
+    core_rests_on_qualification = core_version is not None and (
         _check_core_compatibility(manifest, core_version, qualified_pair_id, warnings)
+    )
+    if core_rests_on_qualification:
+        # The publisher never claimed this core, so the model's own claim
+        # cannot carry the certificate: it is the exact pair that was tested,
+        # and the certificate must name it so its evidence is checked.
+        warnings.append(
+            f"certifying exactly {model_package}=={model_version} with "
+            f"policyengine-core=={core_version} on automated qualification of "
+            f"pair {qualified_pair_id}; the certificate stands only with a "
+            "promotable qualification receipt for that pair in the ledger"
+        )
+        return BASIS_QUALIFIED_PAIR, warnings
 
     if built_with == model_version:
         return BASIS_BUILT_WITH, warnings
@@ -323,8 +337,12 @@ def _check_core_compatibility(
     core_version: str,
     qualified_pair_id: Optional[str],
     warnings: list[str],
-) -> None:
-    """The core must be the build core, publisher-claimed, or qualified."""
+) -> bool:
+    """The core must be the build core, publisher-claimed, or qualified.
+
+    Returns whether the core is admitted only by the qualification, in which
+    case the certificate's basis must be the qualified exact pair.
+    """
 
     build = manifest.build
     built_with_core = (
@@ -340,14 +358,14 @@ def _check_core_compatibility(
     if built_with_core == core_version or any(
         _specifier_matches(core_version, specifier) for specifier in core_claims
     ):
-        return
+        return False
     if qualified_pair_id is not None:
         warnings.append(
             f"policyengine-core {core_version} is outside the publisher's core "
             f"claims {core_claims or '(none declared)'}; covered by qualification "
             f"of pair {qualified_pair_id}"
         )
-        return
+        return True
     raise CertificationError(
         f"policyengine-core {core_version} matches neither the build-time core "
         f"({built_with_core or 'unrecorded'}) nor any publisher core claim "

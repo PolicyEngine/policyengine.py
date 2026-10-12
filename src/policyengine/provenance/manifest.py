@@ -402,10 +402,32 @@ def _specifier_matches(version: str, specifier: str) -> bool:
         return False
 
 
+def _runtime_core_is_certified(
+    certification: DataCertification, runtime_core_version: Optional[str]
+) -> bool:
+    """Whether the running core is the one an exact-pair certificate tested.
+
+    Other bases make no claim about the core at run time. An exact pair was
+    tested with one core, so it holds only for that core.
+    """
+
+    if certification.compatibility_basis != "qualified_exact_pair":
+        return True
+    if runtime_core_version is None:
+        from importlib import metadata
+
+        try:
+            runtime_core_version = metadata.version("policyengine-core")
+        except metadata.PackageNotFoundError:
+            return False
+    return certification.certified_for_core_version == runtime_core_version
+
+
 def certify_data_release_compatibility(
     country_id: str,
     runtime_model_version: str,
     runtime_data_build_fingerprint: Optional[str] = None,
+    runtime_core_version: Optional[str] = None,
 ) -> DataCertification:
     country_manifest = get_release_manifest(country_id)
     try:
@@ -428,6 +450,9 @@ def certify_data_release_compatibility(
             if (
                 bundled_certification.certified_for_model_version
                 == runtime_model_version
+                and _runtime_core_is_certified(
+                    bundled_certification, runtime_core_version
+                )
             ):
                 return bundled_certification
             return DataCertification(
@@ -539,6 +564,7 @@ def certify_data_release_compatibility(
         and bundled_certification.certified_for_model_version == runtime_model_version
         and bundled_certification.qualification_pair_id is not None
         and bundled_certification.data_build_id == remote_build_id
+        and _runtime_core_is_certified(bundled_certification, runtime_core_version)
     ):
         return bundled_certification
 

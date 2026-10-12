@@ -130,8 +130,10 @@ def verify_certification_evidence(
 
     Records on any basis other than ``qualified_exact_pair`` need no ledger
     evidence and return no problems. A qualified exact pair needs a
-    promotable receipt for exactly the model wheel, core, data release and
-    dataset bytes the record certifies.
+    promotable receipt for exactly the model wheel (its hash must be stated),
+    core, data release and dataset the record certifies, including the
+    default dataset's reference (repository, path, revision and bytes), which
+    is what the runtime resolves.
     """
 
     certification = record.get("certification") or {}
@@ -154,6 +156,7 @@ def verify_certification_evidence(
     model = record.get("model_package") or {}
     data = record.get("data_package") or {}
     artifact = record.get("certified_data_artifact") or {}
+    reference = (record.get("datasets") or {}).get(record.get("default_dataset")) or {}
     expected: Iterable[tuple[str, Any, Any]] = (
         (
             "model version",
@@ -161,11 +164,7 @@ def verify_certification_evidence(
             certification.get("certified_for_model_version"),
         ),
         ("model version in bundle", pair.model.version, model.get("version")),
-        (
-            "model wheel sha256",
-            pair.model.wheel_sha256,
-            model.get("sha256", pair.model.wheel_sha256),
-        ),
+        ("model wheel sha256", pair.model.wheel_sha256, model.get("sha256")),
         (
             "core version",
             pair.core.version,
@@ -178,7 +177,17 @@ def verify_certification_evidence(
             data.get("release_manifest_revision"),
         ),
         ("default dataset", pair.data.dataset, record.get("default_dataset")),
+        ("certified dataset", pair.data.dataset, artifact.get("dataset")),
         ("dataset sha256", pair.data.dataset_sha256, artifact.get("sha256")),
+        # The reference the runtime actually resolves and downloads.
+        ("dataset reference repo", pair.data.repo_id, reference.get("repo_id")),
+        ("dataset reference path", pair.data.dataset_path, reference.get("path")),
+        (
+            "dataset reference revision",
+            pair.data.dataset_revision,
+            reference.get("revision"),
+        ),
+        ("dataset reference sha256", pair.data.dataset_sha256, reference.get("sha256")),
         ("data build id", pair.data.build_id, certification.get("data_build_id")),
     )
     for label, qualified, certified in expected:
