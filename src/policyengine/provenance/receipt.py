@@ -6,7 +6,9 @@ figure, an API response) and names everything that determined it:
 - the wrapper, country model and core versions that actually ran, read
   from the installed distributions rather than from the bundle manifest;
 - the data release, its build identity, and the dataset's revision and
-  SHA-256 as read from the bytes that were simulated;
+  SHA-256 as read from the bytes that were simulated, resolved as
+  :func:`~policyengine.provenance.dataset_materialization.materialize_dataset`
+  resolves it;
 - the certificate that admitted that model, core and data, as a digest of
   the bundle's certification record;
 - the reform and baseline, as digests of their canonical representation;
@@ -25,6 +27,14 @@ Rules every valid v1 receipt satisfies:
   wrapper version; otherwise the receipt is ``uncertified``.
 - ``years`` is sorted and unique, and each reported year has the meaning
   ``fiscal_year`` gives it.
+- ``data`` names the artifact the bundle resolves for ``data.dataset``, and
+  ``data.dataset_sha256`` is the hash the bundle pins for it: a receipt
+  never gives an artifact's name to other bytes. A receipt built from a
+  microsimulation also requires the bytes verified when it was loaded.
+- ``wheel_sha256`` with evidence ``installed_record_verified`` means the
+  installed files and any bytecode the interpreter would load instead of
+  them match that wheel; ``installer_archive_hash`` comes only from a
+  ``.whl`` direct URL.
 - The execution identity digest covers only what determines the execution
   (wrapper, model, core, data and the certificate's content); two results
   with the same digest ran on the same runtime, data and certificate. The
@@ -32,7 +42,8 @@ Rules every valid v1 receipt satisfies:
   outputs, but not runtime context or human labels.
 - A reform digest binds content (``binding="content"``) unless the reform
   runs Python code, in which case it binds that function's source, its
-  module's source and its default arguments plus the caller's code revision,
+  module's source and its module's typed default arguments plus the
+  caller's code revision,
   and says so (``binding="code_revision"``). The digest is the same wherever
   the code is checked out and whichever Python runs it.
 - A certificate is trusted only after :func:`verify_certificate` has checked
@@ -65,10 +76,14 @@ from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 from types import CodeType
 from typing import Any, ClassVar, Literal, Optional, Union
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from policyengine.provenance.bytecode import code_shape as _code_shape
+from policyengine.provenance.bytecode import compile_source
 from policyengine.provenance.canonical import (
+    MAX_SAFE_INTEGER,
     CanonicalJSONError,
     canonical_json,
     canonical_sha256,
@@ -413,6 +428,14 @@ class ExecutionReceipt(_Contract):
     )
     runtime: Optional[RuntimeContext] = None
 
+    @field_validator("schema_version", mode="before")
+    @classmethod
+    def _schema_version_is_an_integer(cls, value: Any) -> Any:
+        # ``True == 1``, so a Literal[1] alone would accept a boolean.
+        if isinstance(value, bool):
+            raise ValueError("schema_version must be the integer 1, not a boolean.")
+        return value
+
     @field_validator("years")
     @classmethod
     def _sorted_unique_years(cls, years: list[int]) -> list[int]:
@@ -513,11 +536,16 @@ class ExecutionReceipt(_Contract):
 
 
 def _numpy_scalar(value: Any) -> bool:
-    module = type(value).__module__
-    return (
-        module.startswith("numpy")
-        and hasattr(value, "item")
-        and getattr(value, "ndim", 0) == 0
+    """Whether ``value`` is a NumPy boolean, integer or floating scalar.
+
+    Only true scalars: a masked value (``np.ma.masked``, a masked 0-d array)
+    or a 0-d array is an array, and structured, complex, datetime and string
+    scalars have no one exact JSON number.
+    """
+
+    numpy = sys.modules.get("numpy")
+    return numpy is not None and isinstance(
+        value, (numpy.bool_, numpy.integer, numpy.floating)
     )
 
 
@@ -682,44 +710,10 @@ _SCENARIO_ATTRIBUTES = (
 )
 
 
-def _code_shape(code: CodeType) -> tuple[Any, ...]:
-    """A code object without where it was compiled: no file, no line numbers."""
-
-    return (
-        code.co_name,
-        code.co_qualname,
-        code.co_argcount,
-        code.co_posonlyargcount,
-        code.co_kwonlyargcount,
-        code.co_flags,
-        code.co_stacksize,
-        code.co_code,
-        code.co_names,
-        code.co_varnames,
-        code.co_freevars,
-        code.co_cellvars,
-        code.co_exceptiontable,
-        tuple(
-            _code_shape(const) if isinstance(const, CodeType) else (type(const), const)
-            for const in code.co_consts
-        ),
-    )
-
-
 def _compile_module_source(source: str, code: CodeType) -> Optional[CodeType]:
     """``source`` compiled as a module, with the flags ``code`` was compiled with."""
 
-    try:
-        compiled: CodeType = compile(
-            source,
-            code.co_filename,
-            "exec",
-            flags=code.co_flags & _FUTURE_FLAGS,
-            dont_inherit=True,
-        )
-    except SyntaxError:
-        return None
-    return compiled
+    return compile_source(source, code.co_filename, flags=code.co_flags & _FUTURE_FLAGS)
 
 
 def _top_level_code(module_code: CodeType) -> dict[str, list[CodeType]]:
@@ -742,57 +736,215 @@ def _source_matches_loaded_code(source: str, code: CodeType, qualname: str) -> b
     return len(compiled) == 1 and _code_shape(compiled[0]) == _code_shape(code)
 
 
-def _module_scope_bindings(node: ast.AST) -> list[str]:
-    """Names a module-scope statement binds, without entering function or class bodies."""
+#: Value types a typed encoding preserves exactly. Subclasses (enums, named
+#: tuples, bool-like ints) are refused rather than flattened.
+_TYPED_SCALARS = (type(None), bool, int, float, str)
 
-    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-        return [node.name]
-    if isinstance(node, (ast.Import, ast.ImportFrom)):
-        return [(alias.asname or alias.name).split(".")[0] for alias in node.names]
+
+def _typed_value(value: Any, path: str = "$") -> dict[str, Any]:
+    """A lossless JSON encoding of a Python literal value, or ``ReceiptError``.
+
+    Unlike :func:`strict_json_value`, it keeps what changes a function's
+    behaviour: ``1`` and ``1.0``, a tuple and a list, ``None`` and a missing
+    member, and the order of a dictionary's keys.
+    """
+
+    kind = type(value)
+    if kind is type(None):
+        return {"type": "none"}
+    if kind is bool:
+        return {"type": "bool", "value": value}
+    if kind is int:
+        if abs(value) > MAX_SAFE_INTEGER:
+            raise ReceiptError(f"{path}: {value} is outside +/-(2**53 - 1).")
+        return {"type": "int", "value": value}
+    if kind is float:
+        if not math.isfinite(value):
+            raise ReceiptError(f"{path}: {value} is not a finite number.")
+        return {"type": "float", "value": value}
+    if kind is str:
+        return {"type": "str", "value": value}
+    if kind in (tuple, list):
+        return {
+            "type": kind.__name__,
+            "items": [
+                _typed_value(item, f"{path}[{index}]")
+                for index, item in enumerate(value)
+            ],
+        }
+    if kind is dict:
+        items = []
+        for key, item in value.items():
+            if type(key) is not str:
+                raise ReceiptError(f"{path}: dictionary keys must be strings.")
+            items.append([key, _typed_value(item, f"{path}.{key}")])
+        return {"type": "dict", "items": items}
+    raise ReceiptError(
+        f"{path}: {kind.__name__} has no exact encoding; use None, bool, int, "
+        "float, str, tuple, list or dict."
+    )
+
+
+_COMPREHENSIONS = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+
+
+def _expression_bindings(node: Optional[ast.AST]) -> list[str]:
+    """Names an expression binds in its enclosing scope.
+
+    Plain targets bind; inside a comprehension or lambda only ``:=`` targets
+    reach the enclosing scope (a comprehension's loop variable is its own).
+    """
+
+    if node is None:
+        return []
     if isinstance(node, ast.Name):
         return [node.id] if isinstance(node.ctx, ast.Store) else []
-    if isinstance(node, ast.Lambda):
-        return []
+    if isinstance(node, _COMPREHENSIONS + (ast.Lambda,)):
+        return [
+            child.target.id
+            for child in ast.walk(node)
+            if isinstance(child, ast.NamedExpr) and isinstance(child.target, ast.Name)
+        ]
     names: list[str] = []
     for child in ast.iter_child_nodes(node):
-        names.extend(_module_scope_bindings(child))
+        names.extend(_expression_bindings(child))
     return names
 
 
-def _literal_assignments(tree: ast.Module) -> dict[str, Any]:
-    """Module-scope names bound exactly once: by a top-level assignment of a literal.
+def _scope_statements(body: Sequence[ast.stmt]) -> list[ast.stmt]:
+    """Every statement that runs at module scope, inside blocks included."""
 
-    A name bound anywhere else at module scope (a second assignment, an
-    ``if`` block, a loop, an import) is not a constant and is not checked.
+    statements: list[ast.stmt] = []
+    for statement in body:
+        statements.append(statement)
+        if isinstance(statement, _SCOPES):
+            continue
+        for field in ("body", "orelse", "finalbody"):
+            statements.extend(_scope_statements(getattr(statement, field, None) or []))
+        for handler in getattr(statement, "handlers", None) or []:
+            statements.extend(_scope_statements(handler.body))
+        for case in getattr(statement, "cases", None) or []:
+            statements.extend(_scope_statements(case.body))
+    return statements
+
+
+def _statement_bindings(statement: ast.stmt) -> list[str]:
+    """Names a module-scope statement itself binds (not its nested statements)."""
+
+    if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return [statement.name]
+    if isinstance(statement, (ast.Import, ast.ImportFrom)):
+        return [(alias.asname or alias.name).split(".")[0] for alias in statement.names]
+    if isinstance(statement, (ast.For, ast.AsyncFor)):
+        return _expression_bindings(statement.target) + _expression_bindings(
+            statement.iter
+        )
+    if isinstance(statement, (ast.If, ast.While)):
+        return _expression_bindings(statement.test)
+    if isinstance(statement, (ast.With, ast.AsyncWith)):
+        names = []
+        for item in statement.items:
+            names += _expression_bindings(item.context_expr)
+            names += _expression_bindings(item.optional_vars)
+        return names
+    if isinstance(statement, ast.Try) or type(statement).__name__ == "TryStar":
+        return [h.name for h in statement.handlers if h.name]  # type: ignore[attr-defined]
+    if isinstance(statement, ast.Match):
+        names = _expression_bindings(statement.subject)
+        for case in statement.cases:
+            for node in ast.walk(case.pattern):
+                for attribute in ("name", "rest"):
+                    value = getattr(node, attribute, None)
+                    if isinstance(value, str):
+                        names.append(value)
+            names += _expression_bindings(case.guard)
+        return names
+    return _expression_bindings(statement)
+
+
+def _literal_bindings(tree: ast.Module) -> dict[str, list[Any]]:
+    """Module-scope names every one of whose bindings assigns a literal.
+
+    Maps each such name to the literal values it can take, from top-level
+    assignments and assignments inside module-level blocks alike. A name
+    with any other binding (a computed value, an import, a loop variable, a
+    ``def``) is not a constant and is left out.
     """
 
-    bindings: dict[str, int] = {}
-    for node in tree.body:
-        for name in _module_scope_bindings(node):
-            bindings[name] = bindings.get(name, 0) + 1
-    literals: dict[str, Any] = {}
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and all(
-            isinstance(target, ast.Name) for target in node.targets
+    literals: dict[str, list[Any]] = {}
+    computed: set[str] = set()
+    for statement in _scope_statements(tree.body):
+        value: Optional[ast.expr] = None
+        names: list[str] = []
+        if isinstance(statement, ast.Assign) and all(
+            isinstance(target, ast.Name) for target in statement.targets
         ):
-            names = [target.id for target in node.targets]  # type: ignore[attr-defined]
-            value: ast.expr = node.value
+            names = [target.id for target in statement.targets]  # type: ignore[attr-defined]
+            value = statement.value
         elif (
-            isinstance(node, ast.AnnAssign)
-            and isinstance(node.target, ast.Name)
-            and node.value is not None
+            isinstance(statement, ast.AnnAssign)
+            and isinstance(statement.target, ast.Name)
+            and statement.value is not None
         ):
-            names, value = [node.target.id], node.value
-        else:
+            names, value = [statement.target.id], statement.value
+        if value is not None:
+            try:
+                literal = ast.literal_eval(value)
+            except (ValueError, TypeError, SyntaxError, MemoryError, RecursionError):
+                computed.update(names)
+            else:
+                for name in names:
+                    literals.setdefault(name, []).append(literal)
+            computed.update(_expression_bindings(value))
             continue
-        try:
-            literal = ast.literal_eval(value)
-        except (ValueError, TypeError, SyntaxError, MemoryError, RecursionError):
-            continue
-        for name in names:
-            if bindings.get(name) == 1:
-                literals[name] = literal
-    return literals
+        computed.update(_statement_bindings(statement))
+    return {name: values for name, values in literals.items() if name not in computed}
+
+
+def _literal_defaults(definition: ast.FunctionDef) -> Optional[dict[str, Any]]:
+    """A ``def``'s default values when every default is a literal, else ``None``."""
+
+    try:
+        defaults = [ast.literal_eval(node) for node in definition.args.defaults]
+        kwdefaults = {
+            arg.arg: ast.literal_eval(node)
+            for arg, node in zip(
+                definition.args.kwonlyargs, definition.args.kw_defaults
+            )
+            if node is not None
+        }
+    except (ValueError, TypeError, SyntaxError, MemoryError, RecursionError):
+        return None
+    return {"defaults": defaults, "kwdefaults": kwdefaults}
+
+
+def _same_typed(left: Any, right: Any) -> bool:
+    try:
+        return _typed_value(left) == _typed_value(right)
+    except ReceiptError:
+        return False
+
+
+def _function_defaults(function: Any) -> dict[str, Any]:
+    return {
+        "defaults": list(function.__defaults__ or ()),
+        "kwdefaults": dict(function.__kwdefaults__ or {}),
+    }
+
+
+def _module_functions(module: Any, filename: str) -> list[Any]:
+    """The functions an imported module defines at module scope in ``filename``."""
+
+    return [
+        value
+        for value in vars(module).values()
+        if inspect.isfunction(value)
+        and value.__module__ == module.__name__
+        and value.__code__.co_filename == filename
+        and "." not in value.__qualname__
+        and "<" not in value.__qualname__
+    ]
 
 
 def _module_differs_from_source(
@@ -800,36 +952,52 @@ def _module_differs_from_source(
 ) -> Optional[str]:
     """How the imported module differs from its source as read now, if it does.
 
-    Every function defined at module scope in that file must compile to the
-    loaded code (ignoring file and line numbers), and every module-scope name
-    bound once to a literal (``RATE = 0.21``) must still hold that value.
+    For every function defined at module scope in that file: it must use the
+    module's own globals, compile from the source to the loaded code
+    (ignoring file and line numbers), and, where the source's defaults are
+    literals, hold those defaults. Every module-scope name all of whose
+    bindings assign literals (``RATE = 0.21``, in a block or not) must still
+    hold one of those values, with the same type.
     """
 
     module_code = _compile_module_source(module_source, code)
     if module_code is None:
         return "its source no longer compiles"
+    tree = ast.parse(module_source)
     compiled = _top_level_code(module_code)
-    for name, value in vars(module).items():
-        if (
-            not inspect.isfunction(value)
-            or value.__module__ != module.__name__
-            or value.__code__.co_filename != code.co_filename
-            or "." in value.__qualname__
-            or "<" in value.__qualname__
-        ):
-            continue
-        candidates = compiled.get(value.__qualname__, [])
-        if not any(
-            _code_shape(item) == _code_shape(value.__code__) for item in candidates
-        ):
-            return f"function {value.__qualname__} no longer matches it"
+    definitions: dict[str, list[ast.FunctionDef]] = {}
+    for statement in _scope_statements(tree.body):
+        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            definitions.setdefault(statement.name, []).append(statement)  # type: ignore[arg-type]
     namespace = vars(module)
-    for name, literal in _literal_assignments(ast.parse(module_source)).items():
+    for function in _module_functions(module, code.co_filename):
+        name = function.__qualname__
+        if function.__globals__ is not namespace:
+            return f"function {name} does not use its module's globals"
+        shapes = {_code_shape(item) for item in compiled.get(name, [])}
+        if _code_shape(function.__code__) not in shapes:
+            return f"function {name} no longer matches it"
+        if len(shapes) > 1:
+            # Which branch the source selects now cannot be read from it.
+            return (
+                f"function {name} has {len(shapes)} different definitions, so "
+                "which one ran cannot be checked"
+            )
+        sources = [_literal_defaults(node) for node in definitions.get(name, [])]
+        literal_sources = [item for item in sources if item is not None]
+        if literal_sources and len(literal_sources) == len(sources):
+            if not any(
+                _same_typed(item, _function_defaults(function))
+                for item in literal_sources
+            ):
+                return f"function {name}'s default arguments differ from the source"
+    for name, values in _literal_bindings(tree).items():
         if name not in namespace:
             return f"{name} is no longer defined"
         current = namespace[name]
-        if type(current) is not type(literal) or current != literal:
-            return f"{name} is {current!r} at run time but {literal!r} in the source"
+        if not any(_same_typed(current, value) for value in values):
+            shown = values[0] if len(values) == 1 else values
+            return f"{name} is {current!r} at run time but {shown!r} in the source"
     return None
 
 
@@ -850,16 +1018,28 @@ def _modifier_identity(
     The digest may only name code that ran, so the module's source is checked
     against what was imported (ignoring file names and line numbers):
     - the modifier, and every other function defined at module scope in that
-      file, must compile to the loaded code, nested code included;
-    - every module-scope name bound once to a literal (``RATE = 0.21``) must
-      still hold that value.
+      file, must use the module's own globals and compile to the loaded code,
+      nested code included; literal default arguments must match the source;
+    - every module-scope name all of whose bindings assign literals
+      (``RATE = 0.21``, at top level or in a block) must still hold one of
+      those values, with the same type.
     A file edited after import, or a literal constant reassigned at run time,
-    is refused. Not covered: other module state (objects built at import,
-    imported modules, class bodies and methods) and data read at run time;
-    ``code_revision`` names the code, not the process.
+    is refused. The default arguments of every function in the module are
+    bound by value, with their types (``1`` is not ``1.0``, a tuple is not a
+    list, ``None`` is not a missing key).
+
+    A module that defines one function name more than once with different
+    code (``if FLAG: def helper(): ... else: def helper(): ...``) is refused,
+    because which definition the source selects now cannot be checked.
+
+    Not covered: other module state (objects built at import, imported
+    modules, class bodies and methods) and data read at run time;
+    ``code_revision`` names the code, not the process. Receipts are claims by
+    their producer: this protects an honest producer against mistakes, not a
+    reader against a producer who builds code to mislead.
 
     Closures, lambdas, nested functions, methods, partials, builtins and
-    functions whose defaults have no exact JSON form are refused: their
+    functions whose defaults have no exact encoding are refused: their
     behaviour depends on values the digest cannot bind (two
     ``Scenario.from_reform`` closures share one source but apply different
     reforms).
@@ -912,28 +1092,28 @@ def _modifier_identity(
             f"{modifier.__module__} no longer matches its source file: {difference} "
             "(edited or reassigned after import?), so it cannot be bound."
         )
-    try:
-        defaults = (
-            strict_json_value(list(modifier.__defaults__))
-            if modifier.__defaults__
-            else None
-        )
-        kwdefaults = (
-            strict_json_value(dict(modifier.__kwdefaults__))
-            if modifier.__kwdefaults__
-            else None
-        )
-    except ReceiptError as exc:
-        raise ReceiptError(
-            f"The modifier's default arguments cannot be bound: {exc}"
-        ) from exc
+    # Default arguments are runtime values, so they are bound by value, with
+    # their types, for the modifier and every function in its module.
+    module_defaults: dict[str, Any] = {}
+    for function in sorted(
+        _module_functions(module, code.co_filename), key=lambda f: f.__qualname__
+    ):
+        if not function.__defaults__ and not function.__kwdefaults__:
+            continue
+        try:
+            module_defaults[function.__qualname__] = _typed_value(
+                _function_defaults(function), function.__qualname__
+            )
+        except ReceiptError as exc:
+            raise ReceiptError(
+                f"{function.__qualname__}'s default arguments cannot be bound: {exc}"
+            ) from exc
     return {
         "module": modifier.__module__,
         "qualname": modifier.__qualname__,
         "source_sha256": _sha256_text(source),
         "module_source_sha256": _sha256_text(module_source),
-        "defaults": defaults,
-        "kwdefaults": kwdefaults,
+        "module_defaults": module_defaults or None,
         "code_revision": strict_json_value(dict(code_revision)),
     }
 
@@ -1065,6 +1245,12 @@ def installed_package_identity(
 
 
 def _installer_archive_sha256(name: str) -> Optional[str]:
+    """The SHA-256 of the wheel a PEP 610 direct URL install came from, if any.
+
+    Only a ``.whl`` URL qualifies: a source archive's hash does not describe
+    the installed files, so it is never recorded as ``wheel_sha256``.
+    """
+
     try:
         text = metadata.distribution(name).read_text("direct_url.json")
     except PackageNotFoundError:
@@ -1072,8 +1258,12 @@ def _installer_archive_sha256(name: str) -> Optional[str]:
     if not text:
         return None
     try:
-        archive = json.loads(text).get("archive_info") or {}
-    except ValueError:
+        direct_url = json.loads(text)
+        url_path = urlparse(str(direct_url.get("url") or "")).path
+        archive = direct_url.get("archive_info") or {}
+    except (ValueError, AttributeError):
+        return None
+    if not url_path.endswith(".whl") or not isinstance(archive, Mapping):
         return None
     candidate = (archive.get("hashes") or {}).get("sha256")
     if candidate is None:
@@ -1166,6 +1356,25 @@ def build_execution_receipt(
         ) from exc
 
 
+def _receipt_years(years: Any) -> list[int]:
+    """Sorted unique years, refusing anything that is not a sequence of integers."""
+
+    if isinstance(years, (str, bytes)) or not isinstance(years, Sequence):
+        raise ReceiptError(f"years must be a sequence of integers, not {years!r}.")
+    result = set()
+    for year in years:
+        if isinstance(year, bool) or not (
+            isinstance(year, int)
+            or _numpy_scalar(year)
+            and isinstance(year.item(), int)
+        ):
+            raise ReceiptError(f"years must be integers, not {year!r}.")
+        result.add(int(year))
+    if not result:
+        raise ReceiptError("A receipt covers at least one year.")
+    return sorted(result)
+
+
 def _certificate_fields(
     country_id: str, record: Mapping[str, Any], bundle: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -1202,36 +1411,48 @@ def _data_identity(
 ) -> DataIdentity:
     """The data identity of ``dataset_name`` with those bytes, from the bundle.
 
+    The dataset is resolved exactly as
+    :func:`policyengine.provenance.dataset_materialization.materialize_dataset`
+    resolves it (overlays, per-dataset repository, package and revision
+    overrides, the release manifest revision), so the receipt names the
+    artifact a managed simulation downloads. The bytes must be that
+    artifact's: a receipt never gives one artifact's name to other bytes.
     Release-level members (build, fingerprint, manifest revision) are filled
     only for datasets in the certified release, never for overlays.
     """
 
-    from policyengine.provenance.manifest import _apply_dataset_overlays
+    from pydantic import ValidationError
 
-    resolved = _apply_dataset_overlays(country_id, dict(record), dict(bundle))
-    reference = (resolved.get("datasets") or {}).get(dataset_name)
-    if reference is None:
-        raise ReceiptError(
-            f"Dataset {dataset_name!r} is not in the {country_id} bundle."
+    from policyengine.provenance.dataset_materialization import (
+        DatasetMaterializationError,
+        _resolve_bundle_dataset,
+    )
+    from policyengine.provenance.manifest import (
+        CountryReleaseManifest,
+        _apply_dataset_overlays,
+    )
+
+    try:
+        manifest = CountryReleaseManifest.model_validate(
+            _apply_dataset_overlays(country_id, dict(record), dict(bundle))
         )
-    is_certified_release = dataset_name in (record.get("datasets") or {})
+        spec = _resolve_bundle_dataset(country_id, dataset_name, manifest=manifest)
+    except (DatasetMaterializationError, ValidationError, ValueError) as exc:
+        raise ReceiptError(
+            f"The {country_id} bundle cannot resolve dataset {dataset_name!r}: {exc}"
+        ) from exc
+    if spec.sha256 != dataset_sha256:
+        raise ReceiptError(
+            f"The file is not the bundle's {dataset_name!r}: it hashes to "
+            f"{dataset_sha256}, but {spec.source_uri} is {spec.sha256}."
+        )
+    release = dataset_name in (record.get("datasets") or {})
     data_package = record["data_package"]
     certified_artifact = record.get("certified_data_artifact") or {}
     certification = record.get("certification") or {}
-    revision = reference.get("revision") or data_package.get("version")
-    repo_id = reference.get("repo_id") or data_package.get("repo_id")
-    if not revision or not repo_id:
-        raise ReceiptError(
-            f"Dataset {dataset_name!r} has no repository or revision pin."
-        )
-    release = is_certified_release
     return DataIdentity(
-        data_package=(
-            data_package["name"]
-            if release
-            else reference.get("data_package_name") or data_package["name"]
-        ),
-        release_version=data_package["version"] if release else revision,
+        data_package=spec.data_package_name,
+        release_version=data_package["version"] if release else spec.revision,
         build_id=(
             certification.get("data_build_id") or certified_artifact.get("build_id")
             if release
@@ -1247,8 +1468,8 @@ def _data_identity(
         if release
         else None,
         dataset=dataset_name,
-        dataset_uri=f"hf://{repo_id}/{reference['path']}@{revision}",
-        dataset_revision=revision,
+        dataset_uri=spec.source_uri,
+        dataset_revision=spec.revision,
         dataset_sha256=dataset_sha256,
     )
 
@@ -1325,7 +1546,7 @@ def _build(
         reform=reform,
         baseline=baseline,
         fiscal_year=uk_fiscal_year_convention(),
-        years=sorted(set(int(year) for year in years)),
+        years=_receipt_years(years),
         outputs_sha256=content_sha256(outputs) if outputs is not None else None,
         runtime=RuntimeContext(
             python_version=platform.python_version(),
@@ -1417,9 +1638,14 @@ def build_execution_receipt_for_microsimulation(
 ) -> ExecutionReceipt:
     """Receipt for a country Microsimulation built by ``managed_microsimulation``.
 
-    Reads the dataset that was loaded from ``microsimulation.policyengine_bundle``
-    and hashes those bytes. ``reform`` and ``baseline`` must describe what the
-    microsimulation was built with (``scenario_reform_identity`` or
+    Reads the dataset that was loaded from ``microsimulation.policyengine_bundle``.
+    The bytes on disk must still be the bytes verified when it was loaded
+    (``runtime_dataset_sha256``), and the receipt must name the dataset,
+    artifact URI, revision and package recorded at load time; otherwise the
+    receipt would describe a file that did not run, so it is refused. A
+    simulation loaded from an unmanaged file or URI recorded no load-time
+    hash and cannot be receipted. ``reform`` and ``baseline`` must describe
+    what the microsimulation was built with (``scenario_reform_identity`` or
     ``reform_identity``); the microsimulation itself does not record them.
     """
 
@@ -1431,13 +1657,45 @@ def build_execution_receipt_for_microsimulation(
         )
     if bundle_fields.get("country_id") != "uk":
         raise ReceiptError("Execution receipt schema v1 covers UK results only.")
-    return build_execution_receipt(
-        country_id="uk",
-        dataset_path=bundle_fields["runtime_dataset_source"],
-        dataset=bundle_fields.get("runtime_dataset"),
-        years=years,
-        reform=reform,
-        baseline=baseline,
-        outputs=outputs,
-        **kwargs,
-    )
+    loaded_sha256 = bundle_fields.get("runtime_dataset_sha256")
+    if not loaded_sha256:
+        raise ReceiptError(
+            "This microsimulation loaded a dataset without verifying its SHA-256 "
+            "(an unmanaged file or URI), so a receipt cannot say which bytes ran; "
+            "load a bundle dataset through managed_microsimulation()."
+        )
+    try:
+        receipt = build_execution_receipt(
+            country_id="uk",
+            dataset_path=bundle_fields["runtime_dataset_source"],
+            dataset=bundle_fields.get("runtime_dataset"),
+            years=years,
+            reform=reform,
+            baseline=baseline,
+            outputs=outputs,
+            **kwargs,
+        )
+    except FileNotFoundError as exc:
+        raise ReceiptError(
+            f"The loaded dataset {bundle_fields['runtime_dataset_source']} is gone."
+        ) from exc
+    if receipt.data.dataset_sha256 != loaded_sha256:
+        raise ReceiptError(
+            f"{bundle_fields['runtime_dataset_source']} has changed since the "
+            f"microsimulation loaded it ({loaded_sha256}); it now hashes to "
+            f"{receipt.data.dataset_sha256}."
+        )
+    loaded = {
+        "dataset": bundle_fields.get("runtime_dataset"),
+        "dataset_uri": bundle_fields.get("runtime_dataset_uri"),
+        "dataset_revision": bundle_fields.get("runtime_dataset_revision"),
+        "data_package": bundle_fields.get("runtime_dataset_data_package"),
+    }
+    for field, value in loaded.items():
+        named = getattr(receipt.data, field)
+        if value is not None and named != value:
+            raise ReceiptError(
+                f"The receipt would name data.{field} {named!r}, but the "
+                f"microsimulation loaded {value!r}."
+            )
+    return receipt

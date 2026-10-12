@@ -8,8 +8,8 @@ Schema v1 covers UK results and is defined by `policyengine.provenance.receipt.E
 
 | Field | Contents |
 |---|---|
-| `wrapper`, `model`, `core` | The `policyengine`, `policyengine-uk` and `policyengine-core` versions that actually ran, read from the installed distributions rather than from the bundle manifest. `wheel_sha256` appears only when the receipt builder verified it: either by checking the installed files against a wheel's RECORD (`wheel_paths=`, evidence `installed_record_verified`), or from the installer's recorded archive hash (`installer_archive_hash`). |
-| `data` | The data release and build, and the model version the data was built with (`build_model_version`, distinct from `model.version`). Also the dataset's logical name, URI, revision and the SHA-256 of the bytes that were simulated. |
+| `wrapper`, `model`, `core` | The `policyengine`, `policyengine-uk` and `policyengine-core` versions that actually ran, read from the installed distributions rather than from the bundle manifest. `wheel_sha256` appears only when the receipt builder verified it. One way is `wheel_paths=` (evidence `installed_record_verified`): the installed files, and any bytecode cache the interpreter would load instead of a source file, are checked against that wheel's RECORD. The other is the installer's recorded archive hash (`installer_archive_hash`), taken only when the install came from a `.whl` URL; a source archive's hash is never recorded as a wheel hash. |
+| `data` | The data release and build, and the model version the data was built with (`build_model_version`, distinct from `model.version`). Also the dataset's logical name, URI, revision and the SHA-256 of the bytes that were simulated. The dataset is resolved exactly as `materialize_dataset` resolves it (overlays, per-dataset repository, package and revision, and the release manifest revision when an artifact has none of its own), and the bytes must be the ones the bundle pins for it: a receipt never gives an artifact's name to other bytes. |
 | `certification_status`, `certificate` | `certified` only when the bundle certifies all of: the installed model and core versions, that dataset name and those bytes, and the running `policyengine` version. Otherwise the receipt says `uncertified` and carries no certificate. `certificate_source` records whether the builder read the certificate from the installed bundle (`packaged`) or from a manifest the caller passed (`caller_supplied`). It is the producer's statement, not evidence: trust a certificate only after `verify_certificate` (below). With the packaged bundle, the composition fingerprint of its TRACE TRO is recorded as well. |
 | `reform`, `baseline` | Both are required. Each is `current_law` or a digest of the reform bound to its representation (see below). |
 | `fiscal_year` | What a year label means: year 2027 is the fiscal year from 6 April 2027 to 5 April 2028, shown as `2027-28`. v1 allows only this convention. |
@@ -40,7 +40,7 @@ print(receipt.certification_status, receipt.execution_identity_sha256)
 receipt_json = receipt.to_canonical_json()
 ```
 
-For a country `Microsimulation` built with `managed_microsimulation()`, call `build_execution_receipt_for_microsimulation(sim, years=..., reform=..., baseline=...)`. It reads the dataset that was loaded from `sim.policyengine_bundle` and hashes those bytes. The microsimulation does not record its reform, so pass the reform you built it with.
+For a country `Microsimulation` built with `managed_microsimulation()`, call `build_execution_receipt_for_microsimulation(sim, years=..., reform=..., baseline=...)`. It reads the dataset that was loaded from `sim.policyengine_bundle`. The file must still hash to the SHA-256 verified when it was loaded, and the receipt must name the dataset, URI, revision and package recorded then; otherwise it is refused, because it would describe bytes that did not run. A simulation loaded from an unmanaged file or URI recorded no load-time hash, so it cannot be receipted. The microsimulation does not record its reform, so pass the reform you built it with.
 
 There are two ways to bind a policyengine-uk `Scenario`:
 - A scenario built from `parameter_changes` is bound by content with `scenario_reform_identity(scenario)`.
@@ -49,27 +49,29 @@ There are two ways to bind a policyengine-uk `Scenario`:
 A scenario with a module-level `simulation_modifier` needs `code_revision={"repository": ..., "git_sha": <full commit sha>}`. The identity then says `binding: "code_revision"` and binds:
 - the function's module and qualified name;
 - the SHA-256 of its source and of its module's source file;
-- its default arguments, which must have an exact JSON form;
+- the default arguments of every function in that module, encoded with their types, so `1` and `1.0`, a tuple and a list, or `None` and a missing key never share a digest (defaults with no exact encoding, such as objects, are refused);
 - that revision.
 
 None of these depends on where the code is checked out or which Python version runs it, so CI, a laptop and the server compute the same digest for the same code.
 
 A digest must only name code that ran, so before binding, the module's source as read now is compiled and checked against what was imported, ignoring file names and line numbers:
-- the modifier, and every other function defined at module scope in that file, must compile to the loaded code, nested code included;
-- every module-scope name bound once to a literal, such as `RATE = 0.21`, must still hold that value.
+- the modifier, and every other function defined at module scope in that file (in blocks such as `if` too), must use the module's own globals and compile to the loaded code, nested code included;
+- literal default arguments in the source, such as `rate=0.21`, must still be the function's defaults, with the same type;
+- every module-scope name all of whose bindings assign a literal, such as `RATE = 0.21`, at top level or in a block, must still hold one of those values, with the same type (a comprehension's own loop variable is not a binding; a `:=` is);
+- a function name defined more than once with different code, as in `if FLAG: def helper(): ...` / `else: def helper(): ...`, is refused, because which definition the source selects now cannot be checked.
 
-A measures file edited after import, or a literal constant reassigned while the process runs, is therefore refused rather than misdescribed. The check does not cover other module state, such as objects built at import, imported modules, class bodies and methods, or data the code reads at run time: `code_revision` names the code, not the process.
+A measures file edited after import, or a literal constant or default reassigned while the process runs, is therefore refused rather than misdescribed. The check does not cover other module state, such as objects built at import, imported modules, class bodies and methods, or data the code reads at run time: `code_revision` names the code, not the process.
 
 Some modifiers are refused outright because their behaviour depends on values the digest cannot bind: closures, lambdas, nested functions, methods, `functools.partial` and builtins. Anything that is not a `Scenario` is refused too, rather than read as current law.
 
 To check a certificate, call `verify_certificate(receipt, bundle)` with the policyengine manifest for `certificate.bundle_version`. It rebuilds the certificate from that manifest's certification record, the same way the builder does. Then it compares every identity member: the record digest, the basis, the certified model, core and dataset digest, the certifier and the bundle version. It also checks that the receipt's whole `data` identity is the certified dataset with the certified bytes. An empty list means the bundle certifies exactly what the receipt claims, and through the receipt's own rules that pins `model.version`, `core.version` and `wrapper.version` too. `certificate_source`, `qualification_receipt_sha256`, `tro_composition_fingerprint` and wheel hashes are not determined by the bundle, so it does not check them.
 
-Pass the release artifact that was loaded as `dataset_path`. A derived per-year file such as `enhanced_frs_2024_25_year_2026.h5` has different bytes, so a receipt built from it is `uncertified`.
+Pass the release artifact that was loaded as `dataset_path`. A derived per-year file such as `enhanced_frs_2024_25_year_2026.h5` has different bytes from the artifact the bundle pins, so a receipt for it is refused.
 
 ## Digests
 
 Every receipt digest is the lowercase hexadecimal SHA-256 of the [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785) canonical JSON of a value, computed in two steps:
-1. **Strict JSON conversion.** Only JSON-native values are accepted: strings, booleans, null, integers within ±(2^53−1), finite doubles, arrays and objects with string keys. Numpy scalars are converted to their values, integer keys to their decimal strings, and `datetime.date` to `YYYY-MM-DD`. Anything else is refused rather than silently stringified, including sets, `Decimal`, arrays, NaN and colliding keys.
+1. **Strict JSON conversion.** Only JSON-native values are accepted: strings, booleans, null, integers within ±(2^53−1), finite doubles, arrays and objects with string keys. NumPy boolean, integer and floating scalars are converted to their values, integer keys to their decimal strings, and `datetime.date` to `YYYY-MM-DD`. Anything else is refused rather than silently stringified, including sets, `Decimal`, arrays (0-d and masked ones too, so `np.ma.masked` never becomes `0.0`), NaN and colliding keys.
 2. **Null removal.** Object members whose value is `null` are removed. Array elements are kept.
 
 RFC 8785 fixes member order, string escaping and number formatting, so Python and JavaScript produce the same bytes. Removing nulls means a producer that writes `"field": null` and one that omits the field compute the same digest. In Python use `policyengine.provenance.receipt.content_sha256`. In JavaScript:

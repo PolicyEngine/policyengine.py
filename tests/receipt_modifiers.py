@@ -34,7 +34,3 @@ def raise_basic_rate_to(simulation, rate=0.21):
 
 def raise_basic_rate_from(simulation, *, start=2027):
     simulation.start = start
-
-
-def raise_with_object_default(simulation, measure=Measure(0.21)):
-    simulation.rate = measure.rate

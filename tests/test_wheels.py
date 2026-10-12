@@ -5,8 +5,13 @@ Invariants:
 - an untouched install verifies, including the console-script launchers an
   installer generates for the wheel's declared entry points;
 - mutating any single installed file, or installing a file the wheel lacks
-  (a launcher it does not declare, a stray ``.pyc`` or ``INSTALLER`` outside
+  (a launcher it does not declare or that is not in a scripts directory
+  outside the site directory, a stray ``.pyc`` or ``INSTALLER`` outside
   where installers write them), fails verification;
+- bytecode this interpreter would load instead of a verified source (any
+  optimisation level, listed in the RECORD or not, timestamp or hash based)
+  verifies only when it compiles from that source; caches the interpreter
+  would ignore are inert and reported, never failed;
 - the wheel itself verifies only when its members and its RECORD match one to
   one: changing, adding or removing any archive member fails, so a copied
   RECORD in a junk zip never names a wheel the files did not come from.
@@ -16,6 +21,9 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import importlib.util
+import marshal
+import sys
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -157,6 +165,7 @@ def test_windows_launchers_are_recognised(tmp_path):
         "../../../bin/undeclared",
         "../../../share/policyengine-uk",  # declared name, not a scripts dir
         "bin/policyengine-uk",  # inside site-packages
+        "../site-packages/policyengine_uk/bin/policyengine-uk",  # resolves inside
         "policyengine_uk/injected.pyc",  # not in __pycache__
         "policyengine_uk/INSTALLER",  # not in .dist-info
     ],
@@ -173,17 +182,202 @@ def test_files_installers_do_not_write_fail(tmp_path, path):
     assert evidence["problems"] == [f"{path}: installed but not in the wheel"]
 
 
-def test_compiled_bytecode_in_pycache_is_allowed(tmp_path):
+TAG = sys.implementation.cache_tag
+
+
+def _pyc(
+    source: bytes, *, mtime: int, size: int, flags: int = 0, optimize: int = 0
+) -> bytes:
+    """Bytecode for ``source`` with a header claiming ``mtime`` and ``size``."""
+
+    code = compile(source, "system.py", "exec", dont_inherit=True, optimize=optimize)
+    if flags:
+        middle = importlib.util.source_hash(source)
+    else:
+        middle = mtime.to_bytes(4, "little") + size.to_bytes(4, "little")
+    return (
+        importlib.util.MAGIC_NUMBER
+        + flags.to_bytes(4, "little")
+        + middle
+        + marshal.dumps(code)
+    )
+
+
+def _cache_path(site: Path, optimization: str = "") -> Path:
+    return Path(
+        importlib.util.cache_from_source(
+            str(site / "policyengine_uk/system.py"), optimization=optimization
+        )
+    )
+
+
+def _write_cache(site: Path, compiled_from: bytes, **kwargs) -> Path:
+    """Write a cache for ``system.py`` whose header matches the installed file."""
+
+    optimization = kwargs.pop("optimization", "")
+    source = site / "policyengine_uk/system.py"
+    stat = source.stat()
+    path = _cache_path(site, optimization)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(
+        _pyc(
+            compiled_from,
+            mtime=kwargs.pop("mtime", int(stat.st_mtime)),
+            size=kwargs.pop("size", stat.st_size),
+            optimize=int(optimization or 0),
+            **kwargs,
+        )
+    )
+    return path
+
+
+def _verify(site, wheel, record, **kwargs):
+    return verify_installed_against_wheel(
+        "policyengine-uk", wheel, metadata=fake_metadata(site, record), **kwargs
+    )
+
+
+def _relative(site: Path, path: Path) -> str:
+    return path.relative_to(site).as_posix()
+
+
+SYSTEM = FILES["policyengine_uk/system.py"]
+TAMPERED = b"import os\nsystem = os.system('x')\n"
+
+
+@pytest.mark.parametrize("listed", [False, True], ids=["unlisted", "listed"])
+@pytest.mark.parametrize("optimization", ["", "1", "2"])
+def test_bytecode_compiled_from_the_source_verifies(tmp_path, listed, optimization):
     wheel, site, record = build_wheel(tmp_path)
-    path = "policyengine_uk/__pycache__/system.cpython-313.pyc"
+    path = _write_cache(site, SYSTEM, optimization=optimization)
+    if listed:
+        record = record + [_line(_relative(site, path), path.read_bytes())]
+    evidence = _verify(site, wheel, record)
+    assert evidence["problems"] == []
+    assert evidence["bytecode_verified"] == 1
+
+
+@pytest.mark.parametrize("optimization", ["", "1", "2"])
+def test_each_cache_is_compared_at_its_own_optimisation_level(tmp_path, optimization):
+    """-O drops asserts and -OO docstrings, so each level compiles differently."""
+
+    source = b'"""Docstring."""\nassert True\nsystem = object()\n'
+    files = {**FILES, "policyengine_uk/system.py": source}
+    wheel, site, record = build_wheel(tmp_path, files=files)
+    _write_cache(site, source, optimization=optimization)
+    evidence = _verify(site, wheel, record)
+    assert evidence["problems"] == []
+    assert evidence["bytecode_verified"] == 1
+    for other in {"", "1", "2"} - {optimization}:
+        _cache_path(site, optimization).rename(_cache_path(site, other))
+        problems = _verify(site, wheel, record)["problems"]
+        assert problems and "does not compile" in problems[0]
+        _cache_path(site, other).rename(_cache_path(site, optimization))
+
+
+@pytest.mark.parametrize("listed", [False, True], ids=["unlisted", "listed"])
+@pytest.mark.parametrize(
+    ("optimization", "flags"),
+    [("", 0), ("1", 0), ("2", 0), ("", 0b01), ("", 0b11)],
+    ids=["timestamp", "opt-1", "opt-2", "unchecked-hash", "checked-hash"],
+)
+def test_bytecode_that_would_run_instead_of_the_source_fails(
+    tmp_path, listed, optimization, flags
+):
+    """Round-4 review H1: a planted cache runs, so it must be the wheel's code."""
+
+    wheel, site, record = build_wheel(tmp_path)
+    path = _write_cache(site, TAMPERED, optimization=optimization, flags=flags)
+    if listed:
+        record = record + [_line(_relative(site, path), path.read_bytes())]
+    problems = _verify(site, wheel, record)["problems"]
+    assert len(problems) == 1
+    assert "does not compile from the verified source" in problems[0]
+
+
+def test_bytecode_the_interpreter_would_ignore_is_inert(tmp_path):
+    wheel, site, record = build_wheel(tmp_path)
+    stale = _write_cache(site, TAMPERED, mtime=12345)
+    foreign = site / "policyengine_uk/__pycache__/system.cpython-27.pyc"
+    foreign.write_bytes(b"anything")
+    record = record + [_line(_relative(site, foreign), b"anything")]
+    evidence = _verify(site, wheel, record)
+    assert evidence["problems"] == []
+    assert evidence["bytecode_verified"] == 0
+    assert evidence["inert_bytecode"] == [
+        f"{_relative(site, foreign)}: another interpreter's cache",
+        f"{_relative(site, stale)}: stale timestamp",
+    ]
+
+
+def test_a_listed_cache_of_a_file_the_wheel_lacks_fails(tmp_path):
+    wheel, site, record = build_wheel(tmp_path)
+    path = f"policyengine_uk/__pycache__/injected.{TAG}.pyc"
     (site / path).parent.mkdir(parents=True, exist_ok=True)
     (site / path).write_bytes(b"pyc")
-    evidence = verify_installed_against_wheel(
-        "policyengine-uk",
-        wheel,
-        metadata=fake_metadata(site, record + [_line(path, b"pyc")]),
-    )
+    problems = _verify(site, wheel, record + [_line(path, b"pyc")])["problems"]
+    assert problems == [
+        f"{path}: caches policyengine_uk/injected.py, which is not in the wheel"
+    ]
+
+
+def test_unreadable_bytecode_fails(tmp_path):
+    wheel, site, record = build_wheel(tmp_path)
+    path = _write_cache(site, SYSTEM)
+    path.write_bytes(path.read_bytes()[:16] + b"\xff\x00garbage")
+    problems = _verify(site, wheel, record)["problems"]
+    assert problems == [f"{_relative(site, path)}: unreadable bytecode"]
+
+
+def test_bytecode_under_a_pycache_prefix_is_checked(tmp_path, monkeypatch):
+    wheel, site, record = build_wheel(tmp_path)
+    monkeypatch.setattr(sys, "pycache_prefix", str(tmp_path / "prefix"))
+    path = _write_cache(site, TAMPERED)
+    assert str(path).startswith(str(tmp_path / "prefix"))
+    problems = _verify(site, wheel, record)["problems"]
+    assert problems == [f"{path}: does not compile from the verified source"]
+
+
+def test_without_a_cache_tag_only_listed_caches_are_classified(tmp_path):
+    wheel, site, record = build_wheel(tmp_path)
+    _write_cache(site, TAMPERED)
+    evidence = _verify(site, wheel, record, cache_tag=None)
     assert evidence["problems"] == []
+
+
+@settings(max_examples=25, deadline=None)
+@given(
+    source=st.sampled_from(
+        [
+            b"system = object()\n",
+            b"system = object() \n",  # same code, different bytes
+            b"system = 1\n",
+            b"system = object\n",
+            b"def system():\n    return 1\n",
+            b"def system():\n    return 2\n",
+        ]
+    )
+)
+def test_cache_verifies_exactly_when_it_compiles_to_the_same_code(
+    tmp_path_factory, source
+):
+    """Differential: the verdict equals comparing the two compiled modules."""
+
+    wheel, site, record = build_wheel(tmp_path_factory.mktemp("cache"))
+    _write_cache(site, source)
+    same = marshal.dumps(
+        compile(source, "x", "exec", dont_inherit=True)
+    ) == marshal.dumps(compile(SYSTEM, "x", "exec", dont_inherit=True))
+    assert (_verify(site, wheel, record)["problems"] == []) == same
+
+
+def test_a_listed_launcher_missing_on_disk_is_not_exempt(tmp_path):
+    """Round-4 review L9: a launcher is exempt only where it actually is."""
+
+    wheel, site, record = build_wheel(tmp_path)
+    (site / "../../../bin/policyengine-uk").unlink()
+    problems = _verify(site, wheel, record)["problems"]
+    assert problems == ["../../../bin/policyengine-uk: installed but not in the wheel"]
 
 
 def test_a_junk_wheel_with_a_copied_record_does_not_verify(tmp_path):

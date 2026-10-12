@@ -163,7 +163,6 @@ def test_certified_when_certificate_covers_what_ran(certified_receipt, dataset_f
         "core version",
         "wrapper version in bundle",
         "wrapper version in record",
-        "dataset bytes",
         "dataset name",
     ],
 )
@@ -182,9 +181,6 @@ def test_any_uncovered_component_makes_the_receipt_uncertified(
         bundle["policyengine_version"] = "0.0.0"
     elif change == "wrapper version in record":
         bundle["data_releases"]["uk"]["policyengine_version"] = "0.0.0"
-    elif change == "dataset bytes":
-        path = tmp_path / "other.h5"
-        path.write_bytes(b"different bytes")
     elif change == "dataset name":
         # Same bytes registered under another certified dataset name.
         record = bundle["data_releases"]["uk"]
@@ -196,6 +192,31 @@ def test_any_uncovered_component_makes_the_receipt_uncertified(
     assert receipt.certification_status == "uncertified"
     assert receipt.certificate is None
     assert receipt.model.version == INSTALLED_UK  # installed, never the manifest's
+
+
+@pytest.mark.parametrize(
+    "years",
+    [[2027.9], [True], "2027", [], [2027, "2028"], 2027, [np.float64(2027)]],
+    ids=["float", "bool", "string", "empty", "mixed", "scalar", "numpy-float"],
+)
+def test_receipt_years_must_be_integers(dataset_file, years):
+    """Round-4 review L8: years are never coerced."""
+
+    with pytest.raises(ReceiptError, match="years|at least one year"):
+        _build(dataset_file, years=years)
+
+
+def test_numpy_integer_years_are_accepted(dataset_file):
+    assert _build(dataset_file, years=[np.int64(2027), 2026]).years == [2026, 2027]
+
+
+def test_a_boolean_schema_version_is_refused(certified_receipt, schema_validator):
+    payload = json.loads(certified_receipt.model_dump_json())
+    payload["schema_version"] = True
+    with pytest.raises(ValidationError):
+        ExecutionReceipt.model_validate(payload)
+    with pytest.raises(jsonschema.ValidationError):
+        schema_validator.validate(payload)
 
 
 def test_unknown_dataset_and_incomplete_bundles_are_refused(dataset_file):
@@ -215,13 +236,69 @@ def test_unknown_dataset_and_incomplete_bundles_are_refused(dataset_file):
         )
 
 
+def test_bytes_that_are_not_the_named_dataset_are_refused(dataset_file, tmp_path):
+    """A receipt never gives one artifact's name and URI to other bytes."""
+
+    other = tmp_path / "other.h5"
+    other.write_bytes(b"different bytes")
+    with pytest.raises(ReceiptError, match="is not the bundle's"):
+        _build(other, _bundle_for(dataset_file.read_bytes()))
+
+
 def test_overlay_datasets_receive_uncertified_receipts(dataset_file):
     bundle = _bundle_for(dataset_file.read_bytes())
     overlay_name = next(iter(bundle["dataset_overlays"]["uk"]))
+    bundle["dataset_overlays"]["uk"][overlay_name]["sha256"] = hashlib.sha256(
+        dataset_file.read_bytes()
+    ).hexdigest()
     receipt = _build(dataset_file, bundle, dataset=overlay_name)
     assert receipt.certification_status == "uncertified"
     assert receipt.data.dataset == overlay_name
     assert receipt.data.build_id is None
+
+
+def test_an_omitted_artifact_revision_is_the_release_manifest_revision(dataset_file):
+    """Round-4 review M5: the receipt names what the materializer downloads."""
+
+    bundle = _bundle_for(dataset_file.read_bytes())
+    record = bundle["data_releases"]["uk"]
+    del record["datasets"][record["default_dataset"]]["revision"]
+    receipt = _build(dataset_file, bundle)
+    pinned = record["data_package"]["release_manifest_revision"]
+    assert receipt.data.dataset_revision == pinned
+    assert receipt.data.dataset_uri.endswith(f"@{pinned}")
+    assert receipt.data.release_version == record["data_package"]["version"]
+    assert verify_certificate(receipt, bundle) == []
+
+
+def test_a_datasets_own_package_is_kept(dataset_file):
+    bundle = _bundle_for(dataset_file.read_bytes())
+    record = bundle["data_releases"]["uk"]
+    record["datasets"][record["default_dataset"]]["data_package_name"] = "other-data"
+    assert _build(dataset_file, bundle).data.data_package == "other-data"
+
+
+def test_every_packaged_dataset_resolves_as_the_materializer_resolves_it():
+    """Differential: the receipt and ``materialize_dataset`` name one artifact."""
+
+    from policyengine.provenance.dataset_materialization import (
+        _resolve_bundle_dataset,
+    )
+
+    bundle = json.loads(BUNDLE_PATH.read_text())
+    record = bundle["data_releases"]["uk"]
+    names = [*record["datasets"], *(bundle.get("dataset_overlays") or {}).get("uk", {})]
+    assert names
+    for name in names:
+        spec = _resolve_bundle_dataset("uk", name)  # the packaged manifest
+        identity = receipt_module._data_identity(
+            "uk", record, bundle, name, spec.sha256
+        )
+        assert (identity.dataset_uri, identity.dataset_revision) == (
+            spec.source_uri,
+            spec.revision,
+        )
+        assert identity.data_package == spec.data_package_name
 
 
 def test_packaged_bundle_certificate_records_its_source_and_tro(tmp_path, monkeypatch):
@@ -303,9 +380,10 @@ def test_verify_certificate_against_a_published_bundle(certified_receipt, datase
     tampered = copy.deepcopy(bundle)
     tampered["data_releases"]["uk"]["certification"]["compatibility_basis"] = "trust me"
     assert verify_certificate(certified_receipt, tampered)
-    assert verify_certificate(_build(dataset_file, _bundle_for(b"x")), bundle) == [
-        "the receipt is uncertified"
-    ]
+    uncertified = _build(
+        dataset_file, _bundle_for(dataset_file.read_bytes(), model_version="0.0.1")
+    )
+    assert verify_certificate(uncertified, bundle) == ["the receipt is uncertified"]
     assert verify_certificate(certified_receipt, {"data_releases": {}}) == [
         "the bundle has no uk data release"
     ]
@@ -504,28 +582,51 @@ def test_unreadable_wheels_raise_receipt_errors(tmp_path, content):
         installed_package_identity("policyengine-uk", wheel_path=wheel)
 
 
-def test_installer_archive_hash_is_read_from_direct_url(monkeypatch):
+def _direct_url_identity(monkeypatch, direct_url):
     class Distribution:
         version = INSTALLED_UK
 
         def read_text(self, name):
             assert name == "direct_url.json"
-            return json.dumps(
-                {
-                    "url": "file:///w.whl",
-                    "archive_info": {"hashes": {"sha256": "b" * 64}},
-                }
-            )
+            return json.dumps(direct_url)
 
     fake = SimpleNamespace(
         version=lambda name: INSTALLED_UK, distribution=lambda name: Distribution()
     )
     monkeypatch.setattr(receipt_module, "metadata", fake)
     identity = installed_package_identity("policyengine-uk")
-    assert (identity.wheel_sha256, identity.wheel_sha256_evidence) == (
-        "b" * 64,
-        "installer_archive_hash",
-    )
+    return identity.wheel_sha256, identity.wheel_sha256_evidence
+
+
+def test_installer_archive_hash_is_read_from_direct_url(monkeypatch):
+    archive = {"hashes": {"sha256": "b" * 64}}
+    assert _direct_url_identity(
+        monkeypatch, {"url": "file:///w-1-py3-none-any.whl", "archive_info": archive}
+    ) == ("b" * 64, "installer_archive_hash")
+    assert _direct_url_identity(
+        monkeypatch,
+        {
+            "url": "https://files.example/w-1-py3-none-any.whl#sha256=" + "b" * 64,
+            "archive_info": {"hash": "sha256=" + "b" * 64},
+        },
+    ) == ("b" * 64, "installer_archive_hash")
+
+
+@pytest.mark.parametrize(
+    "direct_url",
+    [
+        {"url": "file:///w-1.tar.gz", "archive_info": {"hashes": {"sha256": "b" * 64}}},
+        {"url": "https://x/w-1.zip", "archive_info": {"hashes": {"sha256": "b" * 64}}},
+        {"url": "file:///src/w", "dir_info": {"editable": True}},
+        {"archive_info": {"hashes": {"sha256": "b" * 64}}},
+        ["not", "an", "object"],
+    ],
+    ids=["sdist", "zip", "directory", "no-url", "not-an-object"],
+)
+def test_only_a_wheel_archive_hash_is_recorded(monkeypatch, direct_url):
+    """Round-4 review M6: a source archive's hash is not a wheel hash."""
+
+    assert _direct_url_identity(monkeypatch, direct_url) == (None, None)
 
 
 def test_callers_cannot_supply_the_versions_a_receipt_records(dataset_file):
@@ -716,6 +817,44 @@ def test_strict_json_converts_exact_values(value, expected):
 def test_strict_json_refuses_values_without_one_json_form(value):
     with pytest.raises(ReceiptError):
         strict_json_value(value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        np.ma.masked,
+        np.ma.array(42, mask=True),
+        np.ma.array(42.0, mask=False),
+        np.array(1.5),  # a 0-d array, not a scalar
+        np.complex128(1),
+        np.datetime64("2027-04-06"),
+        np.zeros(1, dtype=[("a", "i4")])[0],  # a structured scalar
+    ],
+    ids=[
+        "masked",
+        "masked-42",
+        "unmasked-0d",
+        "0d-array",
+        "complex",
+        "datetime",
+        "void",
+    ],
+)
+def test_strict_json_refuses_numpy_values_that_are_not_plain_scalars(value):
+    """Round-4 review M7: a masked value never becomes an ordinary number."""
+
+    with pytest.raises(ReceiptError):
+        strict_json_value(value)
+    with pytest.raises(ReceiptError):
+        content_sha256({"total": value})
+
+
+def test_strict_json_unwraps_numpy_scalars_exactly():
+    assert strict_json_value([np.int64(7), np.float32(0.5), np.bool_(True)]) == [
+        7,
+        0.5,
+        True,
+    ]
 
 
 def test_strict_json_refuses_rather_than_overflowing_the_stack():
@@ -1075,6 +1214,38 @@ def test_functions_defined_in_module_level_blocks_bind(tmp_path):
         sys.modules.pop(name, None)
 
 
+def test_conditionally_defined_functions_with_different_code_are_refused(tmp_path):
+    """Round-4 review M3: reversing a conditional definition changes what runs."""
+
+    source = (
+        "import os\n\nif os.environ.get('W4_ALT'):\n"
+        "    def _helper():\n        return 0.30\n"
+        "else:\n    def _helper():\n        return 0.21\n\n\n"
+        "def raise_rate(simulation):\n    simulation.rate = _helper()\n"
+    )
+    name = "w4_receipt_measures_conditional_definition"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match="2 different definitions"):
+            _measure_identity(module)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_identical_conditional_definitions_bind(tmp_path):
+    source = (
+        "import sys\n\nif sys.version_info >= (3,):\n"
+        "    def raise_rate(simulation):\n        simulation.rate = 0.21\n"
+        "else:\n    def raise_rate(simulation):\n        simulation.rate = 0.21\n"
+    )
+    name = "w4_receipt_measures_identical_definitions"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert _measure_identity(module).binding == "code_revision"
+    finally:
+        sys.modules.pop(name, None)
+
+
 def test_methods_are_refused_with_a_clear_reason():
     class Holder:
         @staticmethod
@@ -1102,28 +1273,234 @@ def test_a_function_with_foreign_globals_is_refused():
         )
 
 
-def test_modifier_defaults_are_bound():
-    """Round-2 review N7: defaults change behaviour, so they change the digest."""
+def _identity(modifier):
+    return scenario_reform_identity(
+        _scenario(simulation_modifier=modifier), code_revision=REVISION
+    ).reform_sha256
 
-    def identity(modifier):
-        return scenario_reform_identity(
-            _scenario(simulation_modifier=modifier), code_revision=REVISION
-        ).reform_sha256
+
+def test_literal_defaults_changed_at_run_time_are_refused():
+    """Round-2 review N7: a default that differs from the source never binds."""
 
     to_rate = receipt_modifiers.raise_basic_rate_to
     from_year = receipt_modifiers.raise_basic_rate_from
-    original = identity(to_rate), identity(from_year)
+    original = _identity(to_rate), _identity(from_year)
     try:
         to_rate.__defaults__ = (0.99,)
+        with pytest.raises(ReceiptError, match="default arguments differ"):
+            _identity(to_rate)
+        # Any function in the module counts, not only the modifier.
+        with pytest.raises(ReceiptError, match="raise_basic_rate_to's default"):
+            _identity(receipt_modifiers.raise_basic_rate)
+        to_rate.__defaults__ = (0.21,)
         from_year.__kwdefaults__ = {"start": 2030}
-        assert identity(to_rate) != original[0]
-        assert identity(from_year) != original[1]
+        with pytest.raises(ReceiptError, match="default arguments differ"):
+            _identity(from_year)
     finally:
         to_rate.__defaults__ = (0.21,)
         from_year.__kwdefaults__ = {"start": 2027}
-    assert (identity(to_rate), identity(from_year)) == original
-    with pytest.raises(ReceiptError, match="default arguments"):
-        identity(receipt_modifiers.raise_with_object_default)
+    assert (_identity(to_rate), _identity(from_year)) == original
+
+
+COMPUTED_DEFAULT_SOURCE = """
+import ast
+import os
+
+
+def _helper(value, scale=ast.literal_eval(os.environ["W4_HELPER_DEFAULT"])):
+    return value * scale
+
+
+def raise_rate(simulation, *, rate=ast.literal_eval(os.environ["W4_RATE_DEFAULT"])):
+    simulation.rate = _helper(rate)
+"""
+
+
+def _computed_default_identity(tmp_path, monkeypatch, rate, helper="2"):
+    name = "w4_receipt_measures_computed_default"
+    monkeypatch.setenv("W4_RATE_DEFAULT", rate)
+    monkeypatch.setenv("W4_HELPER_DEFAULT", helper)
+    try:
+        module, _ = _import_source(tmp_path, name, COMPUTED_DEFAULT_SOURCE)
+        return _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [
+        ("0.21", "0.99"),
+        ("1", "1.0"),
+        ("False", "0"),
+        ("True", "1"),
+        ("(0.21,)", "[0.21]"),
+        ("{}", "{'rate': None}"),
+        ("{'a': 1, 'b': 2}", "{'b': 2, 'a': 1}"),
+        ("None", "'None'"),
+    ],
+)
+def test_computed_defaults_are_bound_by_typed_value(
+    tmp_path, monkeypatch, first, second
+):
+    """Round-4 review M4: values that behave differently never share a digest."""
+
+    one = _computed_default_identity(tmp_path / "a", monkeypatch, first)
+    again = _computed_default_identity(tmp_path / "b", monkeypatch, first)
+    other = _computed_default_identity(tmp_path / "c", monkeypatch, second)
+    assert one == again
+    assert one != other
+
+
+def test_a_helpers_computed_default_is_bound(tmp_path, monkeypatch):
+    one = _computed_default_identity(tmp_path / "a", monkeypatch, "0.21", "2")
+    other = _computed_default_identity(tmp_path / "b", monkeypatch, "0.21", "3")
+    assert one != other
+
+
+def test_defaults_without_an_exact_encoding_are_refused(tmp_path):
+    source = (
+        "class Measure:\n    rate = 0.21\n\n\n"
+        "def raise_rate(simulation, measure=Measure()):\n"
+        "    simulation.rate = measure.rate\n"
+    )
+    name = "w4_receipt_measures_object_default"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match="default arguments cannot be bound"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_helpers_unencodable_default_refuses_the_module(tmp_path):
+    source = (
+        "import decimal\n\n\n"
+        "def _helper(value, scale=decimal.Decimal('2')):\n"
+        "    return value * scale\n\n\n"
+        "def raise_rate(simulation):\n    simulation.rate = 0.21\n"
+    )
+    name = "w4_receipt_measures_helper_object_default"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match="_helper's default arguments"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize(
+    ("source_value", "runtime_value"),
+    [(False, 0), (0, False), (1, 1.0), (1.0, 1), ((1,), [1]), ("1", 1)],
+)
+def test_literal_defaults_compare_with_their_types(
+    tmp_path, source_value, runtime_value
+):
+    """A runtime default equal in Python but of another type is refused."""
+
+    source = (
+        f"def raise_rate(simulation, value={source_value!r}):\n"
+        "    simulation.value = value\n"
+    )
+    name = "w4_receipt_measures_typed_literal_default"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        _identity(module.raise_rate)
+        module.raise_rate.__defaults__ = (runtime_value,)
+        with pytest.raises(ReceiptError, match="default arguments differ"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize(
+    ("source_value", "runtime_value"),
+    [(False, 0), (0, False), (1, 1.0), ((1,), [1])],
+)
+def test_literal_constants_compare_with_their_types(
+    tmp_path, source_value, runtime_value
+):
+    source = (
+        f"ENABLED = {source_value!r}\n\n\n"
+        "def raise_rate(simulation):\n    simulation.enabled = ENABLED\n"
+    )
+    name = "w4_receipt_measures_typed_constant"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        _identity(module.raise_rate)
+        module.ENABLED = runtime_value
+        with pytest.raises(ReceiptError, match="ENABLED is"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_comprehension_variable_does_not_unbind_a_constant(tmp_path):
+    """Round-4 review M3: a comprehension's own loop variable is not a binding."""
+
+    source = (
+        "RATE = 0.21\nRATES = [RATE for RATE in range(3)]\n\n\n"
+        "def raise_rate(simulation):\n    simulation.rate = RATE\n"
+    )
+    name = "w4_receipt_measures_comprehension"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        _identity(module.raise_rate)
+        module.RATE = 0.99
+        with pytest.raises(ReceiptError, match="RATE is 0.99 at run time"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_walrus_in_a_comprehension_unbinds_a_constant(tmp_path):
+    source = (
+        "RATE = 0.21\nRATES = [(RATE := x) for x in range(3)]\n\n\n"
+        "def raise_rate(simulation):\n    simulation.rate = RATE\n"
+    )
+    name = "w4_receipt_measures_walrus"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert module.RATE == 2
+        _identity(module.raise_rate)  # RATE is computed, so not checked
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_conditional_literals_admit_each_branch_only(tmp_path, monkeypatch):
+    source = (
+        "import os\n\nif os.environ.get('W4_HIGH'):\n    RATE = 0.30\n"
+        "else:\n    RATE = 0.21\n\n\n"
+        "def raise_rate(simulation):\n    simulation.rate = RATE\n"
+    )
+    name = "w4_receipt_measures_conditional"
+    monkeypatch.delenv("W4_HIGH", raising=False)
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        _identity(module.raise_rate)
+        module.RATE = 0.30
+        _identity(module.raise_rate)
+        module.RATE = 0.99
+        with pytest.raises(ReceiptError, match=r"RATE is 0.99 at run time but \["):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_helper_with_foreign_globals_is_refused(tmp_path):
+    import types
+
+    name = "w4_receipt_measures_foreign_helper"
+    try:
+        module, _ = _import_source(tmp_path, name, HELPER_SOURCE)
+        _measure_identity(module)
+        module._helper = types.FunctionType(
+            module._helper.__code__, {"__name__": name}, "_helper"
+        )
+        with pytest.raises(ReceiptError, match="does not use its module's globals"):
+            _measure_identity(module)
+    finally:
+        sys.modules.pop(name, None)
 
 
 def test_from_reform_scenarios_are_refused_in_favour_of_their_dictionary():
@@ -1145,29 +1522,62 @@ def test_from_reform_scenarios_are_refused_in_favour_of_their_dictionary():
     assert a.reform_sha256 != b.reform_sha256
 
 
-def test_microsimulation_receipt_needs_its_reform_and_reads_the_loaded_dataset(
-    dataset_file,
-):
-    simulation = SimpleNamespace(
-        policyengine_bundle={
-            "country_id": "uk",
-            "runtime_dataset": "enhanced_frs_2024_25",
-            "runtime_dataset_source": str(dataset_file),
-        }
+def _managed_simulation(dataset_file, bundle, **overrides):
+    """A microsimulation as ``managed_microsimulation`` records its dataset."""
+
+    from policyengine.provenance.dataset_materialization import MaterializedDataset
+    from policyengine.tax_benefit_models.common.model_version import (
+        build_runtime_dataset_provenance,
     )
-    bundle = _bundle_for(dataset_file.read_bytes())
-    with pytest.raises(TypeError):
-        build_execution_receipt_for_microsimulation(
-            simulation, years=[2026], bundle=bundle
+
+    record = bundle["data_releases"]["uk"]
+    reference = record["datasets"][record["default_dataset"]]
+    uri = f"hf://{reference['repo_id']}/{reference['path']}@{reference['revision']}"
+    fields = {"country_id": "uk"}
+    fields.update(
+        build_runtime_dataset_provenance(
+            uri,
+            str(dataset_file),
+            MaterializedDataset(
+                data_package_name=record["data_package"]["name"],
+                repo_type="model",
+                revision=reference["revision"],
+                source_uri=uri,
+                sha256=hashlib.sha256(dataset_file.read_bytes()).hexdigest(),
+                path=dataset_file,
+            ),
+            logical_name=record["default_dataset"],
         )
-    receipt = build_execution_receipt_for_microsimulation(
+    )
+    fields.update(overrides)
+    return SimpleNamespace(policyengine_bundle=fields)
+
+
+def _microsimulation_receipt(simulation, bundle):
+    return build_execution_receipt_for_microsimulation(
         simulation,
         years=[2026],
         reform=CURRENT_LAW,
         baseline=CURRENT_LAW,
         bundle=bundle,
     )
+
+
+def test_microsimulation_receipt_needs_its_reform_and_reads_the_loaded_dataset(
+    dataset_file,
+):
+    bundle = _bundle_for(dataset_file.read_bytes())
+    simulation = _managed_simulation(dataset_file, bundle)
+    with pytest.raises(TypeError):
+        build_execution_receipt_for_microsimulation(
+            simulation, years=[2026], bundle=bundle
+        )
+    receipt = _microsimulation_receipt(simulation, bundle)
     assert receipt.certification_status == "certified"
+    assert (
+        receipt.data.dataset_uri
+        == simulation.policyengine_bundle["runtime_dataset_uri"]
+    )
     assert (
         receipt.data.build_model_version
         == bundle["data_releases"]["uk"]["certification"]["built_with_model_version"]
@@ -1176,6 +1586,45 @@ def test_microsimulation_receipt_needs_its_reform_and_reads_the_loaded_dataset(
         build_execution_receipt_for_microsimulation(
             object(), years=[2026], reform=CURRENT_LAW, baseline=CURRENT_LAW
         )
+
+
+def test_a_dataset_replaced_after_loading_is_refused(dataset_file, tmp_path):
+    """Round-4 review H2: the receipt describes the bytes that were loaded."""
+
+    loaded = tmp_path / "loaded.h5"
+    loaded.write_bytes(b"the bytes that ran")
+    certified = dataset_file.read_bytes()
+    bundle = _bundle_for(certified)
+    simulation = _managed_simulation(loaded, bundle)
+    loaded.write_bytes(certified)  # swapped for the certified bytes afterwards
+    with pytest.raises(ReceiptError, match="has changed since the microsimulation"):
+        _microsimulation_receipt(simulation, bundle)
+    loaded.unlink()
+    with pytest.raises(ReceiptError, match="is gone"):
+        _microsimulation_receipt(simulation, bundle)
+
+
+def test_a_dataset_loaded_without_a_hash_cannot_be_receipted(dataset_file):
+    bundle = _bundle_for(dataset_file.read_bytes())
+    simulation = _managed_simulation(dataset_file, bundle)
+    del simulation.policyengine_bundle["runtime_dataset_sha256"]
+    with pytest.raises(ReceiptError, match="without verifying its SHA-256"):
+        _microsimulation_receipt(simulation, bundle)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("runtime_dataset_uri", "hf://policyengine/other/enhanced_frs_2024_25.h5@1"),
+        ("runtime_dataset_revision", "0" * 40),
+        ("runtime_dataset_data_package", "other-data"),
+    ],
+)
+def test_load_time_provenance_must_match_the_receipt(dataset_file, field, value):
+    bundle = _bundle_for(dataset_file.read_bytes())
+    simulation = _managed_simulation(dataset_file, bundle, **{field: value})
+    with pytest.raises(ReceiptError, match="but the microsimulation loaded"):
+        _microsimulation_receipt(simulation, bundle)
 
 
 # --- Fiscal years --------------------------------------------------------------------
@@ -1243,7 +1692,7 @@ def test_schema_accepts_every_valid_receipt(
     )
     receipt = _build(
         dataset,
-        _bundle_for(b"bytes" if certified else b"other"),
+        _bundle_for(b"bytes", model_version=INSTALLED_UK if certified else "0.0.1"),
         years=years,
         reform=reform,
         wrapper_git_sha=git_sha,
