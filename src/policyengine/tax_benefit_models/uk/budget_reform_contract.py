@@ -61,9 +61,10 @@ A JSON-serialisable dict: ``contract_id``, ``contract_version``,
 is given, ``cases`` (one row per case, route and check, with ``status`` of
 ``pass``, ``fail``, ``error``, ``unsupported`` or ``pending``),
 ``properties``, ``population`` and ``summary`` counts. ``cases`` also
-holds two run-level rows: ``module_parameters_unchanged`` (the shared
-system's parameters still equal a copy taken before the run) and, when no
-check passed at all, an ``error`` row with case id ``run``. Any ``fail`` or
+holds two run-level rows: ``module_parameters_unchanged`` (policyengine-uk's
+shared parameter state, including the cached tree new simulations copy,
+still equals its values before the run) and, when no case, property or
+population check passed, an ``error`` row with case id ``run``. Any ``fail`` or
 ``error`` means the contract does not hold.
 
 Isolation
@@ -373,6 +374,9 @@ MODIFIER_ORACLE = (
 
 
 def _modifier_case(case_id: str, modifier_first: bool) -> Case:
+    # The modifier and the reform change different parameters, so either
+    # order must give the same values: what the two cases check is that
+    # neither side is lost however the scenario or policy is assembled.
     order = "then" if modifier_first else "after"
     return Case(
         id=case_id,
@@ -1364,24 +1368,75 @@ def _parameter_values(parameters) -> dict[str, list[tuple]]:
     return values
 
 
-def module_parameters_unchanged(reference) -> dict:
-    """A report row: the shared system's parameters still equal the reference."""
+def _shared_trees() -> dict:
+    """policyengine-uk's shared parameter state that a reform could leak into.
+
+    The module system's parameters, and (where the installed version has
+    them) the cached processed tree every new simulation copies, the cached
+    statutory tree reforms are written onto, and the cached projected
+    timelines. The caches are module globals, read without building them.
+    """
+    import importlib
+
     from policyengine_uk.system import system
 
-    before = _parameter_values(reference)
-    now = _parameter_values(system.parameters)
-    changed = sorted(
-        path for path in before.keys() | now.keys() if before.get(path) != now.get(path)
-    )
+    module = importlib.import_module("policyengine_uk.tax_benefit_system")
+    trees = {"system": system.parameters}
+    for name, attribute in (
+        ("processed", "_processed_parameters_cache"),
+        ("statutory", "_statutory_parameters_cache"),
+        ("projected", "_projected_timelines_cache"),
+    ):
+        value = getattr(module, attribute, None)
+        if value is not None:
+            trees[name] = value
+    return trees
+
+
+def _state_values(tree) -> dict:
+    if isinstance(tree, Mapping):
+        # Timelines by name: each entry's date and value.
+        return {
+            name: [(entry.instant_str, entry.value) for entry in timeline or []]
+            for name, timeline in tree.items()
+        }
+    return _parameter_values(tree)
+
+
+def shared_state() -> dict:
+    """The values of policyengine-uk's shared parameter state, by tree."""
+    return {name: _state_values(tree) for name, tree in _shared_trees().items()}
+
+
+def module_parameters_unchanged(before: dict) -> dict:
+    """A report row: the shared parameter state still equals ``before``.
+
+    ``before`` is :func:`shared_state` taken before any reform ran.
+    """
+    now = shared_state()
+    changed = []
+    for tree in sorted(before.keys() | now.keys()):
+        if tree not in before:
+            # Built during the run, so there is nothing to compare it with.
+            continue
+        old, new = before[tree], now.get(tree, {})
+        changed += [
+            f"{tree}:{path}"
+            for path in sorted(old.keys() | new.keys())
+            if old.get(path) != new.get(path)
+        ]
     return {
         "case_id": "module_parameters_unchanged",
         "route": "all",
         "reform_digest": None,
-        "check": f"every parameter on 1 January {REFERENCE_YEARS[0]}-{REFERENCE_YEARS[-1]}",
+        "check": (
+            f"every parameter on 1 January {REFERENCE_YEARS[0]}-"
+            f"{REFERENCE_YEARS[-1]} in {', '.join(sorted(before))}"
+        ),
         "status": FAIL if changed else PASS,
-        "expected": "current law's parameters as they were before the run",
+        "expected": "policyengine-uk's shared parameters as they were before the run",
         "actual": f"{len(changed)} changed: {changed[:10]}" if changed else "unchanged",
-        "oracle": "a copy of the shared system's parameters taken before any reform",
+        "oracle": "the shared parameter state's values, read before any reform ran",
     }
 
 
@@ -1894,8 +1949,8 @@ def run_budget_reform_contract(
             raise ValueError(f"Unknown cases {unknown}; expected some of {case_ids}.")
     selected_cases = [case for case in CASES if cases is None or case.id in cases]
     # Expected values read current law as it is before any reform runs.
-    reference_tree = reference_parameters()
-    reference = parameter_reader(reference_tree)
+    reference = parameter_reader(reference_parameters())
+    before = shared_state()
     cache: dict = {}
     rows: list[dict] = []
     for case in selected_cases:
@@ -1915,9 +1970,12 @@ def run_budget_reform_contract(
         )
 
         population = run_population_checks(dataset_path, selected_routes, seed)
+    # Whether any check passed, before the run-level row (which passes
+    # whenever nothing leaked, including when nothing ran).
+    passed = any(row["status"] == PASS for row in rows + properties + population)
     if any(route not in UNSUPPORTED_ROUTES for route in selected_routes):
-        rows.append(module_parameters_unchanged(reference_tree))
-    if not any(row["status"] == PASS for row in rows + properties + population):
+        rows.append(module_parameters_unchanged(before))
+    if not passed:
         # A run in which nothing passed certifies nothing.
         rows.append(
             {

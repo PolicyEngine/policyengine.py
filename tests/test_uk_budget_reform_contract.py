@@ -285,13 +285,28 @@ def test_expected_values_read_the_reference_they_are_given(monkeypatch):
     assert row["status"] == "fail" and row["expected"] == 0.0
 
 
-def test_module_parameters_unchanged_compares_with_the_reference():
-    reference = contract.reference_parameters()
-    assert contract.module_parameters_unchanged(reference)["status"] == "pass"
-    # Changing the copy (never the shared system) stands in for a leak.
-    reference.get_child(RATE).update(period="year:2027:1", value=0.5)
-    row = contract.module_parameters_unchanged(reference)
-    assert row["status"] == "fail" and RATE in row["actual"]
+def test_module_parameters_unchanged_compares_the_shared_state():
+    before = contract.shared_state()
+    assert "system" in before
+    assert contract.module_parameters_unchanged(before)["status"] == "pass"
+    # Changing the snapshot (never the shared state) stands in for a leak.
+    tree = "processed" if "processed" in before else "system"
+    before[tree][RATE][0] = (0.5,) * len(contract.REFERENCE_YEARS)
+    row = contract.module_parameters_unchanged(before)
+    assert row["status"] == "fail" and f"{tree}:{RATE}" in row["actual"]
+
+
+def test_a_run_in_which_nothing_passed_errors_with_an_in_process_route():
+    # A country-only case selected with a wrapper route runs nothing; the
+    # run-level parameters row passes, but must not count as a pass.
+    report = run_budget_reform_contract(
+        routes=["wrapper.household"],
+        cases=["september_cpi_moves_indexed_thresholds"],
+        max_examples=0,
+    )
+    statuses = {row["case_id"]: row["status"] for row in report["cases"]}
+    assert statuses == {"module_parameters_unchanged": "pass", "run": "error"}
+    assert report["holds"] is False
 
 
 def _failing_property(monkeypatch, error):
