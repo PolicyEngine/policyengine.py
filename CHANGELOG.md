@@ -1,3 +1,17 @@
+## [6.3.0] - 2026-10-12
+
+### Added
+
+- Added the UK Budget reform contract (`policyengine.tax_benefit_models.uk.budget_reform_contract`), version 1.0.0. `run_budget_reform_contract()` checks that dated reforms (an April rate change, a finite change, an extended freeze, an April uprating schedule, a mid-year blended rate, a CPI-driven indexation change, a scenario or policy combining a parameter-setting modifier with dated changes, an unknown path, and each route's documented key readings) give independently derived results through the policyengine-uk and policyengine.py routes, leave the baseline and later unreformed runs unchanged, and survive bounded property sampling. It returns a JSON report for release qualification.
+
+
+## [6.2.7] - 2026-10-12
+
+### Fixed
+
+- Align UK household and population reform routes with policy effective dates and inclusive date intervals, reject ambiguous bare-year keys, and pass parameter reforms at country-model construction so dated changes are reprocessed when supported by policyengine-uk. A UK policy or dynamic carrying both parameter values and a simulation modifier (as a `Policy` or `Dynamic` sum does) now applies its values and then its modifier, where the modifier used to replace the values.
+
+
 ## [6.2.6] - 2026-10-10
 
 ### Changed
