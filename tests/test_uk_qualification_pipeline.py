@@ -19,6 +19,8 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -251,6 +253,142 @@ def test_constant_rewrite_leaves_no_old_values(tmp_path):
     assert 'UK_DATA_RELEASE_PATH = "releases/1.59.0/release_manifest.json"' in manifests
     assert 'UK_DATA_RELEASE_REVISION = "' + "1" * 40 + '"' in manifests
     assert rewrite_certified_constants(tmp_path, replacements) == []
+
+
+@pytest.mark.parametrize("qualification_only", [False, True])
+def test_preparation_generates_new_sidecars_and_verifies_the_exact_pair(
+    tmp_path, monkeypatch, qualification_only
+):
+    """Run preparation, certification and real TRO generation without a network."""
+
+    from policyengine.provenance import certification, manifest
+    from policyengine.provenance.uk_qualification import prepare_candidate_commit
+
+    monkeypatch.syspath_prepend(str(REPO_ROOT / "scripts"))
+    import bundle as maintenance
+    import certify_data_release as certify_script
+    import generate_bundle_artifacts as artifacts
+    import generate_trace_tros as tros
+
+    release = json.loads(json.dumps(MANIFEST))
+    release["build"].update(
+        built_with_model_package={
+            "name": "policyengine-uk",
+            "version": "2.100.0" if qualification_only else "2.126.8",
+        },
+        built_with_core_package={
+            "name": "policyengine-core",
+            "version": "3.0.0" if qualification_only else "3.33.0",
+        },
+    )
+    release_bytes = json.dumps(release).encode()
+    resolved, _ = _resolver(hf_file=lambda *args: release_bytes)
+    pair = resolved.pair
+    bundle_dir = tmp_path / "src/policyengine/data/bundle"
+    bundle_dir.mkdir(parents=True)
+    source = json.loads(json.dumps(BUNDLE))
+    source["data_releases"].pop("us")
+    source["packages"].pop("policyengine-us")
+    for packages in source["extras"].values():
+        if "policyengine-us" in packages:
+            packages.remove("policyengine-us")
+    bundle_path = bundle_dir / "manifest.json"
+    write_json(bundle_path, source)
+    sidecar = bundle_dir / "uk.trace.tro.jsonld"
+    old_sidecar = (
+        REPO_ROOT / "src/policyengine/data/bundle/uk.trace.tro.jsonld"
+    ).read_bytes()
+    sidecar.write_bytes(old_sidecar)
+    shutil.copy(REPO_ROOT / "pyproject.toml", tmp_path / "pyproject.toml")
+    (tmp_path / "changelog.d").mkdir()
+    for name in ("test_models.py", "test_release_manifests.py", "test_uk_regions.py"):
+        (tmp_path / "tests").mkdir(exist_ok=True)
+        shutil.copy(REPO_ROOT / "tests" / name, tmp_path / "tests" / name)
+
+    def country_manifest(country):
+        assert country == "uk"
+        result = manifest.CountryReleaseManifest.model_validate(
+            json.loads(bundle_path.read_text())["data_releases"][country]
+        )
+        result.source_sha256 = hashlib.sha256(bundle_path.read_bytes()).hexdigest()
+        return result
+
+    def data_manifest(country=None):
+        result = manifest.DataReleaseManifest.model_validate_json(release_bytes)
+        result.source_sha256 = hashlib.sha256(release_bytes).hexdigest()
+        return result
+
+    monkeypatch.setattr(certify_script, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(maintenance, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(artifacts, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(artifacts, "BUNDLE_MANIFEST", bundle_path)
+    monkeypatch.setattr(artifacts, "PYPROJECT", tmp_path / "pyproject.toml")
+    load_bundle = artifacts.load_bundle_manifest
+    monkeypatch.setattr(
+        artifacts, "load_bundle_manifest", lambda path=bundle_path: load_bundle(path)
+    )
+    monkeypatch.setattr(tros, "BUNDLE_MANIFEST", bundle_path)
+    monkeypatch.setattr(tros, "BUNDLE_TRO_DIR", bundle_dir)
+    monkeypatch.setattr(tros, "BUNDLE_LOCK", tmp_path / "uv.lock")
+    monkeypatch.setattr(tros, "get_release_manifest", country_manifest)
+    monkeypatch.setattr(tros, "get_data_release_manifest", data_manifest)
+    monkeypatch.setattr(
+        certification,
+        "fetch_release_manifest",
+        lambda uri, **kw: (
+            data_manifest(),
+            pair.data.release_manifest_sha256,
+            certification.parse_manifest_uri(uri),
+        ),
+    )
+    monkeypatch.setattr(
+        certification,
+        "fetch_pypi_wheel_metadata",
+        lambda *args: {
+            "sha256": pair.model.wheel_sha256,
+            "url": resolved.model_wheel.url,
+        },
+    )
+    monkeypatch.setattr(certification, "head_artifact", lambda *args, **kw: True)
+    monkeypatch.setattr(
+        certification, "required_supplemental_release_files", lambda *args: []
+    )
+    calls = []
+
+    def run(command, *, cwd, env=None):
+        calls.append(command)
+        assert cwd == tmp_path
+        if command[1] == "scripts/bundle.py":
+            assert maintenance.main(command[2:]) == 0
+        elif command[:2] == ["uv", "lock"]:
+            (tmp_path / "uv.lock").write_text(
+                "[[package]]\n"
+                'name = "policyengine-uk"\n'
+                f'version = "{pair.model.version}"\n'
+                'source = { registry = "https://pypi.org/simple" }\n'
+                f'wheels = [{{url = "{resolved.model_wheel.url}", hash = "sha256:{pair.model.wheel_sha256}"}}]\n'
+            )
+        else:
+            assert command[1] == "scripts/release_lock.py"
+        return subprocess.CompletedProcess(command, 0)
+
+    prepared = prepare_candidate_commit(
+        tmp_path, resolved, python=sys.executable, run=run, refresh_snapshots=False
+    )
+    assert sidecar.read_bytes() != old_sidecar
+    assert pair.data.release_manifest_sha256.encode() in sidecar.read_bytes()
+    assert prepared["compatibility_basis"] == (
+        "qualified_exact_pair" if qualification_only else "built_with_model_package"
+    )
+    assert (tmp_path / prepared["changelog_fragment"]).is_file()
+    assert maintenance.main(["check", "--include-tros", "--strict-tros"]) == 0
+    assert calls[-1][2:] == ["check", "--include-tros", "--strict-tros"]
+    if qualification_only:
+        changed = json.loads(bundle_path.read_bytes())
+        changed["packages"]["policyengine-core"]["version"] = "99.0.0"
+        write_json(bundle_path, changed)
+        with pytest.raises(ValueError, match="runtime core.*qualified exact pair"):
+            tros.generated_tros(strict=True)
 
 
 def test_replay_request_is_valid_for_the_scorecard():
@@ -559,6 +697,189 @@ def test_attempt_lifecycle(tmp_path):
     )
     assert final.verdict == "qualified"
     assert final.replay.request_id == request.request_id
+    assert (attempt / "receipts" / f"{receipt.receipt_sha256}.json").is_file()
+    assert (attempt / "receipts" / f"{final.receipt_sha256}.json").is_file()
+    assert (
+        read_json(attempt / "receipts" / f"{receipt.receipt_sha256}.json")
+        == receipt.canonical_payload()
+    )
+
+
+def test_older_attempt_finalization_preserves_latest_staged_attempt(tmp_path):
+    from policyengine.provenance.qualification_ledger import (
+        attempt_directory,
+        read_json,
+    )
+    from policyengine.provenance.uk_qualification import (
+        finalize_attempt,
+        stage_attempt,
+        write_gate_results,
+    )
+
+    pair = make_pair()
+    # The staging order deliberately differs from directory/commit order.
+    older = attempt_directory(tmp_path, "uk", pair.pair_id, "ffffffffffff")
+    newer = attempt_directory(tmp_path, "uk", pair.pair_id, "aaaaaaaaaaaa")
+    payload = {"pair": pair.canonical_payload(), "previous_certificate": None}
+    stage_attempt(older, payload, HARNESS)
+    newer_harness = HARNESS.model_copy(update={"git_commit": "a" * 40})
+    stage_attempt(newer, payload, newer_harness)
+    for attempt in (older, newer):
+        write_gate_results(attempt, gates(), {})
+    newest = finalize_attempt(
+        newer, tmp_path, issued_by=ISSUED, completed_at="2026-10-15T10:00:00Z"
+    )
+    old = finalize_attempt(
+        older, tmp_path, issued_by=ISSUED, completed_at="2026-10-15T11:00:00Z"
+    )
+    latest = read_json(tmp_path / "uk" / pair.pair_id / "qualification_receipt.json")
+    assert latest == newest.canonical_payload()
+    assert read_json(older / "qualification_receipt.json") == old.canonical_payload()
+    assert read_json(newer / "qualification_receipt.json") == newest.canonical_payload()
+
+
+def test_terminal_attempt_receipt_is_immutable_and_finalization_is_idempotent(tmp_path):
+    from policyengine.provenance.qualification_ledger import attempt_directory
+    from policyengine.provenance.uk_qualification import (
+        finalize_attempt,
+        stage_attempt,
+        write_gate_results,
+    )
+
+    pair = make_pair()
+    attempt = attempt_directory(tmp_path, "uk", pair.pair_id, "abcdef123456")
+    stage_attempt(attempt, {"pair": pair.canonical_payload()}, HARNESS)
+    write_gate_results(attempt, gates(), {})
+    original = finalize_attempt(
+        attempt, tmp_path, issued_by=ISSUED, completed_at="2026-10-15T10:00:00Z"
+    )
+    original_bytes = (attempt / "qualification_receipt.json").read_bytes()
+    write_gate_results(attempt, gates(replay="fail"), {})
+    repeated = finalize_attempt(
+        attempt, tmp_path, issued_by=ISSUED, completed_at="2026-10-15T11:00:00Z"
+    )
+    assert repeated == original
+    assert (attempt / "qualification_receipt.json").read_bytes() == original_bytes
+
+
+def test_new_staged_attempt_advances_a_legacy_latest_receipt(tmp_path):
+    from policyengine.provenance.qualification_ledger import (
+        attempt_directory,
+        read_json,
+    )
+    from policyengine.provenance.uk_qualification import (
+        finalize_attempt,
+        stage_attempt,
+        write_gate_results,
+    )
+
+    legacy = make_receipt()
+    latest_path = tmp_path / "uk" / legacy.pair_id / "qualification_receipt.json"
+    write_json(latest_path, legacy.canonical_payload())
+    attempt = attempt_directory(tmp_path, "uk", legacy.pair_id, "new-attempt")
+    stage_attempt(attempt, {"pair": legacy.pair.canonical_payload()}, HARNESS)
+    write_gate_results(attempt, gates(), {})
+    current = finalize_attempt(
+        attempt, tmp_path, issued_by=ISSUED, completed_at="2026-10-15T11:00:00Z"
+    )
+    assert read_json(latest_path) == current.canonical_payload()
+
+
+@pytest.mark.parametrize(
+    "interrupted", ["missing", "older", "missing-pointer", "missing-receipt"]
+)
+def test_terminal_finalization_repairs_interrupted_latest_publication(
+    tmp_path, interrupted
+):
+    from policyengine.provenance.qualification_ledger import (
+        attempt_directory,
+        read_json,
+    )
+    from policyengine.provenance.uk_qualification import (
+        finalize_attempt,
+        stage_attempt,
+        write_gate_results,
+    )
+
+    pair = make_pair()
+    payload = {"pair": pair.canonical_payload()}
+    older = attempt_directory(tmp_path, "uk", pair.pair_id, "older")
+    stage_attempt(older, payload, HARNESS)
+    write_gate_results(older, gates(), {})
+    old_receipt = finalize_attempt(
+        older, tmp_path, issued_by=ISSUED, completed_at="2026-10-15T09:00:00Z"
+    )
+    current = attempt_directory(tmp_path, "uk", pair.pair_id, "newer")
+    stage_attempt(current, payload, HARNESS.model_copy(update={"git_commit": "a" * 40}))
+    write_gate_results(current, gates(), {})
+    receipt = finalize_attempt(
+        current, tmp_path, issued_by=ISSUED, completed_at="2026-10-15T10:00:00Z"
+    )
+    original_bytes = (current / "qualification_receipt.json").read_bytes()
+    pair_dir = tmp_path / "uk" / pair.pair_id
+    latest = pair_dir / "qualification_receipt.json"
+    pointer = pair_dir / "latest_attempt.json"
+    if interrupted == "older":
+        write_json(latest, old_receipt.canonical_payload())
+        write_json(pointer, {"attempt_key": "older", "sequence": 1})
+    else:
+        if interrupted != "missing-pointer":
+            latest.unlink()
+        if interrupted != "missing-receipt":
+            pointer.unlink()
+    repeated = finalize_attempt(
+        current, tmp_path, issued_by=ISSUED, completed_at="2026-10-15T11:00:00Z"
+    )
+    assert repeated == receipt
+    assert (current / "qualification_receipt.json").read_bytes() == original_bytes
+    assert read_json(latest) == receipt.canonical_payload()
+    assert read_json(pointer) == {"attempt_key": "newer", "sequence": 2}
+    finalize_attempt(
+        older, tmp_path, issued_by=ISSUED, completed_at="2026-10-15T12:00:00Z"
+    )
+    assert read_json(latest) == receipt.canonical_payload()
+
+
+def test_stale_latest_pointer_cannot_replace_a_newer_incomplete_receipt(tmp_path):
+    from policyengine.provenance.qualification_ledger import (
+        attempt_directory,
+        read_json,
+    )
+    from policyengine.provenance.uk_qualification import (
+        finalize_attempt,
+        stage_attempt,
+        write_gate_results,
+    )
+
+    pair = make_pair()
+    payload = {"pair": pair.canonical_payload()}
+    older = attempt_directory(tmp_path, "uk", pair.pair_id, "older")
+    stage_attempt(older, payload, HARNESS)
+    write_gate_results(older, gates(), {})
+    finalize_attempt(
+        older, tmp_path, issued_by=ISSUED, completed_at="2026-10-15T09:00:00Z"
+    )
+    newer = attempt_directory(tmp_path, "uk", pair.pair_id, "newer")
+    stage_attempt(newer, payload, HARNESS.model_copy(update={"git_commit": "a" * 40}))
+    write_gate_results(newer, gates(replay="unavailable"), {})
+    current = finalize_attempt(
+        newer, tmp_path, issued_by=ISSUED, completed_at="2026-10-15T10:00:00Z"
+    )
+    pair_dir = tmp_path / "uk" / pair.pair_id
+    write_json(
+        pair_dir / "latest_attempt.json", {"attempt_key": "older", "sequence": 1}
+    )
+    finalize_attempt(
+        older, tmp_path, issued_by=ISSUED, completed_at="2026-10-15T11:00:00Z"
+    )
+    assert (
+        read_json(pair_dir / "qualification_receipt.json")
+        == current.canonical_payload()
+    )
+    assert read_json(pair_dir / "latest_attempt.json") == {
+        "attempt_key": "newer",
+        "sequence": 2,
+    }
 
 
 # --- Release dispatch ----------------------------------------------------------------

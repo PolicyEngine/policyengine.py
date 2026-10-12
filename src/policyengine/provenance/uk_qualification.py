@@ -337,6 +337,11 @@ def previous_certificate(bundle: Mapping[str, Any]) -> PreviousCertificate:
         data_release_version=record["data_package"]["version"],
         dataset_sha256=record["certified_data_artifact"]["sha256"],
         certificate_sha256=certificate_sha256(record),
+        qualification_pair_id=(record.get("certification") or {}).get(
+            "qualification_pair_id"
+        ),
+        model_wheel_sha256=record["model_package"].get("sha256"),
+        core_wheel_sha256=bundle["packages"][CORE_PACKAGE].get("sha256"),
     )
 
 
@@ -559,8 +564,10 @@ def prepare_candidate_commit(
         cwd=repo_root,
     )
     run([python, "scripts/release_lock.py"], cwd=repo_root)
+    # Prepare the candidate's replacement sidecars before strict verification:
+    # the committed sidecars still authenticate the previous data release.
     run(
-        [python, "scripts/bundle.py", "generate", "--include-tros", "--strict-tros"],
+        [python, "scripts/bundle.py", "generate", "--include-tros"],
         cwd=repo_root,
     )
     constants = rewrite_certified_constants(
@@ -827,8 +834,26 @@ def stage_attempt(
     candidate_payload: Mapping[str, Any],
     harness: QualificationHarness,
 ) -> None:
-    write_json(attempt_dir / "candidate.json", dict(candidate_payload))
-    write_json(attempt_dir / "harness.json", harness.canonical_payload())
+    payloads = {
+        attempt_dir / "candidate.json": dict(candidate_payload),
+        attempt_dir / "harness.json": harness.canonical_payload(),
+    }
+    for path, payload in payloads.items():
+        if path.exists() and read_json(path) != payload:
+            raise ValueError(f"A staged attempt's {path.name} is immutable.")
+    staging_path = attempt_dir / "staging.json"
+    if not staging_path.exists():
+        # Persist staging order in the ledger, never infer it from finalization
+        # time, commit hashes or filesystem mtimes. Legacy attempts precede
+        # newly staged attempts and keep their existing receipt bytes.
+        prior_orders = [
+            int(read_json(path)["sequence"])
+            for path in attempt_dir.parent.glob("*/staging.json")
+        ]
+        write_json(staging_path, {"sequence": max(prior_orders, default=0) + 1})
+    for path, payload in payloads.items():
+        if not path.exists():
+            write_json(path, payload)
 
 
 def write_gate_results(
@@ -864,6 +889,15 @@ def finalize_attempt(
 ) -> QualificationReceipt:
     """Assemble and record the receipt for a staged attempt."""
 
+    receipt_path = attempt_dir / "qualification_receipt.json"
+    existing = None
+    if receipt_path.exists():
+        existing = QualificationReceipt.model_validate(read_json(receipt_path))
+        if existing.verdict != "incomplete":
+            # A terminal attempt is immutable, including its completion time.
+            # Retry publication if an earlier run stopped after saving it.
+            _publish_latest_attempt_receipt(attempt_dir, ledger_root, existing)
+            return existing
     candidate = read_json(attempt_dir / "candidate.json")
     pair = CandidatePair.model_validate(candidate["pair"])
     harness = QualificationHarness.model_validate(
@@ -901,11 +935,89 @@ def finalize_attempt(
         previous=previous,
         replay=replay_reference,
     )
-    write_json(attempt_dir / "qualification_receipt.json", receipt.canonical_payload())
+    # Pending receipts may advance to terminal when replay finishes. Preserve
+    # every version under its digest; terminal attempt receipts never change.
+    if existing is not None:
+        snapshot = attempt_dir / "receipts" / f"{existing.receipt_sha256}.json"
+        if not snapshot.exists():
+            write_json(snapshot, existing.canonical_payload())
+    snapshot = attempt_dir / "receipts" / f"{receipt.receipt_sha256}.json"
+    if not snapshot.exists():
+        write_json(snapshot, receipt.canonical_payload())
+    write_json(receipt_path, receipt.canonical_payload())
+    _publish_latest_attempt_receipt(attempt_dir, ledger_root, receipt)
+    return receipt
+
+
+def _publish_latest_attempt_receipt(
+    attempt_dir: Path, ledger_root: Path, receipt: QualificationReceipt
+) -> None:
+    """Publish by staging order, repairing interrupted publication on retry."""
+
+    pair = receipt.pair
     pair_dir = pair_directory(ledger_root, "uk", pair.pair_id)
     write_json(pair_dir / "pair.json", pair.canonical_payload())
-    write_json(pair_dir / "qualification_receipt.json", receipt.canonical_payload())
-    return receipt
+    staging_path = attempt_dir / "staging.json"
+    sequence = int(read_json(staging_path)["sequence"]) if staging_path.exists() else 0
+    latest_path = pair_dir / "qualification_receipt.json"
+    latest_attempt_path = pair_dir / "latest_attempt.json"
+    latest_sequence = -1
+    latest_attempt_key = None
+    latest_pointer = (
+        read_json(latest_attempt_path) if latest_attempt_path.exists() else None
+    )
+    if latest_path.exists():
+        # Receipt identity is authoritative: a crash can leave a stale pointer.
+        # Recover staging order from immutable receipts/snapshots, including
+        # old ledgers and receipts with a receipt-bound acceptance.
+        latest = QualificationReceipt.model_validate(read_json(latest_path))
+        latest_sequence = 0
+        previous_paths = [
+            *pair_dir.glob("attempts/*/qualification_receipt.json"),
+            *pair_dir.glob("attempts/*/receipts/*.json"),
+        ]
+        for previous_path in previous_paths:
+            previous = QualificationReceipt.model_validate(read_json(previous_path))
+            if previous.unreviewed_sha256 != latest.unreviewed_sha256:
+                continue
+            previous_attempt = (
+                previous_path.parent.parent
+                if previous_path.parent.name == "receipts"
+                else previous_path.parent
+            )
+            previous_stage = previous_attempt / "staging.json"
+            previous_sequence = (
+                int(read_json(previous_stage)["sequence"])
+                if previous_stage.exists()
+                else 0
+            )
+            if previous_sequence >= latest_sequence:
+                latest_sequence = previous_sequence
+                latest_attempt_key = previous_attempt.name
+    elif latest_pointer is not None:
+        # Preserve the known order if only the publication pointer survived.
+        latest_sequence = int(latest_pointer["sequence"])
+        latest_attempt_key = latest_pointer["attempt_key"]
+    same_attempt = latest_attempt_key == attempt_dir.name
+    update_pending = (
+        same_attempt
+        and latest_path.exists()
+        and QualificationReceipt.model_validate(read_json(latest_path)).verdict
+        == "incomplete"
+    )
+    if (
+        sequence > latest_sequence
+        or update_pending
+        or (same_attempt and not latest_path.exists())
+    ):
+        write_json(latest_path, receipt.canonical_payload())
+        latest_attempt_key = attempt_dir.name
+        latest_sequence = sequence
+    expected_pointer = {"attempt_key": latest_attempt_key, "sequence": latest_sequence}
+    if latest_attempt_key is not None and latest_pointer != expected_pointer:
+        # Repair only the pointer when the published receipt already belongs
+        # to the latest attempt, preserving any receipt-bound review acceptance.
+        write_json(latest_attempt_path, expected_pointer)
 
 
 def attempt_is_waiting_for_replay(attempt_dir: Path) -> bool:
