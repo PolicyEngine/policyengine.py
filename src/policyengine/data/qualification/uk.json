@@ -12,7 +12,7 @@
   "metrics": {
     "tool": {
       "repository": "PolicyEngine/policyengine-uk",
-      "commit": "bd8bff74c0baea19c09eedf9ce1391d598d2ffaf",
+      "commit": "9b33fe19f80676fc5b81d2d80b36072e1c2fc1df",
       "path": "policyengine_uk/utils/aggregate_impact",
       "_comment": "W3's aggregate-impact tool, pinned so both pairs use the same definitions (draft policyengine-uk#2335). Move the pin to the merged commit when it lands."
     },

@@ -3,9 +3,14 @@
 Both files come from PolicyEngine/policyengine-uk's aggregate-impact tool
 (`policyengine_uk/utils/aggregate_impact/`, policyengine-uk#2335), which the
 qualification config pins at commit
-`bd8bff74c0baea19c09eedf9ce1391d598d2ffaf`.
-`tests/test_uk_candidate_gates.py` reads them. Refresh them from the newly
-pinned commit; never edit them by hand.
+`9b33fe19f80676fc5b81d2d80b36072e1c2fc1df`. They were produced at its parent,
+`bd8bff74c0baea19c09eedf9ce1391d598d2ffaf`; the pinned commit changes only
+when the tool digest is taken (at module load rather than at the end of a
+run), so `standard_reforms.yaml` is byte-identical there and the report format
+is unchanged. A report from the pinned commit differs only in
+`metrics_version`, which the gate compares between the two pairs' reports,
+never against this file. `tests/test_uk_candidate_gates.py` reads them.
+Refresh them when a pin changes the report; never edit them by hand.
 
 - `standard_reforms.yaml`: the tool's standard reform set, copied unchanged.
   Ten reforms, each with the model variable it must move, the direction and
