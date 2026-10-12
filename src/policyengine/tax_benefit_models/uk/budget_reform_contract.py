@@ -1023,6 +1023,8 @@ class _CountryRoute:
             requests.append((kind, check.name, check.year))
             if check.target == "baseline_equals":
                 requests.append(("variable", check.expected, check.year))
+        # Two checks can read the same value; request it once.
+        requests = list(dict.fromkeys(requests))
         # Unreformed values are cached, not simulations, so each simulation
         # can be released as soon as its case is done.
         missing = [

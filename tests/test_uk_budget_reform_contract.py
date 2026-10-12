@@ -355,8 +355,11 @@ def test_the_april_rate_case_holds_on_the_country_routes():
     )
     failures = [row for row in report["cases"] if row["status"] in ("fail", "error")]
     assert failures == []
-    checks = {row["check"] for row in report["cases"]}
+    checks = [row["check"] for row in report["cases"] if row["route"] != "all"]
     assert "unreformed_after_reform:income_tax:2027" in checks
+    # Each value is checked once per case and route.
+    labelled = [(row["case_id"], row["route"], row["check"]) for row in report["cases"]]
+    assert len(labelled) == len(set(labelled))
     assert any(
         row["case_id"] == "module_parameters_unchanged" for row in report["cases"]
     )
