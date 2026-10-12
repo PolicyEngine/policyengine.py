@@ -284,6 +284,60 @@ class TestRuntimeAcceptance:
         with pytest.raises(ValueError, match="not certified"):
             self._certify(_qualified(), "2.126.8", remote=_uk_manifest(), core="3.34.0")
 
+    @pytest.mark.parametrize(
+        ("runtime_model", "fingerprint", "claims", "expected_basis"),
+        [
+            ("2.122.2", None, (), "exact_build_model_version"),
+            (
+                "2.126.8",
+                "sha256:build",
+                (),
+                "matching_data_build_fingerprint",
+            ),
+            (
+                "2.126.8",
+                None,
+                ("==2.126.8",),
+                "legacy_compatible_model_package",
+            ),
+        ],
+        ids=["build-model", "fingerprint", "publisher-claim"],
+    )
+    def test_online_stronger_basis_cannot_bypass_qualified_core(
+        self, runtime_model, fingerprint, claims, expected_basis
+    ):
+        remote = _uk_manifest(model_claims=claims)
+        bundled = _qualified(model=runtime_model)
+        assert (
+            self._certify(
+                bundled, runtime_model, remote=remote, fingerprint=fingerprint
+            ).compatibility_basis
+            == expected_basis
+        )
+        with pytest.raises(ValueError, match="not certified"):
+            self._certify(
+                bundled,
+                runtime_model,
+                remote=remote,
+                fingerprint=fingerprint,
+                core="99.0.0",
+            )
+
+    def test_online_build_model_requires_installed_qualified_core(self):
+        from importlib.metadata import PackageNotFoundError
+
+        with patch(
+            "importlib.metadata.version",
+            side_effect=PackageNotFoundError("policyengine-core"),
+        ):
+            with pytest.raises(ValueError, match="not certified"):
+                self._certify(
+                    _qualified(model="2.122.2"),
+                    "2.122.2",
+                    remote=_uk_manifest(),
+                    core=None,
+                )
+
     def test_offline_other_core_is_not_certified(self):
         certification = self._certify(_qualified(), "2.126.8", core="3.34.0")
         assert certification.compatibility_basis == (

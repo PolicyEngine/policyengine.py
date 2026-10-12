@@ -469,6 +469,19 @@ def certify_data_release_compatibility(
                 certified_by=bundled_certification.certified_by,
             )
         raise exc
+
+    # An exact-pair certificate also restricts the core when the remote
+    # manifest offers a stronger model or fingerprint compatibility basis.
+    # Enforce that restriction before any online acceptance path can return.
+    bundled_certification = country_manifest.certification
+    if bundled_certification is not None and not _runtime_core_is_certified(
+        bundled_certification, runtime_core_version
+    ):
+        raise ValueError(
+            "Data release manifest is not certified for the runtime core version "
+            f"{runtime_core_version} in country '{country_id}'; the exact pair "
+            f"requires {bundled_certification.certified_for_core_version}."
+        )
     built_with_model = (
         data_release_manifest.build.built_with_model_package
         if data_release_manifest.build is not None
