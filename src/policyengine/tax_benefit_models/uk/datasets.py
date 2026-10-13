@@ -794,7 +794,9 @@ def _output_year_file_reasons(
 
     Returns no reason exactly when ``recorded`` equals ``current`` and is
     ``None`` or this release's stamp for its source and year under
-    ``packages``.
+    ``packages``. Both must be well formed to count as equal: Python equality
+    takes JSON ``true`` for 1, and a well-formed stamp holds only strings,
+    integers and ``null``, which compare as JSON does.
     """
     if recorded != current:
         return [_year_file_mismatch(recorded, current)]
@@ -809,7 +811,7 @@ def _output_year_file_reasons(
             f"revision {revision}, and this version of policyengine.py reads "
             f"only revision {YEAR_FILE_STAMP_REVISION}"
         ]
-    if not _is_year_file_stamp(recorded):
+    if not (_is_year_file_stamp(recorded) and _is_year_file_stamp(current)):
         return [
             "it was calculated from a year file whose stamp is unreadable or malformed"
         ]
