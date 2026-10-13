@@ -281,8 +281,8 @@ def dataset_source_identity(source: DatasetSource) -> dict[str, Any]:
 
     Computing it reads no source contents. See
     :func:`requested_dataset_source_identity` for the identity a request
-    gives without materializing it, and :func:`dataset_source_change` to check
-    a materialized source again.
+    gives without materializing it, and :func:`dataset_source_snapshot` and
+    :func:`dataset_source_change` to check a materialized source again.
     """
     if source.bundle_dataset is not None:
         return {
@@ -297,11 +297,13 @@ def dataset_source_identity(source: DatasetSource) -> dict[str, Any]:
 def requested_dataset_source_identity(
     country_id: str,
     dataset: Optional[str] = None,
+    *,
+    allow_unmanaged: bool = True,
 ) -> dict[str, Any]:
     """Return the identity of the source ``materialize_dataset`` would use.
 
     This is what :func:`dataset_source_identity` gives for
-    ``materialize_dataset(country_id, dataset, allow_unmanaged=True)``,
+    ``materialize_dataset(country_id, dataset, allow_unmanaged=...)``,
     computed without downloading anything or reading the source's contents:
     the bundle manifest entry for a bundle dataset (or the certified default's
     own URI), the URI for any other explicit Hugging Face URI, and file-system
@@ -309,8 +311,10 @@ def requested_dataset_source_identity(
     local file is looked up in the data release manifest, as
     ``materialize_dataset`` does.
 
-    It does not enforce bundle selection: an unmanaged request gives its
-    identity whether or not ``allow_unmanaged`` would be set.
+    A request ``materialize_dataset`` would refuse with the same
+    ``allow_unmanaged`` raises the same error here. The default,
+    ``allow_unmanaged=True``, gives an unmanaged request's identity without
+    enforcing bundle selection.
     """
     manifest = get_release_manifest(country_id)
     if dataset is None or dataset == manifest.default_dataset_uri:
@@ -319,30 +323,64 @@ def requested_dataset_source_identity(
         bundle_dataset = _resolve_bundle_dataset(country_id, dataset, manifest=manifest)
         return {"uri": bundle_dataset.source_uri, "sha256": bundle_dataset.sha256}
     source_uri = resolve_managed_dataset_reference(
-        country_id, dataset, allow_unmanaged=True
+        country_id, dataset, allow_unmanaged=allow_unmanaged
     )
     if "://" in source_uri:
         return {"uri": source_uri}
     return _local_file_identity(source_uri)
 
 
-def dataset_source_change(
-    source: DatasetSource, identity: dict[str, Any]
-) -> Optional[str]:
-    """Return how a materialized source differs from its identity, or ``None``.
+def dataset_source_snapshot(source: DatasetSource) -> dict[str, int]:
+    """Return the materialized file's device, inode, size and modification time.
 
-    ``identity`` is what :func:`dataset_source_identity` gave for ``source``
-    earlier. Another process can replace a file in a shared data folder in
-    the meantime, for example by materializing another release of the same
-    bundle dataset there. A bundle dataset's file is hashed again and compared
-    with its verified sha256, and a local file's size and modification time
-    are read again. An explicit URI's identity records nothing about the
-    file, so it is never reported as changed.
+    Taken right after ``materialize_dataset`` returns, it lets
+    :func:`dataset_source_change` tell whether the file at ``source.path`` is
+    still the one materialized. Another process can replace a file in a shared
+    data folder, for example by materializing another release of the same
+    dataset, or another file with the same name, there. A download replaces
+    the file with ``os.replace``, which always gives it another inode.
+    """
+    status = os.stat(source.path)
+    return {
+        "device": status.st_dev,
+        "inode": status.st_ino,
+        "size": status.st_size,
+        "mtime_ns": status.st_mtime_ns,
+    }
+
+
+def dataset_source_change(
+    source: DatasetSource,
+    identity: dict[str, Any],
+    snapshot: dict[str, int],
+) -> Optional[str]:
+    """Return how a materialized source has changed, or ``None``.
+
+    ``identity`` is what :func:`dataset_source_identity` gave for ``source``,
+    and ``snapshot`` what :func:`dataset_source_snapshot` gave right after it
+    was materialized. The file must still be the one snapshotted: the same
+    device, inode, size and modification time. A bundle dataset's file must
+    also still hash to its verified sha256, which covers a replacement after
+    verification and before the snapshot. A local file must still have its
+    identity.
+
+    One gap remains, for an explicit URI only. Its contents are verified
+    against nothing, so a file another process puts in its place between the
+    download and the snapshot goes unnoticed.
 
     Returns:
         ``None`` when the source still matches; otherwise a clause saying
         what changed.
     """
+    try:
+        now = dataset_source_snapshot(source)
+    except FileNotFoundError:
+        return f"{source.path} no longer exists"
+    if now != snapshot:
+        return (
+            f"{source.path} was replaced or modified (device, inode, size or "
+            "modification time changed)"
+        )
     if "sha256" in identity:
         try:
             sha256 = sha256_file(source.path)
@@ -350,19 +388,18 @@ def dataset_source_change(
             return f"{source.path} no longer exists"
         if sha256 != identity["sha256"]:
             return (
-                f"{source.path} now has sha256 {sha256}, not the verified "
+                f"{source.path} has sha256 {sha256}, not the verified "
                 f"{identity['sha256']}"
             )
-        return None
     if "path" in identity:
         try:
-            now = _local_file_identity(source.path)
+            local = _local_file_identity(source.path)
         except FileNotFoundError:
             return f"{identity['path']} no longer exists"
-        if now != identity:
+        if local != identity:
             return (
                 f"{describe_dataset_source_identity(identity)} is now "
-                f"{describe_dataset_source_identity(now)}"
+                f"{describe_dataset_source_identity(local)}"
             )
     return None
 

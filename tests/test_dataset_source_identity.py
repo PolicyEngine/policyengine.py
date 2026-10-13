@@ -22,9 +22,10 @@ safe, over a fixture bundle manifest whose datasets are tiny local files:
   of a ``stat()`` check, the quick check ``rsync`` makes by default.
 - **Shapes.** Every identity produced has a shape
   ``is_dataset_source_identity`` accepts, and describing one never raises.
-- **Checking again.** ``dataset_source_change`` reports a bundle dataset's
-  file whose bytes no longer match its verified sha256, and a local file
-  whose size or modification time moved, and nothing else.
+- **Checking again.** ``dataset_source_change`` reports a source file that
+  is no longer the one snapshotted after materializing (device, inode, size
+  or modification time), for every kind of source, and a bundle dataset's
+  file whose bytes no longer hash to its verified sha256.
 """
 
 from __future__ import annotations
@@ -46,6 +47,7 @@ import policyengine.provenance.manifest as manifest_module
 from policyengine.provenance.dataset_materialization import (
     dataset_source_change,
     dataset_source_identity,
+    dataset_source_snapshot,
     describe_dataset_source_identity,
     is_dataset_source_identity,
     materialize_dataset,
@@ -540,80 +542,162 @@ def test_an_identity_is_described_in_words(identity, described):
 # --- Checking a materialized source again --------------------------------
 
 
-def test_an_unchanged_bundle_source_has_not_changed(bundle):
+def _replace(path: Path, payload: bytes) -> None:
+    """Replace a file as a download does: a new file renamed over it."""
+    temporary = path.with_name(f".{path.name}.download")
+    temporary.write_bytes(payload)
+    os.replace(temporary, path)
+
+
+def _materialized(dataset, data_dir, served=None):
+    get, _ = _serve(served or b"")
+    with patch.object(
+        dataset_materialization.requests, "get", get if served else _refuse
+    ):
+        source = materialize_dataset(
+            "us", dataset, allow_unmanaged=True, data_dir=data_dir
+        )
+    return source, dataset_source_identity(source), dataset_source_snapshot(source)
+
+
+def test_the_snapshot_is_the_files_device_inode_size_and_mtime(bundle):
     _, data_dir = bundle
-    source = materialize_dataset("us", "tiny_default", data_dir=data_dir)
+    source, _, snapshot = _materialized("tiny_default", data_dir)
+    status = os.stat(source.path)
 
-    assert dataset_source_change(source, dataset_source_identity(source)) is None
+    assert snapshot == {
+        "device": status.st_dev,
+        "inode": status.st_ino,
+        "size": status.st_size,
+        "mtime_ns": status.st_mtime_ns,
+    }
 
 
-def test_a_bundle_file_replaced_after_verification_has_changed(bundle):
-    """Another process materializing another release into the same folder."""
+@pytest.mark.parametrize(
+    "dataset, served",
+    [
+        ("tiny_default", None),
+        ("hf://fixture/explicit/explicit.h5@pinned", EXPLICIT_BYTES),
+        ("{tmp}/sources/tiny_local.h5", None),
+    ],
+)
+def test_an_untouched_source_has_not_changed(bundle, tmp_path, dataset, served):
     _, data_dir = bundle
-    source = materialize_dataset("us", "tiny_default", data_dir=data_dir)
-    identity = dataset_source_identity(source)
+    _local_file(tmp_path)
+    source, identity, snapshot = _materialized(
+        dataset.format(tmp=tmp_path), data_dir, served
+    )
 
-    Path(source.path).write_bytes(b"another release")
-    assert dataset_source_change(source, identity) == (
-        f"{source.path} now has sha256 {_sha256(b'another release')}, not the "
-        f"verified {_sha256(DEFAULT_BYTES)}"
+    assert dataset_source_change(source, identity, snapshot) is None
+
+
+@pytest.mark.parametrize(
+    "dataset, served",
+    [
+        ("tiny_default", None),
+        ("hf://fixture/explicit/explicit.h5@pinned", EXPLICIT_BYTES),
+        ("{tmp}/sources/tiny_local.h5", None),
+    ],
+)
+def test_a_source_replaced_after_its_snapshot_has_changed(
+    bundle, tmp_path, dataset, served
+):
+    """Another process materializing another release, or another file with
+    the same name, into the same folder. An explicit URI is caught too,
+    although nothing verifies its contents."""
+    _, data_dir = bundle
+    _local_file(tmp_path)
+    source, identity, snapshot = _materialized(
+        dataset.format(tmp=tmp_path), data_dir, served
+    )
+
+    _replace(Path(source.path), b"another release")
+
+    assert dataset_source_change(source, identity, snapshot) == (
+        f"{source.path} was replaced or modified (device, inode, size or "
+        "modification time changed)"
     )
     Path(source.path).unlink()
-    assert dataset_source_change(source, identity) == (
-        f"{source.path} no longer exists"
+    assert dataset_source_change(source, identity, snapshot).endswith(
+        "no longer exists"
     )
 
 
-def test_a_local_file_rewritten_after_identification_has_changed(tmp_path):
+def test_a_bundle_file_swapped_out_and_back_has_changed(bundle):
+    """Its bytes hash to the verified sha256 again, but it is not the file
+    that was loaded: another release was materialized over it, then the
+    pinned release downloaded again."""
+    _, data_dir = bundle
+    source, identity, snapshot = _materialized("tiny_default", data_dir)
+    path = Path(source.path)
+
+    # The loader's open handle keeps the original inode allocated, so the
+    # file system cannot hand its number to the file swapped back in.
+    with path.open("rb"):
+        _replace(path, b"another release")
+        _replace(path, DEFAULT_BYTES)
+
+        assert _sha256(path.read_bytes()) == identity["sha256"]
+        assert dataset_source_change(source, identity, snapshot) is not None
+
+
+def test_a_bundle_file_replaced_before_its_snapshot_has_changed(bundle):
+    """Replaced after verification but before the snapshot, so the snapshot
+    matches; the sha256 does not."""
+    _, data_dir = bundle
+    source, identity, _ = _materialized("tiny_default", data_dir)
+    _replace(Path(source.path), b"another release")
+    snapshot = dataset_source_snapshot(source)
+
+    assert dataset_source_change(source, identity, snapshot) == (
+        f"{source.path} has sha256 {_sha256(b'another release')}, not the "
+        f"verified {_sha256(DEFAULT_BYTES)}"
+    )
+
+
+def test_a_local_file_rewritten_before_its_snapshot_has_changed(tmp_path):
+    """Its identity was read before the rewrite, the snapshot after."""
     path = _local_file(tmp_path)
     os.utime(path, ns=(SECOND, SECOND))
     source = materialize_dataset("us", str(path), allow_unmanaged=True)
     identity = dataset_source_identity(source)
-    assert dataset_source_change(source, identity) is None
-
     os.utime(path, ns=(2 * SECOND, 2 * SECOND))
-    now = requested_dataset_source_identity("us", str(path))
-    assert dataset_source_change(source, identity) == (
+    snapshot = dataset_source_snapshot(source)
+
+    assert dataset_source_change(source, identity, snapshot) == (
         f"{describe_dataset_source_identity(identity)} is now "
-        f"{describe_dataset_source_identity(now)}"
+        f"{describe_dataset_source_identity(requested_dataset_source_identity('us', str(path)))}"
     )
-    path.unlink()
-    assert dataset_source_change(source, identity) == (
-        f"{identity['path']} no longer exists"
-    )
-
-
-def test_an_explicit_uri_source_is_never_reported_as_changed(bundle):
-    """Its identity records nothing about the file to compare."""
-    _, data_dir = bundle
-    get, _ = _serve(EXPLICIT_BYTES)
-    with patch.object(dataset_materialization.requests, "get", get):
-        source = materialize_dataset(
-            "us",
-            "hf://fixture/explicit/explicit.h5@pinned",
-            allow_unmanaged=True,
-            data_dir=data_dir,
-        )
-    identity = dataset_source_identity(source)
-    Path(source.path).write_bytes(b"changed")
-
-    assert dataset_source_change(source, identity) is None
 
 
 @settings(max_examples=100, deadline=None)
-@given(first=CONTENTS, second=CONTENTS, first_mtime=MTIMES, second_mtime=MTIMES)
-def test_a_local_source_has_changed_exactly_when_its_identity_has(
-    tmp_path_factory, first, second, first_mtime, second_mtime
+@given(
+    first=CONTENTS,
+    second=CONTENTS,
+    first_mtime=MTIMES,
+    second_mtime=MTIMES,
+    replace=st.booleans(),
+)
+def test_a_local_source_has_changed_exactly_when_its_file_has(
+    tmp_path_factory, first, second, first_mtime, second_mtime, replace
 ):
+    """Rewritten in place or replaced: changed exactly when the snapshot
+    moved, which a replacement always does (a new inode)."""
     path = tmp_path_factory.mktemp("local") / "tiny_local.h5"
     path.write_bytes(first)
     os.utime(path, ns=(first_mtime, first_mtime))
     source = materialize_dataset("us", str(path), allow_unmanaged=True)
     identity = dataset_source_identity(source)
+    snapshot = dataset_source_snapshot(source)
 
-    path.write_bytes(second)
+    if replace:
+        _replace(path, second)
+    else:
+        path.write_bytes(second)
     os.utime(path, ns=(second_mtime, second_mtime))
 
-    assert (dataset_source_change(source, identity) is None) == (
-        requested_dataset_source_identity("us", str(path)) == identity
+    assert (dataset_source_change(source, identity, snapshot) is None) == (
+        dataset_source_snapshot(source) == snapshot
     )
+    if replace:
+        assert dataset_source_change(source, identity, snapshot) is not None

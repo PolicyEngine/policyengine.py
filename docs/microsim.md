@@ -462,14 +462,16 @@ explicit URI by the URI, and a local file by its file-system metadata.
 Package versions come from the installed distributions' metadata, so
 policyengine-us is not imported.
 
-`create_datasets` identifies the source before loading it, and checks it
-again once the year files are written. A bundle dataset's file is hashed
-again; a local file's size and modification time are read again
-(`dataset_materialization.dataset_source_change`). Another process can
+`create_datasets` records the source file's device, inode, size and
+modification time right after materializing it
+(`dataset_materialization.dataset_source_snapshot`). It checks them again
+once the year files are written, and hashes a bundle dataset's file again
+against its verified sha256 (`dataset_source_change`). Another process can
 replace a file in a shared data folder, for example by materializing another
-release of the same dataset there. If the source changed, the year files are
-left unstamped, so they are cut again, and `DatasetMaterializationError` is
-raised.
+release of the same dataset, or another file with the same name, there. A
+download replaces a file with a new inode. If the source changed, the year
+files are left unstamped, so they are cut again, and
+`DatasetMaterializationError` is raised.
 
 Requested datasets that are different sources with one name, such as two
 revisions of one Hugging Face file or two local files called `pop.h5`, would
@@ -512,7 +514,9 @@ The source check has limits that follow from not reading the source:
   resolution) is not detected;
 - an explicit Hugging Face URI is compared as a string. Pin it to a commit
   (`hf://owner/repo/file.h5@<commit>`): a URI without a revision, or with a
-  branch, names whatever the branch holds when the files are cut;
+  branch, names whatever the branch holds when the files are cut. Its
+  contents are verified against nothing, so a file another process puts in
+  its place between the download and the snapshot goes unnoticed;
 - an editable or source install of policyengine-us keeps its version string
   while its code changes, so its year files are not cut again;
 - `create_datasets` takes no lock, so two processes cutting the same year

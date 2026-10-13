@@ -1008,37 +1008,77 @@ def test_a_re_pinned_bundle_dataset_cuts_its_year_files_again(tmp_path):
         assert _person_outputs(_run(loaded))["wic"].iloc[INFANT] > 0
 
 
-@pytest.mark.parametrize("kind", ["bundle", "local"])
+class _Download:
+    """A Hugging Face response serving ``payload``."""
+
+    status_code = 200
+
+    def __init__(self, payload: bytes):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+    def raise_for_status(self):
+        pass
+
+    def iter_content(self, chunk_size):
+        yield self.payload
+
+
+@pytest.mark.parametrize("kind", ["bundle", "explicit URI", "local"])
 def test_a_source_replaced_while_it_is_cut_leaves_the_year_files_unstamped(
     tmp_path, kind
 ):
-    """Another process replaces the source after it is identified (for a
-    bundle dataset, by materializing another release into the same data
-    folder). The year files hold data the stamp would not describe, so they
-    are left unstamped and cut again."""
+    """Another process replaces the source once it is materialized: by
+    materializing another release, or another file with the same name, into
+    the same data folder, or by rewriting a local file. The year files may
+    hold data the stamp would not describe, so they are left unstamped and
+    cut again."""
     import policyengine_us
 
     data_folder = tmp_path / "data"
     data_folder.mkdir()
+    original = Path(_write_entity_tables(tmp_path / "original.h5")).read_bytes()
     if kind == "bundle":
         path = data_folder / f"{BUNDLE_NAME}.h5"
-        _write_entity_tables(path)
+        path.write_bytes(original)
         request, pins = BUNDLE_NAME, _pinned("release-1", sha256_file(path))
+    elif kind == "explicit URI":
+        path = data_folder / "tiny_uri.h5"
+        request = "hf://fixture/tiny-uri/tiny_uri.h5@pinned"
+        pins = (
+            patch.object(
+                dataset_materialization.requests,
+                "get",
+                lambda *args, **kwargs: _Download(original),
+            ),
+        )
     else:
         path = tmp_path / "populace_layout.h5"
-        _write_entity_tables(path)
+        path.write_bytes(original)
         request, pins = str(path), ()
-    original = path.read_bytes()
     real_microsimulation = policyengine_us.Microsimulation
 
     def replaced_once_loaded(*args, **kwargs):
         simulation = real_microsimulation(*args, **kwargs)
-        _write_entity_tables(path, draw=[False, True, True])
-        later = path.stat().st_mtime_ns + 1_000_000_000
-        os.utime(path, ns=(later, later))
+        if kind == "local":
+            # Rewritten in place, with a later modification time of its own.
+            _write_entity_tables(path, draw=[False, True, True])
+            later = path.stat().st_mtime_ns + 1_000_000_000
+            os.utime(path, ns=(later, later))
+        else:
+            # Replaced as a download replaces it.
+            other = _write_entity_tables(
+                path.with_name(".other.h5"), draw=[False, True, True]
+            )
+            os.replace(other, path)
         return simulation
 
-    year_file = data_folder / f"{Path(path).stem}_year_{YEAR}.h5"
+    year_file = data_folder / f"{path.stem}_year_{YEAR}.h5"
     with contextlib.ExitStack() as stack:
         for pin in pins:
             stack.enter_context(pin)
@@ -1055,7 +1095,7 @@ def test_a_source_replaced_while_it_is_cut_leaves_the_year_files_unstamped(
                 datasets=[request], years=[YEAR], data_folder=str(data_folder)
             )
 
-        # The pinned release is back in place, as a download would put it.
+        # The pinned source is back in place, as a download would put it.
         path.write_bytes(original)
         regenerated = _ensure(request, data_folder)
         assert pd.DataFrame(regenerated.data.person)[LIVE].tolist() == DRAW

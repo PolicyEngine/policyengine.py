@@ -1590,7 +1590,10 @@ def test_two_sources_with_one_stem_are_refused_before_anything_is_cut(requests):
                     datasets=requests, years=[2024], data_folder=directory
                 ),
                 lambda: us_datasets.create_datasets(
-                    datasets=requests, years=[2024], data_folder=directory
+                    datasets=requests,
+                    years=[2024],
+                    data_folder=directory,
+                    allow_unmanaged=True,
                 ),
             ):
                 if collide:
@@ -1621,6 +1624,33 @@ def test_the_collision_refusal_names_both_requests_and_sources(tmp_path):
         f"pop_year_{{year}}.h5, but are different sources: {first} and {second}. "
         "Request them in separate calls with separate data folders."
     )
+
+
+@pytest.mark.parametrize(
+    "requests, error",
+    [
+        (["not_a_bundle_dataset", SOURCE], "Unknown managed dataset"),
+        ([SOURCE, "hf://fixture/other.h5"], "Explicit dataset URIs bypass"),
+    ],
+)
+def test_create_refuses_what_materialize_would_with_its_error(
+    tmp_path, requests, error
+):
+    """With several datasets, ``create_datasets`` checks them all for shared
+    year files first. A request ``materialize_dataset`` would refuse is
+    refused there with the same error, and nothing is downloaded."""
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("a dataset was materialized or downloaded")
+
+    with (
+        patch.object(us_datasets, "materialize_dataset", refuse),
+        patch("requests.get", refuse),
+    ):
+        with pytest.raises(ValueError, match=error):
+            us_datasets.create_datasets(
+                datasets=requests, years=[2024], data_folder=str(tmp_path)
+            )
 
 
 def test_one_source_requested_by_two_names_is_not_a_collision(tmp_path):

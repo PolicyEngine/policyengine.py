@@ -18,6 +18,7 @@ from policyengine.provenance.dataset_materialization import (
     MaterializedDataset,
     dataset_source_change,
     dataset_source_identity,
+    dataset_source_snapshot,
     describe_dataset_source_identity,
     materialize_dataset,
     requested_dataset_source_identity,
@@ -374,26 +375,35 @@ def _load_policyengine_core_h5(path: Path, year: int) -> USYearData:
     )
 
 
-def _year_file_source(dataset: str) -> tuple[str, dict[str, Any]]:
+def _year_file_source(
+    dataset: str, allow_unmanaged: bool = True
+) -> tuple[str, dict[str, Any]]:
     """Return a requested dataset's year-file stem and its source identity.
 
     The stem names the year files (``{stem}_year_{year}.h5``) and drops any
     revision, so files cut from every release of a logical dataset share
     names; the identity tells them apart. Neither downloads nor reads the
-    source (see ``requested_dataset_source_identity``).
+    source (see ``requested_dataset_source_identity``). A request
+    ``materialize_dataset`` would refuse with the same ``allow_unmanaged``
+    raises the same error, before the stem is resolved.
     """
+    identity = requested_dataset_source_identity(
+        "us", dataset, allow_unmanaged=allow_unmanaged
+    )
     stem = dataset_logical_name(resolve_dataset_reference("us", dataset))
-    return stem, requested_dataset_source_identity("us", dataset)
+    return stem, identity
 
 
-def _year_file_sources(datasets: list[str]) -> list[tuple[str, dict[str, Any]]]:
+def _year_file_sources(
+    datasets: list[str], allow_unmanaged: bool = True
+) -> list[tuple[str, dict[str, Any]]]:
     """Return each requested dataset's year-file stem and source identity.
 
     Raises ``ValueError`` when two of them are different sources with one
     stem. They would write the same year files, each cut overwriting the
     other's, so a request of both would cut them all again every time.
     """
-    sources = [_year_file_source(dataset) for dataset in datasets]
+    sources = [_year_file_source(dataset, allow_unmanaged) for dataset in datasets]
     first_by_stem: dict[str, tuple[str, dict[str, Any]]] = {}
     for dataset, (stem, identity) in zip(datasets, sources):
         first, first_identity = first_by_stem.setdefault(stem, (dataset, identity))
@@ -424,13 +434,13 @@ def create_datasets(
     ``legacy_inputs.YEAR_FILE_STAMP_H5_DATASET``), which ``ensure_datasets``
     and ``load_datasets`` check.
 
-    The source is identified before it is loaded, and checked again after the
-    year files are written: a bundle dataset's file is hashed again and a
-    local file's metadata read again (see
-    ``dataset_materialization.dataset_source_change``). Another process can
-    replace a file in a shared data folder, for example by materializing
-    another release of the same dataset there. If the source changed, the
-    year files are left unstamped, so they are cut again, and
+    The source file's device, inode, size and modification time are recorded
+    right after it is materialized, and checked again once the year files are
+    written; a bundle dataset's file is also hashed again against its
+    verified sha256 (see ``dataset_materialization.dataset_source_change``).
+    Another process can replace a file in a shared data folder, for example
+    by materializing another release of the same dataset there. If the source
+    changed, the year files are left unstamped, so they are cut again, and
     ``DatasetMaterializationError`` is raised. Two requested datasets that are
     different sources with one stem are refused with ``ValueError`` before
     anything is cut, since they would overwrite each other's year files.
@@ -444,7 +454,7 @@ def create_datasets(
         Dictionary mapping dataset keys (e.g., "populace_us_2024") to PolicyEngineUSDataset objects
     """
     if datasets is not None and len(datasets) > 1:
-        _year_file_sources(datasets)
+        _year_file_sources(datasets, allow_unmanaged)
 
     from policyengine_us import Microsimulation
 
@@ -464,6 +474,7 @@ def create_datasets(
         # before it is loaded, the package versions and the register the
         # mapping below uses.
         identity = dataset_source_identity(source)
+        snapshot = dataset_source_snapshot(source)
         stamp = year_file_stamp(identity)
         sim = Microsimulation(dataset=source.path, spm=resolve_spm_selection())
         # Map stored inputs the engine has since renamed before extracting,
@@ -633,9 +644,10 @@ def create_datasets(
             dataset_key = f"{dataset_stem}_{year}"
             result[dataset_key] = us_dataset
 
-        # Stamp only if the source still matches what was identified, so no
+        # Stamp only if the source file is still the one materialized (and,
+        # for a bundle dataset, still hashes to its verified sha256), so no
         # stamp names a source the files may not have been cut from.
-        change = dataset_source_change(source, identity)
+        change = dataset_source_change(source, identity, snapshot)
         if change is not None:
             raise DatasetMaterializationError(
                 f"The source of the US year files {data_folder}/"
