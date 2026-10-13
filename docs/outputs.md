@@ -167,6 +167,12 @@ rate.run()
 rate.headcount, rate.total_population, rate.rate
 ```
 
+`rate.rate` is `None` when nobody in the group is measured: the group's
+weighted population with a poverty status is zero, for example a filter that
+matches no one, or a group whose members are all outside the SPM measurement
+on a legacy source. That is not a measured rate of zero, so handle `None`
+before formatting or subtracting rates.
+
 For all canonical poverty measures over one simulation:
 
 ```python

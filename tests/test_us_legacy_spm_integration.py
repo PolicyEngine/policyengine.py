@@ -726,6 +726,38 @@ def test_a_managed_simulation_of_a_legacy_source_applies_the_declarations(
     assert recorded.outside_spm_units == 2
 
 
+def test_year_files_load_by_the_sources_uri_as_well_as_its_name(tmp_path, legacy_files):
+    """The region registry names the source by URI; that form must work too."""
+    from policyengine.provenance.manifest import resolve_dataset_reference
+
+    data_folder = str(tmp_path / "data")
+    create_datasets(
+        datasets=["populace_us_2024_acs_local"], years=[YEAR], data_folder=data_folder
+    )
+    uri = resolve_dataset_reference("us", "populace_us_2024_acs_local")
+    (loaded,) = load_datasets(
+        datasets=[uri], years=[YEAR], data_folder=data_folder
+    ).values()
+    assert LegacySPMRecord.model_validate(loaded.metadata[RECORD_KEY]) == _record()
+
+    legacy_files.requests.clear()
+    (ensured,) = ensure_datasets(
+        datasets=[uri], years=[YEAR], data_folder=data_folder
+    ).values()
+    assert legacy_files.requests == []  # current, so nothing is cut again
+    assert ensured.metadata[RECORD_KEY] == loaded.metadata[RECORD_KEY]
+
+
+def test_a_year_without_a_declaration_is_refused_not_guessed(legacy_files):
+    """The source stores 2024 onwards; an earlier year has no declaration."""
+    from spm_calculator.errors import SPMInputError
+
+    simulation = pe.us.managed_microsimulation(dataset="populace_us_2024_acs_local")
+    with pytest.raises(SPMInputError) as error:
+        simulation.calculate("spm_unit_spm_threshold", 2023)
+    assert error.value.code == "SPM_UNIVERSE_REQUIRED"
+
+
 def test_other_sources_get_no_declarations(tmp_path):
     source = _write_source(tmp_path / "other.h5")
     created = create_datasets(

@@ -111,6 +111,35 @@ def test_the_installed_model_does_not_read_scope_natively_yet():
     assert UNIVERSE_VARIABLE not in system.variables
 
 
+#: The installed ``spm_unit_income_decile`` formula the override recalculates
+#: over measured units (policyengine-us 2.2.1). The override re-implements
+#: this one formula rather than wrapping it, so a different installed method
+#: must fail here before legacy-source deciles can drift from the model's.
+_VERIFIED_DECILE_FORMULA = """
+def formula(spm_unit, period, parameters):
+    income = spm_unit("spm_unit_oecd_equiv_net_income", period)
+    weights = spm_unit("spm_unit_weight", period) * spm_unit.nb_persons()
+    return MicroSeries(income, weights=weights).decile_rank()
+"""
+
+
+def _normalised_ast(source: str) -> str:
+    return ast.dump(ast.parse(textwrap.dedent(source)), annotate_fields=False)
+
+
+def test_the_recalculated_decile_matches_the_installed_method():
+    from policyengine_us.system import system
+
+    formulas = list(system.variables["spm_unit_income_decile"].formulas.values())
+    assert len(formulas) == 1
+    installed = _normalised_ast(inspect.getsource(formulas[0]))
+    assert installed == _normalised_ast(_VERIFIED_DECILE_FORMULA), (
+        "policyengine-us changed how spm_unit_income_decile ranks units; update "
+        "legacy_spm.model_adapter._income_decile_variable to the new method "
+        "before updating _VERIFIED_DECILE_FORMULA."
+    )
+
+
 # --- Chain-shape guard -------------------------------------------------------
 
 

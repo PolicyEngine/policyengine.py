@@ -15,9 +15,13 @@
 #   never reach the provider and every SPM outcome for them is NaN ("not     #
 #   measured"). Measured units keep the canonical values.                    #
 #                                                                            #
-# The override never copies a model formula: it wraps the installed ones.   #
-# Before wrapping, it checks that the SPM chain still has the shape it was   #
-# verified against, and refuses to run otherwise.                            #
+# The override wraps the installed formulas, with ONE exception:           #
+# ``spm_unit_income_decile`` ranks units, so it is recalculated over         #
+# measured units with the installed method (same weights, same ranking).    #
+# ``test_us_legacy_spm_model_contract`` pins that installed method, so a     #
+# model change cannot silently diverge from it. Before wrapping, the         #
+# override checks that the SPM chain still has the shape it was verified     #
+# against, and refuses to run otherwise.                                     #
 #############################################################################
 
 The override must be applied after the simulation is constructed (so policy
@@ -299,6 +303,10 @@ def _income_decile_variable() -> type:
     weighted by people. With outside units' income NaN, it would place them
     in the top decile and count their weight, so the ranking is recalculated
     over measured units, with the same weights and the same ranking method.
+
+    This is the one installed formula the override re-implements rather than
+    wraps. ``test_the_recalculated_decile_matches_the_installed_method`` pins
+    the installed formula it mirrors.
     """
     from microdf import MicroSeries
     from policyengine_core.variables import Variable

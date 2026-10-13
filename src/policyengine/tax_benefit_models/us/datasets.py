@@ -648,15 +648,27 @@ def _legacy_spm_declarations(
 
 
 def _managed_source_sha256(dataset: Optional[str]) -> Optional[str]:
-    """Return the certified SHA-256 of a managed bundle dataset reference."""
+    """Return the certified SHA-256 of a managed bundle dataset reference.
+
+    A managed dataset may be named by its manifest name or by the URI that
+    name resolves to (the form the region registry's dataset paths take).
+    Any other reference is unmanaged and has no certified hash.
+    """
     manifest = get_release_manifest("us")
     if dataset is None or dataset == manifest.default_dataset_uri:
-        name = manifest.default_dataset
+        name: Optional[str] = manifest.default_dataset
     elif dataset in manifest.datasets:
         name = dataset
     else:
-        return None
-    reference = manifest.datasets.get(name)
+        name = next(
+            (
+                candidate
+                for candidate in manifest.datasets
+                if resolve_dataset_reference("us", candidate) == dataset
+            ),
+            None,
+        )
+    reference = manifest.datasets.get(name) if name is not None else None
     return reference.sha256 if reference is not None else None
 
 

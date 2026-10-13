@@ -461,3 +461,101 @@ def test_only_legacy_year_files_must_record_declarations(tmp_path):
     write_record(path, _record())
     assert year_file_problem(path, acs_local) is None
     assert year_file_problem(path, None) is not None
+
+
+def test_a_managed_dataset_is_recognised_by_its_uri_too():
+    from policyengine.provenance.manifest import resolve_dataset_reference
+
+    uri = resolve_dataset_reference("us", "populace_us_2024_acs_local")
+    assert uri.startswith("hf://")
+    assert us_datasets._expected_legacy_spm_profile(uri) == expected_profile(BUILD_O)
+    default_uri = resolve_dataset_reference("us", "populace_us_2024")
+    assert us_datasets._expected_legacy_spm_profile(default_uri) is None
+
+
+# --- Year-file frame guards -------------------------------------------------
+
+
+def _declared_frames():
+    from policyengine.tax_benefit_models.us.legacy_spm import UNIVERSE_VARIABLE
+
+    person = pd.DataFrame({"person_id": [1, 2], INDEPENDENCE_ROLE: [True, False]})
+    spm_unit = pd.DataFrame(
+        {"spm_unit_id": [1, 2], UNIVERSE_VARIABLE: ["INCLUDED", "OUTSIDE"]}
+    )
+    return person, spm_unit
+
+
+def test_complete_declarations_pass_the_frame_check():
+    from policyengine.tax_benefit_models.us.legacy_spm import check_year_file_frames
+
+    person, spm_unit = _declared_frames()
+    check_year_file_frames(person, spm_unit, _record())
+    spm_unit["spm_unit_spm_universe_status"] = [b"INCLUDED", b"OUTSIDE"]
+    check_year_file_frames(person, spm_unit, _record())
+
+
+def _drop_column(table, column):
+    def change(person, spm_unit):
+        (person if table == "person" else spm_unit).drop(columns=[column], inplace=True)
+
+    return change
+
+
+def _set_column(table, column, values):
+    def change(person, spm_unit):
+        (person if table == "person" else spm_unit)[column] = values
+
+    return change
+
+
+@pytest.mark.parametrize(
+    "change, message",
+    [
+        (
+            _drop_column("spm_unit", "spm_unit_spm_universe_status"),
+            "stores no 'spm_unit_spm_universe_status'",
+        ),
+        (
+            _set_column(
+                "spm_unit", "spm_unit_spm_universe_status", ["INCLUDED", "UNRESOLVED"]
+            ),
+            "must declare every SPM unit",
+        ),
+        (
+            _set_column("spm_unit", "spm_unit_spm_universe_status", ["INCLUDED", None]),
+            "must declare every SPM unit",
+        ),
+        (
+            _drop_column("person", INDEPENDENCE_ROLE),
+            "stores no 'is_spm_independent_minor_role'",
+        ),
+        (
+            _set_column("person", INDEPENDENCE_ROLE, [True, None]),
+            "must be complete and boolean",
+        ),
+        (
+            _set_column("person", INDEPENDENCE_ROLE, [1, 0]),
+            "must be complete and boolean",
+        ),
+    ],
+)
+def test_incomplete_or_invalid_declarations_fail_the_frame_check(change, message):
+    from policyengine.tax_benefit_models.us.legacy_spm import check_year_file_frames
+
+    person, spm_unit = _declared_frames()
+    change(person, spm_unit)
+    with pytest.raises(ValueError, match=message):
+        check_year_file_frames(person, spm_unit, _record())
+
+
+def test_only_the_declarations_a_source_needs_are_required():
+    from policyengine.tax_benefit_models.us.legacy_spm import check_year_file_frames
+
+    person, spm_unit = _declared_frames()
+    person.drop(columns=[INDEPENDENCE_ROLE], inplace=True)
+    check_year_file_frames(person, spm_unit, _record(independence_list=None))
+    spm_unit.drop(columns=["spm_unit_spm_universe_status"], inplace=True)
+    check_year_file_frames(
+        person, spm_unit, _record(independence_list=None, spm_universe_rule=None)
+    )

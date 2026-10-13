@@ -76,9 +76,11 @@ teen.
   - wraps the installed SPM chain so that outside units never reach the
     canonical provider and every SPM outcome for them is NaN ("not measured").
 
-  Poverty indicators become floats (1.0, 0.0 or NaN). No model formula is
-  copied. The override refuses to run if the SPM chain no longer has the
-  verified shape.
+  Poverty indicators become floats (1.0, 0.0 or NaN). The override wraps the
+  installed formulas, with one exception: `spm_unit_income_decile` ranks
+  units, so it is recalculated over measured units with the installed method.
+  A contract test pins that method. The override refuses to run if the SPM
+  chain no longer has the verified shape.
 
 Poverty rates count measured people only. A group with nobody measured has a
 rate of `None`, not 0.
@@ -102,9 +104,10 @@ existing files must be made again.
   the native members include `INCLUDED` and `OUTSIDE`, and confirm the native
   runs in the integration tests. Then delete the override half of
   `model_adapter` (keep the derivation) and raise `ADAPTER_REVISION`.
-- **The SPM chain changes.** `test_the_override_covers_every_variable_that_depends_on_the_provider`
-  or `test_the_installed_chain_has_the_verified_shape` fails. Re-verify the
-  override against the new chain before bumping the pin.
+- **The SPM chain changes.** `test_the_override_covers_every_variable_that_depends_on_the_provider`,
+  `test_the_installed_chain_has_the_verified_shape` or
+  `test_the_recalculated_decile_matches_the_installed_method` fails. Re-verify
+  the override against the new chain before bumping the pin.
 - **A rebuilt source declares scope and role itself.** Point the bundle at it.
   Keep the Build O registry entry only while anything still reads Build O,
   then delete it.
