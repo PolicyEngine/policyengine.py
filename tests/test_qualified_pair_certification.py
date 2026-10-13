@@ -285,6 +285,57 @@ class TestRuntimeAcceptance:
             self._certify(_qualified(), "2.126.8", remote=_uk_manifest(), core="3.34.0")
 
     @pytest.mark.parametrize(
+        ("runtime_model", "fingerprint", "claims"),
+        [
+            ("2.122.2", None, ()),
+            ("2.126.9", "sha256:build", ()),
+            ("2.126.9", None, ("==2.126.9",)),
+        ],
+        ids=["build-model", "fingerprint", "publisher-claim"],
+    )
+    def test_online_stronger_basis_cannot_bypass_qualified_model(
+        self, runtime_model, fingerprint, claims
+    ):
+        """The qualified core must not extend qualification to another model."""
+
+        with pytest.raises(ValueError, match="not certified.*model"):
+            self._certify(
+                _qualified(),
+                runtime_model,
+                remote=_uk_manifest(model_claims=claims),
+                fingerprint=fingerprint,
+            )
+
+    @pytest.mark.parametrize(
+        ("runtime_model", "fingerprint", "claims"),
+        [
+            ("2.122.2", None, ()),
+            ("2.126.8", "sha256:build", ()),
+            ("2.126.8", None, ("==2.126.8",)),
+        ],
+        ids=["build-model", "fingerprint", "publisher-claim"],
+    )
+    @pytest.mark.parametrize("remote_build", ["another-build", None])
+    def test_online_stronger_basis_cannot_bypass_qualified_build(
+        self, runtime_model, fingerprint, claims, remote_build
+    ):
+        remote = _uk_manifest(model_claims=claims)
+        remote.build.build_id = remote_build
+        with pytest.raises(ValueError, match="not certified.*data build"):
+            self._certify(
+                _qualified(model=runtime_model),
+                runtime_model,
+                remote=remote,
+                fingerprint=fingerprint,
+            )
+
+    def test_online_publisher_claim_cannot_bypass_missing_qualified_build(self):
+        remote = _uk_manifest(model_claims=("==2.126.8",))
+        remote.build = None
+        with pytest.raises(ValueError, match="not certified.*data build"):
+            self._certify(_qualified(), "2.126.8", remote=remote)
+
+    @pytest.mark.parametrize(
         ("runtime_model", "fingerprint", "claims", "expected_basis"),
         [
             ("2.122.2", None, (), "exact_build_model_version"),
