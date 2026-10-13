@@ -23,18 +23,39 @@ if the engine defines the legacy name again.
 from __future__ import annotations
 
 import inspect
-import json
 from collections.abc import Iterable, Iterator, Mapping
-from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
+from policyengine.provenance import year_file_stamp as _shared_stamp
 from policyengine.provenance.dataset_materialization import (
-    describe_dataset_source_identity,
     is_dataset_source_identity,
+)
+from policyengine.provenance.year_file_stamp import ABSENT as _ABSENT
+from policyengine.provenance.year_file_stamp import NOT_HDF5 as _NOT_HDF5
+from policyengine.provenance.year_file_stamp import (
+    UNRELATED_TO_CONTENTS as _UNRELATED_TO_CONTENTS,
+)
+from policyengine.provenance.year_file_stamp import (
+    is_version_map as _is_version_map,
+)
+from policyengine.provenance.year_file_stamp import (
+    read_json_dataset as _read_json_dataset,
+)
+from policyengine.provenance.year_file_stamp import (
+    read_year_file_stamp as read_year_file_stamp,
+)
+from policyengine.provenance.year_file_stamp import (
+    source_and_package_differences as _source_and_package_differences,
+)
+from policyengine.provenance.year_file_stamp import (
+    write_json_dataset as _write_json_dataset,
+)
+from policyengine.provenance.year_file_stamp import (
+    write_year_file_stamp as write_year_file_stamp,
 )
 
 #: Stored input columns that policyengine-us has since renamed, mapped to the
@@ -100,7 +121,10 @@ RENAMES_H5_DATASET = "policyengine_legacy_input_renames"
 #: now from the requested dataset would carry (see
 #: :func:`year_file_stamp_problem`). ``PolicyEngineUSDataset.save()`` neither
 #: writes nor keeps it, so saving a year file again drops the stamp.
-YEAR_FILE_STAMP_H5_DATASET = "policyengine_year_file_stamp"
+#:
+#: UK year files carry a stamp of their own shape under the same name (see
+#: ``policyengine.provenance.year_file_stamp``).
+YEAR_FILE_STAMP_H5_DATASET = _shared_stamp.YEAR_FILE_STAMP_H5_DATASET
 
 #: Format revision of ``create_datasets`` year files, stored in their stamp.
 #: Raise it when the stamp changes shape, or when a change to year-file
@@ -149,12 +173,6 @@ def pending_legacy_input_renames(variables: Any) -> dict[str, str]:
     }
 
 
-#: What :func:`_read_json_dataset` returns for a node a file does not have, and
-#: for one that is not a scalar dataset holding UTF-8 JSON.
-_ABSENT = object()
-_UNREADABLE = object()
-
-
 def read_renames_record(path: str | Path) -> dict[str, str] | None:
     """Return the renames record stored in an H5 file, or ``None``.
 
@@ -182,13 +200,7 @@ def installed_package_versions() -> dict[str, str | None]:
     ``None`` stands for a package that is not installed. The versions come
     from the installed distributions' metadata, so no package is imported.
     """
-    versions: dict[str, str | None] = {}
-    for name in YEAR_FILE_PACKAGES:
-        try:
-            versions[name] = importlib_metadata.version(name)
-        except importlib_metadata.PackageNotFoundError:
-            versions[name] = None
-    return versions
+    return _shared_stamp.installed_package_versions(YEAR_FILE_PACKAGES)
 
 
 def year_file_stamp(
@@ -213,27 +225,6 @@ def year_file_stamp(
         "revision": YEAR_FILE_STAMP_REVISION,
         "source": dict(source),
     }
-
-
-def read_year_file_stamp(path: str | Path) -> Any | None:
-    """Return the JSON value of a year file's stamp, well formed or not.
-
-    ``None`` means the file stores no readable stamp (see
-    :data:`YEAR_FILE_STAMP_H5_DATASET`) or is not an H5 file.
-    """
-    import h5py
-
-    try:
-        with h5py.File(path, "r") as file:
-            stamp = _read_json_dataset(file, YEAR_FILE_STAMP_H5_DATASET)
-    except OSError:
-        return None
-    return None if stamp is _ABSENT or stamp is _UNREADABLE else stamp
-
-
-def write_year_file_stamp(path: str | Path, stamp: Mapping[str, Any]) -> None:
-    """Stamp a year file (see :func:`year_file_stamp`), replacing any stamp."""
-    _write_json_dataset(path, YEAR_FILE_STAMP_H5_DATASET, dict(stamp))
 
 
 def year_file_stamp_problem(
@@ -287,10 +278,10 @@ def year_file_stamp_problem(
         with h5py.File(path, "r") as file:
             stamp = _read_json_dataset(file, YEAR_FILE_STAMP_H5_DATASET)
             record = _read_json_dataset(file, RENAMES_H5_DATASET)
-    except (PermissionError, IsADirectoryError, BlockingIOError):
+    except _UNRELATED_TO_CONTENTS:
         raise
     except OSError:
-        return "it cannot be read as an HDF5 file (it may be half-written or corrupt)"
+        return _NOT_HDF5
 
     # The revision comes first: a later revision may shape its stamp and
     # record differently.
@@ -360,85 +351,13 @@ def year_file_stamp_problem(
             "it was cut under renames this version of policyengine.py does not "
             f"register: {_describe(unknown)}"
         )
-    if stamp["source"] != current["source"]:
-        reasons.append(
-            "it was cut from "
-            f"{describe_dataset_source_identity(stamp['source'])}, and the "
-            "requested source is "
-            f"{describe_dataset_source_identity(current['source'])}"
-        )
-    stamped_packages, packages = stamp["packages"], current["packages"]
-    for name in sorted(stamped_packages.keys() | packages.keys()):
-        if name not in packages:
-            reasons.append(
-                f"it records the {name} version it was cut with, which this "
-                "version of policyengine.py does not check"
-            )
-            continue
-        if name in stamped_packages and stamped_packages[name] == packages[name]:
-            continue
-        cut_with = (
-            f"{name} {stamped_packages[name]}"
-            if stamped_packages.get(name) is not None
-            else f"no recorded {name} version"
-        )
-        installed = (
-            f"{name} {packages[name]} is installed"
-            if packages[name] is not None
-            else f"{name} is not installed"
-        )
-        reasons.append(f"it was cut with {cut_with}, and {installed}")
+    reasons.extend(_source_and_package_differences(stamp, current))
     return "; ".join(reasons)
-
-
-def _read_json_dataset(file: Any, name: str) -> Any:
-    """Return the JSON value stored in an open H5 file's ``name`` dataset."""
-    import h5py
-
-    try:
-        # A cycle of soft links, or a chain too long to follow, raises
-        # RuntimeError here.
-        node = file.get(name)
-        if node is None:
-            return _ABSENT
-        if not isinstance(node, h5py.Dataset) or node.shape != ():
-            return _UNREADABLE
-        # A numeric dataset raises TypeError; bytes that are not UTF-8, or
-        # not JSON, raise ValueError; JSON nested too deeply raises
-        # RecursionError, a RuntimeError.
-        return json.loads(node.asstr()[()])
-    except (PermissionError, IsADirectoryError, BlockingIOError):
-        raise
-    except (KeyError, OSError, RuntimeError, TypeError, ValueError):
-        return _UNREADABLE
-
-
-def _write_json_dataset(path: str | Path, name: str, value: Any) -> None:
-    """Store ``value`` as UTF-8 JSON in an H5 file's ``name`` dataset."""
-    import h5py
-
-    with h5py.File(path, "a") as file:
-        if name in file:
-            del file[name]
-        # UTF-8 JSON in a dataset, as for the SPM receipt of a saved output.
-        file.create_dataset(
-            name,
-            data=json.dumps(value, sort_keys=True),
-            dtype=h5py.string_dtype("utf-8"),
-        )
 
 
 def _is_str_map(value: Any) -> bool:
     return isinstance(value, dict) and all(
         isinstance(key, str) and isinstance(item, str) for key, item in value.items()
-    )
-
-
-def _is_version_map(value: Any) -> bool:
-    """Whether ``value`` maps package names to versions, ``None`` for absent."""
-    return isinstance(value, dict) and all(
-        isinstance(key, str) and (item is None or isinstance(item, str))
-        for key, item in value.items()
     )
 
 
