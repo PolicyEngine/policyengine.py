@@ -35,6 +35,7 @@ pytest.importorskip("spm_calculator.policyengine_adapter")
 import policyengine as pe  # noqa: E402
 import policyengine.provenance.dataset_materialization as dataset_materialization  # noqa: E402
 import policyengine.provenance.manifest as manifest_module  # noqa: E402
+import policyengine.provenance.year_file_stamp as year_file_stamp_module  # noqa: E402
 from policyengine.provenance.dataset_materialization import (  # noqa: E402
     DatasetMaterializationError,
     describe_dataset_source_identity,
@@ -1095,6 +1096,181 @@ def test_concurrent_cuts_never_mix_one_cuts_tables_with_anothers_stamp(tmp_path)
     # a request of the first source reuses it.
     assert stamp == _stamp_for(first)
     assert _problem(path, first) is None
+    assert _partial_files(data_folder) == []
+
+
+#: The stored draws of another release of the source: the infant's is True.
+OTHER_DRAW = [False, True, True]
+#: Each step of a cut of two year files, in order: each is saved to its
+#: temporary file, the source is checked again, then each is stamped and
+#: moved onto its path.
+CUT_STEPS = (
+    "save 0",
+    "save 1",
+    "check source",
+    "stamp 0",
+    "move 0",
+    "stamp 1",
+    "move 1",
+)
+#: How many year files a cut has moved into place before each step.
+MOVED_BEFORE = {step: 0 for step in CUT_STEPS} | {"stamp 1": 1, "move 1": 1}
+
+
+@contextlib.contextmanager
+def _just_before(step, action):
+    """Run ``action`` once, just before ``step`` of the next cut of two year
+    files. Yields the steps it ran at, so a test can check that it did.
+
+    Anything ``action`` does (another cut, for one) runs unhooked.
+    """
+    fired = []
+    seen = {"save": 0, "stamp": 0, "move": 0}
+    save = PolicyEngineUSDataset.save
+    change = us_datasets.dataset_source_change
+    publish = us_datasets.publish_year_file
+    write_stamp = year_file_stamp_module.write_json_dataset
+
+    def reach(kind):
+        if fired:
+            return
+        name = kind if kind == "check source" else f"{kind} {seen[kind]}"
+        if kind in seen:
+            seen[kind] += 1
+        if name == step:
+            fired.append(name)
+            action()
+
+    def hooked_save(self):
+        reach("save")
+        save(self)
+
+    def hooked_change(*args):
+        reach("check source")
+        return change(*args)
+
+    def hooked_publish(*args):
+        reach("stamp")
+        publish(*args)
+
+    def hooked_write_stamp(*args):
+        # ``publish_year_file`` stamps the temporary file, then moves it.
+        write_stamp(*args)
+        reach("move")
+
+    with (
+        patch.object(PolicyEngineUSDataset, "save", hooked_save),
+        patch.object(us_datasets, "dataset_source_change", hooked_change),
+        patch.object(us_datasets, "publish_year_file", hooked_publish),
+        patch.object(year_file_stamp_module, "write_json_dataset", hooked_write_stamp),
+    ):
+        yield fired
+
+
+@pytest.mark.parametrize("already_there", [False, True])
+@pytest.mark.parametrize("step", CUT_STEPS)
+def test_a_cut_that_fails_at_any_step_leaves_each_year_file_old_or_new(
+    tmp_path, step, already_there
+):
+    """Failure atomicity, at every step of a cut of two year files: each year
+    file is either as it was before the cut (byte for byte, or absent) or the
+    whole new file, current for the source, and no temporary file is left.
+    ``ensure_datasets`` then finishes the job."""
+    source = _write_entity_tables(tmp_path / "populace_layout.h5")
+    data_folder = tmp_path / "data"
+    years = [YEAR, YEAR + 1]
+    paths = [data_folder / f"populace_layout_year_{year}.h5" for year in years]
+
+    def cut():
+        return create_datasets(
+            datasets=[source],
+            years=years,
+            data_folder=str(data_folder),
+            allow_unmanaged=True,
+        )
+
+    new_draw = DRAW
+    if already_there:
+        cut()
+        # Another release of the source, so the next cut writes other tables.
+        cut_from = requested_dataset_source_identity("us", source)
+        _write_entity_tables(source, draw=OTHER_DRAW)
+        later = cut_from["mtime_ns"] + 10**9
+        os.utime(source, ns=(later, later))
+        new_draw = OTHER_DRAW
+    before = [path.read_bytes() if path.exists() else None for path in paths]
+    assert all((content is not None) == already_there for content in before)
+
+    def fail():
+        raise OSError(28, "No space left on device")
+
+    with _just_before(step, fail) as fired:
+        with pytest.raises(OSError, match="No space left"):
+            cut()
+
+    assert fired == [step]
+    assert _partial_files(data_folder) == []
+    for index, (year, path) in enumerate(zip(years, paths)):
+        if index < MOVED_BEFORE[step]:
+            assert _problem(path, source, year) is None
+            assert _draw(_stored(path, year)) == new_draw
+        elif already_there:
+            assert path.read_bytes() == before[index]
+            assert _draw(_stored(path, year)) == DRAW
+            assert _problem(path, source, year).startswith("it was cut from ")
+        else:
+            assert not path.exists()
+
+    ensure_datasets(
+        datasets=[source],
+        years=years,
+        data_folder=str(data_folder),
+        allow_unmanaged=True,
+    )
+    for year, path in zip(years, paths):
+        assert _problem(path, source, year) is None
+        assert _draw(_stored(path, year)) == new_draw
+    assert _partial_files(data_folder) == []
+
+
+@pytest.mark.parametrize("step", CUT_STEPS)
+def test_a_cut_run_at_any_step_of_another_never_mixes_tables_and_stamps(tmp_path, step):
+    """One cut per file, whichever step of a cut another whole cut runs at:
+    two processes cut the same two year files from different sources (two
+    ``pop.h5`` files, one data folder). Each year file then holds the tables,
+    the renames record and the stamp of the cut that moved it into place
+    last, so the files of the two years can come from different cuts, but no
+    file mixes them."""
+    first_folder, second_folder = tmp_path / "a", tmp_path / "b"
+    first_folder.mkdir()
+    second_folder.mkdir()
+    first = _write_entity_tables(first_folder / "pop.h5")
+    second = _write_entity_tables(second_folder / "pop.h5", draw=OTHER_DRAW)
+    data_folder = tmp_path / "data"
+    years = [YEAR, YEAR + 1]
+    draws = {first: DRAW, second: OTHER_DRAW}
+
+    def cut(source):
+        create_datasets(
+            datasets=[source],
+            years=years,
+            data_folder=str(data_folder),
+            allow_unmanaged=True,
+        )
+
+    with _just_before(step, lambda: cut(second)) as fired:
+        cut(first)
+
+    assert fired == [step]
+    for index, year in enumerate(years):
+        path = data_folder / f"pop_year_{year}.h5"
+        # The second cut moved both files into place while the first was at
+        # ``step``; the first then moved those it had still to move.
+        last = second if index < MOVED_BEFORE[step] else first
+        assert read_year_file_stamp(path) == _stamp_for(last, year)
+        assert _draw(_stored(path, year)) == draws[last]
+        assert read_renames_record(path) == RENAME
+        assert _problem(path, last, year) is None
     assert _partial_files(data_folder) == []
 
 
