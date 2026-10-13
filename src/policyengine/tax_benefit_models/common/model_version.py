@@ -388,6 +388,28 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     "inputs were mapped when it was calculated; run again "
                     "before saving"
                 )
+        if self.country_code == "uk":
+            from policyengine.tax_benefit_models.uk.datasets import (
+                OUTPUT_STAMP_KEY,
+                save_output,
+            )
+
+            # The stamp the run recorded, not one made now: the year file the
+            # output was calculated from, and the package versions it was
+            # calculated with.
+            output: Any = simulation.output_dataset
+            uk_stamp = (getattr(output, "metadata", None) or {}).get(OUTPUT_STAMP_KEY)
+            if uk_stamp is None:
+                raise ValueError(
+                    "This UK output does not record what it was calculated "
+                    "from and with; run again before saving"
+                )
+            # The tables and the stamp reach the output's path in one step,
+            # so neither a save that stops part-way nor another process
+            # saving to the same path leaves one run's tables under another
+            # run's stamp.
+            save_output(output, uk_stamp)
+            return
         simulation.output_dataset.save()
         if serialized_spm is not None:
             # Store UTF-8 JSON in a dataset rather than an attribute: the
@@ -443,29 +465,63 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     "stored inputs (it has no record of them); run it again"
                 )
 
-        if self.country_code == "uk":
-            from policyengine.tax_benefit_models.uk.datasets import (
-                _year_file_records_data_year,
+        def hydrate(path: str, **kept: Any) -> Any:
+            return self._dataset_class(
+                id=simulation.id,
+                name=simulation.dataset.name,
+                description=simulation.dataset.description,
+                filepath=path,
+                year=simulation.dataset.year,
+                is_output_dataset=True,
+                **kept,
             )
 
-            # UK outputs saved before runs anchored on the observed data year
-            # (PolicyEngine/policyengine.py#556) took a projected year as
-            # observed and uprated the State Pension by CPI, so they are not
-            # reused. ``Simulation.ensure()`` runs such a simulation again.
-            if not _year_file_records_data_year(Path(filepath)):
-                raise ValueError(
-                    "Saved UK simulation predates anchoring on the observed "
-                    "data year (it records none); run it again"
-                )
+        if self.country_code == "uk":
+            from policyengine.provenance.year_file_stamp import read_one_file
+            from policyengine.tax_benefit_models.uk.datasets import (
+                OUTPUT_STAMP_KEY,
+                input_year_file_stamp,
+                output_stamp,
+                output_stamp_problem,
+            )
 
-        simulation.output_dataset = self._dataset_class(
-            id=simulation.id,
-            name=simulation.dataset.name,
-            description=simulation.dataset.description,
-            filepath=filepath,
-            year=simulation.dataset.year,
-            is_output_dataset=True,
-        )
+            # The stamp a run of the simulation's dataset would record now:
+            # the installed package versions and the year-file stamp the
+            # dataset keeps.
+            expected = output_stamp(input_year_file_stamp(simulation.dataset))
+
+            def read(path: str) -> Any:
+                # Outputs calculated with other package versions, from
+                # another year file than the simulation's dataset is read
+                # from, or from another cut of it (cut again after the
+                # bundle re-pinned its dataset, its local source changed or
+                # a package was upgraded), hold other results. So do outputs
+                # saved before runs anchored on the observed data year
+                # (PolicyEngine/policyengine.py#556), which took a projected
+                # year as observed and uprated the State Pension by CPI.
+                # None is reused: ``Simulation.ensure()`` runs such a
+                # simulation again. A missing file raises
+                # ``FileNotFoundError`` here.
+                problem = output_stamp_problem(
+                    path, expected["year_file"], expected["packages"]
+                )
+                if problem is not None:
+                    raise ValueError(
+                        f"Saved UK simulation output {path} is out of date: "
+                        f"{problem}. Run the simulation again "
+                        "(Simulation.ensure() does so)."
+                    )
+                # The stored stamp equals ``expected``; kept so that saving
+                # the loaded output again writes it.
+                return hydrate(path, metadata={OUTPUT_STAMP_KEY: expected})
+
+            # The stamp is checked and the tables are read through separate
+            # opens of the file, and another process can move another output
+            # onto the path in between. ``read_one_file`` checks that both
+            # read one unchanged file, and reads again if not.
+            simulation.output_dataset = read_one_file(filepath, read)
+        else:
+            simulation.output_dataset = hydrate(filepath)
         if self.country_code == "us":
             from policyengine.core.spm import SPMSelection
 

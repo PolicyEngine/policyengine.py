@@ -27,7 +27,12 @@ This module holds what the countries share:
 - each requested dataset's year-file stem and source identity, refusing two
   sources that would share year files (:func:`year_file_sources`);
 - writing a year file beside its path and moving it into place only once it
-  is stamped (:func:`temporary_year_file`, :func:`publish_year_file`).
+  is stamped (:func:`temporary_year_file`, :func:`publish_year_file`);
+- reading a file's stamp and its tables from one file, though each is read
+  through its own open of the path (:func:`read_one_file`).
+
+A saved UK simulation output is written, stamped and read the same way (see
+``tax_benefit_models.uk.datasets.OUTPUT_STAMP_H5_DATASET``).
 """
 
 from __future__ import annotations
@@ -35,10 +40,10 @@ from __future__ import annotations
 import json
 import os
 import secrets
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from importlib import metadata as importlib_metadata
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, TypeVar
 
 from .dataset_materialization import (
     describe_dataset_source_identity,
@@ -180,6 +185,57 @@ def publish_year_file(
     os.replace(temporary, path)
 
 
+_Read = TypeVar("_Read")
+
+
+def read_one_file(
+    path: str | Path, read: Callable[[str], _Read], attempts: int = 3
+) -> _Read:
+    """Return ``read(path)``, having checked that it read one unchanged file.
+
+    ``read`` may open ``path`` several times, for example once for a stamp
+    and once for the tables. Another process can move another file onto the
+    path in between (:func:`publish_year_file` does), so what one open reads
+    need not belong with what the next reads.
+
+    The file at ``path`` is therefore held open while ``read`` runs. After it
+    returns, ``path`` must still name that file (the same device and inode,
+    which the file system does not give to another file while this one is
+    held open), and the file must have the size and modification time it had
+    before. If not, ``read`` runs again, up to ``attempts`` times in all, and
+    then ``RuntimeError`` is raised. A file moved onto the path is another
+    file, even when its contents are those of an earlier one.
+
+    Two changes are not noticed: a file rewritten in place to the same size
+    within one tick of the file system's modification time, and a file
+    replaced and then put back by moving another hard link to it onto the
+    path. Neither ``create_datasets`` nor ``save_output`` writes that way:
+    each moves a newly written file onto the path.
+
+    Whatever ``read`` raises is raised, as is whatever opening ``path``
+    raises (``FileNotFoundError`` for a missing file).
+    """
+    path = str(path)
+    for _ in range(attempts):
+        with open(path, "rb") as held:
+            before = os.fstat(held.fileno())
+            result = read(path)
+            after = os.fstat(held.fileno())
+            try:
+                named = os.stat(path)
+            except FileNotFoundError:
+                continue
+        if os.path.samestat(named, before) and (
+            after.st_size,
+            after.st_mtime_ns,
+        ) == (before.st_size, before.st_mtime_ns):
+            return result
+    raise RuntimeError(
+        f"{path} was replaced or modified while it was read, {attempts} times; "
+        "read it again once it is no longer being written"
+    )
+
+
 def is_version_map(value: Any) -> bool:
     """Whether ``value`` maps package names to versions, ``None`` for absent."""
     return isinstance(value, dict) and all(
@@ -213,19 +269,40 @@ def source_and_package_differences(
             "requested source is "
             f"{describe_dataset_source_identity(current['source'])}"
         )
-    stamped_packages, packages = stamp["packages"], current["packages"]
-    for name in sorted(stamped_packages.keys() | packages.keys()):
+    reasons.extend(package_differences(stamp["packages"], current["packages"]))
+    return reasons
+
+
+def package_differences(
+    stamped: Mapping[str, Optional[str]],
+    packages: Mapping[str, Optional[str]],
+    done: str = "cut",
+) -> list[str]:
+    """Return the clauses naming the package versions a stamp differs in.
+
+    ``stamped`` is the version map a stamp records and ``packages`` the one a
+    stamp made now would (each as :func:`is_version_map` accepts). ``done``
+    says what the stamped file had done to it with those versions: a year
+    file was "cut" with them, an output "calculated". One clause, starting
+    "it", names each package whose version differs, in name order. A package
+    ``stamped`` records that ``packages`` does not is named too, and a
+    package recorded in both with one version is not.
+
+    Returns no clause exactly when the two maps are equal.
+    """
+    reasons = []
+    for name in sorted(stamped.keys() | packages.keys()):
         if name not in packages:
             reasons.append(
-                f"it records the {name} version it was cut with, which this "
+                f"it records the {name} version it was {done} with, which this "
                 "version of policyengine.py does not check"
             )
             continue
-        if name in stamped_packages and stamped_packages[name] == packages[name]:
+        if name in stamped and stamped[name] == packages[name]:
             continue
-        cut_with = (
-            f"{name} {stamped_packages[name]}"
-            if stamped_packages.get(name) is not None
+        done_with = (
+            f"{name} {stamped[name]}"
+            if stamped.get(name) is not None
             else f"no recorded {name} version"
         )
         installed = (
@@ -233,7 +310,7 @@ def source_and_package_differences(
             if packages[name] is not None
             else f"{name} is not installed"
         )
-        reasons.append(f"it was cut with {cut_with}, and {installed}")
+        reasons.append(f"it was {done} with {done_with}, and {installed}")
     return reasons
 
 
