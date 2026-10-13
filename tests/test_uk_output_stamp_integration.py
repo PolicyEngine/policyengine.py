@@ -3,16 +3,19 @@
 These tests run, save, load and ensure UK simulations over a real
 policyengine-uk engine, on the seven-person 2024 dataset of
 ``test_uk_year_file_data_year.py``. Each replays one way a saved output could
-be reused although it holds results calculated from other data:
+be reused although it holds results calculated from other data, or with
+other package versions:
 
 - the bundle re-pins a logical dataset name to another revision and sha256,
   and ``ensure_datasets`` cuts the year files again;
 - a local source is rewritten in place, and the year files are cut again;
 - policyengine-uk or policyengine-core is upgraded, before and after the
   year files are cut again;
+- a year file is run with other versions than cut it, and those that cut it
+  are installed again;
 - the simulation's dataset is another year's file in the same folder;
-- the output was saved by an earlier release, before the stamp existed, or
-  its save stopped part-way.
+- the output was saved by an earlier release, before the stamp existed;
+- another process saves another output to the path while this one is loaded.
 
 In each case ``Simulation.load()`` refuses the output, naming what changed,
 and ``Simulation.ensure()`` calculates it again from the simulation's dataset
@@ -25,14 +28,14 @@ the engine's run:
 - **Ensure agrees with load.** ``Simulation.ensure()`` runs the simulation
   exactly when its output is missing or ``Simulation.load()`` would refuse
   it, and the output it saves is current exactly when the simulation's
-  dataset keeps no year-file stamp, or one with this release's year-file
-  format revision and the installed package versions.
+  dataset keeps no year-file stamp or a well-formed one.
 """
 
 from __future__ import annotations
 
 import os
 import re
+import shutil
 import tempfile
 import uuid
 from pathlib import Path
@@ -64,7 +67,6 @@ from policyengine.tax_benefit_models.uk.datasets import (  # noqa: E402
     OUTPUT_STAMP_H5_DATASET,
     OUTPUT_STAMP_KEY,
     OUTPUT_STAMP_REVISION,
-    OUTPUT_WITHOUT_DATA_YEAR,
     UNREADABLE_YEAR_FILE_STAMP,
     UNSTAMPED_OUTPUT,
     YEAR_FILE_STAMP_KEY,
@@ -72,6 +74,7 @@ from policyengine.tax_benefit_models.uk.datasets import (  # noqa: E402
     PolicyEngineUKDataset,
     ensure_datasets,
     input_year_file_stamp,
+    installed_output_packages,
     installed_package_versions,
     load_datasets,
     output_stamp,
@@ -183,6 +186,36 @@ def _assert_same_output(first: Simulation, second: Simulation) -> None:
         )
 
 
+def _upgrade(patcher, package: str, version: str = "999.0.0") -> None:
+    """Make ``package`` report ``version`` as installed, to year files and to
+    outputs alike, as an upgrade would. The engine's code stays the same."""
+    cut_with = installed_package_versions()
+    calculated_with = installed_output_packages()
+    patcher.setattr(
+        uk_datasets,
+        "installed_package_versions",
+        lambda: {**cut_with, package: version},
+    )
+    patcher.setattr(
+        uk_datasets,
+        "installed_output_packages",
+        lambda: {**calculated_with, package: version},
+    )
+
+
+def _edit(source: str) -> None:
+    """Rewrite a local source in place, with a modification time of its own
+    whatever the file system's resolution."""
+    before = requested_dataset_source_identity("uk", source)
+    _write_source(Path(source), _replacement_tables())
+    os.utime(source, ns=(before["mtime_ns"] + 10**9, before["mtime_ns"] + 10**9))
+    assert requested_dataset_source_identity("uk", source) != before
+
+
+def _partial_files(folder: Path) -> list[Path]:
+    return sorted(Path(folder).glob(".*.partial"))
+
+
 # --- What a run records --------------------------------------------------
 
 
@@ -204,7 +237,7 @@ def test_year_files_keep_their_stamp_in_memory_as_on_disk(tmp_path):
         assert input_year_file_stamp(loaded[key]) == on_disk
 
 
-def test_a_saved_output_records_the_stamp_of_its_year_file(tmp_path):
+def test_a_saved_output_records_what_it_was_calculated_from_and_with(tmp_path):
     source = _new_source(tmp_path)
     dataset = _ensure(source, tmp_path / "data")[KEY]
     year_file = read_year_file_stamp(dataset.filepath)
@@ -213,7 +246,13 @@ def test_a_saved_output_records_the_stamp_of_its_year_file(tmp_path):
     simulation = _simulation(dataset, run_id)
     simulation.run()
 
-    stamp = {"revision": OUTPUT_STAMP_REVISION, "year_file": year_file}
+    stamp = {
+        "packages": installed_output_packages(),
+        "revision": OUTPUT_STAMP_REVISION,
+        "year_file": year_file,
+    }
+    assert set(stamp["packages"]) == {"policyengine-core", "policyengine-uk"}
+    assert None not in stamp["packages"].values()
     assert simulation.output_dataset.metadata == {OUTPUT_STAMP_KEY: stamp}
     path = output_dataset_filepath(simulation)
     assert not path.exists()
@@ -222,12 +261,35 @@ def test_a_saved_output_records_the_stamp_of_its_year_file(tmp_path):
     with h5py.File(path, "r") as file:
         assert {DATA_YEAR_KEY, OUTPUT_STAMP_H5_DATASET, "person"} <= set(file)
     assert output_stamp_problem(path, year_file) is None
+    assert _partial_files(path.parent) == []
 
     reloaded = _simulation(dataset, run_id)
     reloaded.load()
     assert reloaded.output_dataset.metadata == {OUTPUT_STAMP_KEY: stamp}
     assert reloaded.output_dataset.data_year == DATA_YEAR
     _assert_same_output(simulation, reloaded)
+
+
+def test_a_run_records_the_output_revision_it_runs_under(tmp_path, monkeypatch):
+    source = _new_source(tmp_path)
+    dataset = _ensure(source, tmp_path / "data")[KEY]
+    run_id = _run_id()
+
+    with monkeypatch.context() as raised:
+        raised.setattr(uk_datasets, "OUTPUT_STAMP_REVISION", OUTPUT_STAMP_REVISION + 1)
+        simulation, runs = _ensured(dataset, run_id)
+        assert runs == 1
+        revision = simulation.output_dataset.metadata[OUTPUT_STAMP_KEY]["revision"]
+        assert revision == OUTPUT_STAMP_REVISION + 1
+        assert _refusal(dataset, run_id) is None
+
+    path = output_dataset_filepath(simulation)
+    assert _refusal(dataset, run_id) == _out_of_date(
+        path,
+        f"it was saved with output format revision {OUTPUT_STAMP_REVISION + 1}, "
+        "and this version of policyengine.py reads only revision "
+        f"{OUTPUT_STAMP_REVISION}",
+    )
 
 
 def test_saving_writes_the_stamp_the_run_recorded_not_one_made_then(tmp_path):
@@ -241,9 +303,7 @@ def test_saving_writes_the_stamp_the_run_recorded_not_one_made_then(tmp_path):
     simulation = _simulation(dataset, run_id)
     simulation.run()
 
-    _write_source(Path(source), _replacement_tables())
-    identity = requested_dataset_source_identity("uk", source)
-    os.utime(source, ns=(identity["mtime_ns"] + 10**9, identity["mtime_ns"] + 10**9))
+    _edit(source)
     recut = _assert_cut_again(source, data_folder)[KEY]
     new = read_year_file_stamp(recut.filepath)
     assert new != old
@@ -274,6 +334,23 @@ def test_a_loaded_output_saved_again_keeps_its_stamp(tmp_path):
 
     assert read_output_stamp(path) == stamp
     assert _refusal(dataset, run_id) is None
+
+
+def test_an_output_is_saved_where_its_filepath_says(tmp_path):
+    source = _new_source(tmp_path)
+    dataset = _ensure(source, tmp_path / "data")[KEY]
+    simulation = _simulation(dataset, _run_id())
+    simulation.run()
+    moved = tmp_path / "elsewhere" / "output.h5"
+    simulation.output_dataset.filepath = str(moved)
+
+    simulation.save()
+
+    # The tables and the stamp go to one place.
+    assert not output_dataset_filepath(simulation).exists()
+    assert output_stamp_problem(moved, read_year_file_stamp(dataset.filepath)) is None
+    with pd.HDFStore(moved, mode="r") as store:
+        assert len(store["person"]) == 7
 
 
 def test_a_scoped_run_records_the_stamp_of_the_year_file_it_filters(tmp_path):
@@ -312,6 +389,7 @@ def test_a_run_of_data_built_in_memory_records_no_year_file(tmp_path):
     assert runs == 1
     path = output_dataset_filepath(simulation)
     assert read_output_stamp(path) == {
+        "packages": installed_output_packages(),
         "revision": OUTPUT_STAMP_REVISION,
         "year_file": None,
     }
@@ -331,6 +409,32 @@ def test_a_run_of_data_built_in_memory_records_no_year_file(tmp_path):
         "it was calculated from a year file, and the simulation's dataset keeps "
         "no year-file stamp",
     )
+
+
+def test_an_output_from_data_built_in_memory_is_not_reused_after_an_upgrade(
+    tmp_path, monkeypatch
+):
+    built = PolicyEngineUKDataset(
+        name="observed-2026",
+        description="tables taken as observed in 2026",
+        filepath=str(tmp_path / "built.h5"),
+        year=YEAR,
+        data=_with_weights(_tables()),
+    )
+    run_id = _run_id()
+    simulation, _ = _ensured(built, run_id)
+    path = output_dataset_filepath(simulation)
+    calculated_with = installed_output_packages()["policyengine-uk"]
+
+    _upgrade(monkeypatch, "policyengine-uk")
+
+    assert _refusal(built, run_id) == _out_of_date(
+        path,
+        f"it was calculated with policyengine-uk {calculated_with}, and "
+        "policyengine-uk 999.0.0 is installed",
+    )
+    assert _ensured(built, run_id)[1] == 1
+    assert _ensured(built, run_id)[1] == 0
 
 
 # --- Year files cut again ------------------------------------------------
@@ -362,11 +466,8 @@ def test_an_output_is_not_reused_after_its_local_source_is_edited(tmp_path):
     assert runs == 1
     path = output_dataset_filepath(first)
 
-    _write_source(Path(source), _replacement_tables())
-    # A modification time of its own, whatever the file system's resolution.
-    os.utime(source, ns=(old["mtime_ns"] + 10**9, old["mtime_ns"] + 10**9))
+    _edit(source)
     new = requested_dataset_source_identity("uk", source)
-    assert new != old
 
     # Until the year file is cut again, a simulation over it holds the tables
     # the output was calculated from. ``load_datasets`` refuses the year file.
@@ -382,6 +483,9 @@ def test_an_output_is_not_reused_after_its_local_source_is_edited(tmp_path):
         f"{describe_dataset_source_identity(old)}, and the simulation's dataset "
         f"was cut from {describe_dataset_source_identity(new)}",
     )
+    # The dataset loaded before still holds the old cut's tables, and the
+    # output is still what a run of it would give.
+    assert _refusal(first_dataset, run_id) is None
 
     second, runs = _ensured(second_dataset, run_id)
     assert runs == 1
@@ -389,9 +493,8 @@ def test_an_output_is_not_reused_after_its_local_source_is_edited(tmp_path):
     assert read_output_stamp(path)["year_file"]["source"] == new
     # Calculated from the rewritten source, not the one the old output held.
     _assert_matches_direct(second, _direct(source), YEAR)
-    reported = "state_pension"
-    assert list(_frames(second)["person"][reported]) != list(
-        _frames(first)["person"][reported]
+    assert list(_frames(second)["person"]["state_pension"]) != list(
+        _frames(first)["person"]["state_pension"]
     )
 
     third, runs = _ensured(_assert_reused(source, data_folder)[KEY], run_id)
@@ -468,38 +571,76 @@ def test_an_output_is_not_reused_after_a_package_upgrade(
     first, runs = _ensured(dataset, run_id)
     assert runs == 1
     path = output_dataset_filepath(first)
-    cut_with = installed_package_versions()
+    before = installed_output_packages()[package]
 
-    monkeypatch.setattr(
-        uk_datasets,
-        "installed_package_versions",
-        lambda: {**cut_with, package: "999.0.0"},
-    )
+    _upgrade(monkeypatch, package)
 
-    # Before the year file is cut again: the packages that cut it, and
-    # calculated the output, are not the ones installed.
+    # Before the year file is cut again: the versions that calculated the
+    # output are not the ones installed.
     year_file = data_folder / f"tiny_uk_2024_year_{YEAR}.h5"
     stale = _out_of_date(
         path,
-        f"its year file was cut with {package} {cut_with[package]}, and "
-        f"{package} 999.0.0 is installed",
+        f"it was calculated with {package} {before}, and {package} 999.0.0 is "
+        "installed",
     )
     assert _refusal(dataset, run_id) == stale
     assert _refusal(_stored(year_file), run_id) == stale
-    # An output calculated from an out-of-date year file is never current.
+    # A simulation over the old cut, opened directly, is run again once with
+    # the new versions and then reused: it is what a run of that file gives.
     assert _ensured(_stored(year_file), run_id)[1] == 1
-    assert _refusal(_stored(year_file), run_id) == stale
+    assert _refusal(_stored(year_file), run_id) is None
+    recorded = read_output_stamp(path)
+    assert recorded["packages"][package] == "999.0.0"
+    assert recorded["year_file"]["packages"][package] == before
 
+    # ``ensure_datasets`` cuts the year file again, and the output is not the
+    # new cut's.
     recut = _assert_cut_again(source, data_folder)[KEY]
     assert _refusal(recut, run_id) == _out_of_date(
         path,
-        f"it was calculated from a year file cut with {package} "
-        f"{cut_with[package]}, and the simulation's dataset was cut with "
-        f"{package} 999.0.0",
+        f"it was calculated from a year file cut with {package} {before}, and "
+        f"the simulation's dataset was cut with {package} 999.0.0",
     )
     assert _ensured(recut, run_id)[1] == 1
     assert read_output_stamp(path)["year_file"]["packages"][package] == "999.0.0"
     assert _ensured(_assert_reused(source, data_folder)[KEY], run_id)[1] == 0
+
+
+def test_an_output_is_not_reused_when_the_versions_that_cut_its_year_file_return(
+    tmp_path, monkeypatch
+):
+    """A year file cut under one policyengine-uk is opened directly and run
+    under another. With the first installed again, the output's year-file
+    stamp names the installed versions, but the output was not calculated
+    with them."""
+    source = _new_source(tmp_path)
+    data_folder = tmp_path / "data"
+    run_id = _run_id()
+    _ensure(source, data_folder)
+    year_file = data_folder / f"tiny_uk_2024_year_{YEAR}.h5"
+    cut_with = installed_package_versions()["policyengine-uk"]
+
+    with monkeypatch.context() as upgraded:
+        _upgrade(upgraded, "policyengine-uk")
+        simulation, runs = _ensured(_stored(year_file), run_id)
+        assert runs == 1
+        path = output_dataset_filepath(simulation)
+        recorded = read_output_stamp(path)
+        assert recorded["packages"]["policyengine-uk"] == "999.0.0"
+        assert recorded["year_file"]["packages"]["policyengine-uk"] == cut_with
+        assert _refusal(_stored(year_file), run_id) is None
+
+    # The year file is current again, and loads.
+    dataset = _assert_reused(source, data_folder)[KEY]
+    stale = _out_of_date(
+        path,
+        "it was calculated with policyengine-uk 999.0.0, and policyengine-uk "
+        f"{cut_with} is installed",
+    )
+    assert _refusal(dataset, run_id) == stale
+    assert _refusal(_stored(year_file), run_id) == stale
+    assert _ensured(dataset, run_id)[1] == 1
+    assert _ensured(dataset, run_id)[1] == 0
 
 
 def test_an_output_is_not_reused_for_another_years_file(tmp_path):
@@ -537,13 +678,16 @@ def test_raising_the_year_file_revision_makes_saved_outputs_out_of_date(
         uk_datasets, "YEAR_FILE_STAMP_REVISION", YEAR_FILE_STAMP_REVISION + 1
     )
 
-    assert _refusal(dataset, run_id) == _out_of_date(
-        path,
-        "it was calculated from a year file cut with year-file format revision "
-        f"{YEAR_FILE_STAMP_REVISION}, and this version of policyengine.py reads "
-        f"only revision {YEAR_FILE_STAMP_REVISION + 1}",
-    )
+    # The dataset still holds the tables the output was calculated from.
+    assert _refusal(dataset, run_id) is None
+    # ``ensure_datasets`` cuts the year files again under the new revision.
     recut = _assert_cut_again(source, data_folder)[KEY]
+    assert _refusal(recut, run_id) == _out_of_date(
+        path,
+        "it was calculated from a year file of year-file format revision "
+        f"{YEAR_FILE_STAMP_REVISION}, and the simulation's dataset is of "
+        f"revision {YEAR_FILE_STAMP_REVISION + 1}",
+    )
     assert _ensured(recut, run_id)[1] == 1
     assert _ensured(_assert_reused(source, data_folder)[KEY], run_id)[1] == 0
 
@@ -579,59 +723,71 @@ def test_saving_an_output_that_records_no_stamp_is_refused(tmp_path):
         simulation.save()
     # Refused before anything is written.
     assert not output_dataset_filepath(simulation).exists()
+    assert _partial_files(tmp_path / "data") == []
 
 
-def test_a_save_that_stops_before_the_stamp_leaves_an_output_that_is_rerun(
+@pytest.mark.parametrize("stop", ["in the tables", "at the stamp"])
+def test_a_save_that_fails_leaves_the_saved_output_whole_and_current(
+    tmp_path, monkeypatch, stop
+):
+    source = _new_source(tmp_path)
+    data_folder = tmp_path / "data"
+    dataset = _ensure(source, data_folder)[KEY]
+    run_id = _run_id()
+    simulation, _ = _ensured(dataset, run_id)
+    path = output_dataset_filepath(simulation)
+    before = path.read_bytes()
+
+    def stopped(*args, **kwargs):
+        raise RuntimeError("stopped part-way")
+
+    with monkeypatch.context() as patcher:
+        if stop == "in the tables":
+            put = pd.HDFStore.put
+
+            def put_until_household(self, key, value, *args, **kwargs):
+                if key == "household":
+                    raise RuntimeError("stopped part-way")
+                return put(self, key, value, *args, **kwargs)
+
+            patcher.setattr(pd.HDFStore, "put", put_until_household)
+        else:
+            patcher.setattr(uk_datasets, "publish_year_file", stopped)
+        with pytest.raises(RuntimeError, match="stopped part-way"):
+            simulation.save()
+
+    # The save wrote beside the path, so the output there is untouched.
+    assert path.read_bytes() == before
+    assert _partial_files(data_folder) == []
+    assert _refusal(dataset, run_id) is None
+    assert _ensured(dataset, run_id)[1] == 0
+
+
+def test_a_first_save_that_fails_leaves_no_output_and_the_next_ensure_runs(
     tmp_path, monkeypatch
 ):
     source = _new_source(tmp_path)
-    dataset = _ensure(source, tmp_path / "data")[KEY]
+    data_folder = tmp_path / "data"
+    dataset = _ensure(source, data_folder)[KEY]
     run_id = _run_id()
     simulation = _simulation(dataset, run_id)
     simulation.run()
     path = output_dataset_filepath(simulation)
 
-    def stop(*args, **kwargs):
+    def stopped(*args, **kwargs):
         raise RuntimeError("stopped before the stamp")
 
     with monkeypatch.context() as patcher:
-        patcher.setattr(uk_datasets, "write_output_stamp", stop)
+        patcher.setattr(uk_datasets, "publish_year_file", stopped)
         with pytest.raises(RuntimeError, match="stopped before the stamp"):
             simulation.save()
 
-    # The tables and the data year are there; the stamp, written last, is not.
-    with pd.HDFStore(path, mode="r") as store:
-        assert f"/{DATA_YEAR_KEY}" in store.keys()
-    assert read_output_stamp(path) is None
-    assert _refusal(dataset, run_id) == _out_of_date(path, UNSTAMPED_OUTPUT)
+    assert not path.exists()
+    assert _partial_files(data_folder) == []
+    with pytest.raises(FileNotFoundError):
+        _simulation(dataset, run_id).load()
     assert _ensured(dataset, run_id)[1] == 1
     assert _refusal(dataset, run_id) is None
-
-
-def test_a_save_that_stops_in_the_tables_leaves_an_output_that_is_rerun(
-    tmp_path, monkeypatch
-):
-    source = _new_source(tmp_path)
-    dataset = _ensure(source, tmp_path / "data")[KEY]
-    run_id = _run_id()
-    simulation, _ = _ensured(dataset, run_id)
-    path = output_dataset_filepath(simulation)
-    put = pd.HDFStore.put
-
-    def put_until_household(self, key, value, *args, **kwargs):
-        if key == "household":
-            raise RuntimeError("stopped part-way")
-        return put(self, key, value, *args, **kwargs)
-
-    with monkeypatch.context() as patcher:
-        patcher.setattr(pd.HDFStore, "put", put_until_household)
-        with pytest.raises(RuntimeError, match="stopped part-way"):
-            simulation.save()
-
-    # Saving truncates the file first, so the stamp of the save before is gone.
-    assert read_output_stamp(path) is None
-    assert _refusal(dataset, run_id) == _out_of_date(path, OUTPUT_WITHOUT_DATA_YEAR)
-    assert _ensured(dataset, run_id)[1] == 1
 
 
 def test_a_missing_output_is_calculated_without_a_refusal(tmp_path):
@@ -644,14 +800,65 @@ def test_a_missing_output_is_calculated_without_a_refusal(tmp_path):
     assert _ensured(dataset, run_id)[1] == 1
 
 
+# --- Another process saving to the same path ------------------------------
+
+
+def test_an_output_replaced_while_it_is_loaded_is_checked_again(tmp_path, monkeypatch):
+    """The output is checked, and then, before its tables are read, another
+    process moves the output of another cut onto the path. The tables read
+    are that other output's, so the check is made again, and refuses it."""
+    source = _new_source(tmp_path)
+    data_folder = tmp_path / "data"
+    run_id = _run_id()
+    first_dataset = _ensure(source, data_folder)[KEY]
+    old = requested_dataset_source_identity("uk", source)
+    first, _ = _ensured(first_dataset, run_id)
+    path = output_dataset_filepath(first)
+    ours = tmp_path / "ours.h5"
+    shutil.copy(path, ours)
+
+    # Another process's output: the same id over the year file cut again.
+    _edit(source)
+    new = requested_dataset_source_identity("uk", source)
+    second_dataset = _assert_cut_again(source, data_folder)[KEY]
+    second, runs = _ensured(second_dataset, run_id)
+    assert runs == 1
+    theirs = tmp_path / "theirs.h5"
+    shutil.copy(path, theirs)
+    os.replace(ours, path)
+    assert _refusal(first_dataset, run_id) is None
+
+    check = uk_datasets.output_stamp_problem
+    checks = []
+
+    def check_then_replace(*args, **kwargs):
+        problem = check(*args, **kwargs)
+        checks.append(problem)
+        if len(checks) == 1:
+            os.replace(theirs, path)
+        return problem
+
+    monkeypatch.setattr(uk_datasets, "output_stamp_problem", check_then_replace)
+    refusal = _refusal(first_dataset, run_id)
+
+    mismatch = (
+        "it was calculated from a year file cut from "
+        f"{describe_dataset_source_identity(new)}, and the simulation's dataset "
+        f"was cut from {describe_dataset_source_identity(old)}"
+    )
+    assert checks == [None, mismatch]
+    assert refusal == _out_of_date(path, mismatch)
+
+
 # --- Ensure agrees with load ---------------------------------------------
 
 
 def _stand_in_run(self, simulation):
     """What the engine's run records, without the engine.
 
-    A fixed two-household output stamped as ``PolicyEngineUKLatest.run``
-    stamps one: from the year-file stamp the simulation's dataset keeps.
+    A fixed output stamped as ``PolicyEngineUKLatest.run`` stamps one: with
+    the installed versions and the year-file stamp the simulation's dataset
+    keeps.
     """
     simulation.output_dataset = PolicyEngineUKDataset(
         id=simulation.id,
@@ -691,11 +898,18 @@ def _dataset_stamps() -> dict[str, object]:
 
 
 DATASET_STAMPS = st.sampled_from(sorted(_dataset_stamps()))
-#: The stamps of :func:`_dataset_stamps` that are none, or what this release
-#: would write for their own source and year: its year-file format revision
-#: and the installed package versions. Whether a year file is the one for the
-#: source and year requested is ``load_datasets``' check, not the output's.
-THIS_RELEASES = ("none", "current", "another source", "another year")
+#: The stamps of :func:`_dataset_stamps` that are none or well formed, and so
+#: name the tables a run reads. Whether a year file is the one for the source
+#: and year requested, cut with the installed versions, is ``load_datasets``'
+#: check, not the output's.
+NAMES_ITS_TABLES = (
+    "none",
+    "current",
+    "another source",
+    "another year",
+    "another policyengine-uk",
+    "another revision",
+)
 #: What is at the output's path: an output saved by a run over a dataset
 #: keeping the named stamp, or one of these.
 SAVED = st.one_of(
@@ -706,6 +920,7 @@ SAVED = st.one_of(
             "no stamp",
             "no data year",
             "another output revision",
+            "other versions",
             "malformed stamp",
             "not hdf5",
         ]
@@ -740,18 +955,25 @@ def _save_as(path: Path, saved: str, directory: Path, run_id: str) -> None:
     if saved == "no data year":
         simulation.output_dataset.data_year = None
     simulation.save()
+    recorded = read_output_stamp(path)
     if saved == "no stamp" or saved == "no data year":
         with h5py.File(path, "a") as file:
             del file[OUTPUT_STAMP_H5_DATASET]
     elif saved == "another output revision":
+        write_output_stamp(path, {**recorded, "revision": OUTPUT_STAMP_REVISION + 1})
+    elif saved == "other versions":
         write_output_stamp(
-            path, {**read_output_stamp(path), "revision": OUTPUT_STAMP_REVISION + 1}
+            path,
+            {
+                **recorded,
+                "packages": {**recorded["packages"], "policyengine-uk": "0.0.1"},
+            },
         )
     elif saved == "malformed stamp":
         write_output_stamp(path, {"revision": OUTPUT_STAMP_REVISION})
 
 
-@settings(max_examples=120, deadline=None)
+@settings(max_examples=150, deadline=None)
 @given(saved=SAVED, kept=DATASET_STAMPS)
 def test_ensure_runs_exactly_when_load_would_refuse(saved, kept):
     with tempfile.TemporaryDirectory() as directory:
@@ -770,9 +992,9 @@ def _check_ensure_agrees_with_load(directory: Path, saved: str, kept: str) -> No
     problem = None if missing else output_stamp_problem(path, dataset_stamp)
     # The check is the one the engine-free tests state: current exactly when
     # the output was saved by a run over the stamp the dataset keeps, and
-    # that stamp is none or this release's.
+    # that stamp is none or well formed.
     assert (problem is None and not missing) == (
-        saved == kept and kept in THIS_RELEASES
+        saved == kept and kept in NAMES_ITS_TABLES
     )
 
     if missing:
@@ -790,10 +1012,11 @@ def _check_ensure_agrees_with_load(directory: Path, saved: str, kept: str) -> No
     )
     assert read_output_stamp(path) == output_stamp(dataset_stamp)
 
-    # What ensure leaves is current exactly when the dataset keeps no stamp,
-    # or one this release would write: an output calculated from an
-    # out-of-date year file is calculated again every time.
-    current = kept in THIS_RELEASES
+    # What ensure leaves is current exactly when the dataset keeps no stamp
+    # or a well-formed one: a stamp that is unreadable or malformed names no
+    # tables, so an output calculated from such a year file is calculated
+    # again every time.
+    current = kept in NAMES_ITS_TABLES
     assert (output_stamp_problem(path, dataset_stamp) is None) == current
     assert _ensured(dataset, run_id, run=_stand_in_run)[1] == (0 if current else 1)
 
