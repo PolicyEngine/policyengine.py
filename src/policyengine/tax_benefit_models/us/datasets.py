@@ -26,6 +26,9 @@ from policyengine.tax_benefit_models.common.model_version import (
     build_runtime_dataset_provenance,
 )
 from policyengine.tax_benefit_models.us.legacy_inputs import (
+    _ABSENT as _ABSENT_RECORD,
+)
+from policyengine.tax_benefit_models.us.legacy_inputs import (
     RENAMES_RECORD_KEY,
     apply_legacy_input_renames_to_microsimulation,
     check_yearly_periods,
@@ -35,6 +38,21 @@ from policyengine.tax_benefit_models.us.legacy_inputs import (
     write_year_file_stamp,
     year_file_stamp,
     year_file_stamp_problem,
+)
+from policyengine.tax_benefit_models.us.legacy_spm import (
+    RECORD_KEY as LEGACY_SPM_RECORD_KEY,
+)
+from policyengine.tax_benefit_models.us.legacy_spm import (
+    LegacySPMDeclarations,
+    LegacySPMProfile,
+    add_to_year_file_frames,
+    derive_from_stored_tables,
+    expected_profile,
+    legacy_spm_source,
+    parse_record,
+    read_record_value,
+    write_record,
+    year_file_problem,
 )
 from policyengine.utils.hashing import sha256_file
 
@@ -117,6 +135,12 @@ class PolicyEngineUSDataset(Dataset):
         renames = self.metadata.get(RENAMES_RECORD_KEY)
         if renames is not None:
             write_renames_record(filepath, renames)
+        # BACKWARD COMPATIBILITY (#597, #598): the legacy SPM declarations a
+        # year file was cut with, or an output calculated with (see
+        # ``legacy_spm.record``).
+        legacy_spm_record = parse_record(self.metadata.get(LEGACY_SPM_RECORD_KEY))
+        if legacy_spm_record is not None:
+            write_record(filepath, legacy_spm_record)
 
     def load(self) -> None:
         """Load dataset from HDF5 file into this instance."""
@@ -125,6 +149,15 @@ class PolicyEngineUSDataset(Dataset):
         renames = read_renames_record(path)
         if renames is not None:
             self.metadata[RENAMES_RECORD_KEY] = renames
+        # BACKWARD COMPATIBILITY (#597, #598): keep the stored record as it
+        # is, readable or not; runs and loaders judge it (``legacy_spm.record``).
+        legacy_spm_record = read_record_value(path)
+        if isinstance(legacy_spm_record, dict):
+            self.metadata[LEGACY_SPM_RECORD_KEY] = legacy_spm_record
+        elif legacy_spm_record is not _ABSENT_RECORD:
+            self.metadata[LEGACY_SPM_RECORD_KEY] = None
+        else:
+            self.metadata.pop(LEGACY_SPM_RECORD_KEY, None)
         if _is_policyengine_core_h5(path):
             self.data = _load_policyengine_core_h5(path, self.year)
             return
@@ -411,6 +444,12 @@ def create_datasets(
         # Map stored inputs the engine has since renamed before extracting,
         # so each year's file stores the live input rather than dropping it.
         legacy_input_renames = apply_legacy_input_renames_to_microsimulation(sim)
+        # BACKWARD COMPATIBILITY (#597, #598): a legacy certified source
+        # carries no SPM declarations, so derive them while its stored
+        # evidence is still available; year files keep model inputs only.
+        legacy_spm = _legacy_spm_declarations(
+            sim, source.bundle_dataset, Path(data_folder)
+        )
 
         for year in years:
             # Get all input variables from the simulation
@@ -548,15 +587,24 @@ def create_datasets(
                     elif entity_name == "tax_unit":
                         tax_unit_df = entity_df
 
+            metadata: dict[str, Any] = {
+                RENAMES_RECORD_KEY: dict(sorted(legacy_input_renames.items()))
+            }
+            if legacy_spm is not None:
+                # BACKWARD COMPATIBILITY (#597, #598): store the derived
+                # declarations as the ordinary inputs newer sources carry.
+                add_to_year_file_frames(person_df, spm_unit_df, legacy_spm)
+                metadata[LEGACY_SPM_RECORD_KEY] = legacy_spm.record.model_dump(
+                    mode="json"
+                )
+
             us_dataset = PolicyEngineUSDataset(
                 id=f"{dataset_stem}_year_{year}",
                 name=f"{dataset_stem}-year-{year}",
                 description=f"US Dataset for year {year} based on {dataset_stem}",
                 filepath=f"{data_folder}/{dataset_stem}_year_{year}.h5",
                 year=int(year),
-                metadata={
-                    RENAMES_RECORD_KEY: dict(sorted(legacy_input_renames.items()))
-                },
+                metadata=metadata,
                 data=USYearData(
                     person=MicroDataFrame(person_df, weights="person_weight"),
                     household=MicroDataFrame(household_df, weights="household_weight"),
@@ -577,6 +625,57 @@ def create_datasets(
             result[dataset_key] = us_dataset
 
     return result
+
+
+def _legacy_spm_declarations(
+    sim: Any,
+    bundle_dataset: Optional[MaterializedDataset],
+    data_folder: Path,
+) -> Optional[LegacySPMDeclarations]:
+    """Derive the SPM declarations a legacy certified source lacks.
+
+    BACKWARD COMPATIBILITY (#597, #598). Only a bundle dataset whose verified
+    SHA-256 is registered in ``legacy_spm.registry`` gets any; see
+    ``legacy_spm``.
+    """
+    source = legacy_spm_source(bundle_dataset.sha256 if bundle_dataset else None)
+    if source is None:
+        return None
+    declarations, _ = derive_from_stored_tables(
+        source, getattr(sim, "dataset", None), data_dir=data_folder
+    )
+    return declarations
+
+
+def _managed_source_sha256(dataset: Optional[str]) -> Optional[str]:
+    """Return the certified SHA-256 of a managed bundle dataset reference.
+
+    A managed dataset may be named by its manifest name or by the URI that
+    name resolves to (the form the region registry's dataset paths take).
+    Any other reference is unmanaged and has no certified hash.
+    """
+    manifest = get_release_manifest("us")
+    if dataset is None or dataset == manifest.default_dataset_uri:
+        name: Optional[str] = manifest.default_dataset
+    elif dataset in manifest.datasets:
+        name = dataset
+    else:
+        name = next(
+            (
+                candidate
+                for candidate in manifest.datasets
+                if resolve_dataset_reference("us", candidate) == dataset
+            ),
+            None,
+        )
+    reference = manifest.datasets.get(name) if name is not None else None
+    return reference.sha256 if reference is not None else None
+
+
+def _expected_legacy_spm_profile(dataset: Optional[str]) -> Optional[LegacySPMProfile]:
+    """Return the legacy SPM profile a dataset reference's year files need."""
+    source = legacy_spm_source(_managed_source_sha256(dataset))
+    return expected_profile(source) if source is not None else None
 
 
 def load_datasets(
@@ -616,6 +715,17 @@ def load_datasets(
                         f"US year file {filepath} is out of date: {problem}. "
                         "Regenerate it with ensure_datasets() or "
                         "create_datasets()."
+                    )
+                # BACKWARD COMPATIBILITY (#597, #598): a legacy source's year
+                # file must carry exactly the declarations this release derives.
+                legacy_problem = year_file_problem(
+                    filepath, _expected_legacy_spm_profile(dataset)
+                )
+                if legacy_problem is not None:
+                    raise ValueError(
+                        f"US year file {filepath} is out of date: "
+                        f"{legacy_problem}. Regenerate it with ensure_datasets() "
+                        "or create_datasets()."
                     )
             us_dataset = PolicyEngineUSDataset(
                 name=f"{dataset_stem}-year-{year}",
@@ -1300,6 +1410,19 @@ def ensure_datasets(
                     "files again.",
                     filepath,
                     problem,
+                )
+                continue
+            # BACKWARD COMPATIBILITY (#597, #598): see ``legacy_spm.record``.
+            legacy_problem = year_file_problem(
+                filepath, _expected_legacy_spm_profile(dataset)
+            )
+            if legacy_problem is not None:
+                all_current = False
+                logger.warning(
+                    "US year file %s is out of date: %s. Creating the year "
+                    "files again.",
+                    filepath,
+                    legacy_problem,
                 )
 
     if all_current:

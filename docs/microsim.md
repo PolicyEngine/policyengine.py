@@ -87,6 +87,24 @@ before passing them to the country model. Generic adult/child counts remain
 separate. The native source enrichment is not recalibration, and inherited
 schema-5 calibration diagnostics cannot be relabeled as schema 6.
 
+**Legacy SPM sources (backward compatibility).** Some certified US sources
+predate SPM declarations, for example the ACS-local Build O release. For those
+sources, .py derives the declarations from evidence they carry, following
+Census's ACS SPM methodology, which measures the household population only:
+
+- ACS group-quarters SPM units are outside the SPM measurement. Their SPM
+  thresholds, resources and poverty indicators are missing (NaN).
+- Poverty indicators on those sources are floats: 1.0, 0.0, or NaN for "not
+  measured".
+- Poverty rates count measured people only. A group with nobody measured has
+  a rate of `None`, not 0.
+- The sources' ASEC and PUF records take the certified SPM independence role
+  from the national release.
+
+Ordinary tax, benefit and income results are unchanged. Outputs record the
+declarations they used under `legacy_spm_declarations`. See
+[the runbook](engineering/runbooks/us-legacy-spm-sources.md).
+
 The wrapper's native pandas HDF loader accepts files that store only calibrated
 `household_weight`. It maps missing person and group weight columns through
 native membership IDs in memory, retaining supplied weight columns and the

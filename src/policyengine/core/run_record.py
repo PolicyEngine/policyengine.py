@@ -193,6 +193,15 @@ def build_simulation_run_record_payloads(
     if renames is not None:
         results_payload["legacy_input_renames"] = dict(renames)
 
+    # BACKWARD COMPATIBILITY (#597, #598): the legacy SPM declarations a
+    # US run applied, which change its SPM results. See
+    # ``policyengine.tax_benefit_models.us.legacy_spm``.
+    legacy_spm_declarations = (
+        getattr(simulation.output_dataset, "metadata", None) or {}
+    ).get("legacy_spm_declarations")
+    if legacy_spm_declarations is not None:
+        results_payload["legacy_spm_declarations"] = dict(legacy_spm_declarations)
+
     return {"reform": reform, "input": input_payload, "results": results_payload}
 
 

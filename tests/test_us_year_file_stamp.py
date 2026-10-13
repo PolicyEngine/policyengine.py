@@ -65,6 +65,9 @@ from policyengine.tax_benefit_models.us.legacy_inputs import (
     year_file_stamp,
     year_file_stamp_problem,
 )
+from policyengine.tax_benefit_models.us.legacy_spm import (
+    RECORD_H5_DATASET as LEGACY_SPM_RECORD_H5_DATASET,
+)
 
 LEGACY = "would_claim_wic"
 LIVE = "takes_up_wic_if_eligible"
@@ -975,7 +978,13 @@ def test_ensure_decides_from_the_stamps_alone(tmp_path, states):
             self._file.close()
 
         def get(self, name, default=None):
-            assert name in (YEAR_FILE_STAMP_H5_DATASET, RENAMES_H5_DATASET), name
+            # The legacy SPM declarations record is a small JSON node like the
+            # stamp, read to tell a legacy source's year file is current.
+            assert name in (
+                YEAR_FILE_STAMP_H5_DATASET,
+                RENAMES_H5_DATASET,
+                LEGACY_SPM_RECORD_H5_DATASET,
+            ), name
             return self._file.get(name, default)
 
     with (
