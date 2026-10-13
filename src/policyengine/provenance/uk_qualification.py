@@ -629,8 +629,11 @@ def expected_release_bundle(python: str, *, cwd: Path) -> dict[str, Optional[str
         [
             python,
             "-c",
-            "import json, policyengine as pe; "
-            "print(json.dumps(dict(pe.uk.uk_latest.release_bundle), sort_keys=True))",
+            # The CLI disables automatic country imports. Load the UK API
+            # explicitly so the flag cannot leave pe.uk unset and unrelated
+            # country models need not be initialized for this UK request.
+            "import json; from policyengine.tax_benefit_models.uk import uk_latest; "
+            "print(json.dumps(dict(uk_latest.release_bundle), sort_keys=True))",
         ],
         cwd=cwd,
         env=env,

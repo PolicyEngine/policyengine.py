@@ -187,9 +187,17 @@ jobs:
       - name: Commit and push the candidate commit
         if: steps.duplicate.outputs.duplicate == 'false'
         env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           BRANCH: ${{ needs.resolve.outputs.branch }}
           PAIR_ID: ${{ needs.resolve.outputs.pair_id }}
         run: |
+          # A forced attempt may replace an already qualified head. Revoke
+          # its ready status before exposing any new, unqualified commit.
+          ready_pr=$(gh pr list --head "$BRANCH" --state open --json number,isDraft \
+            --jq '.[] | select(.isDraft == false) | .number')
+          if [[ -n "$ready_pr" ]]; then
+            gh pr ready "$ready_pr" --undo
+          fi
           git add -A
           git -c user.name="policyengine-qualification[bot]" \
               -c user.email="qualification@policyengine.org" \

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -419,6 +420,50 @@ def test_replay_request_is_valid_for_the_scorecard():
     assert again.request_id == request.request_id
 
 
+def test_the_real_cli_generates_replay_requests_despite_country_import_suppression(
+    tmp_path,
+):
+    """The real CLI can read the UK certificate despite automatic import suppression."""
+
+    from importlib.util import find_spec
+
+    if find_spec("policyengine_uk") is None:
+        pytest.skip("Replay request generation requires the installed UK model")
+    attempt = tmp_path / "attempt"
+    write_json(attempt / "candidate.json", {"pair": make_pair().canonical_payload()})
+    write_json(attempt / "harness.json", HARNESS.canonical_payload())
+    env = dict(os.environ)
+    env["POLICYENGINE_SKIP_COUNTRY_IMPORTS"] = "1"
+    env.pop("GITHUB_OUTPUT", None)
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "scripts/check_uk_candidate.py"),
+            "request-replay",
+            "--attempt",
+            str(attempt),
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    request = json.loads((attempt / "replay/request.json").read_text())
+    schema = json.loads(
+        (VENDORED_SCHEMAS / "qualification_request.v1.json").read_text()
+    )
+    jsonschema.Draft202012Validator(schema).validate(request)
+    candidate = request["candidate"]
+    assert candidate["policyengine"]["source"]["git"]["commit"] == HARNESS.git_commit
+    bundle = candidate["expected_release_bundle"]
+    record = BUNDLE["data_releases"]["uk"]
+    assert bundle["model_version"] == record["model_package"]["version"]
+    assert bundle["data_version"] == record["data_package"]["version"]
+    assert bundle["default_dataset"] == record["default_dataset"]
+
+
 def test_reading_replay_state():
     pair = make_pair()
     request = build_replay_request(
@@ -634,6 +679,95 @@ def test_a_forced_rerun_stages_a_new_attempt(tmp_path):
         parents=True
     )
     assert attempt_key(pair, tmp_path, base_commit=base, force=True) == f"{base[:12]}-3"
+
+
+@pytest.mark.parametrize(
+    ("pr_state", "reset_fails"),
+    [("ready", False), ("draft", False), ("absent", False), ("ready", True)],
+)
+def test_the_workflow_drafts_existing_prs_before_replacing_their_head(
+    tmp_path, pr_state, reset_fails
+):
+    """Execute the workflow shell with local gh/git stand-ins and no remote writes."""
+
+    import yaml
+
+    workflow = yaml.safe_load(
+        (REPO_ROOT / ".github/workflows/certify-uk-release.yaml").read_text()
+    )
+    step = next(
+        step
+        for step in workflow["jobs"]["prepare"]["steps"]
+        if step.get("name") == "Commit and push the candidate commit"
+    )
+    state_path = tmp_path / "pr-state.json"
+    state_path.write_text(json.dumps({"status": pr_state}))
+    log_path = tmp_path / "commands.jsonl"
+    fake = f"""#!{sys.executable}
+import json
+import os
+import sys
+from pathlib import Path
+
+command = Path(sys.argv[0]).name
+args = sys.argv[1:]
+state_path = Path(os.environ["PR_STATE"])
+state = json.loads(state_path.read_text())
+with Path(os.environ["COMMAND_LOG"]).open("a") as log:
+    log.write(json.dumps([command, *args]) + "\\n")
+if command == "gh" and args[:2] == ["pr", "list"]:
+    if state["status"] == "ready":
+        print("574")
+elif command == "gh" and args[:2] == ["pr", "ready"]:
+    assert args[2:] == ["574", "--undo"]
+    if os.environ["RESET_FAILS"] == "1":
+        sys.exit(42)
+    state["status"] = "draft"
+    state_path.write_text(json.dumps(state))
+elif command == "git" and args[0] == "push":
+    if state["status"] == "ready":
+        sys.exit(91)
+"""
+    binary_dir = tmp_path / "bin"
+    binary_dir.mkdir()
+    for command in ("gh", "git"):
+        executable = binary_dir / command
+        executable.write_text(fake)
+        executable.chmod(0o755)
+    result = subprocess.run(
+        ["bash", "-e", "-o", "pipefail", "-c", step["run"]],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "PATH": f"{binary_dir}{os.pathsep}{os.environ['PATH']}",
+            "BRANCH": "candidate/uk/2.126.8-1.58.0",
+            "PAIR_ID": "a" * 64,
+            "GH_TOKEN": "local-workflow-test",
+            "PR_STATE": str(state_path),
+            "COMMAND_LOG": str(log_path),
+            "RESET_FAILS": "1" if reset_fails else "0",
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    commands = [json.loads(line) for line in log_path.read_text().splitlines()]
+    pushes = [i for i, command in enumerate(commands) if command[:2] == ["git", "push"]]
+    resets = [
+        i for i, command in enumerate(commands) if command[:3] == ["gh", "pr", "ready"]
+    ]
+    if reset_fails:
+        assert result.returncode == 42, result.stdout + result.stderr
+        assert not pushes
+    else:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert len(pushes) == 1
+        if pr_state == "ready":
+            assert len(resets) == 1 and resets[0] < pushes[0]
+            assert json.loads(state_path.read_text())["status"] == "draft"
+        else:
+            assert not resets
+    assert step["env"]["GH_TOKEN"] == "${{ steps.app-token.outputs.token }}"
 
 
 # --- Attempt lifecycle -----------------------------------------------------------------
@@ -996,6 +1130,7 @@ def test_expected_release_bundle_uses_the_scorecard_certification_environment(
         "NO_PROXY": "huggingface.co",
         "no_proxy": "huggingface.co",
         "HTTPS_PROXY": "http://corporate:3128",
+        "POLICYENGINE_SKIP_COUNTRY_IMPORTS": "1",
     }
     env = uk_qualification.certification_environment(environ)
     assert env["PATH"] == "/usr/bin"
