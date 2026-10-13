@@ -325,28 +325,31 @@ def requested_dataset_source_identity(
     source_uri = resolve_managed_dataset_reference(
         country_id, dataset, allow_unmanaged=allow_unmanaged
     )
-    if "://" in source_uri:
+    if source_uri.startswith("hf://"):
         return {"uri": source_uri}
+    if "://" in source_uri:
+        raise DatasetMaterializationError(
+            f"Unsupported explicit dataset URI: {source_uri!r}."
+        )
     return _local_file_identity(source_uri)
 
 
 def dataset_source_snapshot(source: DatasetSource) -> dict[str, int]:
-    """Return the materialized file's device, inode, size and modification time.
+    """Return the materialized file's size and modification time.
 
     Taken right after ``materialize_dataset`` returns, it lets
-    :func:`dataset_source_change` tell whether the file at ``source.path`` is
-    still the one materialized. Another process can replace a file in a shared
-    data folder, for example by materializing another release of the same
-    dataset, or another file with the same name, there. A download replaces
-    the file with ``os.replace``, which always gives it another inode.
+    :func:`dataset_source_change` tell whether the file at ``source.path`` has
+    been replaced or modified since. Another process can replace a file in a
+    shared data folder, for example by materializing another release of the
+    same dataset, or another file with the same name, there. A download
+    writes a new file, so its modification time is when it finished.
+
+    Device and inode numbers are left out: some file systems (FUSE mounts
+    such as sshfs without ``-o use_ino``) do not keep them stable, and a
+    replacement policyengine.py makes always moves the modification time.
     """
     status = os.stat(source.path)
-    return {
-        "device": status.st_dev,
-        "inode": status.st_ino,
-        "size": status.st_size,
-        "mtime_ns": status.st_mtime_ns,
-    }
+    return {"size": status.st_size, "mtime_ns": status.st_mtime_ns}
 
 
 def dataset_source_change(
@@ -358,14 +361,16 @@ def dataset_source_change(
 
     ``identity`` is what :func:`dataset_source_identity` gave for ``source``,
     and ``snapshot`` what :func:`dataset_source_snapshot` gave right after it
-    was materialized. The file must still be the one snapshotted: the same
-    device, inode, size and modification time. A bundle dataset's file must
-    also still hash to its verified sha256, which covers a replacement after
-    verification and before the snapshot. A local file must still have its
-    identity.
+    was materialized. The file must still have the snapshot's size and
+    modification time, whatever the kind of source. A bundle dataset's file
+    must also still hash to its verified sha256, which covers a replacement
+    after verification and before the snapshot. A local file must still have
+    its identity.
 
-    One gap remains, for an explicit URI only. Its contents are verified
-    against nothing, so a file another process puts in its place between the
+    Two gaps remain. A file that another process restores to the snapshot's
+    size and modification time is not noticed: one renamed aside and back,
+    or copied with its times kept. And an explicit URI's contents are
+    verified against nothing, so a file put in its place between the
     download and the snapshot goes unnoticed.
 
     Returns:
@@ -378,8 +383,8 @@ def dataset_source_change(
         return f"{source.path} no longer exists"
     if now != snapshot:
         return (
-            f"{source.path} was replaced or modified (device, inode, size or "
-            "modification time changed)"
+            f"{source.path} was replaced or modified (its size or modification "
+            "time changed)"
         )
     if "sha256" in identity:
         try:

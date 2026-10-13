@@ -1653,6 +1653,22 @@ def test_create_refuses_what_materialize_would_with_its_error(
             )
 
 
+def test_create_refuses_an_unsupported_scheme_before_cutting_anything(tmp_path):
+    """Even with ``allow_unmanaged``, as ``materialize_dataset`` would."""
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("a dataset was materialized or downloaded")
+
+    with patch.object(us_datasets, "materialize_dataset", refuse):
+        with pytest.raises(ValueError, match="Unsupported explicit dataset URI"):
+            us_datasets.create_datasets(
+                datasets=[SOURCE, "s3://bucket/tiny.h5"],
+                years=[2024],
+                data_folder=str(tmp_path),
+                allow_unmanaged=True,
+            )
+
+
 def test_one_source_requested_by_two_names_is_not_a_collision(tmp_path):
     """The default's logical name and its own URI are one source."""
     from policyengine.provenance.manifest import get_release_manifest

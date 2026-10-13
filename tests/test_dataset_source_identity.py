@@ -292,6 +292,22 @@ def test_a_bundle_entry_without_a_revision_uses_the_release_revision():
         }
 
 
+@pytest.mark.parametrize("uri", ["s3://bucket/x.h5", "gs://bucket/x.h5"])
+def test_an_unsupported_uri_scheme_is_refused_as_materialize_does(bundle, uri):
+    _, data_dir = bundle
+
+    with pytest.raises(
+        dataset_materialization.DatasetMaterializationError,
+        match="Unsupported explicit dataset URI",
+    ):
+        requested_dataset_source_identity("us", uri)
+    with pytest.raises(
+        dataset_materialization.DatasetMaterializationError,
+        match="Unsupported explicit dataset URI",
+    ):
+        materialize_dataset("us", uri, allow_unmanaged=True, data_dir=data_dir)
+
+
 def test_a_bundle_entry_without_a_sha256_is_refused_as_materialize_does(tmp_path):
     manifest = _manifest()
     manifest.datasets["tiny_other"].sha256 = None
@@ -550,6 +566,7 @@ def _replace(path: Path, payload: bytes) -> None:
 
 
 def _materialized(dataset, data_dir, served=None):
+    """Materialize ``dataset``, dated well before anything replaces it."""
     get, _ = _serve(served or b"")
     with patch.object(
         dataset_materialization.requests, "get", get if served else _refuse
@@ -557,20 +574,19 @@ def _materialized(dataset, data_dir, served=None):
         source = materialize_dataset(
             "us", dataset, allow_unmanaged=True, data_dir=data_dir
         )
+    # Materialized long ago, so a replacement made now has a later
+    # modification time, whatever the file system's timestamp resolution.
+    os.utime(source.path, ns=(SECOND, SECOND))
     return source, dataset_source_identity(source), dataset_source_snapshot(source)
 
 
-def test_the_snapshot_is_the_files_device_inode_size_and_mtime(bundle):
+def test_the_snapshot_is_the_files_size_and_mtime(bundle):
+    """Not its device or inode, which some file systems do not keep stable."""
     _, data_dir = bundle
     source, _, snapshot = _materialized("tiny_default", data_dir)
     status = os.stat(source.path)
 
-    assert snapshot == {
-        "device": status.st_dev,
-        "inode": status.st_ino,
-        "size": status.st_size,
-        "mtime_ns": status.st_mtime_ns,
-    }
+    assert snapshot == {"size": status.st_size, "mtime_ns": status.st_mtime_ns}
 
 
 @pytest.mark.parametrize(
@@ -614,8 +630,8 @@ def test_a_source_replaced_after_its_snapshot_has_changed(
     _replace(Path(source.path), b"another release")
 
     assert dataset_source_change(source, identity, snapshot) == (
-        f"{source.path} was replaced or modified (device, inode, size or "
-        "modification time changed)"
+        f"{source.path} was replaced or modified (its size or modification "
+        "time changed)"
     )
     Path(source.path).unlink()
     assert dataset_source_change(source, identity, snapshot).endswith(
@@ -631,14 +647,13 @@ def test_a_bundle_file_swapped_out_and_back_has_changed(bundle):
     source, identity, snapshot = _materialized("tiny_default", data_dir)
     path = Path(source.path)
 
-    # The loader's open handle keeps the original inode allocated, so the
-    # file system cannot hand its number to the file swapped back in.
-    with path.open("rb"):
-        _replace(path, b"another release")
-        _replace(path, DEFAULT_BYTES)
+    _replace(path, b"another release")
+    _replace(path, DEFAULT_BYTES)
 
-        assert _sha256(path.read_bytes()) == identity["sha256"]
-        assert dataset_source_change(source, identity, snapshot) is not None
+    # The pinned release downloaded again has its bytes, but a modification
+    # time of its own.
+    assert _sha256(path.read_bytes()) == identity["sha256"]
+    assert dataset_source_change(source, identity, snapshot) is not None
 
 
 def test_a_bundle_file_replaced_before_its_snapshot_has_changed(bundle):
@@ -678,11 +693,12 @@ def test_a_local_file_rewritten_before_its_snapshot_has_changed(tmp_path):
     second_mtime=MTIMES,
     replace=st.booleans(),
 )
-def test_a_local_source_has_changed_exactly_when_its_file_has(
+def test_a_local_source_has_changed_exactly_when_its_size_or_mtime_has(
     tmp_path_factory, first, second, first_mtime, second_mtime, replace
 ):
-    """Rewritten in place or replaced: changed exactly when the snapshot
-    moved, which a replacement always does (a new inode)."""
+    """Rewritten in place or replaced: changed exactly when the size or the
+    modification time moved. Other bytes restored to the same size and time
+    are not noticed: the intended, documented gap."""
     path = tmp_path_factory.mktemp("local") / "tiny_local.h5"
     path.write_bytes(first)
     os.utime(path, ns=(first_mtime, first_mtime))
@@ -697,7 +713,5 @@ def test_a_local_source_has_changed_exactly_when_its_file_has(
     os.utime(path, ns=(second_mtime, second_mtime))
 
     assert (dataset_source_change(source, identity, snapshot) is None) == (
-        dataset_source_snapshot(source) == snapshot
+        len(first) == len(second) and first_mtime == second_mtime
     )
-    if replace:
-        assert dataset_source_change(source, identity, snapshot) is not None

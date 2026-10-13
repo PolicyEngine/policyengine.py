@@ -434,10 +434,10 @@ def create_datasets(
     ``legacy_inputs.YEAR_FILE_STAMP_H5_DATASET``), which ``ensure_datasets``
     and ``load_datasets`` check.
 
-    The source file's device, inode, size and modification time are recorded
-    right after it is materialized, and checked again once the year files are
-    written; a bundle dataset's file is also hashed again against its
-    verified sha256 (see ``dataset_materialization.dataset_source_change``).
+    The source file's size and modification time are recorded right after it
+    is materialized, and checked again once the year files are written; a
+    bundle dataset's file is also hashed again against its verified sha256
+    (see ``dataset_materialization.dataset_source_change``).
     Another process can replace a file in a shared data folder, for example
     by materializing another release of the same dataset there. If the source
     changed, the year files are left unstamped, so they are cut again, and
