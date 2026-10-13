@@ -504,7 +504,10 @@ def test_raising_the_format_revision_makes_older_files_out_of_date(
     )
 
 
-#: JSON nested deeper than the parser's recursion limit.
+#: JSON nested very deeply. Whether the parser reaches its recursion limit
+#: depends on the platform: CPython 3.11-3.13, and 3.14 on macOS, raise
+#: RecursionError, while 3.14 on Linux parses it into nested lists. Either
+#: way the stamp or record is not well formed.
 DEEP_JSON = "[" * 100_000 + "0" + "]" * 100_000
 
 
@@ -530,14 +533,42 @@ DEEP_JSON = "[" * 100_000 + "0" + "]" * 100_000
         ),
     ],
 )
-def test_json_nested_too_deeply_is_unreadable_not_an_error(
+def test_json_nested_too_deeply_is_out_of_date_not_an_error(
     tmp_path, stamp, record, reason
 ):
     path = _write_year_file(tmp_path / "year.h5", stamp=stamp, record=record)
 
     assert year_file_stamp_problem(path) == reason
-    assert read_year_file_stamp(path) == (None if isinstance(stamp, tuple) else stamp)
+    if isinstance(stamp, tuple):
+        # Unreadable (None) or parsed into nested lists, but never a stamp.
+        assert not isinstance(read_year_file_stamp(path), dict)
+    else:
+        assert read_year_file_stamp(path) == stamp
     assert read_renames_record(path) == (None if isinstance(record, tuple) else record)
+
+
+@pytest.mark.parametrize("name", [YEAR_FILE_STAMP_H5_DATASET, RENAMES_H5_DATASET])
+def test_a_recursion_error_while_parsing_is_unreadable_content(
+    tmp_path, monkeypatch, name
+):
+    """The RecursionError path, on every platform (see ``DEEP_JSON``)."""
+    path = _write_year_file(tmp_path / "year.h5", stamp=year_file_stamp(), record={})
+    loads = json.loads
+
+    def deep(text, *args, **kwargs):
+        with h5py.File(path, "r") as file:
+            if text == file[name].asstr()[()]:
+                raise RecursionError("maximum recursion depth exceeded")
+        return loads(text, *args, **kwargs)
+
+    monkeypatch.setattr(legacy_inputs.json, "loads", deep)
+
+    assert year_file_stamp_problem(path) == (
+        "its stamp of the register of renamed inputs it was cut under is malformed"
+        if name == YEAR_FILE_STAMP_H5_DATASET
+        else "its record of the renamed stored inputs mapped when it was cut is "
+        "malformed"
+    )
 
 
 def test_dangling_links_in_place_of_the_stamp_and_record_read_as_absent(tmp_path):
