@@ -155,12 +155,11 @@ def temporary_year_file(path: str | Path) -> Path:
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     for _ in range(100):
         temporary = path.parent / f".{path.stem}.{secrets.token_hex(8)}.partial"
         try:
-            descriptor = os.open(
-                temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666
-            )
+            descriptor = os.open(temporary, flags, 0o666)
         except FileExistsError:
             continue
         os.close(descriptor)
