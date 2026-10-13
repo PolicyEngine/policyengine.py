@@ -12,8 +12,8 @@ Each country stores its stamp, as UTF-8 JSON, in an H5 dataset of its own
 name, so a year file of one country never passes as one of another:
 ``tax_benefit_models.us.legacy_inputs.YEAR_FILE_STAMP_H5_DATASET`` (which
 also records the register of renamed stored inputs) and
-``tax_benefit_models.uk.datasets.YEAR_FILE_STAMP_H5_DATASET`` (which also
-records the year the file was cut for).
+``tax_benefit_models.uk.datasets.YEAR_FILE_STAMP_H5_DATASET``. Both record
+the year the file was cut for.
 
 This module holds what the countries share:
 

@@ -105,17 +105,22 @@ RENAMES_H5_DATASET = "policyengine_legacy_input_renames"
 #:                   "policyengine-us": str | null},
 #:      "register": {legacy: live, ...},
 #:      "revision": int,
-#:      "source": {...}}
+#:      "source": {...},
+#:      "year": int}
 #:
 #: It holds the versions of the packages that calculated the file's values
 #: (``null`` for one that was not installed, see
 #: :func:`installed_package_versions`), the whole register the file was cut
-#: under, its year-file format revision and the identity of the dataset it was
-#: cut from. ``create_datasets`` writes
-#: it after the tables and the renames record, so a year file whose write
-#: stopped part-way has none. ``ensure_datasets`` cuts a year file again, and
-#: ``load_datasets`` refuses it, unless its stamp equals the one a file cut
-#: now from the requested dataset would carry (see
+#: under, its year-file format revision, the identity of the dataset it was
+#: cut from and the year whose tables it holds. ``create_datasets`` writes
+#: each year file's tables and renames record to a temporary file beside its
+#: path, and stamps that file only after the source has been checked again,
+#: just before moving it onto the path (see
+#: ``policyengine.provenance.year_file_stamp.publish_year_file``). A year file
+#: at its path therefore holds the tables and the stamp of one cut.
+#: ``ensure_datasets`` cuts a year file again, and ``load_datasets`` refuses
+#: it, unless its stamp equals the one a file cut now from the requested
+#: dataset, for the requested year, would carry (see
 #: :func:`year_file_stamp_problem`). ``PolicyEngineUSDataset.save()`` neither
 #: writes nor keeps it, so saving a year file again drops the stamp.
 #:
@@ -141,8 +146,10 @@ YEAR_FILE_STAMP_H5_DATASET = "policyengine_year_file_stamp"
 #:
 #: Revision 2 added the source dataset's identity and the package versions,
 #: so year files stamped with revision 1, which record neither, are cut again
-#: once.
-YEAR_FILE_STAMP_REVISION = 2
+#: once. Revision 3 added the year the file was cut for, so a year file
+#: copied or renamed to another year's name is not taken for that year; year
+#: files stamped with revision 2 are cut again once.
+YEAR_FILE_STAMP_REVISION = 3
 
 #: Distributions whose installed versions a year file's stamp records.
 #: ``create_datasets`` stores each input as policyengine-us calculates it for
@@ -203,13 +210,16 @@ def installed_package_versions() -> dict[str, str | None]:
 
 def year_file_stamp(
     source: Mapping[str, Any],
+    year: int,
     packages: Mapping[str, str | None] | None = None,
 ) -> dict[str, Any]:
-    """Return the stamp for a year file cut now from ``source``.
+    """Return the stamp for a year file for ``year`` cut now from ``source``.
 
     ``source`` is the source dataset's identity (see
     ``policyengine.provenance.dataset_materialization.dataset_source_identity``).
-    ``packages`` defaults to :func:`installed_package_versions`.
+    ``year`` is the year whose tables the file holds, so a year file copied or
+    renamed to another year's name is not taken for that year. ``packages``
+    defaults to :func:`installed_package_versions`.
 
     The stamp holds the whole register, not only the entries an engine needs
     mapped, so checking a stamp never imports policyengine-us. The register
@@ -222,6 +232,7 @@ def year_file_stamp(
         "register": dict(sorted(LEGACY_INPUT_RENAMES.items())),
         "revision": YEAR_FILE_STAMP_REVISION,
         "source": dict(source),
+        "year": int(year),
     }
 
 
@@ -242,18 +253,19 @@ def write_year_file_stamp(path: str | Path, stamp: Mapping[str, Any]) -> None:
 def year_file_stamp_problem(
     path: str | Path,
     source: Mapping[str, Any],
+    year: int,
     packages: Mapping[str, str | None] | None = None,
 ) -> str | None:
     """Return why a ``create_datasets`` year file is out of date, or ``None``.
 
     ``source`` is the identity of the dataset the year file is requested for
     (see ``policyengine.provenance.dataset_materialization
-    .requested_dataset_source_identity``), and ``packages`` defaults to
-    :func:`installed_package_versions`. A year file is current only when both
-    of these hold:
+    .requested_dataset_source_identity``), ``year`` the year it is requested
+    for, and ``packages`` defaults to :func:`installed_package_versions`. A
+    year file is current only when both of these hold:
 
-    - its stamp equals ``year_file_stamp(source, packages)``: the same format
-      revision, register, source identity and package versions;
+    - its stamp equals ``year_file_stamp(source, year, packages)``: the same
+      format revision, register, source identity, package versions and year;
     - it stores the renames record, listing only renames in that register.
 
     The register must match exactly. A file cut under a register that lacks
@@ -267,7 +279,9 @@ def year_file_stamp_problem(
     The source must match exactly too: a file cut from another revision or
     file of a dataset that keeps its logical name (and so the year file's
     name) holds the other data. So must the package versions, which
-    calculated every value in the file.
+    calculated every value in the file, and the year: a year file copied or
+    renamed to another year's name holds the tables of the year it was cut
+    for.
 
     Only the stamp and the record are read, never the tables or the source
     dataset. A file that cannot be read as HDF5 is out of date. An error that
@@ -277,14 +291,15 @@ def year_file_stamp_problem(
 
     Returns:
         ``None`` for a current year file; otherwise a clause, starting "it"
-        or "its", that says why the file is out of date. It names the renames
-        the file may have lost, the source it was cut from and the source
-        requested, and the package versions it was cut with and those
-        installed, wherever they differ.
+        or "its", that says why the file is out of date. It names the year it
+        was cut for and the year requested, the renames the file may have
+        lost, the source it was cut from and the source requested, and the
+        package versions it was cut with and those installed, wherever they
+        differ.
     """
     import h5py
 
-    current = year_file_stamp(source, packages)
+    current = year_file_stamp(source, year, packages)
     register = current["register"]
     try:
         with h5py.File(path, "r") as file:
@@ -323,8 +338,9 @@ def year_file_stamp_problem(
     # ``True``, which equals 1.
     if not (
         isinstance(stamp, dict)
-        and set(stamp) == {"packages", "register", "revision", "source"}
+        and set(stamp) == {"packages", "register", "revision", "source", "year"}
         and type(revision) is int
+        and type(stamp["year"]) is int
         and _is_str_map(stamp["register"])
         and _is_version_map(stamp["packages"])
         and is_dataset_source_identity(stamp["source"])
@@ -353,6 +369,8 @@ def year_file_stamp_problem(
         legacy: live for legacy, live in stamped.items() if register.get(legacy) != live
     }
     reasons = []
+    if stamp["year"] != current["year"]:
+        reasons.append(f"it was cut for {stamp['year']}, not {current['year']}")
     if missing:
         reasons.append(
             "it was cut before these renames were registered, so it may have "

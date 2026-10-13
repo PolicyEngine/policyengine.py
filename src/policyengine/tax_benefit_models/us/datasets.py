@@ -24,18 +24,22 @@ from policyengine.provenance.dataset_materialization import (
 from policyengine.provenance.manifest import (
     get_release_manifest,
 )
-from policyengine.provenance.year_file_stamp import year_file_sources
+from policyengine.provenance.year_file_stamp import (
+    publish_year_file,
+    temporary_year_file,
+    year_file_sources,
+)
 from policyengine.tax_benefit_models.common.model_version import (
     build_runtime_dataset_provenance,
 )
 from policyengine.tax_benefit_models.us.legacy_inputs import (
     RENAMES_RECORD_KEY,
+    YEAR_FILE_STAMP_H5_DATASET,
     apply_legacy_input_renames_to_microsimulation,
     check_yearly_periods,
     pending_legacy_input_renames,
     read_renames_record,
     write_renames_record,
-    write_year_file_stamp,
     year_file_stamp,
     year_file_stamp_problem,
 )
@@ -392,13 +396,21 @@ def create_datasets(
 ) -> dict[str, PolicyEngineUSDataset]:
     """Create PolicyEngineUSDataset instances from logical dataset names or URLs.
 
-    Each year file is written to ``{data_folder}/{dataset_stem}_year_{year}.h5``.
-    Once a dataset's year files are all written, each is stamped with the
-    identity of the source dataset it was cut from, the installed
-    policyengine-core and policyengine-us versions, the register of renamed
-    stored inputs it was cut under and the year-file format revision (see
-    ``legacy_inputs.YEAR_FILE_STAMP_H5_DATASET``), which ``ensure_datasets``
-    and ``load_datasets`` check.
+    Each year file is written to ``{data_folder}/{dataset_stem}_year_{year}.h5``
+    and stamped with the identity of the source dataset it was cut from, the
+    installed policyengine-core and policyengine-us versions, the register of
+    renamed stored inputs it was cut under, its year and the year-file format
+    revision (see ``legacy_inputs.YEAR_FILE_STAMP_H5_DATASET``), which
+    ``ensure_datasets`` and ``load_datasets`` check.
+
+    Once a dataset's year files have all been extracted, each is written to a
+    temporary file beside its path (see
+    ``year_file_stamp.temporary_year_file``). The source is then checked
+    again, and only then is each temporary file stamped and moved onto its
+    path. The tables, the renames record and the stamp at a year file's path
+    therefore always come from one cut, even when two processes cut the same
+    year files at once, and a cut that fails leaves the year files already
+    there as they were.
 
     The source file's size and modification time are recorded right after it
     is materialized, and checked again once the year files are written. A
@@ -407,7 +419,8 @@ def create_datasets(
     ``dataset_materialization.dataset_source_change``).
     Another process can replace a file in a shared data folder, for example
     by materializing another release of the same dataset there. If the source
-    changed, the year files are left unstamped, so they are cut again, and
+    changed, none of that dataset's year files is moved into place (those of
+    datasets cut before it in the same call already are) and
     ``DatasetMaterializationError`` is raised. Two requested datasets that are
     different sources with one stem are refused with ``ValueError`` before
     anything is cut, since they would overwrite each other's year files.
@@ -438,19 +451,20 @@ def create_datasets(
         )
         dataset_stem = source.name
         # What each year file is cut from and under: the source, identified
-        # before it is loaded, the package versions and the register the
-        # mapping below uses.
+        # before it is loaded, the package versions, the register the mapping
+        # below uses and the year.
         identity = dataset_source_identity(source)
         # The source is checked again only when year files are cut from it.
         snapshot = dataset_source_snapshot(source) if years else None
-        stamp = year_file_stamp(identity)
+        stamps = [year_file_stamp(identity, year) for year in years]
         sim = Microsimulation(dataset=source.path, spm=resolve_spm_selection())
         # Map stored inputs the engine has since renamed before extracting,
         # so each year's file stores the live input rather than dropping it.
         legacy_input_renames = apply_legacy_input_renames_to_microsimulation(sim)
 
-        cut: list[PolicyEngineUSDataset] = []
-        for year in years:
+        # (dataset, year file, stamp) for each year file extracted.
+        cut: list[tuple[PolicyEngineUSDataset, str, dict[str, Any]]] = []
+        for year, stamp in zip(years, stamps):
             # Get all input variables from the simulation
             # We'll calculate each input variable for the specified year
             entity_data = {
@@ -586,11 +600,12 @@ def create_datasets(
                     elif entity_name == "tax_unit":
                         tax_unit_df = entity_df
 
+            filepath = f"{data_folder}/{dataset_stem}_year_{year}.h5"
             us_dataset = PolicyEngineUSDataset(
                 id=f"{dataset_stem}_year_{year}",
                 name=f"{dataset_stem}-year-{year}",
                 description=f"US Dataset for year {year} based on {dataset_stem}",
-                filepath=f"{data_folder}/{dataset_stem}_year_{year}.h5",
+                filepath=filepath,
                 year=int(year),
                 metadata={
                     RENAMES_RECORD_KEY: dict(sorted(legacy_input_renames.items()))
@@ -606,32 +621,48 @@ def create_datasets(
                     tax_unit=MicroDataFrame(tax_unit_df, weights="tax_unit_weight"),
                 ),
             )
-            us_dataset.save()
-            cut.append(us_dataset)
+            cut.append((us_dataset, filepath, stamp))
 
             dataset_key = f"{dataset_stem}_{year}"
             result[dataset_key] = us_dataset
 
-        # Stamp only if the source file is still the one materialized (and,
-        # if it was downloaded, still hashes to the sha256 it was verified
-        # against or downloaded with), so no stamp names a source the files
-        # may not have been cut from.
-        change = (
-            dataset_source_change(source, identity, snapshot)
-            if snapshot is not None
-            else None
-        )
-        if change is not None:
-            raise DatasetMaterializationError(
-                f"The source of the US year files {data_folder}/"
-                f"{dataset_stem}_year_{{year}}.h5 changed while they were cut: "
-                f"{change}. They were left unstamped, so ensure_datasets() "
-                "cuts them again."
+        # Write each year file to a temporary file beside its path, and move
+        # it onto the path only once it is stamped, so the tables and the
+        # stamp at a path always come from one cut.
+        temporaries: list[Path] = []
+        try:
+            for us_dataset, filepath, _ in cut:
+                temporary = temporary_year_file(filepath)
+                temporaries.append(temporary)
+                # A copy at the temporary path, so everything ``save()``
+                # writes (the tables and the renames record) goes there, and
+                # the dataset returned keeps the year file's path.
+                us_dataset.model_copy(update={"filepath": str(temporary)}).save()
+
+            # Move the year files into place only if the source file is still
+            # the one materialized (and, if it was downloaded, still hashes to
+            # the sha256 it was verified against or downloaded with), so no
+            # stamp names a source the files may not have been cut from.
+            change = (
+                dataset_source_change(source, identity, snapshot)
+                if snapshot is not None
+                else None
             )
-        # Stamp last. ``save()`` truncates each file first, so a year file
-        # whose write stopped part-way has no stamp and is cut again.
-        for us_dataset in cut:
-            write_year_file_stamp(us_dataset.filepath, stamp)
+            if change is not None:
+                raise DatasetMaterializationError(
+                    f"The source of the US year files {data_folder}/"
+                    f"{dataset_stem}_year_{{year}}.h5 changed while they were "
+                    f"cut: {change}. None of them was written, so "
+                    "ensure_datasets() cuts them again."
+                )
+            # Stamp last, then move each year file onto its path in one step.
+            for (_, filepath, stamp), temporary in zip(cut, temporaries):
+                publish_year_file(
+                    temporary, filepath, YEAR_FILE_STAMP_H5_DATASET, stamp
+                )
+        finally:
+            for temporary in temporaries:
+                temporary.unlink(missing_ok=True)
 
     return result
 
@@ -670,7 +701,7 @@ def load_datasets(
         for year in years:
             filepath = f"{data_folder}/{dataset_stem}_year_{year}.h5"
             if Path(filepath).exists():
-                problem = year_file_stamp_problem(filepath, source)
+                problem = year_file_stamp_problem(filepath, source, year)
                 if problem is not None:
                     raise ValueError(
                         f"US year file {filepath} is out of date: {problem}. "
@@ -1358,7 +1389,7 @@ def ensure_datasets(
             if not filepath.exists():
                 all_current = False
                 continue
-            problem = year_file_stamp_problem(filepath, source)
+            problem = year_file_stamp_problem(filepath, source, year)
             if problem is not None:
                 all_current = False
                 logger.warning(

@@ -331,15 +331,9 @@ is raised. A process killed mid-cut can leave a temporary file behind, which
 is never read and can be deleted. Requested datasets that are different
 sources with one name are refused with `ValueError`.
 
-Moving a year file into place replaces the file at its path rather than
-rewriting it. The cut therefore needs write access to the data folder (and,
-in a folder with the sticky bit set, ownership of the year file it replaces
-or of the folder), and the year file gets the mode and group a file the
-cutting user creates there would get, not those of the file it replaces.
-
 The limits listed under [Year files](#year-files) apply to UK year files too,
-with policyengine-uk in place of policyengine-us, except that UK year files
-are moved into place whole. Three more apply:
+with policyengine-uk in place of policyengine-us, and so does what moving a
+year file into place needs. Three more limits apply:
 
 - the versions are those installed when the files are cut. A package upgraded
   in a running process after policyengine-uk was imported is recorded at its
@@ -506,11 +500,12 @@ everything else, it stamps each file with what the file was cut from and under
 {
   "packages": {"policyengine-core": "3.33.0", "policyengine-us": "2.2.1"},
   "register": {"would_claim_wic": "takes_up_wic_if_eligible"},
-  "revision": 2,
+  "revision": 3,
   "source": {
     "sha256": "6496cc4393d4d3c6574f76eca231de5898c803b9067645591fd5c4d3e65aee84",
     "uri": "hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-spm-20260915"
-  }
+  },
+  "year": 2026
 }
 ```
 
@@ -530,16 +525,19 @@ everything else, it stamps each file with what the file was cut from and under
     the URI as given;
   - a local file (`allow_unmanaged=True`): `{"path", "size", "mtime_ns"}`,
     its resolved path, and its size in bytes and modification time from one
-    `stat()`.
+    `stat()`;
+- `year`: the year whose tables the file holds, so a year file copied or
+  renamed to another year's name is not taken for that year.
 
 `ensure_datasets` reuses a year file only when its stamp equals the one a file
-cut now from the requested dataset would carry, and its renames record lists
-only renames in the stamped register. Otherwise it logs why and creates the
-year files again. `load_datasets` refuses the file with the same reason, which
-names the renames the file may lack, the source it was cut from and the
+cut now from the requested dataset, for the requested year, would carry, and
+its renames record lists only renames in the stamped register. Otherwise it
+logs why and creates the year files again. `load_datasets` refuses the file
+with the same reason, which names the year it was cut for and the year
+requested, the renames the file may lack, the source it was cut from and the
 source requested, or the package versions it was cut with and those
-installed. `legacy_inputs.year_file_stamp_problem(path, source)` returns the
-reason, or `None` for a current year file; `source` is
+installed. `legacy_inputs.year_file_stamp_problem(path, source, year)`
+returns the reason, or `None` for a current year file; `source` is
 `dataset_materialization.requested_dataset_source_identity("us", dataset)`.
 
 Deciding stays cheap. Both functions read only each year file's stamp and
@@ -549,15 +547,24 @@ explicit URI by the URI, and a local file by its file-system metadata.
 Package versions come from the installed distributions' metadata, so
 policyengine-us is not imported.
 
-`create_datasets` records the source file's size and modification time right
-after materializing it (`dataset_materialization.dataset_source_snapshot`),
-and checks them again once the year files are written. A downloaded file is
-also hashed again, against the sha256 a bundle dataset was verified against
-or an explicit URI was downloaded with (`dataset_source_change`). Another
-process can replace a file in a shared data folder, for example by
-materializing another release of the same dataset, or another file with the
-same name, there. If the source changed, the year files are left unstamped,
-so they are cut again, and `DatasetMaterializationError` is raised.
+`create_datasets` writes each year file to a hidden temporary file beside its
+path (`.{name}_year_{year}.…partial`). It records the source file's size and
+modification time right after materializing it
+(`dataset_materialization.dataset_source_snapshot`), and checks them again
+once a dataset's year files are written. A downloaded file is also hashed
+again, against the sha256 a bundle dataset was verified against or an
+explicit URI was downloaded with (`dataset_source_change`). Only then does it
+stamp each temporary file and move it onto its path, in one step
+(`os.replace`). The tables, the renames record and the stamp at a year
+file's path therefore always come from one cut, even when two processes cut
+the same year files at once, and a reader sees the old file or the new one,
+never a mix. Another process can replace a file in a shared data folder, for
+example by materializing another release of the same dataset, or another file
+with the same name, there. If the source changed, none of that dataset's year
+files is moved into place, the ones already there are left as they were, and
+`DatasetMaterializationError` is raised. A cut that fails for any other reason
+leaves them as they were too. A process killed mid-cut can leave a temporary
+file behind, which is never read and can be deleted.
 
 Requested datasets that are different sources with one name, such as two
 revisions of one Hugging Face file or two local files called `pop.h5`, would
@@ -571,8 +578,9 @@ A year file is out of date when:
   with policyengine-us 2.x, from a source storing the draw only as
   `would_claim_wic` (such as the certified default) store neither WIC take-up
   name, so the draw is lost from them. Year files written with the renames
-  record but before the stamp are cut again once, and so is a year file whose
-  write did not finish;
+  record but before the stamp are cut again once, and so is a year file an
+  earlier release left half-written;
+- it was cut for another year, and copied or renamed to this year's name;
 - its register lacks an entry this release has. It may have lost that
   entry's input, as the older files lost the WIC draw;
 - its register has an entry this release lacks, or maps an old name to
@@ -585,6 +593,8 @@ A year file is out of date when:
   same name may have been requested;
 - it was cut with another policyengine-core or policyengine-us version;
 - it has another format revision, or its stamp or record cannot be read.
+  Revision 3 added the year, so year files stamped with revision 2 are cut
+  again once.
 
 So any change to `LEGACY_INPUT_RENAMES`, a re-pinned dataset or a new package
 version makes the affected year files out of date. Two environments with
@@ -609,9 +619,17 @@ The source check has limits that follow from not reading the source:
   is not noticed either; a downloaded file is also checked by its sha256;
 - an editable or source install of policyengine-us keeps its version string
   while its code changes, so its year files are not cut again;
-- `create_datasets` takes no lock, so two processes cutting the same year
-  files at once write them at the same time. Cut year files in one process
-  at a time per data folder.
+- `create_datasets` takes no lock. Two processes cutting the same year files
+  at once each cut them whole, and each year file holds the tables and stamp
+  of the cut that moved it into place last. The files of a dataset's years
+  can therefore come from different cuts; each is checked against its own
+  stamp.
+
+Moving a year file into place replaces the file at its path rather than
+rewriting it. The cut therefore needs write access to the data folder (and,
+in a folder with the sticky bit set, ownership of the year file it replaces
+or of the folder), and the year file gets the mode and group a file the
+cutting user creates there would get, not those of the file it replaces.
 
 `ensure_datasets` raises, rather than cutting the files again, when a year
 file cannot be opened for reasons unrelated to its contents: no permission, a
