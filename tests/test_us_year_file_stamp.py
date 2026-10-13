@@ -221,6 +221,33 @@ def _write_year_file(path, *, stamp=_ABSENT, record=_ABSENT):
     return Path(path)
 
 
+#: What :func:`_stored` gives for a node no reader can parse as JSON.
+_UNREADABLE = object()
+
+
+def _stored(content):
+    """Decode what :func:`_write_node` stores, as the checker reads it back.
+
+    An oracle independent of the checker's reader: raw text is parsed as
+    JSON; raw bytes are fixed-length strings, which read back without
+    trailing NULs; any other raw node, or text that is not JSON, is
+    unreadable. A JSON value reads back as its JSON round trip.
+    """
+    if content is _ABSENT:
+        return _ABSENT
+    if isinstance(content, tuple):
+        kind, value = content
+        try:
+            if kind == "text":
+                return json.loads(value)
+            if kind == "bytes":
+                return json.loads(value.rstrip(b"\x00").decode("utf-8"))
+        except (RecursionError, ValueError):
+            pass
+        return _UNREADABLE
+    return json.loads(json.dumps(content))
+
+
 def _same_json(left, right) -> bool:
     """Equal as JSON: ``True`` is not ``1``, and ``1.0`` is not ``1``."""
     return json.dumps(left, sort_keys=True) == json.dumps(right, sort_keys=True)
@@ -443,7 +470,7 @@ def test_a_year_file_is_current_only_under_the_exact_stamp_requested(case):
             problem = year_file_stamp_problem(path, source, packages)
 
         assert (problem is None) == _is_current(
-            stamp, record, register, source, packages
+            _stored(stamp), _stored(record), register, source, packages
         )
         assert problem is None or (isinstance(problem, str) and problem)
         if problem is None:
@@ -499,15 +526,31 @@ def test_the_year_file_problem_is_total_and_exact_for_any_content(
     stamp, record, register, source, packages
 ):
     """Totality: any stamp and record give a reason or ``None``, never an
-    error, and ``None`` only for the exact stamp requested."""
+    error, and ``None`` exactly for the stamp requested, however it is
+    stored (``_stored`` decodes raw nodes independently of the checker)."""
     with tempfile.TemporaryDirectory() as directory:
         path = _write_year_file(Path(directory) / "year.h5", stamp=stamp, record=record)
         with patch.object(legacy_inputs, "LEGACY_INPUT_RENAMES", register):
             problem = year_file_stamp_problem(path, source, packages)
 
     assert problem is None or (isinstance(problem, str) and problem)
-    if problem is None:
-        assert _is_current(stamp, record, register, source, packages)
+    assert (problem is None) == _is_current(
+        _stored(stamp), _stored(record), register, source, packages
+    )
+
+
+@pytest.mark.parametrize(
+    "record",
+    [("text", "{}"), ("bytes", b"{}"), ("bytes", b"{}\x00\x00")],
+)
+def test_a_record_stored_raw_is_read_as_its_json(tmp_path, monkeypatch, record):
+    """The case a one-directional totality check missed: raw text or bytes
+    that hold an empty record, under an empty register."""
+    monkeypatch.setattr(legacy_inputs, "LEGACY_INPUT_RENAMES", {})
+    path = _write_year_file(tmp_path / "year.h5", stamp=_current(), record=record)
+
+    assert year_file_stamp_problem(path, IDENTITY) is None
+    assert _is_current(_stored(_current()), _stored(record), {})
 
 
 @pytest.mark.parametrize(
