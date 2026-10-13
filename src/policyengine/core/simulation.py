@@ -258,4 +258,12 @@ class Simulation(BaseModel):
         )
         if renames is not None:
             result["legacy_input_renames"] = dict(renames)
+        # !!! TEMPORARY ACS-LOCAL SPM COMPATIBILITY — MUST BE REPLACED (#597, #598) !!!
+        # the SPM measurement scope applied to US ACS-local data.
+        # See ``policyengine.tax_benefit_models.us.spm_measurement_scope``.
+        scope = (getattr(self.output_dataset, "metadata", None) or {}).get(
+            "spm_measurement_scope"
+        )
+        if scope is not None:
+            result["spm_measurement_scope"] = dict(scope)
         return result

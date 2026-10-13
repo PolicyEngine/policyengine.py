@@ -87,6 +87,22 @@ before passing them to the country model. Generic adult/child counts remain
 separate. The native source enrichment is not recalibration, and inherited
 schema-5 calibration diagnostics cannot be relabeled as schema 6.
 
+**Temporary ACS-local SPM measurement.** Year files cut from the certified
+ACS-local source follow Census's ACS SPM methodology, which measures the
+household population only:
+
+- ACS group-quarters SPM units are outside the SPM measurement. Their SPM
+  thresholds, resources and poverty indicators are missing (NaN), and poverty
+  rates count measured people only.
+- On these files the poverty indicators are floats: 1.0, 0.0, or NaN for
+  "not measured".
+- The source's ASEC and PUF records take the certified SPM independence role
+  from the national release.
+
+Ordinary tax, benefit and income results are unchanged. This compatibility is
+temporary; see
+[the runbook](engineering/runbooks/acs-local-spm-compatibility.md).
+
 The wrapper's native pandas HDF loader accepts files that store only calibrated
 `household_weight`. It maps missing person and group weight columns through
 native membership IDs in memory, retaining supplied weight columns and the

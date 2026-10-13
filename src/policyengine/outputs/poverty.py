@@ -81,6 +81,21 @@ class Poverty(Output):
 
         # Map poverty variable to target entity if needed
         if poverty_var_obj.entity != target_entity:
+            source = getattr(
+                self.simulation.output_dataset.data, poverty_var_obj.entity
+            )
+            if (
+                target_entity != "person"
+                and pd.isna(source[self.poverty_variable]).any()
+            ):
+                # Mapping onto a group sums members and fills empty groups
+                # with zero, which would count a person outside the SPM
+                # measurement as measured and not poor.
+                raise ValueError(
+                    f"{self.poverty_variable} is missing for units outside "
+                    f"the poverty measurement; summarise it for people, not "
+                    f"for {target_entity} units."
+                )
             mapped = self.simulation.output_dataset.data.map_to_entity(
                 poverty_var_obj.entity,
                 target_entity,

@@ -28,6 +28,12 @@ from .spm import (
     calculation_provenance,
     resolve_spm_selection,
 )
+from .spm_measurement_scope import (
+    SCOPE_RECORD_KEY,
+    apply_spm_measurement_scope,
+    check_scoped_spm_units,
+    scope_from_metadata,
+)
 
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
@@ -174,6 +180,16 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
 
         validate_policyengine_inputs(dataset.data.entity_data)
 
+        # !!! TEMPORARY ACS-LOCAL SPM COMPATIBILITY — MUST BE REPLACED (#597, #598) !!!
+        # a year file cut from the certified ACS-local source
+        # records which SPM units are outside the SPM measurement (see
+        # ``spm_measurement_scope``).
+        measurement_scope = scope_from_metadata(simulation.dataset.metadata)
+        if measurement_scope is not None:
+            check_scoped_spm_units(
+                pd.DataFrame(dataset.data.spm_unit), measurement_scope
+            )
+
         # Apply regional scoping if specified
         if simulation.scoping_strategy:
             scoped_data = simulation.scoping_strategy.apply(
@@ -218,6 +234,12 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             spm=simulation.spm_config,
             default_input_period=dataset.year,
         )
+        if measurement_scope is not None:
+            # !!! TEMPORARY ACS-LOCAL SPM COMPATIBILITY — MUST BE REPLACED (#597) !!!
+            # After construction, so every policy and structural reform is
+            # in place, and before populations are built, so the stored
+            # scope column loads as an input in the reform and its baseline.
+            apply_spm_measurement_scope(microsim)
         # Use ``microsim.tax_benefit_system``, not the module-level
         # ``system``: ``Microsimulation.__init__`` applies structural
         # reforms (e.g. ``gov.contrib.ctc.*``) to its per-sim system but
@@ -325,6 +347,12 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             data["household"], weights="household_weight"
         )
 
+        output_metadata = {
+            "spm_config": dict(microsim.spm_config),
+            RENAMES_RECORD_KEY: dict(sorted(legacy_input_renames.items())),
+        }
+        if measurement_scope is not None:
+            output_metadata[SCOPE_RECORD_KEY] = measurement_scope.model_dump()
         simulation.output_dataset = PolicyEngineUSDataset(
             id=simulation.id,
             name=dataset.name,
@@ -332,10 +360,7 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             filepath=str(_output_dataset_filepath(simulation)),
             year=simulation.dataset.year,
             is_output_dataset=True,
-            metadata={
-                "spm_config": dict(microsim.spm_config),
-                RENAMES_RECORD_KEY: dict(sorted(legacy_input_renames.items())),
-            },
+            metadata=output_metadata,
             data=USYearData(
                 person=data["person"],
                 marital_unit=data["marital_unit"],

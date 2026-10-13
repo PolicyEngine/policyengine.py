@@ -417,6 +417,11 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 RENAMES_RECORD_KEY,
                 read_renames_record,
             )
+            from policyengine.tax_benefit_models.us.spm_measurement_scope import (
+                SCOPE_RECORD_KEY,
+                read_scope_record,
+                scope_from_metadata,
+            )
 
             with h5py.File(filepath, "r") as stream:
                 raw = (
@@ -441,6 +446,18 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 raise ValueError(
                     "Saved US simulation predates the mapping of renamed "
                     "stored inputs (it has no record of them); run it again"
+                )
+            # !!! TEMPORARY ACS-LOCAL SPM COMPATIBILITY — MUST BE REPLACED (#597, #598) !!!
+            # an output is reused only under the SPM measurement
+            # scope its input data records (see ``spm_measurement_scope``).
+            recorded_scope = read_scope_record(filepath)
+            expected_scope = scope_from_metadata(
+                getattr(simulation.dataset, "metadata", None) or {}
+            )
+            if recorded_scope != expected_scope:
+                raise ValueError(
+                    "Saved US simulation used a different SPM measurement "
+                    "scope from its input data; run it again"
                 )
 
         if self.country_code == "uk":
@@ -474,6 +491,10 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             simulation.output_dataset.metadata.update(
                 {"spm_config": recorded["config"], RENAMES_RECORD_KEY: recorded_renames}
             )
+            if recorded_scope is not None:
+                simulation.output_dataset.metadata[SCOPE_RECORD_KEY] = (
+                    recorded_scope.model_dump()
+                )
 
         if os.path.exists(filepath):
             simulation.created_at = datetime.datetime.fromtimestamp(
