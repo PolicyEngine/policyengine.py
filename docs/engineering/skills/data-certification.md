@@ -35,8 +35,29 @@ python scripts/bundle.py certify-data --country us --data-producer populace \
   --model-version "<policyengine-us-version>"
 ```
 
-US state and congressional-district regions are row filters over one shared,
-certified ACS-local Populace dataset. Its release manifest must declare
+**Interim exception (from policyengine 6.3.4; PolicyEngine/policyengine.py#604).**
+State and congressional-district regions currently filter the certified
+national dataset, not the ACS-local one, and the bundle manifest was set that
+way by hand. The certified ACS-local release has no source-backed SPM
+independence, so canonical SPM refuses its SPM units that have no classified
+adult, and with them every state-region run (PolicyEngine/microcosm#1263,
+PolicyEngine/policyengine-sim-api#747). Until that is fixed:
+
+- do not pass `--regional-manifest-uri`: it writes the ACS-local templates
+  below back into the manifest;
+- after any certification, confirm `region_datasets.state` and
+  `region_datasets.congressional_district` still name the national file
+  (`tests/test_release_manifests.py` fails if they do not).
+
+Restore the ACS-local regions only with an ACS-local release in which every
+SPM unit has at least one classified adult under the pinned spm-calculator's
+rule (zero unclassified units), and after a state-region run through the
+public wrapper succeeds on it. Then remove this exception, the temporary test
+and the matching notes in `docs/regions.md` and `docs/bundles.md`.
+
+Outside that exception, US state and congressional-district regions are row
+filters over one shared, certified ACS-local Populace dataset. Its release
+manifest must declare
 `dataset_role: non_default_local_area`, `is_default: false`, no default
 datasets, and exactly one pinned H5 microdata artifact. Certification writes:
 

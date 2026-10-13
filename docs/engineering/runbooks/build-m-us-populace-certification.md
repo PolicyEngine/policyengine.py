@@ -87,8 +87,17 @@ PE_UPDATE_SNAPSHOTS=1 pytest tests/test_household_calculator_snapshot.py
 
 ## Step 5 — certify and verify the local-area release
 
-The certification command passes the immutable ACS-local release manifest with
-`--regional-manifest-uri`. Confirm all of the following:
+**Interim exception (from policyengine 6.3.4; PolicyEngine/policyengine.py#604).**
+Skip this step for now: state and congressional-district regions filter the
+national dataset until an ACS-local release has no SPM unit without a
+classified adult (PolicyEngine/microcosm#1263). Do not pass
+`--regional-manifest-uri`, and confirm `region_datasets.state` and
+`region_datasets.congressional_district` still select the national artifact.
+The data-certification skill (`docs/engineering/skills/data-certification.md`)
+says what must hold before this step applies again.
+
+When it applies, the certification command passes the immutable ACS-local
+release manifest with `--regional-manifest-uri`. Confirm all of the following:
 
 - `default_dataset` remains the national Populace dataset;
 - the local-area artifact appears in `data_releases.us.datasets` with its
