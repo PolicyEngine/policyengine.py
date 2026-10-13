@@ -7,9 +7,16 @@ import pytest
 from microdf import MicroDataFrame
 
 from policyengine.outputs.constituency_impact import (
+    ConstituencyImpact,
     compute_uk_constituency_impacts,
 )
 from policyengine.outputs.uk_geography_assets import CONSTITUENCY_ASSET_SPEC
+
+# These outputs are deprecated: they are not disclosure-controlled. The tests
+# below still pin their behaviour until they are removed.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:.*not disclosure-controlled.*:DeprecationWarning"
+)
 
 
 def _make_sim(household_data: dict) -> MagicMock:
@@ -248,3 +255,21 @@ def test_compute_constituency_impacts_requires_longwise_geography_column():
             reform,
             download_missing_assets=False,
         )
+
+
+def test_constituency_impacts_warn_that_they_are_not_disclosure_controlled():
+    household = {
+        "household_net_income": [100.0],
+        "household_weight": [1.0],
+        "constituency_code_oa": ["A001"],
+    }
+    baseline, reform = _make_sim(household), _make_sim(household)
+    message = "not disclosure-controlled.*compute_uk_geography_disclosure"
+
+    with pytest.warns(DeprecationWarning, match=message):
+        compute_uk_constituency_impacts(baseline, reform, download_missing_assets=False)
+    impact = ConstituencyImpact.model_construct(
+        baseline_simulation=baseline, reform_simulation=reform
+    )
+    with pytest.warns(DeprecationWarning, match=message):
+        impact.run()

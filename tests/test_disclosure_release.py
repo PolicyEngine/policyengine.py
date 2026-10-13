@@ -1,0 +1,512 @@
+"""The release check and the public rows. Synthetic data."""
+
+import stat
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from policyengine.disclosure import (
+    AreaWeights,
+    DisclosureError,
+    DisclosureSettings,
+    PriorPublic,
+    Release,
+    estimate_change,
+)
+from policyengine.disclosure.schema import (
+    ALREADY_PUBLIC,
+    APPROXIMATE,
+    AUDIT_COLUMNS,
+    NOISE_REFERENCE_PUBLIC,
+    PRIVATE_SECONDARY,
+    PUBLIC_COLUMNS,
+    REASON_DISCLOSURE_CONTROL,
+    REASON_THIN_SUPPORT,
+    RECOVERABLE_PARENT,
+    RECOVERABLE_REMAINDER,
+    REPORTED,
+    UNCHECKED_OVERLAP,
+    WITHHELD,
+)
+
+TEST_KEY = "test-key-for-unit-tests-only"
+REGION_OF = {"S1": "R1", "S2": "R1", "S3": "R1", "S4": "R2", "S5": "R2", "S6": "R2"}
+STRONG = {"S1": 60, "S2": 60, "S3": 60, "S4": 60, "S5": 60, "S6": 60}
+
+
+def _records(affected, *, households=120, change=200.0, loose=0):
+    """Households by seat, with the first ``affected[seat]`` of each changed.
+
+    ``loose`` adds changed households in region R1 that have no seat.
+    """
+    seats, regions, deltas = [], [], []
+    for seat, region in REGION_OF.items():
+        seats += [seat] * households
+        regions += [region] * households
+        deltas += [change] * affected[seat] + [0.0] * (households - affected[seat])
+    seats += [""] * loose
+    regions += ["R1"] * loose
+    deltas += [change] * loose
+    n = len(seats)
+    baseline = np.random.default_rng(0).uniform(20_000.0, 60_000.0, n)
+    return {
+        "seats": np.array(seats, dtype=object),
+        "regions": np.array(regions, dtype=object),
+        "weights": np.full(n, 100.0),
+        "source_ids": np.arange(n),
+        "baseline": baseline,
+        "change": np.array(deltas),
+    }
+
+
+def _estimates(data, level, *, reform="reform", change=None, settings=None, key=None):
+    codes = data["seats"] if level == "constituency" else data[f"{level}s"]
+    delta = data["change"] if change is None else change
+    return estimate_change(
+        level=level,
+        reform=reform,
+        year=2026,
+        areas=AreaWeights.from_labels(codes, data["weights"]),
+        source_ids=data["source_ids"],
+        baseline=data["baseline"],
+        reformed=data["baseline"] + delta,
+        settings=settings,
+        noise_key=key,
+    )
+
+
+def _release(affected, *, loose=0, settings=None, key=None, **options):
+    data = _records(affected, loose=loose)
+    release = Release(settings, **options)
+    release.add(_estimates(data, "region", settings=settings, key=key))
+    release.add(_estimates(data, "constituency", settings=settings, key=key))
+    release.add_nesting("constituency", "region")
+    return release
+
+
+def _blocking(findings, code):
+    return [
+        finding for finding in findings if finding.blocking and finding.code == code
+    ]
+
+
+def _public_row(release, area, outcome="average_change", level="constituency"):
+    frame = release.to_public().to_frame()
+    rows = frame[
+        (frame["level"] == level)
+        & (frame["area_code"] == area)
+        & (frame["outcome"] == outcome)
+    ]
+    assert len(rows) == 1
+    return rows.iloc[0]
+
+
+def test_to_public_needs_a_check_first():
+    release = _release(STRONG)
+
+    with pytest.raises(DisclosureError, match="check"):
+        release.to_public()
+
+    assert release.check() == []
+    release.to_public()
+    release.withhold(
+        level="constituency",
+        area_code="S1",
+        reform="reform",
+        year=2026,
+        outcome="average_change",
+    )
+    assert release.findings is None
+    with pytest.raises(DisclosureError, match="check"):
+        release.to_public()
+
+
+def test_public_rows_hold_only_public_columns():
+    release = _release(STRONG)
+    release.check()
+
+    frame = release.to_public().to_frame()
+
+    assert list(frame.columns) == list(PUBLIC_COLUMNS)
+    assert not set(frame.columns) & set(AUDIT_COLUMNS)
+    assert set(frame["level"]) == {"region", "constituency"}
+    assert len(frame) == (2 + 6) * 6
+    reported = _public_row(release, "S1")
+    assert reported["tier"] == REPORTED
+    assert pd.isna(reported["reason"])
+    assert reported["lo"] <= reported["value"] <= reported["hi"]
+
+
+def test_approximate_rows_keep_a_value_and_an_interval():
+    release = _release({**STRONG, "S1": 14})
+    release.check()
+
+    row = _public_row(release, "S1")
+
+    assert (row["tier"], row["reason"]) == (APPROXIMATE, REASON_THIN_SUPPORT)
+    assert row["lo"] <= row["value"] <= row["hi"]
+    assert row["direction"] == "gain"
+
+
+def test_one_withheld_seat_in_a_region_is_recoverable_until_a_second_goes():
+    release = _release({**STRONG, "S1": 4, "S2": 30})
+
+    findings = release.check()
+
+    blocking = _blocking(findings, RECOVERABLE_REMAINDER)
+    assert {finding.family for finding in blocking} == {"change", "share_gaining"}
+    for finding in blocking:
+        assert (finding.relation, finding.group) == ("nesting", "R1")
+        assert finding.members == ["S1"]
+        assert finding.suggested == "S2"
+    with pytest.raises(DisclosureError, match="recoverable_remainder"):
+        release.to_public()
+
+    for outcome in ("average_change", "share_gaining"):
+        release.withhold(
+            level="constituency",
+            area_code="S2",
+            reform="reform",
+            year=2026,
+            outcome=outcome,
+        )
+    assert release.check() == []
+    for seat in ("S1", "S2"):
+        row = _public_row(release, seat)
+        assert (row["tier"], row["reason"]) == (WITHHELD, REASON_DISCLOSURE_CONTROL)
+        for column in ("value", "lo", "hi", "direction", "support_band"):
+            assert pd.isna(row[column])
+    assert _public_row(release, "S3")["tier"] == REPORTED
+    assert _public_row(release, "S2", "share_no_change")["tier"] == WITHHELD
+    assert _public_row(release, "S2", "share_losing")["tier"] == REPORTED
+
+
+def test_findings_hold_labels_and_never_counts():
+    release = _release({**STRONG, "S1": 4, "S2": 30})
+
+    for finding in release.check():
+        assert not any(
+            character.isdigit() for character in finding.message.replace("R1", "")
+        )
+
+
+def test_withheld_seats_that_pass_together_need_no_more_withholding():
+    release = _release({**STRONG, "S1": 6, "S2": 7})
+
+    findings = release.check()
+
+    assert _blocking(findings, RECOVERABLE_REMAINDER) == []
+    assert _public_row(release, "S1")["tier"] == WITHHELD
+    assert _public_row(release, "S2")["tier"] == WITHHELD
+    assert _public_row(release, "S3")["tier"] == REPORTED
+
+
+def test_a_withheld_parent_gives_no_total_to_subtract_from():
+    release = _release({**STRONG, "S1": 4, "S2": 0, "S3": 0})
+
+    assert release.check() == []
+    assert _public_row(release, "R1", level="region")["tier"] == WITHHELD
+    assert _public_row(release, "S1")["tier"] == WITHHELD
+    assert _public_row(release, "S2")["value"] == 0.0
+
+
+def test_the_suggestion_skips_cells_that_add_nothing():
+    release = _release({**STRONG, "S1": 4, "S2": 0, "S3": 60})
+
+    findings = _blocking(release.check(), RECOVERABLE_REMAINDER)
+
+    assert {finding.suggested for finding in findings} == {"S3"}
+    assert {finding.group_level for finding in findings} == {"region"}
+
+
+def test_noise_never_protects_a_remainder():
+    settings = DisclosureSettings(noise=True)
+    release = _release({**STRONG, "S1": 4}, settings=settings, key=TEST_KEY)
+
+    assert _blocking(release.check(), RECOVERABLE_REMAINDER)
+
+
+def test_records_with_no_seat_are_part_of_the_remainder():
+    release = _release(STRONG, loose=5)
+
+    findings = _blocking(release.check(), RECOVERABLE_REMAINDER)
+
+    assert {finding.group for finding in findings} == {"R1"}
+    assert all(finding.members == [] for finding in findings)
+
+
+def test_a_withheld_parent_with_all_children_published_is_recoverable():
+    release = _release(STRONG)
+    release.withhold(
+        level="region",
+        area_code="R1",
+        reform="reform",
+        year=2026,
+        outcome="average_change",
+    )
+
+    findings = _blocking(release.check(), RECOVERABLE_PARENT)
+
+    assert [(f.relation, f.group, f.family) for f in findings] == [
+        ("nesting", "R1", "change")
+    ]
+
+
+def test_a_reference_level_is_checked_against_but_not_published():
+    data = _records({**STRONG, "S1": 4})
+    release = Release()
+    release.add(_estimates(data, "region"), publish=False)
+    release.add(_estimates(data, "constituency"))
+    release.add_nesting("constituency", "region")
+
+    assert _blocking(release.check(), RECOVERABLE_REMAINDER)
+    release.withhold(
+        level="constituency",
+        area_code="S2",
+        reform="reform",
+        year=2026,
+        outcome="average_change",
+    )
+    release.withhold(
+        level="constituency",
+        area_code="S2",
+        reform="reform",
+        year=2026,
+        outcome="share_gaining",
+    )
+    release.check()
+    assert set(release.to_public().to_frame()["level"]) == {"constituency"}
+
+
+def _package_release():
+    data = _records(STRONG)
+    seat_one = data["seats"] == "S1"
+    broad = data["change"]
+    narrow = np.where(seat_one & (np.arange(len(seat_one)) % 120 < 4), 500.0, 0.0)
+    narrow = np.where(~seat_one & (np.arange(len(seat_one)) % 120 < 60), 500.0, narrow)
+    release = Release()
+    for reform, change in (("A", broad), ("B", narrow), ("P", broad + narrow)):
+        release.add(_estimates(data, "constituency", reform=reform, change=change))
+    release.add_package("P", ["A", "B"])
+    return release
+
+
+def test_a_package_gives_away_a_withheld_component():
+    release = _package_release()
+
+    findings = _blocking(release.check(), RECOVERABLE_REMAINDER)
+
+    assert [(f.relation, f.reform, f.group, f.members) for f in findings] == [
+        ("package", "P", "S1", ["B"])
+    ]
+    assert findings[0].suggested == "A"
+
+    release.withhold(
+        level="constituency",
+        area_code="S1",
+        reform="P",
+        year=2026,
+        outcome="average_change",
+    )
+    assert release.check() == []
+
+
+def test_a_withheld_package_with_all_components_published_is_recoverable():
+    release = _package_release()
+    for reform in ("A", "P"):
+        release.withhold(
+            level="constituency",
+            area_code="S4",
+            reform=reform,
+            year=2026,
+            outcome="average_change",
+        )
+    release.withhold(
+        level="constituency",
+        area_code="S1",
+        reform="P",
+        year=2026,
+        outcome="average_change",
+    )
+    assert release.check() == []
+
+    release = _package_release()
+    release.withhold(
+        level="constituency",
+        area_code="S4",
+        reform="P",
+        year=2026,
+        outcome="average_change",
+    )
+    findings = _blocking(release.check(), RECOVERABLE_PARENT)
+    assert [(f.relation, f.group) for f in findings] == [("package", "S4")]
+
+
+def test_relations_need_their_estimates_on_the_same_records():
+    data = _records(STRONG)
+    release = Release()
+    release.add(_estimates(data, "constituency"))
+    release.add_nesting("constituency", "region")
+    with pytest.raises(DisclosureError, match="needs region estimates"):
+        release.check()
+
+    other = _records(STRONG, loose=3)
+    release.add(_estimates(other, "region"))
+    with pytest.raises(DisclosureError, match="same records"):
+        release.check()
+
+    release = Release()
+    release.add(_estimates(data, "constituency", reform="P"))
+    release.add_package("P", ["A"])
+    with pytest.raises(DisclosureError, match="component"):
+        release.check()
+
+
+def test_a_seat_in_two_regions_is_not_a_nesting():
+    data = _records(STRONG)
+    data["regions"][0] = "R2"
+    release = Release()
+    release.add(_estimates(data, "region"))
+    release.add(_estimates(data, "constituency"))
+    release.add_nesting("constituency", "region")
+
+    with pytest.raises(DisclosureError, match="more than one"):
+        release.check()
+
+
+def test_levels_published_together_need_a_declared_relation():
+    data = _records(STRONG)
+    data["local_authoritys"] = np.where(data["seats"] < "S3", "L1", "L2").astype(object)
+
+    def build(**options):
+        release = Release(**options)
+        release.add(_estimates(data, "constituency"))
+        release.add(_estimates(data, "local_authority"))
+        return release
+
+    blocked = build()
+    findings = blocked.check()
+    assert [(f.code, f.blocking, f.level) for f in findings] == [
+        (UNCHECKED_OVERLAP, True, "constituency|local_authority")
+    ]
+    with pytest.raises(DisclosureError, match=UNCHECKED_OVERLAP):
+        blocked.to_public()
+
+    accepted = build(acknowledge=[UNCHECKED_OVERLAP])
+    assert [f.blocking for f in accepted.check()] == [False]
+    accepted.to_public()
+
+    with pytest.raises(ValueError, match="cannot be acknowledged"):
+        Release(acknowledge=[RECOVERABLE_REMAINDER])
+
+
+def test_a_cell_that_is_already_public_is_not_a_secret():
+    cells = [
+        ("constituency", "S1", "reform", 2026, "average_change"),
+        ("constituency", "S1", "reform", 2026, "share_gaining"),
+    ]
+    release = _release(
+        {**STRONG, "S1": 4}, prior_public=[PriorPublic(name="2025 table", cells=cells)]
+    )
+
+    findings = release.check()
+
+    assert not any(finding.blocking for finding in findings)
+    assert {(f.code, f.group, tuple(f.members)) for f in findings} == {
+        (ALREADY_PUBLIC, "2025 table", ("S1",))
+    }
+    assert _public_row(release, "S1")["tier"] == WITHHELD
+
+
+def test_a_prior_with_another_noise_setting_blocks_until_acknowledged():
+    cells = [("constituency", "S3", "reform", 2026, "average_change")]
+    prior = PriorPublic(name="noised table", noise=True, cells=cells)
+
+    blocked = _release(STRONG, prior_public=[prior])
+    findings = blocked.check()
+    assert [(f.code, f.blocking, f.members) for f in findings] == [
+        (NOISE_REFERENCE_PUBLIC, True, ["S3"])
+    ]
+
+    accepted = _release(
+        STRONG, prior_public=[prior], acknowledge=[NOISE_REFERENCE_PUBLIC]
+    )
+    assert [f.blocking for f in accepted.check()] == [False]
+
+
+def test_a_weight_matrix_child_needs_parent_of_under_several_parents():
+    data = _records(STRONG)
+    n = len(data["seats"])
+    matrix = np.ones((2, n))
+    seats = estimate_change(
+        level="constituency",
+        reform="reform",
+        year=2026,
+        areas=AreaWeights.from_matrix(matrix, ["M1", "M2"]),
+        source_ids=data["source_ids"],
+        baseline=data["baseline"],
+        reformed=data["baseline"] + data["change"],
+    )
+
+    release = Release()
+    release.add(_estimates(data, "region"))
+    release.add(seats)
+    release.add_nesting("constituency", "region")
+    with pytest.raises(DisclosureError, match="parent_of"):
+        release.check()
+
+    release = Release()
+    release.add(_estimates(data, "region"))
+    release.add(seats)
+    release.add_nesting("constituency", "region", {"M1": "R1", "M2": "R2"})
+    assert release.check() == []
+
+
+def test_the_release_refuses_mixed_settings_and_duplicates():
+    data = _records(STRONG)
+    release = Release()
+    release.add(_estimates(data, "constituency"))
+
+    with pytest.raises(DisclosureError, match="already holds"):
+        release.add(_estimates(data, "constituency"))
+    with pytest.raises(DisclosureError, match="other settings"):
+        release.add(
+            _estimates(data, "region", settings=DisclosureSettings(min_sources=30))
+        )
+
+
+def test_withhold_takes_a_cell_of_the_release_and_a_family_outcome():
+    release = _release(STRONG)
+    cell = {"level": "constituency", "reform": "reform", "year": 2026}
+
+    with pytest.raises(ValueError, match="share_gaining"):
+        release.withhold(area_code="S1", outcome="share_no_change", **cell)
+    with pytest.raises(DisclosureError, match="no cell"):
+        release.withhold(area_code="S9", outcome="average_change", **cell)
+
+
+def test_the_audit_is_private_and_stays_out_of_repositories(tmp_path):
+    release = _release({**STRONG, "S1": 4})
+    release.withhold(
+        level="constituency",
+        area_code="S2",
+        reform="reform",
+        year=2026,
+        outcome="average_change",
+    )
+    repository = tmp_path / "repo"
+    (repository / ".git").mkdir(parents=True)
+
+    with pytest.raises(DisclosureError, match="git repository"):
+        release.write_audit(repository / "private" / "audit")
+
+    path = release.write_audit(tmp_path / "private")
+    audit = pd.read_csv(path)
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert set(AUDIT_COLUMNS) <= set(audit.columns)
+    manual = audit[
+        (audit["area_code"] == "S2") & (audit["outcome"] == "average_change")
+    ].iloc[0]
+    assert (manual["tier"], manual["private_reason"]) == (WITHHELD, PRIVATE_SECONDARY)
+    assert not list(repository.rglob("*.csv"))

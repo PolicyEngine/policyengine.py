@@ -88,6 +88,11 @@ national UK dataset.
 
 ## UK parliamentary constituencies
 
+To publish results by constituency, local authority or region, use
+`compute_uk_geography_disclosure`; see [Disclosure control](disclosure.md).
+The functions in this section and the next are deprecated: their output is
+not disclosure-controlled.
+
 Constituency-level impacts group household output rows by the longwise
 `constituency_code_oa` column carried by the dataset. If the constituency CSV is
 available locally or from the PolicyEngine UK GCS bucket, PolicyEngine uses it
