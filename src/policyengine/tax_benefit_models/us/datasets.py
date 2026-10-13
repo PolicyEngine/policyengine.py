@@ -475,7 +475,8 @@ def create_datasets(
         # before it is loaded, the package versions and the register the
         # mapping below uses.
         identity = dataset_source_identity(source)
-        snapshot = dataset_source_snapshot(source)
+        # The source is checked again only when year files are cut from it.
+        snapshot = dataset_source_snapshot(source) if years else None
         stamp = year_file_stamp(identity)
         sim = Microsimulation(dataset=source.path, spm=resolve_spm_selection())
         # Map stored inputs the engine has since renamed before extracting,
@@ -649,7 +650,11 @@ def create_datasets(
         # if it was downloaded, still hashes to the sha256 it was verified
         # against or downloaded with), so no stamp names a source the files
         # may not have been cut from.
-        change = dataset_source_change(source, identity, snapshot)
+        change = (
+            dataset_source_change(source, identity, snapshot)
+            if snapshot is not None
+            else None
+        )
         if change is not None:
             raise DatasetMaterializationError(
                 f"The source of the US year files {data_folder}/"
