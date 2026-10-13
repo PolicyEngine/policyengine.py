@@ -200,11 +200,17 @@ def read_one_file(
 
     The file at ``path`` is therefore held open while ``read`` runs. After it
     returns, ``path`` must still name that file (the same device and inode,
-    which cannot be given to another file while this one is held open), and
-    the file must have the size and modification time it had before. If not,
-    ``read`` runs again, up to ``attempts`` times in all, and then
-    ``RuntimeError`` is raised. A file moved onto the path is another file,
-    even when its contents are those of an earlier one.
+    which the file system does not give to another file while this one is
+    held open), and the file must have the size and modification time it had
+    before. If not, ``read`` runs again, up to ``attempts`` times in all, and
+    then ``RuntimeError`` is raised. A file moved onto the path is another
+    file, even when its contents are those of an earlier one.
+
+    Two changes are not noticed: a file rewritten in place to the same size
+    within one tick of the file system's modification time, and a file
+    replaced and then put back by moving another hard link to it onto the
+    path. Neither ``create_datasets`` nor ``save_output`` writes that way:
+    each moves a newly written file onto the path.
 
     Whatever ``read`` raises is raised, as is whatever opening ``path``
     raises (``FileNotFoundError`` for a missing file).

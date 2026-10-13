@@ -324,6 +324,28 @@ def _write_year_file(path, stamp, age=70) -> Path:
     return Path(path)
 
 
+def _write_stamps(path, *, stamp=_ABSENT, data_year=True, year_file_stamp=_ABSENT):
+    """Write what the checks read of an output or a year file, and no tables.
+
+    The checks read the stamps and whether there is a data year, never the
+    tables (``test_the_decision_reads_only_the_stamp_and_the_data_year``), and
+    decide alike with and without them
+    (``test_a_file_without_tables_is_checked_as_one_with_them``). The property
+    tests write one file per example, so they write these, a fortieth of the
+    size of :func:`_write_output`'s. Arguments are as for that function.
+    """
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with h5py.File(path, "w") as file:
+        if data_year is True:
+            # As pandas stores the data year: a group.
+            file.create_group(DATA_YEAR_KEY)
+        elif data_year is not False:
+            _write_data_year_node(file, data_year)
+        _write_node(file, YEAR_FILE_STAMP_H5_DATASET, year_file_stamp)
+        _write_node(file, OUTPUT_STAMP_H5_DATASET, stamp)
+    return Path(path)
+
+
 def _age(path) -> int:
     """The first person's age in the tables stored at ``path``."""
     with pd.HDFStore(path, mode="r") as store:
@@ -528,7 +550,7 @@ STAMPS = st.fixed_dictionaries(
 @given(first=STAMPS, second=STAMPS)
 def test_an_output_stamp_reads_back_as_written(first, second):
     with tempfile.TemporaryDirectory() as directory:
-        path = _write_output(Path(directory) / "output.h5")
+        path = _write_stamps(Path(directory) / "output.h5")
         write_output_stamp(path, first)
         assert read_output_stamp(path) == first
         write_output_stamp(path, second)
@@ -638,7 +660,7 @@ def stamped_outputs(draw):
 def test_an_output_is_current_only_under_the_exact_stamp_its_run_would_record(case):
     stamp, data_year, dataset_stamp = case
     with tempfile.TemporaryDirectory() as directory:
-        path = _write_output(
+        path = _write_stamps(
             Path(directory) / "output.h5", stamp=stamp, data_year=data_year
         )
         problem = output_stamp_problem(path, dataset_stamp)
@@ -679,7 +701,7 @@ def test_the_output_problem_is_total_and_exact_for_any_content(
     stamp, data_year, dataset_stamp, packages
 ):
     with tempfile.TemporaryDirectory() as directory:
-        path = _write_output(
+        path = _write_stamps(
             Path(directory) / "output.h5", stamp=stamp, data_year=data_year
         )
         problem = output_stamp_problem(path, dataset_stamp, packages)
@@ -698,6 +720,53 @@ def test_an_output_stamped_with_what_its_run_would_record_is_current(tmp_path):
             stamp=_stamp(dataset_stamp),
         )
         assert output_stamp_problem(path, dataset_stamp) is None
+
+
+@pytest.mark.parametrize("data_year", [True, False, *DATA_YEAR_NODES])
+@pytest.mark.parametrize(
+    "stamp",
+    [
+        _ABSENT,
+        None,
+        {"revision": REVISION + 1},
+        {"packages": PACKAGES, "revision": REVISION, "year_file": None},
+        {
+            "packages": {"policyengine-uk": "1.0"},
+            "revision": REVISION,
+            "year_file": None,
+        },
+        {
+            "packages": PACKAGES,
+            "revision": REVISION,
+            "year_file": {
+                "packages": {},
+                "revision": 1,
+                "source": {"uri": "u"},
+                "year": 1,
+            },
+        },
+        ("text", "not json"),
+        ("group", None),
+    ],
+)
+def test_a_file_without_tables_is_checked_as_one_with_them(tmp_path, stamp, data_year):
+    """The property tests' files hold no tables (see ``_write_stamps``)."""
+    full = _write_output(tmp_path / "full.h5", stamp=stamp, data_year=data_year)
+    light = _write_stamps(tmp_path / "light.h5", stamp=stamp, data_year=data_year)
+
+    for dataset_stamp in (None, _current_year_stamp()):
+        assert output_stamp_problem(light, dataset_stamp) == output_stamp_problem(
+            full, dataset_stamp
+        )
+    assert light.stat().st_size < full.stat().st_size / 10
+    year_file = _write_year_file(tmp_path / "year.h5", stamp)
+    light_year_file = _write_stamps(tmp_path / "light_year.h5", year_file_stamp=stamp)
+    assert year_file_stamp_metadata(light_year_file) == year_file_stamp_metadata(
+        year_file
+    )
+    assert year_file_stamp_problem(
+        light_year_file, IDENTITY, YEAR
+    ) == year_file_stamp_problem(year_file, IDENTITY, YEAR)
 
 
 def test_outputs_without_a_stamp_or_data_year_are_out_of_date_with_distinct_reasons(
@@ -876,7 +945,7 @@ def test_a_stale_output_names_each_difference(
     recorded, current, calculated_with, installed
 ):
     with tempfile.TemporaryDirectory() as directory:
-        path = _write_output(
+        path = _write_stamps(
             Path(directory) / "output.h5", stamp=_stamp(recorded, calculated_with)
         )
         problem = output_stamp_problem(path, current, installed)
@@ -1142,7 +1211,7 @@ def test_an_output_of_another_year_names_both(tmp_path):
 @functools.cache
 def _current_output_bytes() -> bytes:
     with tempfile.TemporaryDirectory() as directory:
-        path = _write_output(
+        path = _write_stamps(
             Path(directory) / "output.h5", stamp=_stamp(_current_year_stamp())
         )
         assert output_stamp_problem(path, _current_year_stamp()) is None
@@ -1228,20 +1297,22 @@ def test_an_output_never_passes_as_a_year_file_nor_the_reverse(year_file):
     with tempfile.TemporaryDirectory() as directory:
         directory = Path(directory)
         # An output stamped as current carries no year-file stamp.
-        output = _write_output(directory / "output.h5", stamp=_stamp(year_file))
+        output = _write_stamps(directory / "output.h5", stamp=_stamp(year_file))
         assert output_stamp_problem(output, year_file) is None
         assert read_year_file_stamp(output) is None
         assert year_file_stamp_metadata(output) is None
         assert year_file_stamp_problem(output, IDENTITY, YEAR) is not None
 
         # A current year file carries no output stamp.
-        year = _write_year_file(directory / "year.h5", _current_year_stamp())
+        year = _write_stamps(
+            directory / "year.h5", year_file_stamp=_current_year_stamp()
+        )
         assert year_file_stamp_problem(year, IDENTITY, YEAR) is None
         assert read_output_stamp(year) is None
         assert output_stamp_problem(year, _current_year_stamp()) == UNSTAMPED_OUTPUT
 
         # Nor does a US output stamp pass as a UK one.
-        us_output = _write_output(directory / "us.h5")
+        us_output = _write_stamps(directory / "us.h5")
         with h5py.File(us_output, "a") as file:
             _write_node(file, US_OUTPUT_STAMP_H5_DATASET, _stamp(year_file))
         assert output_stamp_problem(us_output, year_file) == UNSTAMPED_OUTPUT
@@ -1813,6 +1884,22 @@ def test_read_one_file_reads_again_after_the_file_is_modified_in_place(tmp_path)
 
     assert read_one_file(path, appending) == "first and more"
     assert reads == ["first", "first and more"]
+
+    # Another size, at the same time.
+    reads.clear()
+
+    def appending_unseen(name):
+        reads.append(Path(name).read_text())
+        if len(reads) == 1:
+            status = os.stat(name)
+            with open(name, "a") as file:
+                file.write("!")
+            os.utime(name, ns=(status.st_atime_ns, status.st_mtime_ns))
+        return reads[-1]
+
+    assert read_one_file(path, appending_unseen) == "first and more!"
+    assert len(reads) == 2
+    path.write_text("first and more")
 
     # The same size, at another time.
     reads.clear()

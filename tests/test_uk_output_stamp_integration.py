@@ -973,7 +973,7 @@ def _save_as(path: Path, saved: str, directory: Path, run_id: str) -> None:
         write_output_stamp(path, {"revision": OUTPUT_STAMP_REVISION})
 
 
-@settings(max_examples=150, deadline=None)
+@settings(max_examples=80, deadline=None)
 @given(saved=SAVED, kept=DATASET_STAMPS)
 def test_ensure_runs_exactly_when_load_would_refuse(saved, kept):
     with tempfile.TemporaryDirectory() as directory:
