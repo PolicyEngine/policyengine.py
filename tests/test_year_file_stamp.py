@@ -21,6 +21,7 @@ tests state the shared pieces' own invariants:
 from __future__ import annotations
 
 import builtins
+import os
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 from unittest.mock import patch
@@ -179,6 +180,7 @@ def _new_file_mode() -> int:
     return 0o666 & ~umask
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits")
 @pytest.mark.parametrize("umask", [0o022, 0o002, 0o077])
 def test_a_temporary_year_file_gets_a_new_files_mode(tmp_path, umask):
     """Not ``mkstemp``'s owner-only 0600, so a year file moved into place is

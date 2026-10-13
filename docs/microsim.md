@@ -324,14 +324,18 @@ modification time right after materializing it, and checks them again
 (re-hashing a downloaded file) once a dataset's year files are written. Only
 then does it stamp each temporary file and move it onto its path, in one
 step. The tables and the stamp at a year file's path therefore always come
-from one cut, even when two processes cut the same year files at once, and a
-year file moved into place gets the mode a newly created file would. If the
+from one cut, even when two processes cut the same year files at once. If the
 source changed, none of that dataset's year files is moved into place, the
 ones already there are left as they were, and `DatasetMaterializationError`
-is raised. A
-process killed mid-cut can leave a temporary file behind, which is never read
-and can be deleted. Requested datasets that are different sources with one
-name are refused with `ValueError`.
+is raised. A process killed mid-cut can leave a temporary file behind, which
+is never read and can be deleted. Requested datasets that are different
+sources with one name are refused with `ValueError`.
+
+Moving a year file into place replaces the file at its path rather than
+rewriting it. The cut therefore needs write access to the data folder (and,
+in a folder with the sticky bit set, ownership of the year file it replaces),
+and the year file gets the mode and group a file the cutting user creates
+there would get, not those of the file it replaces.
 
 The limits listed under [Year files](#year-files) apply to UK year files too,
 with policyengine-uk in place of policyengine-us, except that UK year files

@@ -570,7 +570,8 @@ def create_datasets(
         # What each year file is cut from and under: the source, identified
         # before it is loaded, and the package versions.
         identity = dataset_source_identity(source)
-        snapshot = dataset_source_snapshot(source)
+        # The source is checked again only when year files are cut from it.
+        snapshot = dataset_source_snapshot(source) if years else None
         packages = installed_package_versions()
         from policyengine_uk import Microsimulation
 
@@ -609,7 +610,11 @@ def create_datasets(
             # the one materialized (and, if it was downloaded, still hashes to
             # the sha256 it was verified against or downloaded with), so no
             # stamp names a source the files may not have been cut from.
-            change = dataset_source_change(source, identity, snapshot)
+            change = (
+                dataset_source_change(source, identity, snapshot)
+                if snapshot is not None
+                else None
+            )
             if change is not None:
                 raise DatasetMaterializationError(
                     f"The source of the UK year files {data_folder}/"

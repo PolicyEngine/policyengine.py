@@ -77,17 +77,15 @@ def test_us_create_datasets_passes_verified_bundle_source_to_country_package(
 
 
 def test_uk_create_datasets_passes_verified_bundle_source_to_country_package(
-    monkeypatch, tmp_path
+    monkeypatch,
 ):
     uk_datasets = _load_module_from_path(
         "_test_policyengine_uk_datasets",
         REPO_ROOT / "src/policyengine/tax_benefit_models/uk/datasets.py",
     )
-    # ``create_datasets`` records the materialized file's size and
-    # modification time before handing it over, so the file must exist.
-    source_file = tmp_path / "populace_uk_2023.h5"
-    source_file.write_bytes(b"materialized")
-    materialize = Mock(return_value=_source("uk", "populace_uk_2023", str(source_file)))
+    materialize = Mock(
+        return_value=_source("uk", "populace_uk_2023", "/tmp/populace_uk_2023.h5")
+    )
     microsimulation = Mock()
     monkeypatch.setattr(uk_datasets, "materialize_dataset", materialize)
     monkeypatch.setitem(
@@ -104,18 +102,20 @@ def test_uk_create_datasets_passes_verified_bundle_source_to_country_package(
         allow_unmanaged=False,
         data_dir=Path("./data"),
     )
-    microsimulation.assert_called_once_with(dataset=str(source_file))
+    microsimulation.assert_called_once_with(dataset="/tmp/populace_uk_2023.h5")
 
 
-def test_uk_create_datasets_defaults_to_certified_bundle_dataset(monkeypatch, tmp_path):
+def test_uk_create_datasets_defaults_to_certified_bundle_dataset(monkeypatch):
     uk_datasets = _load_module_from_path(
         "_test_policyengine_uk_default_create_datasets",
         REPO_ROOT / "src/policyengine/tax_benefit_models/uk/datasets.py",
     )
-    source_file = tmp_path / "enhanced_frs_2024_25.h5"
-    source_file.write_bytes(b"materialized")
     materialize = Mock(
-        return_value=_source("uk", "enhanced_frs_2024_25", str(source_file))
+        return_value=_source(
+            "uk",
+            "enhanced_frs_2024_25",
+            "/tmp/enhanced_frs_2024_25.h5",
+        )
     )
     microsimulation = Mock()
     monkeypatch.setattr(uk_datasets, "materialize_dataset", materialize)
@@ -133,7 +133,7 @@ def test_uk_create_datasets_defaults_to_certified_bundle_dataset(monkeypatch, tm
         allow_unmanaged=False,
         data_dir=Path("./data"),
     )
-    microsimulation.assert_called_once_with(dataset=str(source_file))
+    microsimulation.assert_called_once_with(dataset="/tmp/enhanced_frs_2024_25.h5")
 
 
 def test_uk_load_datasets_defaults_to_certified_bundle_dataset(monkeypatch):

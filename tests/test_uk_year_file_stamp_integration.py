@@ -158,11 +158,12 @@ def test_create_stamps_each_year_file_with_its_source_and_packages(tmp_path):
     # Each year file was written beside its path and moved into place, with
     # the mode a file pandas created at its path would have.
     assert _partial_files(data_folder) == []
-    umask = os.umask(0)
-    os.umask(umask)
-    for year in (DATA_YEAR, YEAR):
-        mode = (data_folder / f"tiny_uk_2024_year_{year}.h5").stat().st_mode
-        assert stat.S_IMODE(mode) == 0o666 & ~umask
+    if os.name != "nt":
+        umask = os.umask(0)
+        os.umask(umask)
+        for year in (DATA_YEAR, YEAR):
+            mode = (data_folder / f"tiny_uk_2024_year_{year}.h5").stat().st_mode
+            assert stat.S_IMODE(mode) == 0o666 & ~umask
     # The real versions, not a fixture's.
     assert all(installed_package_versions().values())
 
@@ -446,6 +447,10 @@ def test_a_year_given_as_a_float_is_cut_and_returned(tmp_path):
     assert dataset.filepath == f"{data_folder}/tiny_uk_2024_year_{float(YEAR)}.h5"
     assert read_year_file_stamp(dataset.filepath)["year"] == YEAR
     assert _partial_files(data_folder) == []
+    # ensure and load find the same file, and take it as current.
+    reused = _assert_reused(source, data_folder, (float(YEAR),))
+    assert reused[f"tiny_uk_2024_{float(YEAR)}"].filepath == dataset.filepath
+    assert reused[f"tiny_uk_2024_{float(YEAR)}"].year == YEAR
 
 
 def test_two_sources_cut_in_one_call_are_each_stamped_with_their_own(tmp_path):
