@@ -401,15 +401,45 @@ The renames applied are recorded as `{old: new}` (`{}` when none applied):
 carried the draw: data that stores neither name runs with the new input's
 default, which for WIC is full take-up.
 
-Files written before this mapping existed have no record, and are not reused:
+A saved US output written before this mapping existed has no record and may
+have been calculated without the mapped inputs, so `load()` refuses it, and
+`ensure()` runs the simulation again and saves the new output. Saved outputs
+are checked only for the record, not for the register they were calculated
+under.
 
-- A saved US output may have been calculated without the mapped inputs.
-  `load()` refuses it, and `ensure()` runs the simulation again and saves the new
-  output.
-- A year file that `ensure_datasets` or `create_datasets` wrote stores
-  neither name, so the draw is lost from it. `ensure_datasets` creates such
-  year files again, and `load_datasets` refuses them. A year file opened
-  directly, as `PolicyEngineUSDataset(filepath=...)`, is not checked.
+### Year files
+
+`create_datasets` stamps each year file, after writing everything else, with
+the register it was cut under and a year-file format revision
+(`legacy_inputs.YEAR_FILE_STAMP_H5_DATASET`, UTF-8 JSON
+`{"register": {old: new, ...}, "revision": 1}`). `ensure_datasets` reuses a
+year file only when its stamp equals this release's exactly and its renames
+record lists only renames in the stamped register. Otherwise it logs why and
+creates the year files again; `load_datasets` refuses the file with the same
+reason. To decide, both read only the stamp and the record, never the tables
+or the source dataset. `legacy_inputs.year_file_stamp_problem(path)` returns
+the reason, or `None` for a current year file.
+
+A year file is out of date when:
+
+- it has no stamp. Year files written by policyengine.py 6.1.1 and earlier
+  store neither WIC take-up name, so the draw is lost from them; year files
+  written with the renames record but before the stamp are cut again once;
+- its register lacks an entry this release has. It may have lost that
+  entry's input, as the older files lost the WIC draw;
+- its register has an entry this release lacks, or maps an old name to
+  another new name. It stores a new name this release's engine may not
+  define, and a run skips any column the engine does not define;
+- it has another format revision, or its stamp or record cannot be read.
+
+So any change to `LEGACY_INPUT_RENAMES` makes every year file out of date,
+and two policyengine.py versions with different registers that share a data
+folder cut each other's year files again. `ensure_datasets` raises, rather
+than cutting the files again, when a year file cannot be opened for reasons
+unrelated to its contents: no permission, a directory at its path, or a lock
+held by another process. A year file opened directly, as
+`PolicyEngineUSDataset(filepath=...)`, is not checked, and saving it again with
+`save()` drops its stamp.
 
 ## Pinned model versions
 
