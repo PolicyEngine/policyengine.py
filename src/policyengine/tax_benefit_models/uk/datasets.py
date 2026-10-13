@@ -1,5 +1,4 @@
 import copy
-import json
 import logging
 from collections.abc import Mapping
 from pathlib import Path
@@ -27,8 +26,10 @@ from policyengine.provenance.year_file_stamp import (
     UNREADABLE,
     UNRELATED_TO_CONTENTS,
     is_version_map,
+    package_differences,
     publish_year_file,
     read_json_dataset,
+    read_one_file,
     read_stored_json,
     source_and_package_differences,
     temporary_year_file,
@@ -64,7 +65,8 @@ YEAR_FILE_STAMP_H5_DATASET = "policyengine_uk_year_file_stamp"
 #: they are cut again once.
 #:
 #: A saved output records the stamp of the year file it was calculated from,
-#: so raising this makes those outputs out of date too.
+#: so once the year files are cut again under a new revision, outputs
+#: calculated from the old ones are out of date too.
 YEAR_FILE_STAMP_REVISION = 1
 
 #: Key under which a UK dataset read from, or cut into, a year file keeps that
@@ -73,16 +75,18 @@ YEAR_FILE_STAMP_REVISION = 1
 YEAR_FILE_STAMP_KEY = "year_file_stamp"
 
 #: H5 dataset stamping a saved UK simulation output, as UTF-8 JSON
-#: ``{"revision": int, "year_file": ...}``: its output format revision and the
-#: stamp of the year file it was calculated from (``null`` when the input
-#: dataset kept none). See :func:`output_stamp`.
+#: ``{"packages": {...}, "revision": int, "year_file": ...}``: the installed
+#: versions of the packages that calculated it, its output format revision,
+#: and the stamp of the year file it was calculated from (``null`` when the
+#: input dataset kept none). See :func:`output_stamp`.
 #:
 #: A UK run records the stamp in its output's ``metadata`` (under
-#: :data:`OUTPUT_STAMP_KEY`) when it is calculated.
-#: ``MicrosimulationModelVersion.save()`` writes it after the tables and the
-#: data year, so an output whose save stopped part-way has none.
-#: ``Simulation.load()`` refuses an output whose stamp does not match what a
-#: run of the simulation's dataset would record now, under this release (see
+#: :data:`OUTPUT_STAMP_KEY`) when it is calculated. Saving the output writes
+#: its tables, its data year and then the stamp to a temporary file, and
+#: moves that onto the output's path in one step (see :func:`save_output`), so
+#: the tables and the stamp at the path always come from one run.
+#: ``Simulation.load()`` refuses an output whose stamp is not the one a run of
+#: the simulation's dataset would record now (see
 #: :func:`output_stamp_problem`), and ``Simulation.ensure()`` then calculates
 #: it again.
 #:
@@ -92,9 +96,9 @@ YEAR_FILE_STAMP_KEY = "year_file_stamp"
 OUTPUT_STAMP_H5_DATASET = "policyengine_uk_output_stamp"
 
 #: Format revision of saved UK outputs, stored in their stamp. Raise it when a
-#: change to how a run calculates its output means that outputs calculated
-#: before it must be calculated again, for a reason the year-file stamp does
-#: not capture.
+#: change to how policyengine.py runs a UK simulation means that outputs
+#: calculated before it must be calculated again, for a reason the rest of
+#: the stamp does not capture.
 #:
 #: Revision 1 is the first: UK outputs saved before it have no stamp, so they
 #: are calculated again once.
@@ -102,11 +106,6 @@ OUTPUT_STAMP_REVISION = 1
 
 #: Key under which a UK run's output keeps its stamp in ``metadata``.
 OUTPUT_STAMP_KEY = "output_stamp"
-
-#: Times ``PolicyEngineUKDataset.load()`` reads a file whose year-file stamp
-#: changes while its tables are read before it gives up (see
-#: ``PolicyEngineUKDataset.load``).
-_LOAD_ATTEMPTS = 3
 
 #: Distributions whose installed versions a UK year file's stamp records.
 #: ``create_datasets`` stores each year's tables as policyengine-uk projects
@@ -117,6 +116,13 @@ _LOAD_ATTEMPTS = 3
 #: new student loan holders in each projected year from numpy's random
 #: generator, seeded by the year; numpy's version is not recorded.)
 YEAR_FILE_PACKAGES = ("policyengine-core", "policyengine-uk")
+
+#: Distributions whose installed versions a UK output's stamp records: those
+#: that calculate a run. They are the ones a year file's stamp records, but
+#: an output records them itself: a run can be calculated with other versions
+#: than cut the year file it reads (a year file opened directly after an
+#: upgrade, for example).
+OUTPUT_PACKAGES = YEAR_FILE_PACKAGES
 
 #: Prefix of the HDF5 keys holding the data year's entity tables in a year
 #: file whose year comes after its data year.
@@ -242,7 +248,10 @@ class PolicyEngineUKDataset(Dataset):
         filepath = Path(self.filepath)
         if not filepath.parent.exists():
             filepath.parent.mkdir(parents=True, exist_ok=True)
+        self._write(filepath)
 
+    def _write(self, filepath: Path) -> None:
+        """Write the tables and the data year to ``filepath``, replacing it."""
         # Mode "w" truncates the file first, so saving a year file again
         # drops the stamp ``create_datasets`` wrote after it.
         with pd.HDFStore(filepath, mode="w") as store:
@@ -262,21 +271,21 @@ class PolicyEngineUKDataset(Dataset):
         A run records it in its output's stamp, so an output calculated from a
         year file that is cut again is not reused.
 
-        The stamp is read before and after the tables. ``create_datasets``
-        replaces a year file whole, with its stamp, so the same stamp both
-        times means the tables came from a cut stamped with it. If another
-        process replaces the file with a differently stamped one in between,
-        it is read again, up to three times in all, and then ``RuntimeError``
-        is raised.
+        The stamp and the tables are each read through their own open of the
+        file, and ``create_datasets`` in another process can move another cut
+        onto the path in between. ``year_file_stamp.read_one_file`` checks
+        that both were read from one unchanged file, and reads again if not
+        (``RuntimeError`` after three attempts), so the stamp a dataset keeps
+        is the stamp of the cut its tables came from.
         """
-        filepath = self.filepath
-        if not filepath:
+        if not self.filepath:
             raise ValueError(
                 "Cannot load a PolicyEngineUKDataset with no filepath. This "
                 "is an in-memory dataset; set `.filepath` to a file to load."
             )
-        for _ in range(_LOAD_ATTEMPTS):
-            before = year_file_stamp_metadata(filepath)
+
+        def read(filepath: str):
+            stamp = year_file_stamp_metadata(filepath)
             with pd.HDFStore(filepath, mode="r") as store:
                 keys = set(store.keys())
                 data = _read_year_data(store)
@@ -290,19 +299,11 @@ class PolicyEngineUKDataset(Dataset):
                     if f"/{DATA_YEAR_TABLE_PREFIX}person" in keys
                     else None
                 )
-            stamp = year_file_stamp_metadata(filepath)
-            # As JSON: Python equality takes ``true`` for 1.
-            if json.dumps(stamp, sort_keys=True) == json.dumps(before, sort_keys=True):
-                break
-        else:
-            raise RuntimeError(
-                f"UK year file {filepath} was replaced while it was read, "
-                f"{_LOAD_ATTEMPTS} times; load it again once it is no longer "
-                "being cut"
-            )
-        self.data = data
-        self.data_year = data_year
-        self.data_year_data = data_year_data
+            return stamp, data, data_year, data_year_data
+
+        stamp, self.data, self.data_year, self.data_year_data = read_one_file(
+            self.filepath, read
+        )
         if stamp is None:
             self.metadata.pop(YEAR_FILE_STAMP_KEY, None)
         else:
@@ -644,18 +645,45 @@ def input_year_file_stamp(dataset: Any) -> Any | None:
     return copy.deepcopy(metadata.get(YEAR_FILE_STAMP_KEY))
 
 
-def output_stamp(year_file: Any = None) -> dict[str, Any]:
+def installed_output_packages() -> dict[str, Optional[str]]:
+    """Return the installed version of each of :data:`OUTPUT_PACKAGES`.
+
+    ``None`` stands for a package that is not installed. The versions come
+    from the installed distributions' metadata, so no package is imported.
+    """
+    return _shared_stamp.installed_package_versions(OUTPUT_PACKAGES)
+
+
+def output_stamp(
+    year_file: Any = None,
+    packages: Optional[Mapping[str, Optional[str]]] = None,
+) -> dict[str, Any]:
     """Return the stamp for a UK output calculated now.
 
-    ``year_file`` is the year-file stamp the input dataset keeps (see
-    :func:`input_year_file_stamp`), or ``None`` when it keeps none. A run
-    records the stamp in its output's ``metadata`` under
+    A run records it in its output's ``metadata`` under
     :data:`OUTPUT_STAMP_KEY`, and saving the output writes it as UTF-8 JSON in
     :data:`OUTPUT_STAMP_H5_DATASET`::
 
-        {"revision": int, "year_file": {...} | null}
+        {"packages": {"policyengine-core": str | null,
+                      "policyengine-uk": str | null},
+         "revision": int,
+         "year_file": {...} | null}
+
+    ``packages`` defaults to :func:`installed_output_packages`, read when this
+    is called: the versions that calculate the run. ``revision`` is
+    :data:`OUTPUT_STAMP_REVISION`. ``year_file`` is the year-file stamp the
+    input dataset keeps (see :func:`input_year_file_stamp`), or ``None`` when
+    it keeps none. It names the tables the run reads, and records the
+    versions that cut them, which need not be the ones that calculate the
+    run.
     """
-    return {"revision": OUTPUT_STAMP_REVISION, "year_file": copy.deepcopy(year_file)}
+    if packages is None:
+        packages = installed_output_packages()
+    return {
+        "packages": dict(sorted(packages.items())),
+        "revision": OUTPUT_STAMP_REVISION,
+        "year_file": copy.deepcopy(year_file),
+    }
 
 
 def read_output_stamp(path: str | Path) -> Any | None:
@@ -670,6 +698,31 @@ def read_output_stamp(path: str | Path) -> Any | None:
 def write_output_stamp(path: str | Path, stamp: Mapping[str, Any]) -> None:
     """Stamp a saved UK output (see :func:`output_stamp`), replacing any stamp."""
     write_json_dataset(path, OUTPUT_STAMP_H5_DATASET, dict(stamp))
+
+
+def save_output(dataset: PolicyEngineUKDataset, stamp: Mapping[str, Any]) -> None:
+    """Save a run's output and its stamp to ``dataset.filepath`` in one step.
+
+    The tables and the data year are written to a temporary file beside the
+    path, which is then stamped and moved onto the path, as
+    ``create_datasets`` writes a year file (see
+    ``year_file_stamp.temporary_year_file`` and ``publish_year_file``). The
+    tables and the stamp at the path therefore always come from one save,
+    even when two processes save an output to the same path at once, and a
+    save that fails leaves the output already there as it was.
+    """
+    if not dataset.filepath:
+        raise ValueError(
+            "Cannot save a PolicyEngineUKDataset with no filepath. This "
+            "is an in-memory dataset (e.g. a region-scoped copy); set "
+            "`.filepath` to a destination before calling save()."
+        )
+    temporary = temporary_year_file(dataset.filepath)
+    try:
+        dataset._write(temporary)
+        publish_year_file(temporary, dataset.filepath, OUTPUT_STAMP_H5_DATASET, stamp)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 #: What a UK run without a data year would have done wrong.
@@ -694,13 +747,21 @@ STAMPED_OUTPUT_WITHOUT_DATA_YEAR = (
 
 #: Why a UK output with a data year but no stamp is out of date.
 UNSTAMPED_OUTPUT = (
-    "it has no stamp of what it was calculated from, so it was saved by an "
-    "older policyengine.py or not saved completely"
+    "it has no stamp of what it was calculated from and with, so it was saved "
+    "by an older policyengine.py"
 )
 
 #: Why a UK output whose stamp is unreadable or of another shape is out of
 #: date.
-MALFORMED_OUTPUT_STAMP = "its stamp of what it was calculated from is malformed"
+MALFORMED_OUTPUT_STAMP = (
+    "its stamp of what it was calculated from and with is malformed"
+)
+
+#: Why a UK output calculated from a year file whose stamp is unreadable or
+#: of another shape is out of date: such a stamp names no cut.
+MALFORMED_OUTPUT_YEAR_FILE = (
+    "it was calculated from a year file whose stamp is unreadable or malformed"
+)
 
 
 def output_stamp_problem(
@@ -712,25 +773,23 @@ def output_stamp_problem(
 
     ``year_file`` is the year-file stamp a run of the simulation's dataset
     would record now (see :func:`input_year_file_stamp`), and ``packages``
-    defaults to :func:`installed_package_versions`. A saved output is current
+    defaults to :func:`installed_output_packages`. A saved output is current
     only when all of these hold:
 
     - it records its data year (``DATA_YEAR_KEY``), as every output a UK run
       saves does;
-    - its stamp equals ``output_stamp(year_file)``: this release's output
-      format revision, and the stamp of the year file it was calculated from
-      equal to the simulation's dataset's. An output calculated from another
-      year file, or from another cut of the same one, holds other results.
-      ``create_datasets`` cuts a year file again with another stamp when the
-      bundle re-pins its dataset, its local source changes or a package is
-      upgraded, so an output is never reused once the simulation's dataset
-      is read from such a cut;
-    - ``year_file`` is ``None``, or a well-formed year-file stamp with this
-      release's year-file format revision and the installed package versions
-      (``year_file_stamp(year_file["source"], year_file["year"], packages)``
-      equals it). The packages that cut a year file also calculate a run of
-      it, so an output calculated from a year file cut with other versions
-      is out of date even before the year file is cut again.
+    - its stamp equals ``output_stamp(year_file, packages)``, the one a run of
+      the simulation's dataset would record now: this release's output format
+      revision, the installed package versions, and the year-file stamp the
+      dataset keeps. An output calculated with other versions holds other
+      results, and so does one calculated from another year file, or from
+      another cut of the same one. ``create_datasets`` cuts a year file again
+      with another stamp when the bundle re-pins its dataset, its local
+      source changes or a package is upgraded, so an output is not reused
+      once the simulation's dataset is read from such a cut;
+    - ``year_file`` is ``None`` or a well-formed year-file stamp. One that
+      is unreadable, or of another shape, names no cut, so an output
+      calculated from such a year file is never current.
 
     Whether the year file is current for the source requested now is not
     checked here: ``load_datasets`` refuses, and ``ensure_datasets`` cuts
@@ -747,12 +806,14 @@ def output_stamp_problem(
     Returns:
         ``None`` for a current output; otherwise a clause, starting "it" or
         "its", that says why the output is out of date. It names the years,
-        sources and package versions that differ between the year file the
-        output was calculated from and the simulation's dataset, or between
-        that year file and this release.
+        format revisions, sources and package versions that differ between
+        the year file the output was calculated from and the simulation's
+        dataset, and the package versions the output was calculated with
+        that are not the ones installed.
     """
     import h5py
 
+    current = output_stamp(year_file, packages)
     try:
         with h5py.File(path, "r") as file:
             stamp = read_json_dataset(file, OUTPUT_STAMP_H5_DATASET)
@@ -783,52 +844,35 @@ def output_stamp_problem(
     # ``True``, which equals 1.
     if not (
         isinstance(stamp, dict)
-        and set(stamp) == {"revision", "year_file"}
+        and set(stamp) == {"packages", "revision", "year_file"}
         and type(revision) is int
+        and is_version_map(stamp["packages"])
     ):
         return MALFORMED_OUTPUT_STAMP
-    reasons = _output_year_file_reasons(stamp["year_file"], year_file, packages)
+    reasons = _output_year_file_reasons(stamp["year_file"], current["year_file"])
+    reasons.extend(
+        package_differences(stamp["packages"], current["packages"], "calculated")
+    )
     return "; ".join(reasons) or None
 
 
-def _output_year_file_reasons(
-    recorded: Any,
-    current: Any,
-    packages: Optional[Mapping[str, Optional[str]]],
-) -> list[str]:
+def _output_year_file_reasons(recorded: Any, current: Any) -> list[str]:
     """Say why an output calculated from the year file stamped ``recorded`` is
     out of date, for a simulation whose dataset keeps ``current``.
 
-    Returns no reason exactly when ``recorded`` equals ``current`` and is
-    ``None`` or this release's stamp for its source and year under
-    ``packages``. Both must be well formed to count as equal: Python equality
-    takes JSON ``true`` for 1, and a well-formed stamp holds only strings,
-    integers and ``null``, which compare as JSON does.
+    Returns no reason exactly when ``recorded`` equals ``current`` and both
+    are ``None`` or well-formed year-file stamps. They must be well formed to
+    count as equal: Python equality takes JSON ``true`` for 1, and a
+    well-formed stamp holds only strings, integers and ``null``, which
+    compare as JSON does.
     """
     if recorded != current:
         return [_year_file_mismatch(recorded, current)]
     if recorded is None:
         return []
-    # The revision comes first: a later revision may shape its stamp
-    # differently.
-    revision = recorded.get("revision") if isinstance(recorded, dict) else None
-    if type(revision) is int and revision != YEAR_FILE_STAMP_REVISION:
-        return [
-            "it was calculated from a year file cut with year-file format "
-            f"revision {revision}, and this version of policyengine.py reads "
-            f"only revision {YEAR_FILE_STAMP_REVISION}"
-        ]
     if not (_is_year_file_stamp(recorded) and _is_year_file_stamp(current)):
-        return [
-            "it was calculated from a year file whose stamp is unreadable or malformed"
-        ]
-    expected = year_file_stamp(recorded["source"], recorded["year"], packages)
-    # Each clause starts "it", meaning the year file; the sources are equal,
-    # so the clauses name package versions only.
-    return [
-        "its year file " + clause.removeprefix("it ")
-        for clause in source_and_package_differences(recorded, expected)
-    ]
+        return [MALFORMED_OUTPUT_YEAR_FILE]
+    return []
 
 
 def _year_file_mismatch(recorded: Any, current: Any) -> str:

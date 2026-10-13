@@ -1,18 +1,18 @@
 """Unit and property tests for the stamp on saved UK simulation outputs.
 
 A UK run records a stamp in its output (``uk.datasets.OUTPUT_STAMP_H5_DATASET``
-once saved): an output format revision and the stamp of the year file its
-input data was cut into, or ``null``. ``Simulation.load()`` refuses an
-output, and ``Simulation.ensure()`` calculates it again, unless the stamp is
-what a run of the simulation's dataset would record now, under this release.
-These tests state the check's invariants over generated stamps, data-year
-nodes and input year-file stamps, without a country engine:
+once saved): the installed versions of the packages that calculated it, an
+output format revision, and the stamp of the year file its input data was cut
+into, or ``null``. ``Simulation.load()`` refuses an output, and
+``Simulation.ensure()`` calculates it again, unless the stamp is the one a run
+of the simulation's dataset would record now. These tests state the check's
+invariants over generated stamps, data-year nodes, package versions and input
+year-file stamps, without a country engine:
 
 - **Exactness.** An output is current exactly when it records its data year,
-  its stamp has this release's output format revision, its year-file stamp
-  equals the simulation's dataset's, and that is ``null`` or a well-formed
-  year-file stamp with this release's year-file format revision and the
-  installed package versions.
+  its stamp has this release's output format revision and the installed
+  package versions, its year-file stamp equals the simulation's dataset's,
+  and that is ``null`` or a well-formed year-file stamp.
 - **Totality.** Whatever the stamp, the data year and the dataset's stamp
   hold, the check returns a reason or ``None``, and raises only for errors
   unrelated to the file's contents (a missing file, no permission, a
@@ -20,18 +20,23 @@ nodes and input year-file stamps, without a country engine:
 - **Round trip.** A stamp reads back as written, and writing again replaces it.
 - **Named differences.** The reason names every year, format revision,
   source and package version that differs between the year file the output
-  was calculated from and the simulation's dataset, or between that year
-  file's packages and the installed ones, and nothing that agrees.
+  was calculated from and the simulation's dataset, and every package
+  version the output was calculated with that is not the one installed, and
+  nothing that agrees.
 - **No partial output is current.** Every truncation of a current output is
   out of date.
 - **Distinct stamps.** An output never passes as a year file, nor a year file
   as an output, nor a US output as a UK one.
-- **One cut per load.** A dataset loaded from a year file keeps the stamp of
-  the cut its tables came from, even when the file is replaced while it is
-  read.
+- **One save per output.** The tables and the stamp at an output's path come
+  from one save: a save that fails leaves the output already there whole,
+  and two saves to one path never leave one's tables under the other's
+  stamp.
+- **One file per load.** A dataset loaded from a year file keeps the stamp of
+  the cut its tables came from, even when the file is replaced, replaced and
+  put back, or modified while it is read.
 
-``test_uk_year_file_data_year.py`` runs, saves, loads and ensures outputs over
-a real policyengine-uk engine, on a tiny dataset.
+``test_uk_output_stamp_integration.py`` runs, saves, loads and ensures outputs
+over a real policyengine-uk engine, on a tiny dataset.
 """
 
 from __future__ import annotations
@@ -52,14 +57,21 @@ from hypothesis import event, given, settings
 from hypothesis import strategies as st
 from microdf import MicroDataFrame
 
+from policyengine.provenance import year_file_stamp as shared_stamp
 from policyengine.provenance.dataset_materialization import (
     describe_dataset_source_identity,
 )
-from policyengine.provenance.year_file_stamp import NOT_HDF5
+from policyengine.provenance.year_file_stamp import (
+    NOT_HDF5,
+    package_differences,
+    read_one_file,
+)
 from policyengine.tax_benefit_models.uk import datasets as uk_datasets
 from policyengine.tax_benefit_models.uk.datasets import (
     DATA_YEAR_KEY,
     MALFORMED_OUTPUT_STAMP,
+    MALFORMED_OUTPUT_YEAR_FILE,
+    OUTPUT_PACKAGES,
     OUTPUT_STAMP_H5_DATASET,
     OUTPUT_STAMP_KEY,
     OUTPUT_STAMP_REVISION,
@@ -67,7 +79,6 @@ from policyengine.tax_benefit_models.uk.datasets import (
     STAMPED_OUTPUT_WITHOUT_DATA_YEAR,
     UNREADABLE_YEAR_FILE_STAMP,
     UNSTAMPED_OUTPUT,
-    YEAR_FILE_PACKAGES,
     YEAR_FILE_STAMP_H5_DATASET,
     YEAR_FILE_STAMP_KEY,
     YEAR_FILE_STAMP_REVISION,
@@ -78,6 +89,7 @@ from policyengine.tax_benefit_models.uk.datasets import (
     output_stamp_problem,
     read_output_stamp,
     read_year_file_stamp,
+    save_output,
     write_output_stamp,
     year_file_stamp,
     year_file_stamp_metadata,
@@ -93,6 +105,8 @@ IDENTITY = {"uri": SOURCE}
 #: The installed versions every test in this module sees (see
 #: ``_installed_packages``), so no expectation depends on the environment.
 PACKAGES = {"policyengine-core": "3.33.0", "policyengine-uk": "2.126.12"}
+#: The real reader, kept before ``_installed_packages`` replaces it.
+REAL_INSTALLED_OUTPUT_PACKAGES = uk_datasets.installed_output_packages
 #: The US output stamp's H5 dataset (``us.legacy_inputs.OUTPUT_STAMP_H5_DATASET``,
 #: PolicyEngine/policyengine.py#594), named here so this module does not
 #: depend on that change.
@@ -115,7 +129,7 @@ SOURCES = st.one_of(
         st.sampled_from([0, 1_760_000_000_123_456_789]),
     ),
 )
-PACKAGE_NAMES = st.sampled_from([*YEAR_FILE_PACKAGES, "policyengine-us", "extra"])
+PACKAGE_NAMES = st.sampled_from([*OUTPUT_PACKAGES, "policyengine-us", "extra"])
 VERSIONS = st.one_of(st.none(), st.sampled_from(["1.0", "1.1"]))
 PACKAGE_MAPS = st.one_of(
     st.just(PACKAGES), st.dictionaries(PACKAGE_NAMES, VERSIONS, max_size=3)
@@ -181,6 +195,9 @@ def _installed_packages():
         patcher.setattr(
             uk_datasets, "installed_package_versions", lambda: dict(PACKAGES)
         )
+        patcher.setattr(
+            uk_datasets, "installed_output_packages", lambda: dict(PACKAGES)
+        )
         yield
 
 
@@ -211,7 +228,7 @@ def _tables(age=70) -> UKYearData:
     )
 
 
-def _output_dataset(path, data_year=DATA_YEAR) -> PolicyEngineUKDataset:
+def _output_dataset(path, data_year=DATA_YEAR, age=70) -> PolicyEngineUKDataset:
     """A two-person UK output for ``YEAR``, as a run makes one."""
     return PolicyEngineUKDataset(
         name="output",
@@ -219,20 +236,19 @@ def _output_dataset(path, data_year=DATA_YEAR) -> PolicyEngineUKDataset:
         filepath=str(path),
         year=YEAR,
         is_output_dataset=True,
-        data=_tables(),
+        data=_tables(age),
         data_year=data_year,
     )
 
 
 def _year_dataset(path, age=70) -> PolicyEngineUKDataset:
     """A two-person UK year file for ``YEAR`` projected from ``DATA_YEAR``."""
-    tables = _tables(age)
     return PolicyEngineUKDataset(
         name="year-file",
         description="Uncertified two-person UK year-file fixture",
         filepath=str(path),
         year=YEAR,
-        data=tables,
+        data=_tables(age),
         data_year=DATA_YEAR,
         data_year_data=_tables(age),
     )
@@ -279,7 +295,9 @@ def _write_data_year_node(file, kind) -> None:
         raise AssertionError(kind)
 
 
-def _write_output(path, *, stamp=_ABSENT, data_year=True, year_file_stamp=_ABSENT):
+def _write_output(
+    path, *, stamp=_ABSENT, data_year=True, year_file_stamp=_ABSENT, age=70
+):
     """Write an output's tables and data year, then its stamps, as given.
 
     ``stamp`` (the output stamp) and ``year_file_stamp`` are JSON values,
@@ -288,7 +306,7 @@ def _write_output(path, *, stamp=_ABSENT, data_year=True, year_file_stamp=_ABSEN
     or one of :data:`DATA_YEAR_NODES`.
     """
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    _output_dataset(path, DATA_YEAR if data_year is True else None).save()
+    _output_dataset(path, DATA_YEAR if data_year is True else None, age).save()
     with h5py.File(path, "a") as file:
         if data_year not in (True, False):
             _write_data_year_node(file, data_year)
@@ -304,6 +322,12 @@ def _write_year_file(path, stamp, age=70) -> Path:
     with h5py.File(path, "a") as file:
         _write_node(file, YEAR_FILE_STAMP_H5_DATASET, stamp)
     return Path(path)
+
+
+def _age(path) -> int:
+    """The first person's age in the tables stored at ``path``."""
+    with pd.HDFStore(path, mode="r") as store:
+        return int(store["person"]["age"].iloc[0])
 
 
 #: What :func:`_stored` gives for a node no reader can parse as JSON.
@@ -374,18 +398,15 @@ def _is_current(stamp, data_year, dataset_stamp, packages=PACKAGES) -> bool:
 
     Only a data year written as ``save()`` writes it (a group) counts.
     """
-    if dataset_stamp is not None and not (
-        _well_formed_year_file_stamp(dataset_stamp)
-        and dataset_stamp["revision"] == YEAR_FILE_REVISION
-        and _same_json(dataset_stamp["packages"], dict(sorted(packages.items())))
-    ):
+    if dataset_stamp is not None and not _well_formed_year_file_stamp(dataset_stamp):
         return False
     return (
         data_year is True
         and isinstance(stamp, dict)
-        and set(stamp) == {"revision", "year_file"}
+        and set(stamp) == {"packages", "revision", "year_file"}
         and type(stamp["revision"]) is int
         and stamp["revision"] == REVISION
+        and _same_json(stamp["packages"], dict(packages))
         and _same_json(stamp["year_file"], dataset_stamp)
     )
 
@@ -405,16 +426,73 @@ def _current_year_stamp(year=YEAR):
     return year_file_stamp(IDENTITY, year)
 
 
+def _stamp(year_file=None, packages=PACKAGES, revision=REVISION):
+    """An output stamp, stated directly rather than through ``output_stamp``."""
+    return {
+        "packages": dict(packages),
+        "revision": revision,
+        "year_file": copy.deepcopy(year_file),
+    }
+
+
 # --- The stamp ----------------------------------------------------------
 
 
-def test_the_stamp_holds_the_revision_and_the_year_file():
-    assert output_stamp() == {"revision": REVISION, "year_file": None}
+def test_the_stamp_holds_the_packages_the_revision_and_the_year_file():
+    assert output_stamp() == {
+        "packages": PACKAGES,
+        "revision": REVISION,
+        "year_file": None,
+    }
     assert output_stamp(_current_year_stamp()) == {
+        "packages": PACKAGES,
         "revision": REVISION,
         "year_file": _current_year_stamp(),
     }
     assert OUTPUT_STAMP_REVISION == 1
+    assert list(output_stamp()["packages"]) == sorted(PACKAGES)
+
+
+def test_the_stamp_reads_the_packages_and_revision_when_called(monkeypatch):
+    monkeypatch.setattr(
+        uk_datasets,
+        "installed_output_packages",
+        lambda: {"policyengine-uk": "9.0.0", "policyengine-core": None},
+    )
+    monkeypatch.setattr(uk_datasets, "OUTPUT_STAMP_REVISION", 7)
+
+    assert output_stamp() == {
+        "packages": {"policyengine-core": None, "policyengine-uk": "9.0.0"},
+        "revision": 7,
+        "year_file": None,
+    }
+
+
+def test_explicit_packages_override_the_installed_ones():
+    assert output_stamp(None, {"policyengine-uk": "1.0"})["packages"] == {
+        "policyengine-uk": "1.0"
+    }
+
+
+def test_the_stamp_records_the_packages_that_calculate_a_run():
+    assert OUTPUT_PACKAGES == ("policyengine-core", "policyengine-uk")
+
+
+def test_installed_output_packages_reads_the_distributions(monkeypatch):
+    """The real reader asks for the output's packages, importing none."""
+    seen = []
+
+    def recording(names):
+        seen.append(tuple(names))
+        return {name: "1.0" for name in names}
+
+    monkeypatch.setattr(shared_stamp, "installed_package_versions", recording)
+
+    assert REAL_INSTALLED_OUTPUT_PACKAGES() == {
+        "policyengine-core": "1.0",
+        "policyengine-uk": "1.0",
+    }
+    assert seen == [OUTPUT_PACKAGES]
 
 
 def test_the_stamp_copies_the_year_file_stamp():
@@ -438,7 +516,11 @@ def test_the_stamp_is_stored_as_utf8_json(tmp_path):
 
 
 STAMPS = st.fixed_dictionaries(
-    {"revision": st.integers(), "year_file": st.one_of(st.none(), YEAR_FILE_STAMPS)}
+    {
+        "packages": PACKAGE_MAPS,
+        "revision": st.integers(),
+        "year_file": st.one_of(st.none(), YEAR_FILE_STAMPS),
+    }
 )
 
 
@@ -497,8 +579,9 @@ def _weighted(draw, *choices):
 def stamped_outputs(draw):
     """An output stamped as a run would, near the simulation's dataset.
 
-    Most draws stamp the output from the dataset's own stamp or one a single
-    field away, so current outputs and near misses are both common.
+    Most draws stamp the output from the dataset's own stamp, or one a single
+    field away, with the installed packages, so current outputs and near
+    misses are both common.
     """
     dataset_stamp = draw(DATASET_STAMPS)
     near = st.one_of(YEAR_FILE_STAMPS, DATASET_STAMPS)
@@ -513,17 +596,29 @@ def stamped_outputs(draw):
         )
     year_file = _weighted(
         draw,
-        (4, st.just(copy.deepcopy(dataset_stamp))),
+        (5, st.just(copy.deepcopy(dataset_stamp))),
         (3, near),
         (1, st.none()),
     )
+    packages = _weighted(
+        draw,
+        (6, st.just(dict(PACKAGES))),
+        (2, PACKAGE_MAPS),
+        (1, st.one_of(st.booleans(), JSON_VALUES)),
+    )
     stamp = _weighted(
         draw,
-        (6, st.just({"revision": REVISION, "year_file": year_file})),
+        (
+            7,
+            st.just(
+                {"packages": packages, "revision": REVISION, "year_file": year_file}
+            ),
+        ),
         (
             1,
             st.fixed_dictionaries(
                 {
+                    "packages": st.just(packages),
                     "revision": st.one_of(
                         st.sampled_from([REVISION + 1, 0]), st.booleans(), st.floats()
                     ),
@@ -560,6 +655,7 @@ NODES = st.one_of(
     JSON_VALUES,
     st.fixed_dictionaries(
         {
+            "packages": st.one_of(PACKAGE_MAPS, JSON_VALUES),
             "revision": st.one_of(st.just(REVISION), st.booleans(), JSON_VALUES),
             "year_file": DATASET_STAMPS,
         }
@@ -599,7 +695,7 @@ def test_an_output_stamped_with_what_its_run_would_record_is_current(tmp_path):
     for dataset_stamp in (None, _current_year_stamp()):
         path = _write_output(
             tmp_path / f"{dataset_stamp is None}.h5",
-            stamp=output_stamp(dataset_stamp),
+            stamp=_stamp(dataset_stamp),
         )
         assert output_stamp_problem(path, dataset_stamp) is None
 
@@ -608,13 +704,20 @@ def test_outputs_without_a_stamp_or_data_year_are_out_of_date_with_distinct_reas
     tmp_path,
 ):
     no_data_year = _write_output(tmp_path / "a.h5", data_year=False)
-    stamped = _write_output(tmp_path / "b.h5", stamp=output_stamp(), data_year=False)
+    stamped = _write_output(tmp_path / "b.h5", stamp=_stamp(), data_year=False)
     unstamped = _write_output(tmp_path / "c.h5")
 
     assert output_stamp_problem(no_data_year, None) == OUTPUT_WITHOUT_DATA_YEAR
     assert output_stamp_problem(stamped, None) == STAMPED_OUTPUT_WITHOUT_DATA_YEAR
     assert output_stamp_problem(unstamped, None) == UNSTAMPED_OUTPUT
-    assert len({OUTPUT_WITHOUT_DATA_YEAR, STAMPED_OUTPUT_WITHOUT_DATA_YEAR}) == 2
+    reasons = {
+        OUTPUT_WITHOUT_DATA_YEAR,
+        STAMPED_OUTPUT_WITHOUT_DATA_YEAR,
+        UNSTAMPED_OUTPUT,
+        MALFORMED_OUTPUT_STAMP,
+        MALFORMED_OUTPUT_YEAR_FILE,
+    }
+    assert len(reasons) == 5
     # The wording the data-year refusal has always matched.
     assert "records none" in OUTPUT_WITHOUT_DATA_YEAR
 
@@ -627,11 +730,16 @@ def test_outputs_without_a_stamp_or_data_year_are_out_of_date_with_distinct_reas
         "stamp",
         {},
         {"revision": REVISION},
-        {"year_file": None},
-        {"revision": REVISION, "year_file": None, "extra": 1},
-        {"revision": True, "year_file": None},
-        {"revision": 1.0, "year_file": None},
-        {"revision": "1", "year_file": None},
+        {"revision": REVISION, "year_file": None},
+        {"packages": PACKAGES, "revision": REVISION},
+        {"packages": PACKAGES, "year_file": None},
+        {"packages": PACKAGES, "revision": REVISION, "year_file": None, "extra": 1},
+        {"packages": PACKAGES, "revision": True, "year_file": None},
+        {"packages": PACKAGES, "revision": 1.0, "year_file": None},
+        {"packages": PACKAGES, "revision": "1", "year_file": None},
+        {"packages": None, "revision": REVISION, "year_file": None},
+        {"packages": [], "revision": REVISION, "year_file": None},
+        {"packages": {"policyengine-uk": 2}, "revision": REVISION, "year_file": None},
         ("text", "not json"),
         ("number", 3),
         ("group", None),
@@ -661,7 +769,7 @@ def test_an_output_from_another_format_revision_is_out_of_date(tmp_path, revisio
 def test_raising_the_output_revision_makes_older_outputs_out_of_date(
     tmp_path, monkeypatch
 ):
-    path = _write_output(tmp_path / "output.h5", stamp=output_stamp())
+    path = _write_output(tmp_path / "output.h5", stamp=_stamp())
     assert output_stamp_problem(path, None) is None
 
     monkeypatch.setattr(uk_datasets, "OUTPUT_STAMP_REVISION", REVISION + 1)
@@ -672,21 +780,20 @@ def test_raising_the_output_revision_makes_older_outputs_out_of_date(
     )
 
 
-def test_raising_the_year_file_revision_makes_outputs_from_year_files_out_of_date(
-    tmp_path, monkeypatch
-):
-    year_file = _current_year_stamp()
-    from_year_file = _write_output(tmp_path / "a.h5", stamp=output_stamp(year_file))
-    from_memory = _write_output(tmp_path / "b.h5", stamp=output_stamp())
-
-    monkeypatch.setattr(uk_datasets, "YEAR_FILE_STAMP_REVISION", YEAR_FILE_REVISION + 1)
-
-    assert output_stamp_problem(from_year_file, year_file) == (
-        "it was calculated from a year file cut with year-file format revision "
-        f"{YEAR_FILE_REVISION}, and this version of policyengine.py reads only "
-        f"revision {YEAR_FILE_REVISION + 1}"
+def test_an_outputs_year_file_need_not_be_this_releases(tmp_path, monkeypatch):
+    """Whether a year file is current is ``load_datasets``' check: an output
+    calculated from a year file cut with other versions, or another year-file
+    format revision, is what a run of that year file would save now."""
+    old = _year_stamp(
+        revision=YEAR_FILE_REVISION + 1,
+        packages={**PACKAGES, "policyengine-uk": "2.126.11"},
     )
-    assert output_stamp_problem(from_memory, None) is None
+    path = _write_output(tmp_path / "output.h5", stamp=_stamp(old))
+
+    assert year_file_stamp(IDENTITY, YEAR) != old
+    assert output_stamp_problem(path, old) is None
+    monkeypatch.setattr(uk_datasets, "YEAR_FILE_STAMP_REVISION", YEAR_FILE_REVISION + 5)
+    assert output_stamp_problem(path, old) is None
 
 
 # --- Named differences --------------------------------------------------
@@ -700,23 +807,8 @@ def _cut_with(packages, name):
     return f"with {name} {packages[name]}"
 
 
-@settings(max_examples=300, deadline=None)
-@given(recorded=YEAR_FILE_STAMPS, current=YEAR_FILE_STAMPS)
-def test_a_stale_output_names_each_difference_from_the_dataset(recorded, current):
-    with tempfile.TemporaryDirectory() as directory:
-        path = _write_output(
-            Path(directory) / "output.h5", stamp=output_stamp(recorded)
-        )
-        problem = output_stamp_problem(path, current)
-
-    if recorded == current:
-        # Then it is current exactly when the year file is this release's.
-        assert (problem is None) == (
-            current == year_file_stamp(current["source"], current["year"])
-        )
-        return
-    assert problem is not None
-    clauses = problem.split("; ")
+def _year_file_clauses(recorded, current) -> list[str]:
+    """Each difference between two well-formed year-file stamps, in order."""
     expected = []
     if recorded["year"] != current["year"]:
         expected.append(
@@ -745,36 +837,69 @@ def test_a_stale_output_names_each_difference_from_the_dataset(recorded, current
                 f"{_cut_with(recorded['packages'], name)}, and the simulation's "
                 f"dataset was cut {_cut_with(current['packages'], name)}"
             )
-    assert clauses == expected
+    return expected
+
+
+def _package_clauses(calculated_with, installed) -> list[str]:
+    """Each package version an output was calculated with that is not the one
+    installed, in name order."""
+    expected = []
+    for name in sorted(calculated_with.keys() | installed.keys()):
+        if name not in installed:
+            expected.append(
+                f"it records the {name} version it was calculated with, which "
+                "this version of policyengine.py does not check"
+            )
+        elif calculated_with.get(name, _ABSENT) != installed[name]:
+            with_version = (
+                f"{name} {calculated_with[name]}"
+                if calculated_with.get(name) is not None
+                else f"no recorded {name} version"
+            )
+            now = (
+                f"{name} {installed[name]} is installed"
+                if installed[name] is not None
+                else f"{name} is not installed"
+            )
+            expected.append(f"it was calculated with {with_version}, and {now}")
+    return expected
+
+
+@settings(max_examples=300, deadline=None)
+@given(
+    recorded=YEAR_FILE_STAMPS,
+    current=YEAR_FILE_STAMPS,
+    calculated_with=PACKAGE_MAPS,
+    installed=PACKAGE_MAPS,
+)
+def test_a_stale_output_names_each_difference(
+    recorded, current, calculated_with, installed
+):
+    with tempfile.TemporaryDirectory() as directory:
+        path = _write_output(
+            Path(directory) / "output.h5", stamp=_stamp(recorded, calculated_with)
+        )
+        problem = output_stamp_problem(path, current, installed)
+
+    expected = _year_file_clauses(recorded, current) + _package_clauses(
+        calculated_with, installed
+    )
+    assert (problem.split("; ") if problem else []) == expected
+    assert (problem is None) == (recorded == current and calculated_with == installed)
 
 
 @settings(max_examples=200, deadline=None)
-@given(year_file=YEAR_FILE_STAMPS.filter(lambda s: s["revision"] == YEAR_FILE_REVISION))
-def test_an_output_from_a_year_file_cut_with_other_versions_names_them(year_file):
-    with tempfile.TemporaryDirectory() as directory:
-        path = _write_output(
-            Path(directory) / "output.h5", stamp=output_stamp(year_file)
-        )
-        problem = output_stamp_problem(path, year_file)
+@given(stamped=PACKAGE_MAPS, packages=PACKAGE_MAPS)
+def test_package_differences_name_what_was_done_with_them(stamped, packages):
+    """The shared clauses, for a year file ("cut") and an output
+    ("calculated"), differ only in that word."""
+    calculated = package_differences(stamped, packages, "calculated")
 
-    expected = []
-    for name in sorted(year_file["packages"].keys() | PACKAGES.keys()):
-        if name not in PACKAGES:
-            expected.append(
-                f"its year file records the {name} version it was cut with, "
-                "which this version of policyengine.py does not check"
-            )
-        elif year_file["packages"].get(name, _ABSENT) != PACKAGES[name]:
-            cut_with = (
-                f"{name} {year_file['packages'][name]}"
-                if year_file["packages"].get(name) is not None
-                else f"no recorded {name} version"
-            )
-            expected.append(
-                f"its year file was cut with {cut_with}, and {name} "
-                f"{PACKAGES[name]} is installed"
-            )
-    assert (problem.split("; ") if problem else []) == expected
+    assert calculated == _package_clauses(stamped, packages)
+    assert package_differences(stamped, packages) == [
+        clause.replace("calculated with", "cut with") for clause in calculated
+    ]
+    assert (calculated == []) == (dict(stamped) == dict(packages))
 
 
 @pytest.mark.parametrize(
@@ -807,21 +932,24 @@ def test_an_output_from_a_year_file_cut_with_other_versions_names_them(year_file
         (
             UNREADABLE_YEAR_FILE_STAMP,
             UNREADABLE_YEAR_FILE_STAMP,
-            "it was calculated from a year file whose stamp is unreadable or malformed",
+            MALFORMED_OUTPUT_YEAR_FILE,
         ),
         (
             {**_year_stamp(), "year": 2026.0},
             {**_year_stamp(), "year": 2026.0},
-            "it was calculated from a year file whose stamp is unreadable or malformed",
+            MALFORMED_OUTPUT_YEAR_FILE,
         ),
     ],
 )
 def test_outputs_from_other_or_unreadable_year_files_are_out_of_date(
     tmp_path, recorded, current, reason
 ):
-    path = _write_output(tmp_path / "output.h5", stamp=output_stamp(recorded))
+    path = _write_output(tmp_path / "output.h5", stamp=_stamp(recorded))
 
     assert output_stamp_problem(path, current) == reason
+    assert MALFORMED_OUTPUT_YEAR_FILE == (
+        "it was calculated from a year file whose stamp is unreadable or malformed"
+    )
 
 
 def test_a_stamp_equal_in_python_but_not_in_json_is_not_current(tmp_path):
@@ -832,16 +960,14 @@ def test_a_stamp_equal_in_python_but_not_in_json_is_not_current(tmp_path):
     assert tampered == stamp
 
     for recorded, current in ((stamp, tampered), (tampered, stamp)):
-        path = _write_output(tmp_path / "output.h5", stamp=output_stamp(recorded))
-        assert output_stamp_problem(path, current) == (
-            "it was calculated from a year file whose stamp is unreadable or malformed"
-        )
+        path = _write_output(tmp_path / "output.h5", stamp=_stamp(recorded))
+        assert output_stamp_problem(path, current) == MALFORMED_OUTPUT_YEAR_FILE
 
 
 def test_an_output_from_another_source_names_both(tmp_path):
     old = _year_stamp(source={"uri": f"{SOURCE}@1.57.0", "sha256": "a" * 64})
     new = _year_stamp(source={"uri": f"{SOURCE}@1.58.0", "sha256": "b" * 64})
-    path = _write_output(tmp_path / "output.h5", stamp=output_stamp(old))
+    path = _write_output(tmp_path / "output.h5", stamp=_stamp(old))
 
     assert output_stamp_problem(path, new) == (
         f"it was calculated from a year file cut from {SOURCE}@1.57.0 (sha256 "
@@ -850,37 +976,68 @@ def test_an_output_from_another_source_names_both(tmp_path):
     )
 
 
-def test_an_output_from_a_year_file_cut_with_another_policyengine_uk(tmp_path):
-    old = _year_stamp(packages={**PACKAGES, "policyengine-uk": "2.126.11"})
-    path = _write_output(tmp_path / "output.h5", stamp=output_stamp(old))
+def test_an_output_calculated_with_another_policyengine_uk_names_both(tmp_path):
+    """After an upgrade, before and after the year file is cut again."""
+    before = {**PACKAGES, "policyengine-uk": "2.126.11"}
+    old = _year_stamp(packages=before)
+    path = _write_output(tmp_path / "output.h5", stamp=_stamp(old, before))
 
-    # Before the year file is cut again: the version that cut it is not the
-    # one installed.
+    # Before the year file is cut again: the versions that calculated the
+    # output are not the ones installed.
     assert output_stamp_problem(path, old) == (
-        "its year file was cut with policyengine-uk 2.126.11, and "
-        "policyengine-uk 2.126.12 is installed"
+        "it was calculated with policyengine-uk 2.126.11, and policyengine-uk "
+        "2.126.12 is installed"
     )
-    # After: the simulation's dataset is the new cut.
+    # After: the simulation's dataset is the new cut, too.
     assert output_stamp_problem(path, _current_year_stamp()) == (
         "it was calculated from a year file cut with policyengine-uk 2.126.11, "
-        "and the simulation's dataset was cut with policyengine-uk 2.126.12"
+        "and the simulation's dataset was cut with policyengine-uk 2.126.12; it "
+        "was calculated with policyengine-uk 2.126.11, and policyengine-uk "
+        "2.126.12 is installed"
     )
 
 
-def test_explicit_packages_override_the_installed_ones(tmp_path):
+def test_an_output_records_the_versions_that_calculated_it_not_its_year_files(
+    tmp_path,
+):
+    """A year file cut with one policyengine-uk and run with another: the
+    output is that other version's, whatever the year file's stamp says."""
+    cut_with = {**PACKAGES, "policyengine-uk": "2.126.11"}
+    year_file = _year_stamp(packages=cut_with)
+    # Calculated under the installed versions, from the old cut.
+    path = _write_output(tmp_path / "output.h5", stamp=_stamp(year_file, PACKAGES))
+
+    assert output_stamp_problem(path, year_file) is None
+    # With the year file's versions installed again, it is not their output.
+    assert output_stamp_problem(path, year_file, cut_with) == (
+        "it was calculated with policyengine-uk 2.126.12, and policyengine-uk "
+        "2.126.11 is installed"
+    )
+
+
+def test_an_output_from_data_built_in_memory_is_out_of_date_after_an_upgrade(
+    tmp_path,
+):
+    path = _write_output(tmp_path / "output.h5", stamp=_stamp(None))
+
+    assert output_stamp_problem(path, None) is None
+    assert output_stamp_problem(
+        path, None, {**PACKAGES, "policyengine-core": "3.34.0"}
+    ) == (
+        "it was calculated with policyengine-core 3.33.0, and policyengine-core "
+        "3.34.0 is installed"
+    )
+
+
+def test_explicit_packages_override_the_installed_ones_in_the_check(tmp_path):
     other = {"policyengine-core": "9.0.0", "policyengine-uk": "9.0.0"}
-    year_file = _year_stamp(packages=other)
-    path = _write_output(tmp_path / "output.h5", stamp=output_stamp(year_file))
+    path = _write_output(tmp_path / "output.h5", stamp=_stamp(None, other))
 
-    assert output_stamp_problem(path, year_file, other) is None
-    assert output_stamp_problem(path, year_file) is not None
-    assert output_stamp_problem(path, year_file, PACKAGES) == output_stamp_problem(
-        path, year_file
+    assert output_stamp_problem(path, None, other) is None
+    assert output_stamp_problem(path, None) is not None
+    assert output_stamp_problem(path, None, PACKAGES) == output_stamp_problem(
+        path, None
     )
-    current = _write_output(
-        tmp_path / "current.h5", stamp=output_stamp(_current_year_stamp())
-    )
-    assert output_stamp_problem(current, _current_year_stamp(), other) is not None
 
 
 @pytest.mark.parametrize(
@@ -916,7 +1073,7 @@ def test_a_version_the_year_file_lacked_or_did_not_record_is_named(
     tmp_path, recorded, current, cut, dataset_cut
 ):
     path = _write_output(
-        tmp_path / "output.h5", stamp=output_stamp(_year_stamp(packages=recorded))
+        tmp_path / "output.h5", stamp=_stamp(_year_stamp(packages=recorded))
     )
 
     assert output_stamp_problem(path, _year_stamp(packages=current)) == (
@@ -925,9 +1082,52 @@ def test_a_version_the_year_file_lacked_or_did_not_record_is_named(
     )
 
 
+@pytest.mark.parametrize(
+    "calculated_with, installed, reason",
+    [
+        (
+            {"policyengine-uk": "1.0"},
+            {"policyengine-uk": "1.1"},
+            "it was calculated with policyengine-uk 1.0, and policyengine-uk 1.1 "
+            "is installed",
+        ),
+        (
+            {"policyengine-uk": None},
+            {"policyengine-uk": "1.1"},
+            "it was calculated with no recorded policyengine-uk version, and "
+            "policyengine-uk 1.1 is installed",
+        ),
+        (
+            {"policyengine-uk": "1.0"},
+            {"policyengine-uk": None},
+            "it was calculated with policyengine-uk 1.0, and policyengine-uk is "
+            "not installed",
+        ),
+        (
+            {"policyengine-uk": "1.0", "extra": "2"},
+            {"policyengine-uk": "1.0"},
+            "it records the extra version it was calculated with, which this "
+            "version of policyengine.py does not check",
+        ),
+        (
+            {},
+            {"policyengine-uk": "1.1"},
+            "it was calculated with no recorded policyengine-uk version, and "
+            "policyengine-uk 1.1 is installed",
+        ),
+    ],
+)
+def test_a_version_the_output_was_calculated_with_is_named(
+    tmp_path, calculated_with, installed, reason
+):
+    path = _write_output(tmp_path / "output.h5", stamp=_stamp(None, calculated_with))
+
+    assert output_stamp_problem(path, None, installed) == reason
+
+
 def test_an_output_of_another_year_names_both(tmp_path):
     path = _write_output(
-        tmp_path / "output.h5", stamp=output_stamp(_current_year_stamp(YEAR))
+        tmp_path / "output.h5", stamp=_stamp(_current_year_stamp(YEAR))
     )
 
     assert output_stamp_problem(path, _current_year_stamp(YEAR + 1)) == (
@@ -943,7 +1143,7 @@ def test_an_output_of_another_year_names_both(tmp_path):
 def _current_output_bytes() -> bytes:
     with tempfile.TemporaryDirectory() as directory:
         path = _write_output(
-            Path(directory) / "output.h5", stamp=output_stamp(_current_year_stamp())
+            Path(directory) / "output.h5", stamp=_stamp(_current_year_stamp())
         )
         assert output_stamp_problem(path, _current_year_stamp()) is None
         return path.read_bytes()
@@ -969,7 +1169,7 @@ def test_a_file_that_is_not_hdf5_is_out_of_date(tmp_path):
 
 
 def test_saving_the_tables_again_drops_the_stamp(tmp_path):
-    path = _write_output(tmp_path / "output.h5", stamp=output_stamp())
+    path = _write_output(tmp_path / "output.h5", stamp=_stamp())
 
     PolicyEngineUKDataset(
         name="output",
@@ -1011,18 +1211,14 @@ def test_json_nested_too_deeply_is_out_of_date_not_an_error(tmp_path):
 
 
 def test_the_stamps_have_distinct_names_and_keys():
-    assert (
-        len(
-            {
-                OUTPUT_STAMP_H5_DATASET,
-                YEAR_FILE_STAMP_H5_DATASET,
-                US_OUTPUT_STAMP_H5_DATASET,
-            }
-        )
-        == 3
-    )
+    names = {
+        OUTPUT_STAMP_H5_DATASET,
+        YEAR_FILE_STAMP_H5_DATASET,
+        US_OUTPUT_STAMP_H5_DATASET,
+    }
+    assert len(names) == 3
     assert set(output_stamp()) != set(_current_year_stamp())
-    # The US output stamp also records a register of renamed inputs.
+    # The US output stamp records a register of renamed inputs.
     assert set(output_stamp()) != {"register", "revision", "year_file"}
 
 
@@ -1032,7 +1228,8 @@ def test_an_output_never_passes_as_a_year_file_nor_the_reverse(year_file):
     with tempfile.TemporaryDirectory() as directory:
         directory = Path(directory)
         # An output stamped as current carries no year-file stamp.
-        output = _write_output(directory / "output.h5", stamp=output_stamp(year_file))
+        output = _write_output(directory / "output.h5", stamp=_stamp(year_file))
+        assert output_stamp_problem(output, year_file) is None
         assert read_year_file_stamp(output) is None
         assert year_file_stamp_metadata(output) is None
         assert year_file_stamp_problem(output, IDENTITY, YEAR) is not None
@@ -1046,11 +1243,7 @@ def test_an_output_never_passes_as_a_year_file_nor_the_reverse(year_file):
         # Nor does a US output stamp pass as a UK one.
         us_output = _write_output(directory / "us.h5")
         with h5py.File(us_output, "a") as file:
-            _write_node(
-                file,
-                US_OUTPUT_STAMP_H5_DATASET,
-                {"register": {}, "revision": 1, "year_file": year_file},
-            )
+            _write_node(file, US_OUTPUT_STAMP_H5_DATASET, _stamp(year_file))
         assert output_stamp_problem(us_output, year_file) == UNSTAMPED_OUTPUT
 
 
@@ -1065,7 +1258,7 @@ def test_a_missing_output_raises_file_not_found(tmp_path):
 
 
 def _unreadable_by_permission(path) -> Path:
-    path = _write_output(path, stamp=output_stamp())
+    path = _write_output(path, stamp=_stamp())
     os.chmod(path, 0)
     return path
 
@@ -1113,7 +1306,7 @@ ERRORS = [
 def test_errors_unrelated_to_the_contents_are_raised_on_opening(
     tmp_path, monkeypatch, error, check
 ):
-    path = _write_output(tmp_path / "output.h5", stamp=output_stamp())
+    path = _write_output(tmp_path / "output.h5", stamp=_stamp())
 
     def fail(*args, **kwargs):
         raise error
@@ -1129,7 +1322,7 @@ def test_errors_unrelated_to_the_contents_are_raised_while_reading(
 ):
     path = _write_output(
         tmp_path / "output.h5",
-        stamp=output_stamp(),
+        stamp=_stamp(),
         year_file_stamp=_current_year_stamp(),
     )
 
@@ -1147,7 +1340,7 @@ def test_errors_unrelated_to_the_contents_are_raised_while_reading(
 def test_errors_unrelated_to_the_contents_are_raised_while_finding_the_data_year(
     tmp_path, monkeypatch, error
 ):
-    path = _write_output(tmp_path / "output.h5", stamp=output_stamp())
+    path = _write_output(tmp_path / "output.h5", stamp=_stamp())
     get = h5py.Group.get
 
     def fail_for_the_data_year(self, name, *args, **kwargs):
@@ -1161,9 +1354,7 @@ def test_errors_unrelated_to_the_contents_are_raised_while_finding_the_data_year
 
 
 def test_the_decision_reads_only_the_stamp_and_the_data_year(tmp_path, monkeypatch):
-    path = _write_output(
-        tmp_path / "output.h5", stamp=output_stamp(_current_year_stamp())
-    )
+    path = _write_output(tmp_path / "output.h5", stamp=_stamp(_current_year_stamp()))
     read = []
     get = h5py.Group.get
 
@@ -1185,6 +1376,12 @@ def test_the_decision_reads_only_the_stamp_and_the_data_year(tmp_path, monkeypat
 # --- The year-file stamp a dataset keeps --------------------------------
 
 
+def _load(path) -> PolicyEngineUKDataset:
+    return PolicyEngineUKDataset(
+        name="year-file", description="load", filepath=str(path), year=YEAR
+    )
+
+
 @pytest.mark.parametrize(
     "stored, kept",
     [
@@ -1201,9 +1398,7 @@ def test_a_dataset_keeps_its_year_files_stamp(tmp_path, stored, kept):
     path = _write_year_file(tmp_path / "year.h5", stored)
 
     assert year_file_stamp_metadata(path) == kept
-    dataset = PolicyEngineUKDataset(
-        name="year-file", description="load", filepath=str(path), year=YEAR
-    )
+    dataset = _load(path)
     assert dataset.metadata.get(YEAR_FILE_STAMP_KEY) == kept
     assert (YEAR_FILE_STAMP_KEY in dataset.metadata) == (kept is not None)
     assert input_year_file_stamp(dataset) == kept
@@ -1218,9 +1413,7 @@ def test_a_file_that_is_not_hdf5_keeps_no_year_file_stamp(tmp_path):
 
 def test_reloading_a_resaved_year_file_drops_the_stamp_it_kept(tmp_path):
     path = _write_year_file(tmp_path / "year.h5", _current_year_stamp())
-    dataset = PolicyEngineUKDataset(
-        name="year-file", description="load", filepath=str(path), year=YEAR
-    )
+    dataset = _load(path)
     assert dataset.metadata[YEAR_FILE_STAMP_KEY] == _current_year_stamp()
 
     dataset.save()
@@ -1251,9 +1444,7 @@ def test_loading_a_dataset_with_no_filepath_is_refused():
 
 def test_a_dataset_whose_tables_are_not_loaded_gives_its_files_stamp(tmp_path):
     path = _write_year_file(tmp_path / "year.h5", _current_year_stamp())
-    dataset = PolicyEngineUKDataset(
-        name="year-file", description="load", filepath=str(path), year=YEAR
-    )
+    dataset = _load(path)
     # A run loads a dataset whose tables are not loaded, so the stamp it
     # records is the one the file holds, not one kept from before.
     dataset.data = None
@@ -1266,9 +1457,7 @@ def test_a_loaded_dataset_keeps_the_stamp_of_the_tables_it_holds(tmp_path):
     """A year file cut again after it was loaded: the dataset still holds the
     old cut's tables, so a run of it records the old cut's stamp."""
     path, replacement, old, new = _two_cuts(tmp_path)
-    dataset = PolicyEngineUKDataset(
-        name="year-file", description="load", filepath=str(path), year=YEAR
-    )
+    dataset = _load(path)
 
     os.replace(replacement, path)
 
@@ -1282,17 +1471,158 @@ def test_a_loaded_dataset_keeps_the_stamp_of_the_tables_it_holds(tmp_path):
 
 def test_the_stamp_a_run_records_is_a_copy(tmp_path):
     path = _write_year_file(tmp_path / "year.h5", _current_year_stamp())
-    dataset = PolicyEngineUKDataset(
-        name="year-file", description="load", filepath=str(path), year=YEAR
-    )
+    dataset = _load(path)
 
     stamp = input_year_file_stamp(dataset)
     stamp["year"] = 0
+    stamp["source"]["uri"] = "changed"
+    stamp["packages"]["policyengine-uk"] = "changed"
 
     assert dataset.metadata[YEAR_FILE_STAMP_KEY] == _current_year_stamp()
 
 
-# --- One cut per load ---------------------------------------------------
+def test_the_metadata_a_dataset_keeps_survives_a_json_round_trip():
+    dataset = PolicyEngineUKDataset(
+        name="memory",
+        description="memory",
+        year=YEAR,
+        metadata={
+            YEAR_FILE_STAMP_KEY: _current_year_stamp(),
+            OUTPUT_STAMP_KEY: _stamp(_current_year_stamp()),
+        },
+    )
+
+    restored = PolicyEngineUKDataset.model_validate_json(dataset.model_dump_json())
+
+    assert restored.metadata == dataset.metadata
+    assert dataset.model_dump(mode="json")["metadata"] == dataset.metadata
+
+
+def test_the_metadata_keys_are_the_documented_ones():
+    assert OUTPUT_STAMP_KEY == "output_stamp"
+    assert YEAR_FILE_STAMP_KEY == "year_file_stamp"
+    assert OUTPUT_STAMP_H5_DATASET == "policyengine_uk_output_stamp"
+
+
+# --- One save per output ------------------------------------------------
+
+
+def _partial_files(folder: Path) -> list[Path]:
+    """Temporary files left in a folder."""
+    return sorted(folder.glob(".*.partial"))
+
+
+def test_saving_an_output_writes_its_tables_and_stamp(tmp_path):
+    path = tmp_path / "data" / "output.h5"
+    stamp = _stamp(_current_year_stamp())
+
+    save_output(_output_dataset(path, age=41), stamp)
+
+    assert output_stamp_problem(path, _current_year_stamp()) is None
+    assert read_output_stamp(path) == stamp
+    assert _age(path) == 41
+    assert _partial_files(path.parent) == []
+
+
+def test_saving_an_output_with_no_filepath_is_refused():
+    dataset = PolicyEngineUKDataset(
+        name="memory",
+        description="memory",
+        year=YEAR,
+        is_output_dataset=True,
+        data=_tables(),
+        data_year=DATA_YEAR,
+    )
+
+    with pytest.raises(ValueError, match="no filepath"):
+        save_output(dataset, _stamp())
+
+
+@pytest.mark.parametrize("stop", ["in the tables", "at the stamp", "at the move"])
+def test_a_save_that_fails_leaves_the_output_already_there_whole(tmp_path, stop):
+    path = tmp_path / "output.h5"
+    save_output(_output_dataset(path, age=41), _stamp(_current_year_stamp()))
+    before = path.read_bytes()
+
+    def stopped(*args, **kwargs):
+        raise RuntimeError("stopped part-way")
+
+    with pytest.MonkeyPatch.context() as patcher:
+        if stop == "in the tables":
+            put = pd.HDFStore.put
+
+            def put_until_household(self, key, value, *args, **kwargs):
+                if key == "household":
+                    raise RuntimeError("stopped part-way")
+                return put(self, key, value, *args, **kwargs)
+
+            patcher.setattr(pd.HDFStore, "put", put_until_household)
+        elif stop == "at the stamp":
+            patcher.setattr(shared_stamp, "write_json_dataset", stopped)
+        else:
+            patcher.setattr(shared_stamp.os, "replace", stopped)
+        with pytest.raises(RuntimeError, match="stopped part-way"):
+            save_output(_output_dataset(path, age=99), _stamp(None))
+
+    assert path.read_bytes() == before
+    assert output_stamp_problem(path, _current_year_stamp()) is None
+    assert _age(path) == 41
+    assert _partial_files(tmp_path) == []
+
+
+def test_a_first_save_that_fails_leaves_no_output(tmp_path, monkeypatch):
+    path = tmp_path / "output.h5"
+
+    def stopped(*args, **kwargs):
+        raise RuntimeError("stopped part-way")
+
+    monkeypatch.setattr(shared_stamp, "write_json_dataset", stopped)
+    with pytest.raises(RuntimeError, match="stopped part-way"):
+        save_output(_output_dataset(path), _stamp())
+
+    assert not path.exists()
+    assert _partial_files(tmp_path) == []
+
+
+def test_two_saves_to_one_path_never_mix_ones_tables_with_the_others_stamp(
+    tmp_path, monkeypatch
+):
+    """Another process saves a whole output to the path between this save's
+    tables and its stamp. Whichever save's file is at the path, its tables
+    and its stamp are that save's."""
+    path = tmp_path / "output.h5"
+    one = _stamp(_year_stamp(source={"uri": f"{SOURCE}@1"}))
+    other = _stamp(_year_stamp(source={"uri": f"{SOURCE}@2"}))
+    publish = uk_datasets.publish_year_file
+    seen = []
+
+    def publish_after_the_other_save(temporary, target, name, stamp):
+        if not seen:
+            seen.append("other")
+            # The other save runs to completion before this one stamps.
+            save_output(_output_dataset(path, age=99), other)
+            assert (read_output_stamp(path), _age(path)) == (other, 99)
+        return publish(temporary, target, name, stamp)
+
+    monkeypatch.setattr(uk_datasets, "publish_year_file", publish_after_the_other_save)
+    save_output(_output_dataset(path, age=41), one)
+
+    assert seen == ["other"]
+    assert (read_output_stamp(path), _age(path)) == (one, 41)
+    assert _partial_files(tmp_path) == []
+
+
+def test_an_output_is_saved_where_its_filepath_says(tmp_path):
+    dataset = _output_dataset(tmp_path / "first.h5")
+    dataset.filepath = str(tmp_path / "moved" / "second.h5")
+
+    save_output(dataset, _stamp())
+
+    assert not (tmp_path / "first.h5").exists()
+    assert output_stamp_problem(tmp_path / "moved" / "second.h5", None) is None
+
+
+# --- One file per load --------------------------------------------------
 
 
 def _two_cuts(directory: Path):
@@ -1305,117 +1635,222 @@ def _two_cuts(directory: Path):
     return path, replacement, old, new
 
 
-@pytest.mark.parametrize("when", ["before the tables", "after the tables"])
+class _DuringTheRead:
+    """Stand in for ``pd.HDFStore``, calling ``before`` as the tables are
+    opened and ``after`` as they are closed, as another process acting at
+    those moments would: on the first open only, or on every open."""
+
+    def __init__(self, before=None, after=None, every_time=False):
+        self.before, self.after, self.every_time = before, after, every_time
+        self.store = pd.HDFStore
+        self.opened = 0
+
+    def __call__(self, *args, **kwargs):
+        acting = self.opened == 0 or self.every_time
+        self.opened += 1
+        outer = self
+
+        class Store:
+            def __init__(self):
+                if outer.before and acting:
+                    outer.before()
+                self.store = outer.store(*args, **kwargs)
+
+            def __enter__(self):
+                return self.store.__enter__()
+
+            def __exit__(self, *exc):
+                result = self.store.__exit__(*exc)
+                if outer.after and acting:
+                    outer.after()
+                return result
+
+        return Store()
+
+
+@pytest.mark.parametrize("when", ["before", "after"])
 def test_a_year_file_replaced_while_it_is_read_is_read_again(
     tmp_path, monkeypatch, when
 ):
     """The dataset keeps the stamp of the cut its tables came from."""
     path, replacement, _, new = _two_cuts(tmp_path)
-    store = pd.HDFStore
-    replaced = []
+    stores = _DuringTheRead(**{when: lambda: os.replace(replacement, path)})
 
-    class ReplacingStore:
-        """Replace the file once, as another process's cut would."""
+    monkeypatch.setattr(pd, "HDFStore", stores)
+    dataset = _load(path)
 
-        def __init__(self, *args, **kwargs):
-            if when == "before the tables" and not replaced:
-                os.replace(replacement, path)
-                replaced.append(True)
-            self.store = store(*args, **kwargs)
-
-        def __enter__(self):
-            return self.store.__enter__()
-
-        def __exit__(self, *exc):
-            result = self.store.__exit__(*exc)
-            if when == "after the tables" and not replaced:
-                os.replace(replacement, path)
-                replaced.append(True)
-            return result
-
-    monkeypatch.setattr(pd, "HDFStore", ReplacingStore)
-    dataset = PolicyEngineUKDataset(
-        name="year-file", description="load", filepath=str(path), year=YEAR
-    )
-
-    assert replaced == [True]
+    assert stores.opened == 2
     assert dataset.metadata[YEAR_FILE_STAMP_KEY] == new
     assert pd.DataFrame(dataset.data.person)["age"].iloc[0] == 99
     assert pd.DataFrame(dataset.data_year_data.person)["age"].iloc[0] == 99
 
 
+def test_a_year_file_replaced_and_put_back_while_it_is_read_is_read_again(
+    tmp_path, monkeypatch
+):
+    """Another cut is moved onto the path after the stamp is read, its tables
+    are read, and a copy of the first cut is moved back before the read ends.
+    The stamp at the path is the same before and after, yet the tables read
+    are the other cut's: the file put back is another file, so the read is
+    done again."""
+    path, replacement, old, _ = _two_cuts(tmp_path)
+    put_back = tmp_path / "back.h5"
+    shutil.copy(path, put_back)
+    stores = _DuringTheRead(
+        before=lambda: os.replace(replacement, path),
+        after=lambda: os.replace(put_back, path),
+    )
+
+    monkeypatch.setattr(pd, "HDFStore", stores)
+    dataset = _load(path)
+
+    assert stores.opened == 2
+    assert dataset.metadata[YEAR_FILE_STAMP_KEY] == old
+    assert pd.DataFrame(dataset.data.person)["age"].iloc[0] == 70
+
+
+def test_a_year_file_modified_while_it_is_read_is_read_again(tmp_path, monkeypatch):
+    """A writer that rewrites the file in place, as ``save()`` does."""
+    path = _write_year_file(tmp_path / "year.h5", _current_year_stamp(), age=70)
+    write = PolicyEngineUKDataset._write
+    store = pd.HDFStore
+
+    def rewrite():
+        # With the real store, so this writer's open is not counted.
+        with pytest.MonkeyPatch.context() as patcher:
+            patcher.setattr(pd, "HDFStore", store)
+            write(_year_dataset(path, age=99), path)
+        status = os.stat(path)
+        os.utime(path, ns=(status.st_atime_ns, status.st_mtime_ns + 10**9))
+
+    stores = _DuringTheRead(after=rewrite)
+    monkeypatch.setattr(pd, "HDFStore", stores)
+    dataset = _load(path)
+
+    assert stores.opened == 2
+    assert pd.DataFrame(dataset.data.person)["age"].iloc[0] == 99
+    # Rewriting the tables wrote no stamp.
+    assert YEAR_FILE_STAMP_KEY not in dataset.metadata
+
+
 def test_a_year_file_replaced_on_every_read_is_refused(tmp_path, monkeypatch):
     path = _write_year_file(tmp_path / "year.h5", _current_year_stamp())
+    spare = tmp_path / "spare.h5"
+
+    def replace():
+        shutil.copy(path, spare)
+        os.replace(spare, path)
+
+    stores = _DuringTheRead(after=replace, every_time=True)
+    monkeypatch.setattr(pd, "HDFStore", stores)
+    with pytest.raises(
+        RuntimeError, match="was replaced or modified while it was read, 3 times"
+    ):
+        _load(path)
+    assert stores.opened == 3
+
+
+def test_an_unchanged_year_file_is_read_once(tmp_path, monkeypatch):
+    path = _write_year_file(tmp_path / "year.h5", _current_year_stamp())
+    stores = _DuringTheRead()
+
+    monkeypatch.setattr(pd, "HDFStore", stores)
+    dataset = _load(path)
+
+    assert stores.opened == 1
+    assert dataset.metadata[YEAR_FILE_STAMP_KEY] == _current_year_stamp()
+
+
+def test_read_one_file_returns_what_was_read_of_one_unchanged_file(tmp_path):
+    path = tmp_path / "file"
+    path.write_text("first")
     reads = []
 
-    def changing(path):
-        reads.append(path)
-        return {"read": len(reads)}
+    def read(name):
+        reads.append(name)
+        return Path(name).read_text()
 
-    monkeypatch.setattr(uk_datasets, "year_file_stamp_metadata", changing)
-    with pytest.raises(RuntimeError, match="was replaced while it was read, 3 times"):
-        PolicyEngineUKDataset(
-            name="year-file", description="load", filepath=str(path), year=YEAR
-        )
-    assert len(reads) == 6
+    assert read_one_file(path, read) == "first"
+    assert reads == [str(path)]
 
 
-def test_a_year_file_replaced_once_is_read_again_once(tmp_path, monkeypatch):
-    path = _write_year_file(tmp_path / "year.h5", _current_year_stamp())
-    stamps = iter(["first", "second", "second", "second"])
+def test_read_one_file_reads_again_after_a_replacement_and_gives_up(tmp_path):
+    path = tmp_path / "file"
+    path.write_text("first")
     reads = []
 
-    def changing_once(path):
-        reads.append(path)
-        return next(stamps)
+    def replacing(until):
+        def read(name):
+            reads.append(Path(name).read_text())
+            if len(reads) <= until:
+                spare = tmp_path / "spare"
+                spare.write_text(f"replacement {len(reads)}")
+                os.replace(spare, name)
+            return reads[-1]
 
-    monkeypatch.setattr(uk_datasets, "year_file_stamp_metadata", changing_once)
-    dataset = PolicyEngineUKDataset(
-        name="year-file", description="load", filepath=str(path), year=YEAR
-    )
+        return read
 
-    assert len(reads) == 4
-    assert dataset.metadata[YEAR_FILE_STAMP_KEY] == "second"
+    assert read_one_file(path, replacing(1)) == "replacement 1"
+    assert reads == ["first", "replacement 1"]
+
+    reads.clear()
+    with pytest.raises(RuntimeError, match="2 times"):
+        read_one_file(path, replacing(5), attempts=2)
+    assert len(reads) == 2
 
 
-def test_stamps_equal_in_python_but_not_in_json_are_two_cuts(tmp_path, monkeypatch):
-    path = _write_year_file(tmp_path / "year.h5", _current_year_stamp())
-    stamp = _current_year_stamp()
-    tampered = {**stamp, "revision": True}
-    assert tampered == stamp
-    stamps = iter([tampered, stamp, stamp, stamp])
+def test_read_one_file_reads_again_after_the_file_is_modified_in_place(tmp_path):
+    path = tmp_path / "file"
+    path.write_text("first")
     reads = []
 
-    def changing_once(path):
-        reads.append(path)
-        return next(stamps)
+    def appending(name):
+        reads.append(Path(name).read_text())
+        if len(reads) == 1:
+            with open(name, "a") as file:
+                file.write(" and more")
+        return reads[-1]
 
-    monkeypatch.setattr(uk_datasets, "year_file_stamp_metadata", changing_once)
-    dataset = PolicyEngineUKDataset(
-        name="year-file", description="load", filepath=str(path), year=YEAR
-    )
+    assert read_one_file(path, appending) == "first and more"
+    assert reads == ["first", "first and more"]
 
-    assert len(reads) == 4
-    assert dataset.metadata[YEAR_FILE_STAMP_KEY]["revision"] is not True
+    # The same size, at another time.
+    reads.clear()
 
+    def touching(name):
+        reads.append(Path(name).read_text())
+        if len(reads) == 1:
+            status = os.stat(name)
+            os.utime(name, ns=(status.st_atime_ns, status.st_mtime_ns + 10**9))
+        return reads[-1]
 
-def test_copying_a_year_file_keeps_the_stamp_and_its_check(tmp_path):
-    """A copied year file keeps its stamp; the output records it either way."""
-    path = _write_year_file(tmp_path / "year.h5", _current_year_stamp())
-    copied = tmp_path / "copy.h5"
-    shutil.copy(path, copied)
-
-    dataset = PolicyEngineUKDataset(
-        name="year-file", description="load", filepath=str(copied), year=YEAR
-    )
-    assert input_year_file_stamp(dataset) == _current_year_stamp()
-    output = _write_output(
-        tmp_path / "output.h5", stamp=output_stamp(input_year_file_stamp(dataset))
-    )
-    assert output_stamp_problem(output, input_year_file_stamp(dataset)) is None
+    assert read_one_file(path, touching) == "first and more"
+    assert len(reads) == 2
 
 
-def test_the_metadata_keys_are_the_documented_ones():
-    assert OUTPUT_STAMP_KEY == "output_stamp"
-    assert YEAR_FILE_STAMP_KEY == "year_file_stamp"
-    assert OUTPUT_STAMP_H5_DATASET == "policyengine_uk_output_stamp"
+def test_read_one_file_finds_no_file_once_it_is_removed_meanwhile(tmp_path):
+    path = tmp_path / "file"
+    path.write_text("first")
+
+    def removing(name):
+        os.unlink(name)
+        return "read"
+
+    # The read is not trusted; the second attempt finds no file to read.
+    with pytest.raises(FileNotFoundError):
+        read_one_file(path, removing)
+
+
+def test_read_one_file_raises_what_the_read_raises_and_what_opening_does(tmp_path):
+    path = tmp_path / "file"
+    path.write_text("first")
+
+    def failing(name):
+        raise ValueError("refused")
+
+    with pytest.raises(ValueError, match="refused"):
+        read_one_file(path, failing)
+    with pytest.raises(FileNotFoundError):
+        read_one_file(tmp_path / "missing", failing)
+    with pytest.raises(IsADirectoryError):
+        read_one_file(tmp_path, failing)

@@ -187,10 +187,11 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
         # autosave removal in datasets.py).
         if dataset.data is None:
             dataset.load()
-        # The stamp of the year file the input data was cut into, if it is
-        # one, stamped into the output when it is saved. ``load()`` refuses
-        # the output once the simulation's dataset is read from another cut,
-        # or the year file is out of date under this release (see
+        # The installed package versions, which calculate this run, and the
+        # stamp of the year file the input data was cut into, if it is one.
+        # Both are stamped into the output when it is saved, and ``load()``
+        # refuses the output once other versions are installed or the
+        # simulation's dataset is read from another cut (see
         # ``uk.datasets.OUTPUT_STAMP_H5_DATASET``).
         stamp = output_stamp(input_year_file_stamp(dataset))
 
