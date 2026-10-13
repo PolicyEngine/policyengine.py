@@ -188,11 +188,12 @@ def year_file_stamp_problem(path: str | Path) -> str | None:
     - it stores the renames record, listing only renames in that register.
 
     The register must match exactly. A file cut under a register that lacks
-    an entry may have lost that entry's input, as year files cut by
-    policyengine.py 6.1.1 and earlier lost the WIC take-up draw. A file cut
-    under an entry this release does not register, or registers with another
-    live input, stores a live name this release's engine may not define, and
-    a run skips any column the engine does not define.
+    an entry may have lost that entry's input, as year files that
+    policyengine.py 6.1.1 and earlier cut from the certified default lost the
+    WIC take-up draw. A file cut under an entry this release does not
+    register, or registers with another live input, may store a live name
+    this release's engine does not define, and a run skips any column the
+    engine does not define.
 
     Only the stamp and the record are read, never the tables or the source
     dataset. A file that cannot be read as HDF5 is out of date. An error that
@@ -231,9 +232,10 @@ def year_file_stamp_problem(path: str | Path) -> str | None:
         if record is _ABSENT:
             return (
                 "it has no record of the renamed stored inputs mapped when it "
-                "was cut, so it was cut before policyengine.py mapped them"
+                "was cut, so it was cut by an older policyengine.py or not "
+                "written completely"
                 + (
-                    f" and may have lost any of: {_describe(register)}"
+                    f", and may have lost any of: {_describe(register)}"
                     if register
                     else ""
                 )
@@ -299,9 +301,12 @@ def _read_json_dataset(file: Any, name: str) -> Any:
         if not isinstance(node, h5py.Dataset) or node.shape != ():
             return _UNREADABLE
         # A numeric dataset raises TypeError; bytes that are not UTF-8, or
-        # not JSON, raise ValueError.
+        # not JSON, raise ValueError; JSON nested too deeply raises
+        # RecursionError.
         return json.loads(node.asstr()[()])
-    except (KeyError, OSError, TypeError, ValueError):
+    except (PermissionError, IsADirectoryError, BlockingIOError):
+        raise
+    except (KeyError, OSError, RecursionError, TypeError, ValueError):
         return _UNREADABLE
 
 

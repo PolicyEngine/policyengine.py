@@ -589,9 +589,10 @@ def load_datasets(
     A year file is refused unless ``create_datasets`` stamped it with this
     release's register of renamed stored inputs and year-file format revision
     (see ``legacy_inputs.year_file_stamp_problem``). A file cut before a
-    register entry was added may have lost that input, as files cut by
-    policyengine.py 6.1.1 and earlier lost the WIC take-up draw. The error
-    names the renames the file may lack.
+    register entry was added may have lost that input, as files that
+    policyengine.py 6.1.1 and earlier cut from the certified default lost the
+    WIC take-up draw. The error says why, and names the renames the file may
+    lack when its register is the reason.
 
     Args:
         datasets: List of HuggingFace dataset paths (used to derive file names)
@@ -1264,7 +1265,8 @@ def ensure_datasets(
     Existing year files are reused only when ``create_datasets`` stamped them
     with this release's register of renamed stored inputs and year-file format
     revision (see ``legacy_inputs.year_file_stamp_problem``). Only each file's
-    stamp is read to decide. If any year file is missing or out of date, every
+    stamp and renames record are read to decide, never its tables or the
+    source dataset. If any year file is missing or out of date, every
     year file is created again from the source dataset, and each out-of-date
     file is logged with the reason.
 

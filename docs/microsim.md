@@ -416,19 +416,23 @@ the register it was cut under and a year-file format revision
 year file only when its stamp equals this release's exactly and its renames
 record lists only renames in the stamped register. Otherwise it logs why and
 creates the year files again; `load_datasets` refuses the file with the same
-reason. To decide, both read only the stamp and the record, never the tables
+reason, which names the renames the file may lack when its register is the
+cause. To decide, both read only the stamp and the record, never the tables
 or the source dataset. `legacy_inputs.year_file_stamp_problem(path)` returns
 the reason, or `None` for a current year file.
 
 A year file is out of date when:
 
-- it has no stamp. Year files written by policyengine.py 6.1.1 and earlier
-  store neither WIC take-up name, so the draw is lost from them; year files
-  written with the renames record but before the stamp are cut again once;
+- it has no stamp. Year files that policyengine.py 6.1.1 and earlier cut,
+  with policyengine-us 2.x, from a source storing the draw only as
+  `would_claim_wic` (such as the certified default) store neither WIC take-up
+  name, so the draw is lost from them. Year files written with the renames
+  record but before the stamp are cut again once, and so is a year file whose
+  write did not finish;
 - its register lacks an entry this release has. It may have lost that
   entry's input, as the older files lost the WIC draw;
 - its register has an entry this release lacks, or maps an old name to
-  another new name. It stores a new name this release's engine may not
+  another new name. It may store a new name this release's engine does not
   define, and a run skips any column the engine does not define;
 - it has another format revision, or its stamp or record cannot be read.
 

@@ -398,8 +398,8 @@ def test_files_without_a_stamp_are_out_of_date_with_distinct_reasons(tmp_path):
 
     assert year_file_stamp_problem(oldest) == (
         "it has no record of the renamed stored inputs mapped when it was cut, "
-        "so it was cut before policyengine.py mapped them and may have lost any "
-        f"of: {LEGACY} -> {LIVE}"
+        "so it was cut by an older policyengine.py or not written completely, "
+        f"and may have lost any of: {LEGACY} -> {LIVE}"
     )
     assert year_file_stamp_problem(record_only) == (
         "it has no stamp of the register of renamed inputs it was cut under, so "
@@ -416,7 +416,7 @@ def test_an_unstamped_file_is_out_of_date_even_with_an_empty_register(
 
     assert year_file_stamp_problem(oldest) == (
         "it has no record of the renamed stored inputs mapped when it was cut, "
-        "so it was cut before policyengine.py mapped them"
+        "so it was cut by an older policyengine.py or not written completely"
     )
     assert year_file_stamp_problem(record_only) == (
         "it has no stamp of the register of renamed inputs it was cut under"
@@ -472,6 +472,69 @@ def test_a_stamped_file_needs_a_record_within_its_register(tmp_path, record, rea
     )
 
     assert year_file_stamp_problem(path) == reason
+
+
+def test_a_stamp_and_record_stored_as_fixed_length_strings_are_read(tmp_path):
+    stamp = json.dumps(year_file_stamp()).encode()
+    record = json.dumps({LEGACY: LIVE}).encode()
+    path = _write_year_file(
+        tmp_path / "year.h5", stamp=("bytes", stamp), record=("bytes", record)
+    )
+
+    assert year_file_stamp_problem(path) is None
+    assert read_year_file_stamp(path) == year_file_stamp()
+    assert read_renames_record(path) == {LEGACY: LIVE}
+
+
+def test_raising_the_format_revision_makes_older_files_out_of_date(
+    tmp_path, monkeypatch
+):
+    older = _write_year_file(tmp_path / "older.h5", stamp=year_file_stamp(), record={})
+    monkeypatch.setattr(legacy_inputs, "YEAR_FILE_STAMP_REVISION", 7)
+    newer = _write_year_file(tmp_path / "newer.h5", stamp=year_file_stamp(), record={})
+
+    assert year_file_stamp()["revision"] == 7
+    assert year_file_stamp_problem(newer) is None
+    assert year_file_stamp_problem(older) == (
+        "it was cut with year-file format revision 1, and this version of "
+        "policyengine.py reads only revision 7"
+    )
+
+
+#: JSON nested deeper than the parser's recursion limit.
+DEEP_JSON = "[" * 100_000 + "0" + "]" * 100_000
+
+
+@pytest.mark.parametrize(
+    "stamp, record, reason",
+    [
+        (
+            ("text", DEEP_JSON),
+            {},
+            "its stamp of the register of renamed inputs it was cut under is malformed",
+        ),
+        (
+            year_file_stamp(),
+            ("text", DEEP_JSON),
+            "its record of the renamed stored inputs mapped when it was cut is "
+            "malformed",
+        ),
+        (
+            {"revision": 2},
+            ("text", DEEP_JSON),
+            "it was cut with year-file format revision 2, and this version of "
+            "policyengine.py reads only revision 1",
+        ),
+    ],
+)
+def test_json_nested_too_deeply_is_unreadable_not_an_error(
+    tmp_path, stamp, record, reason
+):
+    path = _write_year_file(tmp_path / "year.h5", stamp=stamp, record=record)
+
+    assert year_file_stamp_problem(path) == reason
+    assert read_year_file_stamp(path) == (None if isinstance(stamp, tuple) else stamp)
+    assert read_renames_record(path) == (None if isinstance(record, tuple) else record)
 
 
 @pytest.mark.parametrize("record", [{}, {LEGACY: LIVE}])
@@ -679,6 +742,27 @@ def test_a_locked_file_is_raised_not_cut_again(tmp_path, monkeypatch):
         year_file_stamp_problem(path)
 
 
+@pytest.mark.parametrize(
+    "error",
+    [
+        PermissionError(13, "Permission denied"),
+        IsADirectoryError(21, "Is a directory"),
+        BlockingIOError(35, "Unable to lock file"),
+    ],
+)
+def test_errors_unrelated_to_the_contents_are_raised_while_reading(
+    tmp_path, monkeypatch, error
+):
+    path = _write_year_file(tmp_path / "year.h5", stamp=year_file_stamp(), record={})
+
+    def fail(self, *args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(h5py.Dataset, "asstr", fail)
+    with pytest.raises(type(error)):
+        year_file_stamp_problem(path)
+
+
 # --- read_renames_record reads only well-formed records -----------------
 
 
@@ -766,6 +850,12 @@ def test_ensure_cuts_again_exactly_when_load_would_refuse(states):
                     datasets=[SOURCE], years=years, data_folder=str(data_folder)
                 )
 
+        expected_warnings = sorted(
+            (str(path), problem)
+            for year in years
+            if (path := data_folder / f"{STEM}_year_{year}.h5").exists()
+            and (problem := year_file_stamp_problem(path)) is not None
+        )
         create = MagicMock(side_effect=_create_current_files)
         with (
             patch.object(us_datasets, "create_datasets", create),
@@ -776,11 +866,18 @@ def test_ensure_cuts_again_exactly_when_load_would_refuse(states):
             )
 
             assert create.called == (bool(stale) or "missing" in states)
-            # One warning per out-of-date file, each with its reason.
+            # One warning per out-of-date file, naming it and its reason.
             assert warning.call_count == len(stale)
+            assert (
+                sorted(
+                    (str(call.args[1]), call.args[2]) for call in warning.call_args_list
+                )
+                == expected_warnings
+            )
             for call in warning.call_args_list:
-                assert "out of date" in call.args[0]
-                assert call.args[2]
+                assert call.args[0] == (
+                    "US year file %s is out of date: %s. Creating the year files again."
+                )
 
             # The year files are now current, so they are reused.
             create.reset_mock()
@@ -805,7 +902,27 @@ def test_ensure_decides_from_the_stamps_alone(tmp_path, states):
     def refuse(*args, **kwargs):
         raise AssertionError("deciding opened a table or the source dataset")
 
+    real_file = h5py.File
+
+    class StampAndRecordOnly:
+        """An H5 file that lets the decision read only the stamp and record."""
+
+        def __init__(self, path, mode="r", **kwargs):
+            assert mode == "r"
+            self._file = real_file(path, mode, **kwargs)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc_info):
+            self._file.close()
+
+        def get(self, name, default=None):
+            assert name in (YEAR_FILE_STAMP_H5_DATASET, RENAMES_H5_DATASET), name
+            return self._file.get(name, default)
+
     with (
+        patch.object(h5py, "File", StampAndRecordOnly),
         patch.object(pd, "HDFStore", refuse),
         patch.object(us_datasets, "materialize_dataset", refuse),
         patch.object(us_datasets, "load_datasets", load),
