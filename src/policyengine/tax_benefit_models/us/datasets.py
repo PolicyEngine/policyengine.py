@@ -452,11 +452,12 @@ def create_datasets(
         dataset_stem = source.name
         # What each year file is cut from and under: the source, identified
         # before it is loaded, the package versions, the register the mapping
-        # below uses and the year.
+        # below uses and the year. Each stamp is kept with its year as given,
+        # which names the year file.
         identity = dataset_source_identity(source)
         # The source is checked again only when year files are cut from it.
         snapshot = dataset_source_snapshot(source) if years else None
-        stamps = [year_file_stamp(identity, year) for year in years]
+        stamps = [(year, year_file_stamp(identity, year)) for year in years]
         sim = Microsimulation(dataset=source.path, spm=resolve_spm_selection())
         # Map stored inputs the engine has since renamed before extracting,
         # so each year's file stores the live input rather than dropping it.
@@ -464,7 +465,7 @@ def create_datasets(
 
         # (dataset, year file, stamp) for each year file extracted.
         cut: list[tuple[PolicyEngineUSDataset, str, dict[str, Any]]] = []
-        for year, stamp in zip(years, stamps):
+        for year, stamp in stamps:
             # Get all input variables from the simulation
             # We'll calculate each input variable for the specified year
             entity_data = {

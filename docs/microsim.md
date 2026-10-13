@@ -332,8 +332,8 @@ is never read and can be deleted. Requested datasets that are different
 sources with one name are refused with `ValueError`.
 
 The limits listed under [Year files](#year-files) apply to UK year files too,
-with policyengine-uk in place of policyengine-us, and so does what moving a
-year file into place needs. Three more limits apply:
+with policyengine-uk in place of policyengine-us, as does the note there on
+moving a year file into place. Three more limits apply:
 
 - the versions are those installed when the files are cut. A package upgraded
   in a running process after policyengine-uk was imported is recorded at its
@@ -629,7 +629,9 @@ Moving a year file into place replaces the file at its path rather than
 rewriting it. The cut therefore needs write access to the data folder (and,
 in a folder with the sticky bit set, ownership of the year file it replaces
 or of the folder), and the year file gets the mode and group a file the
-cutting user creates there would get, not those of the file it replaces.
+cutting user creates there would get, not those of the file it replaces. A
+dataset's new year files are all written before any is moved, so the data
+folder needs room for them beside the year files already there.
 
 `ensure_datasets` raises, rather than cutting the files again, when a year
 file cannot be opened for reasons unrelated to its contents: no permission, a
