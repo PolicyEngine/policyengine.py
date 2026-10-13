@@ -587,8 +587,8 @@ def _read_json_dataset(file: Any, name: str) -> Any:
         # not JSON, raise ValueError; JSON nested too deeply raises
         # RecursionError, a RuntimeError, as does h5py following a soft link
         # at ``name`` that leads back to itself. Any RuntimeError counts as
-        # unreadable content: the errors that say nothing about the content
-        # are OSErrors, re-raised first.
+        # unreadable content. The OSErrors that say nothing about the content
+        # (no permission, a directory, a lock) are re-raised first.
         return json.loads(node.asstr()[()])
     except (PermissionError, IsADirectoryError, BlockingIOError):
         raise
