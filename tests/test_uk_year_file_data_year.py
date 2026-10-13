@@ -30,6 +30,8 @@ Invariants exercised:
   (PolicyEngine/policyengine.py#567).
 - Round trip: saving and loading a year file preserves its data year and
   the data year's tables.
+- One read: ``load_datasets`` loads each year file once, when it constructs
+  the dataset from the file's path.
 - No aliasing: a run leaves the caller's dataset tables unchanged.
 - Saved outputs: a saved UK output records the data year its run anchored
   on, and an output saved without one is refused, so ``Simulation.ensure()``
@@ -37,6 +39,9 @@ Invariants exercised:
 """
 
 from __future__ import annotations
+
+from collections import Counter
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -504,6 +509,29 @@ def test_year_file_loaded_from_disk_matches_direct_run(source, tmp_path, direct)
         assert dataset.data_year == DATA_YEAR
         assert dataset.data_year_data is not None
         _assert_matches_direct(_run(dataset), direct, year)
+
+
+def test_load_datasets_reads_each_year_file_once(source, year_files, monkeypatch):
+    """Constructing a dataset with its filepath loads it, and nothing again."""
+    years = [2024, 2025, 2026, 2028]
+    paths = [Path(year_files[f"tiny_uk_2024_{year}"].filepath) for year in years]
+    real_load = PolicyEngineUKDataset.load
+    loads = Counter()
+
+    def counting_load(self):
+        loads[Path(self.filepath)] += 1
+        real_load(self)
+
+    monkeypatch.setattr(PolicyEngineUKDataset, "load", counting_load)
+    loaded = load_datasets(
+        datasets=[source], years=years, data_folder=str(paths[0].parent)
+    )
+
+    assert loads == Counter(paths)
+    for year in years:
+        dataset = loaded[f"tiny_uk_2024_{year}"]
+        assert dataset.data_year == DATA_YEAR
+        assert (dataset.data_year_data is None) == (year == DATA_YEAR)
 
 
 REFORM = {
