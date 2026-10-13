@@ -181,13 +181,15 @@ def remove_temporary_year_files(temporaries: Iterable[Path]) -> None:
 
     ``create_datasets`` calls this in a ``finally``, so it runs after a cut
     that failed and after one that moved every file (which leaves nothing to
-    remove). A file that cannot be removed is left behind rather than raised
-    for: the error would replace the one that stopped the cut, and keep the
-    files after it from being removed.
+    remove). A file that is no longer there is skipped, and one that cannot
+    be removed is left behind rather than raised for: the error would replace
+    the one that stopped the cut, and keep the files after it from being
+    removed.
     """
     for temporary in temporaries:
+        # FileNotFoundError, for a file moved into place, is an OSError too.
         with contextlib.suppress(OSError):
-            temporary.unlink(missing_ok=True)
+            temporary.unlink()
 
 
 def publish_year_file(
