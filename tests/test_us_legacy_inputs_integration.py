@@ -123,14 +123,17 @@ def _in_memory_dataset(directory, frames=None) -> PolicyEngineUSDataset:
     )
 
 
-def _write_entity_tables(path, draw=None) -> str:
+def _write_entity_tables(path, draw=None, name=LEGACY) -> str:
     """Write the household in the certified Populace default's layout.
 
     ``draw`` replaces the stored draws (``DRAW``), as a new release would.
+    ``name`` is the column the draw is stored under: ``LIVE`` for a source
+    cut under the live name, which a cut maps no rename for.
     """
     frames = _frames()
     if draw is not None:
         frames["person"][LEGACY] = draw
+    frames["person"] = frames["person"].rename(columns={LEGACY: name})
     with pd.HDFStore(path, mode="w") as store:
         for entity, frame in frames.items():
             store.put(entity, frame, format="table", data_columns=True)
@@ -611,6 +614,15 @@ def _draw(dataset) -> list:
     return pd.DataFrame(dataset.data.person)[LIVE].tolist()
 
 
+def _assert_same_tables(returned, stored) -> None:
+    """Every entity table of a returned dataset is the one in its year file."""
+    for entity in ("person", *GROUPS):
+        pd.testing.assert_frame_equal(
+            pd.DataFrame(getattr(returned.data, entity)),
+            pd.DataFrame(getattr(stored.data, entity)),
+        )
+
+
 def test_create_datasets_extracts_the_draw_under_the_live_name(tmp_path):
     source, dataset = _create_year_file(tmp_path)
     person = pd.DataFrame(dataset.data.person)
@@ -893,12 +905,16 @@ def test_create_datasets_stamps_the_year_files_after_saving_and_checking(
         assert Path(temporary).name.endswith(".partial")
         assert not Path(temporary).exists()
     assert _partial_files(data_folder) == []
-    for year, path in zip((YEAR, YEAR + 1), paths):
+    for year, path, dataset in zip((YEAR, YEAR + 1), paths, created.values()):
         assert _problem(path, source, year) is None
         assert read_year_file_stamp(path)["year"] == year
         # The renames record went with the tables into the temporary file.
         assert read_renames_record(path) == RENAME
         assert _draw(_stored(path, year)) == DRAW
+        # The dataset returned is the one written, at the year file's path.
+        assert dataset.year == year
+        assert dataset.metadata["legacy_input_renames"] == RENAME
+        _assert_same_tables(dataset, _stored(path, year))
     # Moved into place with the mode a file pandas created at its path would
     # have.
     if os.name != "nt":
@@ -1015,8 +1031,9 @@ def test_a_cut_that_fails_part_way_leaves_no_temporary_file(tmp_path):
 
 def test_two_sources_cut_in_one_call_are_each_stamped_with_their_own(tmp_path):
     first = _write_entity_tables(tmp_path / "populace_layout.h5")
+    # Stored under the live name, so this cut maps no rename.
     second = _write_entity_tables(
-        tmp_path / "other_layout.h5", draw=[False, True, True]
+        tmp_path / "other_layout.h5", draw=[False, True, True], name=LIVE
     )
     data_folder = tmp_path / "data"
     years = [YEAR, YEAR + 1]
@@ -1028,15 +1045,17 @@ def test_two_sources_cut_in_one_call_are_each_stamped_with_their_own(tmp_path):
         allow_unmanaged=True,
     )
 
-    for source, stem, draw in (
-        (first, "populace_layout", DRAW),
-        (second, "other_layout", [False, True, True]),
+    for source, stem, draw, record in (
+        (first, "populace_layout", DRAW, RENAME),
+        (second, "other_layout", [False, True, True], {}),
     ):
         for year in years:
             path = data_folder / f"{stem}_year_{year}.h5"
             assert created[f"{stem}_{year}"].filepath == f"{data_folder}/{path.name}"
             assert read_year_file_stamp(path) == _stamp_for(source, year)
+            assert read_renames_record(path) == record
             assert _draw(_stored(path, year)) == draw
+            _assert_same_tables(created[f"{stem}_{year}"], _stored(path, year))
     assert _partial_files(data_folder) == []
     with patch.object(us_datasets, "create_datasets", side_effect=AssertionError):
         ensure_datasets(
@@ -1060,7 +1079,11 @@ def test_concurrent_cuts_never_mix_one_cuts_tables_with_anothers_stamp(tmp_path)
     first_folder.mkdir()
     second_folder.mkdir()
     first = _write_entity_tables(first_folder / "pop.h5")
-    second = _write_entity_tables(second_folder / "pop.h5", draw=[False, True, True])
+    # Stored under the live name, so the second cut's renames record is
+    # empty and the first's is not.
+    second = _write_entity_tables(
+        second_folder / "pop.h5", draw=[False, True, True], name=LIVE
+    )
     data_folder = tmp_path / "data"
     save = PolicyEngineUSDataset.save
     interleaved = []
@@ -1087,11 +1110,16 @@ def test_concurrent_cuts_never_mix_one_cuts_tables_with_anothers_stamp(tmp_path)
     assert interleaved
     path = data_folder / f"pop_year_{YEAR}.h5"
     stamp = read_year_file_stamp(path)
-    draws = {
-        requested_dataset_source_identity("us", first)["path"]: DRAW,
-        requested_dataset_source_identity("us", second)["path"]: [False, True, True],
+    cuts = {
+        requested_dataset_source_identity("us", first)["path"]: (DRAW, RENAME),
+        requested_dataset_source_identity("us", second)["path"]: (
+            [False, True, True],
+            {},
+        ),
     }
-    assert _draw(_stored(path)) == draws[stamp["source"]["path"]]
+    draw, record = cuts[stamp["source"]["path"]]
+    assert _draw(_stored(path)) == draw
+    assert read_renames_record(path) == record
     # The first cut finished last, so its year file is the one in place, and
     # a request of the first source reuses it.
     assert stamp == _stamp_for(first)
@@ -1101,12 +1129,17 @@ def test_concurrent_cuts_never_mix_one_cuts_tables_with_anothers_stamp(tmp_path)
 
 #: The stored draws of another release of the source: the infant's is True.
 OTHER_DRAW = [False, True, True]
-#: Each step of a cut of two year files, in order: each is saved to its
-#: temporary file, the source is checked again, then each is stamped and
-#: moved onto its path.
+#: Each step of a cut of two year files, in order. For each year file, its
+#: temporary file is created, then saved to ("table" is part-way through the
+#: save, once some of its tables are written). The source is then checked
+#: again, and each temporary file is stamped and moved onto its path.
 CUT_STEPS = (
+    "create 0",
     "save 0",
+    "table 0",
+    "create 1",
     "save 1",
+    "table 1",
     "check source",
     "stamp 0",
     "move 0",
@@ -1125,8 +1158,10 @@ def _just_before(step, action):
     Anything ``action`` does (another cut, for one) runs unhooked.
     """
     fired = []
-    seen = {"save": 0, "stamp": 0, "move": 0}
+    seen = {"create": 0, "save": 0, "table": 0, "stamp": 0, "move": 0}
+    create = us_datasets.temporary_year_file
     save = PolicyEngineUSDataset.save
+    put = pd.HDFStore.put
     change = us_datasets.dataset_source_change
     publish = us_datasets.publish_year_file
     write_stamp = year_file_stamp_module.write_json_dataset
@@ -1141,9 +1176,19 @@ def _just_before(step, action):
             fired.append(name)
             action()
 
+    def hooked_create(path):
+        reach("create")
+        return create(path)
+
     def hooked_save(self):
         reach("save")
         save(self)
+
+    def hooked_put(self, key, *args, **kwargs):
+        # ``save()`` writes the person and marital unit tables first.
+        if key == "family":
+            reach("table")
+        return put(self, key, *args, **kwargs)
 
     def hooked_change(*args):
         reach("check source")
@@ -1159,7 +1204,9 @@ def _just_before(step, action):
         reach("move")
 
     with (
+        patch.object(us_datasets, "temporary_year_file", hooked_create),
         patch.object(PolicyEngineUSDataset, "save", hooked_save),
+        patch.object(pd.HDFStore, "put", hooked_put),
         patch.object(us_datasets, "dataset_source_change", hooked_change),
         patch.object(us_datasets, "publish_year_file", hooked_publish),
         patch.object(year_file_stamp_module, "write_json_dataset", hooked_write_stamp),
@@ -1245,10 +1292,13 @@ def test_a_cut_run_at_any_step_of_another_never_mixes_tables_and_stamps(tmp_path
     first_folder.mkdir()
     second_folder.mkdir()
     first = _write_entity_tables(first_folder / "pop.h5")
-    second = _write_entity_tables(second_folder / "pop.h5", draw=OTHER_DRAW)
+    # Stored under the live name, so the second cut's renames record is
+    # empty and the first's is not.
+    second = _write_entity_tables(second_folder / "pop.h5", draw=OTHER_DRAW, name=LIVE)
     data_folder = tmp_path / "data"
     years = [YEAR, YEAR + 1]
     draws = {first: DRAW, second: OTHER_DRAW}
+    records = {first: RENAME, second: {}}
 
     def cut(source):
         create_datasets(
@@ -1269,7 +1319,7 @@ def test_a_cut_run_at_any_step_of_another_never_mixes_tables_and_stamps(tmp_path
         last = second if index < MOVED_BEFORE[step] else first
         assert read_year_file_stamp(path) == _stamp_for(last, year)
         assert _draw(_stored(path, year)) == draws[last]
-        assert read_renames_record(path) == RENAME
+        assert read_renames_record(path) == records[last]
         assert _problem(path, last, year) is None
     assert _partial_files(data_folder) == []
 

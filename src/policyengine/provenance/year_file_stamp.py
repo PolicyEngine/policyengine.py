@@ -27,11 +27,13 @@ This module holds what the countries share:
 - each requested dataset's year-file stem and source identity, refusing two
   sources that would share year files (:func:`year_file_sources`);
 - writing a year file beside its path and moving it into place only once it
-  is stamped (:func:`temporary_year_file`, :func:`publish_year_file`).
+  is stamped (:func:`temporary_year_file`, :func:`publish_year_file`,
+  :func:`remove_temporary_year_files`).
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import secrets
@@ -146,7 +148,8 @@ def temporary_year_file(path: str | Path) -> Path:
     always come from one cut, even when two processes cut the same year files
     at once, and a cut that stops part-way leaves ``path`` as it was. The
     file's name starts with ``.{stem}.`` and ends with ``.partial``; the
-    caller removes it if the cut fails.
+    caller removes it if the cut fails (see
+    :func:`remove_temporary_year_files`).
 
     The file is created with the mode a new file gets (``0o666`` less the
     umask), as pandas would create the year file itself, so a year file moved
@@ -162,9 +165,29 @@ def temporary_year_file(path: str | Path) -> Path:
             descriptor = os.open(temporary, flags, 0o666)
         except FileExistsError:
             continue
-        os.close(descriptor)
+        try:
+            os.close(descriptor)
+        except BaseException:
+            # The caller never learns this file's name, so could not remove it.
+            with contextlib.suppress(OSError):
+                temporary.unlink()
+            raise
         return temporary
     raise FileExistsError(f"Could not create a temporary file beside {path}")
+
+
+def remove_temporary_year_files(temporaries: Iterable[Path]) -> None:
+    """Remove the temporary year files a cut did not move into place.
+
+    ``create_datasets`` calls this in a ``finally``, so it runs after a cut
+    that failed and after one that moved every file (which leaves nothing to
+    remove). A file that cannot be removed is left behind rather than raised
+    for: the error would replace the one that stopped the cut, and keep the
+    files after it from being removed.
+    """
+    for temporary in temporaries:
+        with contextlib.suppress(OSError):
+            temporary.unlink(missing_ok=True)
 
 
 def publish_year_file(

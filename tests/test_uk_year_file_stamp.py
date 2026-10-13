@@ -973,14 +973,17 @@ def test_a_us_year_file_stamp_never_passes_as_a_uk_one(tmp_path):
     assert legacy_inputs.YEAR_FILE_STAMP_H5_DATASET != YEAR_FILE_STAMP_H5_DATASET
     us_stamped = _write_year_file(tmp_path / "us_stamped.h5")
     legacy_inputs.write_year_file_stamp(
-        us_stamped, legacy_inputs.year_file_stamp(IDENTITY, PACKAGES)
+        us_stamped, legacy_inputs.year_file_stamp(IDENTITY, DATA_YEAR, PACKAGES)
     )
     uk_stamped = _write_year_file(tmp_path / "uk_stamped.h5", stamp=_current())
 
     assert year_file_stamp_problem(us_stamped, IDENTITY, DATA_YEAR) == NO_STAMP
     assert read_year_file_stamp(us_stamped) is None
     assert legacy_inputs.read_year_file_stamp(uk_stamped) is None
-    assert legacy_inputs.year_file_stamp_problem(uk_stamped, IDENTITY) is not None
+    assert (
+        legacy_inputs.year_file_stamp_problem(uk_stamped, IDENTITY, DATA_YEAR)
+        is not None
+    )
     assert year_file_stamp_problem(uk_stamped, IDENTITY, DATA_YEAR) is None
 
 
@@ -993,12 +996,14 @@ def test_a_us_year_file_stamp_never_passes_as_a_uk_one(tmp_path):
     stamped_source=SOURCES,
     packages=PACKAGE_MAPS,
     stamped_packages=PACKAGE_MAPS,
+    year=st.sampled_from([DATA_YEAR, DATA_YEAR + 1]),
+    stamped_year=st.sampled_from([DATA_YEAR, DATA_YEAR + 1]),
 )
-def test_the_uk_and_us_checks_name_source_and_package_differences_alike(
-    source, stamped_source, packages, stamped_packages
+def test_the_uk_and_us_checks_name_year_source_and_package_differences_alike(
+    source, stamped_source, packages, stamped_packages, year, stamped_year
 ):
     """Two implementations of one semantics: a UK and a US year file that
-    differ from the request only in source and packages get the same
+    differ from the request only in year, source and packages get the same
     reason."""
     from policyengine.tax_benefit_models.us import legacy_inputs
     from policyengine.tax_benefit_models.us.datasets import (
@@ -1021,7 +1026,7 @@ def test_the_uk_and_us_checks_name_source_and_package_differences_alike(
     with tempfile.TemporaryDirectory() as directory:
         uk_path = _write_year_file(
             Path(directory) / "uk.h5",
-            stamp=_stamp(REVISION, stamped_source, stamped_packages),
+            stamp=_stamp(REVISION, stamped_source, stamped_packages, stamped_year),
         )
         us_path = Path(directory) / "us.h5"
         PolicyEngineUSDataset(
@@ -1037,13 +1042,18 @@ def test_the_uk_and_us_checks_name_source_and_package_differences_alike(
             ),
             metadata={legacy_inputs.RENAMES_RECORD_KEY: {}},
         ).save()
-        us_stamp = legacy_inputs.year_file_stamp(stamped_source, stamped_packages)
+        us_stamp = legacy_inputs.year_file_stamp(
+            stamped_source, stamped_year, stamped_packages
+        )
         legacy_inputs.write_year_file_stamp(us_path, us_stamp)
 
-        uk = year_file_stamp_problem(uk_path, source, DATA_YEAR, packages)
-        us = legacy_inputs.year_file_stamp_problem(us_path, source, packages)
+        uk = year_file_stamp_problem(uk_path, source, year, packages)
+        us = legacy_inputs.year_file_stamp_problem(us_path, source, year, packages)
 
     assert uk == us
+    assert (uk is None) == (
+        (stamped_source, stamped_packages, stamped_year) == (source, packages, year)
+    )
 
 
 # --- Partial files ------------------------------------------------------

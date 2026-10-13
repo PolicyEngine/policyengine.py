@@ -557,14 +557,16 @@ explicit URI was downloaded with (`dataset_source_change`). Only then does it
 stamp each temporary file and move it onto its path, in one step
 (`os.replace`). The tables, the renames record and the stamp at a year
 file's path therefore always come from one cut, even when two processes cut
-the same year files at once, and a reader sees the old file or the new one,
-never a mix. Another process can replace a file in a shared data folder, for
-example by materializing another release of the same dataset, or another file
-with the same name, there. If the source changed, none of that dataset's year
-files is moved into place, the ones already there are left as they were, and
-`DatasetMaterializationError` is raised. A cut that fails for any other reason
-leaves them as they were too. A process killed mid-cut can leave a temporary
-file behind, which is never read and can be deleted.
+the same year files at once: whatever opens the file gets the old file or the
+new one, whole. Another process can replace a file in a shared data folder,
+for example by materializing another release of the same dataset, or another
+file with the same name, there. If the source changed, none of that dataset's
+year files is moved into place, the ones already there are left as they were,
+and `DatasetMaterializationError` is raised. A cut that fails for another
+reason before it moves any year file leaves them as they were too. One that
+fails while moving them leaves each year file either as it was or whole and
+stamped. A process killed mid-cut can leave a temporary file behind, which is
+never read and can be deleted.
 
 Requested datasets that are different sources with one name, such as two
 revisions of one Hugging Face file or two local files called `pop.h5`, would
@@ -623,7 +625,12 @@ The source check has limits that follow from not reading the source:
   at once each cut them whole, and each year file holds the tables and stamp
   of the cut that moved it into place last. The files of a dataset's years
   can therefore come from different cuts; each is checked against its own
-  stamp.
+  stamp;
+- `load_datasets` checks a year file's stamp, then opens the file again to
+  read its renames record and its tables. A cut that replaces the file in
+  between is not noticed, so the tables read can be the new cut's, checked
+  against the stamp of the file it replaced. `ensure_datasets` reuses year
+  files through `load_datasets`, so the same holds for it.
 
 Moving a year file into place replaces the file at its path rather than
 rewriting it. The cut therefore needs write access to the data folder (and,

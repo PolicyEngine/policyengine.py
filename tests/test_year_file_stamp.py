@@ -16,6 +16,9 @@ tests state the shared pieces' own invariants:
   their sources differ, naming the country.
 - **Publishing is whole.** A year file written beside its path and published
   replaces the file at the path in one step, with its stamp.
+- **No temporary file outlives a failure it can be removed after.** A
+  temporary file whose creation fails is removed, and removing a cut's
+  temporary files removes every one that can be, raising for none.
 """
 
 from __future__ import annotations
@@ -35,6 +38,7 @@ from policyengine.provenance.year_file_stamp import (
     is_version_map,
     publish_year_file,
     read_stored_json,
+    remove_temporary_year_files,
     source_and_package_differences,
     temporary_year_file,
     write_json_dataset,
@@ -247,3 +251,64 @@ def test_publishing_stamps_the_file_before_moving_it(tmp_path, monkeypatch):
     publish_year_file(temporary, path, "stamp", {"cut": "this"})
 
     assert moved == [(temporary, path)]
+
+
+@pytest.mark.parametrize(
+    "error", [OSError(5, "Input/output error"), KeyboardInterrupt()]
+)
+def test_a_temporary_year_file_whose_creation_fails_is_removed(
+    tmp_path, monkeypatch, error
+):
+    """The caller learns a temporary file's name only when it is returned,
+    so one whose descriptor fails to close is removed here."""
+    close = os.close
+    closed = []
+
+    def close_then_fail(descriptor):
+        close(descriptor)
+        closed.append(descriptor)
+        raise error
+
+    monkeypatch.setattr(os, "close", close_then_fail)
+    with pytest.raises(type(error)):
+        temporary_year_file(tmp_path / "pop_year_2026.h5")
+    monkeypatch.undo()
+
+    assert len(closed) == 1
+    assert list(tmp_path.iterdir()) == []
+
+
+@settings(max_examples=50, deadline=None)
+@given(
+    states=st.lists(
+        st.sampled_from(["there", "moved", "stuck"]), min_size=0, max_size=5
+    )
+)
+def test_removing_temporary_year_files_removes_all_it_can(states):
+    """Best effort: a temporary file already moved into place is skipped, one
+    that cannot be removed is left, and every other is removed, in any
+    order, without raising."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as directory:
+        folder = Path(directory)
+        temporaries = []
+        for index, state in enumerate(states):
+            temporary = temporary_year_file(folder / f"pop_year_{2020 + index}.h5")
+            if state == "moved":
+                os.replace(temporary, folder / f"pop_year_{2020 + index}.h5")
+            temporaries.append(temporary)
+        stuck = {t for t, state in zip(temporaries, states) if state == "stuck"}
+        unlink = Path.unlink
+
+        def unlink_unless_stuck(self, *args, **kwargs):
+            if self in stuck:
+                raise PermissionError(13, "Permission denied")
+            return unlink(self, *args, **kwargs)
+
+        with patch.object(Path, "unlink", unlink_unless_stuck):
+            remove_temporary_year_files(temporaries)
+
+        assert sorted(folder.glob(".*.partial")) == sorted(stuck)
+        # The year files moved into place are left alone.
+        assert len(list(folder.glob("pop_year_*.h5"))) == states.count("moved")

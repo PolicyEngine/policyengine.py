@@ -26,6 +26,7 @@ from policyengine.provenance.manifest import (
 )
 from policyengine.provenance.year_file_stamp import (
     publish_year_file,
+    remove_temporary_year_files,
     temporary_year_file,
     year_file_sources,
 )
@@ -409,8 +410,10 @@ def create_datasets(
     again, and only then is each temporary file stamped and moved onto its
     path. The tables, the renames record and the stamp at a year file's path
     therefore always come from one cut, even when two processes cut the same
-    year files at once, and a cut that fails leaves the year files already
-    there as they were.
+    year files at once. A cut that fails before it moves any year file leaves
+    the year files already there as they were. One that fails while moving
+    them leaves each either as it was or whole and stamped. Either way its
+    temporary files are removed.
 
     The source file's size and modification time are recorded right after it
     is materialized, and checked again once the year files are written. A
@@ -662,8 +665,7 @@ def create_datasets(
                     temporary, filepath, YEAR_FILE_STAMP_H5_DATASET, stamp
                 )
         finally:
-            for temporary in temporaries:
-                temporary.unlink(missing_ok=True)
+            remove_temporary_year_files(temporaries)
 
     return result
 
