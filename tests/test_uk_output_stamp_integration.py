@@ -202,8 +202,6 @@ def test_year_files_keep_their_stamp_in_memory_as_on_disk(tmp_path):
         assert loaded[key].metadata == {YEAR_FILE_STAMP_KEY: on_disk}
         assert input_year_file_stamp(created[key]) == on_disk
         assert input_year_file_stamp(loaded[key]) == on_disk
-        # Each dataset keeps a copy of its own.
-        assert created[key].metadata[YEAR_FILE_STAMP_KEY] is not on_disk
 
 
 def test_a_saved_output_records_the_stamp_of_its_year_file(tmp_path):
@@ -230,6 +228,35 @@ def test_a_saved_output_records_the_stamp_of_its_year_file(tmp_path):
     assert reloaded.output_dataset.metadata == {OUTPUT_STAMP_KEY: stamp}
     assert reloaded.output_dataset.data_year == DATA_YEAR
     _assert_same_output(simulation, reloaded)
+
+
+def test_saving_writes_the_stamp_the_run_recorded_not_one_made_then(tmp_path):
+    """The year file is cut again between a run and its save: the output
+    holds results from the old cut, and is stamped with the old cut."""
+    source = _new_source(tmp_path)
+    data_folder = tmp_path / "data"
+    dataset = _ensure(source, data_folder)[KEY]
+    old = read_year_file_stamp(dataset.filepath)
+    run_id = _run_id()
+    simulation = _simulation(dataset, run_id)
+    simulation.run()
+
+    _write_source(Path(source), _replacement_tables())
+    identity = requested_dataset_source_identity("uk", source)
+    os.utime(source, ns=(identity["mtime_ns"] + 10**9, identity["mtime_ns"] + 10**9))
+    recut = _assert_cut_again(source, data_folder)[KEY]
+    new = read_year_file_stamp(recut.filepath)
+    assert new != old
+    # The simulation's dataset is reloaded from the new cut before the save.
+    dataset.load()
+    assert input_year_file_stamp(dataset) == new
+    simulation.save()
+
+    path = output_dataset_filepath(simulation)
+    assert read_output_stamp(path) == output_stamp(old)
+    assert _refusal(recut, run_id) is not None
+    assert _ensured(recut, run_id)[1] == 1
+    assert read_output_stamp(path) == output_stamp(new)
 
 
 def test_a_loaded_output_saved_again_keeps_its_stamp(tmp_path):

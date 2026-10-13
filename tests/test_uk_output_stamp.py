@@ -867,6 +867,64 @@ def test_an_output_from_a_year_file_cut_with_another_policyengine_uk(tmp_path):
     )
 
 
+def test_explicit_packages_override_the_installed_ones(tmp_path):
+    other = {"policyengine-core": "9.0.0", "policyengine-uk": "9.0.0"}
+    year_file = _year_stamp(packages=other)
+    path = _write_output(tmp_path / "output.h5", stamp=output_stamp(year_file))
+
+    assert output_stamp_problem(path, year_file, other) is None
+    assert output_stamp_problem(path, year_file) is not None
+    assert output_stamp_problem(path, year_file, PACKAGES) == output_stamp_problem(
+        path, year_file
+    )
+    current = _write_output(
+        tmp_path / "current.h5", stamp=output_stamp(_current_year_stamp())
+    )
+    assert output_stamp_problem(current, _current_year_stamp(), other) is not None
+
+
+@pytest.mark.parametrize(
+    "recorded, current, cut, dataset_cut",
+    [
+        (
+            {"policyengine-uk": "1.0"},
+            {"policyengine-uk": "1.1"},
+            "with policyengine-uk 1.0",
+            "with policyengine-uk 1.1",
+        ),
+        (
+            {"policyengine-uk": None},
+            {"policyengine-uk": "1.1"},
+            "without policyengine-uk installed",
+            "with policyengine-uk 1.1",
+        ),
+        (
+            {},
+            {"policyengine-uk": None},
+            "without a recorded policyengine-uk version",
+            "without policyengine-uk installed",
+        ),
+        (
+            {"policyengine-uk": "1.0"},
+            {},
+            "with policyengine-uk 1.0",
+            "without a recorded policyengine-uk version",
+        ),
+    ],
+)
+def test_a_version_the_year_file_lacked_or_did_not_record_is_named(
+    tmp_path, recorded, current, cut, dataset_cut
+):
+    path = _write_output(
+        tmp_path / "output.h5", stamp=output_stamp(_year_stamp(packages=recorded))
+    )
+
+    assert output_stamp_problem(path, _year_stamp(packages=current)) == (
+        f"it was calculated from a year file cut {cut}, and the simulation's "
+        f"dataset was cut {dataset_cut}"
+    )
+
+
 def test_an_output_of_another_year_names_both(tmp_path):
     path = _write_output(
         tmp_path / "output.h5", stamp=output_stamp(_current_year_stamp(YEAR))
@@ -1182,6 +1240,15 @@ def test_a_dataset_built_in_memory_keeps_no_year_file_stamp():
     assert input_year_file_stamp(dataset) is None
 
 
+def test_loading_a_dataset_with_no_filepath_is_refused():
+    dataset = PolicyEngineUKDataset(
+        name="memory", description="memory", year=YEAR, data=_tables()
+    )
+
+    with pytest.raises(ValueError, match="no filepath"):
+        dataset.load()
+
+
 def test_a_dataset_whose_tables_are_not_loaded_gives_its_files_stamp(tmp_path):
     path = _write_year_file(tmp_path / "year.h5", _current_year_stamp())
     dataset = PolicyEngineUKDataset(
@@ -1193,6 +1260,24 @@ def test_a_dataset_whose_tables_are_not_loaded_gives_its_files_stamp(tmp_path):
     dataset.metadata[YEAR_FILE_STAMP_KEY] = "kept from before"
 
     assert input_year_file_stamp(dataset) == _current_year_stamp()
+
+
+def test_a_loaded_dataset_keeps_the_stamp_of_the_tables_it_holds(tmp_path):
+    """A year file cut again after it was loaded: the dataset still holds the
+    old cut's tables, so a run of it records the old cut's stamp."""
+    path, replacement, old, new = _two_cuts(tmp_path)
+    dataset = PolicyEngineUKDataset(
+        name="year-file", description="load", filepath=str(path), year=YEAR
+    )
+
+    os.replace(replacement, path)
+
+    assert year_file_stamp_metadata(path) == new
+    assert pd.DataFrame(dataset.data.person)["age"].iloc[0] == 70
+    assert input_year_file_stamp(dataset) == old
+    dataset.load()
+    assert pd.DataFrame(dataset.data.person)["age"].iloc[0] == 99
+    assert input_year_file_stamp(dataset) == new
 
 
 def test_the_stamp_a_run_records_is_a_copy(tmp_path):
@@ -1293,6 +1378,27 @@ def test_a_year_file_replaced_once_is_read_again_once(tmp_path, monkeypatch):
     assert dataset.metadata[YEAR_FILE_STAMP_KEY] == "second"
 
 
+def test_stamps_equal_in_python_but_not_in_json_are_two_cuts(tmp_path, monkeypatch):
+    path = _write_year_file(tmp_path / "year.h5", _current_year_stamp())
+    stamp = _current_year_stamp()
+    tampered = {**stamp, "revision": True}
+    assert tampered == stamp
+    stamps = iter([tampered, stamp, stamp, stamp])
+    reads = []
+
+    def changing_once(path):
+        reads.append(path)
+        return next(stamps)
+
+    monkeypatch.setattr(uk_datasets, "year_file_stamp_metadata", changing_once)
+    dataset = PolicyEngineUKDataset(
+        name="year-file", description="load", filepath=str(path), year=YEAR
+    )
+
+    assert len(reads) == 4
+    assert dataset.metadata[YEAR_FILE_STAMP_KEY]["revision"] is not True
+
+
 def test_copying_a_year_file_keeps_the_stamp_and_its_check(tmp_path):
     """A copied year file keeps its stamp; the output records it either way."""
     path = _write_year_file(tmp_path / "year.h5", _current_year_stamp())
@@ -1307,4 +1413,9 @@ def test_copying_a_year_file_keeps_the_stamp_and_its_check(tmp_path):
         tmp_path / "output.h5", stamp=output_stamp(input_year_file_stamp(dataset))
     )
     assert output_stamp_problem(output, input_year_file_stamp(dataset)) is None
+
+
+def test_the_metadata_keys_are_the_documented_ones():
     assert OUTPUT_STAMP_KEY == "output_stamp"
+    assert YEAR_FILE_STAMP_KEY == "year_file_stamp"
+    assert OUTPUT_STAMP_H5_DATASET == "policyengine_uk_output_stamp"

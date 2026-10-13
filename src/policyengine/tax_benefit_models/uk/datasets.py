@@ -1,4 +1,5 @@
 import copy
+import json
 import logging
 from collections.abc import Mapping
 from pathlib import Path
@@ -269,6 +270,11 @@ class PolicyEngineUKDataset(Dataset):
         is raised.
         """
         filepath = self.filepath
+        if not filepath:
+            raise ValueError(
+                "Cannot load a PolicyEngineUKDataset with no filepath. This "
+                "is an in-memory dataset; set `.filepath` to a file to load."
+            )
         for _ in range(_LOAD_ATTEMPTS):
             before = year_file_stamp_metadata(filepath)
             with pd.HDFStore(filepath, mode="r") as store:
@@ -285,7 +291,8 @@ class PolicyEngineUKDataset(Dataset):
                     else None
                 )
             stamp = year_file_stamp_metadata(filepath)
-            if stamp == before:
+            # As JSON: Python equality takes ``true`` for 1.
+            if json.dumps(stamp, sort_keys=True) == json.dumps(before, sort_keys=True):
                 break
         else:
             raise RuntimeError(

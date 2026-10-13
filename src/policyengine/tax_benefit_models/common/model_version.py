@@ -469,7 +469,8 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     "stored inputs (it has no record of them); run it again"
                 )
 
-        uk_stamp = None
+        # What the output dataset is constructed with, besides its file.
+        kept: dict[str, Any] = {}
         if self.country_code == "uk":
             from policyengine.tax_benefit_models.uk.datasets import (
                 OUTPUT_STAMP_KEY,
@@ -497,8 +498,9 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     "does so)."
                 )
             # Current: ``output_stamp_problem`` accepts an output only with a
-            # well-formed stamp.
-            uk_stamp = read_output_stamp(filepath)
+            # well-formed stamp. Kept so that saving the loaded output again
+            # writes its stamp.
+            kept = {"metadata": {OUTPUT_STAMP_KEY: read_output_stamp(filepath)}}
 
         simulation.output_dataset = self._dataset_class(
             id=simulation.id,
@@ -507,6 +509,7 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             filepath=filepath,
             year=simulation.dataset.year,
             is_output_dataset=True,
+            **kept,
         )
         if self.country_code == "us":
             from policyengine.core.spm import SPMSelection
@@ -516,9 +519,6 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             simulation.output_dataset.metadata.update(
                 {"spm_config": recorded["config"], RENAMES_RECORD_KEY: recorded_renames}
             )
-        if uk_stamp is not None:
-            # Kept so that saving the loaded output again writes its stamp.
-            simulation.output_dataset.metadata[OUTPUT_STAMP_KEY] = uk_stamp
 
         if os.path.exists(filepath):
             simulation.created_at = datetime.datetime.fromtimestamp(
