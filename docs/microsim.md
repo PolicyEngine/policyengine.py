@@ -401,11 +401,9 @@ The renames applied are recorded as `{old: new}` (`{}` when none applied):
 carried the draw: data that stores neither name runs with the new input's
 default, which for WIC is full take-up.
 
-A saved US output written before this mapping existed has no record and may
-have been calculated without the mapped inputs, so `load()` refuses it, and
-`ensure()` runs the simulation again and saves the new output. Saved outputs
-are checked only for the record, not for the register they were calculated
-under.
+Year files and saved outputs are each stamped with the register they were
+cut or calculated under, so neither is reused once the register changes (see
+below).
 
 ### Year files
 
@@ -443,7 +441,56 @@ than cutting the files again, when a year file cannot be opened for reasons
 unrelated to its contents: no permission, a directory at its path, or a lock
 held by another process. A year file opened directly, as
 `PolicyEngineUSDataset(filepath=...)`, is not checked, and saving it again with
-`save()` drops its stamp.
+`save()` drops its stamp. A dataset read from a year file, or returned by
+`create_datasets`, keeps the file's stamp as `metadata["year_file_stamp"]`, so
+an output calculated from it records the stamp (see below).
+
+### Saved outputs
+
+A US `Simulation.run()` records a stamp in its output's
+`metadata["output_stamp"]`, read before it applies the mapping: UTF-8 JSON
+`{"register": {old: new, ...}, "revision": 1, "year_file": ...}`. It holds
+the whole register, an output format revision, and the stamp of the year file
+the input data was cut into, or `null` when the input dataset keeps none (an
+in-memory dataset or a source file, for example). `save()` writes it into the
+output file, after everything else, as
+`legacy_inputs.OUTPUT_STAMP_H5_DATASET`; `load()` restores it. Its name and
+keys differ from the year-file stamp's, so an output never passes as a year
+file, nor a year file as an output.
+
+`Simulation.load()` refuses a saved US output unless its stamp is exactly what
+this release would write for a run over a dataset with no year-file stamp, or
+over a current year file, and its renames record lists only renames in the
+stamped register. `Simulation.ensure()` then runs the simulation again and
+saves the new output. `legacy_inputs.output_stamp_problem(path)` returns the
+reason, or `None` for a current output; it reads only the stamp and the
+record. A saved output is out of date when:
+
+- it has no stamp. Outputs saved before the mapping existed have no record
+  either, and may have been calculated with every WIC-eligible person taking
+  WIC up. Outputs saved with the record but before the stamp are calculated
+  again once, and so is an output whose save did not finish;
+- its register differs from this release's. An output calculated before an
+  entry was registered may lack that entry's input, and one calculated under
+  an entry this release lacks, or maps to another new name, used a mapping
+  this release does not;
+- it was calculated from a year file whose stamp is not this release's: a
+  run over a year file maps only what the file still stores under an old
+  name, so the output inherits whatever the file lost. That happens for a
+  year file opened directly when `load_datasets` would refuse it, and for
+  every year file once the register or the year-file format revision
+  changes;
+- it has another output format revision, or its stamp or record cannot be
+  read.
+
+So any change to `LEGACY_INPUT_RENAMES` makes every saved US output out of
+date too. A missing output file raises `FileNotFoundError`, as before, so
+`ensure()` runs the simulation. An output file that cannot be opened for
+reasons unrelated to its contents (no permission, a directory, a lock held by
+another process) raises that error rather than counting as out of date. A
+year file cut before the stamp existed and opened directly keeps no stamp, so
+an output calculated from it records `null` and is reused; `load_datasets`
+refuses such a file.
 
 ## Pinned model versions
 

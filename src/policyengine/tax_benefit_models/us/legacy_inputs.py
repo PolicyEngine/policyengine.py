@@ -22,6 +22,7 @@ if the engine defines the legacy name again.
 
 from __future__ import annotations
 
+import copy
 import inspect
 import json
 from collections.abc import Iterable, Iterator, Mapping
@@ -41,11 +42,13 @@ import pandas as pd
 #: ``would_claim_wic`` only, so without this mapping every WIC-eligible person
 #: takes WIC up (PolicyEngine/microcosm#1026).
 #:
-#: Each ``create_datasets`` year file is stamped with this register (see
-#: :data:`YEAR_FILE_STAMP_H5_DATASET`), so any change to it (an entry added,
-#: removed or pointed at another live input) makes every year file stale, and
-#: ``ensure_datasets`` cuts them all again. An entry that no longer applies
-#: turns itself off, so leave it in place rather than remove it.
+#: Each ``create_datasets`` year file and each saved output is stamped with
+#: this register (see :data:`YEAR_FILE_STAMP_H5_DATASET` and
+#: :data:`OUTPUT_STAMP_H5_DATASET`), so any change to it (an entry added,
+#: removed or pointed at another live input) makes every year file and every
+#: saved output stale: ``ensure_datasets`` cuts the year files again, and
+#: ``Simulation.ensure()`` calculates the outputs again. An entry that no
+#: longer applies turns itself off, so leave it in place rather than remove it.
 LEGACY_INPUT_RENAMES: dict[str, str] = {
     "would_claim_wic": "takes_up_wic_if_eligible",
 }
@@ -68,10 +71,9 @@ RENAMES_RECORD_KEY = "legacy_input_renames"
 #: ``ensure_datasets`` regenerates it.
 #:
 #: The record shows that a file was written with the mapping, not under which
-#: register. Year files also carry :data:`YEAR_FILE_STAMP_H5_DATASET`, which
-#: ties them to the register they were cut under. Saved outputs carry only
-#: this record, so an output saved before a register entry was added is still
-#: reused.
+#: register. Year files also carry :data:`YEAR_FILE_STAMP_H5_DATASET`, and
+#: saved outputs :data:`OUTPUT_STAMP_H5_DATASET`, which tie each to the
+#: register it was cut or calculated under.
 RENAMES_H5_DATASET = "policyengine_legacy_input_renames"
 
 #: H5 dataset stamping a ``create_datasets`` year file, as UTF-8 JSON
@@ -94,7 +96,47 @@ YEAR_FILE_STAMP_H5_DATASET = "policyengine_year_file_stamp"
 #: Removing the temporary ACS WIC assumption (:func:`_temporary_acs_wic_values`)
 #: is such a change: year files cut while it applies store assumed claiming
 #: as ``takes_up_wic_if_eligible`` for ACS people with no stored decision.
+#:
+#: A saved output records the stamp of the year file it was calculated from,
+#: so raising this makes those outputs out of date too.
 YEAR_FILE_STAMP_REVISION = 1
+
+#: Key under which a dataset read from, or cut into, a year file keeps that
+#: file's stamp in its ``metadata``, as the JSON value stored (see
+#: :func:`read_year_file_stamp`). A run records it in its output's stamp.
+YEAR_FILE_STAMP_KEY = "year_file_stamp"
+
+#: H5 dataset stamping a saved US simulation output, as UTF-8 JSON
+#: ``{"register": {legacy: live, ...}, "revision": int, "year_file": ...}``:
+#: the whole register the output was calculated under, its output format
+#: revision, and the stamp of the year file it was calculated from (``null``
+#: when the input dataset carried none). See :func:`output_stamp`.
+#:
+#: A US run records the stamp in its output's ``metadata`` (under
+#: :data:`OUTPUT_STAMP_KEY`) when it is calculated, before applying the
+#: mapping. ``MicrosimulationModelVersion.save()`` writes it after the tables,
+#: the renames record and the SPM receipt, so an output whose save stopped
+#: part-way has none. ``Simulation.load()`` refuses an output whose stamp does
+#: not match this release's (see :func:`output_stamp_problem`), and
+#: ``Simulation.ensure()`` then calculates it again.
+#:
+#: Its name and its keys differ from :data:`YEAR_FILE_STAMP_H5_DATASET`'s, so
+#: an output never passes as a year file, nor a year file as an output.
+OUTPUT_STAMP_H5_DATASET = "policyengine_output_stamp"
+
+#: Format revision of saved outputs, stored in their stamp. Raise it when a
+#: change to the mapping, or to how a run uses it, means that outputs
+#: calculated before it must be calculated again, for a reason neither the
+#: register nor the year-file stamp captures.
+#:
+#: Removing the temporary ACS WIC assumption (:func:`_temporary_acs_wic_values`)
+#: is such a change: a run over a source that stores ``would_claim_wic``
+#: assumes claiming for ACS people with no stored decision while it applies.
+#: Raise :data:`YEAR_FILE_STAMP_REVISION` with it.
+OUTPUT_STAMP_REVISION = 1
+
+#: Key under which a US run's output keeps its stamp in ``metadata``.
+OUTPUT_STAMP_KEY = "output_stamp"
 
 #: ``{year: {entity key: stored table}}``, one table per entity per dataset
 #: year, in the dataset's own row order.
@@ -270,12 +312,7 @@ def year_file_stamp_problem(path: str | Path) -> str | None:
         )
     if stamp == current:
         return None
-    missing = {
-        legacy: live for legacy, live in register.items() if stamped.get(legacy) != live
-    }
-    unknown = {
-        legacy: live for legacy, live in stamped.items() if register.get(legacy) != live
-    }
+    missing, unknown = _register_differences(stamped, register)
     reasons = []
     if missing:
         reasons.append(
@@ -288,6 +325,252 @@ def year_file_stamp_problem(path: str | Path) -> str | None:
             f"register: {_describe(unknown)}"
         )
     return "; ".join(reasons)
+
+
+def year_file_stamp_metadata(path: str | Path) -> Any | None:
+    """Return the year-file stamp a dataset read from ``path`` keeps.
+
+    A dataset keeps it in ``metadata`` under :data:`YEAR_FILE_STAMP_KEY`, and
+    a run records it in its output's stamp (see :func:`output_stamp`).
+
+    An error that says nothing about the file's contents (a missing file, no
+    permission, a directory, a lock) is raised, as by
+    :func:`year_file_stamp_problem`.
+
+    Returns:
+        ``None`` when the file stores no stamp or is not an H5 file; the
+        stored JSON value when it is readable and not ``null``; otherwise
+        ``"unreadable"``. No release stamps a year file with a string, so an
+        output calculated from a file whose stamp is unreadable is never
+        current.
+    """
+    import h5py
+
+    try:
+        with h5py.File(path, "r") as file:
+            stamp = _read_json_dataset(file, YEAR_FILE_STAMP_H5_DATASET)
+    except (FileNotFoundError, PermissionError, IsADirectoryError, BlockingIOError):
+        raise
+    except OSError:
+        return None
+    if stamp is _ABSENT:
+        return None
+    return "unreadable" if stamp is _UNREADABLE or stamp is None else stamp
+
+
+def output_stamp(year_file: Any = None) -> dict[str, Any]:
+    """Return the stamp for an output calculated now.
+
+    ``year_file`` is the stamp the input dataset keeps under
+    :data:`YEAR_FILE_STAMP_KEY` (see :func:`year_file_stamp_metadata`), or
+    ``None`` when it keeps none. Like :func:`year_file_stamp`, the stamp holds
+    the whole register, read when this is called.
+    """
+    return {
+        "register": dict(sorted(LEGACY_INPUT_RENAMES.items())),
+        "revision": OUTPUT_STAMP_REVISION,
+        "year_file": copy.deepcopy(year_file),
+    }
+
+
+def read_output_stamp(path: str | Path) -> Any | None:
+    """Return the JSON value of a saved output's stamp, well formed or not.
+
+    ``None`` means the file stores no readable stamp (see
+    :data:`OUTPUT_STAMP_H5_DATASET`) or is not an H5 file.
+    """
+    import h5py
+
+    try:
+        with h5py.File(path, "r") as file:
+            stamp = _read_json_dataset(file, OUTPUT_STAMP_H5_DATASET)
+    except OSError:
+        return None
+    return None if stamp is _ABSENT or stamp is _UNREADABLE else stamp
+
+
+def write_output_stamp(path: str | Path, stamp: Mapping[str, Any]) -> None:
+    """Stamp a saved output (see :func:`output_stamp`), replacing any stamp."""
+    _write_json_dataset(path, OUTPUT_STAMP_H5_DATASET, dict(stamp))
+
+
+def output_stamp_problem(path: str | Path) -> str | None:
+    """Return why a saved US simulation output is out of date, or ``None``.
+
+    A saved output is current only when both of these hold:
+
+    - its stamp equals :func:`output_stamp` for an input that kept no
+      year-file stamp, or for one cut into a year file under this release's
+      :func:`year_file_stamp`. That is, it has the same output format
+      revision and the same register, and the stamp of the year file it was
+      calculated from is ``null`` or this release's;
+    - it stores the renames record, listing only renames in its stamped
+      register.
+
+    The registers must match exactly, for the reasons
+    :func:`year_file_stamp_problem` gives. An output calculated before an
+    entry was registered may lack that entry's input, as outputs calculated
+    before the WIC entry gave every WIC-eligible person WIC. A run over a year
+    file maps only what the file still stores under a legacy name, so an
+    output calculated from a year file that is out of date under this release
+    is out of date too.
+
+    Only the stamp and the record are read, never the tables. A file that
+    cannot be read as HDF5 is out of date. A missing file raises
+    ``FileNotFoundError``, so ``Simulation.ensure()`` calculates the output
+    without reporting an unexpected error. An error that says nothing about
+    the file's contents (no permission, a directory, a file another process
+    has locked) is raised too, since the output could not be saved again
+    either.
+
+    Returns:
+        ``None`` for a current output; otherwise a clause, starting "it" or
+        "its", that says why the output is out of date and names the renames
+        it may lack.
+    """
+    import h5py
+
+    register = dict(sorted(LEGACY_INPUT_RENAMES.items()))
+    current_year_file = year_file_stamp()
+    try:
+        with h5py.File(path, "r") as file:
+            stamp = _read_json_dataset(file, OUTPUT_STAMP_H5_DATASET)
+            record = _read_json_dataset(file, RENAMES_H5_DATASET)
+    except (FileNotFoundError, PermissionError, IsADirectoryError, BlockingIOError):
+        raise
+    except OSError:
+        return "it cannot be read as an HDF5 file (it may be half-written or corrupt)"
+
+    # The revision comes first: a later revision may shape its stamp and
+    # record differently.
+    revision = stamp.get("revision") if isinstance(stamp, dict) else None
+    if type(revision) is int and revision != OUTPUT_STAMP_REVISION:
+        return (
+            f"it was saved with output format revision {revision}, and this "
+            f"version of policyengine.py reads only revision "
+            f"{OUTPUT_STAMP_REVISION}"
+        )
+    if stamp is _ABSENT:
+        if record is _ABSENT:
+            return (
+                "it has no record of the renamed stored inputs mapped when it "
+                "was calculated, so it was saved by an older policyengine.py "
+                "or not saved completely"
+                + (
+                    f", and may have been calculated without any of: "
+                    f"{_describe(register)}"
+                    if register
+                    else ""
+                )
+            )
+        return (
+            "it has no stamp of the register of renamed inputs it was "
+            "calculated under"
+            + (
+                f", so it may have been calculated without any of: "
+                f"{_describe(register)}"
+                if register
+                else ""
+            )
+        )
+    # ``type(...) is int`` rather than ``isinstance``: JSON ``true`` loads as
+    # ``True``, which equals 1.
+    if not (
+        isinstance(stamp, dict)
+        and set(stamp) == {"register", "revision", "year_file"}
+        and type(revision) is int
+        and _is_str_map(stamp["register"])
+    ):
+        return (
+            "its stamp of the register of renamed inputs it was calculated "
+            "under is malformed"
+        )
+    if record is _ABSENT:
+        return (
+            "it has no record of the renamed stored inputs mapped when it was "
+            "calculated"
+        )
+    if not _is_str_map(record):
+        return (
+            "its record of the renamed stored inputs mapped when it was "
+            "calculated is malformed"
+        )
+    stamped = stamp["register"]
+    outside = dict(record.items() - stamped.items())
+    if outside:
+        return (
+            "its record lists renames outside the register it was stamped "
+            f"with: {_describe(outside)}"
+        )
+    missing, unknown = _register_differences(stamped, register)
+    reasons = []
+    if missing:
+        reasons.append(
+            "it was calculated before these renames were registered, so it "
+            f"may have been calculated without them: {_describe(missing)}"
+        )
+    if unknown:
+        reasons.append(
+            "it was calculated under renames this version of policyengine.py "
+            f"does not register: {_describe(unknown)}"
+        )
+    if stamp["year_file"] is not None:
+        reasons.extend(_year_file_reasons(stamp["year_file"], current_year_file))
+    return "; ".join(reasons) or None
+
+
+def _year_file_reasons(stamp: Any, current: Mapping[str, Any]) -> list[str]:
+    """Say why the stamp of an output's year file is not ``current``.
+
+    Returns no reason exactly when ``stamp`` equals ``current``.
+    """
+    revision = stamp.get("revision") if isinstance(stamp, dict) else None
+    if type(revision) is int and revision != current["revision"]:
+        return [
+            "it was calculated from a year file cut with year-file format "
+            f"revision {revision}, and this version of policyengine.py reads "
+            f"only revision {current['revision']}"
+        ]
+    if not (
+        isinstance(stamp, dict)
+        and set(stamp) == {"register", "revision"}
+        and type(revision) is int
+        and _is_str_map(stamp["register"])
+    ):
+        return [
+            "its record of the stamp of the year file it was calculated from "
+            "is malformed"
+        ]
+    missing, unknown = _register_differences(stamp["register"], current["register"])
+    reasons = []
+    if missing:
+        reasons.append(
+            "it was calculated from a year file cut before these renames were "
+            f"registered, which may have lost them: {_describe(missing)}"
+        )
+    if unknown:
+        reasons.append(
+            "it was calculated from a year file cut under renames this version "
+            f"of policyengine.py does not register: {_describe(unknown)}"
+        )
+    return reasons
+
+
+def _register_differences(
+    stamped: Mapping[str, str], register: Mapping[str, str]
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Return the entries each register has that the other lacks or retargets.
+
+    The first holds ``register``'s entries that ``stamped`` lacks or maps to
+    another live input; the second, ``stamped``'s that ``register`` does.
+    """
+    missing = {
+        legacy: live for legacy, live in register.items() if stamped.get(legacy) != live
+    }
+    unknown = {
+        legacy: live for legacy, live in stamped.items() if register.get(legacy) != live
+    }
+    return missing, unknown
 
 
 def _read_json_dataset(file: Any, name: str) -> Any:

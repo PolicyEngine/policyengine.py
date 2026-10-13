@@ -872,19 +872,24 @@ def test_an_output_saved_before_the_mapping_is_not_reused(tmp_path):
     ``load()`` refuses it, and ``ensure()`` runs the simulation again.
     """
     from policyengine.core.simulation import _cache
-    from policyengine.tax_benefit_models.us.legacy_inputs import RENAMES_H5_DATASET
+    from policyengine.tax_benefit_models.us.legacy_inputs import (
+        OUTPUT_STAMP_H5_DATASET,
+        RENAMES_H5_DATASET,
+    )
 
     simulation = _saved_run(tmp_path, "legacy-wic-stale")
     path = simulation.output_dataset.filepath
     # Make the file look like one saved before the mapping existed: no
-    # record, and the full-take-up WIC every eligible person got then.
+    # record or stamp, and the full-take-up WIC every eligible person got
+    # then.
     with h5py.File(path, "a") as stream:
         del stream[RENAMES_H5_DATASET]
+        del stream[OUTPUT_STAMP_H5_DATASET]
     stale = pd.DataFrame(pd.read_hdf(path, "person"))
     stale["wic"] = stale["wic"].where(stale["person_id"] != 2, 999.0)
     stale.to_hdf(path, key="person", format="fixed")
 
-    with pytest.raises(ValueError, match="predates the mapping"):
+    with pytest.raises(ValueError, match="saved by an older policyengine.py"):
         _reloaded(simulation)
 
     _cache.clear()
