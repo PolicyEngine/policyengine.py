@@ -221,12 +221,12 @@ Datasets contain microdata at entity level (person, household, tax unit). Load r
 ```python
 from policyengine.tax_benefit_models.uk import PolicyEngineUKDataset
 
+# Constructing with a filepath loads the file.
 dataset = PolicyEngineUKDataset(
     name="Representative data",
     filepath="./data/frs_2023_24_year_2026.h5",
     year=2026,
 )
-dataset.load()
 ```
 
 ### Simulations

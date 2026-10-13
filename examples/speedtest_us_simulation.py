@@ -199,13 +199,13 @@ def main():
             "Run create_datasets() from policyengine.tax_benefit_models.us first."
         )
 
+    # Constructing with a filepath loads the file.
     full_dataset = PolicyEngineUSDataset(
         name="Enhanced CPS 2024",
         description="Full enhanced CPS dataset",
         filepath=str(dataset_path),
         year=2024,
     )
-    full_dataset.load()
 
     total_households = len(full_dataset.data.household)
     print(f"Full dataset: {total_households:,} households")

@@ -38,13 +38,13 @@ def load_representative_data(year: int = 2026) -> PolicyEngineUKDataset:
             "Run create_datasets() from policyengine.tax_benefit_models.uk first."
         )
 
+    # Constructing with a filepath loads the file.
     dataset = PolicyEngineUKDataset(
         name=f"Enhanced FRS {year}",
         description=f"Representative household microdata for {year}",
         filepath=str(dataset_path),
         year=year,
     )
-    dataset.load()
     return dataset
 
 

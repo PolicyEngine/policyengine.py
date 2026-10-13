@@ -22,6 +22,9 @@ stamps, records and registers, without a country engine:
 - **Ensure agrees with load.** ``ensure_datasets`` cuts the year files again
   exactly when one is missing or ``load_datasets`` would refuse one, and
   decides from the stamps alone.
+- **One read per year file.** ``load_datasets`` loads each year file once and
+  opens its tables once, whatever the datasets and years, and each dataset it
+  returns holds the file's tables and renames record.
 
 ``test_us_legacy_inputs_integration.py`` runs ``create_datasets`` and
 ``ensure_datasets`` over a real policyengine-us engine.
@@ -33,6 +36,7 @@ import functools
 import json
 import os
 import tempfile
+from collections import Counter
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -56,6 +60,7 @@ from policyengine.tax_benefit_models.us.datasets import (
 from policyengine.tax_benefit_models.us.legacy_inputs import (
     LEGACY_INPUT_RENAMES,
     RENAMES_H5_DATASET,
+    RENAMES_RECORD_KEY,
     YEAR_FILE_STAMP_H5_DATASET,
     YEAR_FILE_STAMP_REVISION,
     read_renames_record,
@@ -1010,3 +1015,68 @@ def test_the_refusal_names_the_file_and_what_it_may_lack(tmp_path):
         f"were registered, so it may have lost them: {LEGACY} -> {LIVE}. "
         "Regenerate it with ensure_datasets() or create_datasets()."
     )
+
+
+# --- load_datasets reads each year file once ----------------------------
+
+
+@settings(max_examples=25, deadline=None)
+@given(
+    stems=st.lists(
+        st.sampled_from([STEM, "small"]), min_size=1, max_size=2, unique=True
+    ),
+    years=st.lists(st.integers(2024, 2030), min_size=1, max_size=3, unique=True),
+    mapped=st.booleans(),
+)
+def test_load_datasets_reads_each_year_file_once(stems, years, mapped):
+    """Constructing a dataset with its filepath loads it, and nothing again.
+
+    ``PolicyEngineUSDataset`` loads a year file when it is built with only a
+    filepath, so a further ``load()`` would read every table and the renames
+    record a second time. The stamp and record checks read with h5py, so each
+    ``pd.HDFStore`` opened here is a read of a year file's tables.
+    """
+    record = dict(LEGACY_INPUT_RENAMES) if mapped else {}
+    real_load, real_store = PolicyEngineUSDataset.load, pd.HDFStore
+    loads, opened = Counter(), Counter()
+
+    def counting_load(self):
+        loads[Path(self.filepath)] += 1
+        real_load(self)
+
+    class CountingStore(real_store):
+        def __init__(self, path, *args, **kwargs):
+            opened[Path(path)] += 1
+            super().__init__(path, *args, **kwargs)
+
+    with tempfile.TemporaryDirectory() as directory:
+        data_folder = Path(directory)
+        paths = {
+            f"{stem}_{year}": _write_year_file(
+                data_folder / f"{stem}_year_{year}.h5",
+                stamp=year_file_stamp(),
+                record=record,
+            )
+            for stem in stems
+            for year in years
+        }
+        with (
+            patch.object(PolicyEngineUSDataset, "load", counting_load),
+            patch.object(pd, "HDFStore", CountingStore),
+        ):
+            loaded = load_datasets(
+                datasets=[f"hf://fixture/{stem}.h5" for stem in stems],
+                years=years,
+                data_folder=str(data_folder),
+            )
+
+        assert loads == Counter(paths.values())
+        assert opened == Counter(paths.values())
+        assert sorted(loaded) == sorted(paths)
+        for key, dataset in loaded.items():
+            assert Path(dataset.filepath) == paths[key]
+            assert dataset.metadata[RENAMES_RECORD_KEY] == record
+            for entity, frame in _frames().items():
+                pd.testing.assert_frame_equal(
+                    pd.DataFrame(getattr(dataset.data, entity)), frame
+                )

@@ -617,13 +617,13 @@ def load_datasets(
                         "Regenerate it with ensure_datasets() or "
                         "create_datasets()."
                     )
+            # Constructing with a filepath loads the file.
             us_dataset = PolicyEngineUSDataset(
                 name=f"{dataset_stem}-year-{year}",
                 description=f"US Dataset for year {year} based on {dataset_stem}",
                 filepath=filepath,
                 year=year,
             )
-            us_dataset.load()
 
             dataset_key = f"{dataset_stem}_{year}"
             result[dataset_key] = us_dataset
