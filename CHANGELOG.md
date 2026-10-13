@@ -1,3 +1,10 @@
+## [6.3.3] - 2026-10-13
+
+### Changed
+
+- `create_datasets` stamps each US year file with the register of renamed stored inputs it was cut under and a year-file format revision. `ensure_datasets` creates a year file again, and `load_datasets` refuses it, unless its stamp matches this release exactly. A year file cut before a rename was registered, which may have lost that input, is therefore not reused. `load_datasets` says why it refuses a file, naming the renames the file may lack when its register is the reason. Year files written before the stamp existed are created again once.
+
+
 ## [6.3.2] - 2026-10-12
 
 ### Changed
