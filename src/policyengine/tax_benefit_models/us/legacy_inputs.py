@@ -46,16 +46,13 @@ from policyengine.provenance.year_file_stamp import (
     read_json_dataset as _read_json_dataset,
 )
 from policyengine.provenance.year_file_stamp import (
-    read_year_file_stamp as read_year_file_stamp,
+    read_stored_json as _read_stored_json,
 )
 from policyengine.provenance.year_file_stamp import (
     source_and_package_differences as _source_and_package_differences,
 )
 from policyengine.provenance.year_file_stamp import (
     write_json_dataset as _write_json_dataset,
-)
-from policyengine.provenance.year_file_stamp import (
-    write_year_file_stamp as write_year_file_stamp,
 )
 
 #: Stored input columns that policyengine-us has since renamed, mapped to the
@@ -122,9 +119,10 @@ RENAMES_H5_DATASET = "policyengine_legacy_input_renames"
 #: :func:`year_file_stamp_problem`). ``PolicyEngineUSDataset.save()`` neither
 #: writes nor keeps it, so saving a year file again drops the stamp.
 #:
-#: UK year files carry a stamp of their own shape under the same name (see
+#: UK year files store their stamp under a name of their own, so a year file
+#: of one country never passes as one of the other (see
 #: ``policyengine.provenance.year_file_stamp``).
-YEAR_FILE_STAMP_H5_DATASET = _shared_stamp.YEAR_FILE_STAMP_H5_DATASET
+YEAR_FILE_STAMP_H5_DATASET = "policyengine_year_file_stamp"
 
 #: Format revision of ``create_datasets`` year files, stored in their stamp.
 #: Raise it when the stamp changes shape, or when a change to year-file
@@ -225,6 +223,20 @@ def year_file_stamp(
         "revision": YEAR_FILE_STAMP_REVISION,
         "source": dict(source),
     }
+
+
+def read_year_file_stamp(path: str | Path) -> Any | None:
+    """Return the JSON value of a year file's stamp, well formed or not.
+
+    ``None`` means the file stores no readable stamp (see
+    :data:`YEAR_FILE_STAMP_H5_DATASET`) or is not an H5 file.
+    """
+    return _read_stored_json(path, YEAR_FILE_STAMP_H5_DATASET)
+
+
+def write_year_file_stamp(path: str | Path, stamp: Mapping[str, Any]) -> None:
+    """Stamp a year file (see :func:`year_file_stamp`), replacing any stamp."""
+    _write_json_dataset(path, YEAR_FILE_STAMP_H5_DATASET, dict(stamp))
 
 
 def year_file_stamp_problem(

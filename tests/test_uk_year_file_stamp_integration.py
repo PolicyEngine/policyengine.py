@@ -10,6 +10,7 @@ be reused although it holds data cut from something else:
 - a local source is rewritten in place;
 - policyengine-uk or policyengine-core is upgraded;
 - the source is replaced while the year files are cut;
+- another process cuts the same year files at the same time;
 - year files were cut by an earlier release, before the stamp existed.
 
 In each case ``load_datasets`` refuses the old year files, naming what
@@ -42,16 +43,15 @@ from policyengine.provenance.manifest import (  # noqa: E402
     ArtifactPathReference,
     get_release_manifest,
 )
-from policyengine.provenance.year_file_stamp import (  # noqa: E402
-    YEAR_FILE_STAMP_H5_DATASET,
-    read_year_file_stamp,
-)
 from policyengine.tax_benefit_models.uk import datasets as uk_datasets  # noqa: E402
 from policyengine.tax_benefit_models.uk.datasets import (  # noqa: E402
+    YEAR_FILE_STAMP_H5_DATASET,
+    PolicyEngineUKDataset,
     create_datasets,
     ensure_datasets,
     installed_package_versions,
     load_datasets,
+    read_year_file_stamp,
     year_file_stamp,
     year_file_stamp_problem,
 )
@@ -107,11 +107,23 @@ def _assert_cut_again(source: str, data_folder: Path, years=(YEAR,)):
     return ensured
 
 
-def _new_source(tmp_path: Path) -> str:
-    """Write the tiny 2024 dataset as a local source."""
+def _new_source(tmp_path: Path, name="tiny_uk_2024.h5", tables=None) -> str:
+    """Write the tiny 2024 dataset (or ``tables``) as a local source."""
     folder = tmp_path / "sources"
-    folder.mkdir()
-    return _write_source(folder / "tiny_uk_2024.h5")
+    folder.mkdir(exist_ok=True)
+    return _write_source(folder / name, tables)
+
+
+def _partial_files(data_folder: Path) -> list[Path]:
+    """Temporary year files left in a data folder."""
+    return sorted(data_folder.glob(".*.partial"))
+
+
+def _stored(path: Path, year: int = YEAR) -> PolicyEngineUKDataset:
+    """A year file read directly, without the stamp check."""
+    return PolicyEngineUKDataset(
+        name="stored", description="stored", filepath=str(path), year=year
+    )
 
 
 def test_create_stamps_each_year_file_with_its_source_and_packages(tmp_path):
@@ -138,9 +150,12 @@ def test_create_stamps_each_year_file_with_its_source_and_packages(tmp_path):
             "packages": installed_package_versions(),
             "revision": 1,
             "source": identity,
+            "year": year,
         }
-        assert read_year_file_stamp(path) == year_file_stamp(identity)
-        assert year_file_stamp_problem(path, identity) is None
+        assert read_year_file_stamp(path) == year_file_stamp(identity, year)
+        assert year_file_stamp_problem(path, identity, year) is None
+    # Each year file was written beside its path and moved into place.
+    assert _partial_files(data_folder) == []
     # The real versions, not a fixture's.
     assert all(installed_package_versions().values())
 
@@ -172,7 +187,7 @@ def test_an_edited_local_source_cuts_its_year_files_again(tmp_path):
         f"it was cut from {describe_dataset_source_identity(old)}, and the "
         f"requested source is {describe_dataset_source_identity(new)}"
     )
-    assert year_file_stamp_problem(path, new) == reason
+    assert year_file_stamp_problem(path, new, YEAR) == reason
     with pytest.raises(ValueError, match=re.escape(reason)):
         load_datasets(datasets=[source], years=[YEAR], data_folder=str(data_folder))
 
@@ -281,7 +296,7 @@ def test_a_re_pinned_bundle_dataset_cuts_its_year_files_again(tmp_path):
         )
         assert (
             year_file_stamp_problem(
-                path, requested_dataset_source_identity("uk", BUNDLE_NAME)
+                path, requested_dataset_source_identity("uk", BUNDLE_NAME), YEAR
             )
             == reason
         )
@@ -303,22 +318,32 @@ def test_a_re_pinned_bundle_dataset_cuts_its_year_files_again(tmp_path):
         }
 
 
-def test_a_source_replaced_while_cut_leaves_the_year_files_unstamped(tmp_path):
-    """Another process replaces the source while the year files are cut, so
-    no stamp may claim they were cut from what is there now."""
-    source = _new_source(tmp_path)
-    data_folder = tmp_path / "data"
+def _replacing_the_source_after_the_first_save(source: str):
+    """Patch ``save()`` so the source is replaced, by another process in
+    effect, once the first year file is written."""
     original = Path(source).stat().st_mtime_ns
     save = uk_datasets.PolicyEngineUKDataset.save
+    replaced = []
 
     def save_then_replace_the_source(self):
         save(self)
-        _write_source(Path(source), _replacement_tables())
-        os.utime(source, ns=(original + 10**9, original + 10**9))
+        if not replaced:
+            replaced.append(True)
+            _write_source(Path(source), _replacement_tables())
+            os.utime(source, ns=(original + 10**9, original + 10**9))
 
-    with patch.object(
+    return patch.object(
         uk_datasets.PolicyEngineUKDataset, "save", save_then_replace_the_source
-    ):
+    )
+
+
+def test_a_source_replaced_while_cut_writes_no_year_file(tmp_path):
+    """Another process replaces the source while the year files are cut, so
+    no year file may claim it was cut from what is there now."""
+    source = _new_source(tmp_path)
+    data_folder = tmp_path / "data"
+
+    with _replacing_the_source_after_the_first_save(source):
         with pytest.raises(DatasetMaterializationError) as raised:
             create_datasets(
                 datasets=[source],
@@ -328,17 +353,122 @@ def test_a_source_replaced_while_cut_leaves_the_year_files_unstamped(tmp_path):
             )
 
     assert "changed while they were cut" in str(raised.value)
-    assert "They were left unstamped" in str(raised.value)
+    assert "None of them was written" in str(raised.value)
     for year in (DATA_YEAR, YEAR):
-        path = data_folder / f"tiny_uk_2024_year_{year}.h5"
-        assert path.exists()
-        assert read_year_file_stamp(path) is None
+        assert not (data_folder / f"tiny_uk_2024_year_{year}.h5").exists()
+    assert _partial_files(data_folder) == []
     # Cut again, from the replacement, and stamped with its identity.
     recut = _assert_cut_again(source, data_folder, (DATA_YEAR, YEAR))
     assert _reported(recut[f"tiny_uk_2024_{YEAR}"]) == list(REPLACED)
     assert read_year_file_stamp(data_folder / f"tiny_uk_2024_year_{YEAR}.h5")[
         "source"
     ] == requested_dataset_source_identity("uk", source)
+
+
+def test_a_failed_cut_leaves_the_year_files_already_there_whole(tmp_path):
+    """Year files cut before keep their own tables and stamp, which no longer
+    match the replaced source, so they are cut again."""
+    source = _new_source(tmp_path)
+    data_folder = tmp_path / "data"
+    _ensure(source, data_folder)
+    path = data_folder / f"tiny_uk_2024_year_{YEAR}.h5"
+    before = read_year_file_stamp(path)
+    # Touch the source so the next ensure cuts again, then replace it mid-cut.
+    old = requested_dataset_source_identity("uk", source)
+    os.utime(source, ns=(old["mtime_ns"] + 10**9, old["mtime_ns"] + 10**9))
+
+    with _replacing_the_source_after_the_first_save(source):
+        with pytest.raises(DatasetMaterializationError):
+            _ensure(source, data_folder)
+
+    assert read_year_file_stamp(path) == before
+    assert _reported(_stored(path)) == list(
+        _tables()["person"]["state_pension_reported"]
+    )
+    assert _partial_files(data_folder) == []
+    recut = _assert_cut_again(source, data_folder)
+    assert _reported(recut[f"tiny_uk_2024_{YEAR}"]) == list(REPLACED)
+
+
+def test_two_sources_cut_in_one_call_are_each_stamped_with_their_own(tmp_path):
+    first = _new_source(tmp_path)
+    second = _new_source(tmp_path, "other_uk_2024.h5", _replacement_tables())
+    data_folder = tmp_path / "data"
+
+    created = create_datasets(
+        datasets=[first, second],
+        years=[DATA_YEAR, YEAR],
+        data_folder=str(data_folder),
+        allow_unmanaged=True,
+    )
+
+    for source, stem, reported in (
+        (first, "tiny_uk_2024", list(_tables()["person"]["state_pension_reported"])),
+        (second, "other_uk_2024", list(REPLACED)),
+    ):
+        identity = requested_dataset_source_identity("uk", source)
+        for year in (DATA_YEAR, YEAR):
+            path = data_folder / f"{stem}_year_{year}.h5"
+            assert created[f"{stem}_{year}"].filepath == str(data_folder / path.name)
+            assert read_year_file_stamp(path) == year_file_stamp(identity, year)
+            assert _reported(_stored(path, year)) == reported
+    with patch.object(uk_datasets, "create_datasets", side_effect=AssertionError):
+        ensure_datasets(
+            datasets=[first, second],
+            years=[DATA_YEAR, YEAR],
+            data_folder=str(data_folder),
+            allow_unmanaged=True,
+        )
+
+
+def test_concurrent_cuts_never_mix_one_cuts_tables_with_anothers_stamp(tmp_path):
+    """Two processes cut the same year files from different sources (two
+    ``pop.h5`` files, one data folder) at once: a second cut runs to the end
+    while the first is between writing a year file and stamping it. The file
+    then holds one cut's tables with that cut's stamp."""
+    first_folder, second_folder = tmp_path / "a", tmp_path / "b"
+    first_folder.mkdir()
+    second_folder.mkdir()
+    first = _write_source(first_folder / "pop.h5")
+    second = _write_source(second_folder / "pop.h5", _replacement_tables())
+    data_folder = tmp_path / "data"
+    save = uk_datasets.PolicyEngineUKDataset.save
+    interleaved = []
+
+    def save_then_let_the_other_cut_run(self):
+        save(self)
+        if not interleaved:
+            interleaved.append(True)
+            create_datasets(
+                datasets=[second],
+                years=[YEAR],
+                data_folder=str(data_folder),
+                allow_unmanaged=True,
+            )
+
+    with patch.object(
+        uk_datasets.PolicyEngineUKDataset, "save", save_then_let_the_other_cut_run
+    ):
+        create_datasets(
+            datasets=[first],
+            years=[YEAR],
+            data_folder=str(data_folder),
+            allow_unmanaged=True,
+        )
+
+    assert interleaved
+    path = data_folder / f"pop_year_{YEAR}.h5"
+    stamp = read_year_file_stamp(path)
+    tables = {
+        requested_dataset_source_identity("uk", first)["path"]: list(
+            _tables()["person"]["state_pension_reported"]
+        ),
+        requested_dataset_source_identity("uk", second)["path"]: list(REPLACED),
+    }
+    assert _reported(_stored(path)) == tables[stamp["source"]["path"]]
+    # The first cut finished last, so its year file is the one in place.
+    assert stamp["source"] == requested_dataset_source_identity("uk", first)
+    assert _partial_files(data_folder) == []
 
 
 def test_year_files_from_an_earlier_release_are_cut_again_once(tmp_path):

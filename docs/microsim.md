@@ -265,10 +265,11 @@ benefit unit that do not depend on those match the national run.
 
 UK year files are named after the dataset's logical name,
 `{data_folder}/{name}_year_{year}.h5`, which drops the revision, so files cut
-from every release of a dataset share names. After writing a dataset's year
-files, `create_datasets` stamps each with what it was cut from and with
-(`year_file_stamp.YEAR_FILE_STAMP_H5_DATASET`, UTF-8 JSON, the dataset US
-year files use for their own stamp):
+from every release of a dataset share names. `create_datasets` stamps each
+with what it was cut from and with, as UTF-8 JSON in
+`uk.datasets.YEAR_FILE_STAMP_H5_DATASET` (`policyengine_uk_year_file_stamp`).
+US year files store theirs under another name, so a year file of one country
+never passes as one of the other.
 
 ```json
 {
@@ -277,7 +278,8 @@ year files use for their own stamp):
   "source": {
     "sha256": "5ba399ea5ab9a6c7d4e9aaf6c623080beb34d9ad5f330f6244dbad72b8d960b6",
     "uri": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2024_25.h5@1.58.0"
-  }
+  },
+  "year": 2026
 }
 ```
 
@@ -290,15 +292,18 @@ year files use for their own stamp):
 - `source`: the identity of the dataset it was cut from, in the three shapes
   US year files use (see [Year files](#year-files)): a bundle dataset's
   pinned `hf://…@revision` URI and verified sha256, an explicit Hugging Face
-  URI as given, or a local file's resolved path, size and modification time.
+  URI as given, or a local file's resolved path, size and modification time;
+- `year`: the year whose tables the file holds, so a year file copied or
+  renamed to another year's name is not taken for that year.
 
 `ensure_datasets` reuses a UK year file only when it records its data year
-and its stamp equals the one a file cut now from the requested dataset would
-carry. Otherwise it logs why and creates the year files again.
-`load_datasets` refuses the file with the same reason, which names the
-source it was cut from and the source requested, or the package versions it
-was cut with and those installed. `uk.datasets.year_file_stamp_problem(path,
-source)` returns the reason, or `None` for a current year file; `source` is
+and its stamp equals the one a file cut now from the requested dataset, for
+the requested year, would carry. Otherwise it logs why and creates the year
+files again. `load_datasets` refuses the file with the same reason, which
+names the year, the source or the package versions it was cut for, from or
+with, and the ones requested or installed.
+`uk.datasets.year_file_stamp_problem(path, source, year)` returns the
+reason, or `None` for a current year file; `source` is
 `dataset_materialization.requested_dataset_source_identity("uk", dataset)`.
 
 So a re-pinned dataset (a new release of `enhanced_frs_2024_25` or
@@ -312,14 +317,32 @@ Deciding reads only each year file's stamp and whether it has a data year,
 never its tables. As for US year files, the requested source is identified
 without downloading or reading it, and package versions come from the
 installed distributions' metadata, so policyengine-uk is not imported.
-`create_datasets` records the source file's size and modification time right
-after materializing it, and checks them again (re-hashing a downloaded file)
-once the year files are written. If the source changed, the year files are
-left unstamped, so they are cut again, and `DatasetMaterializationError` is
-raised. Requested datasets that are different sources with one name are
-refused with `ValueError`. The limits listed under [Year files](#year-files)
-apply to UK year files too, with policyengine-uk in place of
-policyengine-us.
+
+`create_datasets` writes each year file to a hidden temporary file beside its
+path (`.{name}_year_{year}.…partial`). It records the source file's size and
+modification time right after materializing it, and checks them again
+(re-hashing a downloaded file) once a dataset's year files are written. Only
+then does it stamp each temporary file and move it onto its path, in one
+step. The tables and the stamp at a year file's path therefore always come
+from one cut, even when two processes cut the same year files at once. If the
+source changed, no year file is moved into place, the year files already
+there are left as they were, and `DatasetMaterializationError` is raised. A
+process killed mid-cut can leave a temporary file behind, which is never read
+and can be deleted. Requested datasets that are different sources with one
+name are refused with `ValueError`.
+
+The limits listed under [Year files](#year-files) apply to UK year files too,
+with policyengine-uk in place of policyengine-us, except that UK year files
+are moved into place whole. Three more apply:
+
+- the versions are those installed when the files are cut. A package upgraded
+  in a running process after policyengine-uk was imported is recorded at its
+  new version, though the cut ran the code already imported. Restart the
+  process after upgrading;
+- policyengine-uk draws new student loan holders in each projected year from
+  numpy's random generator, seeded by the year. numpy's version is not
+  recorded;
+- a multi-year source is read as stored, without the projection.
 
 A year file opened directly, as `PolicyEngineUKDataset(filepath=...)`, is not
 checked, and saving it again with `save()` drops its stamp. A saved UK

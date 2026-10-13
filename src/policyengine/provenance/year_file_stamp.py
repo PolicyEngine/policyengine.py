@@ -4,32 +4,37 @@ A country's ``create_datasets`` cuts one file per requested year from a
 source dataset and names it ``{data_folder}/{stem}_year_{year}.h5``, after
 the source's logical name. The name drops any revision, so files cut from
 every release of a dataset share names. Each year file is therefore stamped
-(:data:`YEAR_FILE_STAMP_H5_DATASET`) with the identity of the source it was
-cut from and the versions of the packages that calculated it, and the
-country's ``ensure_datasets`` and ``load_datasets`` compare that stamp with
-the one a file cut now would carry.
+with the identity of the source it was cut from and the versions of the
+packages that calculated it, and the country's ``ensure_datasets`` and
+``load_datasets`` compare that stamp with the one a file cut now would carry.
+
+Each country stores its stamp, as UTF-8 JSON, in an H5 dataset of its own
+name, so a year file of one country never passes as one of another:
+``tax_benefit_models.us.legacy_inputs.YEAR_FILE_STAMP_H5_DATASET`` (which
+also records the register of renamed stored inputs) and
+``tax_benefit_models.uk.datasets.YEAR_FILE_STAMP_H5_DATASET`` (which also
+records the year the file was cut for).
 
 This module holds what the countries share:
 
 - reading and writing a JSON value in an H5 dataset
-  (:func:`read_json_dataset`, :func:`write_json_dataset`), and the stamp
-  itself (:func:`read_year_file_stamp`, :func:`write_year_file_stamp`);
+  (:func:`read_json_dataset`, :func:`read_stored_json`,
+  :func:`write_json_dataset`);
 - the installed versions of the packages a stamp records
   (:func:`installed_package_versions`);
 - the clauses naming how a stamp's source and package versions differ from
   the current ones (:func:`source_and_package_differences`);
 - each requested dataset's year-file stem and source identity, refusing two
-  sources that would share year files (:func:`year_file_sources`).
-
-The US stamp (``tax_benefit_models.us.legacy_inputs``) also records the
-register of renamed stored inputs; the UK stamp
-(``tax_benefit_models.uk.datasets``) records the source, the packages and its
-format revision.
+  sources that would share year files (:func:`year_file_sources`);
+- writing a year file beside its path and moving it into place only once it
+  is stamped (:func:`temporary_year_file`, :func:`publish_year_file`).
 """
 
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from collections.abc import Iterable, Mapping
 from importlib import metadata as importlib_metadata
 from pathlib import Path
@@ -40,14 +45,6 @@ from .dataset_materialization import (
     requested_dataset_source_identity,
 )
 from .manifest import dataset_logical_name, resolve_dataset_reference
-
-#: H5 dataset stamping a ``create_datasets`` year file, as UTF-8 JSON. Each
-#: country gives its own shape (see the module docstring); every shape has a
-#: ``"revision"``, the country's year-file format revision, a ``"source"``,
-#: the identity of the dataset the file was cut from (see
-#: ``dataset_materialization.dataset_source_identity``), and a
-#: ``"packages"``, the installed versions of the packages that calculated it.
-YEAR_FILE_STAMP_H5_DATASET = "policyengine_year_file_stamp"
 
 #: What :func:`read_json_dataset` returns for a node a file does not have, and
 #: for one that is not a scalar dataset holding UTF-8 JSON.
@@ -123,25 +120,54 @@ def write_json_dataset(path: str | Path, name: str, value: Any) -> None:
         )
 
 
-def read_year_file_stamp(path: str | Path) -> Any | None:
-    """Return the JSON value of a year file's stamp, well formed or not.
+def read_stored_json(path: str | Path, name: str) -> Any | None:
+    """Return the JSON value of an H5 file's ``name`` dataset, well formed or
+    not.
 
-    ``None`` means the file stores no readable stamp (see
-    :data:`YEAR_FILE_STAMP_H5_DATASET`) or is not an H5 file.
+    ``None`` means the file stores no readable JSON there (see
+    :func:`read_json_dataset`) or is not an H5 file.
     """
     import h5py
 
     try:
         with h5py.File(path, "r") as file:
-            stamp = read_json_dataset(file, YEAR_FILE_STAMP_H5_DATASET)
+            value = read_json_dataset(file, name)
     except OSError:
         return None
-    return None if stamp is ABSENT or stamp is UNREADABLE else stamp
+    return None if value is ABSENT or value is UNREADABLE else value
 
 
-def write_year_file_stamp(path: str | Path, stamp: Mapping[str, Any]) -> None:
-    """Stamp a year file, replacing any stamp it has."""
-    write_json_dataset(path, YEAR_FILE_STAMP_H5_DATASET, dict(stamp))
+def temporary_year_file(path: str | Path) -> Path:
+    """Create an empty file beside ``path`` to write a year file to.
+
+    ``create_datasets`` writes a year file's tables there, stamps it once the
+    source has been checked again, and only then moves it onto ``path`` (see
+    :func:`publish_year_file`). The tables and the stamp at ``path`` then
+    always come from one cut, even when two processes cut the same year files
+    at once, and a cut that stops part-way leaves ``path`` as it was. The
+    file's name starts with ``.{stem}.`` and ends with ``.partial``; the
+    caller removes it if the cut fails.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, name = tempfile.mkstemp(
+        prefix=f".{path.stem}.", suffix=".partial", dir=path.parent
+    )
+    os.close(descriptor)
+    return Path(name)
+
+
+def publish_year_file(
+    temporary: str | Path, path: str | Path, name: str, stamp: Mapping[str, Any]
+) -> None:
+    """Stamp a year file written to ``temporary``, then move it onto ``path``.
+
+    ``name`` is the country's stamp dataset. The move replaces any file at
+    ``path`` in one step (``os.replace`` within one folder), so a reader sees
+    either the old file or the new one, each with its own stamp.
+    """
+    write_json_dataset(temporary, name, dict(stamp))
+    os.replace(temporary, path)
 
 
 def is_version_map(value: Any) -> bool:

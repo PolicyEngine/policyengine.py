@@ -2,8 +2,9 @@
 
 ``create_datasets`` stamps each UK year file, after its tables and data year,
 with the identity of the source dataset it was cut from, the
-policyengine-core and policyengine-uk versions that projected it and a
-year-file format revision (``year_file_stamp.YEAR_FILE_STAMP_H5_DATASET``).
+policyengine-core and policyengine-uk versions that projected it, the year it
+was cut for and a year-file format revision
+(``uk.datasets.YEAR_FILE_STAMP_H5_DATASET``).
 ``ensure_datasets`` cuts a year file again, and ``load_datasets`` refuses it,
 unless it records its data year and its stamp matches the one a file cut now
 from the requested dataset would carry. These tests state the check's
@@ -11,14 +12,17 @@ invariants over generated stamps, data-year nodes, sources and package
 versions, without a country engine:
 
 - **Exactness.** A year file is current exactly when it records its data
-  year and its stamp has this release's format revision, the requested
-  source and the installed package versions.
+  year and its stamp has this release's format revision, the requested year
+  and source, and the installed package versions.
 - **Totality.** Whatever the stamp and the data-year node hold, the check
   returns a reason or ``None``, and raises only for errors unrelated to the
   file's contents (no permission, a directory, a lock).
 - **Round trip.** A stamp reads back as written, and writing again replaces it.
-- **Named differences.** The reason names both sources when they differ and
-  every package whose version differs, and nothing that agrees.
+- **Named differences.** The reason names both years and both sources when
+  they differ, and every package whose version differs, and nothing that
+  agrees.
+- **Country isolation.** A UK year file's stamp is stored under a name of its
+  own, so a US year-file stamp never passes as a UK one, nor the reverse.
 - **No partial file is current.** Every truncation of a current year file,
   every save that stops part-way and every save that does not stamp is out
   of date.
@@ -61,17 +65,14 @@ from policyengine.provenance.dataset_materialization import (
     describe_dataset_source_identity,
     requested_dataset_source_identity,
 )
-from policyengine.provenance.year_file_stamp import (
-    NOT_HDF5,
-    YEAR_FILE_STAMP_H5_DATASET,
-    read_year_file_stamp,
-    write_year_file_stamp,
-)
+from policyengine.provenance.year_file_stamp import NOT_HDF5
 from policyengine.tax_benefit_models.uk import datasets as uk_datasets
 from policyengine.tax_benefit_models.uk.datasets import (
     DATA_YEAR_KEY,
     NO_DATA_YEAR,
+    STAMPED_WITHOUT_DATA_YEAR,
     YEAR_FILE_PACKAGES,
+    YEAR_FILE_STAMP_H5_DATASET,
     YEAR_FILE_STAMP_REVISION,
     PolicyEngineUKDataset,
     UKYearData,
@@ -79,6 +80,8 @@ from policyengine.tax_benefit_models.uk.datasets import (
     _year_file_records_data_year,
     ensure_datasets,
     load_datasets,
+    read_year_file_stamp,
+    write_year_file_stamp,
     year_file_stamp,
     year_file_stamp_problem,
 )
@@ -302,7 +305,9 @@ def _same_json(left, right) -> bool:
     return json.dumps(left, sort_keys=True) == json.dumps(right, sort_keys=True)
 
 
-def _is_current(stamp, data_year, source=IDENTITY, packages=PACKAGES) -> bool:
+def _is_current(
+    stamp, data_year, source=IDENTITY, packages=PACKAGES, year=DATA_YEAR
+) -> bool:
     """The exactness invariant, stated directly on the stored values.
 
     Only a data year written as pandas writes it (a group) counts.
@@ -310,35 +315,40 @@ def _is_current(stamp, data_year, source=IDENTITY, packages=PACKAGES) -> bool:
     return (
         data_year is True
         and isinstance(stamp, dict)
-        and set(stamp) == {"packages", "revision", "source"}
+        and set(stamp) == {"packages", "revision", "source", "year"}
         and type(stamp["revision"]) is int
         and stamp["revision"] == REVISION
+        and type(stamp["year"]) is int
+        and stamp["year"] == year
         and _same_json(stamp["source"], source)
         and _same_json(stamp["packages"], packages)
     )
 
 
-def _stamp(revision=REVISION, source=IDENTITY, packages=PACKAGES):
+def _stamp(revision=REVISION, source=IDENTITY, packages=PACKAGES, year=DATA_YEAR):
     return {
         "packages": dict(packages),
         "revision": revision,
         "source": dict(source),
+        "year": year,
     }
 
 
-def _current():
-    return year_file_stamp(IDENTITY)
+def _current(year=DATA_YEAR):
+    return year_file_stamp(IDENTITY, year)
 
 
 # --- The stamp ----------------------------------------------------------
 
 
-def test_the_stamp_holds_the_source_packages_and_revision():
+def test_the_stamp_holds_the_source_packages_revision_and_year():
     assert _current() == {
         "packages": PACKAGES,
         "revision": 1,
         "source": IDENTITY,
+        "year": DATA_YEAR,
     }
+    assert year_file_stamp(IDENTITY, 2030)["year"] == 2030
 
 
 def test_the_stamp_reads_the_packages_when_called(monkeypatch):
@@ -347,16 +357,17 @@ def test_the_stamp_reads_the_packages_when_called(monkeypatch):
         uk_datasets, "installed_package_versions", lambda: {"z": None, "y": "1"}
     )
 
-    assert year_file_stamp(IDENTITY) == {
+    assert year_file_stamp(IDENTITY, DATA_YEAR) == {
         "packages": {"y": "1", "z": None},
         "revision": 1,
         "source": IDENTITY,
+        "year": DATA_YEAR,
     }
 
 
 def test_explicit_packages_override_the_installed_ones():
     packages = {"policyengine-uk": "9.9.9"}
-    assert year_file_stamp(IDENTITY, packages)["packages"] == packages
+    assert year_file_stamp(IDENTITY, DATA_YEAR, packages)["packages"] == packages
 
 
 def test_the_stamp_is_stored_as_utf8_json(tmp_path):
@@ -392,7 +403,12 @@ def test_the_stamp_records_policyengine_core_and_policyengine_uk():
 
 
 STAMPS = st.fixed_dictionaries(
-    {"packages": PACKAGE_MAPS, "revision": st.integers(), "source": SOURCES}
+    {
+        "packages": PACKAGE_MAPS,
+        "revision": st.integers(),
+        "source": SOURCES,
+        "year": st.integers(),
+    }
 )
 
 
@@ -458,7 +474,7 @@ def test_a_year_file_of_a_later_year_records_its_data_year(tmp_path):
     ).save()
     write_year_file_stamp(path, _current())
 
-    assert year_file_stamp_problem(path, IDENTITY) is None
+    assert year_file_stamp_problem(path, IDENTITY, DATA_YEAR) is None
 
 
 def test_files_without_a_stamp_are_out_of_date_with_distinct_reasons(tmp_path):
@@ -466,8 +482,8 @@ def test_files_without_a_stamp_are_out_of_date_with_distinct_reasons(tmp_path):
     oldest = _write_year_file(tmp_path / "oldest.h5", data_year=False)
     data_year_only = _write_year_file(tmp_path / "data_year_only.h5")
 
-    assert year_file_stamp_problem(oldest, IDENTITY) == NO_DATA_YEAR
-    assert year_file_stamp_problem(data_year_only, IDENTITY) == NO_STAMP
+    assert year_file_stamp_problem(oldest, IDENTITY, DATA_YEAR) == NO_DATA_YEAR
+    assert year_file_stamp_problem(data_year_only, IDENTITY, DATA_YEAR) == NO_STAMP
     assert NO_DATA_YEAR == (
         "it has no recorded data year, so it was written before policyengine.py "
         "kept the observed year its tables were projected from, or not written "
@@ -482,7 +498,15 @@ def test_a_stamped_file_without_a_data_year_is_out_of_date(tmp_path, data_year):
     node that is not a group, or a link that cannot be followed, is none."""
     path = _write_year_file(tmp_path / "year.h5", stamp=_current(), data_year=data_year)
 
-    assert year_file_stamp_problem(path, IDENTITY) == NO_DATA_YEAR
+    assert year_file_stamp_problem(path, IDENTITY, DATA_YEAR) == (
+        STAMPED_WITHOUT_DATA_YEAR
+    )
+    assert STAMPED_WITHOUT_DATA_YEAR == (
+        "it is stamped but records no data year, which every year file "
+        "create_datasets writes records; policyengine-uk would take its projected "
+        "tables as observed data and uprate the State Pension by CPI rather than "
+        "the triple lock"
+    )
 
 
 # --- Exactness ----------------------------------------------------------
@@ -508,10 +532,11 @@ def stamped_files(draw):
         )
     )
     revision = draw(st.sampled_from([REVISION, REVISION, 0, 2, -1, 99]))
+    stamped_year = draw(st.sampled_from([DATA_YEAR, DATA_YEAR, DATA_YEAR + 1]))
     stamp = draw(
         st.one_of(
-            st.just(_stamp(revision, stamped_source, stamped_packages)),
-            st.just(_stamp(revision, stamped_source, stamped_packages)),
+            st.just(_stamp(revision, stamped_source, stamped_packages, stamped_year)),
+            st.just(_stamp(revision, stamped_source, stamped_packages, stamped_year)),
             st.just(_ABSENT),
         )
     )
@@ -527,7 +552,7 @@ def test_a_year_file_is_current_only_under_the_exact_stamp_requested(case):
         path = _write_year_file(
             Path(directory) / "year.h5", stamp=stamp, data_year=data_year
         )
-        problem = year_file_stamp_problem(path, source, packages)
+        problem = year_file_stamp_problem(path, source, DATA_YEAR, packages)
 
     assert (problem is None) == _is_current(_stored(stamp), data_year, source, packages)
     assert problem is None or (isinstance(problem, str) and problem)
@@ -558,6 +583,12 @@ NODES = st.one_of(
                 ),
                 st.fixed_dictionaries({"uri": JSON_VALUES, "sha256": JSON_VALUES}),
             ),
+            "year": st.one_of(
+                st.sampled_from([DATA_YEAR, DATA_YEAR + 1]),
+                st.booleans(),
+                st.floats(),
+                JSON_VALUES,
+            ),
         }
     ),
     st.tuples(st.just("text"), RAW_TEXT),
@@ -585,7 +616,7 @@ def test_the_year_file_problem_is_total_and_exact_for_any_content(
         path = _write_year_file(
             Path(directory) / "year.h5", stamp=stamp, data_year=data_year
         )
-        problem = year_file_stamp_problem(path, source, packages)
+        problem = year_file_stamp_problem(path, source, DATA_YEAR, packages)
 
     assert problem is None or (isinstance(problem, str) and problem)
     assert (problem is None) == _is_current(_stored(stamp), data_year, source, packages)
@@ -600,6 +631,11 @@ def test_the_year_file_problem_is_total_and_exact_for_any_content(
         {"revision": 1},
         {k: v for k, v in _stamp().items() if k != "source"},
         {k: v for k, v in _stamp().items() if k != "packages"},
+        {k: v for k, v in _stamp().items() if k != "year"},
+        {**_stamp(), "year": True},
+        {**_stamp(), "year": float(DATA_YEAR)},
+        {**_stamp(), "year": str(DATA_YEAR)},
+        {**_stamp(), "year": None},
         {**_stamp(), "extra": None},
         # A US stamp's shape, with its register.
         {**_stamp(), "register": {}},
@@ -625,7 +661,7 @@ def test_the_year_file_problem_is_total_and_exact_for_any_content(
 def test_a_malformed_stamp_is_out_of_date(tmp_path, stamp):
     path = _write_year_file(tmp_path / "year.h5", stamp=stamp)
 
-    assert year_file_stamp_problem(path, IDENTITY) == MALFORMED
+    assert year_file_stamp_problem(path, IDENTITY, DATA_YEAR) == MALFORMED
 
 
 @pytest.mark.parametrize("revision", [0, 2, 3, -1])
@@ -636,7 +672,7 @@ def test_a_year_file_from_another_format_revision_is_out_of_date(tmp_path, revis
     stamp = {"revision": revision, "sources": [SOURCE]}
     path = _write_year_file(tmp_path / "year.h5", stamp=stamp, data_year=False)
 
-    assert year_file_stamp_problem(path, IDENTITY) == (
+    assert year_file_stamp_problem(path, IDENTITY, DATA_YEAR) == (
         f"it was cut with year-file format revision {revision}, and this "
         "version of policyengine.py reads only revision 1"
     )
@@ -646,7 +682,7 @@ def test_a_stamp_stored_as_a_fixed_length_string_is_read(tmp_path):
     stamp = json.dumps(_current()).encode()
     path = _write_year_file(tmp_path / "year.h5", stamp=("bytes", stamp))
 
-    assert year_file_stamp_problem(path, IDENTITY) is None
+    assert year_file_stamp_problem(path, IDENTITY, DATA_YEAR) is None
     assert read_year_file_stamp(path) == _current()
 
 
@@ -658,8 +694,8 @@ def test_raising_the_format_revision_makes_older_files_out_of_date(
     newer = _write_year_file(tmp_path / "newer.h5", stamp=_current())
 
     assert _current()["revision"] == 7
-    assert year_file_stamp_problem(newer, IDENTITY) is None
-    assert year_file_stamp_problem(older, IDENTITY) == (
+    assert year_file_stamp_problem(newer, IDENTITY, DATA_YEAR) is None
+    assert year_file_stamp_problem(older, IDENTITY, DATA_YEAR) == (
         "it was cut with year-file format revision 1, and this version of "
         "policyengine.py reads only revision 7"
     )
@@ -674,7 +710,7 @@ DEEP_JSON = "[" * 100_000 + "0" + "]" * 100_000
 def test_json_nested_too_deeply_is_out_of_date_not_an_error(tmp_path):
     path = _write_year_file(tmp_path / "year.h5", stamp=("text", DEEP_JSON))
 
-    assert year_file_stamp_problem(path, IDENTITY) == MALFORMED
+    assert year_file_stamp_problem(path, IDENTITY, DATA_YEAR) == MALFORMED
     # Unreadable (None) or parsed into nested lists, but never a stamp.
     assert not isinstance(read_year_file_stamp(path), dict)
 
@@ -692,7 +728,7 @@ def test_a_recursion_error_while_parsing_is_unreadable_content(tmp_path, monkeyp
 
     monkeypatch.setattr(json, "loads", deep)
 
-    assert year_file_stamp_problem(path, IDENTITY) == MALFORMED
+    assert year_file_stamp_problem(path, IDENTITY, DATA_YEAR) == MALFORMED
 
 
 def test_a_dangling_link_in_place_of_the_stamp_reads_as_absent(tmp_path):
@@ -702,7 +738,7 @@ def test_a_dangling_link_in_place_of_the_stamp_reads_as_absent(tmp_path):
             str(tmp_path / "missing.h5"), "/stamp"
         )
 
-    assert year_file_stamp_problem(path, IDENTITY) == NO_STAMP
+    assert year_file_stamp_problem(path, IDENTITY, DATA_YEAR) == NO_STAMP
     assert read_year_file_stamp(path) is None
 
 
@@ -718,14 +754,14 @@ def test_stamp_links_that_cannot_be_followed_are_unreadable_content(tmp_path, li
             _write_node(file, f"{YEAR_FILE_STAMP_H5_DATASET}_end", _current())
             _link_chain(file, YEAR_FILE_STAMP_H5_DATASET)
 
-    assert year_file_stamp_problem(path, IDENTITY) == MALFORMED
+    assert year_file_stamp_problem(path, IDENTITY, DATA_YEAR) == MALFORMED
     assert read_year_file_stamp(path) is None
 
 
 def test_a_file_stamped_for_the_requested_source_is_current(tmp_path):
     path = _write_year_file(tmp_path / "year.h5", stamp=_current())
 
-    assert year_file_stamp_problem(path, IDENTITY) is None
+    assert year_file_stamp_problem(path, IDENTITY, DATA_YEAR) is None
 
 
 # --- Named differences --------------------------------------------------
@@ -737,19 +773,21 @@ def test_a_file_stamped_for_the_requested_source_is_current(tmp_path):
     stamped_source=SOURCES,
     packages=PACKAGE_MAPS,
     stamped_packages=PACKAGE_MAPS,
+    stamped_year=st.sampled_from([DATA_YEAR, DATA_YEAR, DATA_YEAR + 3]),
 )
-def test_a_stale_year_file_names_each_source_and_version_that_differs(
-    source, stamped_source, packages, stamped_packages
+def test_a_stale_year_file_names_each_year_source_and_version_that_differs(
+    source, stamped_source, packages, stamped_packages, stamped_year
 ):
-    """The reason has a source clause exactly when the sources differ, naming
-    both, and one clause for each package whose version differs or that only
-    one side records, naming it; nothing that agrees is mentioned."""
+    """The reason has a year clause first exactly when the years differ, a
+    source clause exactly when the sources differ, naming both, and one clause
+    for each package whose version differs or that only one side records,
+    naming it; nothing that agrees is mentioned."""
     with tempfile.TemporaryDirectory() as directory:
         path = _write_year_file(
             Path(directory) / "year.h5",
-            stamp=_stamp(REVISION, stamped_source, stamped_packages),
+            stamp=_stamp(REVISION, stamped_source, stamped_packages, stamped_year),
         )
-        problem = year_file_stamp_problem(path, source, packages)
+        problem = year_file_stamp_problem(path, source, DATA_YEAR, packages)
 
     differing = {
         name
@@ -758,10 +796,17 @@ def test_a_stale_year_file_names_each_source_and_version_that_differs(
         or name not in packages
         or stamped_packages[name] != packages[name]
     }
-    if stamped_source == source and not differing:
+    if stamped_source == source and not differing and stamped_year == DATA_YEAR:
         assert problem is None
         return
     clauses = problem.split("; ")
+    year_clauses = [c for c in clauses if c.startswith("it was cut for ")]
+    if stamped_year == DATA_YEAR:
+        assert year_clauses == []
+    else:
+        assert clauses[0] == f"it was cut for {stamped_year}, not {DATA_YEAR}"
+        assert year_clauses == clauses[:1]
+    clauses = [c for c in clauses if c not in year_clauses]
     source_clauses = [c for c in clauses if c.startswith("it was cut from ")]
     if stamped_source == source:
         assert source_clauses == []
@@ -818,7 +863,10 @@ def test_a_year_file_cut_from_another_source_names_both(
 ):
     path = _write_year_file(tmp_path / "year.h5", stamp=_stamp(source=stamped_source))
 
-    assert year_file_stamp_problem(path, source) == f"it was cut from {described}"
+    assert (
+        year_file_stamp_problem(path, source, DATA_YEAR)
+        == f"it was cut from {described}"
+    )
 
 
 @pytest.mark.parametrize(
@@ -864,7 +912,7 @@ def test_a_year_file_cut_with_other_versions_names_them(
         tmp_path / "year.h5", stamp=_stamp(packages=stamped_packages)
     )
 
-    assert year_file_stamp_problem(path, IDENTITY, packages) == reason
+    assert year_file_stamp_problem(path, IDENTITY, DATA_YEAR, packages) == reason
 
 
 def test_every_difference_is_named_in_order(tmp_path):
@@ -876,11 +924,64 @@ def test_every_difference_is_named_in_order(tmp_path):
         ),
     )
 
-    assert year_file_stamp_problem(path, IDENTITY) == (
+    assert year_file_stamp_problem(path, IDENTITY, DATA_YEAR) == (
         f"it was cut from {SOURCE}@old, and the requested source is {SOURCE}; "
         "it was cut with policyengine-uk 2.126.11, and policyengine-uk "
         "2.126.12 is installed"
     )
+
+
+def test_a_year_file_cut_for_another_year_names_both(tmp_path):
+    path = _write_year_file(tmp_path / "year.h5", stamp=_current(DATA_YEAR + 1))
+
+    assert year_file_stamp_problem(path, IDENTITY, DATA_YEAR) == (
+        f"it was cut for {DATA_YEAR + 1}, not {DATA_YEAR}"
+    )
+    assert year_file_stamp_problem(path, IDENTITY, DATA_YEAR + 1) is None
+
+
+def test_a_year_file_copied_to_another_years_name_is_cut_again(tmp_path):
+    """Its tables are the other year's, so it is not taken for this one."""
+    data_folder = tmp_path / "data"
+    original = data_folder / f"{STEM}_year_2025.h5"
+    _write_year_file(original, stamp=_current(2025), year=2025)
+    copy = data_folder / f"{STEM}_year_2026.h5"
+    copy.write_bytes(original.read_bytes())
+
+    with pytest.raises(ValueError, match="it was cut for 2025, not 2026"):
+        load_datasets(datasets=[SOURCE], years=[2026], data_folder=str(data_folder))
+    create = MagicMock(return_value="created")
+    with patch.object(uk_datasets, "create_datasets", create):
+        assert (
+            ensure_datasets(
+                datasets=[SOURCE], years=[2025, 2026], data_folder=str(data_folder)
+            )
+            == "created"
+        )
+
+
+# --- Country isolation --------------------------------------------------
+
+
+def test_a_us_year_file_stamp_never_passes_as_a_uk_one(tmp_path):
+    """Each country stores its stamp under its own name: a UK year file that
+    carries only a US stamp is unstamped for the UK check, and a UK stamp is
+    no stamp to the US reader."""
+    from policyengine.tax_benefit_models.us import legacy_inputs
+
+    assert YEAR_FILE_STAMP_H5_DATASET == "policyengine_uk_year_file_stamp"
+    assert legacy_inputs.YEAR_FILE_STAMP_H5_DATASET != YEAR_FILE_STAMP_H5_DATASET
+    us_stamped = _write_year_file(tmp_path / "us_stamped.h5")
+    legacy_inputs.write_year_file_stamp(
+        us_stamped, legacy_inputs.year_file_stamp(IDENTITY, PACKAGES)
+    )
+    uk_stamped = _write_year_file(tmp_path / "uk_stamped.h5", stamp=_current())
+
+    assert year_file_stamp_problem(us_stamped, IDENTITY, DATA_YEAR) == NO_STAMP
+    assert read_year_file_stamp(us_stamped) is None
+    assert legacy_inputs.read_year_file_stamp(uk_stamped) is None
+    assert legacy_inputs.year_file_stamp_problem(uk_stamped, IDENTITY) is not None
+    assert year_file_stamp_problem(uk_stamped, IDENTITY, DATA_YEAR) is None
 
 
 # --- Differential: the US check names differences the same way -----------
@@ -939,7 +1040,7 @@ def test_the_uk_and_us_checks_name_source_and_package_differences_alike(
         us_stamp = legacy_inputs.year_file_stamp(stamped_source, stamped_packages)
         legacy_inputs.write_year_file_stamp(us_path, us_stamp)
 
-        uk = year_file_stamp_problem(uk_path, source, packages)
+        uk = year_file_stamp_problem(uk_path, source, DATA_YEAR, packages)
         us = legacy_inputs.year_file_stamp_problem(us_path, source, packages)
 
     assert uk == us
@@ -952,7 +1053,7 @@ def test_the_uk_and_us_checks_name_source_and_package_differences_alike(
 def _current_year_file_bytes() -> bytes:
     with tempfile.TemporaryDirectory() as directory:
         path = _write_year_file(Path(directory) / "year.h5", stamp=_current())
-        assert year_file_stamp_problem(path, IDENTITY) is None
+        assert year_file_stamp_problem(path, IDENTITY, DATA_YEAR) is None
         return path.read_bytes()
 
 
@@ -965,14 +1066,14 @@ def test_a_truncated_year_file_is_never_current(data):
         path = Path(directory) / "year.h5"
         path.write_bytes(content[:length])
 
-        assert year_file_stamp_problem(path, IDENTITY) is not None
+        assert year_file_stamp_problem(path, IDENTITY, DATA_YEAR) is not None
 
 
 def test_a_file_that_is_not_hdf5_is_out_of_date(tmp_path):
     path = tmp_path / "year.h5"
     path.write_text("not an H5 file")
 
-    assert year_file_stamp_problem(path, IDENTITY) == NOT_HDF5
+    assert year_file_stamp_problem(path, IDENTITY, DATA_YEAR) == NOT_HDF5
     assert NOT_HDF5 == (
         "it cannot be read as an HDF5 file (it may be half-written or corrupt)"
     )
@@ -990,7 +1091,7 @@ def test_saving_a_year_file_again_drops_its_stamp(tmp_path):
     # stamp, which only ``create_datasets`` writes.
     assert dataset.data_year == DATA_YEAR
     assert read_year_file_stamp(path) is None
-    assert year_file_stamp_problem(path, IDENTITY) == NO_STAMP
+    assert year_file_stamp_problem(path, IDENTITY, DATA_YEAR) == NO_STAMP
 
 
 def test_a_save_that_stops_part_way_leaves_no_stamp(tmp_path, monkeypatch):
@@ -1008,7 +1109,7 @@ def test_a_save_that_stops_part_way_leaves_no_stamp(tmp_path, monkeypatch):
 
     assert read_year_file_stamp(path) is None
     # The data year is written after the tables, so it is missing too.
-    assert year_file_stamp_problem(path, IDENTITY) == NO_DATA_YEAR
+    assert year_file_stamp_problem(path, IDENTITY, DATA_YEAR) == NO_DATA_YEAR
 
 
 # --- Errors unrelated to the file's contents ----------------------------
@@ -1041,7 +1142,7 @@ def test_errors_unrelated_to_the_contents_are_raised(tmp_path, make, error):
     create = MagicMock()
     try:
         with pytest.raises(error):
-            year_file_stamp_problem(path, IDENTITY)
+            year_file_stamp_problem(path, IDENTITY, DATA_YEAR)
         with pytest.raises(error):
             load_datasets(datasets=[SOURCE], years=[2024], data_folder=str(data_folder))
         with patch.object(uk_datasets, "create_datasets", create):
@@ -1063,7 +1164,7 @@ def test_a_locked_file_is_raised_not_cut_again(tmp_path, monkeypatch):
 
     monkeypatch.setattr(h5py, "File", locked)
     with pytest.raises(BlockingIOError):
-        year_file_stamp_problem(path, IDENTITY)
+        year_file_stamp_problem(path, IDENTITY, DATA_YEAR)
 
 
 ERRORS = [
@@ -1084,7 +1185,7 @@ def test_errors_unrelated_to_the_contents_are_raised_while_reading_the_stamp(
 
     monkeypatch.setattr(h5py.Dataset, "asstr", fail)
     with pytest.raises(type(error)):
-        year_file_stamp_problem(path, IDENTITY)
+        year_file_stamp_problem(path, IDENTITY, DATA_YEAR)
 
 
 @pytest.mark.parametrize("error", ERRORS)
@@ -1101,7 +1202,7 @@ def test_errors_unrelated_to_the_contents_are_raised_while_finding_the_data_year
 
     monkeypatch.setattr(h5py.Group, "get", fail_for_the_data_year)
     with pytest.raises(type(error)):
-        year_file_stamp_problem(path, IDENTITY)
+        year_file_stamp_problem(path, IDENTITY, DATA_YEAR)
 
 
 # --- ensure_datasets and load_datasets ----------------------------------
@@ -1138,6 +1239,15 @@ STATES = {
 }
 
 
+def _for_year(written: dict, year: int) -> dict:
+    """A state's contents for the year file of ``year``: a stamp that records
+    a year records this one."""
+    stamp = written.get("stamp", _ABSENT)
+    if isinstance(stamp, dict) and "year" in stamp:
+        written = {**written, "stamp": {**stamp, "year": year}}
+    return written
+
+
 def _make_state(path: Path, state: str, year: int) -> None:
     written, _ = STATES[state]
     if state == "missing":
@@ -1146,14 +1256,16 @@ def _make_state(path: Path, state: str, year: int) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("not an H5 file")
         return
-    _write_year_file(path, **written, year=year)
+    _write_year_file(path, **_for_year(written, year), year=year)
 
 
 def _create_current_files(datasets, years, data_folder, allow_unmanaged=False):
     """Stand in for ``create_datasets``: write current year files."""
     for year in years:
         _write_year_file(
-            Path(data_folder) / f"{STEM}_year_{year}.h5", stamp=_current(), year=year
+            Path(data_folder) / f"{STEM}_year_{year}.h5",
+            stamp=_current(year),
+            year=year,
         )
     return {"created": True}
 
@@ -1176,12 +1288,22 @@ def test_ensure_cuts_again_exactly_when_load_would_refuse(states):
                     datasets=[SOURCE], years=years, data_folder=str(data_folder)
                 )
 
-        expected_warnings = sorted(
-            (str(path), problem)
-            for year in years
-            if (path := data_folder / f"{STEM}_year_{year}.h5").exists()
-            and (problem := year_file_stamp_problem(path, IDENTITY)) is not None
-        )
+        # The stale files, from the states alone, and the reason load_datasets
+        # gives for each when it is asked for that year only.
+        expected_warnings = []
+        for year, state in zip(years, states):
+            if STATES[state][1] is not False:
+                continue
+            path = data_folder / f"{STEM}_year_{year}.h5"
+            with pytest.raises(ValueError) as refused:
+                load_datasets(
+                    datasets=[SOURCE], years=[year], data_folder=str(data_folder)
+                )
+            prefix = f"UK year file {path} is out of date: "
+            suffix = ". Regenerate it with ensure_datasets() or create_datasets()."
+            message = str(refused.value)
+            assert message.startswith(prefix) and message.endswith(suffix)
+            expected_warnings.append((str(path), message[len(prefix) : -len(suffix)]))
         create = MagicMock(side_effect=_create_current_files)
         with (
             patch.object(uk_datasets, "create_datasets", create),
@@ -1194,12 +1316,9 @@ def test_ensure_cuts_again_exactly_when_load_would_refuse(states):
             assert create.called == (bool(stale) or "missing" in states)
             # One warning per out-of-date file, naming it and its reason.
             assert warning.call_count == len(stale)
-            assert (
-                sorted(
-                    (str(call.args[1]), call.args[2]) for call in warning.call_args_list
-                )
-                == expected_warnings
-            )
+            assert sorted(
+                (str(call.args[1]), call.args[2]) for call in warning.call_args_list
+            ) == sorted(expected_warnings)
             for call in warning.call_args_list:
                 assert call.args[0] == (
                     "UK year file %s is out of date: %s. Creating the year files again."
@@ -1244,7 +1363,7 @@ def test_ensure_decides_from_the_stamps_alone(tmp_path, states, local_source):
             requested_dataset_source_identity("uk", str(source_file)),
         )
     for year, state in zip(years, states):
-        written, _ = STATES[state]
+        written = _for_year(STATES[state][0], year)
         stamp = written.get("stamp", _ABSENT)
         if isinstance(stamp, dict) and stamp.get("source") == IDENTITY:
             stamp = {**stamp, "source": identity}
@@ -1567,7 +1686,11 @@ def test_the_default_is_checked_against_its_bundle_pin(tmp_path):
     default = requested_dataset_source_identity("uk", None)
     stem = manifest.default_dataset
     data_folder = tmp_path / "data"
-    _write_year_file(data_folder / f"{stem}_year_2026.h5", stamp=_stamp(source=default))
+    _write_year_file(
+        data_folder / f"{stem}_year_2026.h5",
+        stamp=_stamp(source=default, year=2026),
+        year=2026,
+    )
     load = MagicMock(return_value="loaded")
 
     with patch.object(uk_datasets, "load_datasets", load):
@@ -1577,6 +1700,7 @@ def test_the_default_is_checked_against_its_bundle_pin(tmp_path):
         year_file_stamp_problem(
             data_folder / f"{stem}_year_2026.h5",
             requested_dataset_source_identity("uk", manifest.default_dataset_uri),
+            2026,
         )
         is None
     )
