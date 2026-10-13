@@ -429,6 +429,10 @@ def test_the_check_is_total_and_accepts_only_the_expected_profile(
         "[" * 100_000 + "]" * 100_000,
         np.arange(3),
     ],
+    # Explicit IDs: pytest would otherwise use the 200,000-character string as
+    # its test ID, which exceeds Windows' environment-variable limit for
+    # PYTEST_CURRENT_TEST and floods verbose CI logs.
+    ids=["bytes_not_utf8", "text_not_json", "json_nested_too_deeply", "number_array"],
 )
 def test_unreadable_records_are_out_of_date_not_errors(tmp_path, stored):
     path = _empty_h5(tmp_path / "file.h5")
