@@ -585,12 +585,13 @@ def _read_json_dataset(file: Any, name: str) -> Any:
             return _UNREADABLE
         # A numeric dataset raises TypeError; bytes that are not UTF-8, or
         # not JSON, raise ValueError; JSON nested too deeply raises
-        # RecursionError.
+        # RecursionError, a RuntimeError, as does h5py following a soft link
+        # at ``name`` that leads back to itself. Any RuntimeError counts as
+        # unreadable content: the errors that say nothing about the content
+        # are OSErrors, re-raised first.
         return json.loads(node.asstr()[()])
     except (PermissionError, IsADirectoryError, BlockingIOError):
         raise
-    # ``RuntimeError`` covers ``RecursionError``, and h5py raises it when a
-    # soft link at ``name`` leads back to itself.
     except (KeyError, OSError, RuntimeError, TypeError, ValueError):
         return _UNREADABLE
 

@@ -647,7 +647,9 @@ def test_a_soft_link_that_leads_back_to_itself_is_unreadable(tmp_path, name):
     else:
         assert year_file_stamp_metadata(path) == "unreadable"
         assert read_year_file_stamp(path) is None
-        assert year_file_stamp_problem(path) is not None
+        assert year_file_stamp_problem(path) == (
+            "its stamp of the register of renamed inputs it was cut under is malformed"
+        )
 
 
 # --- The year file an output was calculated from ------------------------
