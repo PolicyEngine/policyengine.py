@@ -19,15 +19,12 @@ from policyengine.provenance.dataset_materialization import (
     dataset_source_change,
     dataset_source_identity,
     dataset_source_snapshot,
-    describe_dataset_source_identity,
     materialize_dataset,
-    requested_dataset_source_identity,
 )
 from policyengine.provenance.manifest import (
-    dataset_logical_name,
     get_release_manifest,
-    resolve_dataset_reference,
 )
+from policyengine.provenance.year_file_stamp import year_file_sources
 from policyengine.tax_benefit_models.common.model_version import (
     build_runtime_dataset_provenance,
 )
@@ -375,47 +372,16 @@ def _load_policyengine_core_h5(path: Path, year: int) -> USYearData:
     )
 
 
-def _year_file_source(
-    dataset: str, allow_unmanaged: bool = True
-) -> tuple[str, dict[str, Any]]:
-    """Return a requested dataset's year-file stem and its source identity.
-
-    The stem names the year files (``{stem}_year_{year}.h5``) and drops any
-    revision, so files cut from every release of a logical dataset share
-    names; the identity tells them apart. Neither downloads nor reads the
-    source (see ``requested_dataset_source_identity``). A request
-    ``materialize_dataset`` would refuse with the same ``allow_unmanaged``
-    raises the same error, before the stem is resolved.
-    """
-    identity = requested_dataset_source_identity(
-        "us", dataset, allow_unmanaged=allow_unmanaged
-    )
-    stem = dataset_logical_name(resolve_dataset_reference("us", dataset))
-    return stem, identity
-
-
 def _year_file_sources(
     datasets: list[str], allow_unmanaged: bool = True
 ) -> list[tuple[str, dict[str, Any]]]:
     """Return each requested dataset's year-file stem and source identity.
 
-    Raises ``ValueError`` when two of them are different sources with one
-    stem. They would write the same year files, each cut overwriting the
-    other's, so a request of both would cut them all again every time.
+    Neither downloads nor reads the source. Raises ``ValueError`` when two of
+    them are different sources with one stem, since they would overwrite each
+    other's year files (see ``year_file_stamp.year_file_sources``).
     """
-    sources = [_year_file_source(dataset, allow_unmanaged) for dataset in datasets]
-    first_by_stem: dict[str, tuple[str, dict[str, Any]]] = {}
-    for dataset, (stem, identity) in zip(datasets, sources):
-        first, first_identity = first_by_stem.setdefault(stem, (dataset, identity))
-        if first_identity != identity:
-            raise ValueError(
-                f"Datasets {first!r} and {dataset!r} would share the US year "
-                f"files {stem}_year_{{year}}.h5, but are different sources: "
-                f"{describe_dataset_source_identity(first_identity)} and "
-                f"{describe_dataset_source_identity(identity)}. Request them "
-                "in separate calls with separate data folders."
-            )
-    return sources
+    return year_file_sources("us", datasets, allow_unmanaged)
 
 
 def create_datasets(

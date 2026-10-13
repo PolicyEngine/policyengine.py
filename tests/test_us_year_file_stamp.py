@@ -787,7 +787,7 @@ def test_a_recursion_error_while_parsing_is_unreadable_content(
                 raise RecursionError("maximum recursion depth exceeded")
         return loads(text, *args, **kwargs)
 
-    monkeypatch.setattr(legacy_inputs.json, "loads", deep)
+    monkeypatch.setattr(json, "loads", deep)
 
     assert year_file_stamp_problem(path, IDENTITY) == (
         MALFORMED

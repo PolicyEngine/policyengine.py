@@ -141,17 +141,12 @@ def test_uk_load_datasets_defaults_to_certified_bundle_dataset(monkeypatch):
         "_test_policyengine_uk_default_load_datasets",
         REPO_ROOT / "src/policyengine/tax_benefit_models/uk/datasets.py",
     )
-    resolve = Mock(
-        return_value=(
-            "hf://policyengine/policyengine-uk-data-private/"
-            "enhanced_frs_2024_25.h5@1.56.16"
-        )
-    )
-    monkeypatch.setattr(uk_datasets, "resolve_dataset_reference", resolve)
+    sources = Mock(return_value=[("enhanced_frs_2024_25", {"uri": "hf://x/y/z"})])
+    monkeypatch.setattr(uk_datasets, "year_file_sources", sources)
 
     assert uk_datasets.load_datasets(years=[]) == {}
 
-    resolve.assert_called_once_with("uk", "enhanced_frs_2024_25")
+    sources.assert_called_once_with("uk", ["enhanced_frs_2024_25"], True)
 
 
 def test_uk_ensure_datasets_defaults_to_certified_bundle_dataset(monkeypatch):
