@@ -768,6 +768,51 @@ def test_dangling_links_in_place_of_the_stamp_and_record_read_as_absent(tmp_path
     assert read_renames_record(path) is None
 
 
+def _link_cycle(file, name) -> None:
+    """Point ``name`` into a cycle of soft links."""
+    file[name] = h5py.SoftLink(f"/{name}_loop")
+    file[f"{name}_loop"] = h5py.SoftLink(f"/{name}")
+
+
+def _long_link_chain(file, name) -> None:
+    """Point ``name`` down a chain of soft links too long to follow, to a
+    node that would be well formed if reached."""
+    content = _current() if name == YEAR_FILE_STAMP_H5_DATASET else {}
+    _write_node(file, f"{name}_end", content)
+    file[name] = h5py.SoftLink(f"/{name}_0")
+    for index in range(100):
+        file[f"{name}_{index}"] = h5py.SoftLink(f"/{name}_{index + 1}")
+    file[f"{name}_100"] = h5py.SoftLink(f"/{name}_end")
+
+
+@pytest.mark.parametrize("links", [_link_cycle, _long_link_chain])
+@pytest.mark.parametrize("name", [YEAR_FILE_STAMP_H5_DATASET, RENAMES_H5_DATASET])
+def test_links_that_cannot_be_followed_are_unreadable_content(tmp_path, links, name):
+    """Totality: h5py raises RuntimeError for these, which reads as
+    unreadable content rather than escaping."""
+    path = _write_year_file(
+        tmp_path / "year.h5",
+        **{"stamp": _current(), "record": {}, **{_NODE_ARGUMENT[name]: _ABSENT}},
+    )
+    with h5py.File(path, "a") as file:
+        links(file, name)
+
+    assert year_file_stamp_problem(path, IDENTITY) == (
+        MALFORMED
+        if name == YEAR_FILE_STAMP_H5_DATASET
+        else "its record of the renamed stored inputs mapped when it was cut is "
+        "malformed"
+    )
+    if name == YEAR_FILE_STAMP_H5_DATASET:
+        assert read_year_file_stamp(path) is None
+    else:
+        assert read_renames_record(path) is None
+
+
+#: Which ``_write_year_file`` argument writes each node.
+_NODE_ARGUMENT = {YEAR_FILE_STAMP_H5_DATASET: "stamp", RENAMES_H5_DATASET: "record"}
+
+
 @pytest.mark.parametrize("record", [{}, {LEGACY: LIVE}])
 def test_a_file_stamped_for_the_requested_source_is_current(tmp_path, record):
     path = _write_year_file(tmp_path / "year.h5", stamp=_current(), record=record)
@@ -1459,6 +1504,95 @@ def test_the_refusal_names_the_file_and_what_it_may_lack(tmp_path):
         f"were registered, so it may have lost them: {LEGACY} -> {LIVE}. "
         "Regenerate it with ensure_datasets() or create_datasets()."
     )
+
+
+# --- Two sources never share year files --------------------------------
+
+#: Requests whose stems (``pop`` or ``other``) collide in different ways.
+COLLIDING = [
+    "hf://fixture/pop.h5@r1",
+    "hf://fixture/pop.h5@r2",
+    "hf://elsewhere/pop.h5@r1",
+    "hf://fixture/other.h5@r1",
+]
+
+
+def _stem_of(uri: str) -> str:
+    return uri.rsplit("/", 1)[-1].split(".")[0]
+
+
+@settings(max_examples=60, deadline=None)
+@given(requests=st.lists(st.sampled_from(COLLIDING), min_size=1, max_size=4))
+def test_two_sources_with_one_stem_are_refused_before_anything_is_cut(requests):
+    """Requests that would share year files are refused by all three
+    functions, before reading a year file or cutting one; requests of one
+    source repeated, or of sources with different stems, are not."""
+    stems = {}
+    for request in requests:
+        stems.setdefault(_stem_of(request), set()).add(request)
+    collide = any(len(sources) > 1 for sources in stems.values())
+    create = MagicMock(side_effect=lambda *a, **k: {})
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("a year file was read or cut")
+
+    with tempfile.TemporaryDirectory() as directory:
+        with (
+            patch.object(us_datasets, "materialize_dataset", refuse),
+            patch.object(us_datasets, "year_file_stamp_problem", refuse),
+            patch.object(us_datasets, "PolicyEngineUSDataset", refuse),
+        ):
+            for call in (
+                lambda: load_datasets(
+                    datasets=requests, years=[2024], data_folder=directory
+                ),
+                lambda: us_datasets.create_datasets(
+                    datasets=requests, years=[2024], data_folder=directory
+                ),
+            ):
+                if collide:
+                    with pytest.raises(ValueError, match="would share the US year"):
+                        call()
+        with patch.object(us_datasets, "create_datasets", create):
+            if collide:
+                with pytest.raises(ValueError, match="would share the US year"):
+                    ensure_datasets(
+                        datasets=requests, years=[2024], data_folder=directory
+                    )
+                create.assert_not_called()
+            else:
+                ensure_datasets(datasets=requests, years=[2024], data_folder=directory)
+                create.assert_called_once()
+
+
+def test_the_collision_refusal_names_both_requests_and_sources(tmp_path):
+    first, second = "hf://fixture/pop.h5@r1", "hf://fixture/pop.h5@r2"
+
+    with pytest.raises(ValueError) as refused:
+        ensure_datasets(
+            datasets=[first, second], years=[2024], data_folder=str(tmp_path)
+        )
+
+    assert str(refused.value) == (
+        f"Datasets {first!r} and {second!r} would share the US year files "
+        f"pop_year_{{year}}.h5, but are different sources: {first} and {second}. "
+        "Request them in separate calls with separate data folders."
+    )
+
+
+def test_one_source_requested_by_two_names_is_not_a_collision(tmp_path):
+    """The default's logical name and its own URI are one source."""
+    from policyengine.provenance.manifest import get_release_manifest
+
+    manifest = get_release_manifest("us")
+    requests = [manifest.default_dataset, manifest.default_dataset_uri]
+    create = MagicMock(return_value="created")
+
+    with patch.object(us_datasets, "create_datasets", create):
+        assert (
+            ensure_datasets(datasets=requests, years=[2024], data_folder=str(tmp_path))
+            == "created"
+        )
 
 
 def test_the_refusal_names_the_source_it_was_cut_from(tmp_path):

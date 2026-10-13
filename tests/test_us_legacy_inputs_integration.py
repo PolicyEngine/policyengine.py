@@ -13,6 +13,7 @@ draw ``True``). Both children are WIC-eligible, which each test checks.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 from importlib import metadata as importlib_metadata
@@ -34,6 +35,7 @@ import policyengine as pe  # noqa: E402
 import policyengine.provenance.dataset_materialization as dataset_materialization  # noqa: E402
 import policyengine.provenance.manifest as manifest_module  # noqa: E402
 from policyengine.provenance.dataset_materialization import (  # noqa: E402
+    DatasetMaterializationError,
     describe_dataset_source_identity,
     requested_dataset_source_identity,
 )
@@ -814,11 +816,15 @@ def test_ensure_datasets_regenerates_a_year_file_with_only_the_renames_record(
     _assert_reused(source, data_folder)
 
 
-def test_create_datasets_stamps_each_year_file_after_saving_it(tmp_path):
+def test_create_datasets_stamps_the_year_files_after_saving_and_checking(
+    tmp_path,
+):
+    """Every year file is saved, the source checked again, then each stamped."""
     source = _write_entity_tables(tmp_path / "populace_layout.h5")
     events = []
     save = PolicyEngineUSDataset.save
     stamp = us_datasets.write_year_file_stamp
+    change = us_datasets.dataset_source_change
 
     def recording_save(self):
         save(self)
@@ -828,9 +834,14 @@ def test_create_datasets_stamps_each_year_file_after_saving_it(tmp_path):
         stamp(path, value)
         events.append(("stamp", path))
 
+    def recording_change(*args):
+        events.append(("check source",))
+        return change(*args)
+
     with (
         patch.object(PolicyEngineUSDataset, "save", recording_save),
         patch.object(us_datasets, "write_year_file_stamp", recording_stamp),
+        patch.object(us_datasets, "dataset_source_change", recording_change),
     ):
         created = create_datasets(
             datasets=[source],
@@ -842,8 +853,9 @@ def test_create_datasets_stamps_each_year_file_after_saving_it(tmp_path):
     paths = [dataset.filepath for dataset in created.values()]
     assert events == [
         ("save", paths[0]),
-        ("stamp", paths[0]),
         ("save", paths[1]),
+        ("check source",),
+        ("stamp", paths[0]),
         ("stamp", paths[1]),
     ]
     for path in paths:
@@ -994,6 +1006,60 @@ def test_a_re_pinned_bundle_dataset_cuts_its_year_files_again(tmp_path):
         ]
         loaded = _assert_reused(BUNDLE_NAME, data_folder)
         assert _person_outputs(_run(loaded))["wic"].iloc[INFANT] > 0
+
+
+@pytest.mark.parametrize("kind", ["bundle", "local"])
+def test_a_source_replaced_while_it_is_cut_leaves_the_year_files_unstamped(
+    tmp_path, kind
+):
+    """Another process replaces the source after it is identified (for a
+    bundle dataset, by materializing another release into the same data
+    folder). The year files hold data the stamp would not describe, so they
+    are left unstamped and cut again."""
+    import policyengine_us
+
+    data_folder = tmp_path / "data"
+    data_folder.mkdir()
+    if kind == "bundle":
+        path = data_folder / f"{BUNDLE_NAME}.h5"
+        _write_entity_tables(path)
+        request, pins = BUNDLE_NAME, _pinned("release-1", sha256_file(path))
+    else:
+        path = tmp_path / "populace_layout.h5"
+        _write_entity_tables(path)
+        request, pins = str(path), ()
+    original = path.read_bytes()
+    real_microsimulation = policyengine_us.Microsimulation
+
+    def replaced_once_loaded(*args, **kwargs):
+        simulation = real_microsimulation(*args, **kwargs)
+        _write_entity_tables(path, draw=[False, True, True])
+        later = path.stat().st_mtime_ns + 1_000_000_000
+        os.utime(path, ns=(later, later))
+        return simulation
+
+    year_file = data_folder / f"{Path(path).stem}_year_{YEAR}.h5"
+    with contextlib.ExitStack() as stack:
+        for pin in pins:
+            stack.enter_context(pin)
+        with patch.object(policyengine_us, "Microsimulation", replaced_once_loaded):
+            with pytest.raises(
+                DatasetMaterializationError, match="changed while they were cut"
+            ):
+                _ensure(request, data_folder)
+
+        assert year_file.exists()
+        assert read_year_file_stamp(year_file) is None
+        with pytest.raises(ValueError, match="it has no stamp"):
+            load_datasets(
+                datasets=[request], years=[YEAR], data_folder=str(data_folder)
+            )
+
+        # The pinned release is back in place, as a download would put it.
+        path.write_bytes(original)
+        regenerated = _ensure(request, data_folder)
+        assert pd.DataFrame(regenerated.data.person)[LIVE].tolist() == DRAW
+        assert _problem(year_file, request) is None
 
 
 def test_another_package_version_cuts_year_files_again(tmp_path, monkeypatch):

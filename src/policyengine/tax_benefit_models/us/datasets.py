@@ -14,8 +14,11 @@ from pydantic import ConfigDict, Field
 
 from policyengine.core import Dataset, YearData
 from policyengine.provenance.dataset_materialization import (
+    DatasetMaterializationError,
     MaterializedDataset,
+    dataset_source_change,
     dataset_source_identity,
+    describe_dataset_source_identity,
     materialize_dataset,
     requested_dataset_source_identity,
 )
@@ -383,6 +386,28 @@ def _year_file_source(dataset: str) -> tuple[str, dict[str, Any]]:
     return stem, requested_dataset_source_identity("us", dataset)
 
 
+def _year_file_sources(datasets: list[str]) -> list[tuple[str, dict[str, Any]]]:
+    """Return each requested dataset's year-file stem and source identity.
+
+    Raises ``ValueError`` when two of them are different sources with one
+    stem. They would write the same year files, each cut overwriting the
+    other's, so a request of both would cut them all again every time.
+    """
+    sources = [_year_file_source(dataset) for dataset in datasets]
+    first_by_stem: dict[str, tuple[str, dict[str, Any]]] = {}
+    for dataset, (stem, identity) in zip(datasets, sources):
+        first, first_identity = first_by_stem.setdefault(stem, (dataset, identity))
+        if first_identity != identity:
+            raise ValueError(
+                f"Datasets {first!r} and {dataset!r} would share the US year "
+                f"files {stem}_year_{{year}}.h5, but are different sources: "
+                f"{describe_dataset_source_identity(first_identity)} and "
+                f"{describe_dataset_source_identity(identity)}. Request them "
+                "in separate calls with separate data folders."
+            )
+    return sources
+
+
 def create_datasets(
     datasets: Optional[list[str]] = None,
     years: list[int] = [2024, 2025, 2026, 2027, 2028],
@@ -391,14 +416,24 @@ def create_datasets(
 ) -> dict[str, PolicyEngineUSDataset]:
     """Create PolicyEngineUSDataset instances from logical dataset names or URLs.
 
-    Each year file is written to ``{data_folder}/{dataset_stem}_year_{year}.h5``
-    and stamped last with the identity of the source dataset it was cut from,
-    the installed policyengine-core and policyengine-us versions, the register
-    of renamed stored inputs it was cut under and the year-file format
-    revision (see ``legacy_inputs.YEAR_FILE_STAMP_H5_DATASET``), which
-    ``ensure_datasets`` and ``load_datasets`` check. A local source is
-    identified before it is loaded, so one that changes while the files are
-    cut leaves them out of date.
+    Each year file is written to ``{data_folder}/{dataset_stem}_year_{year}.h5``.
+    Once a dataset's year files are all written, each is stamped with the
+    identity of the source dataset it was cut from, the installed
+    policyengine-core and policyengine-us versions, the register of renamed
+    stored inputs it was cut under and the year-file format revision (see
+    ``legacy_inputs.YEAR_FILE_STAMP_H5_DATASET``), which ``ensure_datasets``
+    and ``load_datasets`` check.
+
+    The source is identified before it is loaded, and checked again after the
+    year files are written: a bundle dataset's file is hashed again and a
+    local file's metadata read again (see
+    ``dataset_materialization.dataset_source_change``). Another process can
+    replace a file in a shared data folder, for example by materializing
+    another release of the same dataset there. If the source changed, the
+    year files are left unstamped, so they are cut again, and
+    ``DatasetMaterializationError`` is raised. Two requested datasets that are
+    different sources with one stem are refused with ``ValueError`` before
+    anything is cut, since they would overwrite each other's year files.
 
     Args:
         datasets: List of logical dataset names or HuggingFace dataset URLs
@@ -408,6 +443,9 @@ def create_datasets(
     Returns:
         Dictionary mapping dataset keys (e.g., "populace_us_2024") to PolicyEngineUSDataset objects
     """
+    if datasets is not None and len(datasets) > 1:
+        _year_file_sources(datasets)
+
     from policyengine_us import Microsimulation
 
     from policyengine.tax_benefit_models.us.spm import resolve_spm_selection
@@ -425,12 +463,14 @@ def create_datasets(
         # What each year file is cut from and under: the source, identified
         # before it is loaded, the package versions and the register the
         # mapping below uses.
-        stamp = year_file_stamp(dataset_source_identity(source))
+        identity = dataset_source_identity(source)
+        stamp = year_file_stamp(identity)
         sim = Microsimulation(dataset=source.path, spm=resolve_spm_selection())
         # Map stored inputs the engine has since renamed before extracting,
         # so each year's file stores the live input rather than dropping it.
         legacy_input_renames = apply_legacy_input_renames_to_microsimulation(sim)
 
+        cut: list[PolicyEngineUSDataset] = []
         for year in years:
             # Get all input variables from the simulation
             # We'll calculate each input variable for the specified year
@@ -588,12 +628,25 @@ def create_datasets(
                 ),
             )
             us_dataset.save()
-            # Stamp last. ``save()`` truncates the file first, so a year file
-            # whose write stopped part-way has no stamp and is cut again.
-            write_year_file_stamp(us_dataset.filepath, stamp)
+            cut.append(us_dataset)
 
             dataset_key = f"{dataset_stem}_{year}"
             result[dataset_key] = us_dataset
+
+        # Stamp only if the source still matches what was identified, so no
+        # stamp names a source the files may not have been cut from.
+        change = dataset_source_change(source, identity)
+        if change is not None:
+            raise DatasetMaterializationError(
+                f"The source of the US year files {data_folder}/"
+                f"{dataset_stem}_year_{{year}}.h5 changed while they were cut: "
+                f"{change}. They were left unstamped, so ensure_datasets() "
+                "cuts them again."
+            )
+        # Stamp last. ``save()`` truncates each file first, so a year file
+        # whose write stopped part-way has no stamp and is cut again.
+        for us_dataset in cut:
+            write_year_file_stamp(us_dataset.filepath, stamp)
 
     return result
 
@@ -615,6 +668,8 @@ def load_datasets(
     draw. A file cut from an earlier release of a dataset the bundle has since
     re-pinned holds that release's data. The error says why, naming the
     renames the file may lack, the two sources or the two package versions.
+    Two requested datasets that are different sources with one stem are
+    refused, since they would share year files.
 
     Args:
         datasets: List of HuggingFace dataset paths (used to derive file names)
@@ -626,8 +681,7 @@ def load_datasets(
     """
     datasets = datasets or [get_release_manifest("us").default_dataset]
     result = {}
-    for dataset in datasets:
-        dataset_stem, source = _year_file_source(dataset)
+    for dataset_stem, source in _year_file_sources(datasets):
         for year in years:
             filepath = f"{data_folder}/{dataset_stem}_year_{year}.h5"
             if Path(filepath).exists():
@@ -1290,11 +1344,14 @@ def ensure_datasets(
     ``legacy_inputs.year_file_stamp_problem``). Only each file's stamp and
     renames record are read to decide, never its tables. The source is never
     downloaded or read: a bundle dataset is identified by its manifest entry,
-    an explicit Hugging Face URI by the URI and a local file by one
-    ``stat()`` (see ``dataset_materialization.dataset_source_identity``). If
-    any year file is missing or out of date, every year file is created again
-    from the source dataset, and each out-of-date file is logged with the
-    reason.
+    an explicit Hugging Face URI by the URI and a local file by its
+    file-system metadata (see
+    ``dataset_materialization.requested_dataset_source_identity``). If any
+    year file is missing or out of date, every year file is created again from
+    the source dataset, and each out-of-date file is logged with the reason.
+    Two requested datasets that are different sources with one stem are
+    refused with ``ValueError``, since they would overwrite each other's year
+    files.
 
     Args:
         datasets: List of HuggingFace dataset paths
@@ -1310,8 +1367,7 @@ def ensure_datasets(
     # from another source, with other package versions or under another
     # register of renamed stored inputs is created again rather than reused.
     all_current = True
-    for dataset in datasets:
-        dataset_stem, source = _year_file_source(dataset)
+    for dataset_stem, source in _year_file_sources(datasets):
         for year in years:
             filepath = Path(f"{data_folder}/{dataset_stem}_year_{year}.h5")
             if not filepath.exists():

@@ -83,14 +83,17 @@ RENAMES_H5_DATASET = "policyengine_legacy_input_renames"
 #: H5 dataset stamping a ``create_datasets`` year file, as UTF-8 JSON (see
 #: :func:`year_file_stamp`)::
 #:
-#:     {"packages": {"policyengine-core": str, "policyengine-us": str},
+#:     {"packages": {"policyengine-core": str | null,
+#:                   "policyengine-us": str | null},
 #:      "register": {legacy: live, ...},
 #:      "revision": int,
 #:      "source": {...}}
 #:
-#: It holds the versions of the packages that calculated the file's values,
-#: the whole register the file was cut under, its year-file format revision
-#: and the identity of the dataset it was cut from. ``create_datasets`` writes
+#: It holds the versions of the packages that calculated the file's values
+#: (``null`` for one that was not installed, see
+#: :func:`installed_package_versions`), the whole register the file was cut
+#: under, its year-file format revision and the identity of the dataset it was
+#: cut from. ``create_datasets`` writes
 #: it after the tables and the renames record, so a year file whose write
 #: stopped part-way has none. ``ensure_datasets`` cuts a year file again, and
 #: ``load_datasets`` refuses it, unless its stamp equals the one a file cut
@@ -393,6 +396,8 @@ def _read_json_dataset(file: Any, name: str) -> Any:
     import h5py
 
     try:
+        # A cycle of soft links, or a chain too long to follow, raises
+        # RuntimeError here.
         node = file.get(name)
         if node is None:
             return _ABSENT
@@ -400,11 +405,11 @@ def _read_json_dataset(file: Any, name: str) -> Any:
             return _UNREADABLE
         # A numeric dataset raises TypeError; bytes that are not UTF-8, or
         # not JSON, raise ValueError; JSON nested too deeply raises
-        # RecursionError.
+        # RecursionError, a RuntimeError.
         return json.loads(node.asstr()[()])
     except (PermissionError, IsADirectoryError, BlockingIOError):
         raise
-    except (KeyError, OSError, RecursionError, TypeError, ValueError):
+    except (KeyError, OSError, RuntimeError, TypeError, ValueError):
         return _UNREADABLE
 
 

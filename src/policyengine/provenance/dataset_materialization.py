@@ -268,17 +268,21 @@ def dataset_source_identity(source: DatasetSource) -> dict[str, Any]:
 
     - a bundle dataset: ``{"uri": ..., "sha256": ...}``, the
       ``hf://repo/path@revision`` URI the bundle manifest pins and the sha256
-      that the materialized file was verified against;
-    - an explicit Hugging Face URI (``allow_unmanaged=True``): ``{"uri": ...}``,
-      the URI as given. Nothing verified its contents, so a URI that does not
-      pin a revision, or pins a branch, names whatever the branch holds;
+      that the materialized file was verified against. This includes a
+      request of the certified default dataset's own URI, which selects the
+      bundle dataset;
+    - any other explicit Hugging Face URI (``allow_unmanaged=True``):
+      ``{"uri": ...}``, the URI as given. Nothing verified its contents, so a
+      URI that does not pin a revision, or pins a branch, names whatever the
+      branch holds;
     - a local file (``allow_unmanaged=True``): ``{"path": ..., "size": ...,
-      "mtime_ns": ...}``, its resolved path, size in bytes and modification
-      time in nanoseconds, read with one ``stat()``.
+      "mtime_ns": ...}``, its resolved path, and its size in bytes and
+      modification time in nanoseconds from one ``stat()``.
 
-    None of them reads the source's contents. See
+    Computing it reads no source contents. See
     :func:`requested_dataset_source_identity` for the identity a request
-    gives without materializing it.
+    gives without materializing it, and :func:`dataset_source_change` to check
+    a materialized source again.
     """
     if source.bundle_dataset is not None:
         return {
@@ -299,10 +303,11 @@ def requested_dataset_source_identity(
     This is what :func:`dataset_source_identity` gives for
     ``materialize_dataset(country_id, dataset, allow_unmanaged=True)``,
     computed without downloading anything or reading the source's contents:
-    the bundle manifest entry for a bundle dataset, the URI for an explicit
-    Hugging Face URI, and one ``stat()`` for a local file. A name that is
-    neither a bundle dataset nor a local file is looked up in the data
-    release manifest, as ``materialize_dataset`` does.
+    the bundle manifest entry for a bundle dataset (or the certified default's
+    own URI), the URI for any other explicit Hugging Face URI, and file-system
+    metadata for a local file. A name that is neither a bundle dataset nor a
+    local file is looked up in the data release manifest, as
+    ``materialize_dataset`` does.
 
     It does not enforce bundle selection: an unmanaged request gives its
     identity whether or not ``allow_unmanaged`` would be set.
@@ -319,6 +324,47 @@ def requested_dataset_source_identity(
     if "://" in source_uri:
         return {"uri": source_uri}
     return _local_file_identity(source_uri)
+
+
+def dataset_source_change(
+    source: DatasetSource, identity: dict[str, Any]
+) -> Optional[str]:
+    """Return how a materialized source differs from its identity, or ``None``.
+
+    ``identity`` is what :func:`dataset_source_identity` gave for ``source``
+    earlier. Another process can replace a file in a shared data folder in
+    the meantime, for example by materializing another release of the same
+    bundle dataset there. A bundle dataset's file is hashed again and compared
+    with its verified sha256, and a local file's size and modification time
+    are read again. An explicit URI's identity records nothing about the
+    file, so it is never reported as changed.
+
+    Returns:
+        ``None`` when the source still matches; otherwise a clause saying
+        what changed.
+    """
+    if "sha256" in identity:
+        try:
+            sha256 = sha256_file(source.path)
+        except FileNotFoundError:
+            return f"{source.path} no longer exists"
+        if sha256 != identity["sha256"]:
+            return (
+                f"{source.path} now has sha256 {sha256}, not the verified "
+                f"{identity['sha256']}"
+            )
+        return None
+    if "path" in identity:
+        try:
+            now = _local_file_identity(source.path)
+        except FileNotFoundError:
+            return f"{identity['path']} no longer exists"
+        if now != identity:
+            return (
+                f"{describe_dataset_source_identity(identity)} is now "
+                f"{describe_dataset_source_identity(now)}"
+            )
+    return None
 
 
 def _local_file_identity(path: str | Path) -> dict[str, Any]:
@@ -353,9 +399,10 @@ def describe_dataset_source_identity(identity: dict[str, Any]) -> str:
     """Describe a well-formed source identity in words (see
     :func:`is_dataset_source_identity`)."""
     if "uri" in identity:
+        uri: str = identity["uri"]
         if "sha256" in identity:
-            return f"{identity['uri']} (sha256 {identity['sha256']})"
-        return identity["uri"]
+            return f"{uri} (sha256 {identity['sha256']})"
+        return uri
     return (
         f"{identity['path']} ({identity['size']} bytes, modified "
         f"{_describe_mtime_ns(identity['mtime_ns'])})"

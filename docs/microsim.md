@@ -436,11 +436,14 @@ everything else, it stamps each file with what the file was cut from and under
 - `source`: the identity of the dataset it was cut from
   (`dataset_materialization.dataset_source_identity`), in one of three shapes:
   - a bundle dataset: `{"uri", "sha256"}`, the `hf://…@revision` URI the
-    bundle pins and the sha256 the local copy was verified against;
-  - an explicit Hugging Face URI (`allow_unmanaged=True`): `{"uri"}`, the URI
-    as given;
+    bundle pins and the sha256 the local copy was verified against. A
+    request of the certified default dataset's own URI selects the bundle
+    dataset too;
+  - any other explicit Hugging Face URI (`allow_unmanaged=True`): `{"uri"}`,
+    the URI as given;
   - a local file (`allow_unmanaged=True`): `{"path", "size", "mtime_ns"}`,
-    its resolved path, size in bytes and modification time.
+    its resolved path, and its size in bytes and modification time from one
+    `stat()`.
 
 `ensure_datasets` reuses a year file only when its stamp equals the one a file
 cut now from the requested dataset would carry, and its renames record lists
@@ -455,9 +458,24 @@ reason, or `None` for a current year file; `source` is
 Deciding stays cheap. Both functions read only each year file's stamp and
 record, never its tables. They identify the requested source without
 downloading or reading it: a bundle dataset by its bundle manifest entry, an
-explicit URI by the URI, and a local file by one `stat()`. Package versions
-come from the installed distributions' metadata, so policyengine-us is not
-imported.
+explicit URI by the URI, and a local file by its file-system metadata.
+Package versions come from the installed distributions' metadata, so
+policyengine-us is not imported.
+
+`create_datasets` identifies the source before loading it, and checks it
+again once the year files are written. A bundle dataset's file is hashed
+again; a local file's size and modification time are read again
+(`dataset_materialization.dataset_source_change`). Another process can
+replace a file in a shared data folder, for example by materializing another
+release of the same dataset there. If the source changed, the year files are
+left unstamped, so they are cut again, and `DatasetMaterializationError` is
+raised.
+
+Requested datasets that are different sources with one name, such as two
+revisions of one Hugging Face file or two local files called `pop.h5`, would
+write the same year files. `ensure_datasets`, `load_datasets` and
+`create_datasets` refuse them with `ValueError`; request them in separate
+calls with separate data folders.
 
 A year file is out of date when:
 
@@ -496,7 +514,10 @@ The source check has limits that follow from not reading the source:
   (`hf://owner/repo/file.h5@<commit>`): a URI without a revision, or with a
   branch, names whatever the branch holds when the files are cut;
 - an editable or source install of policyengine-us keeps its version string
-  while its code changes, so its year files are not cut again.
+  while its code changes, so its year files are not cut again;
+- `create_datasets` takes no lock, so two processes cutting the same year
+  files at once write them at the same time. Cut year files in one process
+  at a time per data folder.
 
 `ensure_datasets` raises, rather than cutting the files again, when a year
 file cannot be opened for reasons unrelated to its contents: no permission, a

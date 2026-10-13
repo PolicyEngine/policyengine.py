@@ -22,6 +22,9 @@ safe, over a fixture bundle manifest whose datasets are tiny local files:
   of a ``stat()`` check, the quick check ``rsync`` makes by default.
 - **Shapes.** Every identity produced has a shape
   ``is_dataset_source_identity`` accepts, and describing one never raises.
+- **Checking again.** ``dataset_source_change`` reports a bundle dataset's
+  file whose bytes no longer match its verified sha256, and a local file
+  whose size or modification time moved, and nothing else.
 """
 
 from __future__ import annotations
@@ -41,6 +44,7 @@ from hypothesis import strategies as st
 import policyengine.provenance.dataset_materialization as dataset_materialization
 import policyengine.provenance.manifest as manifest_module
 from policyengine.provenance.dataset_materialization import (
+    dataset_source_change,
     dataset_source_identity,
     describe_dataset_source_identity,
     is_dataset_source_identity,
@@ -531,3 +535,85 @@ def test_describing_an_identity_is_total(identity):
 )
 def test_an_identity_is_described_in_words(identity, described):
     assert describe_dataset_source_identity(identity) == described
+
+
+# --- Checking a materialized source again --------------------------------
+
+
+def test_an_unchanged_bundle_source_has_not_changed(bundle):
+    _, data_dir = bundle
+    source = materialize_dataset("us", "tiny_default", data_dir=data_dir)
+
+    assert dataset_source_change(source, dataset_source_identity(source)) is None
+
+
+def test_a_bundle_file_replaced_after_verification_has_changed(bundle):
+    """Another process materializing another release into the same folder."""
+    _, data_dir = bundle
+    source = materialize_dataset("us", "tiny_default", data_dir=data_dir)
+    identity = dataset_source_identity(source)
+
+    Path(source.path).write_bytes(b"another release")
+    assert dataset_source_change(source, identity) == (
+        f"{source.path} now has sha256 {_sha256(b'another release')}, not the "
+        f"verified {_sha256(DEFAULT_BYTES)}"
+    )
+    Path(source.path).unlink()
+    assert dataset_source_change(source, identity) == (
+        f"{source.path} no longer exists"
+    )
+
+
+def test_a_local_file_rewritten_after_identification_has_changed(tmp_path):
+    path = _local_file(tmp_path)
+    os.utime(path, ns=(SECOND, SECOND))
+    source = materialize_dataset("us", str(path), allow_unmanaged=True)
+    identity = dataset_source_identity(source)
+    assert dataset_source_change(source, identity) is None
+
+    os.utime(path, ns=(2 * SECOND, 2 * SECOND))
+    now = requested_dataset_source_identity("us", str(path))
+    assert dataset_source_change(source, identity) == (
+        f"{describe_dataset_source_identity(identity)} is now "
+        f"{describe_dataset_source_identity(now)}"
+    )
+    path.unlink()
+    assert dataset_source_change(source, identity) == (
+        f"{identity['path']} no longer exists"
+    )
+
+
+def test_an_explicit_uri_source_is_never_reported_as_changed(bundle):
+    """Its identity records nothing about the file to compare."""
+    _, data_dir = bundle
+    get, _ = _serve(EXPLICIT_BYTES)
+    with patch.object(dataset_materialization.requests, "get", get):
+        source = materialize_dataset(
+            "us",
+            "hf://fixture/explicit/explicit.h5@pinned",
+            allow_unmanaged=True,
+            data_dir=data_dir,
+        )
+    identity = dataset_source_identity(source)
+    Path(source.path).write_bytes(b"changed")
+
+    assert dataset_source_change(source, identity) is None
+
+
+@settings(max_examples=100, deadline=None)
+@given(first=CONTENTS, second=CONTENTS, first_mtime=MTIMES, second_mtime=MTIMES)
+def test_a_local_source_has_changed_exactly_when_its_identity_has(
+    tmp_path_factory, first, second, first_mtime, second_mtime
+):
+    path = tmp_path_factory.mktemp("local") / "tiny_local.h5"
+    path.write_bytes(first)
+    os.utime(path, ns=(first_mtime, first_mtime))
+    source = materialize_dataset("us", str(path), allow_unmanaged=True)
+    identity = dataset_source_identity(source)
+
+    path.write_bytes(second)
+    os.utime(path, ns=(second_mtime, second_mtime))
+
+    assert (dataset_source_change(source, identity) is None) == (
+        requested_dataset_source_identity("us", str(path)) == identity
+    )
