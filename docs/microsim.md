@@ -409,17 +409,55 @@ under.
 
 ### Year files
 
-`create_datasets` stamps each year file, after writing everything else, with
-the register it was cut under and a year-file format revision
-(`legacy_inputs.YEAR_FILE_STAMP_H5_DATASET`, UTF-8 JSON
-`{"register": {old: new, ...}, "revision": 1}`). `ensure_datasets` reuses a
-year file only when its stamp equals this release's exactly and its renames
-record lists only renames in the stamped register. Otherwise it logs why and
-creates the year files again; `load_datasets` refuses the file with the same
-reason, which names the renames the file may lack when its register is the
-cause. To decide, both read only the stamp and the record, never the tables
-or the source dataset. `legacy_inputs.year_file_stamp_problem(path)` returns
-the reason, or `None` for a current year file.
+`create_datasets` names each US year file after its dataset's logical name,
+`{data_folder}/{name}_year_{year}.h5`, which drops the revision. Files cut
+from every release of a dataset therefore share names. After writing
+everything else, it stamps each file with what the file was cut from and under
+(`legacy_inputs.YEAR_FILE_STAMP_H5_DATASET`, UTF-8 JSON):
+
+```json
+{
+  "packages": {"policyengine-core": "3.33.0", "policyengine-us": "2.2.1"},
+  "register": {"would_claim_wic": "takes_up_wic_if_eligible"},
+  "revision": 2,
+  "source": {
+    "sha256": "6496cc4393d4d3c6574f76eca231de5898c803b9067645591fd5c4d3e65aee84",
+    "uri": "hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-spm-20260915"
+  }
+}
+```
+
+- `packages`: the installed policyengine-core and policyengine-us versions.
+  The file stores each input as policyengine-us calculates it for that year,
+  and policyengine-core uprates an input from its stored year by a
+  policyengine-us parameter, so either version can change the file's values;
+- `register`: the whole `LEGACY_INPUT_RENAMES` it was cut under;
+- `revision`: the year-file format revision;
+- `source`: the identity of the dataset it was cut from
+  (`dataset_materialization.dataset_source_identity`), in one of three shapes:
+  - a bundle dataset: `{"uri", "sha256"}`, the `hf://…@revision` URI the
+    bundle pins and the sha256 the local copy was verified against;
+  - an explicit Hugging Face URI (`allow_unmanaged=True`): `{"uri"}`, the URI
+    as given;
+  - a local file (`allow_unmanaged=True`): `{"path", "size", "mtime_ns"}`,
+    its resolved path, size in bytes and modification time.
+
+`ensure_datasets` reuses a year file only when its stamp equals the one a file
+cut now from the requested dataset would carry, and its renames record lists
+only renames in the stamped register. Otherwise it logs why and creates the
+year files again. `load_datasets` refuses the file with the same reason, which
+names the renames the file may lack, the source it was cut from and the
+source requested, or the package versions it was cut with and those
+installed. `legacy_inputs.year_file_stamp_problem(path, source)` returns the
+reason, or `None` for a current year file; `source` is
+`dataset_materialization.requested_dataset_source_identity("us", dataset)`.
+
+Deciding stays cheap. Both functions read only each year file's stamp and
+record, never its tables. They identify the requested source without
+downloading or reading it: a bundle dataset by its bundle manifest entry, an
+explicit URI by the URI, and a local file by one `stat()`. Package versions
+come from the installed distributions' metadata, so policyengine-us is not
+imported.
 
 A year file is out of date when:
 
@@ -434,16 +472,37 @@ A year file is out of date when:
 - its register has an entry this release lacks, or maps an old name to
   another new name. It may store a new name this release's engine does not
   define, and a run skips any column the engine does not define;
+- it was cut from another source. The bundle may have re-pinned the dataset
+  to another revision or sha256. The replacement of
+  `populace_us_2024_acs_local` (PolicyEngine/microcosm#1154) is one such
+  re-pin. A local file may have been rewritten, or another file with the
+  same name may have been requested;
+- it was cut with another policyengine-core or policyengine-us version;
 - it has another format revision, or its stamp or record cannot be read.
 
-So any change to `LEGACY_INPUT_RENAMES` makes every year file out of date,
-and two policyengine.py versions with different registers that share a data
-folder cut each other's year files again. `ensure_datasets` raises, rather
-than cutting the files again, when a year file cannot be opened for reasons
-unrelated to its contents: no permission, a directory at its path, or a lock
-held by another process. A year file opened directly, as
-`PolicyEngineUSDataset(filepath=...)`, is not checked, and saving it again with
-`save()` drops its stamp.
+So any change to `LEGACY_INPUT_RENAMES`, a re-pinned dataset or a new package
+version makes the affected year files out of date. Two environments with
+different registers or package versions that share a data folder cut each
+other's year files again.
+
+The source check has limits that follow from not reading the source:
+
+- a local file is compared by path, size and modification time, the quick
+  check `rsync` makes by default. Touching or copying the file cuts the
+  year files again. A rewrite that keeps the size and the modification time
+  (restored with `touch -r`, or landing within the file system's timestamp
+  resolution) is not detected;
+- an explicit Hugging Face URI is compared as a string. Pin it to a commit
+  (`hf://owner/repo/file.h5@<commit>`): a URI without a revision, or with a
+  branch, names whatever the branch holds when the files are cut;
+- an editable or source install of policyengine-us keeps its version string
+  while its code changes, so its year files are not cut again.
+
+`ensure_datasets` raises, rather than cutting the files again, when a year
+file cannot be opened for reasons unrelated to its contents: no permission, a
+directory at its path, or a lock held by another process. A year file opened
+directly, as `PolicyEngineUSDataset(filepath=...)`, is not checked, and saving
+it again with `save()` drops its stamp.
 
 ## Pinned model versions
 

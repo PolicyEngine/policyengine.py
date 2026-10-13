@@ -1,38 +1,47 @@
 """Unit and property tests for the stamp on US year files.
 
-``create_datasets`` stamps each year file with the register of renamed stored
-inputs it was cut under and a year-file format revision
-(``legacy_inputs.YEAR_FILE_STAMP_H5_DATASET``). ``ensure_datasets`` cuts a
-year file again, and ``load_datasets`` refuses it, unless the stamp matches
-this release's. These tests state the check's invariants over generated
-stamps, records and registers, without a country engine:
+``create_datasets`` stamps each year file with the identity of the source
+dataset it was cut from, the policyengine-core and policyengine-us versions
+that calculated it, the register of renamed stored inputs it was cut under
+and a year-file format revision (``legacy_inputs.YEAR_FILE_STAMP_H5_DATASET``).
+``ensure_datasets`` cuts a year file again, and ``load_datasets`` refuses it,
+unless the stamp matches the one a file cut now from the requested dataset
+would carry. These tests state the check's invariants over generated stamps,
+records, registers, sources and package versions, without a country engine:
 
 - **Exactness.** A year file is current exactly when its stamp has this
-  release's format revision and register, and its renames record lists only
-  renames in that register.
+  release's format revision and register, the requested source and the
+  installed package versions, and its renames record lists only renames in
+  that register.
 - **Totality.** Whatever the stamp and record hold, the check returns a
   reason or ``None``, and raises only for errors unrelated to the file's
   contents (no permission, a directory, a lock).
 - **Round trip.** A stamp reads back as written, and writing again replaces it.
-- **Named renames.** The reason names every rename the file's register and
-  this release's disagree on, from the register alone.
+- **Named differences.** The reason names every rename the file's register
+  and this release's disagree on, both sources when they differ, and every
+  package whose version differs, and nothing that agrees.
 - **No partial file is current.** Every truncation of a current year file,
   every save that stops part-way and every save that does not stamp is out
   of date.
 - **Ensure agrees with load.** ``ensure_datasets`` cuts the year files again
   exactly when one is missing or ``load_datasets`` would refuse one, and
-  decides from the stamps alone.
+  decides from the stamps alone: it never reads, downloads or hashes the
+  source, and never imports policyengine-us.
 
-``test_us_legacy_inputs_integration.py`` runs ``create_datasets`` and
+``test_dataset_source_identity.py`` tests the source identities themselves,
+and ``test_us_legacy_inputs_integration.py`` runs ``create_datasets`` and
 ``ensure_datasets`` over a real policyengine-us engine.
 """
 
 from __future__ import annotations
 
+import builtins
 import functools
+import io
 import json
 import os
 import tempfile
+from importlib import metadata as importlib_metadata
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -44,6 +53,11 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from microdf import MicroDataFrame
 
+import policyengine.provenance.dataset_materialization as dataset_materialization
+from policyengine.provenance.dataset_materialization import (
+    describe_dataset_source_identity,
+    requested_dataset_source_identity,
+)
 from policyengine.tax_benefit_models.us import datasets as us_datasets
 from policyengine.tax_benefit_models.us import legacy_inputs
 from policyengine.tax_benefit_models.us.datasets import (
@@ -56,6 +70,7 @@ from policyengine.tax_benefit_models.us.datasets import (
 from policyengine.tax_benefit_models.us.legacy_inputs import (
     LEGACY_INPUT_RENAMES,
     RENAMES_H5_DATASET,
+    YEAR_FILE_PACKAGES,
     YEAR_FILE_STAMP_H5_DATASET,
     YEAR_FILE_STAMP_REVISION,
     read_renames_record,
@@ -70,15 +85,48 @@ LEGACY = "would_claim_wic"
 LIVE = "takes_up_wic_if_eligible"
 REVISION = YEAR_FILE_STAMP_REVISION
 #: ``hf://`` references are used as they are, and name year files after the
-#: file's stem, so no manifest or download is involved.
+#: file's stem, so no manifest or download is involved. Its identity is the
+#: URI as given.
 SOURCE = "hf://fixture/tiny.h5"
+IDENTITY = {"uri": SOURCE}
 STEM = "tiny"
 GROUPS = ("household", "tax_unit", "spm_unit", "family", "marital_unit")
+#: The installed versions every test in this module sees (see
+#: ``_installed_packages``), so no expectation depends on the environment.
+PACKAGES = {"policyengine-core": "3.33.0", "policyengine-us": "2.2.1"}
+#: The real reader, kept before ``_installed_packages`` replaces it.
+REAL_INSTALLED_PACKAGE_VERSIONS = legacy_inputs.installed_package_versions
+MALFORMED = "its stamp of what it was cut from and under is malformed"
 
 #: A small alphabet, so generated registers often share names and disagree
 #: only on some entries.
 NAMES = st.sampled_from(["alpha", "beta", "gamma", "delta"])
 REGISTERS = st.dictionaries(NAMES, NAMES, max_size=3)
+#: Small alphabets of source identities in each of their three shapes (see
+#: ``dataset_source_identity``), so generated sources often agree.
+URIS = st.sampled_from([SOURCE, f"{SOURCE}@r1", f"{SOURCE}@r2"])
+SOURCES = st.one_of(
+    st.builds(lambda uri: {"uri": uri}, URIS),
+    st.builds(
+        lambda uri, sha256: {"uri": uri, "sha256": sha256},
+        URIS,
+        st.sampled_from(["a" * 64, "b" * 64]),
+    ),
+    st.builds(
+        lambda path, size, mtime_ns: {
+            "path": path,
+            "size": size,
+            "mtime_ns": mtime_ns,
+        },
+        st.sampled_from(["/data/tiny.h5", "/elsewhere/tiny.h5"]),
+        st.sampled_from([10, 11]),
+        # Before the epoch, at it, and past the year 9999.
+        st.sampled_from([-1, 0, 1_760_000_000_123_456_789, 10**20]),
+    ),
+)
+PACKAGE_NAMES = st.sampled_from([*YEAR_FILE_PACKAGES, "extra-package"])
+VERSIONS = st.one_of(st.none(), st.sampled_from(["1.0", "1.1"]))
+PACKAGE_MAPS = st.dictionaries(PACKAGE_NAMES, VERSIONS, max_size=3)
 #: Raw node contents: ``_ABSENT`` for no node, a JSON value, or a node the
 #: reader cannot parse as JSON.
 _ABSENT = object()
@@ -90,6 +138,19 @@ JSON_VALUES = st.recursive(
     ),
     max_leaves=6,
 )
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _installed_packages():
+    """Pin the installed package versions a stamp records to ``PACKAGES``.
+
+    Module-scoped, so Hypothesis tests can run under it.
+    """
+    with pytest.MonkeyPatch.context() as patcher:
+        patcher.setattr(
+            legacy_inputs, "installed_package_versions", lambda: dict(PACKAGES)
+        )
+        yield
 
 
 def _frames() -> dict[str, pd.DataFrame]:
@@ -160,7 +221,12 @@ def _write_year_file(path, *, stamp=_ABSENT, record=_ABSENT):
     return Path(path)
 
 
-def _is_current(stamp, record, register) -> bool:
+def _same_json(left, right) -> bool:
+    """Equal as JSON: ``True`` is not ``1``, and ``1.0`` is not ``1``."""
+    return json.dumps(left, sort_keys=True) == json.dumps(right, sort_keys=True)
+
+
+def _is_current(stamp, record, register, source=IDENTITY, packages=PACKAGES) -> bool:
     """The exactness invariant, stated directly on the stored JSON values."""
 
     def str_map(value):
@@ -171,54 +237,109 @@ def _is_current(stamp, record, register) -> bool:
 
     return (
         isinstance(stamp, dict)
-        and set(stamp) == {"register", "revision"}
+        and set(stamp) == {"packages", "register", "revision", "source"}
         and type(stamp["revision"]) is int
         and stamp["revision"] == REVISION
         and str_map(stamp["register"])
         and stamp["register"] == register
+        and _same_json(stamp["source"], source)
+        and _same_json(stamp["packages"], packages)
         and str_map(record)
         and record.items() <= stamp["register"].items()
     )
 
 
-def _stamp(register, revision=REVISION):
-    return {"register": dict(register), "revision": revision}
+def _stamp(register, revision=REVISION, source=IDENTITY, packages=PACKAGES):
+    return {
+        "packages": dict(packages),
+        "register": dict(register),
+        "revision": revision,
+        "source": dict(source),
+    }
+
+
+def _current():
+    return year_file_stamp(IDENTITY)
 
 
 # --- The stamp ----------------------------------------------------------
 
 
-def test_the_stamp_holds_the_whole_register_and_the_format_revision():
-    assert year_file_stamp() == {
+def test_the_stamp_holds_the_source_packages_register_and_revision():
+    assert _current() == {
+        "packages": PACKAGES,
         "register": {LEGACY: LIVE},
-        "revision": 1,
+        "revision": 2,
+        "source": IDENTITY,
     }
-    assert year_file_stamp()["register"] == LEGACY_INPUT_RENAMES
+    assert _current()["register"] == LEGACY_INPUT_RENAMES
 
 
-def test_the_stamp_reads_the_register_when_called(monkeypatch):
-    """datasets.py must not freeze the register at import."""
+def test_the_stamp_reads_the_register_and_packages_when_called(monkeypatch):
+    """datasets.py must not freeze the register or the versions at import."""
     monkeypatch.setattr(legacy_inputs, "LEGACY_INPUT_RENAMES", {"b": "c", "a": "d"})
+    monkeypatch.setattr(
+        legacy_inputs, "installed_package_versions", lambda: {"z": None, "y": "1"}
+    )
 
-    assert year_file_stamp() == {"register": {"a": "d", "b": "c"}, "revision": 1}
+    assert year_file_stamp(IDENTITY) == {
+        "packages": {"y": "1", "z": None},
+        "register": {"a": "d", "b": "c"},
+        "revision": 2,
+        "source": IDENTITY,
+    }
+
+
+def test_explicit_packages_override_the_installed_ones():
+    assert year_file_stamp(IDENTITY, {"policyengine-us": "9"})["packages"] == {
+        "policyengine-us": "9"
+    }
 
 
 def test_the_stamp_is_stored_as_utf8_json(tmp_path):
     path = _write_year_file(tmp_path / "year.h5")
 
-    write_year_file_stamp(path, year_file_stamp())
+    write_year_file_stamp(path, _current())
 
     with h5py.File(path, "r") as file:
         assert file[YEAR_FILE_STAMP_H5_DATASET].asstr()[()] == (
-            f'{{"register": {{"{LEGACY}": "{LIVE}"}}, "revision": 1}}'
+            '{"packages": {"policyengine-core": "3.33.0", "policyengine-us": '
+            f'"2.2.1"}}, "register": {{"{LEGACY}": "{LIVE}"}}, "revision": 2, '
+            f'"source": {{"uri": "{SOURCE}"}}}}'
         )
 
 
-@settings(max_examples=50, deadline=None)
-@given(
-    first=st.fixed_dictionaries({"register": REGISTERS, "revision": st.integers()}),
-    second=st.fixed_dictionaries({"register": REGISTERS, "revision": st.integers()}),
+def test_installed_package_versions_reads_metadata(monkeypatch):
+    """The real reader: distribution metadata, ``None`` when absent."""
+    monkeypatch.setattr(
+        legacy_inputs,
+        "YEAR_FILE_PACKAGES",
+        ("pytest", "hypothesis", "not-a-distribution-policyengine-test"),
+    )
+
+    assert REAL_INSTALLED_PACKAGE_VERSIONS() == {
+        "pytest": importlib_metadata.version("pytest"),
+        "hypothesis": importlib_metadata.version("hypothesis"),
+        "not-a-distribution-policyengine-test": None,
+    }
+
+
+def test_the_stamp_records_policyengine_core_and_policyengine_us():
+    assert YEAR_FILE_PACKAGES == ("policyengine-core", "policyengine-us")
+
+
+STAMPS = st.fixed_dictionaries(
+    {
+        "packages": PACKAGE_MAPS,
+        "register": REGISTERS,
+        "revision": st.integers(),
+        "source": SOURCES,
+    }
 )
+
+
+@settings(max_examples=50, deadline=None)
+@given(first=STAMPS, second=STAMPS)
 def test_a_year_file_stamp_reads_back_as_written(first, second):
     """Round trip: a stamp reads back exactly, a new one replaces it, and
     the tables and record are left alone."""
@@ -244,7 +365,7 @@ def test_a_missing_or_foreign_file_has_no_stamp(tmp_path):
 
 
 def test_the_stamp_does_not_disturb_pandas_or_the_layout_check(tmp_path):
-    path = _write_year_file(tmp_path / "year.h5", stamp=year_file_stamp(), record={})
+    path = _write_year_file(tmp_path / "year.h5", stamp=_current(), record={})
 
     with pd.HDFStore(path, mode="r") as store:
         assert sorted(store.keys()) == sorted(f"/{key}" for key in _frames())
@@ -261,8 +382,11 @@ def test_the_stamp_does_not_disturb_pandas_or_the_layout_check(tmp_path):
 
 @st.composite
 def stamped_files(draw):
-    """A current register, and a year file's stamp and record near it."""
+    """A current register, source and packages, and a year file's stamp and
+    record near them."""
     register = draw(REGISTERS)
+    source = draw(SOURCES)
+    packages = draw(PACKAGE_MAPS)
     stamped = draw(
         st.one_of(
             st.just(dict(register)),
@@ -275,7 +399,20 @@ def stamped_files(draw):
             st.builds(lambda k, v: {**register, k: v}, NAMES, NAMES),
         )
     )
-    revision = draw(st.sampled_from([REVISION, REVISION, 0, 2, -1, 99]))
+    stamped_source = draw(st.one_of(st.just(dict(source)), SOURCES))
+    stamped_packages = draw(
+        st.one_of(
+            st.just(dict(packages)),
+            PACKAGE_MAPS,
+            # One version changed, dropped or added.
+            st.builds(lambda k, v: {**packages, k: v}, PACKAGE_NAMES, VERSIONS),
+            st.builds(
+                lambda name: {k: v for k, v in packages.items() if k != name},
+                PACKAGE_NAMES,
+            ),
+        )
+    )
+    revision = draw(st.sampled_from([REVISION, REVISION, 0, 1, 3, -1, 99]))
     record = draw(
         st.one_of(
             st.just(_ABSENT),
@@ -287,24 +424,27 @@ def stamped_files(draw):
             REGISTERS,
         )
     )
-    return register, _stamp(stamped, revision), record
+    stamp = _stamp(stamped, revision, stamped_source, stamped_packages)
+    return register, source, packages, stamp, record
 
 
-@settings(max_examples=300, deadline=None)
+@settings(max_examples=400, deadline=None)
 @given(case=stamped_files())
-def test_a_year_file_is_current_only_under_this_releases_exact_stamp(case):
+def test_a_year_file_is_current_only_under_the_exact_stamp_requested(case):
     """Exactness, and refinement of the record check a year file had before.
 
     A subset rule would accept a file cut by a newer release under a larger
     register, which stores live names this release's engine may not define.
     """
-    register, stamp, record = case
+    register, source, packages, stamp, record = case
     with tempfile.TemporaryDirectory() as directory:
         path = _write_year_file(Path(directory) / "year.h5", stamp=stamp, record=record)
         with patch.object(legacy_inputs, "LEGACY_INPUT_RENAMES", register):
-            problem = year_file_stamp_problem(path)
+            problem = year_file_stamp_problem(path, source, packages)
 
-        assert (problem is None) == _is_current(stamp, record, register)
+        assert (problem is None) == _is_current(
+            stamp, record, register, source, packages
+        )
         assert problem is None or (isinstance(problem, str) and problem)
         if problem is None:
             # Every file the stamp accepts, the record check accepted too.
@@ -323,9 +463,19 @@ NODES = st.one_of(
     JSON_VALUES,
     st.fixed_dictionaries(
         {
+            "packages": st.one_of(PACKAGE_MAPS, JSON_VALUES),
             "register": st.one_of(REGISTERS, JSON_VALUES),
             "revision": st.one_of(
                 st.just(REVISION), st.booleans(), st.floats(), JSON_VALUES
+            ),
+            "source": st.one_of(
+                SOURCES,
+                JSON_VALUES,
+                # Well-formed keys holding values of the wrong type.
+                st.fixed_dictionaries(
+                    {"path": JSON_VALUES, "size": JSON_VALUES, "mtime_ns": JSON_VALUES}
+                ),
+                st.fixed_dictionaries({"uri": JSON_VALUES, "sha256": JSON_VALUES}),
             ),
         }
     ),
@@ -337,38 +487,62 @@ NODES = st.one_of(
 )
 
 
-@settings(max_examples=300, deadline=None)
-@given(stamp=NODES, record=NODES, register=REGISTERS)
+@settings(max_examples=400, deadline=None)
+@given(
+    stamp=NODES,
+    record=NODES,
+    register=REGISTERS,
+    source=SOURCES,
+    packages=PACKAGE_MAPS,
+)
 def test_the_year_file_problem_is_total_and_exact_for_any_content(
-    stamp, record, register
+    stamp, record, register, source, packages
 ):
     """Totality: any stamp and record give a reason or ``None``, never an
-    error, and ``None`` only for this release's exact stamp."""
+    error, and ``None`` only for the exact stamp requested."""
     with tempfile.TemporaryDirectory() as directory:
         path = _write_year_file(Path(directory) / "year.h5", stamp=stamp, record=record)
         with patch.object(legacy_inputs, "LEGACY_INPUT_RENAMES", register):
-            problem = year_file_stamp_problem(path)
+            problem = year_file_stamp_problem(path, source, packages)
 
     assert problem is None or (isinstance(problem, str) and problem)
     if problem is None:
-        assert _is_current(stamp, record, register)
+        assert _is_current(stamp, record, register, source, packages)
 
 
 @pytest.mark.parametrize(
     "stamp",
     [
-        {"register": {LEGACY: LIVE}, "revision": True},
-        {"register": {LEGACY: LIVE}, "revision": 1.0},
-        {"register": {LEGACY: LIVE}, "revision": "1"},
-        {"register": {LEGACY: LIVE}},
-        {"register": {LEGACY: LIVE}, "revision": 1, "extra": None},
-        {"register": {LEGACY: 5}, "revision": 1},
-        {"register": [[LEGACY, LIVE]], "revision": 1},
-        [{"register": {LEGACY: LIVE}, "revision": 1}],
+        {**_stamp({LEGACY: LIVE}), "revision": True},
+        {**_stamp({LEGACY: LIVE}), "revision": 2.0},
+        {**_stamp({LEGACY: LIVE}), "revision": "2"},
+        {"register": {LEGACY: LIVE}, "revision": 2},
+        {k: v for k, v in _stamp({LEGACY: LIVE}).items() if k != "source"},
+        {k: v for k, v in _stamp({LEGACY: LIVE}).items() if k != "packages"},
+        {**_stamp({LEGACY: LIVE}), "extra": None},
+        {**_stamp({LEGACY: LIVE}), "register": {LEGACY: 5}},
+        {**_stamp({LEGACY: LIVE}), "register": [[LEGACY, LIVE]]},
+        {**_stamp({LEGACY: LIVE}), "packages": {"policyengine-us": 2.2}},
+        {**_stamp({LEGACY: LIVE}), "packages": [["policyengine-us", "2.2.1"]]},
+        {**_stamp({LEGACY: LIVE}), "source": SOURCE},
+        {**_stamp({LEGACY: LIVE}), "source": {}},
+        {**_stamp({LEGACY: LIVE}), "source": {"uri": 5}},
+        {**_stamp({LEGACY: LIVE}), "source": {"uri": SOURCE, "sha256": None}},
+        {**_stamp({LEGACY: LIVE}), "source": {"uri": SOURCE, "revision": "r1"}},
+        {
+            **_stamp({LEGACY: LIVE}),
+            "source": {"path": "/a", "size": True, "mtime_ns": 1},
+        },
+        {
+            **_stamp({LEGACY: LIVE}),
+            "source": {"path": "/a", "size": 1, "mtime_ns": 1.0},
+        },
+        {**_stamp({LEGACY: LIVE}), "source": {"path": "/a", "size": 1}},
+        [_stamp({LEGACY: LIVE})],
         ("text", "not json"),
         ("text", ""),
         ("bytes", b"\xff\xfe"),
-        ("number", 1),
+        ("number", 2),
         ("array", ["{}"]),
         ("group", None),
     ],
@@ -376,21 +550,33 @@ def test_the_year_file_problem_is_total_and_exact_for_any_content(
 def test_a_malformed_stamp_is_out_of_date(tmp_path, stamp):
     path = _write_year_file(tmp_path / "year.h5", stamp=stamp, record={})
 
-    assert year_file_stamp_problem(path) == (
-        "its stamp of the register of renamed inputs it was cut under is malformed"
-    )
+    assert year_file_stamp_problem(path, IDENTITY) == MALFORMED
 
 
-@pytest.mark.parametrize("revision", [0, 2, -1])
+@pytest.mark.parametrize("revision", [0, 1, 3, -1])
 def test_a_year_file_from_another_format_revision_is_out_of_date(tmp_path, revision):
-    # A later revision may shape the rest of its stamp and record differently,
+    # Another revision may shape the rest of its stamp and record differently,
     # and is still reported by revision rather than as malformed.
     stamp = {"revision": revision, "registers": [[LEGACY, LIVE]]}
     path = _write_year_file(tmp_path / "year.h5", stamp=stamp)
 
-    assert year_file_stamp_problem(path) == (
+    assert year_file_stamp_problem(path, IDENTITY) == (
         f"it was cut with year-file format revision {revision}, and this "
-        "version of policyengine.py reads only revision 1"
+        "version of policyengine.py reads only revision 2"
+    )
+
+
+def test_a_year_file_stamped_by_revision_1_is_cut_again_once(tmp_path):
+    """The stamp #590 wrote holds no source or package versions."""
+    path = _write_year_file(
+        tmp_path / "year.h5",
+        stamp={"register": dict(LEGACY_INPUT_RENAMES), "revision": 1},
+        record={},
+    )
+
+    assert year_file_stamp_problem(path, IDENTITY) == (
+        "it was cut with year-file format revision 1, and this version of "
+        "policyengine.py reads only revision 2"
     )
 
 
@@ -399,12 +585,12 @@ def test_files_without_a_stamp_are_out_of_date_with_distinct_reasons(tmp_path):
     oldest = _write_year_file(tmp_path / "oldest.h5")
     record_only = _write_year_file(tmp_path / "record_only.h5", record={LEGACY: LIVE})
 
-    assert year_file_stamp_problem(oldest) == (
+    assert year_file_stamp_problem(oldest, IDENTITY) == (
         "it has no record of the renamed stored inputs mapped when it was cut, "
         "so it was cut by an older policyengine.py or not written completely, "
         f"and may have lost any of: {LEGACY} -> {LIVE}"
     )
-    assert year_file_stamp_problem(record_only) == (
+    assert year_file_stamp_problem(record_only, IDENTITY) == (
         "it has no stamp of the register of renamed inputs it was cut under, so "
         f"it may have lost any of: {LEGACY} -> {LIVE}"
     )
@@ -417,11 +603,11 @@ def test_an_unstamped_file_is_out_of_date_even_with_an_empty_register(
     oldest = _write_year_file(tmp_path / "oldest.h5")
     record_only = _write_year_file(tmp_path / "record_only.h5", record={})
 
-    assert year_file_stamp_problem(oldest) == (
+    assert year_file_stamp_problem(oldest, IDENTITY) == (
         "it has no record of the renamed stored inputs mapped when it was cut, "
         "so it was cut by an older policyengine.py or not written completely"
     )
-    assert year_file_stamp_problem(record_only) == (
+    assert year_file_stamp_problem(record_only, IDENTITY) == (
         "it has no stamp of the register of renamed inputs it was cut under"
     )
 
@@ -470,36 +656,34 @@ def test_an_unstamped_file_is_out_of_date_even_with_an_empty_register(
     ],
 )
 def test_a_stamped_file_needs_a_record_within_its_register(tmp_path, record, reason):
-    path = _write_year_file(
-        tmp_path / "year.h5", stamp=year_file_stamp(), record=record
-    )
+    path = _write_year_file(tmp_path / "year.h5", stamp=_current(), record=record)
 
-    assert year_file_stamp_problem(path) == reason
+    assert year_file_stamp_problem(path, IDENTITY) == reason
 
 
 def test_a_stamp_and_record_stored_as_fixed_length_strings_are_read(tmp_path):
-    stamp = json.dumps(year_file_stamp()).encode()
+    stamp = json.dumps(_current()).encode()
     record = json.dumps({LEGACY: LIVE}).encode()
     path = _write_year_file(
         tmp_path / "year.h5", stamp=("bytes", stamp), record=("bytes", record)
     )
 
-    assert year_file_stamp_problem(path) is None
-    assert read_year_file_stamp(path) == year_file_stamp()
+    assert year_file_stamp_problem(path, IDENTITY) is None
+    assert read_year_file_stamp(path) == _current()
     assert read_renames_record(path) == {LEGACY: LIVE}
 
 
 def test_raising_the_format_revision_makes_older_files_out_of_date(
     tmp_path, monkeypatch
 ):
-    older = _write_year_file(tmp_path / "older.h5", stamp=year_file_stamp(), record={})
+    older = _write_year_file(tmp_path / "older.h5", stamp=_current(), record={})
     monkeypatch.setattr(legacy_inputs, "YEAR_FILE_STAMP_REVISION", 7)
-    newer = _write_year_file(tmp_path / "newer.h5", stamp=year_file_stamp(), record={})
+    newer = _write_year_file(tmp_path / "newer.h5", stamp=_current(), record={})
 
-    assert year_file_stamp()["revision"] == 7
-    assert year_file_stamp_problem(newer) is None
-    assert year_file_stamp_problem(older) == (
-        "it was cut with year-file format revision 1, and this version of "
+    assert _current()["revision"] == 7
+    assert year_file_stamp_problem(newer, IDENTITY) is None
+    assert year_file_stamp_problem(older, IDENTITY) == (
+        "it was cut with year-file format revision 2, and this version of "
         "policyengine.py reads only revision 7"
     )
 
@@ -516,22 +700,18 @@ DEEP_JSON = "[" * 100_000 + "0" + "]" * 100_000
 @pytest.mark.parametrize(
     "stamp, record, reason",
     [
+        (("text", DEEP_JSON), {}, MALFORMED),
         (
-            ("text", DEEP_JSON),
-            {},
-            "its stamp of the register of renamed inputs it was cut under is malformed",
-        ),
-        (
-            year_file_stamp(),
+            _current(),
             ("text", DEEP_JSON),
             "its record of the renamed stored inputs mapped when it was cut is "
             "malformed",
         ),
         (
-            {"revision": 2},
+            {"revision": 3},
             ("text", DEEP_JSON),
-            "it was cut with year-file format revision 2, and this version of "
-            "policyengine.py reads only revision 1",
+            "it was cut with year-file format revision 3, and this version of "
+            "policyengine.py reads only revision 2",
         ),
     ],
 )
@@ -540,7 +720,7 @@ def test_json_nested_too_deeply_is_out_of_date_not_an_error(
 ):
     path = _write_year_file(tmp_path / "year.h5", stamp=stamp, record=record)
 
-    assert year_file_stamp_problem(path) == reason
+    assert year_file_stamp_problem(path, IDENTITY) == reason
     if isinstance(stamp, tuple):
         # Unreadable (None) or parsed into nested lists, but never a stamp.
         assert not isinstance(read_year_file_stamp(path), dict)
@@ -554,7 +734,7 @@ def test_a_recursion_error_while_parsing_is_unreadable_content(
     tmp_path, monkeypatch, name
 ):
     """The RecursionError path, on every platform (see ``DEEP_JSON``)."""
-    path = _write_year_file(tmp_path / "year.h5", stamp=year_file_stamp(), record={})
+    path = _write_year_file(tmp_path / "year.h5", stamp=_current(), record={})
     loads = json.loads
 
     def deep(text, *args, **kwargs):
@@ -565,8 +745,8 @@ def test_a_recursion_error_while_parsing_is_unreadable_content(
 
     monkeypatch.setattr(legacy_inputs.json, "loads", deep)
 
-    assert year_file_stamp_problem(path) == (
-        "its stamp of the register of renamed inputs it was cut under is malformed"
+    assert year_file_stamp_problem(path, IDENTITY) == (
+        MALFORMED
         if name == YEAR_FILE_STAMP_H5_DATASET
         else "its record of the renamed stored inputs mapped when it was cut is "
         "malformed"
@@ -581,7 +761,7 @@ def test_dangling_links_in_place_of_the_stamp_and_record_read_as_absent(tmp_path
             str(tmp_path / "missing.h5"), "/record"
         )
 
-    assert year_file_stamp_problem(path).startswith(
+    assert year_file_stamp_problem(path, IDENTITY).startswith(
         "it has no record of the renamed stored inputs mapped when it was cut"
     )
     assert read_year_file_stamp(path) is None
@@ -589,15 +769,13 @@ def test_dangling_links_in_place_of_the_stamp_and_record_read_as_absent(tmp_path
 
 
 @pytest.mark.parametrize("record", [{}, {LEGACY: LIVE}])
-def test_a_file_stamped_with_this_releases_register_is_current(tmp_path, record):
-    path = _write_year_file(
-        tmp_path / "year.h5", stamp=year_file_stamp(), record=record
-    )
+def test_a_file_stamped_for_the_requested_source_is_current(tmp_path, record):
+    path = _write_year_file(tmp_path / "year.h5", stamp=_current(), record=record)
 
-    assert year_file_stamp_problem(path) is None
+    assert year_file_stamp_problem(path, IDENTITY) is None
 
 
-# --- Named renames ------------------------------------------------------
+# --- Named differences --------------------------------------------------
 
 
 @settings(max_examples=200, deadline=None)
@@ -610,34 +788,217 @@ def test_a_stale_year_file_names_each_rename_it_may_lack(register, stamped):
             Path(directory) / "year.h5", stamp=_stamp(stamped), record={}
         )
         with patch.object(legacy_inputs, "LEGACY_INPUT_RENAMES", register):
-            problem = year_file_stamp_problem(path)
+            problem = year_file_stamp_problem(path, IDENTITY)
 
     if stamped == register:
         assert problem is None
         return
     missing = {k: v for k, v in register.items() if stamped.get(k) != v}
     unknown = {k: v for k, v in stamped.items() if register.get(k) != v}
+    clauses = problem.split("; ")
     for legacy, live in missing.items():
-        assert f"{legacy} -> {live}" in problem.split("; ")[0]
+        assert f"{legacy} -> {live}" in clauses[0]
     for legacy, live in unknown.items():
-        assert f"{legacy} -> {live}" in problem.split("; ")[-1]
+        assert f"{legacy} -> {live}" in clauses[-1]
     assert ("cut before these renames were registered" in problem) == bool(missing)
     assert ("does not register" in problem) == bool(unknown)
     for legacy, live in register.items() & stamped.items():
         assert f"{legacy} -> {live}" not in problem
 
 
+@settings(max_examples=300, deadline=None)
+@given(
+    source=SOURCES,
+    stamped_source=SOURCES,
+    packages=PACKAGE_MAPS,
+    stamped_packages=PACKAGE_MAPS,
+)
+def test_a_stale_year_file_names_each_source_and_version_that_differs(
+    source, stamped_source, packages, stamped_packages
+):
+    """The reason has a source clause exactly when the sources differ, naming
+    both, and one clause for each package whose version differs or that only
+    one side records, naming it; nothing that agrees is mentioned."""
+    with tempfile.TemporaryDirectory() as directory:
+        path = _write_year_file(
+            Path(directory) / "year.h5",
+            stamp=_stamp(
+                LEGACY_INPUT_RENAMES, REVISION, stamped_source, stamped_packages
+            ),
+            record={},
+        )
+        problem = year_file_stamp_problem(path, source, packages)
+
+    differing = {
+        name
+        for name in stamped_packages.keys() | packages.keys()
+        if name not in stamped_packages
+        or name not in packages
+        or stamped_packages[name] != packages[name]
+    }
+    if stamped_source == source and not differing:
+        assert problem is None
+        return
+    clauses = problem.split("; ")
+    source_clauses = [c for c in clauses if c.startswith("it was cut from ")]
+    if stamped_source == source:
+        assert source_clauses == []
+    else:
+        assert source_clauses == [
+            f"it was cut from {describe_dataset_source_identity(stamped_source)}, "
+            "and the requested source is "
+            f"{describe_dataset_source_identity(source)}"
+        ]
+    package_clauses = [c for c in clauses if c not in source_clauses]
+    assert len(package_clauses) == len(differing)
+    for name, clause in zip(sorted(differing), package_clauses):
+        assert name in clause
+        for other in (stamped_packages.keys() | packages.keys()) - {name}:
+            assert other not in clause
+
+
+@pytest.mark.parametrize(
+    "stamped_source, source, described",
+    [
+        (
+            {"uri": "hf://org/repo/acs.h5@old", "sha256": "a" * 64},
+            {"uri": "hf://org/repo/acs.h5@new", "sha256": "b" * 64},
+            f"hf://org/repo/acs.h5@old (sha256 {'a' * 64}), and the requested "
+            f"source is hf://org/repo/acs.h5@new (sha256 {'b' * 64})",
+        ),
+        (
+            # A re-upload under the same revision name.
+            {"uri": "hf://org/repo/acs.h5@r", "sha256": "a" * 64},
+            {"uri": "hf://org/repo/acs.h5@r", "sha256": "b" * 64},
+            f"hf://org/repo/acs.h5@r (sha256 {'a' * 64}), and the requested "
+            f"source is hf://org/repo/acs.h5@r (sha256 {'b' * 64})",
+        ),
+        (
+            {"uri": "hf://org/repo/acs.h5@r", "sha256": "a" * 64},
+            {"uri": "hf://org/repo/acs.h5@r"},
+            f"hf://org/repo/acs.h5@r (sha256 {'a' * 64}), and the requested "
+            "source is hf://org/repo/acs.h5@r",
+        ),
+        (
+            {
+                "path": "/data/tiny.h5",
+                "size": 10,
+                "mtime_ns": 1_760_000_000_000_000_001,
+            },
+            {
+                "path": "/data/tiny.h5",
+                "size": 12,
+                "mtime_ns": 1_760_000_060_000_000_000,
+            },
+            "/data/tiny.h5 (10 bytes, modified 2025-10-09T08:53:20.000000001Z), "
+            "and the requested source is /data/tiny.h5 (12 bytes, modified "
+            "2025-10-09T08:54:20.000000000Z)",
+        ),
+        (
+            {"path": "/a/tiny.h5", "size": 10, "mtime_ns": 0},
+            {"path": "/b/tiny.h5", "size": 10, "mtime_ns": 0},
+            "/a/tiny.h5 (10 bytes, modified 1970-01-01T00:00:00.000000000Z), and "
+            "the requested source is /b/tiny.h5 (10 bytes, modified "
+            "1970-01-01T00:00:00.000000000Z)",
+        ),
+    ],
+)
+def test_a_year_file_cut_from_another_source_names_both(
+    tmp_path, stamped_source, source, described
+):
+    path = _write_year_file(
+        tmp_path / "year.h5",
+        stamp=_stamp(LEGACY_INPUT_RENAMES, source=stamped_source),
+        record={},
+    )
+
+    assert year_file_stamp_problem(path, source) == f"it was cut from {described}"
+
+
+@pytest.mark.parametrize(
+    "stamped_packages, packages, reason",
+    [
+        (
+            {**PACKAGES, "policyengine-us": "2.2.0"},
+            PACKAGES,
+            "it was cut with policyengine-us 2.2.0, and policyengine-us 2.2.1 is "
+            "installed",
+        ),
+        (
+            PACKAGES,
+            {**PACKAGES, "policyengine-us": None},
+            "it was cut with policyengine-us 2.2.1, and policyengine-us is not "
+            "installed",
+        ),
+        (
+            {**PACKAGES, "policyengine-core": None},
+            PACKAGES,
+            "it was cut with no recorded policyengine-core version, and "
+            "policyengine-core 3.33.0 is installed",
+        ),
+        (
+            {"policyengine-us": "2.2.1"},
+            PACKAGES,
+            "it was cut with no recorded policyengine-core version, and "
+            "policyengine-core 3.33.0 is installed",
+        ),
+        (
+            {**PACKAGES, "extra-package": "1.0"},
+            PACKAGES,
+            "it records the extra-package version it was cut with, which this "
+            "version of policyengine.py does not check",
+        ),
+        (
+            {"policyengine-core": "3.32.0", "policyengine-us": "2.2.0"},
+            PACKAGES,
+            "it was cut with policyengine-core 3.32.0, and policyengine-core "
+            "3.33.0 is installed; it was cut with policyengine-us 2.2.0, and "
+            "policyengine-us 2.2.1 is installed",
+        ),
+    ],
+)
+def test_a_year_file_cut_with_other_versions_names_them(
+    tmp_path, stamped_packages, packages, reason
+):
+    path = _write_year_file(
+        tmp_path / "year.h5",
+        stamp=_stamp(LEGACY_INPUT_RENAMES, packages=stamped_packages),
+        record={},
+    )
+
+    assert year_file_stamp_problem(path, IDENTITY, packages) == reason
+
+
+def test_every_difference_is_named_in_order(tmp_path):
+    path = _write_year_file(
+        tmp_path / "year.h5",
+        stamp=_stamp(
+            {},
+            source={"uri": f"{SOURCE}@old"},
+            packages={**PACKAGES, "policyengine-us": "2.2.0"},
+        ),
+        record={},
+    )
+
+    assert year_file_stamp_problem(path, IDENTITY) == (
+        "it was cut before these renames were registered, so it may have lost "
+        f"them: {LEGACY} -> {LIVE}; it was cut from {SOURCE}@old, and the "
+        f"requested source is {SOURCE}; it was cut with policyengine-us 2.2.0, "
+        "and policyengine-us 2.2.1 is installed"
+    )
+
+
 def test_a_future_register_entry_makes_a_stamped_file_out_of_date(
     tmp_path, monkeypatch
 ):
-    path = _write_year_file(tmp_path / "year.h5", stamp=year_file_stamp(), record={})
+    path = _write_year_file(tmp_path / "year.h5", stamp=_current(), record={})
     monkeypatch.setattr(
         legacy_inputs,
         "LEGACY_INPUT_RENAMES",
         {**LEGACY_INPUT_RENAMES, "old_input": "new_input"},
     )
 
-    assert year_file_stamp_problem(path) == (
+    assert year_file_stamp_problem(path, IDENTITY) == (
         "it was cut before these renames were registered, so it may have lost "
         "them: old_input -> new_input"
     )
@@ -663,13 +1024,13 @@ def test_retiring_or_retargeting_an_entry_makes_a_stamped_file_out_of_date(
     tmp_path, monkeypatch, register, reason
 ):
     path = _write_year_file(
-        tmp_path / "year.h5", stamp=year_file_stamp(), record={LEGACY: LIVE}
+        tmp_path / "year.h5", stamp=_current(), record={LEGACY: LIVE}
     )
     monkeypatch.setattr(legacy_inputs, "LEGACY_INPUT_RENAMES", register)
 
     # The record of a file cut under the old register lies within that
     # register, so the register is what makes it out of date.
-    assert year_file_stamp_problem(path) == reason
+    assert year_file_stamp_problem(path, IDENTITY) == reason
 
 
 # --- No partial file is current -----------------------------------------
@@ -679,9 +1040,9 @@ def test_retiring_or_retargeting_an_entry_makes_a_stamped_file_out_of_date(
 def _current_year_file_bytes() -> bytes:
     with tempfile.TemporaryDirectory() as directory:
         path = _write_year_file(
-            Path(directory) / "year.h5", stamp=year_file_stamp(), record={}
+            Path(directory) / "year.h5", stamp=_current(), record={}
         )
-        assert year_file_stamp_problem(path) is None
+        assert year_file_stamp_problem(path, IDENTITY) is None
         return path.read_bytes()
 
 
@@ -694,20 +1055,20 @@ def test_a_truncated_year_file_is_never_current(data):
         path = Path(directory) / "year.h5"
         path.write_bytes(content[:length])
 
-        assert year_file_stamp_problem(path) is not None
+        assert year_file_stamp_problem(path, IDENTITY) is not None
 
 
 def test_a_file_that_is_not_hdf5_is_out_of_date(tmp_path):
     path = tmp_path / "year.h5"
     path.write_text("not an H5 file")
 
-    assert year_file_stamp_problem(path) == (
+    assert year_file_stamp_problem(path, IDENTITY) == (
         "it cannot be read as an HDF5 file (it may be half-written or corrupt)"
     )
 
 
 def test_saving_a_year_file_again_drops_its_stamp(tmp_path):
-    path = _write_year_file(tmp_path / "year.h5", stamp=year_file_stamp(), record={})
+    path = _write_year_file(tmp_path / "year.h5", stamp=_current(), record={})
 
     dataset = PolicyEngineUSDataset(
         name="year-file", description="reload", filepath=str(path), year=2024
@@ -718,11 +1079,11 @@ def test_saving_a_year_file_again_drops_its_stamp(tmp_path):
     # stamp, which only ``create_datasets`` writes.
     assert read_renames_record(path) == {}
     assert read_year_file_stamp(path) is None
-    assert year_file_stamp_problem(path).startswith("it has no stamp")
+    assert year_file_stamp_problem(path, IDENTITY).startswith("it has no stamp")
 
 
 def test_a_save_that_stops_part_way_leaves_no_stamp(tmp_path, monkeypatch):
-    path = _write_year_file(tmp_path / "year.h5", stamp=year_file_stamp(), record={})
+    path = _write_year_file(tmp_path / "year.h5", stamp=_current(), record={})
     put = pd.HDFStore.put
 
     def put_until_family(self, key, value, *args, **kwargs):
@@ -735,14 +1096,14 @@ def test_a_save_that_stops_part_way_leaves_no_stamp(tmp_path, monkeypatch):
         _year_dataset(path).save()
 
     assert read_year_file_stamp(path) is None
-    assert year_file_stamp_problem(path) is not None
+    assert year_file_stamp_problem(path, IDENTITY) is not None
 
 
 # --- Errors unrelated to the file's contents ----------------------------
 
 
 def _unreadable_by_permission(path) -> Path:
-    path = _write_year_file(path, stamp=year_file_stamp(), record={})
+    path = _write_year_file(path, stamp=_current(), record={})
     os.chmod(path, 0)
     return path
 
@@ -768,7 +1129,7 @@ def test_errors_unrelated_to_the_contents_are_raised(tmp_path, make, error):
     create = MagicMock()
     try:
         with pytest.raises(error):
-            year_file_stamp_problem(path)
+            year_file_stamp_problem(path, IDENTITY)
         with pytest.raises(error):
             load_datasets(datasets=[SOURCE], years=[2024], data_folder=str(data_folder))
         with patch.object(us_datasets, "create_datasets", create):
@@ -783,14 +1144,14 @@ def test_errors_unrelated_to_the_contents_are_raised(tmp_path, make, error):
 
 
 def test_a_locked_file_is_raised_not_cut_again(tmp_path, monkeypatch):
-    path = _write_year_file(tmp_path / "year.h5", stamp=year_file_stamp(), record={})
+    path = _write_year_file(tmp_path / "year.h5", stamp=_current(), record={})
 
     def locked(*args, **kwargs):
         raise BlockingIOError(35, "Unable to lock file")
 
     monkeypatch.setattr(h5py, "File", locked)
     with pytest.raises(BlockingIOError):
-        year_file_stamp_problem(path)
+        year_file_stamp_problem(path, IDENTITY)
 
 
 @pytest.mark.parametrize(
@@ -804,14 +1165,14 @@ def test_a_locked_file_is_raised_not_cut_again(tmp_path, monkeypatch):
 def test_errors_unrelated_to_the_contents_are_raised_while_reading(
     tmp_path, monkeypatch, error
 ):
-    path = _write_year_file(tmp_path / "year.h5", stamp=year_file_stamp(), record={})
+    path = _write_year_file(tmp_path / "year.h5", stamp=_current(), record={})
 
     def fail(self, *args, **kwargs):
         raise error
 
     monkeypatch.setattr(h5py.Dataset, "asstr", fail)
     with pytest.raises(type(error)):
-        year_file_stamp_problem(path)
+        year_file_stamp_problem(path, IDENTITY)
 
 
 # --- read_renames_record reads only well-formed records -----------------
@@ -838,13 +1199,17 @@ def test_a_well_formed_renames_record_still_reads_back(tmp_path):
 
 #: Each year file state, and whether it is current.
 STATES = {
-    "current": (dict(stamp=year_file_stamp(), record={}), True),
+    "current": (dict(stamp=_current(), record={}), True),
     "current, mapped": (
-        dict(stamp=year_file_stamp(), record=dict(LEGACY_INPUT_RENAMES)),
+        dict(stamp=_current(), record=dict(LEGACY_INPUT_RENAMES)),
         True,
     ),
     "6.1.1 and earlier": (dict(), False),
     "record only": (dict(record={}), False),
+    "revision 1": (
+        dict(stamp={"register": dict(LEGACY_INPUT_RENAMES), "revision": 1}, record={}),
+        False,
+    ),
     "missing entry": (dict(stamp=_stamp({}), record={}), False),
     "extra entry": (
         dict(stamp=_stamp({**LEGACY_INPUT_RENAMES, "old": "new"}), record={}),
@@ -852,10 +1217,46 @@ STATES = {
     ),
     "retargeted": (dict(stamp=_stamp({LEGACY: "elsewhere"}), record={}), False),
     "older revision": (dict(stamp=_stamp(LEGACY_INPUT_RENAMES, 0), record={}), False),
-    "newer revision": (dict(stamp={"revision": 2}, record={}), False),
+    "newer revision": (dict(stamp={"revision": 3}, record={}), False),
+    "other source revision": (
+        dict(
+            stamp=_stamp(LEGACY_INPUT_RENAMES, source={"uri": f"{SOURCE}@old"}),
+            record={},
+        ),
+        False,
+    ),
+    "verified source": (
+        dict(
+            stamp=_stamp(
+                LEGACY_INPUT_RENAMES, source={"uri": SOURCE, "sha256": "a" * 64}
+            ),
+            record={},
+        ),
+        False,
+    ),
+    "other policyengine-us": (
+        dict(
+            stamp=_stamp(
+                LEGACY_INPUT_RENAMES,
+                packages={**PACKAGES, "policyengine-us": "2.2.0"},
+            ),
+            record={},
+        ),
+        False,
+    ),
+    "other policyengine-core": (
+        dict(
+            stamp=_stamp(
+                LEGACY_INPUT_RENAMES,
+                packages={**PACKAGES, "policyengine-core": "3.34.0"},
+            ),
+            record={},
+        ),
+        False,
+    ),
     "malformed stamp": (dict(stamp=("text", "not json"), record={}), False),
-    "no record": (dict(stamp=year_file_stamp()), False),
-    "record outside": (dict(stamp=year_file_stamp(), record={"x": "y"}), False),
+    "no record": (dict(stamp=_current()), False),
+    "record outside": (dict(stamp=_current(), record={"x": "y"}), False),
     "not HDF5": (None, False),
     "missing": (None, None),
 }
@@ -877,13 +1278,13 @@ def _create_current_files(datasets, years, data_folder, allow_unmanaged=False):
     for year in years:
         _write_year_file(
             Path(data_folder) / f"{STEM}_year_{year}.h5",
-            stamp=year_file_stamp(),
+            stamp=_current(),
             record={},
         )
     return {"created": True}
 
 
-@settings(max_examples=60, deadline=None)
+@settings(max_examples=80, deadline=None)
 @given(states=st.lists(st.sampled_from(sorted(STATES)), min_size=1, max_size=3))
 def test_ensure_cuts_again_exactly_when_load_would_refuse(states):
     years = [2024 + index for index in range(len(states))]
@@ -905,7 +1306,7 @@ def test_ensure_cuts_again_exactly_when_load_would_refuse(states):
             (str(path), problem)
             for year in years
             if (path := data_folder / f"{STEM}_year_{year}.h5").exists()
-            and (problem := year_file_stamp_problem(path)) is not None
+            and (problem := year_file_stamp_problem(path, IDENTITY)) is not None
         )
         create = MagicMock(side_effect=_create_current_files)
         with (
@@ -939,16 +1340,42 @@ def test_ensure_cuts_again_exactly_when_load_would_refuse(states):
         assert sorted(loaded) == [f"{STEM}_{year}" for year in years]
 
 
+@pytest.mark.parametrize("local_source", [False, True])
 @pytest.mark.parametrize(
-    "states", [["current", "current, mapped"], ["current", "record only"]]
+    "states",
+    [
+        ["current", "current, mapped"],
+        ["current", "record only"],
+        ["current", "other source revision"],
+        ["current", "other policyengine-us"],
+    ],
 )
-def test_ensure_decides_from_the_stamps_alone(tmp_path, states):
-    """Deciding never opens a year file's tables or the source dataset."""
+def test_ensure_decides_from_the_stamps_alone(tmp_path, states, local_source):
+    """Deciding never opens a year file's tables, and never reads, hashes or
+    downloads the source dataset or imports policyengine-us. A local source
+    is only ``stat()``-ed."""
     data_folder = tmp_path / "data"
     years = [2024, 2025]
+    dataset, identity = SOURCE, IDENTITY
+    if local_source:
+        source_file = tmp_path / "sources" / f"{STEM}.h5"
+        source_file.parent.mkdir()
+        source_file.write_bytes(b"the source is never read")
+        dataset, identity = (
+            str(source_file),
+            requested_dataset_source_identity("us", str(source_file)),
+        )
     for year, state in zip(years, states):
-        _make_state(data_folder / f"{STEM}_year_{year}.h5", state)
+        written, _ = STATES[state]
+        stamp = written.get("stamp", _ABSENT)
+        if isinstance(stamp, dict) and stamp.get("source") == IDENTITY:
+            stamp = {**stamp, "source": identity}
+        _write_year_file(
+            data_folder / f"{STEM}_year_{year}.h5",
+            **{**written, "stamp": stamp},
+        )
     load, create = MagicMock(return_value="loaded"), MagicMock(return_value="created")
+    source_path = Path(dataset).resolve() if local_source else None
 
     def refuse(*args, **kwargs):
         raise AssertionError("deciding opened a table or the source dataset")
@@ -966,6 +1393,7 @@ def test_ensure_decides_from_the_stamps_alone(tmp_path, states):
 
         def __init__(self, path, mode="r", **kwargs):
             assert mode == "r"
+            assert source_path is None or Path(path).resolve() != source_path
             self._file = real_file(path, mode, **kwargs)
 
         def __enter__(self):
@@ -978,6 +1406,22 @@ def test_ensure_decides_from_the_stamps_alone(tmp_path, states):
             assert name in (YEAR_FILE_STAMP_H5_DATASET, RENAMES_H5_DATASET), name
             return self._file.get(name, default)
 
+    real_open, real_import = builtins.open, builtins.__import__
+
+    def open_anything_but_the_source(file, *args, **kwargs):
+        if (
+            source_path is not None
+            and isinstance(file, (str, os.PathLike))
+            and Path(file).resolve() == source_path
+        ):
+            refuse()
+        return real_open(file, *args, **kwargs)
+
+    def import_anything_but_policyengine_us(name, *args, **kwargs):
+        if name == "policyengine_us" or name.startswith("policyengine_us."):
+            raise AssertionError("deciding imported policyengine-us")
+        return real_import(name, *args, **kwargs)
+
     with (
         patch.object(h5py, "File", StampAndRecordOnly),
         patch.object(pd, "HDFStore", RefusedStore),
@@ -985,12 +1429,17 @@ def test_ensure_decides_from_the_stamps_alone(tmp_path, states):
         # opens files without h5py.
         patch("pandas.io.pytables.HDFStore", RefusedStore),
         patch("tables.open_file", refuse),
+        patch.object(builtins, "open", open_anything_but_the_source),
+        patch.object(io, "open", open_anything_but_the_source),
+        patch.object(builtins, "__import__", import_anything_but_policyengine_us),
+        patch.object(dataset_materialization, "sha256_file", refuse),
+        patch.object(dataset_materialization.requests, "get", refuse),
         patch.object(us_datasets, "materialize_dataset", refuse),
         patch.object(us_datasets, "load_datasets", load),
         patch.object(us_datasets, "create_datasets", create),
     ):
         result = ensure_datasets(
-            datasets=[SOURCE], years=years, data_folder=str(data_folder)
+            datasets=[dataset], years=years, data_folder=str(data_folder)
         )
 
     stale = any(STATES[state][1] is False for state in states)
@@ -1010,3 +1459,45 @@ def test_the_refusal_names_the_file_and_what_it_may_lack(tmp_path):
         f"were registered, so it may have lost them: {LEGACY} -> {LIVE}. "
         "Regenerate it with ensure_datasets() or create_datasets()."
     )
+
+
+def test_the_refusal_names_the_source_it_was_cut_from(tmp_path):
+    data_folder = tmp_path / "data"
+    path = data_folder / f"{STEM}_year_2024.h5"
+    _write_year_file(
+        path,
+        stamp=_stamp(LEGACY_INPUT_RENAMES, source={"uri": f"{SOURCE}@old"}),
+        record={},
+    )
+
+    with pytest.raises(ValueError) as refused:
+        load_datasets(datasets=[SOURCE], years=[2024], data_folder=str(data_folder))
+
+    assert str(refused.value) == (
+        f"US year file {path} is out of date: it was cut from {SOURCE}@old, and "
+        f"the requested source is {SOURCE}. Regenerate it with ensure_datasets() "
+        "or create_datasets()."
+    )
+
+
+def test_load_and_ensure_compare_with_the_installed_versions(tmp_path, monkeypatch):
+    """Both read the versions when called, not at import."""
+    data_folder = tmp_path / "data"
+    _write_year_file(data_folder / f"{STEM}_year_2024.h5", stamp=_current(), record={})
+    load_datasets(datasets=[SOURCE], years=[2024], data_folder=str(data_folder))
+
+    monkeypatch.setattr(
+        legacy_inputs,
+        "installed_package_versions",
+        lambda: {**PACKAGES, "policyengine-us": "2.3.0"},
+    )
+    with pytest.raises(ValueError, match="policyengine-us 2.3.0 is installed"):
+        load_datasets(datasets=[SOURCE], years=[2024], data_folder=str(data_folder))
+    create = MagicMock(return_value="created")
+    with patch.object(us_datasets, "create_datasets", create):
+        assert (
+            ensure_datasets(
+                datasets=[SOURCE], years=[2024], data_folder=str(data_folder)
+            )
+            == "created"
+        )
