@@ -416,8 +416,9 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
 
             # Stamp last. ``PolicyEngineUSDataset.save()`` truncates the file
             # first, so an output whose save stopped part-way has no stamp,
-            # and ``load()`` refuses it.
-            write_output_stamp(simulation.output_dataset.filepath, stamp)
+            # and ``load()`` refuses it. It also refuses to save without a
+            # filepath, so there is one here.
+            write_output_stamp(str(simulation.output_dataset.filepath), stamp)
 
     def load(self, simulation: Simulation) -> None:
         """Rehydrate the simulation's output dataset from disk.
