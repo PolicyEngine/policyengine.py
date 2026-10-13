@@ -1,3 +1,16 @@
+## [6.3.4] - 2026-10-13
+
+### Changed
+
+- `Poverty.rate` is now `None`, not `0.0`, when nobody in the group is measured (its weighted population with a poverty status is zero), for every source. `headcount` and `total_population` are unchanged, and the poverty DataFrame helpers report the rate as missing. Callers that format or subtract rates must handle `None`.
+- US state and congressional-district regions temporarily filter the certified national dataset again, as in 6.2.1, because the ACS-local release lacks source-backed SPM independence and canonical SPM refused every state-region run (PolicyEngine/microcosm#1263).
+
+### Fixed
+
+- Measure SPM poverty on legacy certified US sources that predate SPM measurement-scope declarations, such as the ACS-local Build O release. Following Census's ACS household-population method, ACS group-quarters units are outside the SPM measurement: their SPM results are missing instead of stopping the run with `SPM_COMPOSITION_REQUIRED`, and poverty rates count measured people only. Ordinary tax and benefit results are unchanged.
+- Supply the certified SPM independence role from the national release for the ASEC and PUF records of legacy certified US sources, so independent-teen SPM units are measured instead of stopping SPM calculations.
+
+
 ## [6.3.3] - 2026-10-13
 
 ### Changed

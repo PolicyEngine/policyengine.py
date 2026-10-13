@@ -1,1 +1,0 @@
-`Poverty.rate` is now `None`, not `0.0`, when nobody in the group is measured (its weighted population with a poverty status is zero), for every source. `headcount` and `total_population` are unchanged, and the poverty DataFrame helpers report the rate as missing. Callers that format or subtract rates must handle `None`.
