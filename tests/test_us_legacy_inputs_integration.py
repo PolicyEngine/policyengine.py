@@ -1117,6 +1117,47 @@ def test_a_run_over_a_year_file_records_its_stamp(tmp_path):
         assert _person_outputs(_reloaded(simulation))["wic"].iloc[INFANT] == 0
 
 
+def test_a_region_scoped_run_records_its_year_files_stamp(tmp_path):
+    """A scoped run simulates an in-memory copy of the data, which keeps no
+    metadata, so the stamp must come from the dataset the run was given."""
+    from policyengine.core.scoping_strategy import RowFilterStrategy
+
+    (tmp_path / "stale").mkdir()
+    (tmp_path / "current").mkdir()
+    with patch.object(legacy_inputs, "LEGACY_INPUT_RENAMES", {}):
+        _, cut_before = _create_year_file(tmp_path / "stale")
+    _, current = _create_year_file(tmp_path / "current")
+    stale = PolicyEngineUSDataset(
+        name="stale", description="stale", filepath=cut_before.filepath, year=YEAR
+    )
+    cases = [
+        (current, year_file_stamp(), None),
+        (
+            stale,
+            {"register": {}, "revision": 1},
+            "it was calculated from a year file cut before these renames were "
+            f"registered, which may have lost them: {LEGACY} -> {LIVE}",
+        ),
+    ]
+    for index, (dataset, year_file, problem) in enumerate(cases):
+        simulation = pe.Simulation(
+            id=f"scoped-{index}",
+            dataset=dataset,
+            tax_benefit_model_version=pe.us.model,
+            scoping_strategy=RowFilterStrategy(
+                variable_name="state_code", variable_value="CA"
+            ),
+            extra_variables={"person": [LIVE, "wic"]},
+        )
+        simulation.run()
+        simulation.save()
+        path = simulation.output_dataset.filepath
+
+        assert len(_person_outputs(simulation)) == len(PERSON_IDS)
+        assert read_output_stamp(path) == output_stamp(year_file)
+        assert output_stamp_problem(path) == problem
+
+
 def test_an_output_from_an_out_of_date_year_file_is_not_reused(tmp_path):
     """A year file cut before the WIC entry lost the draw, so an output
     calculated from it, under this release's register, is wrong too."""

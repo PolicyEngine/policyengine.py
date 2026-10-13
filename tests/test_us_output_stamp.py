@@ -166,6 +166,30 @@ def _write_output(path, *, stamp=_ABSENT, record=_ABSENT, year_file_stamp=_ABSEN
     return Path(path)
 
 
+_UNREADABLE = object()
+
+
+def _stored(content):
+    """The JSON value a stored node holds, decoded as HDF5 stores it.
+
+    ``_ABSENT`` for no node, ``_UNREADABLE`` for a node that does not hold a
+    UTF-8 JSON scalar, and the value otherwise. This decodes the raw node
+    kinds of :func:`_write_node` directly, not through the reader under test.
+    """
+    if content is _ABSENT or not isinstance(content, tuple):
+        return content
+    kind, value = content
+    try:
+        if kind == "text":
+            return json.loads(value)
+        if kind == "bytes":
+            # A fixed-length string reads back without its trailing NUL bytes.
+            return json.loads(value.rstrip(b"\x00").decode("utf-8"))
+    except (RecursionError, ValueError):
+        pass
+    return _UNREADABLE
+
+
 def _same_json(left, right) -> bool:
     """Equal as JSON text, so ``true`` is not ``1`` and ``1.0`` is not ``1``."""
     return json.dumps(left, sort_keys=True) == json.dumps(right, sort_keys=True)
@@ -291,22 +315,32 @@ def test_a_missing_or_foreign_file_has_no_output_stamp(tmp_path):
 # --- Exactness ----------------------------------------------------------
 
 
+def _weighted(draw, *choices):
+    """Draw from one of ``(weight, strategy)`` pairs, in proportion to weight.
+
+    ``st.one_of`` drops a repeated branch, so repeating one does not weight it.
+    """
+    indices = [
+        index for index, (weight, _) in enumerate(choices) for _ in range(weight)
+    ]
+    return draw(choices[draw(st.sampled_from(indices))][1])
+
+
 @st.composite
 def near(draw, register):
     """``register`` itself (most often), one entry away from it, or any."""
-    exact = st.just(dict(register))
-    return draw(
-        st.one_of(
-            exact,
-            exact,
-            exact,
-            REGISTERS,
+    return _weighted(
+        draw,
+        (6, st.just(dict(register))),
+        (1, REGISTERS),
+        (
+            1,
             st.builds(
                 lambda name: {k: v for k, v in register.items() if k != name},
                 NAMES,
             ),
-            st.builds(lambda k, v: {**register, k: v}, NAMES, NAMES),
-        )
+        ),
+        (1, st.builds(lambda k, v: {**register, k: v}, NAMES, NAMES)),
     )
 
 
@@ -319,28 +353,34 @@ def stamped_outputs(draw):
     """
     register = draw(REGISTERS)
     stamped = draw(near(register))
-    revision = draw(st.sampled_from([REVISION] * 6 + [0, 2, -1, True, 1.0]))
-    year_file = draw(
-        st.one_of(
-            st.none(),
-            st.none(),
+    revision = draw(st.sampled_from([REVISION] * 12 + [0, 2, -1, True, 1.0]))
+    year_file = _weighted(
+        draw,
+        (5, st.none()),
+        (
+            4,
             st.builds(
                 _year_stamp,
                 near(register),
-                st.sampled_from([YEAR_FILE_REVISION] * 6 + [0, 2, True, 1.0, "1"]),
+                st.sampled_from([YEAR_FILE_REVISION] * 12 + [0, 2, True, 1.0, "1"]),
             ),
-            st.builds(_year_stamp, near(register)),
-            st.just("unreadable"),
-            JSON_VALUES,
-        )
+        ),
+        (1, st.just("unreadable")),
+        (1, JSON_VALUES),
     )
-    subset = st.builds(
-        lambda keep: {k: v for k, v in stamped.items() if k in keep},
-        st.sets(NAMES),
-    )
-    record = draw(
+    record = _weighted(
+        draw,
         # A subset of the stamped register, as a run records, most often.
-        st.one_of(subset, subset, subset, st.just(_ABSENT), REGISTERS, JSON_VALUES)
+        (
+            6,
+            st.builds(
+                lambda keep: {k: v for k, v in stamped.items() if k in keep},
+                st.sets(NAMES),
+            ),
+        ),
+        (1, st.just(_ABSENT)),
+        (1, REGISTERS),
+        (1, JSON_VALUES),
     )
     return register, _stamp(stamped, revision, year_file), record
 
@@ -422,8 +462,7 @@ def test_the_output_problem_is_total_and_exact_for_any_content(stamp, record, re
             problem = output_stamp_problem(path)
 
     assert problem is None or (isinstance(problem, str) and problem)
-    if problem is None:
-        assert _is_current(stamp, record, register)
+    assert (problem is None) == _is_current(_stored(stamp), _stored(record), register)
 
 
 @pytest.mark.parametrize(
@@ -562,6 +601,53 @@ def test_a_stamp_and_record_stored_as_fixed_length_strings_are_read(tmp_path):
 
     assert output_stamp_problem(path) is None
     assert read_output_stamp(path) == output_stamp(year_file_stamp())
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        ("text", "{}"),
+        ("bytes", b"{}"),
+        ("bytes", b"{}\x00"),
+        ("text", json.dumps({LEGACY: LIVE})),
+        ("bytes", json.dumps({LEGACY: LIVE}).encode()),
+    ],
+)
+def test_a_record_stored_as_raw_text_or_bytes_is_read(tmp_path, record):
+    path = _write_output(tmp_path / "output.h5", stamp=output_stamp(), record=record)
+
+    assert output_stamp_problem(path) is None
+    assert read_renames_record(path) == _stored(record)
+
+
+@pytest.mark.parametrize(
+    "name", [OUTPUT_STAMP_H5_DATASET, RENAMES_H5_DATASET, YEAR_FILE_STAMP_H5_DATASET]
+)
+def test_a_soft_link_that_leads_back_to_itself_is_unreadable(tmp_path, name):
+    """h5py raises ``RuntimeError`` following such a link."""
+    path = _write_output(
+        tmp_path / "output.h5",
+        stamp=output_stamp(),
+        record={},
+        year_file_stamp=year_file_stamp(),
+    )
+    with h5py.File(path, "a") as file:
+        del file[name]
+        file[name] = h5py.SoftLink(f"/{name}")
+
+    if name == OUTPUT_STAMP_H5_DATASET:
+        assert output_stamp_problem(path) == (
+            "its stamp of the register of renamed inputs it was calculated under "
+            "is malformed"
+        )
+        assert read_output_stamp(path) is None
+    elif name == RENAMES_H5_DATASET:
+        assert output_stamp_problem(path) == MALFORMED_RECORD
+        assert read_renames_record(path) is None
+    else:
+        assert year_file_stamp_metadata(path) == "unreadable"
+        assert read_year_file_stamp(path) is None
+        assert year_file_stamp_problem(path) is not None
 
 
 # --- The year file an output was calculated from ------------------------

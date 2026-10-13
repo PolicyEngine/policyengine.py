@@ -589,7 +589,9 @@ def _read_json_dataset(file: Any, name: str) -> Any:
         return json.loads(node.asstr()[()])
     except (PermissionError, IsADirectoryError, BlockingIOError):
         raise
-    except (KeyError, OSError, RecursionError, TypeError, ValueError):
+    # ``RuntimeError`` covers ``RecursionError``, and h5py raises it when a
+    # soft link at ``name`` leads back to itself.
+    except (KeyError, OSError, RuntimeError, TypeError, ValueError):
         return _UNREADABLE
 
 
