@@ -599,3 +599,17 @@ def test_extra_installed_file_fails(tmp_path):
         "policyengine-uk", wheel, metadata=fake_metadata(site, record)
     )
     assert any("injected.py" in problem for problem in evidence["problems"])
+
+
+def test_an_installed_record_that_differs_from_the_wheel_is_reported(tmp_path):
+    """Round-9 review: the installed RECORD must list the wheel's digests even
+    when the bytes on disk still match the wheel."""
+
+    wheel, site, record = build_wheel(tmp_path)
+    path = "policyengine_uk/system.py"
+    edited = [
+        _line(path, b"something else") if line.startswith(f"{path},") else line
+        for line in record
+    ]
+    problems = _verify(site, wheel, edited)["problems"]
+    assert problems == [f"{path}: installed RECORD differs from the wheel"]

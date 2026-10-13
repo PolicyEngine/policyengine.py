@@ -93,6 +93,7 @@ from policyengine.provenance.canonical import (
     canonical_sha256,
     drop_null_members,
 )
+from policyengine.provenance.loaded import loaded_versions
 from policyengine.utils.hashing import sha256_file
 
 __all__ = [
@@ -762,8 +763,17 @@ def _top_level_code(module_code: CodeType) -> dict[str, list[CodeType]]:
 
     found: dict[str, list[CodeType]] = {}
     for const in module_code.co_consts:
-        if isinstance(const, CodeType):
-            found.setdefault(const.co_qualname, []).append(const)
+        if not isinstance(const, CodeType):
+            continue
+        if const.co_name.startswith("<generic parameters of "):
+            # ``def helper[T](...)`` (3.12+) compiles the function inside a
+            # wrapper that binds its type parameters; the function itself is
+            # still a module-level definition.
+            for inner in const.co_consts:
+                if isinstance(inner, CodeType) and "." not in inner.co_qualname:
+                    found.setdefault(inner.co_qualname, []).append(inner)
+            continue
+        found.setdefault(const.co_qualname, []).append(const)
     return found
 
 
@@ -1344,10 +1354,26 @@ _REFUSED_NAMES = frozenset(
         "id",
         "is_",
         "is_not",
+        # Readers of annotation values, which the digest does not bind.
+        "get_type_hints",
+        "get_annotations",
+        "signature",
+        "getfullargspec",
     }
 )
-#: Attributes refused anywhere: operator.is_ and is_not compare identities.
-_REFUSED_ATTRIBUTES = frozenset({"is_", "is_not"})
+#: Attributes refused anywhere: operator.is_ and is_not compare identities,
+#: and typing.get_type_hints, inspect.signature and the like read annotation
+#: values, which are not bound (only which names carry one).
+_REFUSED_ATTRIBUTES = frozenset(
+    {
+        "is_",
+        "is_not",
+        "get_type_hints",
+        "get_annotations",
+        "signature",
+        "getfullargspec",
+    }
+)
 #: Dunder attributes a measure may read; any other is introspection.
 _ALLOWED_DUNDER_ATTRIBUTES = frozenset({"__init__", "__name__"})
 #: Dunder names a measure may read: its module's name and file.
@@ -2296,6 +2322,15 @@ def _build(
     )
     model = ModelIdentity(**identity(UK_PACKAGES["model"]))
     core = CoreIdentity(**identity(UK_PACKAGES["core"]))
+    loaded = loaded_versions()
+    for installed in (wrapper, model, core):
+        recorded = loaded.get(installed.name)
+        if recorded is not None and recorded != installed.version:
+            raise ReceiptError(
+                f"{installed.name} {recorded} was loaded in this process, but "
+                f"{installed.version} is installed now, so the installed version "
+                "is not the code that ran; restart the process and run again."
+            )
 
     dataset_name = dataset or record["default_dataset"]
     actual_sha256 = sha256_file(dataset_path)

@@ -70,14 +70,16 @@ Each name is bound once. Defaults hold no `:=`, lambda, comprehension, `await` o
 
 Anywhere in the module, code may not:
 - tell equal values apart by identity: `is` is allowed only against `None`, `True`, `False`, `...` or `type(...)`, and `type` may not be rebound. The compiler may make equal immutable constants one object, and a digest of values cannot tell one object from two equal ones.
-- use `id`, `operator.is_` or `is_not`, `globals`, `vars`, `locals`, `exec`, `eval`, `compile`, `__import__` or `breakpoint`, however imported, or import `builtins`.
+- use `id`, `operator.is_` or `is_not`, `globals`, `vars`, `locals`, `exec`, `eval`, `compile`, `__import__` or `breakpoint`, however imported, or import `builtins`;
+- read annotation values through `typing.get_type_hints`, `inspect.signature`, `inspect.getfullargspec` or `get_annotations`, because the digest binds which names carry annotations, not their values.
 - declare a name `global`.
 - read dunder attributes other than `__init__` and `__name__`, or dunder names other than `__name__` and `__file__`. Reading a function's or module's own metadata is introspection.
 
 Put measure values in literal constants or in default arguments.
 
 **What was imported.** A digest must only name code that ran, so before binding, the module's source as read now is compiled and checked against what was imported, ignoring file names and line numbers:
-- **Functions.** The source is compiled as a whole, so each function compiles in its module's context, imports included. The modifier and every other function defined in that file must use the module's own globals and match that code, nested code and constants included. Constants are compared by exact type, by IEEE 754 bytes (so a NaN's sign counts) and by how they share objects. Annotation functions that Python 3.14 compiles (`__annotate__`) are the compiler's, not the module's.
+- **Versions.** The policyengine, policyengine-uk and policyengine-core versions recorded when policyengine and the UK model loaded in this process must still be the installed ones. Installing another version mid-session (in a notebook, say) changes the metadata but not the code already imported, so the receipt would name code that did not run; it is refused, and the fix is to restart the process.
+- **Functions.** The source is compiled as a whole, so each function compiles in its module's context, imports included. The modifier and every other function defined in that file must use the module's own globals and match that code, nested code and constants included. Constants are compared by exact type, by IEEE 754 bytes (so a NaN's sign counts) and by how they share objects. Annotation functions that Python 3.14 compiles (`__annotate__`) are the compiler's, not the module's, and a generic function (`def helper[T](...)`, Python 3.12+) is checked through the wrapper the compiler makes to bind its type parameters.
 - **Function names.** A `def` name must still be bound to that function, not to another function of the same file or any other object.
 - **Function metadata.** Each function's name, qualified name and docstring must still be what its `def` made, compared as the compiler stores them. It must still annotate the names its source annotates, use the builtins module, and carry no other attributes (`helper.amount = 240` is state).
 - **Defaults.** Literal default arguments in the source, such as `rate=0.21`, must still be the function's defaults, with the same type.

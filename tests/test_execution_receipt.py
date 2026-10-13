@@ -3157,3 +3157,187 @@ def test_dunder_definitions_are_refused(tmp_path, definition, match):
             _identity(module.raise_rate)
     finally:
         sys.modules.pop(name, None)
+
+
+# --- Round-9 review findings -------------------------------------------------------
+
+
+def test_versions_installed_after_loading_are_refused(dataset_file, monkeypatch):
+    """Round-9 review H1: upgrading a package mid-session changes what the
+    metadata says but not the code already imported."""
+
+    from policyengine.provenance import loaded
+
+    _build(dataset_file)  # the installed versions are what was loaded
+    monkeypatch.setitem(loaded._LOADED, "policyengine-uk", "0.0.1")
+    with pytest.raises(
+        ReceiptError,
+        match=r"policyengine-uk 0\.0\.1 was loaded in this process, but .* is installed now",
+    ):
+        _build(dataset_file)
+
+
+def test_the_first_loaded_version_is_the_one_kept(monkeypatch):
+    from policyengine.provenance import loaded
+
+    monkeypatch.setattr(loaded, "_LOADED", {})
+    loaded.record_loaded_versions(["policyengine-uk", "no-such-distribution"])
+    first = loaded.loaded_versions()
+    assert set(first) == {"policyengine-uk"}
+    monkeypatch.setattr(
+        loaded.metadata, "version", lambda name: "99.0.0"
+    )  # an upgrade after loading
+    loaded.record_loaded_versions(["policyengine-uk"])
+    assert loaded.loaded_versions() == first
+
+
+@pytest.mark.parametrize(
+    ("header", "body", "match"),
+    [
+        ("import typing\n", "typing.get_type_hints(_helper)", r"\.get_type_hints"),
+        (
+            "from typing import get_type_hints\n",
+            "get_type_hints(_helper)",
+            "get_type_hints",
+        ),
+        ("import inspect\n", "inspect.signature(_helper)", r"\.signature"),
+        ("import inspect\n", "inspect.getfullargspec(_helper)", r"\.getfullargspec"),
+        ("import inspect\n", "inspect.get_annotations(_helper)", r"\.get_annotations"),
+    ],
+    ids=[
+        "get-type-hints",
+        "imported-get-type-hints",
+        "signature",
+        "argspec",
+        "get-annotations",
+    ],
+)
+def test_readers_of_annotation_values_are_refused(tmp_path, header, body, match):
+    """Round-9 review M2: annotation values are not bound, so code may not
+    read them."""
+
+    source = (
+        header + "\n\ndef _helper(value: float) -> float:\n    return value\n\n\n"
+        f"def raise_rate(simulation):\n    simulation.hints = {body}\n"
+    )
+    name = "w4_receipt_r9_annotation_readers"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match=match):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+GENERIC_SOURCE = (
+    "def helper[T](value: T) -> T:\n    return value\n\n\n"
+    "def raise_rate(simulation):\n    simulation.rate = helper(0.21)\n"
+)
+
+
+def test_generic_helpers_bind_and_are_checked(tmp_path):
+    """Round-9 review L3: ``def helper[T]`` compiles inside a wrapper that
+    binds T; the function is still checked against its source."""
+
+    if sys.version_info < (3, 12):
+        pytest.skip("type parameters need Python 3.12")
+    name = "w4_receipt_r9_generic"
+    try:
+        module, path = _import_source(tmp_path, name, GENERIC_SOURCE)
+        assert _identity(module.raise_rate)
+        _edit(path, "return value", "return value * 2")
+        with pytest.raises(ReceiptError, match="no longer matches"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def _code(source, name):
+    namespace = {}
+    exec(compile(source, "x", "exec", dont_inherit=True), namespace)
+    return namespace[name].__code__
+
+
+_FUNCTION = "def f(a, /, b, *, c):\n    return x + a + b + c\n"
+
+
+def _inner_code():
+    namespace = {}
+    exec(compile(_CLOSURE, "x", "exec", dont_inherit=True), namespace)
+    return namespace["outer"]().__code__
+
+
+_CLOSURE = "def outer():\n    v = 1\n\n    def inner():\n        return v\n\n    return inner\n"
+
+
+@pytest.mark.parametrize(
+    ("make", "change"),
+    [
+        (lambda: _code(_FUNCTION, "f"), {"co_name": "g"}),
+        (lambda: _code(_FUNCTION, "f"), {"co_qualname": "g"}),
+        (lambda: _code(_FUNCTION, "f"), {"co_argcount": 1}),
+        (lambda: _code(_FUNCTION, "f"), {"co_posonlyargcount": 0}),
+        (lambda: _code(_FUNCTION, "f"), {"co_kwonlyargcount": 0}),
+        (lambda: _code(_FUNCTION, "f"), {"co_flags": "toggle"}),
+        (lambda: _code(_FUNCTION, "f"), {"co_stacksize": "grow"}),
+        (lambda: _code(_FUNCTION, "f"), {"co_names": ("y",)}),
+        (lambda: _code(_FUNCTION, "f"), {"co_varnames": ("a", "b", "d")}),
+        (lambda: _code(_CLOSURE, "outer"), {"co_cellvars": ("w",)}),
+        (lambda: _inner_code(), {"co_freevars": ("w",)}),
+    ],
+    ids=[
+        "name",
+        "qualname",
+        "argcount",
+        "posonlyargcount",
+        "kwonlyargcount",
+        "flags",
+        "stacksize",
+        "names",
+        "varnames",
+        "cellvars",
+        "freevars",
+    ],
+)
+def test_every_code_field_counts(make, change):
+    """Round-9 review: dropping any field from code_shape survived; each is
+    what the interpreter runs (co_flags, for one, tells a coroutine)."""
+
+    from policyengine.provenance.bytecode import code_shape
+
+    code = make()
+    field, value = next(iter(change.items()))
+    if value == "toggle":
+        value = code.co_flags ^ inspect.CO_NESTED
+    elif value == "grow":
+        value = code.co_stacksize + 1
+    assert code_shape(code.replace(**{field: value})) != code_shape(code)
+
+
+def test_a_guard_on_another_name_is_refused(tmp_path):
+    """Round-9 review: only __name__ makes the main guard."""
+
+    source = 'if __file__ == "__main__":\n    pass\n' + MEASURE_TAIL
+    name = "w4_receipt_r9_guard_name"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match="module-level If statement"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_is_against_a_call_other_than_type_is_refused(tmp_path):
+    """Round-9 review: only ``type(...)`` is a safe identity operand."""
+
+    source = (
+        "def raise_rate(simulation, first=(1,), second=(1,)):\n"
+        "    simulation.rate = 0.99 if first is tuple(second) else 0.21\n"
+    )
+    name = "w4_receipt_r9_identity_call"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match="compares identities"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
