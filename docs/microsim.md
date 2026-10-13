@@ -565,8 +565,9 @@ year files is moved into place, the ones already there are left as they were,
 and `DatasetMaterializationError` is raised. A cut that fails for another
 reason before it moves any year file leaves them as they were too. One that
 fails while moving them leaves each year file either as it was or whole and
-stamped. A process killed mid-cut can leave a temporary file behind, which is
-never read and can be deleted.
+stamped. A failed cut removes its temporary files. One it cannot remove stays
+behind, as can one from a process killed mid-cut; a temporary file is never
+read and can be deleted.
 
 Requested datasets that are different sources with one name, such as two
 revisions of one Hugging Face file or two local files called `pop.h5`, would

@@ -412,8 +412,8 @@ def create_datasets(
     therefore always come from one cut, even when two processes cut the same
     year files at once. A cut that fails before it moves any year file leaves
     the year files already there as they were. One that fails while moving
-    them leaves each either as it was or whole and stamped. Either way its
-    temporary files are removed.
+    them leaves each either as it was or whole and stamped. Either way it
+    removes its temporary files, leaving only one it cannot remove.
 
     The source file's size and modification time are recorded right after it
     is materialized, and checked again once the year files are written. A
