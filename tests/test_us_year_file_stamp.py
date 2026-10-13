@@ -540,6 +540,19 @@ def test_json_nested_too_deeply_is_unreadable_not_an_error(
     assert read_renames_record(path) == (None if isinstance(record, tuple) else record)
 
 
+def test_dangling_links_in_place_of_the_stamp_and_record_read_as_absent(tmp_path):
+    path = _write_year_file(tmp_path / "year.h5")
+    with h5py.File(path, "a") as file:
+        file[YEAR_FILE_STAMP_H5_DATASET] = h5py.SoftLink("/nowhere")
+        file[RENAMES_H5_DATASET] = h5py.ExternalLink("missing.h5", "/record")
+
+    assert year_file_stamp_problem(path).startswith(
+        "it has no record of the renamed stored inputs mapped when it was cut"
+    )
+    assert read_year_file_stamp(path) is None
+    assert read_renames_record(path) is None
+
+
 @pytest.mark.parametrize("record", [{}, {LEGACY: LIVE}])
 def test_a_file_stamped_with_this_releases_register_is_current(tmp_path, record):
     path = _write_year_file(
@@ -927,6 +940,10 @@ def test_ensure_decides_from_the_stamps_alone(tmp_path, states):
     with (
         patch.object(h5py, "File", StampAndRecordOnly),
         patch.object(pd, "HDFStore", refuse),
+        # ``pd.read_hdf`` looks HDFStore up in its own module, and PyTables
+        # opens files without h5py.
+        patch("pandas.io.pytables.HDFStore", refuse),
+        patch("tables.open_file", refuse),
         patch.object(us_datasets, "materialize_dataset", refuse),
         patch.object(us_datasets, "load_datasets", load),
         patch.object(us_datasets, "create_datasets", create),
