@@ -504,10 +504,12 @@ def test_raising_the_format_revision_makes_older_files_out_of_date(
     )
 
 
-#: JSON nested very deeply. Whether the parser reaches its recursion limit
-#: depends on the platform: CPython 3.11-3.13, and 3.14 on macOS, raise
-#: RecursionError, while 3.14 on Linux parses it into nested lists. Either
-#: way the stamp or record is not well formed.
+#: JSON nested very deeply. Whether the parser reaches its limit depends on
+#: the interpreter and the platform: CPython 3.14 checks the native stack, so
+#: it varies with stack size, architecture and build. In our runs, CPython
+#: 3.11-3.13, and 3.14 on macOS, raised RecursionError, while 3.14 on CI's
+#: Linux runners parsed it into nested lists. Either way the stamp or record
+#: is not well formed.
 DEEP_JSON = "[" * 100_000 + "0" + "]" * 100_000
 
 
