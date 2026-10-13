@@ -333,9 +333,9 @@ sources with one name are refused with `ValueError`.
 
 Moving a year file into place replaces the file at its path rather than
 rewriting it. The cut therefore needs write access to the data folder (and,
-in a folder with the sticky bit set, ownership of the year file it replaces),
-and the year file gets the mode and group a file the cutting user creates
-there would get, not those of the file it replaces.
+in a folder with the sticky bit set, ownership of the year file it replaces
+or of the folder), and the year file gets the mode and group a file the
+cutting user creates there would get, not those of the file it replaces.
 
 The limits listed under [Year files](#year-files) apply to UK year files too,
 with policyengine-uk in place of policyengine-us, except that UK year files
