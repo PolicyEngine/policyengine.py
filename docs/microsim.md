@@ -351,11 +351,93 @@ are moved into place whole. Three more apply:
 - a multi-year source is read as stored, without the projection.
 
 A year file opened directly, as `PolicyEngineUKDataset(filepath=...)`, is not
-checked, and saving it again with `save()` drops its stamp. A saved UK
-simulation output records the data year its run anchored on;
-`Simulation.load()` refuses an output saved without one, and
-`Simulation.ensure()` runs it again. A saved UK output does not record the
-stamp of the year file it was calculated from.
+checked, and saving it again with `save()` drops its stamp. A dataset read
+from a year file, or returned by `create_datasets`, keeps the file's stamp as
+`metadata["year_file_stamp"]`, so an output calculated from it records the
+stamp (see below). Loading reads the stamp before and after the tables, and
+reads the file again if the stamp changed in between, so the tables and the
+stamp a dataset keeps come from one cut even when another process replaces
+the year file while it is read.
+
+### Saved UK outputs
+
+A UK `Simulation.run()` records a stamp in its output's
+`metadata["output_stamp"]`:
+
+```json
+{
+  "revision": 1,
+  "year_file": {
+    "packages": {"policyengine-core": "3.33.0", "policyengine-uk": "2.126.12"},
+    "revision": 1,
+    "source": {
+      "sha256": "5ba399ea5ab9a6c7d4e9aaf6c623080beb34d9ad5f330f6244dbad72b8d960b6",
+      "uri": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2024_25.h5@1.58.0"
+    },
+    "year": 2026
+  }
+}
+```
+
+- `revision`: the UK output format revision;
+- `year_file`: the stamp the input dataset keeps of the year file it was cut
+  into, or `null` when it keeps none (a dataset built in memory, for
+  example).
+
+`save()` writes it into the output file as UTF-8 JSON, after the tables and
+the data year, as `uk.datasets.OUTPUT_STAMP_H5_DATASET`
+(`policyengine_uk_output_stamp`); `load()` restores it. UK year files and US
+outputs store their stamps under other names, so none passes as another.
+
+`Simulation.load()` refuses a saved UK output unless it is what a run of the
+simulation's dataset would save now, and `Simulation.ensure()` then runs the
+simulation again and saves the new output.
+`uk.datasets.output_stamp_problem(path, year_file)` returns the reason, or
+`None` for a current output; `year_file` is
+`uk.datasets.input_year_file_stamp(simulation.dataset)`. It reads only the
+output's stamp and whether the output has a data year, never its tables or
+the year file. A saved UK output is out of date when:
+
+- it has no stamp. Outputs saved before the stamp existed are calculated
+  again once, and so is an output whose save did not finish;
+- it has no data year. It was saved before runs anchored on the observed
+  data year, or not saved completely, and may have taken a projected year as
+  observed data and uprated the State Pension by CPI;
+- it was calculated from another year file than the simulation's dataset was
+  read from, or from another cut of it: the two year-file stamps differ.
+  `ensure_datasets` cuts a year file again, with another stamp, when the
+  bundle re-pins its dataset, a local source is edited or a package is
+  upgraded, so an output calculated from the old cut is not reused for a
+  simulation over the new one. Nor is an output reused for another year's
+  file in the same folder, or between a dataset that keeps a stamp and one
+  that keeps none;
+- the year file it was calculated from was cut with another year-file format
+  revision, or with other policyengine-core or policyengine-uk versions than
+  are installed. The output is then out of date even before the year file is
+  cut again;
+- it has another output format revision, or its stamp cannot be read.
+
+The reason names the years, sources and package versions that differ. A
+missing output file raises `FileNotFoundError`, as before, so `ensure()` runs
+the simulation. An output file that cannot be opened for reasons unrelated
+to its contents (no permission, a directory, a lock held by another process)
+raises that error rather than counting as out of date.
+
+The check has these limits:
+
+- it compares the output with the simulation's dataset, not with the source
+  requested now. Until a year file is cut again, a simulation over it reuses
+  the outputs calculated from it; `load_datasets` refuses such a year file,
+  and `ensure_datasets` cuts it again;
+- an output calculated from a year file cut with other package versions than
+  are installed is never current, so a simulation over such a year file
+  opened directly is run again every time;
+- a dataset built in memory, and a year file cut before the stamp existed
+  and opened directly, keep no stamp. Outputs calculated from them record
+  `null` and are reused whatever package versions are installed;
+- editing a dataset's tables in memory does not change the stamp it keeps;
+- within one process, `ensure()` returns the output it already holds in
+  memory for a simulation id without checking its stamp.
 
 ## Simulations
 
