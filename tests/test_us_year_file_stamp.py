@@ -311,6 +311,10 @@ def test_a_year_file_is_current_only_under_this_releases_exact_stamp(case):
             assert read_renames_record(path) == record
 
 
+#: Text stored as it is, not as JSON. HDF5 variable-length strings cannot
+#: hold a NUL character.
+RAW_TEXT = st.text(alphabet=st.characters(blacklist_characters="\x00"), max_size=12)
+
 NODES = st.one_of(
     st.just(_ABSENT),
     JSON_VALUES,
@@ -322,10 +326,10 @@ NODES = st.one_of(
             ),
         }
     ),
-    st.tuples(st.just("text"), st.text(max_size=12)),
+    st.tuples(st.just("text"), RAW_TEXT),
     st.tuples(st.just("bytes"), st.binary(min_size=1, max_size=12)),
     st.tuples(st.just("number"), st.integers(-5, 5)),
-    st.tuples(st.just("array"), st.lists(st.text(max_size=4), min_size=1, max_size=3)),
+    st.tuples(st.just("array"), st.lists(RAW_TEXT, min_size=1, max_size=3)),
     st.tuples(st.just("group"), st.none()),
 )
 
@@ -422,13 +426,34 @@ def test_an_unstamped_file_is_out_of_date_even_with_an_empty_register(
 @pytest.mark.parametrize(
     "record, reason",
     [
-        (_ABSENT, "it has no record of the renamed stored inputs mapped when it was cut"),
-        ([], "its record of the renamed stored inputs mapped when it was cut is malformed"),
-        ([[LEGACY, LIVE]], "its record of the renamed stored inputs mapped when it was cut is malformed"),
-        (5, "its record of the renamed stored inputs mapped when it was cut is malformed"),
-        ({LEGACY: 1}, "its record of the renamed stored inputs mapped when it was cut is malformed"),
-        (("text", "{"), "its record of the renamed stored inputs mapped when it was cut is malformed"),
-        (("group", None), "its record of the renamed stored inputs mapped when it was cut is malformed"),
+        (
+            _ABSENT,
+            "it has no record of the renamed stored inputs mapped when it was cut",
+        ),
+        (
+            [],
+            "its record of the renamed stored inputs mapped when it was cut is malformed",
+        ),
+        (
+            [[LEGACY, LIVE]],
+            "its record of the renamed stored inputs mapped when it was cut is malformed",
+        ),
+        (
+            5,
+            "its record of the renamed stored inputs mapped when it was cut is malformed",
+        ),
+        (
+            {LEGACY: 1},
+            "its record of the renamed stored inputs mapped when it was cut is malformed",
+        ),
+        (
+            ("text", "{"),
+            "its record of the renamed stored inputs mapped when it was cut is malformed",
+        ),
+        (
+            ("group", None),
+            "its record of the renamed stored inputs mapped when it was cut is malformed",
+        ),
         (
             {"retired": "replacement"},
             "its record lists renames outside the register it was stamped with: "
@@ -442,14 +467,18 @@ def test_an_unstamped_file_is_out_of_date_even_with_an_empty_register(
     ],
 )
 def test_a_stamped_file_needs_a_record_within_its_register(tmp_path, record, reason):
-    path = _write_year_file(tmp_path / "year.h5", stamp=year_file_stamp(), record=record)
+    path = _write_year_file(
+        tmp_path / "year.h5", stamp=year_file_stamp(), record=record
+    )
 
     assert year_file_stamp_problem(path) == reason
 
 
 @pytest.mark.parametrize("record", [{}, {LEGACY: LIVE}])
 def test_a_file_stamped_with_this_releases_register_is_current(tmp_path, record):
-    path = _write_year_file(tmp_path / "year.h5", stamp=year_file_stamp(), record=record)
+    path = _write_year_file(
+        tmp_path / "year.h5", stamp=year_file_stamp(), record=record
+    )
 
     assert year_file_stamp_problem(path) is None
 
@@ -733,14 +762,18 @@ def test_ensure_cuts_again_exactly_when_load_would_refuse(states):
 
         if first_unusable is not None and STATES[first_unusable][1] is False:
             with pytest.raises(ValueError, match="is out of date: "):
-                load_datasets(datasets=[SOURCE], years=years, data_folder=str(data_folder))
+                load_datasets(
+                    datasets=[SOURCE], years=years, data_folder=str(data_folder)
+                )
 
         create = MagicMock(side_effect=_create_current_files)
         with (
             patch.object(us_datasets, "create_datasets", create),
             patch.object(us_datasets.logger, "warning") as warning,
         ):
-            ensure_datasets(datasets=[SOURCE], years=years, data_folder=str(data_folder))
+            ensure_datasets(
+                datasets=[SOURCE], years=years, data_folder=str(data_folder)
+            )
 
             assert create.called == (bool(stale) or "missing" in states)
             # One warning per out-of-date file, each with its reason.
@@ -758,7 +791,9 @@ def test_ensure_cuts_again_exactly_when_load_would_refuse(states):
         assert sorted(loaded) == [f"{STEM}_{year}" for year in years]
 
 
-@pytest.mark.parametrize("states", [["current", "current, mapped"], ["current", "record only"]])
+@pytest.mark.parametrize(
+    "states", [["current", "current, mapped"], ["current", "record only"]]
+)
 def test_ensure_decides_from_the_stamps_alone(tmp_path, states):
     """Deciding never opens a year file's tables or the source dataset."""
     data_folder = tmp_path / "data"

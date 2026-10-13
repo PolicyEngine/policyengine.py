@@ -90,6 +90,10 @@ YEAR_FILE_STAMP_H5_DATASET = "policyengine_year_file_stamp"
 #: it must be cut again, for a reason the register does not capture (for
 #: example, policyengine.py 6.1.1 and earlier exported only the engine's input
 #: variables, so a stored column the engine had renamed was dropped).
+#:
+#: Removing the temporary ACS WIC assumption (:func:`_temporary_acs_wic_values`)
+#: is such a change: year files cut while it applies store assumed claiming
+#: as ``takes_up_wic_if_eligible`` for ACS people with no stored decision.
 YEAR_FILE_STAMP_REVISION = 1
 
 #: ``{year: {entity key: stored table}}``, one table per entity per dataset
@@ -228,7 +232,11 @@ def year_file_stamp_problem(path: str | Path) -> str | None:
             return (
                 "it has no record of the renamed stored inputs mapped when it "
                 "was cut, so it was cut before policyengine.py mapped them"
-                + (f" and may have lost any of: {_describe(register)}" if register else "")
+                + (
+                    f" and may have lost any of: {_describe(register)}"
+                    if register
+                    else ""
+                )
             )
         return "it has no stamp of the register of renamed inputs it was cut under" + (
             f", so it may have lost any of: {_describe(register)}" if register else ""
@@ -241,7 +249,9 @@ def year_file_stamp_problem(path: str | Path) -> str | None:
         and type(revision) is int
         and _is_str_map(stamp["register"])
     ):
-        return "its stamp of the register of renamed inputs it was cut under is malformed"
+        return (
+            "its stamp of the register of renamed inputs it was cut under is malformed"
+        )
     if record is _ABSENT:
         return "it has no record of the renamed stored inputs mapped when it was cut"
     if not _is_str_map(record):
@@ -259,14 +269,10 @@ def year_file_stamp_problem(path: str | Path) -> str | None:
     if stamp == current:
         return None
     missing = {
-        legacy: live
-        for legacy, live in register.items()
-        if stamped.get(legacy) != live
+        legacy: live for legacy, live in register.items() if stamped.get(legacy) != live
     }
     unknown = {
-        legacy: live
-        for legacy, live in stamped.items()
-        if register.get(legacy) != live
+        legacy: live for legacy, live in stamped.items() if register.get(legacy) != live
     }
     reasons = []
     if missing:
