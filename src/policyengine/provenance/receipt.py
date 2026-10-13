@@ -2041,14 +2041,28 @@ def composed_reform_identity(
     ``applied_before_data_load``, that applies every member's parameter
     changes (a reform dictionary member's entries, a scenario member's
     ``parameter_changes``) and then runs each member's simulation modifier in
-    member order. This is what the composer must run, for example as a
-    single simulation modifier; it is not ``Scenario.__add__``, whose merge
-    depends on how members are grouped and which leaves the order to the
-    engine (policyengine-uk 2.125.1 runs a Scenario's modifier before its
-    parameter changes). The composer must also make sure no two members
-    change the same parameter, in any form: with disjoint changes the merged
-    result does not depend on grouping or order. This function sees only
-    identities and cannot check either.
+    member order. The changes are applied where the engine applies a
+    Scenario's own parameter changes, so each member's changes act as they do
+    when that member runs alone. This is what the composer must run; it is
+    not ``Scenario.__add__``, whose merge depends on how members are grouped
+    and which leaves the order to the engine (policyengine-uk 2.125.1 runs a
+    Scenario's modifier before its parameter changes).
+
+    On policyengine-uk 2.126.12, which applies a Scenario's own parameter
+    changes before its modifier, run it as one Scenario that carries the
+    members' merged changes as its own ``parameter_changes`` and whose
+    modifier runs only the members' modifiers. Do not apply the changes
+    inside a modifier there: that version applies a Scenario's own changes
+    before the construction steps that read parameters (the Universal Credit
+    rebalancing inputs and the structural reforms switched on by parameters)
+    and runs its modifier after them, so a change made inside a modifier
+    reaches neither step and the combined run can differ from a member run
+    alone.
+
+    The composer must also make sure no two members change the same
+    parameter, in any form: with disjoint changes the merged result does not
+    depend on grouping or order. This function sees only identities and
+    cannot check either.
 
     A member's own phase is overridden by the composition's, and a nested
     composition's members are applied as if listed in its place.
