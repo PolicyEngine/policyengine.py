@@ -527,20 +527,21 @@ def create_datasets(
         # file anchors on the same observed year as a run of the source.
         data_year = int(min(sim.dataset.years))
         data_year_data = _year_data_with_weights(sim.dataset[data_year])
-        cut: list[PolicyEngineUKDataset] = []
+        cut: list[str] = []
         for year in years:
+            filepath = f"{data_folder}/{dataset_stem}_year_{year}.h5"
             uk_dataset = PolicyEngineUKDataset(
                 id=f"{dataset_stem}_year_{year}",
                 name=f"{dataset_stem}-year-{year}",
                 description=f"UK Dataset for year {year} based on {dataset_stem}",
-                filepath=f"{data_folder}/{dataset_stem}_year_{year}.h5",
+                filepath=filepath,
                 year=int(year),
                 data=_year_data_with_weights(sim.dataset[year]),
                 data_year=data_year,
                 data_year_data=data_year_data if int(year) > data_year else None,
             )
             uk_dataset.save()
-            cut.append(uk_dataset)
+            cut.append(filepath)
 
             dataset_key = f"{dataset_stem}_{year}"
             result[dataset_key] = uk_dataset
@@ -559,8 +560,8 @@ def create_datasets(
             )
         # Stamp last. ``save()`` truncates each file first, so a year file
         # whose write stopped part-way has no stamp and is cut again.
-        for uk_dataset in cut:
-            write_year_file_stamp(uk_dataset.filepath, stamp)
+        for filepath in cut:
+            write_year_file_stamp(filepath, stamp)
 
     return result
 
