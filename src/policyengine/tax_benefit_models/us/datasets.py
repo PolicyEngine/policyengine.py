@@ -435,9 +435,10 @@ def create_datasets(
     and ``load_datasets`` check.
 
     The source file's size and modification time are recorded right after it
-    is materialized, and checked again once the year files are written; a
-    bundle dataset's file is also hashed again against its verified sha256
-    (see ``dataset_materialization.dataset_source_change``).
+    is materialized, and checked again once the year files are written. A
+    downloaded file is also hashed again, against the sha256 a bundle
+    dataset was verified against or an explicit URI was downloaded with (see
+    ``dataset_materialization.dataset_source_change``).
     Another process can replace a file in a shared data folder, for example
     by materializing another release of the same dataset there. If the source
     changed, the year files are left unstamped, so they are cut again, and
@@ -645,8 +646,9 @@ def create_datasets(
             result[dataset_key] = us_dataset
 
         # Stamp only if the source file is still the one materialized (and,
-        # for a bundle dataset, still hashes to its verified sha256), so no
-        # stamp names a source the files may not have been cut from.
+        # if it was downloaded, still hashes to the sha256 it was verified
+        # against or downloaded with), so no stamp names a source the files
+        # may not have been cut from.
         change = dataset_source_change(source, identity, snapshot)
         if change is not None:
             raise DatasetMaterializationError(

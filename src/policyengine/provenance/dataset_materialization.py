@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import hashlib
 import os
 import tempfile
 from dataclasses import dataclass
@@ -55,6 +56,15 @@ class DatasetSource(BaseModel):
     source_uri: str
     path: str
     bundle_dataset: Optional[MaterializedDataset] = None
+    downloaded_sha256: Optional[str] = None
+    """sha256 of the bytes downloaded for an explicit Hugging Face URI.
+
+    Nothing verifies an explicit URI's contents, but this records what was
+    downloaded, so a later check can tell whether the file at ``path`` is
+    still those bytes (see :func:`dataset_source_change`). ``None`` for a
+    bundle dataset, whose verified sha256 is on ``bundle_dataset``, and for a
+    local file.
+    """
 
     @property
     def name(self) -> str:
@@ -183,11 +193,11 @@ def _use_bundle_dataset(
     )
 
 
-def _download_hugging_face_dataset(
-    dataset_uri: str,
-    *,
-    data_dir: Path,
-) -> DatasetSource:
+def _parse_hugging_face_uri(dataset_uri: str) -> tuple[str, str, str]:
+    """Split ``hf://owner/repo/path[@revision]`` into repo, path and revision.
+
+    The revision defaults to ``main``.
+    """
     path_with_repo, revision = (
         dataset_uri[5:].rsplit("@", maxsplit=1)
         if "@" in dataset_uri[5:]
@@ -199,9 +209,15 @@ def _download_hugging_face_dataset(
             "Invalid Hugging Face dataset URI. Expected format "
             f"'hf://owner/repo/path/to/file[@revision]', got {dataset_uri!r}."
         )
+    return f"{parts[0]}/{parts[1]}", parts[2], revision
 
-    repo_id = f"{parts[0]}/{parts[1]}"
-    repository_path = parts[2]
+
+def _download_hugging_face_dataset(
+    dataset_uri: str,
+    *,
+    data_dir: Path,
+) -> DatasetSource:
+    repo_id, repository_path, revision = _parse_hugging_face_uri(dataset_uri)
     destination = data_dir / Path(repository_path).name
     destination.parent.mkdir(parents=True, exist_ok=True)
 
@@ -240,12 +256,18 @@ def _download_hugging_face_dataset(
                         f"Could not find explicit dataset {dataset_uri!r}."
                     )
                 response.raise_for_status()
+                digest = hashlib.sha256()
                 with temporary_path.open("wb") as output:
                     for chunk in response.iter_content(chunk_size=1024 * 1024):
                         if chunk:
                             output.write(chunk)
+                            digest.update(chunk)
             os.replace(temporary_path, destination)
-            return DatasetSource(source_uri=dataset_uri, path=str(destination))
+            return DatasetSource(
+                source_uri=dataset_uri,
+                path=str(destination),
+                downloaded_sha256=digest.hexdigest(),
+            )
         finally:
             temporary_path.unlink(missing_ok=True)
 
@@ -326,6 +348,7 @@ def requested_dataset_source_identity(
         country_id, dataset, allow_unmanaged=allow_unmanaged
     )
     if source_uri.startswith("hf://"):
+        _parse_hugging_face_uri(source_uri)
         return {"uri": source_uri}
     if "://" in source_uri:
         raise DatasetMaterializationError(
@@ -339,14 +362,10 @@ def dataset_source_snapshot(source: DatasetSource) -> dict[str, int]:
 
     Taken right after ``materialize_dataset`` returns, it lets
     :func:`dataset_source_change` tell whether the file at ``source.path`` has
-    been replaced or modified since. Another process can replace a file in a
-    shared data folder, for example by materializing another release of the
-    same dataset, or another file with the same name, there. A download
-    writes a new file, so its modification time is when it finished.
-
-    Device and inode numbers are left out: some file systems (FUSE mounts
-    such as sshfs without ``-o use_ino``) do not keep them stable, and a
-    replacement policyengine.py makes always moves the modification time.
+    been modified or replaced since. Device and inode numbers are left out,
+    since some file systems (FUSE mounts such as sshfs without
+    ``-o use_ino``) do not keep them stable. A downloaded file is also checked
+    by its sha256, so the snapshot matters most for a local file.
     """
     status = os.stat(source.path)
     return {"size": status.st_size, "mtime_ns": status.st_mtime_ns}
@@ -361,17 +380,21 @@ def dataset_source_change(
 
     ``identity`` is what :func:`dataset_source_identity` gave for ``source``,
     and ``snapshot`` what :func:`dataset_source_snapshot` gave right after it
-    was materialized. The file must still have the snapshot's size and
-    modification time, whatever the kind of source. A bundle dataset's file
-    must also still hash to its verified sha256, which covers a replacement
-    after verification and before the snapshot. A local file must still have
+    was materialized. Another process can replace a file in a shared data
+    folder, for example by materializing another release of the same
+    dataset, or another file with the same name, there.
+
+    The file must still have the snapshot's size and modification time,
+    whatever the kind of source. A downloaded file must also still hash to
+    the sha256 it was verified against (a bundle dataset) or downloaded with
+    (an explicit URI), so a replacement is caught even when it lands within
+    one timestamp tick, or before the snapshot. A local file must still have
     its identity.
 
-    Two gaps remain. A file that another process restores to the snapshot's
-    size and modification time is not noticed: one renamed aside and back,
-    or copied with its times kept. And an explicit URI's contents are
-    verified against nothing, so a file put in its place between the
-    download and the snapshot goes unnoticed.
+    One gap remains, for a local file only: one modified, or replaced by a
+    file of the same size, within one tick of the file system's timestamp
+    resolution, or restored to the snapshot's size and modification time
+    (renamed aside and back, or copied with its times kept), is not noticed.
 
     Returns:
         ``None`` when the source still matches; otherwise a clause saying
@@ -386,16 +409,19 @@ def dataset_source_change(
             f"{source.path} was replaced or modified (its size or modification "
             "time changed)"
         )
+    expected: Optional[tuple[str, str]] = None
     if "sha256" in identity:
+        expected = ("verified", identity["sha256"])
+    elif source.downloaded_sha256 is not None:
+        expected = ("downloaded", source.downloaded_sha256)
+    if expected is not None:
+        kind, sha256 = expected
         try:
-            sha256 = sha256_file(source.path)
+            actual = sha256_file(source.path)
         except FileNotFoundError:
             return f"{source.path} no longer exists"
-        if sha256 != identity["sha256"]:
-            return (
-                f"{source.path} has sha256 {sha256}, not the verified "
-                f"{identity['sha256']}"
-            )
+        if actual != sha256:
+            return f"{source.path} has sha256 {actual}, not the {kind} {sha256}"
     if "path" in identity:
         try:
             local = _local_file_identity(source.path)

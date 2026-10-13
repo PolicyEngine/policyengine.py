@@ -292,20 +292,28 @@ def test_a_bundle_entry_without_a_revision_uses_the_release_revision():
         }
 
 
-@pytest.mark.parametrize("uri", ["s3://bucket/x.h5", "gs://bucket/x.h5"])
-def test_an_unsupported_uri_scheme_is_refused_as_materialize_does(bundle, uri):
+@pytest.mark.parametrize(
+    "uri, error",
+    [
+        ("s3://bucket/x.h5", "Unsupported explicit dataset URI"),
+        ("gs://bucket/x.h5", "Unsupported explicit dataset URI"),
+        ("hf://owner/repo", "Invalid Hugging Face dataset URI"),
+        ("hf://owner//x.h5@r", "Invalid Hugging Face dataset URI"),
+    ],
+)
+def test_a_uri_materialize_refuses_is_refused_with_its_error(bundle, uri, error):
     _, data_dir = bundle
 
-    with pytest.raises(
-        dataset_materialization.DatasetMaterializationError,
-        match="Unsupported explicit dataset URI",
-    ):
+    with pytest.raises(dataset_materialization.DatasetMaterializationError) as early:
         requested_dataset_source_identity("us", uri)
-    with pytest.raises(
-        dataset_materialization.DatasetMaterializationError,
-        match="Unsupported explicit dataset URI",
-    ):
-        materialize_dataset("us", uri, allow_unmanaged=True, data_dir=data_dir)
+    with patch.object(dataset_materialization.requests, "get", _refuse):
+        with pytest.raises(
+            dataset_materialization.DatasetMaterializationError
+        ) as materializing:
+            materialize_dataset("us", uri, allow_unmanaged=True, data_dir=data_dir)
+
+    assert error in str(early.value)
+    assert str(early.value) == str(materializing.value)
 
 
 def test_a_bundle_entry_without_a_sha256_is_refused_as_materialize_does(tmp_path):
@@ -667,6 +675,80 @@ def test_a_bundle_file_replaced_before_its_snapshot_has_changed(bundle):
     assert dataset_source_change(source, identity, snapshot) == (
         f"{source.path} has sha256 {_sha256(b'another release')}, not the "
         f"verified {_sha256(DEFAULT_BYTES)}"
+    )
+
+
+def test_an_explicit_download_records_the_sha256_of_its_bytes(bundle):
+    _, data_dir = bundle
+    source, _, _ = _materialized(
+        "hf://fixture/explicit/explicit.h5@pinned", data_dir, EXPLICIT_BYTES
+    )
+
+    assert source.downloaded_sha256 == _sha256(EXPLICIT_BYTES)
+    assert Path(source.path).read_bytes() == EXPLICIT_BYTES
+
+
+@pytest.mark.parametrize(
+    "dataset, served, payload, kind",
+    [
+        ("tiny_default", None, DEFAULT_BYTES, "verified"),
+        (
+            "hf://fixture/explicit/explicit.h5@pinned",
+            EXPLICIT_BYTES,
+            EXPLICIT_BYTES,
+            "downloaded",
+        ),
+    ],
+)
+def test_a_downloaded_file_replaced_within_one_timestamp_tick_has_changed(
+    bundle, dataset, served, payload, kind
+):
+    """Same size, same modification time, other bytes: as when another
+    download of the same size finishes within one tick of a coarse file
+    system. The sha256 it was verified against, or downloaded with, catches
+    it."""
+    _, data_dir = bundle
+    source, identity, snapshot = _materialized(dataset, data_dir, served)
+    other = bytes(reversed(payload))
+    assert len(other) == len(payload) and other != payload
+
+    _replace(Path(source.path), other)
+    os.utime(source.path, ns=(snapshot["mtime_ns"], snapshot["mtime_ns"]))
+
+    assert dataset_source_snapshot(source) == snapshot
+    assert dataset_source_change(source, identity, snapshot) == (
+        f"{source.path} has sha256 {_sha256(other)}, not the {kind} {_sha256(payload)}"
+    )
+
+
+@settings(max_examples=100, deadline=None)
+@given(other=st.binary(min_size=0, max_size=24), keep_mtime=st.booleans())
+def test_a_replaced_explicit_download_has_changed_whatever_its_metadata(
+    tmp_path_factory, other, keep_mtime
+):
+    """For a downloaded file, any other bytes are a change, even at the
+    same size and modification time."""
+    data_dir = tmp_path_factory.mktemp("data")
+    get, _ = _serve(EXPLICIT_BYTES)
+    with patch.object(dataset_materialization.requests, "get", get):
+        source = materialize_dataset(
+            "us",
+            "hf://fixture/explicit/explicit.h5@pinned",
+            allow_unmanaged=True,
+            data_dir=data_dir,
+        )
+    os.utime(source.path, ns=(SECOND, SECOND))
+    identity, snapshot = (
+        dataset_source_identity(source),
+        dataset_source_snapshot(source),
+    )
+
+    _replace(Path(source.path), other)
+    if keep_mtime:
+        os.utime(source.path, ns=(SECOND, SECOND))
+
+    assert (dataset_source_change(source, identity, snapshot) is None) == (
+        other == EXPLICIT_BYTES and keep_mtime
     )
 
 

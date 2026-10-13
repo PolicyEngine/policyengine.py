@@ -55,6 +55,7 @@ from microdf import MicroDataFrame
 
 import policyengine.provenance.dataset_materialization as dataset_materialization
 from policyengine.provenance.dataset_materialization import (
+    DatasetMaterializationError,
     describe_dataset_source_identity,
     requested_dataset_source_identity,
 )
@@ -87,7 +88,7 @@ REVISION = YEAR_FILE_STAMP_REVISION
 #: ``hf://`` references are used as they are, and name year files after the
 #: file's stem, so no manifest or download is involved. Its identity is the
 #: URI as given.
-SOURCE = "hf://fixture/tiny.h5"
+SOURCE = "hf://fixture/repo/tiny.h5"
 IDENTITY = {"uri": SOURCE}
 STEM = "tiny"
 GROUPS = ("household", "tax_unit", "spm_unit", "family", "marital_unit")
@@ -1553,10 +1554,10 @@ def test_the_refusal_names_the_file_and_what_it_may_lack(tmp_path):
 
 #: Requests whose stems (``pop`` or ``other``) collide in different ways.
 COLLIDING = [
-    "hf://fixture/pop.h5@r1",
-    "hf://fixture/pop.h5@r2",
-    "hf://elsewhere/pop.h5@r1",
-    "hf://fixture/other.h5@r1",
+    "hf://fixture/repo/pop.h5@r1",
+    "hf://fixture/repo/pop.h5@r2",
+    "hf://elsewhere/repo/pop.h5@r1",
+    "hf://fixture/repo/other.h5@r1",
 ]
 
 
@@ -1612,7 +1613,7 @@ def test_two_sources_with_one_stem_are_refused_before_anything_is_cut(requests):
 
 
 def test_the_collision_refusal_names_both_requests_and_sources(tmp_path):
-    first, second = "hf://fixture/pop.h5@r1", "hf://fixture/pop.h5@r2"
+    first, second = "hf://fixture/repo/pop.h5@r1", "hf://fixture/repo/pop.h5@r2"
 
     with pytest.raises(ValueError) as refused:
         ensure_datasets(
@@ -1630,7 +1631,7 @@ def test_the_collision_refusal_names_both_requests_and_sources(tmp_path):
     "requests, error",
     [
         (["not_a_bundle_dataset", SOURCE], "Unknown managed dataset"),
-        ([SOURCE, "hf://fixture/other.h5"], "Explicit dataset URIs bypass"),
+        ([SOURCE, "hf://fixture/repo/other.h5"], "Explicit dataset URIs bypass"),
     ],
 )
 def test_create_refuses_what_materialize_would_with_its_error(
@@ -1653,16 +1654,25 @@ def test_create_refuses_what_materialize_would_with_its_error(
             )
 
 
-def test_create_refuses_an_unsupported_scheme_before_cutting_anything(tmp_path):
-    """Even with ``allow_unmanaged``, as ``materialize_dataset`` would."""
+@pytest.mark.parametrize(
+    "request_, error",
+    [
+        ("s3://bucket/tiny.h5", "Unsupported explicit dataset URI"),
+        ("hf://owner/repo", "Invalid Hugging Face dataset URI"),
+    ],
+)
+def test_create_refuses_a_uri_materialize_would_before_cutting_anything(
+    tmp_path, request_, error
+):
+    """Even with ``allow_unmanaged``, with ``materialize_dataset``'s error."""
 
     def refuse(*args, **kwargs):
         raise AssertionError("a dataset was materialized or downloaded")
 
     with patch.object(us_datasets, "materialize_dataset", refuse):
-        with pytest.raises(ValueError, match="Unsupported explicit dataset URI"):
+        with pytest.raises(DatasetMaterializationError, match=error):
             us_datasets.create_datasets(
-                datasets=[SOURCE, "s3://bucket/tiny.h5"],
+                datasets=[SOURCE, request_],
                 years=[2024],
                 data_folder=str(tmp_path),
                 allow_unmanaged=True,

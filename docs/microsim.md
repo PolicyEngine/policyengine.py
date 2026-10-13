@@ -463,14 +463,14 @@ Package versions come from the installed distributions' metadata, so
 policyengine-us is not imported.
 
 `create_datasets` records the source file's size and modification time right
-after materializing it (`dataset_materialization.dataset_source_snapshot`).
-It checks them again once the year files are written, and hashes a bundle
-dataset's file again against its verified sha256 (`dataset_source_change`).
-Another process can replace a file in a shared data folder, for example by
+after materializing it (`dataset_materialization.dataset_source_snapshot`),
+and checks them again once the year files are written. A downloaded file is
+also hashed again, against the sha256 a bundle dataset was verified against
+or an explicit URI was downloaded with (`dataset_source_change`). Another
+process can replace a file in a shared data folder, for example by
 materializing another release of the same dataset, or another file with the
-same name, there. A download writes a new file, so its modification time
-moves. If the source changed, the year files are left unstamped, so they are
-cut again, and `DatasetMaterializationError` is raised.
+same name, there. If the source changed, the year files are left unstamped,
+so they are cut again, and `DatasetMaterializationError` is raised.
 
 Requested datasets that are different sources with one name, such as two
 revisions of one Hugging Face file or two local files called `pop.h5`, would
@@ -513,12 +513,12 @@ The source check has limits that follow from not reading the source:
   resolution) is not detected;
 - an explicit Hugging Face URI is compared as a string. Pin it to a commit
   (`hf://owner/repo/file.h5@<commit>`): a URI without a revision, or with a
-  branch, names whatever the branch holds when the files are cut. Its
-  contents are verified against nothing, so a file another process puts in
-  its place between the download and the snapshot goes unnoticed;
-- a source file that another process restores to the size and modification
-  time it had when it was materialized (renamed aside and back, or copied
-  with its times kept) while year files are cut from it is not noticed;
+  branch, names whatever the branch holds when the files are cut;
+- while year files are cut from a local file, a change that keeps its size
+  and lands within one tick of the file system's timestamp resolution, or
+  that restores its size and modification time (renamed aside and back, or
+  copied with its times kept), is not noticed. A downloaded source is also
+  checked by its sha256, so this does not apply to it;
 - an editable or source install of policyengine-us keeps its version string
   while its code changes, so its year files are not cut again;
 - `create_datasets` takes no lock, so two processes cutting the same year
