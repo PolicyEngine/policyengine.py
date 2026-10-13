@@ -94,6 +94,7 @@ AUDIT_COLUMNS = (
     "n_sources",
     "n_eff",
     "top_share",
+    "rest_share",
     "private_reason",
 )
 
@@ -129,11 +130,16 @@ class DisclosureSettings(BaseModel):
 
     min_sources: int = Field(default=10, ge=10)
     max_top_share: float = Field(default=0.5, gt=0.0, le=0.5)
+    # The p% rule: what is left of a number without its largest household, or
+    # its two largest, must be at least this share of the largest one's part.
+    min_rest_share: float = Field(default=0.1, ge=0.1, le=1.0)
     min_n_eff: float = Field(default=10.0, ge=10.0)
     approximate_below_n_eff: float = Field(default=30.0, ge=0.0)
     # A household contributes, gains or loses when its change is larger than
-    # this. Smaller changes count as no change and are left out of every sum.
-    change_tolerance: float = Field(default=1.0, gt=0.0)
+    # this, in the outcome's unit (pounds a year). Smaller changes count as no
+    # change and are left out of every sum. The bound keeps floating-point
+    # residue from counting as a contributor.
+    change_tolerance: float = Field(default=1.0, ge=1.0)
     noise: bool = False
     # Distance of a noise factor from 1: uniform on this range, either side.
     noise_distance: tuple[float, float] = (0.08, 0.12)
@@ -143,6 +149,14 @@ class DisclosureSettings(BaseModel):
     min_rounding_base: dict[str, float] = Field(
         default_factory=lambda: dict(DEFAULT_MIN_ROUNDING_BASE)
     )
+
+    def revalidated(self) -> "DisclosureSettings":
+        """These settings, validated again.
+
+        ``model_copy(update=...)`` and ``model_construct`` skip validation, so
+        the layer validates the settings it is given before it uses them.
+        """
+        return type(self).model_validate(self.model_dump())
 
     @field_validator("noise_distance")
     @classmethod

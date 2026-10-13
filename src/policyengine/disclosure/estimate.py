@@ -52,7 +52,13 @@ _TIER_ORDER = {REPORTED: 0, APPROXIMATE: 1, WITHHELD: 2}
 
 
 class AreaEstimates:
-    """Estimates and support for the areas of one level. Private."""
+    """Estimates and support for the areas of one level. Private.
+
+    The object holds exact values, household counts and, with noise on, the
+    noise factor of every household that gains or loses. Within one dataset
+    those factors do the same job as the key, so treat the object as you treat
+    the key: keep it in memory, and let a release write the audit.
+    """
 
     def __init__(
         self,
@@ -65,19 +71,17 @@ class AreaEstimates:
         settings: DisclosureSettings,
         noise: bool,
         contributions: dict[str, np.ndarray],
-        no_change: np.ndarray,
         table: pd.DataFrame,
     ) -> None:
         self.level = level
         self.reform = reform
         self.year = year
         self.areas = areas
-        self.source_index = source_index
         self.settings = settings
         self.noise = noise
-        self.contributions = contributions
-        self.no_change = no_change
-        self.table = table
+        self._source_index = source_index
+        self._contributions = contributions
+        self._table = table
 
     def __repr__(self) -> str:
         # The table holds exact values and counts, so it stays out of reprs.
@@ -86,15 +90,21 @@ class AreaEstimates:
             f"year={self.year!r}, areas={self.areas.n_areas}, private)"
         )
 
+    def __getstate__(self) -> dict:
+        raise TypeError(
+            "AreaEstimates holds exact values and noise factors, so it cannot "
+            "be pickled or copied. Use Release.write_audit for a private record."
+        )
+
     def family_tiers(self, family: str) -> dict[str, str]:
         """The primary tier of each area's cell in one family."""
         outcome = AVERAGE_CHANGE if family == FAMILY_CHANGE else family
-        rows = self.table[self.table["outcome"] == outcome]
+        rows = self._table[self._table["outcome"] == outcome]
         return dict(zip(rows["area_code"], rows["family_tier"]))
 
     def family_sources(self, family: str) -> dict[str, int]:
         outcome = AVERAGE_CHANGE if family == FAMILY_CHANGE else family
-        rows = self.table[self.table["outcome"] == outcome]
+        rows = self._table[self._table["outcome"] == outcome]
         return dict(zip(rows["area_code"], rows["n_sources"]))
 
 
@@ -169,6 +179,23 @@ def _replicates(
     return {outcome: np.concatenate(chunks, axis=1) for outcome, chunks in out.items()}
 
 
+def _interval(
+    draws: np.ndarray, exact: np.ndarray, alpha: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Percentile bounds and standard error of each area's replicates.
+
+    A skewed set of replicates can leave the estimate outside its percentile
+    bounds, so the bounds are widened to include it.
+    """
+    lower = np.nanpercentile(draws, 100.0 * alpha, axis=1)
+    upper = np.nanpercentile(draws, 100.0 * (1.0 - alpha), axis=1)
+    return (
+        np.fmin(lower, exact),
+        np.fmax(upper, exact),
+        np.nanstd(draws, axis=1, ddof=1),
+    )
+
+
 def _direction(value: float, lo: float, hi: float) -> str:
     if lo > 0:
         return GAIN
@@ -197,7 +224,7 @@ def estimate_change(
     household net income. ``source_ids`` names the survey household each
     record was copied or cloned from.
     """
-    settings = settings or DisclosureSettings()
+    settings = (settings or DisclosureSettings()).revalidated()
     # Resolve the key first, so a missing key fails before any computation.
     key = resolve_noise_key(noise_key) if settings.noise else None
     n_records = areas.n_records
@@ -253,13 +280,7 @@ def estimate_change(
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=RuntimeWarning)
         for outcome, draws in replicates.items():
-            lower = np.nanpercentile(draws, 100.0 * alpha, axis=1)
-            upper = np.nanpercentile(draws, 100.0 * (1.0 - alpha), axis=1)
-            bounds[outcome] = (
-                np.fmin(lower, exact[outcome]),
-                np.fmax(upper, exact[outcome]),
-                np.nanstd(draws, axis=1, ddof=1),
-            )
+            bounds[outcome] = _interval(draws, exact[outcome], alpha)
 
     one_area = areas.one_area_per_record
     rules = {"one_area_per_record": one_area, "noise": settings.noise}
@@ -350,9 +371,15 @@ def estimate_change(
                     tiers[family],
                     reasons[family],
                     binding_support(supports[family]),
+                    # A cell with no contributor rests on the households that
+                    # did not change, as a zero share rests on its other side.
+                    binding_support((*supports[family], unchanged)),
                     one_area,
                 )
             )
+        third_cell = binding_support(
+            (*supports[FAMILY_GAINING], *supports[FAMILY_LOSING], unchanged)
+        )
         rows.append(
             _row(
                 level,
@@ -367,13 +394,8 @@ def estimate_change(
                 rounded[SHARE_NO_CHANGE],
                 third,
                 third_reason,
-                binding_support(
-                    (
-                        *supports[FAMILY_GAINING],
-                        *supports[FAMILY_LOSING],
-                        unchanged,
-                    )
-                ),
+                third_cell,
+                third_cell,
                 one_area,
             )
         )
@@ -387,7 +409,6 @@ def estimate_change(
         settings=settings,
         noise=settings.noise,
         contributions=contributions,
-        no_change=no_change,
         table=pd.DataFrame(rows),
     )
 
@@ -406,6 +427,7 @@ def _row(
     family_tier: str,
     family_reason: Optional[str],
     cell: Support,
+    band_cell: Support,
     one_area_per_record: bool,
 ) -> dict:
     """One private row: exact and rounded values with the cell's support."""
@@ -442,5 +464,9 @@ def _row(
         "n_sources": cell.n_sources,
         "n_eff": cell.n_eff,
         "top_share": cell.top_share,
-        "support_band": support_band(cell, one_area_per_record=one_area_per_record),
+        "rest_share": cell.rest_share,
+        "support_band": support_band(
+            cell if cell.n_sources else band_cell,
+            one_area_per_record=one_area_per_record,
+        ),
     }

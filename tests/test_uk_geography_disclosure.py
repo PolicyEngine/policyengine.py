@@ -237,13 +237,17 @@ def test_a_weight_matrix_can_replace_the_area_codes():
     n = len(baseline["household_id"])
     matrix = AreaWeights.from_matrix(np.full((2, n), 50.0), ["M1", "M2"])
 
+    options = {"levels": ("constituency",), "area_weights": {"constituency": matrix}}
+
+    with pytest.raises(ValueError, match="parent_of"):
+        _compute(baseline, reform, **options)
+
     impact = _compute(
         baseline,
         reform,
-        levels=("constituency",),
-        area_weights={"constituency": matrix},
+        parent_of={"constituency": {"M1": "NORTH_EAST", "M2": "LONDON"}},
+        **options,
     )
-
     assert set(impact.public.to_frame()["area_code"]) == {"M1", "M2"}
 
 

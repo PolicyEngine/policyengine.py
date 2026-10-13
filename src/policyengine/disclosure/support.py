@@ -5,6 +5,7 @@ reader could recover by subtraction. Clones and copies of one survey household
 count once: weights and contributions are summed by source first.
 """
 
+import math
 from typing import NamedTuple, Optional
 
 import numpy as np
@@ -29,6 +30,7 @@ class Support(NamedTuple):
     n_sources: int
     n_eff: float
     top_share: float
+    rest_share: float = math.inf
 
 
 NO_SUPPORT = Support(0, 0.0, 0.0)
@@ -45,14 +47,33 @@ def support(
     if not contributing.any():
         return NO_SUPPORT
     _, by_source = np.unique(source_index[contributing], return_inverse=True)
+    weighted = weights[contributing] * contributions[contributing]
     source_weight = np.bincount(by_source, weights=weights[contributing])
-    magnitude = np.bincount(
-        by_source,
-        weights=np.abs(weights[contributing] * contributions[contributing]),
-    )
+    magnitude = np.bincount(by_source, weights=np.abs(weighted))
     n_eff = float(source_weight.sum() ** 2 / (source_weight**2).sum())
     top_share = float(magnitude.max() / magnitude.sum())
-    return Support(len(source_weight), n_eff, top_share)
+    signed = np.bincount(by_source, weights=weighted)
+    return Support(len(source_weight), n_eff, top_share, _rest_share(signed))
+
+
+def _rest_share(signed: np.ndarray) -> float:
+    """The rest of a total next to its largest household: the p% measure.
+
+    ``top_share`` works on magnitudes, so it misses a total whose other parts
+    cancel: the total is then one household's contribution. This measure
+    works on the signed total. It takes what is left without the largest
+    household, and what is left without the two largest, as a share of the
+    largest household's part. A small value means the number gives that part
+    away, to any reader or to the second-largest household.
+    """
+    order = np.argsort(-np.abs(signed))
+    largest = abs(float(signed[order[0]]))
+    if largest == 0:
+        return math.inf
+    total = float(signed.sum())
+    without_one = abs(total - float(signed[order[0]]))
+    without_two = abs(total - float(signed[order[:2]].sum()))
+    return min(without_one, without_two) / largest
 
 
 def family_supports(
@@ -83,7 +104,11 @@ def primary_tier(
         return WITHHELD, PRIVATE_BELOW_FLOOR
     if not one_area_per_record and cell.n_eff < settings.min_n_eff:
         return WITHHELD, PRIVATE_LOW_N_EFF
-    if not noise and cell.top_share > settings.max_top_share:
+    dominated = (
+        cell.top_share > settings.max_top_share
+        or cell.rest_share < settings.min_rest_share
+    )
+    if not noise and dominated:
         return WITHHELD, PRIVATE_DOMINANT
     if cell.n_eff < settings.approximate_below_n_eff:
         return APPROXIMATE, REASON_THIN_SUPPORT

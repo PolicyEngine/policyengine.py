@@ -1,6 +1,8 @@
 """Private estimates: values, support, intervals and rounding. Synthetic data."""
 
+import copy
 import math
+import pickle
 
 import numpy as np
 import pandas as pd
@@ -72,7 +74,7 @@ def _estimate(data, *, settings=None, noise_key=None, areas=None):
 
 
 def _cell(estimates, area, outcome):
-    table = estimates.table
+    table = estimates._table
     rows = table[(table["area_code"] == area) & (table["outcome"] == outcome)]
     assert len(rows) == 1
     return rows.iloc[0]
@@ -159,7 +161,10 @@ def test_a_cell_with_no_contributing_household_publishes_zero():
 
     assert (cell["value"], cell["lo"], cell["hi"]) == (0.0, 0.0, 0.0)
     assert (cell["tier"], cell["direction"]) == (REPORTED, "no_change")
-    assert cell["support_band"] == BAND_UNDER_10
+    # A zero rests on the households that did not change, as a zero share
+    # rests on its other side.
+    assert cell["n_sources"] == 0
+    assert cell["support_band"] == BAND_30_PLUS
     assert (losing["value"], losing["tier"]) == (0.0, REPORTED)
     assert losing["support_band"] == BAND_30_PLUS
 
@@ -216,6 +221,29 @@ def test_one_heavy_record_in_many_areas_fails_the_effective_sample_gate():
         assert cell["n_eff"] < 2
         assert (cell["tier"], cell["private_reason"]) == (WITHHELD, PRIVATE_LOW_N_EFF)
         assert cell["support_band"] == BAND_UNDER_10
+
+
+def test_one_row_of_a_weight_matrix_keeps_the_effective_sample_gate():
+    """A per-seat slice of a dense matrix has one weight per record."""
+    n = 50
+    weights = np.array([10_000.0] * 3 + [1.0] * 47)
+    data = _population({"a": (n, n)})
+    data["weights"] = weights
+
+    as_matrix = _estimate(data, areas=AreaWeights.from_matrix(weights[None, :], ["a"]))
+    as_labels = _estimate(data)
+
+    matrix_cell = _cell(as_matrix, "a", "average_change")
+    label_cell = _cell(as_labels, "a", "average_change")
+    assert matrix_cell["n_eff"] == pytest.approx(label_cell["n_eff"])
+    assert matrix_cell["n_eff"] < 10
+    assert (matrix_cell["tier"], matrix_cell["private_reason"]) == (
+        WITHHELD,
+        PRIVATE_LOW_N_EFF,
+    )
+    assert matrix_cell["support_band"] == BAND_UNDER_10
+    assert label_cell["tier"] == APPROXIMATE
+    assert label_cell["support_band"] == BAND_30_PLUS
 
 
 def test_an_even_weight_matrix_passes_and_bands_by_effective_sample():
@@ -287,7 +315,7 @@ def test_noise_reads_the_key_from_the_environment(monkeypatch):
     from_argument = _estimate(data, settings=settings, noise_key=TEST_KEY)
 
     assert from_environment.noise
-    pd.testing.assert_frame_equal(from_environment.table, from_argument.table)
+    pd.testing.assert_frame_equal(from_environment._table, from_argument._table)
 
 
 def test_shares_stay_between_zero_and_one_under_noise():
@@ -406,11 +434,11 @@ def test_intervals_are_reproducible_and_do_not_depend_on_the_chunk(monkeypatch):
         data["reformed"] != data["baseline"]
     )
 
-    first = _estimate(data).table
-    again = _estimate(data).table
+    first = _estimate(data)._table
+    again = _estimate(data)._table
     monkeypatch.setattr(estimate_module, "_REPLICATE_CHUNK", 37)
-    chunked = _estimate(data).table
-    other_seed = _estimate(data, settings=DisclosureSettings(bootstrap_seed=1)).table
+    chunked = _estimate(data)._table
+    other_seed = _estimate(data, settings=DisclosureSettings(bootstrap_seed=1))._table
 
     pd.testing.assert_frame_equal(first, again)
     pd.testing.assert_frame_equal(first, chunked)
@@ -425,7 +453,7 @@ def test_values_are_rounded_to_the_order_of_their_standard_error():
     )
     settings = DisclosureSettings()
 
-    table = _estimate(data).table
+    table = _estimate(data)._table
 
     for row in table[table["tier"] != WITHHELD].to_dict("records"):
         base = row["rounding_base"]
@@ -434,11 +462,35 @@ def test_values_are_rounded_to_the_order_of_their_standard_error():
         for column in ("value", "lo", "hi"):
             assert row[column] / base == pytest.approx(round(row[column] / base))
         assert row["lo"] <= row["value"] <= row["hi"]
+        # The interval is rounded outward, never to the nearest step.
+        assert row["lo"] <= row["exact_lo"] + 1e-9
+        assert row["hi"] >= row["exact_hi"] - 1e-9
         if row["outcome"] != "share_no_change" and row["standard_error"] > base:
             assert base == 10.0 ** math.floor(math.log10(row["standard_error"]))
     average = _cell(_estimate(data), "A", "average_change")
     assert average["exact_lo"] < average["exact_value"] < average["exact_hi"]
     assert average["direction"] == "gain"
+
+
+def test_rounding_goes_down_up_or_to_the_nearest_step():
+    assert estimate_module._round(27.0, 10.0) == 30.0
+    assert estimate_module._round(27.0, 10.0, "down") == 20.0
+    assert estimate_module._round(23.0, 10.0, "up") == 30.0
+    assert estimate_module._round(-23.0, 10.0, "down") == -30.0
+    assert estimate_module._round(0.3, 0.1, "down") == 0.3
+    assert estimate_module._round(0.0437, 0.001, "up") == 0.044
+
+
+def test_an_interval_is_widened_to_include_its_estimate():
+    """Skewed replicates can leave the estimate outside their percentiles."""
+    draws = np.array([[2.0, 3.0, 4.0, 5.0], [2.0, 3.0, 4.0, 5.0]])
+
+    lo, hi, error = estimate_module._interval(draws, np.array([10.0, 0.0]), 0.05)
+
+    assert hi[0] == 10.0
+    assert lo[1] == 0.0
+    assert lo[0] == pytest.approx(2.15) and hi[1] == pytest.approx(4.85)
+    assert error.tolist() == pytest.approx([np.std([2, 3, 4, 5], ddof=1)] * 2)
 
 
 def test_an_interval_across_zero_is_too_close_to_call():
@@ -466,6 +518,18 @@ def test_relative_change_is_withheld_where_it_is_undefined():
     )
     assert pd.isna(relative["value"])
     assert _cell(estimates, "A", "average_change")["tier"] != WITHHELD
+
+
+def test_estimates_cannot_be_pickled_or_copied():
+    """They hold exact values and, with noise on, the noise factors."""
+    estimates = _estimate(_population({"A": (50, 30)}))
+
+    with pytest.raises(TypeError, match="cannot be pickled"):
+        pickle.dumps(estimates)
+    with pytest.raises(TypeError, match="cannot be pickled"):
+        copy.deepcopy(estimates)
+    for name in ("table", "contributions", "source_index"):
+        assert not hasattr(estimates, name)
 
 
 def test_repr_holds_no_values():

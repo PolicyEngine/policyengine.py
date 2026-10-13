@@ -21,6 +21,9 @@ from .schema import (
     DEFAULT_MIN_ROUNDING_BASE,
     DIRECTIONS,
     ESTIMATOR_DIRECT,
+    GAIN,
+    LOSS,
+    NO_CHANGE,
     OPTIONAL_LABEL_COLUMNS,
     OUTCOMES,
     PUBLIC_COLUMNS,
@@ -32,6 +35,7 @@ from .schema import (
     SHARE_OUTCOMES,
     SUPPORT_BANDS,
     TIERS,
+    TOO_CLOSE_TO_CALL,
     WITHHELD,
     PublicTable,
 )
@@ -121,6 +125,17 @@ def _check_frame(
             continue
         if not lo <= value <= hi:
             problems.append(f"{where}: the value is outside its interval")
+        if outcome in CHANGE_OUTCOMES and direction in DIRECTIONS:
+            if lo > 0:
+                expected = GAIN
+            elif hi < 0:
+                expected = LOSS
+            elif value == 0 and lo == 0 and hi == 0:
+                expected = NO_CHANGE
+            else:
+                expected = TOO_CLOSE_TO_CALL
+            if direction != expected:
+                problems.append(f"{where}: the direction does not match the interval")
         if row["support_band"] == BAND_UNDER_10 and value != 0:
             problems.append(f"{where}: a non-zero value has a support band under 10")
         if outcome in SHARE_OUTCOMES:

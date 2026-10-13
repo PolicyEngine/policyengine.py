@@ -3,8 +3,8 @@
 Two layouts hold the same thing. In the label layout each record sits in one
 area with one weight. In the matrix layout a record can carry weight in many
 areas. The rules read both through the same operations, so they are written
-once. A matrix with at most one non-zero weight per record is stored in the
-label layout.
+once. Which rules apply depends on how the data was given, not on what it
+holds: weights given as a matrix keep the weight-matrix rules.
 """
 
 from collections.abc import Iterable, Sequence
@@ -55,8 +55,10 @@ class AreaWeights:
         label_index: Optional[np.ndarray] = None,
         weights: Optional[np.ndarray] = None,
         matrix: Optional[np.ndarray] = None,
+        from_matrix: bool = False,
     ) -> None:
         self.area_codes = tuple(area_codes)
+        self._from_matrix = from_matrix or matrix is not None
         self.n_records = int(n_records)
         self._position = {code: i for i, code in enumerate(self.area_codes)}
         # The label layout fills the first two; the matrix layout the third.
@@ -89,6 +91,7 @@ class AreaWeights:
         codes: np.ndarray,
         weights: np.ndarray,
         order: Optional[Sequence[str]] = None,
+        from_matrix: bool = False,
     ) -> "AreaWeights":
         weighted = {code for code in codes[weights > 0] if code != UNASSIGNED}
         ordered = order if order is not None else sorted(weighted)
@@ -101,11 +104,17 @@ class AreaWeights:
             n_records=len(codes),
             label_index=label_index,
             weights=weights,
+            from_matrix=from_matrix,
         )
 
     @classmethod
     def from_matrix(cls, matrix: object, area_codes: Sequence[object]) -> "AreaWeights":
-        """An areas x records weight matrix. The matrix is not copied."""
+        """An areas x records weight matrix. The matrix is not copied.
+
+        Data given as a matrix keeps the weight-matrix rules whatever it
+        holds. One row of a dense matrix has one weight per record, yet every
+        record of the nation still sits in that area.
+        """
         array = np.asarray(matrix)
         if array.ndim != 2:
             raise ValueError("A weight matrix must be two-dimensional.")
@@ -119,14 +128,15 @@ class AreaWeights:
         if (array < 0).any():
             raise ValueError("Weights must be non-negative.")
         if array.shape[0] and np.count_nonzero(array, axis=0).max(initial=0) <= 1:
-            # One non-zero per record: the same data as one label per record.
+            # One non-zero per record: store it as labels, which is faster.
+            # The rules still treat it as a weight matrix.
             weights = array.max(axis=0).astype(float)
             row = array.argmax(axis=0)
             labels = np.array(
                 [codes[r] if w > 0 else UNASSIGNED for r, w in zip(row, weights)],
                 dtype=object,
             )
-            return cls._from_codes(labels, weights, order=codes)
+            return cls._from_codes(labels, weights, order=codes, from_matrix=True)
         return cls(area_codes=codes, n_records=array.shape[1], matrix=array)
 
     @property
@@ -135,7 +145,8 @@ class AreaWeights:
 
     @property
     def one_area_per_record(self) -> bool:
-        return self._matrix is None
+        """Whether the data was given as one area and one weight per record."""
+        return not self._from_matrix
 
     @property
     def labels(self) -> np.ndarray:
@@ -202,4 +213,4 @@ class AreaWeights:
         if self.n_areas == 0:
             return np.zeros((0, multipliers.shape[0]))
         by_area = multipliers[:, self._order] * weighted[self._order]
-        return np.add.reduceat(by_area, self._starts, axis=1).T
+        return np.asarray(np.add.reduceat(by_area, self._starts, axis=1).T)

@@ -220,7 +220,7 @@ def test_the_suggestion_skips_cells_that_add_nothing():
     assert {finding.group_level for finding in findings} == {"region"}
 
 
-def test_noise_never_protects_a_remainder():
+def test_noise_does_not_lift_the_count_floor_for_a_remainder():
     settings = DisclosureSettings(noise=True)
     release = _release({**STRONG, "S1": 4}, settings=settings, key=TEST_KEY)
 
@@ -279,7 +279,7 @@ def test_a_reference_level_is_checked_against_but_not_published():
     assert set(release.to_public().to_frame()["level"]) == {"constituency"}
 
 
-def _package_release():
+def _package_release(reference=()):
     data = _records(STRONG)
     seat_one = data["seats"] == "S1"
     broad = data["change"]
@@ -287,7 +287,10 @@ def _package_release():
     narrow = np.where(~seat_one & (np.arange(len(seat_one)) % 120 < 60), 500.0, narrow)
     release = Release()
     for reform, change in (("A", broad), ("B", narrow), ("P", broad + narrow)):
-        release.add(_estimates(data, "constituency", reform=reform, change=change))
+        release.add(
+            _estimates(data, "constituency", reform=reform, change=change),
+            publish=reform not in reference,
+        )
     release.add_package("P", ["A", "B"])
     return release
 
@@ -310,6 +313,46 @@ def test_a_package_gives_away_a_withheld_component():
         outcome="average_change",
     )
     assert release.check() == []
+
+
+def test_a_withheld_reference_component_is_hidden_too():
+    """Public elsewhere means public where it passes; the rest is secret."""
+    release = _package_release(reference=("B",))
+
+    findings = _blocking(release.check(), RECOVERABLE_REMAINDER)
+
+    assert [(f.relation, f.group, f.members, f.suggested) for f in findings] == [
+        ("package", "S1", ["B"], "A")
+    ]
+
+
+def test_a_relation_between_references_only_is_not_checked():
+    assert _package_release(reference=("A", "B", "P")).check() == []
+
+
+def test_withheld_cells_of_a_reference_child_level_are_hidden_too():
+    data = _records({**STRONG, "S1": 4})
+    release = Release()
+    release.add(_estimates(data, "region"))
+    release.add(_estimates(data, "constituency"), publish=False)
+    release.add_nesting("constituency", "region")
+
+    findings = _blocking(release.check(), RECOVERABLE_REMAINDER)
+
+    assert {(f.group, tuple(f.members), f.suggested) for f in findings} == {
+        ("R1", ("S1",), None)
+    }
+    # The seats are public elsewhere, so the fix is on the published side.
+    for finding in findings:
+        release.withhold(
+            level=finding.group_level,
+            area_code=finding.group,
+            reform="reform",
+            year=2026,
+            outcome="average_change" if finding.family == "change" else finding.family,
+        )
+    assert release.check() == []
+    assert set(release.to_public().to_frame()["level"]) == {"region"}
 
 
 def test_a_withheld_package_with_all_components_published_is_recoverable():
@@ -399,6 +442,43 @@ def test_levels_published_together_need_a_declared_relation():
 
     with pytest.raises(ValueError, match="cannot be acknowledged"):
         Release(acknowledge=[RECOVERABLE_REMAINDER])
+
+
+def test_an_area_minus_the_public_areas_inside_it_is_checked():
+    """A local authority that is one seat plus a few households of another."""
+    data = _records(STRONG)
+    authorities = np.where(data["seats"] == "S1", "L1", "L2").astype(object)
+    authorities[np.flatnonzero(data["seats"] == "S2")[:5]] = "L1"
+    data["local_authoritys"] = authorities
+    release = Release(acknowledge=[UNCHECKED_OVERLAP])
+    release.add(_estimates(data, "constituency"))
+    release.add(_estimates(data, "local_authority"))
+
+    findings = release.check()
+
+    blocking = _blocking(findings, RECOVERABLE_REMAINDER)
+    assert {
+        (f.relation, f.level, f.group, f.group_level, f.suggested) for f in blocking
+    } == {("containment", "constituency", "L1", "local_authority", "S1")}
+    # The rest is five households. Every family fails on it: also the share
+    # losing, because "none of these five lose" is a statement about five.
+    assert {f.family for f in blocking} == {"change", "share_gaining", "share_losing"}
+    overlap = [f for f in findings if f.code == UNCHECKED_OVERLAP]
+    assert [f.blocking for f in overlap] == [False]
+    assert "wholly inside" in overlap[0].message
+    with pytest.raises(DisclosureError, match=RECOVERABLE_REMAINDER):
+        release.to_public()
+
+    for outcome in ("average_change", "share_gaining", "share_losing"):
+        release.withhold(
+            level="constituency",
+            area_code="S1",
+            reform="reform",
+            year=2026,
+            outcome=outcome,
+        )
+    assert not any(finding.blocking for finding in release.check())
+    release.to_public()
 
 
 def test_a_cell_that_is_already_public_is_not_a_secret():

@@ -257,7 +257,7 @@ def test_compute_constituency_impacts_requires_longwise_geography_column():
         )
 
 
-def test_constituency_impacts_warn_that_they_are_not_disclosure_controlled():
+def test_constituency_impacts_warn_that_they_are_not_disclosure_controlled(caplog):
     household = {
         "household_net_income": [100.0],
         "household_weight": [1.0],
@@ -273,3 +273,7 @@ def test_constituency_impacts_warn_that_they_are_not_disclosure_controlled():
     )
     with pytest.warns(DeprecationWarning, match=message):
         impact.run()
+    # policyengine-core silences Python warnings once a country model loads,
+    # so the message must also reach the log.
+    logged = [record.getMessage() for record in caplog.records]
+    assert sum("not disclosure-controlled" in line for line in logged) == 2

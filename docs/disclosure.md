@@ -49,22 +49,38 @@ no value, interval, direction or support band.
 
 **Count floor.** A number must rest on at least 10 distinct survey households
 that contribute to it. For a change, a household contributes when its income
-changes by more than `change_tolerance` (£1 a year). Copies and clones of one
-survey household count once, through the dataset's `source_household_id`. For
-a share, both sides must pass: the households that gain and those that do
-not.
+changes by more than `change_tolerance` (£1 a year, which is also the lowest
+value the setting takes). Copies and clones of one survey household count
+once, through the dataset's `source_household_id`. For a share, both sides
+must pass: the households that gain and those that do not.
 
-**Dominance.** While noise is off, a number is withheld when one survey
-household carries more than half of it.
+**Dominance.** While noise is off, a number is withheld in two cases:
+
+- one survey household carries more than half of it, by size;
+- what is left of it without its largest household, or without its two
+  largest, is less than 10% of the largest household's part (the p% rule).
+  This catches a total whose other parts cancel, and a total that two
+  households carry between them.
+
+These rules protect one or two households. They do not stop a number that
+three or more households carry almost alone, as long as 10 contribute.
 
 **Effective sample.** Weights that differ a lot make an estimate less precise
-than its household count suggests. Where each record sits in one area, a low
-effective sample makes a row `approximate`: it keeps its value and interval,
-but the interval understates the uncertainty. Where a record carries weight in
-several areas (an area × household weight matrix), the household count passes
-by construction, so the effective sample must also be at least 10.
+than its household count suggests. Where the data gives one area and one
+weight per record, a low effective sample makes a row `approximate`: it keeps
+its value and interval, but the interval understates the uncertainty. Where
+the data is an area × household weight matrix, the household count passes by
+construction, so the effective sample must also be at least 10. Weights given
+as a matrix keep this rule whatever they hold: one row of a dense matrix has
+one weight per record, yet every household of the nation sits in that area.
 
-**Zero cells.** A cell with no contributing household is published as zero.
+**Zero cells.** A cell with no contributing household is published as zero,
+with the interval [0, 0] and the direction `no_change`. It means that no
+surveyed household in the area changed, not that no household there does. Its
+support band counts the households it was measured on.
+
+**Settings.** The layer validates its settings again before it uses them, so
+a copy made with `model_copy(update=...)` cannot lower a floor.
 
 **Linked outcomes.** Average, relative and total change share a numerator, so
 they are published or withheld together. Gaining, losing and no change add to
@@ -89,12 +105,20 @@ looks for such remainders:
 - child areas against their parent area (constituencies in regions, regions in
   the nation);
 - the components of a package against the package;
+- an area against the areas of another level that lie wholly inside it, when
+  two levels that do not nest are released together;
 - earlier publications, passed as `prior_public`.
+
+A remainder gets the rules of a cell. Estimates added with `publish=False`
+are a reference: the release does not emit their rows, but it treats the rows
+that pass as public elsewhere and the withheld ones as secret, and checks
+them like its own.
 
 `compute_uk_geography_disclosure` always checks constituencies and local
 authorities against their region, and regions against the nation, also when
-you publish one level only. A parent row counts as public when it passes the
-rules.
+you publish one level only. A level given as a weight matrix needs
+`parent_of=` with the region of each area; without it the function raises,
+because a check against the nation alone nearly always passes.
 
 The check reports; it does not withhold cells by itself. A blocking finding
 names the group and suggests a cell. Withhold it, then check again. When a
@@ -116,10 +140,14 @@ impact.refresh()  # checks again and fills impact.public once nothing blocks
 ```
 
 Two findings can be accepted after review, with `acknowledge=[...]`:
-`unchecked_overlap` (levels that overlap without nesting, such as
-constituencies and local authorities, are published together) and
-`noise_reference_public` (an earlier table shows the same cells under another
-noise setting).
+
+- `unchecked_overlap`: levels that overlap without nesting, such as
+  constituencies and local authorities, are released together. The release
+  checks each area against the areas wholly inside it. It does not check
+  other differences between overlapping areas, and on weight-matrix data it
+  checks none.
+- `noise_reference_public`: an earlier table shows the same cells under
+  another noise setting.
 
 ## Noise
 
@@ -136,8 +164,11 @@ floor still applies.
   change it between releases of one dataset: two noised versions of a number
   average towards the truth.
 - **Limits.** Denominators carry no noise. The factor cancels in a ratio of
-  two numbers that the same household dominates, and it cancels in every
-  subtraction, so noise never protects a remainder.
+  two numbers that the same household dominates. A remainder that subtraction
+  recovers is the noised sum of the withheld cells, so it has the protection
+  of a noised cell and no more: the count floor applies to it, and noise
+  stands in for the dominance rule as it does for a cell. An un-noised copy
+  of the same cell gives the factor away.
 
 ## Validating published files
 
@@ -149,13 +180,27 @@ python -m policyengine.disclosure validate public/data --reviewed notes.csv
 ```
 
 It rejects private audit columns, unknown tiers, a value in a withheld row,
-unrounded values and files it does not recognise. It cannot tell whether a
-number rested on enough households; only the release that made the file can.
+unrounded values, a direction that does not match its interval, and files it
+does not recognise. It cannot tell whether a number rested on enough
+households; only the release that made the file can.
 
-## The private audit
+## Private objects
 
 `audit_dir=` writes the exact values, household counts and shares behind every
 row. The directory must be outside any git repository.
+
+`AreaEstimates`, the object that `estimate_change` returns, holds the same
+exact values. With noise on it also holds the noise factor of every household
+that gains or loses, and within one dataset those factors do the same job as
+the key. Keep it in memory and treat it as you treat the key. It cannot be
+pickled or copied.
+
+## What a reader can still derive
+
+`average_change` and `relative_change` together give the area's total
+baseline income to within a few per cent (household count × average ÷
+relative). That total is a denominator: it carries no noise and is not
+checked for dominance.
 
 ## Arrays without a simulation
 

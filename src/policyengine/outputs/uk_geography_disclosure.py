@@ -170,19 +170,26 @@ class UKGeographyDisclosure(Output):
                 publish=level in self.levels,
             )
 
+        regions = estimated.get(UK_REGION_LEVEL)
         for level, areas in estimated.items():
             if level == UK_NATIONAL_LEVEL:
                 continue
-            under_region = (
-                level != UK_REGION_LEVEL
-                and UK_REGION_LEVEL in estimated
-                and estimated[UK_REGION_LEVEL].one_area_per_record
-                and (areas.one_area_per_record or level in parents)
-            )
-            if under_region:
-                release.add_nesting(level, UK_REGION_LEVEL, parents.get(level))
-            else:
+            if (
+                level == UK_REGION_LEVEL
+                or regions is None
+                or not regions.one_area_per_record
+            ):
                 release.add_nesting(level, UK_NATIONAL_LEVEL)
+                continue
+            if not areas.one_area_per_record and level not in parents:
+                # Against the nation alone, every withheld area goes into one
+                # remainder, and that nearly always passes.
+                raise ValueError(
+                    f"Level {level!r} is a weight matrix. Pass "
+                    f"parent_of={{{level!r}: ...}} with the region code of each "
+                    "area, so its areas are checked against their region."
+                )
+            release.add_nesting(level, UK_REGION_LEVEL, parents.get(level))
 
         self._release = release
         self.refresh()
@@ -236,7 +243,8 @@ def compute_uk_geography_disclosure(
         area_weights: Weights for a level, in place of the level's area code
             column, for example an area x household weight matrix.
         parent_of: For a level given as a weight matrix, the region code of
-            each of its areas.
+            each of its areas. Required for such a level when the household
+            output carries regions.
         acknowledge: Findings the caller accepts after review.
         prior_public: Earlier publications that count as already public.
         audit_dir: Private directory, outside any repository, for the exact

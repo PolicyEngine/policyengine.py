@@ -145,9 +145,22 @@ def test_a_non_zero_value_cannot_have_a_band_under_ten(frame):
     frame.loc[row, "support_band"] = "<10"
 
     assert any("under 10" in problem for problem in validate_public(frame))
+
+
+def test_a_zero_row_shows_the_households_it_was_measured_on(frame):
     zero = _first(frame, outcome="average_change", area_code="D")
-    assert frame.loc[zero, "support_band"] == "<10"
+
     assert frame.loc[zero, "value"] == "0.0"
+    assert frame.loc[zero, "direction"] == "no_change"
+    assert frame.loc[zero, "support_band"] == "30+"
+
+
+def test_a_direction_must_match_its_interval(frame):
+    row = _first(frame, tier="reported", outcome="average_change", area_code="C")
+    assert frame.loc[row, "direction"] == "gain"
+    frame.loc[row, "direction"] = "too_close_to_call"
+
+    assert any("direction does not match" in p for p in validate_public(frame))
 
 
 def test_shares_must_add_to_one_and_stay_in_range(frame):

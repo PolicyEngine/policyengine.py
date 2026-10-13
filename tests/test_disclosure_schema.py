@@ -8,10 +8,13 @@ import pytest
 from pydantic import ValidationError
 
 from policyengine.disclosure import (
+    AreaWeights,
     DisclosureSettings,
     PriorPublic,
     PublicRow,
     PublicTable,
+    Release,
+    estimate_change,
 )
 from policyengine.disclosure.schema import (
     BAND_10_TO_29,
@@ -31,12 +34,39 @@ PACKAGE = Path(__file__).parents[1] / "src" / "policyengine" / "disclosure"
         {"max_top_share": 0.6},
         {"min_n_eff": 9.9},
         {"change_tolerance": 0.0},
+        {"change_tolerance": 1e-9},
+        {"min_rest_share": 0.01},
         {"n_replicates": 50},
     ],
 )
 def test_settings_cannot_be_loosened(loosened):
     with pytest.raises(ValidationError):
         DisclosureSettings(**loosened)
+
+
+def test_settings_are_validated_again_before_use():
+    """``model_copy`` and ``model_construct`` skip validation; the layer does not."""
+    copied = DisclosureSettings().model_copy(update={"min_sources": 1})
+    constructed = DisclosureSettings.model_construct(min_sources=1)
+    areas = AreaWeights.from_labels(["A"] * 20, [1.0] * 20)
+
+    assert copied.min_sources == 1
+    for settings in (copied, constructed):
+        with pytest.raises(ValidationError):
+            settings.revalidated()
+        with pytest.raises(ValidationError):
+            Release(settings)
+        with pytest.raises(ValidationError):
+            estimate_change(
+                level="region",
+                reform="r",
+                year=2026,
+                areas=areas,
+                source_ids=range(20),
+                baseline=[100.0] * 20,
+                reformed=[200.0] * 20,
+                settings=settings,
+            )
 
 
 def test_settings_can_be_raised_for_special_conditions():

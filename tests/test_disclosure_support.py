@@ -113,6 +113,43 @@ def test_dominance_withholds_only_while_noise_is_off():
     assert with_noise == (REPORTED, None)
 
 
+def test_a_total_that_is_one_households_change_is_dominated():
+    """Offsetting gains and losses leave the total equal to one household's."""
+    contributions = np.array([1000.0] + [110.0] * 5 + [-110.0] * 5)
+    cell = support(np.ones(11), contributions, np.arange(11))
+
+    assert cell.top_share == pytest.approx(1000.0 / 2100.0)
+    assert cell.top_share < SETTINGS.max_top_share
+    assert cell.rest_share == pytest.approx(0.0, abs=1e-12)
+    assert primary_tier(cell, SETTINGS, **LABELS) == (WITHHELD, PRIVATE_DOMINANT)
+    with_noise = primary_tier(cell, SETTINGS, one_area_per_record=True, noise=True)
+    assert with_noise[0] != WITHHELD
+
+
+def test_two_households_that_carry_a_total_are_dominated():
+    contributions = np.array([490.0, 490.0] + [2.5] * 8)
+    cell = support(np.ones(10), contributions, np.arange(10))
+
+    assert cell.top_share == pytest.approx(0.49)
+    assert cell.rest_share == pytest.approx(20.0 / 490.0)
+    assert primary_tier(cell, SETTINGS, **LABELS) == (WITHHELD, PRIVATE_DOMINANT)
+
+
+def test_the_rest_share_measures_what_is_left_without_the_largest():
+    even = support(np.ones(40), np.full(40, 50.0), np.arange(40))
+    skewed = support(np.ones(3), np.array([100.0, 50.0, 50.0]), np.arange(3))
+    clones = support(
+        np.ones(4), np.array([60.0, 40.0, 50.0, 50.0]), np.array([0, 0, 1, 2])
+    )
+    cancelled = support(np.ones(2), np.array([70.0, -70.0]), np.array([0, 0]))
+
+    assert even.rest_share == pytest.approx(38.0)
+    assert skewed.rest_share == pytest.approx(0.5)
+    assert clones.rest_share == pytest.approx(0.5)
+    assert cancelled.rest_share == float("inf")
+    assert primary_tier(even, SETTINGS, **LABELS)[0] == REPORTED
+
+
 def test_the_count_rule_comes_before_dominance():
     cell = Support(3, 3.0, 0.9)
 

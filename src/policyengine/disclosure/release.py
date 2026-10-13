@@ -65,7 +65,7 @@ class Release:
         prior_public: Sequence[PriorPublic] = (),
         acknowledge: Iterable[str] = (),
     ) -> None:
-        self.settings = settings or DisclosureSettings()
+        self.settings = (settings or DisclosureSettings()).revalidated()
         self._acknowledged = frozenset(acknowledge)
         unknown = sorted(self._acknowledged - set(ACKNOWLEDGEABLE_FINDINGS))
         if unknown:
@@ -81,9 +81,10 @@ class Release:
     def add(self, estimates: AreaEstimates, *, publish: bool = True) -> None:
         """Add the estimates of one level, reform and year.
 
-        With ``publish=False`` the estimates are a reference only: the release
-        does not emit their rows, and treats the rows that pass the rules as
-        public elsewhere.
+        With ``publish=False`` the estimates are a reference: the release does
+        not emit their rows. It treats the rows that pass the rules as public
+        elsewhere and the withheld rows as secret, and checks them like its
+        own.
         """
         if estimates.settings != self.settings:
             raise DisclosureError(
@@ -152,7 +153,7 @@ class Release:
         findings: list[Finding] = []
         self._check_nesting(tiers, known, findings)
         self._check_packages(tiers, known, findings)
-        self._check_overlap(findings)
+        self._check_overlap(tiers, known, findings)
         self._check_prior(tiers, findings)
         self._findings = findings
         return findings
@@ -221,7 +222,7 @@ class Release:
         directory.mkdir(parents=True, exist_ok=True)
         frames = []
         for key in sorted(self._estimates):
-            frame = self._estimates[key].table.drop(columns=["family_tier"]).copy()
+            frame = self._estimates[key]._table.drop(columns=["family_tier"]).copy()
             effective = list(self._effective_rows(key))
             frame["tier"] = [tier for _, tier, _ in effective]
             frame["private_reason"] = [reason for _, _, reason in effective]
@@ -251,7 +252,7 @@ class Release:
             for level, reform, year, family, area in self._manual
             if (level, reform, year) == key
         }
-        for record in self._estimates[key].table.to_dict("records"):
+        for record in self._estimates[key]._table.to_dict("records"):
             outcome, area = record["outcome"], record["area_code"]
             families = (
                 (FAMILY_GAINING, FAMILY_LOSING)
@@ -280,12 +281,18 @@ class Release:
     def _passes(
         self, estimates: AreaEstimates, weights: np.ndarray, family: str
     ) -> tuple[bool, bool]:
-        """Whether a remainder may be recovered, and whether it is empty."""
+        """Whether a remainder may be recovered, and whether it is empty.
+
+        A remainder gets the rules of a cell, no more and no less. The count
+        floor always applies. With noise on, what subtraction recovers is the
+        noised sum of the withheld cells, so noise stands in for the dominance
+        rule here as it does for a cell.
+        """
         records = np.flatnonzero(weights)
         supports = family_supports(
             weights[records],
-            estimates.contributions[family][records],
-            estimates.source_index[records],
+            estimates._contributions[family][records],
+            estimates._source_index[records],
             family,
         )
         tier, _ = cell_tier(
@@ -300,7 +307,7 @@ class Release:
     @staticmethod
     def _require_same_records(first: AreaEstimates, second: AreaEstimates) -> None:
         same = first.areas.n_records == second.areas.n_records and np.array_equal(
-            first.source_index, second.source_index
+            first._source_index, second._source_index
         )
         if not same:
             raise DisclosureError(
@@ -372,7 +379,7 @@ class Release:
         for child_level, parent_level, parent_of in self._nestings:
             for key in sorted(self._estimates):
                 level, reform, year = key
-                if level != child_level or not self._published[key]:
+                if level != child_level:
                     continue
                 child = self._estimates[key]
                 parent_key = (parent_level, reform, year)
@@ -382,6 +389,9 @@ class Release:
                         f"Nesting {child_level} in {parent_level} needs "
                         f"{parent_level} estimates for reform {reform!r}, {year}."
                     )
+                # A relation between two references is not this release's.
+                if not (self._published[key] or self._published[parent_key]):
+                    continue
                 self._require_same_records(child, parent)
                 groups = self._groups(child, parent, parent_of)
                 for family in FAMILIES:
@@ -414,7 +424,7 @@ class Release:
                             # There is no public parent to subtract from. The
                             # risk is the reverse: published children that add
                             # up to a parent this release withholds.
-                            if empty and self._published[parent_key]:
+                            if empty:
                                 findings.append(
                                     Finding(
                                         code=RECOVERABLE_PARENT,
@@ -432,10 +442,14 @@ class Release:
                         if not passes:
                             # Withholding a cell with no contributor adds
                             # nothing to the remainder.
+                            # A cell that is public elsewhere cannot be
+                            # withheld here either.
                             shown = [
                                 c
                                 for c in children
-                                if child_tiers[c] != WITHHELD and sources[c] > 0
+                                if self._published[key]
+                                and child_tiers[c] != WITHHELD
+                                and sources[c] > 0
                             ]
                             findings.append(
                                 Finding(
@@ -469,7 +483,7 @@ class Release:
         for package, components in self._packages:
             for key in sorted(self._estimates):
                 level, reform, year = key
-                if reform != package or not self._published[key]:
+                if reform != package:
                     continue
                 whole = self._estimates[key]
                 parts = []
@@ -487,12 +501,17 @@ class Release:
                             "A package and its components need the same areas."
                         )
                     parts.append((part_key, part))
+                # A relation between references only is not this release's.
+                if not (
+                    self._published[key]
+                    or any(self._published[part_key] for part_key, _ in parts)
+                ):
+                    continue
                 for area in whole.areas.area_codes:
                     hidden = [
                         (part_key, part)
                         for part_key, part in parts
-                        if self._published[part_key]
-                        and tiers[(part_key, family)][area] == WITHHELD
+                        if tiers[(part_key, family)][area] == WITHHELD
                         and (level, area, part.reform, year, family) not in known
                     ]
                     whole_hidden = (
@@ -524,10 +543,10 @@ class Release:
                     elif hidden and not whole_hidden:
                         records, weights = whole.areas.area_records(area)
                         combined = sum(
-                            part.contributions[family][records] for _, part in hidden
+                            part._contributions[family][records] for _, part in hidden
                         )
                         supports = family_supports(
-                            weights, combined, whole.source_index[records], family
+                            weights, combined, whole._source_index[records], family
                         )
                         tier, _ = cell_tier(
                             supports,
@@ -540,7 +559,8 @@ class Release:
                         shown = [
                             part
                             for part_key, part in parts
-                            if tiers[(part_key, family)][area] != WITHHELD
+                            if self._published[part_key]
+                            and tiers[(part_key, family)][area] != WITHHELD
                             and part.family_sources(family)[area] > 0
                         ]
                         findings.append(
@@ -569,8 +589,18 @@ class Release:
                             )
                         )
 
-    def _check_overlap(self, findings: list[Finding]) -> None:
-        """Levels published together need a declared relation between them."""
+    def _check_overlap(
+        self,
+        tiers: dict[tuple[_Key, str], dict[str, str]],
+        known: set[tuple[str, str, str, int, str]],
+        findings: list[Finding],
+    ) -> None:
+        """Levels released together with no declared nesting between them.
+
+        Areas of one level that lie wholly inside an area of the other are
+        checked like a nesting. Other differences between overlapping areas
+        are not, and the finding says so.
+        """
         related: dict[str, set[str]] = {}
         for child_level, parent_level, _ in self._nestings:
             related.setdefault(child_level, set()).add(parent_level)
@@ -588,29 +618,130 @@ class Release:
             return False
 
         by_run: dict[tuple[str, int], set[str]] = {}
-        for (level, reform, year), publish in self._published.items():
-            if publish:
-                by_run.setdefault((reform, year), set()).add(level)
-        pairs = {
-            pair
-            for levels in by_run.values()
-            for pair in combinations(sorted(levels), 2)
-            if not nests(*pair) and not nests(*reversed(pair))
-        }
-        for first, second in sorted(pairs):
+        for level, reform, year in self._estimates:
+            by_run.setdefault((reform, year), set()).add(level)
+        pairs: dict[tuple[str, str], list[tuple[str, int]]] = {}
+        for (reform, year), levels in sorted(by_run.items()):
+            for first, second in combinations(sorted(levels), 2):
+                released = (
+                    self._published[(first, reform, year)]
+                    or self._published[(second, reform, year)]
+                )
+                if released and not nests(first, second) and not nests(second, first):
+                    pairs.setdefault((first, second), []).append((reform, year))
+        for (first, second), runs in sorted(pairs.items()):
+            contained = [
+                self._check_containment(
+                    (outer, reform, year), (inner, reform, year), tiers, known, findings
+                )
+                for reform, year in runs
+                for outer, inner in ((first, second), (second, first))
+            ]
+            scope = (
+                "Areas that lie wholly inside an area of the other level are "
+                "checked. Other differences between overlapping areas are not."
+                if all(contained)
+                else "Differences between overlapping areas are not checked."
+            )
             findings.append(
                 Finding(
                     code=UNCHECKED_OVERLAP,
                     blocking=UNCHECKED_OVERLAP not in self._acknowledged,
                     relation="release",
                     message=(
-                        f"{first} and {second} are published together with no "
-                        "declared nesting. Differences between overlapping areas "
-                        "are not checked."
+                        f"{first} and {second} are released together with no "
+                        f"declared nesting. {scope}"
                     ),
                     level=f"{first}|{second}",
                 )
             )
+
+    def _check_containment(
+        self,
+        outer_key: _Key,
+        inner_key: _Key,
+        tiers: dict[tuple[_Key, str], dict[str, str]],
+        known: set[tuple[str, str, str, int, str]],
+        findings: list[Finding],
+    ) -> bool:
+        """Check an outer area against the inner areas wholly inside it.
+
+        An outer area minus its public inner areas is a remainder. Returns
+        False when the two levels do not allow the check: they must hold the
+        same records with one area and one weight per record.
+        """
+        outer, inner = self._estimates[outer_key], self._estimates[inner_key]
+        outer_level, reform, year = outer_key
+        inner_level = inner_key[0]
+        try:
+            self._require_same_records(outer, inner)
+            outer_labels, inner_labels = outer.areas.labels, inner.areas.labels
+        except (DisclosureError, ValueError):
+            return False
+        outer_weights = outer.areas.record_weights(outer.areas.area_codes)
+        inner_weights = inner.areas.record_weights(inner.areas.area_codes)
+        both = (outer_weights > 0) & (inner_weights > 0)
+        if not np.array_equal(outer_weights[both], inner_weights[both]):
+            return False
+
+        pairs = pd.DataFrame({"outer": outer_labels, "inner": inner_labels})
+        pairs = pairs[inner_weights > 0].drop_duplicates()
+        whole = pairs[~pairs["inner"].duplicated(keep=False) & (pairs["outer"] != "")]
+        inside = whole.groupby("outer")["inner"].apply(sorted).to_dict()
+        for family in FAMILIES:
+            outer_tiers = tiers[(outer_key, family)]
+            inner_tiers = tiers[(inner_key, family)]
+            sources = inner.family_sources(family)
+            for code, members in inside.items():
+                if (
+                    outer_tiers.get(code) == WITHHELD
+                    and (outer_level, code, reform, year, family) not in known
+                ):
+                    continue
+                public = [
+                    c
+                    for c in members
+                    if inner_tiers[c] != WITHHELD
+                    or (inner_level, c, reform, year, family) in known
+                ]
+                if not public:
+                    continue
+                weights = outer.areas.record_weights([code])
+                weights = np.clip(weights - inner.areas.record_weights(public), 0, None)
+                passes, _ = self._passes(outer, weights, family)
+                if passes:
+                    continue
+                shown = [
+                    c
+                    for c in public
+                    if self._published[inner_key]
+                    and inner_tiers[c] != WITHHELD
+                    and sources[c] > 0
+                ]
+                findings.append(
+                    Finding(
+                        code=RECOVERABLE_REMAINDER,
+                        blocking=True,
+                        relation="containment",
+                        message=(
+                            f"{outer_level} {code!r} minus the public "
+                            f"{inner_level} cells inside it fails the rules, so "
+                            "subtraction recovers the rest. Withhold one of "
+                            f"those cells, or the {outer_level} cell."
+                        ),
+                        level=inner_level,
+                        reform=reform,
+                        year=year,
+                        family=family,
+                        group=code,
+                        group_level=outer_level,
+                        members=sorted(set(members) - set(public)),
+                        suggested=min(
+                            shown, key=lambda c: (sources[c], c), default=None
+                        ),
+                    )
+                )
+        return True
 
     def _check_prior(
         self,

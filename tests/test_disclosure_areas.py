@@ -24,7 +24,7 @@ def test_labels_and_a_one_nonzero_matrix_are_the_same_data():
     from_labels = AreaWeights.from_labels(codes, weights)
     from_matrix = AreaWeights.from_matrix(matrix, order)
 
-    assert from_matrix.one_area_per_record
+    assert from_labels.one_area_per_record
     assert from_labels.area_codes == from_matrix.area_codes == ("A", "B", "C")
     assert np.array_equal(from_labels.labels, from_matrix.labels)
     assert np.allclose(from_labels.totals(values), from_matrix.totals(values))
@@ -32,6 +32,15 @@ def test_labels_and_a_one_nonzero_matrix_are_the_same_data():
         from_labels.totals(values, multipliers),
         from_matrix.totals(values, multipliers),
     )
+
+
+def test_weights_given_as_a_matrix_keep_the_matrix_rules():
+    """One row of a dense matrix looks like labels, but is not label data."""
+    one_row = AreaWeights.from_matrix(np.array([[5.0, 0.0, 2.0, 1.0]]), ["A"])
+
+    assert not one_row.one_area_per_record
+    assert one_row.labels.tolist() == ["A", UNASSIGNED, "A", "A"]
+    assert one_row.totals(np.ones(4)).tolist() == [8.0]
 
 
 def test_totals_equal_a_direct_weighted_sum():
