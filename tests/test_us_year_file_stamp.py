@@ -312,8 +312,11 @@ def test_a_year_file_is_current_only_under_this_releases_exact_stamp(case):
 
 
 #: Text stored as it is, not as JSON. HDF5 variable-length strings cannot
-#: hold a NUL character.
-RAW_TEXT = st.text(alphabet=st.characters(blacklist_characters="\x00"), max_size=12)
+#: hold a NUL character, and a lone surrogate cannot be encoded as UTF-8.
+RAW_TEXT = st.text(
+    alphabet=st.characters(blacklist_categories=("Cs",), blacklist_characters="\x00"),
+    max_size=12,
+)
 
 NODES = st.one_of(
     st.just(_ABSENT),
