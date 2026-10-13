@@ -598,12 +598,26 @@ def strict_json_value(value: Any, path: str = "$") -> Any:
     """
 
     try:
-        return _strict_json_value(value, path)
+        return _strict_json_value(value, path, nonfinite=False)
     except RecursionError as exc:
         raise ReceiptError(f"{path}: the value is nested too deeply.") from exc
 
 
-def _strict_json_value(value: Any, path: str) -> Any:
+#: The reserved member that stands for an infinite number in a reform payload.
+NONFINITE_KEY = "$nonfinite"
+
+
+def _strict_json_value(value: Any, path: str, nonfinite: bool) -> Any:
+    """The strict conversion; with ``nonfinite``, infinities become reserved objects.
+
+    With ``nonfinite`` set, ``inf`` becomes ``{"$nonfinite": "Infinity"}`` and
+    ``-inf`` becomes ``{"$nonfinite": "-Infinity"}``, and a mapping key that
+    converts to ``$nonfinite`` is refused, so no other payload converts to the
+    same JSON. The encoding happens inside the one walk, so a payload this
+    refuses without infinities (colliding keys, say) is refused with them too.
+    NaN is refused either way: it has no one value to bind.
+    """
+
     if value is None or isinstance(value, (bool, str)):
         return value
     if _numpy_scalar(value):
@@ -613,11 +627,13 @@ def _strict_json_value(value: Any, path: str) -> Any:
             raise ReceiptError(
                 f"{path}: {type(value).__name__} has no exact JSON form; convert it first."
             )
-        return _strict_json_value(item, path)
+        return _strict_json_value(item, path, nonfinite)
     if isinstance(value, int):
         return int(value)
     if isinstance(value, float):
         number = float(value)
+        if nonfinite and math.isinf(number):
+            return {NONFINITE_KEY: "Infinity" if number > 0 else "-Infinity"}
         if not math.isfinite(number):
             raise ReceiptError(f"{path}: {number} is not a finite number.")
         return number
@@ -630,14 +646,20 @@ def _strict_json_value(value: Any, path: str) -> Any:
         for key, item in value.items():
             if isinstance(key, bool) or not isinstance(key, (str, int)):
                 raise ReceiptError(f"{path}: object keys must be strings, not {key!r}.")
-            text = key if isinstance(key, str) else str(int(key))
+            # An exact str, so a subclass's own __eq__ or __hash__ cannot hide
+            # a collision or the reserved key.
+            text = str.__str__(key) if isinstance(key, str) else str(int(key))
             if text in result:
                 raise ReceiptError(f"{path}: keys {key!r} and {text!r} collide.")
-            result[text] = _strict_json_value(item, f"{path}.{text}")
+            if nonfinite and text == NONFINITE_KEY:
+                raise ReceiptError(
+                    f"{path}: the key {NONFINITE_KEY} is reserved for infinite numbers."
+                )
+            result[text] = _strict_json_value(item, f"{path}.{text}", nonfinite)
         return result
     if isinstance(value, (list, tuple)):
         return [
-            _strict_json_value(item, f"{path}[{index}]")
+            _strict_json_value(item, f"{path}[{index}]", nonfinite)
             for index, item in enumerate(value)
         ]
     raise ReceiptError(
@@ -661,41 +683,6 @@ def content_sha256(value: Any) -> str:
         raise ReceiptError(str(exc)) from exc
 
 
-#: The reserved member that stands for an infinite number in a reform payload.
-NONFINITE_KEY = "$nonfinite"
-
-
-def _with_infinities_encoded(value: Any, path: str = "$") -> Any:
-    """A reform payload with each infinite number replaced by a reserved object.
-
-    PolicyEngine parameters take infinite values (an uncapped threshold is
-    ``.inf``), which JSON cannot hold. ``inf`` becomes ``{"$nonfinite":
-    "Infinity"}`` and ``-inf`` becomes ``{"$nonfinite": "-Infinity"}``. A payload
-    that uses the key ``$nonfinite`` itself is refused, so no other payload
-    encodes to the same JSON. NaN is left for :func:`strict_json_value` to
-    refuse: it has no one value to bind.
-    """
-
-    if isinstance(value, Mapping):
-        if any(key == NONFINITE_KEY for key in value):
-            raise ReceiptError(
-                f"{path}: the key {NONFINITE_KEY} is reserved for infinite numbers."
-            )
-        return {
-            key: _with_infinities_encoded(item, f"{path}.{key}")
-            for key, item in value.items()
-        }
-    if isinstance(value, (list, tuple)):
-        return [
-            _with_infinities_encoded(item, f"{path}[{index}]")
-            for index, item in enumerate(value)
-        ]
-    number = value.item() if _numpy_scalar(value) else value
-    if isinstance(number, float) and math.isinf(number):
-        return {NONFINITE_KEY: "Infinity" if number > 0 else "-Infinity"}
-    return value
-
-
 def _payload_sha256(value: Any) -> str:
     """Digest of a reform payload: strict JSON with nulls kept, RFC 8785, SHA-256.
 
@@ -703,12 +690,12 @@ def _payload_sha256(value: Any) -> str:
     can mean something (``Scenario.from_reform({"p": {"2027": None}})``
     removes a value that ``{"p": {}}`` keeps), so the payload is digested
     exactly as given. Infinite numbers are encoded as reserved objects
-    (:func:`_with_infinities_encoded`); a payload without them digests as it
-    did before they were allowed.
+    (:func:`_strict_json_value` with ``nonfinite``); a payload without them
+    digests as it did before they were allowed.
     """
 
     try:
-        converted = strict_json_value(_with_infinities_encoded(value))
+        converted = _strict_json_value(value, "$", nonfinite=True)
         return canonical_sha256(converted)
     except RecursionError as exc:
         raise ReceiptError("The value is nested too deeply.") from exc
@@ -850,9 +837,10 @@ def _typed_value(value: Any, path: str = "$") -> dict[str, Any]:
             raise ReceiptError(f"{path}: {value} is outside +/-(2**53 - 1).")
         return {"type": "int", "value": value}
     if kind is float:
-        if not math.isfinite(value):
-            raise ReceiptError(f"{path}: {value} is not a finite number.")
+        if math.isnan(value):
+            raise ReceiptError(f"{path}: NaN has no one value to bind.")
         # By its bits: 0.0 and -0.0 compare equal but behave differently.
+        # float.hex() writes the infinities exactly, as "inf" and "-inf".
         return {"type": "float", "hex": value.hex()}
     if kind is str:
         return {"type": "str", "value": value}

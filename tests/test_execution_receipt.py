@@ -40,6 +40,7 @@ import inspect
 import json
 import linecache
 import sys
+from collections.abc import Mapping
 from importlib import metadata
 from pathlib import Path
 from types import CodeType, SimpleNamespace
@@ -52,7 +53,7 @@ from hypothesis import strategies as st
 from pydantic import ValidationError
 
 from policyengine.provenance import receipt as receipt_module
-from policyengine.provenance.canonical import canonical_sha256
+from policyengine.provenance.canonical import CanonicalJSONError, canonical_sha256
 from policyengine.provenance.receipt import (
     ExecutionReceipt,
     FiscalYearConvention,
@@ -3616,15 +3617,38 @@ def _reform_digest(payload):
     return reform_identity(payload, "policyengine-uk.reform_dict/v1").reform_sha256
 
 
-def test_an_infinite_parameter_value_binds_by_its_reserved_encoding():
-    """An uncapped threshold is ``inf`` in PolicyEngine; the digest names it."""
+@pytest.mark.parametrize(
+    ("value", "spelling"),
+    [(float("inf"), "Infinity"), (float("-inf"), "-Infinity")],
+    ids=["inf", "-inf"],
+)
+def test_an_infinite_parameter_value_binds_by_its_reserved_encoding(value, spelling):
+    """An uncapped threshold is ``inf`` in PolicyEngine; the digest names it.
 
-    payload = {CAP: {"2026-04-06.2100-12-31": float("inf")}}
-    assert _reform_digest(payload) == canonical_sha256(
-        {
-            "representation": "policyengine-uk.reform_dict/v1",
-            "payload": {CAP: {"2026-04-06.2100-12-31": {"$nonfinite": "Infinity"}}},
-        }
+    Round-1 review M2: the spellings are a published contract, so both are
+    pinned by their exact canonical bytes.
+    """
+
+    from policyengine.provenance.canonical import canonical_json
+
+    payload = {CAP: {"2026-04-06.2100-12-31": value}}
+    expected = {
+        "representation": "policyengine-uk.reform_dict/v1",
+        "payload": {CAP: {"2026-04-06.2100-12-31": {"$nonfinite": spelling}}},
+    }
+    assert canonical_json(expected) == (
+        b'{"payload":{"gov.hmrc.pensions.salary_sacrifice_pension_cap":'
+        b'{"2026-04-06.2100-12-31":{"$nonfinite":"' + spelling.encode() + b'"}}},'
+        b'"representation":"policyengine-uk.reform_dict/v1"}'
+    )
+    assert _reform_digest(payload) == canonical_sha256(expected)
+
+
+def test_an_infinity_in_a_tuple_binds_as_one_in_a_list():
+    """Round-1 review L1: tuples are walked like lists."""
+
+    assert _reform_digest({CAP: (float("inf"), 1.0)}) == _reform_digest(
+        {CAP: [float("inf"), 1.0]}
     )
 
 
@@ -3642,20 +3666,82 @@ def test_a_numpy_infinity_binds_as_a_float_one():
         )
 
 
+class _EqualsNothing(str):
+    """A key whose own ``__eq__`` would hide that it spells a reserved key."""
+
+    def __eq__(self, other):
+        return False
+
+    __hash__ = str.__hash__
+
+
+class _Pairs(Mapping):
+    """A mapping that yields its pairs as given, equal keys included."""
+
+    def __init__(self, pairs):
+        self._pairs = pairs
+
+    def __getitem__(self, key):
+        for candidate, value in reversed(self._pairs):
+            if candidate is key or candidate == key:
+                return value
+        raise KeyError(key)
+
+    def __iter__(self):
+        return (key for key, _ in self._pairs)
+
+    def __len__(self):
+        return len(self._pairs)
+
+
+class _Level(enum.IntEnum):
+    ONE = 1
+
+
 @pytest.mark.parametrize(
     "payload",
     [
         {CAP: {"2027": {"$nonfinite": "Infinity"}}},
         {"$nonfinite": "Infinity"},
         [{"$nonfinite": "-Infinity"}],
+        {CAP: ({"$nonfinite": "Infinity"},)},
+        {CAP: {"2027": {_EqualsNothing("$nonfinite"): "Infinity"}}},
     ],
-    ids=["value", "top-level", "array-member"],
+    ids=["value", "top-level", "array-member", "tuple-member", "str-subclass-key"],
 )
 def test_a_payload_using_the_reserved_key_is_refused(payload):
-    """Otherwise the object would digest like the infinity it spells."""
+    """Otherwise the object would digest like the infinity it spells.
+
+    Round-1 review L1 and L3: a tuple is walked like a list, and a ``str``
+    subclass that compares unequal to everything is checked by its text.
+    """
 
     with pytest.raises(ReceiptError, match=r"\$nonfinite is reserved"):
         _reform_digest(payload)
+
+
+@pytest.mark.parametrize(
+    "pairs",
+    [
+        [("2027", 2000.0), ("2027", 1000.0)],
+        [("2027", 2000.0), ("2027", float("inf"))],
+        [(2027, 2000.0), ("2027", 1000.0)],
+        [(_Level.ONE, 2.0), (1, 2.0)],
+        [(_EqualsNothing("2027"), 1.0), ("2027", float("inf"))],
+    ],
+    ids=[
+        "duplicate",
+        "duplicate-inf",
+        "int-and-str",
+        "intenum-and-int",
+        "str-subclass",
+    ],
+)
+def test_colliding_keys_are_still_refused_with_infinities_allowed(pairs):
+    """Round-1 review M1: encoding first used to drop one of the entries."""
+
+    with pytest.raises(ReceiptError, match="collide"):
+        _reform_digest({CAP: _Pairs(pairs)})
 
 
 def test_nan_is_still_refused():
@@ -3676,15 +3762,81 @@ def test_a_scenario_with_an_infinite_parameter_change_binds():
     )
 
 
-@settings(max_examples=200, deadline=None)
-@given(payload=REFORM_PAYLOADS)
+_FINITE_LEAVES = (
+    st.none()
+    | st.booleans()
+    | st.integers(min_value=-(2**60), max_value=2**60)
+    | st.floats(allow_nan=False, allow_infinity=False)
+    | st.floats(allow_nan=False, allow_infinity=False).map(np.float64)
+    | st.floats(allow_nan=False, allow_infinity=False, width=32).map(np.float32)
+    | st.integers(min_value=-(2**31), max_value=2**31).map(np.int64)
+    | st.booleans().map(np.bool_)
+    | st.sampled_from([_Level.ONE])
+    | st.text(max_size=6)
+    | st.dates()
+)
+_PAYLOAD_KEYS = st.text(max_size=4).filter(
+    lambda key: key != "$nonfinite"
+) | st.integers(min_value=-3, max_value=3)
+#: Nested payloads of every kind strict conversion takes, finite numbers only.
+FINITE_PAYLOADS = st.recursive(
+    _FINITE_LEAVES,
+    lambda children: (
+        st.lists(children, max_size=4)
+        | st.lists(children, max_size=4).map(tuple)
+        | st.lists(st.tuples(_PAYLOAD_KEYS, children), max_size=4).map(_Pairs)
+    ),
+    max_leaves=20,
+)
+
+
+def _outcome(digest):
+    try:
+        return digest()
+    except (ReceiptError, CanonicalJSONError):
+        return "refused"
+
+
+@settings(max_examples=300, deadline=None)
+@given(payload=st.one_of(REFORM_PAYLOADS, FINITE_PAYLOADS))
 def test_payloads_without_infinities_digest_as_before(payload):
-    """Differential: allowing infinities changes no finite payload's digest."""
+    """Differential: allowing infinities changes no finite payload's digest.
+
+    Round-1 review L6: payloads cover nesting, int and colliding keys,
+    tuples, nulls, strings, dates, numpy scalars and integers past 2**53;
+    each is either digested as before or refused by both.
+    """
 
     from policyengine.provenance.receipt import strict_json_value
 
-    assert _reform_digest(payload) == canonical_sha256(
-        strict_json_value(
-            {"representation": "policyengine-uk.reform_dict/v1", "payload": payload}
+    representation = "policyengine-uk.reform_dict/v1"
+    if isinstance(payload, (Mapping, list, tuple)) and payload:
+        before = _outcome(
+            lambda: canonical_sha256(
+                strict_json_value(
+                    {"representation": representation, "payload": payload}
+                )
+            )
         )
+        assert _outcome(lambda: _reform_digest(payload)) == before
+
+
+def test_an_infinite_modifier_default_binds_and_nan_is_refused(tmp_path, monkeypatch):
+    """Round-1 review L5: an uncapped default binds by ``float.hex()``."""
+
+    plus = _computed_default_identity(tmp_path / "a", monkeypatch, "1e999")
+    again = _computed_default_identity(tmp_path / "b", monkeypatch, "1e999")
+    minus = _computed_default_identity(tmp_path / "c", monkeypatch, "-1e999")
+    largest = _computed_default_identity(
+        tmp_path / "d", monkeypatch, "1.7976931348623157e308"
     )
+    assert plus == again
+    assert len({plus, minus, largest}) == 3
+    source = "def raise_rate(simulation, cap=float('nan')):\n    simulation.cap = cap\n"
+    name = "w4_receipt_588_nan_default"
+    try:
+        module, _ = _import_source(tmp_path / "e", name, source)
+        with pytest.raises(ReceiptError, match="NaN has no one value"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
