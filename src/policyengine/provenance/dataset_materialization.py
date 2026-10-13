@@ -391,10 +391,13 @@ def dataset_source_change(
     one timestamp tick, or before the snapshot. A local file must still have
     its identity.
 
-    One gap remains, for a local file only: one modified, or replaced by a
+    Two gaps remain. Whatever the source, a file swapped out while it is
+    loaded and then restored (renamed aside and back, or copied back with its
+    times kept) is not noticed: it is checked when the year files are
+    stamped, not as it is read. And a local file modified, or replaced by a
     file of the same size, within one tick of the file system's timestamp
-    resolution, or restored to the snapshot's size and modification time
-    (renamed aside and back, or copied with its times kept), is not noticed.
+    resolution is not noticed either; a downloaded file's bytes would not
+    hash to its sha256.
 
     Returns:
         ``None`` when the source still matches; otherwise a clause saying

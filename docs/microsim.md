@@ -514,11 +514,12 @@ The source check has limits that follow from not reading the source:
 - an explicit Hugging Face URI is compared as a string. Pin it to a commit
   (`hf://owner/repo/file.h5@<commit>`): a URI without a revision, or with a
   branch, names whatever the branch holds when the files are cut;
-- while year files are cut from a local file, a change that keeps its size
-  and lands within one tick of the file system's timestamp resolution, or
-  that restores its size and modification time (renamed aside and back, or
-  copied with its times kept), is not noticed. A downloaded source is also
-  checked by its sha256, so this does not apply to it;
+- the source is checked when the year files are stamped, not as it is read.
+  A source swapped out while it is loaded and then restored, bytes and
+  times (renamed aside and back, or copied back with `cp -p`), is not
+  noticed, whatever its kind. A local file modified, or replaced by a file of
+  the same size, within one tick of the file system's timestamp resolution
+  is not noticed either; a downloaded file is also checked by its sha256;
 - an editable or source install of policyengine-us keeps its version string
   while its code changes, so its year files are not cut again;
 - `create_datasets` takes no lock, so two processes cutting the same year
