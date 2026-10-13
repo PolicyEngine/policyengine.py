@@ -25,11 +25,17 @@ from __future__ import annotations
 import inspect
 import json
 from collections.abc import Iterable, Iterator, Mapping
+from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
+
+from policyengine.provenance.dataset_materialization import (
+    describe_dataset_source_identity,
+    is_dataset_source_identity,
+)
 
 #: Stored input columns that policyengine-us has since renamed, mapped to the
 #: live input that replaced each one.
@@ -74,27 +80,50 @@ RENAMES_RECORD_KEY = "legacy_input_renames"
 #: reused.
 RENAMES_H5_DATASET = "policyengine_legacy_input_renames"
 
-#: H5 dataset stamping a ``create_datasets`` year file, as UTF-8 JSON
-#: ``{"register": {legacy: live, ...}, "revision": int}``: the whole register
-#: the file was cut under and its year-file format revision (see
-#: :func:`year_file_stamp`). ``create_datasets`` writes it after the tables and
-#: the renames record, so a year file whose write stopped part-way has none.
-#: ``ensure_datasets`` cuts a year file again, and ``load_datasets`` refuses
-#: it, unless its stamp equals this release's (see
+#: H5 dataset stamping a ``create_datasets`` year file, as UTF-8 JSON (see
+#: :func:`year_file_stamp`)::
+#:
+#:     {"packages": {"policyengine-core": str, "policyengine-us": str},
+#:      "register": {legacy: live, ...},
+#:      "revision": int,
+#:      "source": {...}}
+#:
+#: It holds the versions of the packages that calculated the file's values,
+#: the whole register the file was cut under, its year-file format revision
+#: and the identity of the dataset it was cut from. ``create_datasets`` writes
+#: it after the tables and the renames record, so a year file whose write
+#: stopped part-way has none. ``ensure_datasets`` cuts a year file again, and
+#: ``load_datasets`` refuses it, unless its stamp equals the one a file cut
+#: now from the requested dataset would carry (see
 #: :func:`year_file_stamp_problem`). ``PolicyEngineUSDataset.save()`` neither
 #: writes nor keeps it, so saving a year file again drops the stamp.
 YEAR_FILE_STAMP_H5_DATASET = "policyengine_year_file_stamp"
 
 #: Format revision of ``create_datasets`` year files, stored in their stamp.
-#: Raise it when a change to year-file extraction means that files cut before
-#: it must be cut again, for a reason the register does not capture (for
-#: example, policyengine.py 6.1.1 and earlier exported only the engine's input
-#: variables, so a stored column the engine had renamed was dropped).
+#: Raise it when the stamp changes shape, or when a change to year-file
+#: extraction means that files cut before it must be cut again, for a reason
+#: the rest of the stamp does not capture (for example, policyengine.py 6.1.1
+#: and earlier exported only the engine's input variables, so a stored column
+#: the engine had renamed was dropped).
 #:
 #: Removing the temporary ACS WIC assumption (:func:`_temporary_acs_wic_values`)
 #: is such a change: year files cut while it applies store assumed claiming
 #: as ``takes_up_wic_if_eligible`` for ACS people with no stored decision.
-YEAR_FILE_STAMP_REVISION = 1
+#: Re-pinning ``populace_us_2024_acs_local`` to its replacement changes its
+#: source identity, so year files cut from the bundle's old pin are cut again
+#: without a new revision. Year files cut from the old dataset requested by
+#: its explicit URI are reused unless the revision is raised.
+#:
+#: Revision 2 added the source dataset's identity and the package versions,
+#: so year files stamped with revision 1, which record neither, are cut again
+#: once.
+YEAR_FILE_STAMP_REVISION = 2
+
+#: Distributions whose installed versions a year file's stamp records.
+#: ``create_datasets`` stores each input as policyengine-us calculates it for
+#: the year, and policyengine-core uprates an input from its stored year by a
+#: policyengine-us parameter, so either can change a year file's values.
+YEAR_FILE_PACKAGES = ("policyengine-core", "policyengine-us")
 
 #: ``{year: {entity key: stored table}}``, one table per entity per dataset
 #: year, in the dataset's own row order.
@@ -144,16 +173,42 @@ def write_renames_record(path: str | Path, record: Mapping[str, str]) -> None:
     _write_json_dataset(path, RENAMES_H5_DATASET, dict(record))
 
 
-def year_file_stamp() -> dict[str, Any]:
-    """Return the stamp for a year file cut now.
+def installed_package_versions() -> dict[str, str | None]:
+    """Return the installed version of each of :data:`YEAR_FILE_PACKAGES`.
 
-    It holds the whole register, not only the entries an engine needs mapped,
-    so checking a stamp never imports policyengine-us. The register is read
-    when this is called.
+    ``None`` stands for a package that is not installed. The versions come
+    from the installed distributions' metadata, so no package is imported.
     """
+    versions: dict[str, str | None] = {}
+    for name in YEAR_FILE_PACKAGES:
+        try:
+            versions[name] = importlib_metadata.version(name)
+        except importlib_metadata.PackageNotFoundError:
+            versions[name] = None
+    return versions
+
+
+def year_file_stamp(
+    source: Mapping[str, Any],
+    packages: Mapping[str, str | None] | None = None,
+) -> dict[str, Any]:
+    """Return the stamp for a year file cut now from ``source``.
+
+    ``source`` is the source dataset's identity (see
+    ``policyengine.provenance.dataset_materialization.dataset_source_identity``).
+    ``packages`` defaults to :func:`installed_package_versions`.
+
+    The stamp holds the whole register, not only the entries an engine needs
+    mapped, so checking a stamp never imports policyengine-us. The register
+    and the package versions are read when this is called.
+    """
+    if packages is None:
+        packages = installed_package_versions()
     return {
+        "packages": dict(sorted(packages.items())),
         "register": dict(sorted(LEGACY_INPUT_RENAMES.items())),
         "revision": YEAR_FILE_STAMP_REVISION,
+        "source": dict(source),
     }
 
 
@@ -178,13 +233,21 @@ def write_year_file_stamp(path: str | Path, stamp: Mapping[str, Any]) -> None:
     _write_json_dataset(path, YEAR_FILE_STAMP_H5_DATASET, dict(stamp))
 
 
-def year_file_stamp_problem(path: str | Path) -> str | None:
+def year_file_stamp_problem(
+    path: str | Path,
+    source: Mapping[str, Any],
+    packages: Mapping[str, str | None] | None = None,
+) -> str | None:
     """Return why a ``create_datasets`` year file is out of date, or ``None``.
 
-    A year file is current only when both of these hold:
+    ``source`` is the identity of the dataset the year file is requested for
+    (see ``policyengine.provenance.dataset_materialization
+    .requested_dataset_source_identity``), and ``packages`` defaults to
+    :func:`installed_package_versions`. A year file is current only when both
+    of these hold:
 
-    - its stamp equals :func:`year_file_stamp`: the same format revision and
-      the same register;
+    - its stamp equals ``year_file_stamp(source, packages)``: the same format
+      revision, register, source identity and package versions;
     - it stores the renames record, listing only renames in that register.
 
     The register must match exactly. A file cut under a register that lacks
@@ -195,6 +258,11 @@ def year_file_stamp_problem(path: str | Path) -> str | None:
     this release's engine does not define, and a run skips any column the
     engine does not define.
 
+    The source must match exactly too: a file cut from another revision or
+    file of a dataset that keeps its logical name (and so the year file's
+    name) holds the other data. So must the package versions, which
+    calculated every value in the file.
+
     Only the stamp and the record are read, never the tables or the source
     dataset. A file that cannot be read as HDF5 is out of date. An error that
     says nothing about the file's contents (no permission, a directory, a file
@@ -203,12 +271,14 @@ def year_file_stamp_problem(path: str | Path) -> str | None:
 
     Returns:
         ``None`` for a current year file; otherwise a clause, starting "it"
-        or "its", that says why the file is out of date and names the
-        renames it may have lost.
+        or "its", that says why the file is out of date. It names the renames
+        the file may have lost, the source it was cut from and the source
+        requested, and the package versions it was cut with and those
+        installed, wherever they differ.
     """
     import h5py
 
-    current = year_file_stamp()
+    current = year_file_stamp(source, packages)
     register = current["register"]
     try:
         with h5py.File(path, "r") as file:
@@ -247,13 +317,13 @@ def year_file_stamp_problem(path: str | Path) -> str | None:
     # ``True``, which equals 1.
     if not (
         isinstance(stamp, dict)
-        and set(stamp) == {"register", "revision"}
+        and set(stamp) == {"packages", "register", "revision", "source"}
         and type(revision) is int
         and _is_str_map(stamp["register"])
+        and _is_version_map(stamp["packages"])
+        and is_dataset_source_identity(stamp["source"])
     ):
-        return (
-            "its stamp of the register of renamed inputs it was cut under is malformed"
-        )
+        return "its stamp of what it was cut from and under is malformed"
     if record is _ABSENT:
         return "it has no record of the renamed stored inputs mapped when it was cut"
     if not _is_str_map(record):
@@ -287,6 +357,34 @@ def year_file_stamp_problem(path: str | Path) -> str | None:
             "it was cut under renames this version of policyengine.py does not "
             f"register: {_describe(unknown)}"
         )
+    if stamp["source"] != current["source"]:
+        reasons.append(
+            "it was cut from "
+            f"{describe_dataset_source_identity(stamp['source'])}, and the "
+            "requested source is "
+            f"{describe_dataset_source_identity(current['source'])}"
+        )
+    stamped_packages, packages = stamp["packages"], current["packages"]
+    for name in sorted(stamped_packages.keys() | packages.keys()):
+        if name not in packages:
+            reasons.append(
+                f"it records the {name} version it was cut with, which this "
+                "version of policyengine.py does not check"
+            )
+            continue
+        if name in stamped_packages and stamped_packages[name] == packages[name]:
+            continue
+        cut_with = (
+            f"{name} {stamped_packages[name]}"
+            if stamped_packages.get(name) is not None
+            else f"no recorded {name} version"
+        )
+        installed = (
+            f"{name} {packages[name]} is installed"
+            if packages[name] is not None
+            else f"{name} is not installed"
+        )
+        reasons.append(f"it was cut with {cut_with}, and {installed}")
     return "; ".join(reasons)
 
 
@@ -328,6 +426,14 @@ def _write_json_dataset(path: str | Path, name: str, value: Any) -> None:
 def _is_str_map(value: Any) -> bool:
     return isinstance(value, dict) and all(
         isinstance(key, str) and isinstance(item, str) for key, item in value.items()
+    )
+
+
+def _is_version_map(value: Any) -> bool:
+    """Whether ``value`` maps package names to versions, ``None`` for absent."""
+    return isinstance(value, dict) and all(
+        isinstance(key, str) and (item is None or isinstance(item, str))
+        for key, item in value.items()
     )
 
 

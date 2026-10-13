@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import datetime
 import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 import requests
 from pydantic import BaseModel, ConfigDict
@@ -255,6 +256,120 @@ def _download_hugging_face_dataset(
 
 def _use_local_dataset(dataset_path: str) -> DatasetSource:
     return DatasetSource(source_uri=dataset_path, path=dataset_path)
+
+
+def dataset_source_identity(source: DatasetSource) -> dict[str, Any]:
+    """Return the identity of a dataset source, for files derived from it.
+
+    A file derived from a source (such as a US year file) records this, so a
+    later request for the same logical dataset can tell whether the source
+    it would use now is the one the file was derived from. The identity has
+    one of three shapes:
+
+    - a bundle dataset: ``{"uri": ..., "sha256": ...}``, the
+      ``hf://repo/path@revision`` URI the bundle manifest pins and the sha256
+      that the materialized file was verified against;
+    - an explicit Hugging Face URI (``allow_unmanaged=True``): ``{"uri": ...}``,
+      the URI as given. Nothing verified its contents, so a URI that does not
+      pin a revision, or pins a branch, names whatever the branch holds;
+    - a local file (``allow_unmanaged=True``): ``{"path": ..., "size": ...,
+      "mtime_ns": ...}``, its resolved path, size in bytes and modification
+      time in nanoseconds, read with one ``stat()``.
+
+    None of them reads the source's contents. See
+    :func:`requested_dataset_source_identity` for the identity a request
+    gives without materializing it.
+    """
+    if source.bundle_dataset is not None:
+        return {
+            "uri": source.bundle_dataset.source_uri,
+            "sha256": source.bundle_dataset.sha256,
+        }
+    if "://" in source.source_uri:
+        return {"uri": source.source_uri}
+    return _local_file_identity(source.path)
+
+
+def requested_dataset_source_identity(
+    country_id: str,
+    dataset: Optional[str] = None,
+) -> dict[str, Any]:
+    """Return the identity of the source ``materialize_dataset`` would use.
+
+    This is what :func:`dataset_source_identity` gives for
+    ``materialize_dataset(country_id, dataset, allow_unmanaged=True)``,
+    computed without downloading anything or reading the source's contents:
+    the bundle manifest entry for a bundle dataset, the URI for an explicit
+    Hugging Face URI, and one ``stat()`` for a local file. A name that is
+    neither a bundle dataset nor a local file is looked up in the data
+    release manifest, as ``materialize_dataset`` does.
+
+    It does not enforce bundle selection: an unmanaged request gives its
+    identity whether or not ``allow_unmanaged`` would be set.
+    """
+    manifest = get_release_manifest(country_id)
+    if dataset is None or dataset == manifest.default_dataset_uri:
+        dataset = manifest.default_dataset
+    if dataset in manifest.datasets:
+        bundle_dataset = _resolve_bundle_dataset(country_id, dataset, manifest=manifest)
+        return {"uri": bundle_dataset.source_uri, "sha256": bundle_dataset.sha256}
+    source_uri = resolve_managed_dataset_reference(
+        country_id, dataset, allow_unmanaged=True
+    )
+    if "://" in source_uri:
+        return {"uri": source_uri}
+    return _local_file_identity(source_uri)
+
+
+def _local_file_identity(path: str | Path) -> dict[str, Any]:
+    resolved = Path(path).expanduser().resolve()
+    status = resolved.stat()
+    return {
+        "path": str(resolved),
+        "size": status.st_size,
+        "mtime_ns": status.st_mtime_ns,
+    }
+
+
+def is_dataset_source_identity(value: Any) -> bool:
+    """Return whether ``value`` has a shape :func:`dataset_source_identity` gives."""
+    if not isinstance(value, dict):
+        return False
+    if set(value) == {"uri", "sha256"}:
+        return isinstance(value["uri"], str) and isinstance(value["sha256"], str)
+    if set(value) == {"uri"}:
+        return isinstance(value["uri"], str)
+    if set(value) == {"path", "size", "mtime_ns"}:
+        # ``type(...) is int``: JSON ``true`` loads as ``True``, which equals 1.
+        return (
+            isinstance(value["path"], str)
+            and type(value["size"]) is int
+            and type(value["mtime_ns"]) is int
+        )
+    return False
+
+
+def describe_dataset_source_identity(identity: dict[str, Any]) -> str:
+    """Describe a well-formed source identity in words (see
+    :func:`is_dataset_source_identity`)."""
+    if "uri" in identity:
+        if "sha256" in identity:
+            return f"{identity['uri']} (sha256 {identity['sha256']})"
+        return identity["uri"]
+    return (
+        f"{identity['path']} ({identity['size']} bytes, modified "
+        f"{_describe_mtime_ns(identity['mtime_ns'])})"
+    )
+
+
+def _describe_mtime_ns(mtime_ns: int) -> str:
+    """Format a modification time as UTC ISO 8601, to the nanosecond."""
+    seconds, nanoseconds = divmod(mtime_ns, 1_000_000_000)
+    try:
+        moment = datetime.datetime.fromtimestamp(seconds, datetime.UTC)
+    except (OverflowError, OSError, ValueError):
+        return f"at {mtime_ns} ns since the epoch"
+    return f"{moment:%Y-%m-%dT%H:%M:%S}.{nanoseconds:09d}Z"
 
 
 def _reuse_or_download_bundle_files(
