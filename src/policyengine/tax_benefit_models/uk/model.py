@@ -17,7 +17,13 @@ from policyengine.tax_benefit_models.common.model_version import (
     output_dataset_filepath as _output_dataset_filepath,
 )
 
-from .datasets import PolicyEngineUKDataset, UKYearData
+from .datasets import (
+    OUTPUT_STAMP_KEY,
+    PolicyEngineUKDataset,
+    UKYearData,
+    input_year_file_stamp,
+    output_stamp,
+)
 
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
@@ -181,6 +187,12 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
         # autosave removal in datasets.py).
         if dataset.data is None:
             dataset.load()
+        # The stamp of the year file the input data was cut into, if it is
+        # one, stamped into the output when it is saved. ``load()`` refuses
+        # the output once the simulation's dataset is read from another cut,
+        # or the year file is out of date under this release (see
+        # ``uk.datasets.OUTPUT_STAMP_H5_DATASET``).
+        stamp = output_stamp(input_year_file_stamp(dataset))
 
         # Apply regional scoping if specified
         if simulation.scoping_strategy:
@@ -291,6 +303,7 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
                 benunit=data["benunit"],
                 household=data["household"],
             ),
+            metadata={OUTPUT_STAMP_KEY: stamp},
         )
 
 

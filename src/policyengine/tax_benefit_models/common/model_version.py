@@ -388,6 +388,22 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     "inputs were mapped when it was calculated; run again "
                     "before saving"
                 )
+        uk_stamp = None
+        if self.country_code == "uk":
+            from policyengine.tax_benefit_models.uk.datasets import (
+                OUTPUT_STAMP_KEY,
+            )
+
+            # The stamp the run recorded, not one made now: the year file the
+            # output was calculated from.
+            uk_stamp = (getattr(simulation.output_dataset, "metadata", None) or {}).get(
+                OUTPUT_STAMP_KEY
+            )
+            if uk_stamp is None:
+                raise ValueError(
+                    "This UK output does not record what it was calculated "
+                    "from; run again before saving"
+                )
         simulation.output_dataset.save()
         if serialized_spm is not None:
             # Store UTF-8 JSON in a dataset rather than an attribute: the
@@ -399,6 +415,16 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     data=serialized_spm,
                     dtype=h5py.string_dtype("utf-8"),
                 )
+        if uk_stamp is not None:
+            from policyengine.tax_benefit_models.uk.datasets import (
+                write_output_stamp,
+            )
+
+            # Stamp last. ``PolicyEngineUKDataset.save()`` truncates the file
+            # first, so an output whose save stopped part-way has no stamp,
+            # and ``load()`` refuses it. It also refuses to save without a
+            # filepath, so there is one here.
+            write_output_stamp(str(simulation.output_dataset.filepath), uk_stamp)
 
     def load(self, simulation: Simulation) -> None:
         """Rehydrate the simulation's output dataset from disk.
@@ -443,20 +469,36 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     "stored inputs (it has no record of them); run it again"
                 )
 
+        uk_stamp = None
         if self.country_code == "uk":
             from policyengine.tax_benefit_models.uk.datasets import (
-                _year_file_records_data_year,
+                OUTPUT_STAMP_KEY,
+                input_year_file_stamp,
+                output_stamp_problem,
+                read_output_stamp,
             )
 
-            # UK outputs saved before runs anchored on the observed data year
-            # (PolicyEngine/policyengine.py#556) took a projected year as
-            # observed and uprated the State Pension by CPI, so they are not
-            # reused. ``Simulation.ensure()`` runs such a simulation again.
-            if not _year_file_records_data_year(Path(filepath)):
+            # Outputs calculated from another year file than the simulation's
+            # dataset is read from, or from another cut of it (cut again after
+            # the bundle re-pinned its dataset, its local source changed or a
+            # package was upgraded), hold other results. So do outputs saved
+            # before runs anchored on the observed data year
+            # (PolicyEngine/policyengine.py#556), which took a projected year
+            # as observed and uprated the State Pension by CPI. None is
+            # reused: ``Simulation.ensure()`` runs such a simulation again. A
+            # missing file raises ``FileNotFoundError`` here.
+            problem = output_stamp_problem(
+                filepath, input_year_file_stamp(simulation.dataset)
+            )
+            if problem is not None:
                 raise ValueError(
-                    "Saved UK simulation predates anchoring on the observed "
-                    "data year (it records none); run it again"
+                    f"Saved UK simulation output {filepath} is out of date: "
+                    f"{problem}. Run the simulation again (Simulation.ensure() "
+                    "does so)."
                 )
+            # Current: ``output_stamp_problem`` accepts an output only with a
+            # well-formed stamp.
+            uk_stamp = read_output_stamp(filepath)
 
         simulation.output_dataset = self._dataset_class(
             id=simulation.id,
@@ -474,6 +516,9 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             simulation.output_dataset.metadata.update(
                 {"spm_config": recorded["config"], RENAMES_RECORD_KEY: recorded_renames}
             )
+        if uk_stamp is not None:
+            # Kept so that saving the loaded output again writes its stamp.
+            simulation.output_dataset.metadata[OUTPUT_STAMP_KEY] = uk_stamp
 
         if os.path.exists(filepath):
             simulation.created_at = datetime.datetime.fromtimestamp(
