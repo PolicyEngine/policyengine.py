@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
+import secrets
 from collections.abc import Iterable, Mapping
 from importlib import metadata as importlib_metadata
 from pathlib import Path
@@ -147,14 +147,25 @@ def temporary_year_file(path: str | Path) -> Path:
     at once, and a cut that stops part-way leaves ``path`` as it was. The
     file's name starts with ``.{stem}.`` and ends with ``.partial``; the
     caller removes it if the cut fails.
+
+    The file is created with the mode a new file gets (``0o666`` less the
+    umask), as pandas would create the year file itself, so a year file moved
+    into place is as readable by others as one written at its path. (A file
+    from ``tempfile.mkstemp`` would be readable by its owner alone.)
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, name = tempfile.mkstemp(
-        prefix=f".{path.stem}.", suffix=".partial", dir=path.parent
-    )
-    os.close(descriptor)
-    return Path(name)
+    for _ in range(100):
+        temporary = path.parent / f".{path.stem}.{secrets.token_hex(8)}.partial"
+        try:
+            descriptor = os.open(
+                temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666
+            )
+        except FileExistsError:
+            continue
+        os.close(descriptor)
+        return temporary
+    raise FileExistsError(f"Could not create a temporary file beside {path}")
 
 
 def publish_year_file(

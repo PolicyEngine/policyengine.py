@@ -170,6 +170,31 @@ def test_a_temporary_year_file_is_hidden_beside_its_path(tmp_path):
     assert temporary != temporary_year_file(path)
 
 
+def _new_file_mode() -> int:
+    """The mode a newly created file gets: ``0o666`` less the umask."""
+    import os
+
+    umask = os.umask(0)
+    os.umask(umask)
+    return 0o666 & ~umask
+
+
+@pytest.mark.parametrize("umask", [0o022, 0o002, 0o077])
+def test_a_temporary_year_file_gets_a_new_files_mode(tmp_path, umask):
+    """Not ``mkstemp``'s owner-only 0600, so a year file moved into place is
+    as readable by others as one written at its path."""
+    import os
+    import stat
+
+    previous = os.umask(umask)
+    try:
+        temporary = temporary_year_file(tmp_path / "pop_year_2026.h5")
+        assert stat.S_IMODE(temporary.stat().st_mode) == _new_file_mode()
+        assert stat.S_IMODE(temporary.stat().st_mode) == 0o666 & ~umask
+    finally:
+        os.umask(previous)
+
+
 def test_publishing_moves_a_stamped_file_onto_its_path_in_one_step(tmp_path):
     """The file at the path is replaced whole: its old contents and stamp go
     together, and the new contents arrive with their stamp."""

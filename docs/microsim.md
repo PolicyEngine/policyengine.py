@@ -324,9 +324,11 @@ modification time right after materializing it, and checks them again
 (re-hashing a downloaded file) once a dataset's year files are written. Only
 then does it stamp each temporary file and move it onto its path, in one
 step. The tables and the stamp at a year file's path therefore always come
-from one cut, even when two processes cut the same year files at once. If the
-source changed, no year file is moved into place, the year files already
-there are left as they were, and `DatasetMaterializationError` is raised. A
+from one cut, even when two processes cut the same year files at once, and a
+year file moved into place gets the mode a newly created file would. If the
+source changed, none of that dataset's year files is moved into place, the
+ones already there are left as they were, and `DatasetMaterializationError`
+is raised. A
 process killed mid-cut can leave a temporary file behind, which is never read
 and can be deleted. Requested datasets that are different sources with one
 name are refused with `ValueError`.

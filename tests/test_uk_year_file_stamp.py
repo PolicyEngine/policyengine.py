@@ -1234,6 +1234,8 @@ STATES = {
     ),
     "malformed stamp": (dict(stamp=("text", "not json")), False),
     "data year link cycle": (dict(stamp=_current(), data_year="link cycle"), False),
+    # ``_for_year`` stamps it for a year ten years on from the file's.
+    "cut for another year": (dict(stamp=_stamp(year="another")), False),
     "not HDF5": (None, False),
     "missing": (None, None),
 }
@@ -1244,7 +1246,8 @@ def _for_year(written: dict, year: int) -> dict:
     a year records this one."""
     stamp = written.get("stamp", _ABSENT)
     if isinstance(stamp, dict) and "year" in stamp:
-        written = {**written, "stamp": {**stamp, "year": year}}
+        stamped = year + 10 if stamp["year"] == "another" else year
+        written = {**written, "stamp": {**stamp, "year": stamped}}
     return written
 
 

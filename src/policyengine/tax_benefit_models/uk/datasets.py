@@ -533,8 +533,10 @@ def create_datasets(
     dataset was verified against or an explicit URI was downloaded with (see
     ``dataset_materialization.dataset_source_change``). Another process can
     replace a file in a shared data folder, for example by materializing
-    another release of the same dataset there. If the source changed, no year
-    file is moved into place and ``DatasetMaterializationError`` is raised.
+    another release of the same dataset there. If the source changed, none of
+    that dataset's year files is moved into place (those of datasets cut
+    before it in the same call already are) and
+    ``DatasetMaterializationError`` is raised.
     Two requested datasets that are different sources with one stem are
     refused with ``ValueError`` before anything is cut, since they would
     overwrite each other's year files.
@@ -581,13 +583,15 @@ def create_datasets(
         # file anchors on the same observed year as a run of the source.
         data_year = int(min(sim.dataset.years))
         data_year_data = _year_data_with_weights(sim.dataset[data_year])
-        # (temporary file, year file, year) for each year file written.
-        cut: list[tuple[Path, str, int]] = []
+        # (temporary file, year file, year, result key) for each year file
+        # written.
+        cut: list[tuple[Path, str, int, str]] = []
         try:
             for year in years:
                 filepath = f"{data_folder}/{dataset_stem}_year_{year}.h5"
+                dataset_key = f"{dataset_stem}_{year}"
                 temporary = temporary_year_file(filepath)
-                cut.append((temporary, filepath, int(year)))
+                cut.append((temporary, filepath, int(year), dataset_key))
                 uk_dataset = PolicyEngineUKDataset(
                     id=f"{dataset_stem}_year_{year}",
                     name=f"{dataset_stem}-year-{year}",
@@ -599,8 +603,6 @@ def create_datasets(
                     data_year_data=data_year_data if int(year) > data_year else None,
                 )
                 uk_dataset.save()
-
-                dataset_key = f"{dataset_stem}_{year}"
                 result[dataset_key] = uk_dataset
 
             # Move the year files into place only if the source file is still
@@ -616,16 +618,16 @@ def create_datasets(
                     "ensure_datasets() cuts them again."
                 )
             # Stamp last, then move each year file onto its path in one step.
-            for temporary, filepath, year in cut:
+            for temporary, filepath, year, dataset_key in cut:
                 publish_year_file(
                     temporary,
                     filepath,
                     YEAR_FILE_STAMP_H5_DATASET,
                     year_file_stamp(identity, year, packages),
                 )
-                result[f"{dataset_stem}_{year}"].filepath = filepath
+                result[dataset_key].filepath = filepath
         finally:
-            for temporary, _, _ in cut:
+            for temporary, *_ in cut:
                 temporary.unlink(missing_ok=True)
 
     return result

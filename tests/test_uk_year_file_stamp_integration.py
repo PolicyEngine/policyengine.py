@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 from pathlib import Path
 from unittest.mock import patch
 
@@ -154,8 +155,14 @@ def test_create_stamps_each_year_file_with_its_source_and_packages(tmp_path):
         }
         assert read_year_file_stamp(path) == year_file_stamp(identity, year)
         assert year_file_stamp_problem(path, identity, year) is None
-    # Each year file was written beside its path and moved into place.
+    # Each year file was written beside its path and moved into place, with
+    # the mode a file pandas created at its path would have.
     assert _partial_files(data_folder) == []
+    umask = os.umask(0)
+    os.umask(umask)
+    for year in (DATA_YEAR, YEAR):
+        mode = (data_folder / f"tiny_uk_2024_year_{year}.h5").stat().st_mode
+        assert stat.S_IMODE(mode) == 0o666 & ~umask
     # The real versions, not a fixture's.
     assert all(installed_package_versions().values())
 
@@ -388,6 +395,57 @@ def test_a_failed_cut_leaves_the_year_files_already_there_whole(tmp_path):
     assert _partial_files(data_folder) == []
     recut = _assert_cut_again(source, data_folder)
     assert _reported(recut[f"tiny_uk_2024_{YEAR}"]) == list(REPLACED)
+
+
+def test_a_cut_that_fails_part_way_leaves_no_temporary_file(tmp_path):
+    """Whatever the error (here a failed write of the second year file), the
+    temporary files go and the year files already there are untouched."""
+    source = _new_source(tmp_path)
+    data_folder = tmp_path / "data"
+    _ensure(source, data_folder, (DATA_YEAR, YEAR))
+    paths = [data_folder / f"tiny_uk_2024_year_{year}.h5" for year in (DATA_YEAR, YEAR)]
+    before = [path.read_bytes() for path in paths]
+    save = uk_datasets.PolicyEngineUKDataset.save
+    saved = []
+
+    def fail_on_the_second_save(self):
+        if saved:
+            raise OSError(28, "No space left on device")
+        saved.append(self.filepath)
+        save(self)
+
+    with patch.object(
+        uk_datasets.PolicyEngineUKDataset, "save", fail_on_the_second_save
+    ):
+        with pytest.raises(OSError, match="No space left"):
+            create_datasets(
+                datasets=[source],
+                years=[DATA_YEAR, YEAR],
+                data_folder=str(data_folder),
+                allow_unmanaged=True,
+            )
+
+    assert len(saved) == 1
+    assert _partial_files(data_folder) == []
+    assert [path.read_bytes() for path in paths] == before
+
+
+def test_a_year_given_as_a_float_is_cut_and_returned(tmp_path):
+    """The result key and file name use the year as given, as before."""
+    source = _new_source(tmp_path)
+    data_folder = tmp_path / "data"
+
+    created = create_datasets(
+        datasets=[source],
+        years=[float(YEAR)],
+        data_folder=str(data_folder),
+        allow_unmanaged=True,
+    )
+
+    dataset = created[f"tiny_uk_2024_{float(YEAR)}"]
+    assert dataset.filepath == f"{data_folder}/tiny_uk_2024_year_{float(YEAR)}.h5"
+    assert read_year_file_stamp(dataset.filepath)["year"] == YEAR
+    assert _partial_files(data_folder) == []
 
 
 def test_two_sources_cut_in_one_call_are_each_stamped_with_their_own(tmp_path):
