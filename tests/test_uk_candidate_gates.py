@@ -548,6 +548,13 @@ def _declared_coverage(source):
     from a report of a full run (each case limited to the routes it ran on)."""
 
     source = source or {}
+    from policyengine.tax_benefit_models.uk import budget_reform_contract as runner
+
+    declared_checks = {
+        (case.id, check.target, check.name, check.year): check
+        for case in runner.CASES
+        for check in case.checks
+    }
     by_case = {}
     for row in source.get("cases") or []:
         by_case.setdefault(row.get("case_id"), []).append(row)
@@ -562,6 +569,13 @@ def _declared_coverage(source):
                         target=label.split(":")[0],
                         name=label.split(":")[1],
                         year=int(label.split(":")[2]),
+                        expected=getattr(
+                            declared_checks.get(
+                                (case, *label.split(":")[:2], int(label.split(":")[2]))
+                            ),
+                            "expected",
+                            None,
+                        ),
                         pending=next(
                             (
                                 row.get("decision_id")
@@ -582,6 +596,7 @@ def _declared_coverage(source):
                 else None,
             )
             for case, rows in by_case.items()
+            if case != "module_parameters_unchanged"
         ),
         "PROPERTIES": {
             row.get("property_id"): "" for row in source.get("properties") or []
@@ -637,6 +652,15 @@ def _importer(report=None, raises=None, missing=False, coverage=None, declare=Tr
 ENTRY = "policyengine.tax_benefit_models.uk.budget_reform_contract:run_budget_reform_contract"
 
 
+def _run_level_row():
+    return {
+        "case_id": "module_parameters_unchanged",
+        "route": "all",
+        "check": "every parameter's dated values and metadata in system",
+        "status": "pass",
+    }
+
+
 @pytest.mark.parametrize(
     ("kwargs", "status"),
     [
@@ -651,7 +675,8 @@ ENTRY = "policyengine.tax_benefit_models.uk.budget_reform_contract:run_budget_re
                             "case_id": "april",
                             "route": "wrapper.policy",
                             "status": "pass",
-                        }
+                        },
+                        _run_level_row(),
                     ],
                 }
             },
@@ -701,6 +726,7 @@ ENTRY = "policyengine.tax_benefit_models.uk.budget_reform_contract:run_budget_re
                             "status": "pending",
                             "decision_id": "d1344",
                         },
+                        _run_level_row(),
                     ]
                 }
             },
@@ -764,7 +790,7 @@ def _recount(report: dict) -> dict:
 def _passing_report() -> dict:
     """W1's real full run: every route, 20 examples, the certified dataset."""
 
-    return _fixture("full_allpass_uk_2.126.8.json")
+    return _fixture("full_released_uk_2.126.12.json")
 
 
 def _run_contract(
@@ -781,24 +807,19 @@ def _run_contract(
             report=report,
             coverage=coverage if coverage is not None else _passing_report(),
         ),
-        expected_versions=versions
-        or {"policyengine-uk": "2.126.8", "policyengine-core": "3.33.0"},
+        expected_versions=versions or _passing_report()["versions"],
         expected_dataset_sha256=dataset_sha,
         **kwargs,
     )[0]
 
 
-def test_the_released_models_full_run_passes_the_runners_own_declarations():
-    """W1's full run on released policyengine-uk 2.126.12, gated against the
-    coverage the merged runner module itself declares, so a stricter coverage
-    rule cannot reject a real full run unnoticed."""
-
+def _run_released_contract(report, *, pending_decisions=()):
+    """Gate a fixture through the real runner's declarations and route logic."""
     import importlib
     import types
 
     from policyengine.tax_benefit_models.uk import budget_reform_contract as runner
 
-    report = _fixture("full_released_uk_2.126.12.json")
     if runner.CONTRACT_VERSION != report["contract_version"]:
         pytest.skip(
             f"the runner declares contract {runner.CONTRACT_VERSION}; refresh "
@@ -811,7 +832,7 @@ def test_the_released_models_full_run_passes_the_runners_own_declarations():
     def importer(name):
         return proxy if name == runner.__name__ else importlib.import_module(name)
 
-    result = reform_contract(
+    return reform_contract(
         entrypoint=ENTRY,
         importer=importer,
         expected_versions=report["versions"],
@@ -819,7 +840,14 @@ def test_the_released_models_full_run_passes_the_runners_own_declarations():
         seed=0,
         max_examples=20,
         dataset_path=Path("enhanced_frs_2024_25.h5"),
+        pending_decisions=pending_decisions,
     )[0]
+
+
+def test_the_released_models_full_run_passes_the_runners_own_declarations():
+    """W1's full run remains valid against the real runner's declarations."""
+
+    result = _run_released_contract(_fixture("full_released_uk_2.126.12.json"))
     assert result.status == "pass", result.summary
     assert result.details["counts"] == {
         "pass": 673,
@@ -828,6 +856,129 @@ def test_the_released_models_full_run_passes_the_runners_own_declarations():
         "unsupported": 79,
         "pending": 6,
     }
+
+
+@pytest.mark.parametrize("section", ["cases", "population"])
+def test_supported_failures_cannot_be_relabelled_unsupported(section):
+    report = _fixture("full_released_uk_2.126.12.json")
+    row = next(
+        row
+        for row in report[section]
+        if row["status"] == "pass" and row["route"] == "country.reform_dict"
+    )
+    row["status"] = "fail"
+    assert _run_released_contract(_recount(report)).status == "fail"
+    row.update(status="unsupported", reason="this candidate does not support it")
+    result = _run_released_contract(_recount(report))
+    assert result.status == "error", result.summary
+    assert any(
+        "undeclared unsupported" in problem for problem in result.details["problems"]
+    )
+
+
+def test_population_cannot_exempt_every_required_check():
+    report = _fixture("full_released_uk_2.126.12.json")
+    assert len(report["population"]) == 19
+    for row in report["population"]:
+        row.update(status="unsupported", reason="no population support")
+    result = _run_released_contract(_recount(report))
+    assert result.status == "error", result.summary
+    assert (
+        len([p for p in result.details["problems"] if "undeclared unsupported" in p])
+        == 19
+    )
+
+
+@pytest.mark.parametrize("route", ["api.sim_api", "wrapper.household"])
+def test_declared_case_exemptions_require_the_runners_reason(route):
+    report = _fixture("full_released_uk_2.126.12.json")
+    row = next(
+        row
+        for row in report["cases"]
+        if row["route"] == route and row["status"] == "unsupported"
+    )
+    row["reason"] = "a different exemption"
+    result = _run_released_contract(report)
+    assert result.status == "error", result.summary
+    assert any("different reason" in p for p in result.details["problems"])
+
+
+def test_deleting_a_failed_run_level_check_cannot_qualify():
+    report = _fixture("full_released_uk_2.126.12.json")
+    row = next(
+        row
+        for row in report["cases"]
+        if row["case_id"] == "module_parameters_unchanged"
+    )
+    row["status"] = "fail"
+    assert _run_released_contract(_recount(report)).status == "fail"
+    report["cases"].remove(row)
+    result = _run_released_contract(_recount(report))
+    assert result.status == "error", result.summary
+    assert any(
+        "module_parameters_unchanged@all" in p for p in result.details["problems"]
+    )
+
+
+@pytest.mark.parametrize(
+    ("route", "check_prefix"),
+    [
+        ("country.reform_dict", "baseline_isolation:"),
+        ("country.scenario_parameter_changes", "baseline_isolation:"),
+        ("country.reform_from_dict", "baseline_isolation:"),
+        ("country.reform_dict", "unreformed_after_reform:gov."),
+        ("country.reform_dict", "unreformed_after_reform:income_tax:"),
+        ("wrapper.household", "unreformed_after_reform:"),
+        ("wrapper.policy", "unreformed_after_reform:"),
+    ],
+)
+def test_each_runner_isolation_row_is_required(route, check_prefix):
+    report = _fixture("full_released_uk_2.126.12.json")
+    omitted = next(
+        row
+        for row in report["cases"]
+        if row["route"] == route and (row.get("check") or "").startswith(check_prefix)
+    )
+    report["cases"].remove(omitted)
+    result = _run_released_contract(_recount(report))
+    assert result.status == "error", result.summary
+    assert any(omitted["check"] in p for p in result.details["problems"])
+
+
+def test_deleting_all_runner_isolation_rows_cannot_qualify():
+    report = _fixture("full_released_uk_2.126.12.json")
+    report["cases"] = [
+        row
+        for row in report["cases"]
+        if not (row.get("check") or "").startswith(
+            ("baseline_isolation:", "unreformed_after_reform:")
+        )
+    ]
+    result = _run_released_contract(_recount(report))
+    assert result.status == "error", result.summary
+    assert any("baseline_isolation:" in p for p in result.details["problems"])
+
+
+@pytest.mark.parametrize(
+    "check_prefix", ["baseline_isolation:", "unreformed_after_reform:"]
+)
+def test_failing_isolation_checks_cannot_be_relabelled_pending(check_prefix):
+    report = _fixture("full_released_uk_2.126.12.json")
+    row = next(
+        row
+        for row in report["cases"]
+        if row["route"] == "country.reform_dict"
+        and (row.get("check") or "").startswith(check_prefix)
+    )
+    row["status"] = "fail"
+    assert _run_released_contract(_recount(report)).status == "fail"
+    row.update(status="pending", decision_id="d1344")
+    result = _run_released_contract(_recount(report), pending_decisions=("d1344",))
+    assert result.status == "error", result.summary
+    assert any(
+        "isolation check" in p and "did not run" in p
+        for p in result.details["problems"]
+    )
 
 
 def test_w1_report_on_the_pinned_model_fails_on_its_defects():
@@ -844,7 +995,13 @@ def test_w1_report_on_the_pinned_model_fails_on_its_defects():
     )
     assert result.status == "fail"
     assert result.summary.startswith("101 contract row(s) failed")
-    assert result.details["problems"] == []
+    # This historical runner predates the always-emitted run-level check and
+    # after-run isolation rows. Its failures remain decisive; current coverage
+    # validation also correctly identifies those absent rows.
+    assert any("declared case check(s)" in p for p in result.details["problems"])
+    assert any(
+        "module_parameters_unchanged@all" in p for p in result.details["problems"]
+    )
 
 
 def test_w1_population_run_alone_is_incomplete():
@@ -859,11 +1016,11 @@ def test_w1_population_run_alone_is_incomplete():
 
 
 def test_w1_full_run_passes():
-    """W1's real all-pass report: 267 pass, 6 pending d1344, 67 unsupported."""
+    """W1's real all-pass report: 673 pass, 6 pending d1344, 79 unsupported."""
 
     result = _run_contract(_passing_report())
     assert result.status == "pass", result.summary
-    assert "every case, property and population check passed (267)" in result.summary
+    assert "every case, property and population check passed (673)" in result.summary
     assert "6 pending a methodology call" in result.summary
     assert result.details["problems"] == []
 
