@@ -1,3 +1,4 @@
+import copy
 import hashlib
 import importlib.util
 import json
@@ -27,6 +28,7 @@ from policyengine.tax_benefit_models.common.model_version import (
 )
 from policyengine.tax_benefit_models.us.legacy_inputs import (
     RENAMES_RECORD_KEY,
+    YEAR_FILE_STAMP_KEY,
     apply_legacy_input_renames_to_microsimulation,
     check_yearly_periods,
     pending_legacy_input_renames,
@@ -34,6 +36,7 @@ from policyengine.tax_benefit_models.us.legacy_inputs import (
     write_renames_record,
     write_year_file_stamp,
     year_file_stamp,
+    year_file_stamp_metadata,
     year_file_stamp_problem,
 )
 from policyengine.utils.hashing import sha256_file
@@ -127,20 +130,29 @@ class PolicyEngineUSDataset(Dataset):
             self.metadata[RENAMES_RECORD_KEY] = renames
         if _is_policyengine_core_h5(path):
             self.data = _load_policyengine_core_h5(path, self.year)
-            return
-
-        with pd.HDFStore(filepath, mode="r") as store:
-            data = {entity: store[entity] for entity in US_ENTITY_KEYS}
-        # Native producer files store calibrated household weights. Project
-        # missing weights through membership IDs on these in-memory copies,
-        # before constructing MicroDataFrames; the source HDF remains read-only.
-        _assign_missing_entity_weights(data)
-        self.data = USYearData(
-            **{
-                entity: MicroDataFrame(frame, weights=f"{entity}_weight")
-                for entity, frame in data.items()
-            }
-        )
+        else:
+            with pd.HDFStore(filepath, mode="r") as store:
+                data = {entity: store[entity] for entity in US_ENTITY_KEYS}
+            # Native producer files store calibrated household weights. Project
+            # missing weights through membership IDs on these in-memory copies,
+            # before constructing MicroDataFrames; the source HDF remains
+            # read-only.
+            _assign_missing_entity_weights(data)
+            self.data = USYearData(
+                **{
+                    entity: MicroDataFrame(frame, weights=f"{entity}_weight")
+                    for entity, frame in data.items()
+                }
+            )
+        # The stamp of the year file this data was cut into, if it is one. A
+        # run records it in its output's stamp, so an output calculated from
+        # a year file that goes out of date is not reused (see
+        # ``legacy_inputs.OUTPUT_STAMP_H5_DATASET``).
+        stamp = year_file_stamp_metadata(path)
+        if stamp is None:
+            self.metadata.pop(YEAR_FILE_STAMP_KEY, None)
+        else:
+            self.metadata[YEAR_FILE_STAMP_KEY] = stamp
 
     def __repr__(self) -> str:
         if self.data is None:
@@ -572,6 +584,9 @@ def create_datasets(
             # Stamp last. ``save()`` truncates the file first, so a year file
             # whose write stopped part-way has no stamp and is cut again.
             write_year_file_stamp(us_dataset.filepath, stamp)
+            # Keep it, as loading the file would, so a run over the returned
+            # dataset records it in its output's stamp.
+            us_dataset.metadata[YEAR_FILE_STAMP_KEY] = copy.deepcopy(stamp)
 
             dataset_key = f"{dataset_stem}_{year}"
             result[dataset_key] = us_dataset

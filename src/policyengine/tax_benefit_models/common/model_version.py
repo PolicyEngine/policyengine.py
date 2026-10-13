@@ -356,9 +356,11 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 "something to persist."
             )
         serialized_spm = None
+        stamp = None
         if self.country_code == "us":
             from policyengine.core.spm import SPMProvenance
             from policyengine.tax_benefit_models.us.legacy_inputs import (
+                OUTPUT_STAMP_KEY,
                 RENAMES_RECORD_KEY,
             )
 
@@ -379,14 +381,22 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             )
             # ``PolicyEngineUSDataset.save()`` writes this record into the
             # file, and ``load()`` refuses an output without it.
-            renames = (getattr(simulation.output_dataset, "metadata", None) or {}).get(
-                RENAMES_RECORD_KEY
-            )
+            metadata = getattr(simulation.output_dataset, "metadata", None) or {}
+            renames = metadata.get(RENAMES_RECORD_KEY)
             if renames is None:
                 raise ValueError(
                     "This US output does not record which renamed stored "
                     "inputs were mapped when it was calculated; run again "
                     "before saving"
+                )
+            # The stamp the run recorded, not one made now: the register the
+            # mapping used when the output was calculated.
+            stamp = metadata.get(OUTPUT_STAMP_KEY)
+            if stamp is None:
+                raise ValueError(
+                    "This US output does not record the register of renamed "
+                    "stored inputs it was calculated under; run again before "
+                    "saving"
                 )
         simulation.output_dataset.save()
         if serialized_spm is not None:
@@ -399,6 +409,16 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     data=serialized_spm,
                     dtype=h5py.string_dtype("utf-8"),
                 )
+        if stamp is not None:
+            from policyengine.tax_benefit_models.us.legacy_inputs import (
+                write_output_stamp,
+            )
+
+            # Stamp last. ``PolicyEngineUSDataset.save()`` truncates the file
+            # first, so an output whose save stopped part-way has no stamp,
+            # and ``load()`` refuses it. It also refuses to save without a
+            # filepath, so there is one here.
+            write_output_stamp(str(simulation.output_dataset.filepath), stamp)
 
     def load(self, simulation: Simulation) -> None:
         """Rehydrate the simulation's output dataset from disk.
@@ -414,17 +434,36 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
         if self.country_code == "us":
             from policyengine.core.spm import SPMProvenance
             from policyengine.tax_benefit_models.us.legacy_inputs import (
+                OUTPUT_STAMP_KEY,
                 RENAMES_RECORD_KEY,
+                output_stamp_problem,
+                read_output_stamp,
                 read_renames_record,
             )
 
+            # Outputs calculated under another register of renamed stored
+            # inputs, or from a year file cut under one, may have been
+            # calculated without a mapped input (for example with every
+            # WIC-eligible person taking WIC up), so they are not reused.
+            # ``Simulation.ensure()`` runs such a simulation again. A missing
+            # file raises ``FileNotFoundError`` here.
+            problem = output_stamp_problem(filepath)
+            if problem is not None:
+                raise ValueError(
+                    f"Saved US simulation output {filepath} is out of date: "
+                    f"{problem}. Run the simulation again (Simulation.ensure() "
+                    "does so)."
+                )
             with h5py.File(filepath, "r") as stream:
                 raw = (
                     stream["policyengine_spm"].asstr()[()]
                     if "policyengine_spm" in stream
                     else None
                 )
+            # Both are current: ``output_stamp_problem`` accepts an output
+            # only with a stamp and a well-formed record.
             recorded_renames = read_renames_record(filepath)
+            recorded_stamp = read_output_stamp(filepath)
             if raw is None:
                 raise ValueError(
                     "Saved US simulation has no SPM configuration or receipt"
@@ -433,15 +472,6 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             if recorded["config"] != simulation.spm_config:
                 raise ValueError("Saved US simulation uses different SPM settings")
             receipt = SPMProvenance.model_validate(recorded["provenance"])
-            # Outputs saved before stored inputs were mapped onto renamed
-            # live inputs were calculated without them (for example with
-            # every WIC-eligible person taking WIC up), so they are not
-            # reused. ``Simulation.ensure()`` runs such a simulation again.
-            if recorded_renames is None:
-                raise ValueError(
-                    "Saved US simulation predates the mapping of renamed "
-                    "stored inputs (it has no record of them); run it again"
-                )
 
         if self.country_code == "uk":
             from policyengine.tax_benefit_models.uk.datasets import (
@@ -471,8 +501,13 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
 
             simulation.spm_receipt = receipt
             simulation.spm = SPMSelection.model_validate(recorded["config"])
+            # Kept so that saving the loaded output again writes its stamp.
             simulation.output_dataset.metadata.update(
-                {"spm_config": recorded["config"], RENAMES_RECORD_KEY: recorded_renames}
+                {
+                    "spm_config": recorded["config"],
+                    RENAMES_RECORD_KEY: recorded_renames,
+                    OUTPUT_STAMP_KEY: recorded_stamp,
+                }
             )
 
         if os.path.exists(filepath):

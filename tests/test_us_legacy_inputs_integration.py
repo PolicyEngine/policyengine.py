@@ -13,13 +13,17 @@ draw ``True``). Both children are WIC-eligible, which each test checks.
 
 from __future__ import annotations
 
+import json
+import shutil
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import h5py
 import numpy as np
 import pandas as pd
 import pytest
-from hypothesis import given, settings
+from hypothesis import event, given, settings
 from hypothesis import strategies as st
 from microdf import MicroDataFrame
 
@@ -37,10 +41,14 @@ from policyengine.tax_benefit_models.us.datasets import (  # noqa: E402
     load_datasets,
 )
 from policyengine.tax_benefit_models.us.legacy_inputs import (  # noqa: E402
+    OUTPUT_STAMP_H5_DATASET,
     RENAMES_H5_DATASET,
     YEAR_FILE_STAMP_H5_DATASET,
     apply_legacy_input_renames,
     apply_legacy_input_renames_to_microsimulation,
+    output_stamp,
+    output_stamp_problem,
+    read_output_stamp,
     read_renames_record,
     read_year_file_stamp,
     year_file_stamp,
@@ -872,19 +880,24 @@ def test_an_output_saved_before_the_mapping_is_not_reused(tmp_path):
     ``load()`` refuses it, and ``ensure()`` runs the simulation again.
     """
     from policyengine.core.simulation import _cache
-    from policyengine.tax_benefit_models.us.legacy_inputs import RENAMES_H5_DATASET
+    from policyengine.tax_benefit_models.us.legacy_inputs import (
+        OUTPUT_STAMP_H5_DATASET,
+        RENAMES_H5_DATASET,
+    )
 
     simulation = _saved_run(tmp_path, "legacy-wic-stale")
     path = simulation.output_dataset.filepath
     # Make the file look like one saved before the mapping existed: no
-    # record, and the full-take-up WIC every eligible person got then.
+    # record or stamp, and the full-take-up WIC every eligible person got
+    # then.
     with h5py.File(path, "a") as stream:
         del stream[RENAMES_H5_DATASET]
+        del stream[OUTPUT_STAMP_H5_DATASET]
     stale = pd.DataFrame(pd.read_hdf(path, "person"))
     stale["wic"] = stale["wic"].where(stale["person_id"] != 2, 999.0)
     stale.to_hdf(path, key="person", format="fixed")
 
-    with pytest.raises(ValueError, match="predates the mapping"):
+    with pytest.raises(ValueError, match="saved by an older policyengine.py"):
         _reloaded(simulation)
 
     _cache.clear()
@@ -922,3 +935,504 @@ def test_the_run_record_binds_the_renames_applied(tmp_path):
     payloads = build_simulation_run_record_payloads(simulation)
 
     assert payloads["results"]["legacy_input_renames"] == RENAME
+
+
+# --- Saved outputs are stamped with the register ------------------------
+
+FUTURE = {"fictitious_old_input": "fictitious_new_input"}
+OUT_OF_DATE = "Saved US simulation output {path} is out of date: {reason}. Run the simulation again (Simulation.ensure() does so)."
+
+
+def _stamped_run(dataset, simulation_id):
+    """Run over ``dataset`` and save, as ``ensure()`` does on a miss."""
+    simulation = pe.Simulation(
+        id=simulation_id,
+        dataset=dataset,
+        tax_benefit_model_version=pe.us.model,
+        extra_variables={"person": [LIVE, "wic"]},
+    )
+    simulation.run()
+    simulation.save()
+    return simulation
+
+
+def _ensure_output(simulation, dataset=None):
+    """``ensure()`` a fresh copy of ``simulation``, past the in-process cache.
+
+    Returns:
+        The ensured simulation, and whether ``ensure()`` ran it again.
+    """
+    from policyengine.core.simulation import _cache
+
+    runs = []
+    run = pe.Simulation.run
+
+    def counting(self):
+        runs.append(self.id)
+        return run(self)
+
+    _cache.clear()
+    try:
+        ensured = pe.Simulation(
+            id=simulation.id,
+            dataset=dataset if dataset is not None else simulation.dataset,
+            tax_benefit_model_version=pe.us.model,
+            extra_variables=simulation.extra_variables,
+        )
+        with patch.object(pe.Simulation, "run", counting):
+            ensured.ensure()
+    finally:
+        _cache.clear()
+    return ensured, bool(runs)
+
+
+def test_a_saved_output_is_stamped_with_the_register_it_was_calculated_under(
+    tmp_path,
+):
+    simulation = _saved_run(tmp_path, "stamped-output")
+    path = simulation.output_dataset.filepath
+
+    # An in-memory input keeps no year-file stamp.
+    assert simulation.output_dataset.metadata["output_stamp"] == output_stamp()
+    assert output_stamp() == {"register": RENAME, "revision": 1, "year_file": None}
+    assert read_output_stamp(path) == output_stamp()
+    assert output_stamp_problem(path) is None
+
+    restored = _reloaded(simulation)
+    assert restored.output_dataset.metadata["output_stamp"] == output_stamp()
+    # Saving the loaded output again keeps its stamp, so it loads again.
+    restored.save()
+    assert read_output_stamp(path) == output_stamp()
+    assert _person_outputs(_reloaded(restored))["wic"].iloc[INFANT] == 0
+    _, ran = _ensure_output(simulation)
+    assert not ran
+
+
+def test_an_output_calculated_before_a_register_entry_is_calculated_again(tmp_path):
+    """Replay the WIC history for a saved output that has the record.
+
+    Calculating under an empty register is what policyengine.py did before
+    the WIC entry existed. The record check alone accepted such an output,
+    since it records ``{}``.
+    """
+    with patch.object(legacy_inputs, "LEGACY_INPUT_RENAMES", {}):
+        simulation = _saved_run(tmp_path, "before-the-entry")
+        path = simulation.output_dataset.filepath
+        # Under the register it was calculated with, the output is current.
+        assert output_stamp_problem(path) is None
+    # Without the mapping, the infant takes WIC up.
+    assert _person_outputs(simulation)["wic"].iloc[INFANT] > 0
+    assert read_renames_record(path) == {}
+    assert read_output_stamp(path) == {"register": {}, "revision": 1, "year_file": None}
+
+    reason = (
+        "it was calculated before these renames were registered, so it may have "
+        f"been calculated without them: {LEGACY} -> {LIVE}"
+    )
+    assert output_stamp_problem(path) == reason
+    with pytest.raises(ValueError) as refused:
+        _reloaded(simulation)
+    assert str(refused.value) == OUT_OF_DATE.format(path=path, reason=reason)
+
+    ensured, ran = _ensure_output(simulation)
+
+    assert ran
+    assert _person_outputs(ensured)["wic"].iloc[INFANT] == 0
+    assert read_output_stamp(path) == output_stamp()
+    # The new output is current, so it is reused from now on.
+    reused, ran = _ensure_output(simulation)
+    assert not ran
+    assert _person_outputs(reused)["wic"].iloc[INFANT] == 0
+
+
+def test_a_future_register_entry_makes_saved_outputs_stale(tmp_path):
+    """An entry the engine does not need still makes older outputs stale."""
+    from policyengine_us.system import system
+
+    for name in (*FUTURE, *FUTURE.values()):
+        assert name not in system.variables
+    simulation = _saved_run(tmp_path, "future-entry")
+    path = simulation.output_dataset.filepath
+
+    with patch.object(legacy_inputs, "LEGACY_INPUT_RENAMES", {**RENAME, **FUTURE}):
+        assert output_stamp_problem(path) == (
+            "it was calculated before these renames were registered, so it may "
+            "have been calculated without them: fictitious_old_input -> "
+            "fictitious_new_input"
+        )
+        with pytest.raises(ValueError, match="fictitious_old_input"):
+            _reloaded(simulation)
+
+        ensured, ran = _ensure_output(simulation)
+
+        assert ran
+        assert read_output_stamp(path) == {
+            "register": {**RENAME, **FUTURE},
+            "revision": 1,
+            "year_file": None,
+        }
+        # Only the entry the engine needs was applied, and the results are as
+        # before.
+        assert read_renames_record(path) == RENAME
+        assert _person_outputs(ensured)["wic"].iloc[INFANT] == 0
+        _, ran = _ensure_output(simulation)
+        assert not ran
+
+    # Back under this release's register, the newer output is out of date too.
+    assert "does not register: fictitious_old_input" in output_stamp_problem(path)
+
+
+def test_an_output_saved_with_only_the_record_is_calculated_again(tmp_path):
+    """An output saved with the record but before the stamp existed."""
+    simulation = _saved_run(tmp_path, "record-only")
+    path = simulation.output_dataset.filepath
+    with h5py.File(path, "a") as stream:
+        del stream[OUTPUT_STAMP_H5_DATASET]
+
+    with pytest.raises(ValueError, match="it has no stamp of the register"):
+        _reloaded(simulation)
+    _, ran = _ensure_output(simulation)
+
+    assert ran
+    assert output_stamp_problem(path) is None
+
+
+def test_a_run_over_a_year_file_records_its_stamp(tmp_path):
+    source, created = _create_year_file(tmp_path)
+    # ``create_datasets`` and ``load_datasets`` (through ``ensure_datasets``)
+    # both keep the year file's stamp.
+    loaded = _assert_reused(source, tmp_path / "data")
+    for dataset in (created, loaded):
+        assert dataset.metadata["year_file_stamp"] == year_file_stamp()
+
+    for index, dataset in enumerate((created, loaded)):
+        simulation = _stamped_run(dataset, f"from-a-year-file-{index}")
+        path = simulation.output_dataset.filepath
+
+        stamp = output_stamp(year_file_stamp())
+        assert stamp["year_file"] == {"register": RENAME, "revision": 1}
+        assert simulation.output_dataset.metadata["output_stamp"] == stamp
+        assert read_output_stamp(path) == stamp
+        assert output_stamp_problem(path) is None
+        assert _person_outputs(_reloaded(simulation))["wic"].iloc[INFANT] == 0
+
+
+def test_a_region_scoped_run_records_its_year_files_stamp(tmp_path):
+    """A scoped run simulates an in-memory copy of the data, which keeps no
+    metadata, so the stamp must come from the dataset the run was given."""
+    from policyengine.core.scoping_strategy import RowFilterStrategy
+
+    (tmp_path / "stale").mkdir()
+    (tmp_path / "current").mkdir()
+    with patch.object(legacy_inputs, "LEGACY_INPUT_RENAMES", {}):
+        _, cut_before = _create_year_file(tmp_path / "stale")
+    _, current = _create_year_file(tmp_path / "current")
+    stale = PolicyEngineUSDataset(
+        name="stale", description="stale", filepath=cut_before.filepath, year=YEAR
+    )
+    cases = [
+        (current, year_file_stamp(), None),
+        (
+            stale,
+            {"register": {}, "revision": 1},
+            "it was calculated from a year file cut before these renames were "
+            f"registered, which may have lost them: {LEGACY} -> {LIVE}",
+        ),
+    ]
+    for index, (dataset, year_file, problem) in enumerate(cases):
+        simulation = pe.Simulation(
+            id=f"scoped-{index}",
+            dataset=dataset,
+            tax_benefit_model_version=pe.us.model,
+            scoping_strategy=RowFilterStrategy(
+                variable_name="state_code", variable_value="CA"
+            ),
+            extra_variables={"person": [LIVE, "wic"]},
+        )
+        simulation.run()
+        simulation.save()
+        path = simulation.output_dataset.filepath
+
+        assert len(_person_outputs(simulation)) == len(PERSON_IDS)
+        assert read_output_stamp(path) == output_stamp(year_file)
+        assert output_stamp_problem(path) == problem
+
+
+def test_an_output_from_an_out_of_date_year_file_is_not_reused(tmp_path):
+    """A year file cut before the WIC entry lost the draw, so an output
+    calculated from it, under this release's register, is wrong too."""
+    with patch.object(legacy_inputs, "LEGACY_INPUT_RENAMES", {}):
+        source, dataset = _create_year_file(tmp_path)
+    # Opened directly: ``load_datasets`` would refuse it.
+    stale = PolicyEngineUSDataset(
+        name="stale", description="stale", filepath=dataset.filepath, year=YEAR
+    )
+    cut_under = {"register": {}, "revision": 1}
+    assert stale.metadata["year_file_stamp"] == cut_under
+
+    simulation = _stamped_run(stale, "from-a-stale-year-file")
+    path = simulation.output_dataset.filepath
+
+    # The file stores neither name, so there was nothing to map.
+    assert _person_outputs(simulation)["wic"].iloc[INFANT] > 0
+    assert read_output_stamp(path) == output_stamp(cut_under)
+    # The output's own register is current; its year file's is not.
+    reason = (
+        "it was calculated from a year file cut before these renames were "
+        f"registered, which may have lost them: {LEGACY} -> {LIVE}"
+    )
+    assert output_stamp_problem(path) == reason
+    with pytest.raises(ValueError) as refused:
+        _reloaded(simulation)
+    assert str(refused.value) == OUT_OF_DATE.format(path=path, reason=reason)
+
+    # Once ensure_datasets cuts the year file again, ensure() over it
+    # calculates the output again rather than reusing the stale one.
+    regenerated = _ensure(source, tmp_path / "data")
+    assert regenerated.filepath == dataset.filepath
+    ensured, ran = _ensure_output(simulation, dataset=regenerated)
+
+    assert ran
+    assert _person_outputs(ensured)["wic"].iloc[INFANT] == 0
+    assert read_output_stamp(path) == output_stamp(year_file_stamp())
+    _, ran = _ensure_output(simulation, dataset=regenerated)
+    assert not ran
+
+
+def test_save_writes_the_stamp_the_run_recorded(tmp_path):
+    """Not one made at save time, under whatever register is current then."""
+    with patch.object(legacy_inputs, "LEGACY_INPUT_RENAMES", {}):
+        simulation = _run(_in_memory_dataset(tmp_path))
+    simulation.save()
+    path = simulation.output_dataset.filepath
+
+    assert read_output_stamp(path) == {"register": {}, "revision": 1, "year_file": None}
+    assert output_stamp_problem(path).startswith(
+        "it was calculated before these renames were registered"
+    )
+
+
+def test_an_output_without_a_stamp_is_not_saved(tmp_path):
+    simulation = _run(_in_memory_dataset(tmp_path))
+    del simulation.output_dataset.metadata["output_stamp"]
+
+    with pytest.raises(
+        ValueError,
+        match="register of renamed stored inputs it was calculated under; run "
+        "again before saving",
+    ):
+        simulation.save()
+    assert not Path(simulation.output_dataset.filepath).exists()
+
+
+def test_save_stamps_the_output_last(tmp_path):
+    events = []
+    save = PolicyEngineUSDataset.save
+    stamp = legacy_inputs.write_output_stamp
+
+    def recording_save(self):
+        save(self)
+        events.append("tables")
+
+    def recording_stamp(path, value):
+        with h5py.File(path, "r") as stream:
+            events.append(
+                ("stamp", RENAMES_H5_DATASET in stream, "policyengine_spm" in stream)
+            )
+        stamp(path, value)
+
+    with (
+        patch.object(PolicyEngineUSDataset, "save", recording_save),
+        patch.object(legacy_inputs, "write_output_stamp", recording_stamp),
+    ):
+        simulation = _saved_run(tmp_path, "stamped-last")
+
+    # The tables, the record and the SPM receipt are all written first.
+    assert events == ["tables", ("stamp", True, True)]
+    assert output_stamp_problem(simulation.output_dataset.filepath) is None
+
+
+def test_an_output_whose_save_stopped_before_the_stamp_is_calculated_again(
+    tmp_path,
+):
+    simulation = pe.Simulation(
+        id="stopped-before-stamping",
+        dataset=_in_memory_dataset(tmp_path),
+        tax_benefit_model_version=pe.us.model,
+        extra_variables={"person": [LIVE, "wic"]},
+    )
+    simulation.run()
+
+    def stop(path, value):
+        raise RuntimeError("stopped before stamping")
+
+    with patch.object(legacy_inputs, "write_output_stamp", stop):
+        with pytest.raises(RuntimeError, match="stopped before stamping"):
+            simulation.save()
+
+    path = simulation.output_dataset.filepath
+    # Everything else was written, but without the stamp the output is
+    # calculated again.
+    assert read_renames_record(path) == RENAME
+    with h5py.File(path, "r") as stream:
+        assert "policyengine_spm" in stream
+    assert output_stamp_problem(path).startswith("it has no stamp")
+    _, ran = _ensure_output(simulation)
+    assert ran
+    assert output_stamp_problem(path) is None
+
+
+def test_an_output_is_never_loaded_as_a_year_file_nor_the_reverse(tmp_path):
+    source, dataset = _create_year_file(tmp_path)
+    data_folder = tmp_path / "data"
+    simulation = _stamped_run(dataset, "beside-the-year-files")
+
+    # A year file where an output is looked for is refused.
+    other = pe.Simulation(
+        id="a-year-file",
+        dataset=dataset,
+        tax_benefit_model_version=pe.us.model,
+        extra_variables={"person": [LIVE, "wic"]},
+    )
+    shutil.copy(dataset.filepath, data_folder / f"{other.storage_id}.h5")
+    with pytest.raises(
+        ValueError,
+        match="it has no stamp of the register of renamed inputs it was "
+        "calculated under",
+    ):
+        other.load()
+
+    # An output where a year file is looked for is refused.
+    shutil.copy(simulation.output_dataset.filepath, dataset.filepath)
+    with pytest.raises(
+        ValueError,
+        match="it has no stamp of the register of renamed inputs it was cut under",
+    ):
+        load_datasets(datasets=[source], years=[YEAR], data_folder=str(data_folder))
+
+
+# --- Simulation.load() and ensure() agree with the stamp check ----------
+
+#: Output stamps to store, around this release's.
+STORED_STAMPS = [
+    "absent",
+    {"register": RENAME, "revision": 1, "year_file": None},
+    {
+        "register": RENAME,
+        "revision": 1,
+        "year_file": {"register": RENAME, "revision": 1},
+    },
+    {"register": {}, "revision": 1, "year_file": None},
+    {"register": {**RENAME, **FUTURE}, "revision": 1, "year_file": None},
+    {"register": RENAME, "revision": 1, "year_file": {"register": {}, "revision": 1}},
+    {
+        "register": RENAME,
+        "revision": 1,
+        "year_file": {"register": RENAME, "revision": 2},
+    },
+    {"register": RENAME, "revision": 1, "year_file": "unreadable"},
+    {"register": RENAME, "revision": 2, "year_file": None},
+    {"register": RENAME, "revision": True, "year_file": None},
+    {"register": RENAME, "revision": 1},
+    "not json",
+]
+STORED_RECORDS = ["absent", RENAME, {}, {"x": "y"}, [], "not json"]
+REGISTERS = [RENAME, {}, {**RENAME, **FUTURE}]
+
+
+@pytest.fixture(scope="module")
+def saved_output(tmp_path_factory):
+    """The bytes of a real saved output, and its file name."""
+    simulation = _saved_run(tmp_path_factory.mktemp("saved_output"), "agreement")
+    path = Path(simulation.output_dataset.filepath)
+    return path.read_bytes(), path.name
+
+
+def _restore(path, name, content):
+    with h5py.File(path, "a") as stream:
+        if name in stream:
+            del stream[name]
+        if content == "absent":
+            return
+        stream.create_dataset(
+            name,
+            data=content if content == "not json" else json.dumps(content),
+            dtype=h5py.string_dtype("utf-8"),
+        )
+
+
+@st.composite
+def stored_outputs(draw):
+    """A register, and an output's stamp and record: current about a third of
+    the time, otherwise out of date in one of many ways."""
+    register = draw(st.sampled_from(REGISTERS))
+    current = [
+        {"register": register, "revision": 1, "year_file": None},
+        {
+            "register": register,
+            "revision": 1,
+            "year_file": {"register": register, "revision": 1},
+        },
+    ]
+    stamp = draw(st.sampled_from(current) | st.sampled_from(STORED_STAMPS))
+    record = draw(
+        st.sampled_from([dict(register), {}]) | st.sampled_from(STORED_RECORDS)
+    )
+    return register, stamp, record
+
+
+@settings(max_examples=60, deadline=None)
+@given(case=stored_outputs())
+def test_load_refuses_and_ensure_runs_again_exactly_when_an_output_is_out_of_date(
+    saved_output, case
+):
+    """``Simulation.load()`` refuses a saved output exactly when
+    ``output_stamp_problem`` gives a reason, and says it; ``ensure()`` runs
+    the simulation again exactly then, and otherwise reuses the output."""
+    from policyengine.core.simulation import _cache
+
+    register, stamp, record = case
+    content, name = saved_output
+    with tempfile.TemporaryDirectory() as directory:
+        dataset = _in_memory_dataset(Path(directory))
+
+        def simulation():
+            return pe.Simulation(
+                id="agreement",
+                dataset=dataset,
+                tax_benefit_model_version=pe.us.model,
+                extra_variables={"person": [LIVE, "wic"]},
+            )
+
+        path = Path(directory) / name
+        assert path.name == f"{simulation().storage_id}.h5"
+        path.write_bytes(content)
+        _restore(path, OUTPUT_STAMP_H5_DATASET, stamp)
+        _restore(path, RENAMES_H5_DATASET, record)
+
+        runs = []
+        with (
+            patch.object(legacy_inputs, "LEGACY_INPUT_RENAMES", register),
+            patch.object(pe.Simulation, "run", lambda self: runs.append(self.id)),
+            patch.object(pe.Simulation, "save", lambda self: None),
+        ):
+            problem = output_stamp_problem(path)
+            loading = simulation()
+            if problem is None:
+                loading.load()
+                assert _person_outputs(loading)["wic"].iloc[INFANT] == 0
+            else:
+                with pytest.raises(ValueError) as refused:
+                    loading.load()
+                assert str(refused.value) == OUT_OF_DATE.format(
+                    path=path, reason=problem
+                )
+
+            _cache.clear()
+            try:
+                simulation().ensure()
+            finally:
+                _cache.clear()
+
+        assert bool(runs) == (problem is not None)
+        event("current" if problem is None else "out of date")

@@ -18,9 +18,12 @@ from policyengine.tax_benefit_models.common.model_version import (
 
 from .datasets import PolicyEngineUSDataset, USYearData, _validate_entity_ids
 from .legacy_inputs import (
+    OUTPUT_STAMP_KEY,
     RENAMES_RECORD_KEY,
+    YEAR_FILE_STAMP_KEY,
     apply_legacy_input_renames,
     apply_legacy_input_renames_to_microsimulation,
+    output_stamp,
 )
 from .spm import (
     SPMProvenance,
@@ -224,6 +227,11 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         # leaves the module-level one untouched. Building populations
         # against the module-level system would hide reform-registered
         # variables like ``ctc_minimum_refundable_amount`` at calc time.
+        # The register the mapping below uses, and the stamp of the year file
+        # the input data was cut into, if it is one, stamped into the output
+        # when it is saved. ``load()`` refuses the output once either is out
+        # of date (see ``legacy_inputs.OUTPUT_STAMP_H5_DATASET``).
+        stamp = output_stamp(simulation.dataset.metadata.get(YEAR_FILE_STAMP_KEY))
         # Renames already applied when the input data was cut (a
         # ``create_datasets`` year file stores the mapped input under its
         # live name) count as applied to this run's inputs too, so the
@@ -335,6 +343,7 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             metadata={
                 "spm_config": dict(microsim.spm_config),
                 RENAMES_RECORD_KEY: dict(sorted(legacy_input_renames.items())),
+                OUTPUT_STAMP_KEY: stamp,
             },
             data=USYearData(
                 person=data["person"],
