@@ -136,8 +136,13 @@ class Poverty(Output):
         # Calculate results using weighted counts
         self.headcount = float((poverty_series == True).sum())  # noqa: E712
         self.total_population = float(poverty_series.count())
+        # ``None`` means nobody in the group is measured (for example, every
+        # member is outside the SPM measurement population), which is not
+        # a measured rate of zero.
         self.rate = (
-            self.headcount / self.total_population if self.total_population > 0 else 0.0
+            self.headcount / self.total_population
+            if self.total_population > 0
+            else None
         )
 
 

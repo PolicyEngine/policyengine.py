@@ -5,7 +5,7 @@ import logging
 import warnings
 from importlib import metadata as importlib_metadata
 from pathlib import Path
-from typing import Any, NamedTuple, Optional
+from typing import Any, Optional
 
 import h5py
 import pandas as pd
@@ -26,36 +26,33 @@ from policyengine.tax_benefit_models.common.model_version import (
     build_runtime_dataset_provenance,
 )
 from policyengine.tax_benefit_models.us.legacy_inputs import (
+    _ABSENT as _ABSENT_RECORD,
+)
+from policyengine.tax_benefit_models.us.legacy_inputs import (
     RENAMES_RECORD_KEY,
     apply_legacy_input_renames_to_microsimulation,
     check_yearly_periods,
     pending_legacy_input_renames,
     read_renames_record,
-    stored_entity_tables,
     write_renames_record,
     write_year_file_stamp,
     year_file_stamp,
     year_file_stamp_problem,
 )
-from policyengine.tax_benefit_models.us.spm_independence_role import (
-    INDEPENDENCE_LIST,
-    INDEPENDENCE_LIST_SHA256,
-    INDEPENDENCE_ROLE,
-    independence_roles,
-    roles_for_people,
+from policyengine.tax_benefit_models.us.legacy_spm import (
+    RECORD_KEY as LEGACY_SPM_RECORD_KEY,
 )
-from policyengine.tax_benefit_models.us.spm_measurement_scope import (
-    NON_ACS_CHANNELS,
-    OUTSIDE_SPM_MEASUREMENT,
-    SCOPE_RECORD_KEY,
-    SPMMeasurementScope,
-    applies_to_source,
-    build_scope,
-    classify_spm_units,
-    outside_by_spm_unit,
-    read_scope_record,
-    scope_from_metadata,
-    write_scope_record,
+from policyengine.tax_benefit_models.us.legacy_spm import (
+    LegacySPMDeclarations,
+    LegacySPMProfile,
+    add_to_year_file_frames,
+    derive_from_stored_tables,
+    expected_profile,
+    legacy_spm_source,
+    parse_record,
+    read_record_value,
+    write_record,
+    year_file_problem,
 )
 from policyengine.utils.hashing import sha256_file
 
@@ -138,12 +135,12 @@ class PolicyEngineUSDataset(Dataset):
         renames = self.metadata.get(RENAMES_RECORD_KEY)
         if renames is not None:
             write_renames_record(filepath, renames)
-        # !!! TEMPORARY ACS-LOCAL SPM COMPATIBILITY — MUST BE REPLACED (#597, #598) !!!
-        # the SPM measurement scope a year file was cut with, or an
-        # output was calculated with (see ``spm_measurement_scope``).
-        scope = scope_from_metadata(self.metadata)
-        if scope is not None:
-            write_scope_record(filepath, scope)
+        # BACKWARD COMPATIBILITY (#597, #598): the legacy SPM declarations a
+        # year file was cut with, or an output calculated with (see
+        # ``legacy_spm.record``).
+        legacy_spm_record = parse_record(self.metadata.get(LEGACY_SPM_RECORD_KEY))
+        if legacy_spm_record is not None:
+            write_record(filepath, legacy_spm_record)
 
     def load(self) -> None:
         """Load dataset from HDF5 file into this instance."""
@@ -152,9 +149,15 @@ class PolicyEngineUSDataset(Dataset):
         renames = read_renames_record(path)
         if renames is not None:
             self.metadata[RENAMES_RECORD_KEY] = renames
-        scope = read_scope_record(path)
-        if scope is not None:
-            self.metadata[SCOPE_RECORD_KEY] = scope.model_dump()
+        # BACKWARD COMPATIBILITY (#597, #598): keep the stored record as it
+        # is, readable or not; runs and loaders judge it (``legacy_spm.record``).
+        legacy_spm_record = read_record_value(path)
+        if isinstance(legacy_spm_record, dict):
+            self.metadata[LEGACY_SPM_RECORD_KEY] = legacy_spm_record
+        elif legacy_spm_record is not _ABSENT_RECORD:
+            self.metadata[LEGACY_SPM_RECORD_KEY] = None
+        else:
+            self.metadata.pop(LEGACY_SPM_RECORD_KEY, None)
         if _is_policyengine_core_h5(path):
             self.data = _load_policyengine_core_h5(path, self.year)
             return
@@ -441,12 +444,10 @@ def create_datasets(
         # Map stored inputs the engine has since renamed before extracting,
         # so each year's file stores the live input rather than dropping it.
         legacy_input_renames = apply_legacy_input_renames_to_microsimulation(sim)
-        # !!! TEMPORARY ACS-LOCAL SPM COMPATIBILITY — MUST BE REPLACED (#597, #598) !!!
-        # Classify ACS group quarters (#597) and supply the certified SPM
-        # independence role for ASEC/PUF records (#598) while the stored
-        # source evidence is still available; year files keep model inputs
-        # only. Delete once a certified ACS-local release carries both.
-        compatibility = _source_spm_compatibility(
+        # BACKWARD COMPATIBILITY (#597, #598): a legacy certified source
+        # carries no SPM declarations, so derive them while its stored
+        # evidence is still available; year files keep model inputs only.
+        legacy_spm = _legacy_spm_declarations(
             sim, source.bundle_dataset, Path(data_folder)
         )
 
@@ -589,15 +590,13 @@ def create_datasets(
             metadata: dict[str, Any] = {
                 RENAMES_RECORD_KEY: dict(sorted(legacy_input_renames.items()))
             }
-            if compatibility is not None:
-                # !!! TEMPORARY ACS-LOCAL SPM COMPATIBILITY — MUST BE REPLACED (#597, #598) !!!
-                spm_unit_df[OUTSIDE_SPM_MEASUREMENT] = outside_by_spm_unit(
-                    spm_unit_df["spm_unit_id"], compatibility.outside
+            if legacy_spm is not None:
+                # BACKWARD COMPATIBILITY (#597, #598): store the derived
+                # declarations as the ordinary inputs newer sources carry.
+                add_to_year_file_frames(person_df, spm_unit_df, legacy_spm)
+                metadata[LEGACY_SPM_RECORD_KEY] = legacy_spm.record.model_dump(
+                    mode="json"
                 )
-                person_df[INDEPENDENCE_ROLE] = roles_for_people(
-                    person_df["person_id"], compatibility.roles
-                )
-                metadata[SCOPE_RECORD_KEY] = compatibility.scope.model_dump()
 
             us_dataset = PolicyEngineUSDataset(
                 id=f"{dataset_stem}_year_{year}",
@@ -628,59 +627,24 @@ def create_datasets(
     return result
 
 
-class _SourceSPMCompatibility(NamedTuple):
-    outside: pd.Series
-    roles: pd.Series
-    scope: SPMMeasurementScope
-
-
-def _source_spm_compatibility(
+def _legacy_spm_declarations(
     sim: Any,
     bundle_dataset: Optional[MaterializedDataset],
     data_folder: Path,
-) -> Optional[_SourceSPMCompatibility]:
-    """Classify a verified source's SPM units and supply its SPM roles.
+) -> Optional[LegacySPMDeclarations]:
+    """Derive the SPM declarations a legacy certified source lacks.
 
-    !!! TEMPORARY ACS-LOCAL SPM COMPATIBILITY — MUST BE REPLACED (#597, #598).
-    Applies only to a bundle dataset whose verified SHA-256 is the certified
-    ACS-local source; see ``spm_measurement_scope`` and
-    ``spm_independence_role``.
+    BACKWARD COMPATIBILITY (#597, #598). Only a bundle dataset whose verified
+    SHA-256 is registered in ``legacy_spm.registry`` gets any; see
+    ``legacy_spm``.
     """
-    if bundle_dataset is None or not applies_to_source(bundle_dataset.sha256):
+    source = legacy_spm_source(bundle_dataset.sha256 if bundle_dataset else None)
+    if source is None:
         return None
-    stored = stored_entity_tables(
-        getattr(sim, "dataset", None), {"person": {}, "household": {}}
+    declarations, _ = derive_from_stored_tables(
+        source, getattr(sim, "dataset", None), data_dir=data_folder
     )
-    if not stored:
-        raise ValueError(
-            "SPM measurement scope needs the stored person and household "
-            "tables of the ACS-local source."
-        )
-    tables = stored[min(stored)]
-    person = pd.DataFrame(tables["person"])
-    outside = classify_spm_units(person, pd.DataFrame(tables["household"]))
-
-    independence_list = materialize_dataset(
-        "us", INDEPENDENCE_LIST, data_dir=data_folder
-    ).bundle_dataset
-    if (
-        independence_list is None
-        or independence_list.sha256 != INDEPENDENCE_LIST_SHA256
-    ):
-        raise ValueError(
-            "The bundle's SPM independence list is not the certified "
-            f"{INDEPENDENCE_LIST_SHA256} file."
-        )
-    roles = independence_roles(person, independence_list.path)
-    scope = build_scope(
-        bundle_dataset.sha256,
-        outside,
-        independence_list_sha256=independence_list.sha256,
-        independence_list_people=int(
-            person["person_support_channel"].isin(NON_ACS_CHANNELS).sum()
-        ),
-    )
-    return _SourceSPMCompatibility(outside=outside, roles=roles, scope=scope)
+    return declarations
 
 
 def _managed_source_sha256(dataset: Optional[str]) -> Optional[str]:
@@ -696,19 +660,10 @@ def _managed_source_sha256(dataset: Optional[str]) -> Optional[str]:
     return reference.sha256 if reference is not None else None
 
 
-def _year_file_records_scope(path: Path, dataset: Optional[str]) -> bool:
-    """Return whether a year file carries the SPM scope its source requires.
-
-    !!! TEMPORARY ACS-LOCAL SPM COMPATIBILITY — MUST BE REPLACED (#597, #598).
-    See ``spm_measurement_scope``. A year file of the certified
-    ACS-local source must record the scope it was cut with; files cut before
-    the rule existed are regenerated.
-    """
-    source_sha256 = _managed_source_sha256(dataset)
-    if not applies_to_source(source_sha256):
-        return True
-    scope = read_scope_record(path)
-    return scope is not None and scope.source_sha256 == source_sha256
+def _expected_legacy_spm_profile(dataset: Optional[str]) -> Optional[LegacySPMProfile]:
+    """Return the legacy SPM profile a dataset reference's year files need."""
+    source = legacy_spm_source(_managed_source_sha256(dataset))
+    return expected_profile(source) if source is not None else None
 
 
 def load_datasets(
@@ -749,14 +704,16 @@ def load_datasets(
                         "Regenerate it with ensure_datasets() or "
                         "create_datasets()."
                     )
-                # !!! TEMPORARY ACS-LOCAL SPM COMPATIBILITY — MUST BE REPLACED (#597, #598) !!!
-                if not _year_file_records_scope(Path(filepath), dataset):
+                # BACKWARD COMPATIBILITY (#597, #598): a legacy source's year
+                # file must carry exactly the declarations this release derives.
+                legacy_problem = year_file_problem(
+                    filepath, _expected_legacy_spm_profile(dataset)
+                )
+                if legacy_problem is not None:
                     raise ValueError(
-                        f"US year file {filepath} was cut from the ACS-local "
-                        "source without its SPM measurement scope, so ACS "
-                        "group-quarters units would stop SPM calculations. "
-                        "Regenerate it with ensure_datasets() or "
-                        "create_datasets()."
+                        f"US year file {filepath} is out of date: "
+                        f"{legacy_problem}. Regenerate it with ensure_datasets() "
+                        "or create_datasets()."
                     )
             us_dataset = PolicyEngineUSDataset(
                 name=f"{dataset_stem}-year-{year}",
@@ -1442,14 +1399,18 @@ def ensure_datasets(
                     filepath,
                     problem,
                 )
-            # !!! TEMPORARY ACS-LOCAL SPM COMPATIBILITY — MUST BE REPLACED (#597, #598) !!!
-            elif not _year_file_records_scope(filepath, dataset):
+                continue
+            # BACKWARD COMPATIBILITY (#597, #598): see ``legacy_spm.record``.
+            legacy_problem = year_file_problem(
+                filepath, _expected_legacy_spm_profile(dataset)
+            )
+            if legacy_problem is not None:
                 all_current = False
                 logger.warning(
-                    "US year file %s was cut from the ACS-local source "
-                    "without its SPM measurement scope. Creating the year "
+                    "US year file %s is out of date: %s. Creating the year "
                     "files again.",
                     filepath,
+                    legacy_problem,
                 )
 
     if all_current:

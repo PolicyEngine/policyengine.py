@@ -193,15 +193,14 @@ def build_simulation_run_record_payloads(
     if renames is not None:
         results_payload["legacy_input_renames"] = dict(renames)
 
-    # !!! TEMPORARY ACS-LOCAL SPM COMPATIBILITY — MUST BE REPLACED (#597, #598) !!!
-    # the SPM measurement scope applied to US ACS-local data
-    # changes SPM results, so the record binds it too. See
-    # ``policyengine.tax_benefit_models.us.spm_measurement_scope``.
-    scope = (getattr(simulation.output_dataset, "metadata", None) or {}).get(
-        "spm_measurement_scope"
-    )
-    if scope is not None:
-        results_payload["spm_measurement_scope"] = dict(scope)
+    # BACKWARD COMPATIBILITY (#597, #598): the legacy SPM declarations a
+    # US run applied, which change its SPM results. See
+    # ``policyengine.tax_benefit_models.us.legacy_spm``.
+    legacy_spm_declarations = (
+        getattr(simulation.output_dataset, "metadata", None) or {}
+    ).get("legacy_spm_declarations")
+    if legacy_spm_declarations is not None:
+        results_payload["legacy_spm_declarations"] = dict(legacy_spm_declarations)
 
     return {"reform": reform, "input": input_payload, "results": results_payload}
 

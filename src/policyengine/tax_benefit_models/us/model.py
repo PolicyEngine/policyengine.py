@@ -1,4 +1,5 @@
 import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import pandas as pd
@@ -22,17 +23,21 @@ from .legacy_inputs import (
     apply_legacy_input_renames,
     apply_legacy_input_renames_to_microsimulation,
 )
+from .legacy_spm import (
+    RECORD_KEY as LEGACY_SPM_RECORD_KEY,
+)
+from .legacy_spm import (
+    derive_from_stored_tables,
+    legacy_spm_for_run,
+    legacy_spm_source,
+    prepare_microsimulation,
+    set_declarations,
+)
 from .spm import (
     SPMProvenance,
     SPMSelection,
     calculation_provenance,
     resolve_spm_selection,
-)
-from .spm_measurement_scope import (
-    SCOPE_RECORD_KEY,
-    apply_spm_measurement_scope,
-    check_scoped_spm_units,
-    scope_from_metadata,
 )
 
 if TYPE_CHECKING:
@@ -180,15 +185,10 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
 
         validate_policyengine_inputs(dataset.data.entity_data)
 
-        # !!! TEMPORARY ACS-LOCAL SPM COMPATIBILITY — MUST BE REPLACED (#597, #598) !!!
-        # a year file cut from the certified ACS-local source
-        # records which SPM units are outside the SPM measurement (see
-        # ``spm_measurement_scope``).
-        measurement_scope = scope_from_metadata(simulation.dataset.metadata)
-        if measurement_scope is not None:
-            check_scoped_spm_units(
-                pd.DataFrame(dataset.data.spm_unit), measurement_scope
-            )
+        # BACKWARD COMPATIBILITY (#597, #598): a legacy certified source
+        # carries no SPM declarations. A year file cut from one stores them;
+        # a run straight over one derives them now (see ``legacy_spm``).
+        legacy_spm = legacy_spm_for_run(dataset)
 
         # Apply regional scoping if specified
         if simulation.scoping_strategy:
@@ -234,12 +234,13 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             spm=simulation.spm_config,
             default_input_period=dataset.year,
         )
-        if measurement_scope is not None:
-            # !!! TEMPORARY ACS-LOCAL SPM COMPATIBILITY — MUST BE REPLACED (#597) !!!
-            # After construction, so every policy and structural reform is
-            # in place, and before populations are built, so the stored
-            # scope column loads as an input in the reform and its baseline.
-            apply_spm_measurement_scope(microsim)
+        legacy_spm_mode = None
+        if legacy_spm is not None:
+            # BACKWARD COMPATIBILITY (#597, #598): after construction, so every
+            # policy and structural reform is in place, and before populations
+            # are built, so stored declarations load as inputs in the reform
+            # and its baseline.
+            legacy_spm_mode = prepare_microsimulation(microsim)
         # Use ``microsim.tax_benefit_system``, not the module-level
         # ``system``: ``Microsimulation.__init__`` applies structural
         # reforms (e.g. ``gov.contrib.ctc.*``) to its per-sim system but
@@ -266,6 +267,10 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
                 microsim, dataset, microsim.tax_benefit_system
             )
         )
+        if legacy_spm is not None and legacy_spm.in_memory is not None:
+            # BACKWARD COMPATIBILITY (#597, #598): declarations derived from a
+            # raw legacy source are set on the simulation and its baseline.
+            set_declarations(microsim, legacy_spm.in_memory, [dataset.year])
 
         data = {
             "person": pd.DataFrame(),
@@ -351,8 +356,10 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             "spm_config": dict(microsim.spm_config),
             RENAMES_RECORD_KEY: dict(sorted(legacy_input_renames.items())),
         }
-        if measurement_scope is not None:
-            output_metadata[SCOPE_RECORD_KEY] = measurement_scope.model_dump()
+        if legacy_spm is not None:
+            output_metadata[LEGACY_SPM_RECORD_KEY] = legacy_spm.record.model_copy(
+                update={"model_mode": legacy_spm_mode}
+            ).model_dump(mode="json")
         simulation.output_dataset = PolicyEngineUSDataset(
             id=simulation.id,
             name=dataset.name,
@@ -559,6 +566,22 @@ def managed_microsimulation(
     )
     microsim = Microsimulation(dataset=source.path, spm=selection, **kwargs)
     legacy_input_renames = apply_legacy_input_renames_to_microsimulation(microsim)
+    # BACKWARD COMPATIBILITY (#597, #598): a legacy certified source carries
+    # no SPM declarations, so derive them from its stored evidence and set
+    # them on the simulation and its branches (see ``legacy_spm``).
+    legacy_spm_record = None
+    legacy_source = legacy_spm_source(
+        source.bundle_dataset.sha256 if source.bundle_dataset else None
+    )
+    if legacy_source is not None:
+        declarations, years = derive_from_stored_tables(
+            legacy_source, microsim.dataset, data_dir=Path(source.path).parent
+        )
+        mode = prepare_microsimulation(microsim)
+        set_declarations(microsim, declarations, years)
+        legacy_spm_record = declarations.record.model_copy(
+            update={"model_mode": mode}
+        ).model_dump(mode="json")
     microsim.policyengine_bundle = dict(us_latest.release_bundle)
     microsim.policyengine_bundle.update(
         build_runtime_dataset_provenance(
@@ -571,6 +594,8 @@ def managed_microsimulation(
     microsim.policyengine_bundle[RENAMES_RECORD_KEY] = dict(
         sorted(legacy_input_renames.items())
     )
+    if legacy_spm_record is not None:
+        microsim.policyengine_bundle[LEGACY_SPM_RECORD_KEY] = legacy_spm_record
     return microsim
 
 
