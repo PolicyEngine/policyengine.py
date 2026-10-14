@@ -60,6 +60,19 @@ This one command:
 - writes the changelog fragment
   `changelog.d/certify-us-$NATIONAL_RELEASE_ID.changed.md`.
 
+**Interim exception (from policyengine 6.3.4; PolicyEngine/policyengine.py#604).**
+State and congressional-district regions filter the national dataset until an
+ACS-local release has no SPM unit without a classified adult
+(PolicyEngine/microcosm#1263). Run the command above unchanged, with
+`--regional-manifest-uri`: without it, certification drops the ACS-local
+dataset and leaves no state or district template. Then, before Step 3, set
+`region_datasets.state` and `region_datasets.congressional_district` in
+`data_releases.us` to `{"path_template": "populace_us_2024.h5"}` by hand. In
+Step 5, expect those two templates to select the national artifact, not the
+local-area one. The data-certification skill
+(`docs/engineering/skills/data-certification.md`) says what must hold before
+the exception ends.
+
 ## Step 3 — regenerate TRACE sidecars
 
 The certify step does not touch TRACE sidecars. Regenerate them so they record
@@ -87,16 +100,7 @@ PE_UPDATE_SNAPSHOTS=1 pytest tests/test_household_calculator_snapshot.py
 
 ## Step 5 — certify and verify the local-area release
 
-**Interim exception (from policyengine 6.3.4; PolicyEngine/policyengine.py#604).**
-Skip this step for now: state and congressional-district regions filter the
-national dataset until an ACS-local release has no SPM unit without a
-classified adult (PolicyEngine/microcosm#1263). Do not pass
-`--regional-manifest-uri`, and confirm `region_datasets.state` and
-`region_datasets.congressional_district` still select the national artifact.
-The data-certification skill (`docs/engineering/skills/data-certification.md`)
-says what must hold before this step applies again.
-
-When it applies, the certification command passes the immutable ACS-local
+The certification command passes the immutable ACS-local
 release manifest with `--regional-manifest-uri`. Confirm all of the following:
 
 - `default_dataset` remains the national Populace dataset;
@@ -104,7 +108,8 @@ release manifest with `--regional-manifest-uri`. Confirm all of the following:
   repository type, immutable revision, and SHA-256;
 - `region_datasets.national` selects the national artifact;
 - `region_datasets.state` and `region_datasets.congressional_district` select
-  the shared local-area artifact;
+  the shared local-area artifact (the national artifact while the interim
+  exception in Step 2 holds);
 - no derived `states/*.h5` or `districts/*.h5` artifacts are runtime inputs.
 
 ```bash
