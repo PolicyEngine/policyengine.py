@@ -62,7 +62,7 @@ def household_inputs(**overrides):
     return values
 
 
-@pytest.mark.parametrize("year", [2024, 2026, 2035])
+@pytest.mark.parametrize("year", [2024, 2026, 2035, 2036])
 def test_explicit_national_amounts_and_component_provenance(year, tmp_path):
     result = pe.us.calculate_household(
         **household_inputs(year=year),
@@ -390,7 +390,7 @@ def test_axes_reforms_and_scenarios_keep_detached_receipts():
     assert selection == {"geography_kind": "national", "scenario": "ce_trend"}
 
 
-@pytest.mark.parametrize("year", [2021, 2036])
+@pytest.mark.parametrize("year", [2021, 2037])
 def test_year_outside_canonical_horizon_is_not_silently_extrapolated(year):
     with pytest.raises(ValueError, match="no entry|unavailable|not available"):
         pe.us.calculate_household(
