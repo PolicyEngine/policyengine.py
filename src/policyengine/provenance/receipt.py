@@ -80,15 +80,20 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from importlib import metadata
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
-from types import CodeType
+from types import CodeType, GenericAlias, UnionType
 from typing import (
+    Annotated,
     Any,
     ClassVar,
+    Final,
+    ForwardRef,
     Literal,
     Optional,
     ParamSpecArgs,
     ParamSpecKwargs,
     Union,
+    get_args,
+    get_origin,
 )
 from urllib.parse import urlparse
 from urllib.request import url2pathname
@@ -1335,7 +1340,7 @@ _SCOPED_EVALUATION = (
 #: Singletons whose identity is the same in every process.
 _IDENTITY_CONSTANTS = (None, True, False, Ellipsis)
 #: What an annotation may contain: names, attributes, subscripts, constants,
-#: tuples and lists of them, and ``X | Y``.
+#: tuples and lists of them, ``X | Y``, and signed numeric constants.
 _ANNOTATION_NODES = (
     ast.Name,
     ast.Attribute,
@@ -1347,7 +1352,24 @@ _ANNOTATION_NODES = (
     ast.BitOr,
     ast.Load,
     ast.Slice,
+    ast.UnaryOp,
+    ast.UAdd,
+    ast.USub,
 )
+
+
+def _is_annotation_expression(expression: ast.AST) -> bool:
+    return all(
+        isinstance(node, _ANNOTATION_NODES)
+        and (
+            not isinstance(node, ast.UnaryOp)
+            or (
+                isinstance(node.operand, ast.Constant)
+                and type(node.operand.value) in (int, float, complex)
+            )
+        )
+        for node in ast.walk(expression)
+    )
 
 
 def _function_annotations(
@@ -1622,10 +1644,7 @@ def _module_statement_problem(tree: ast.Module) -> Optional[str]:
         # An annotation runs at import (before 3.14 or without postponed
         # annotations), so it may only name types, not compute values.
         return any(
-            not isinstance(node, _ANNOTATION_NODES)
-            for root in nodes
-            if root is not None
-            for node in ast.walk(root)
+            not _is_annotation_expression(root) for root in nodes if root is not None
         )
 
     for statement in tree.body:
@@ -1698,6 +1717,232 @@ def _module_shape_problem(tree: ast.Module) -> Optional[str]:
             "name bound once"
         )
     return _introspection_problem(tree)
+
+
+def _same_annotation(
+    actual: Any,
+    declared: Any,
+    namespace: Mapping[str, Any],
+    type_argument: bool = True,
+) -> bool:
+    """Compare resolved annotation origins and arguments, preserving order."""
+
+    if (
+        actual is declared
+        and type(actual) is not str
+        and not isinstance(actual, ForwardRef)
+    ):
+        return True
+    actual_origin, declared_origin = get_origin(actual), get_origin(declared)
+    if isinstance(actual, (ParamSpecArgs, ParamSpecKwargs)) or isinstance(
+        declared, (ParamSpecArgs, ParamSpecKwargs)
+    ):
+        return type(actual) is type(declared) and actual_origin is declared_origin
+    if isinstance(actual, ForwardRef) or isinstance(declared, ForwardRef):
+        same = (
+            type(actual) is type(declared)
+            and actual.__forward_arg__ == declared.__forward_arg__
+            and actual.__forward_module__ == declared.__forward_module__
+            and actual.__forward_is_argument__ == declared.__forward_is_argument__
+            and actual.__forward_is_class__ == declared.__forward_is_class__
+        )
+        if same and type_argument:
+            resolved, source = _annotation_string_state(
+                declared.__forward_arg__, namespace
+            )
+            if not _same_annotation(
+                resolved, source, namespace, type(resolved) is not str
+            ):
+                return False
+            if getattr(actual, "__forward_evaluated__", False):
+                return _same_annotation(actual.__forward_value__, source, namespace)
+        return same
+    if actual_origin is not None or declared_origin is not None:
+        actual_args, declared_args = get_args(actual), get_args(declared)
+        return (
+            actual_origin is declared_origin
+            and len(actual_args) == len(declared_args)
+            and all(
+                _same_annotation(
+                    left,
+                    right,
+                    namespace,
+                    type_argument
+                    and actual_origin is not Literal
+                    and (actual_origin is not Annotated or position == 0),
+                )
+                for position, (left, right) in enumerate(
+                    zip(actual_args, declared_args)
+                )
+            )
+        )
+    if type(actual) in (list, tuple) and type(actual) is type(declared):
+        return len(actual) == len(declared) and all(
+            _same_annotation(left, right, namespace, type_argument)
+            for left, right in zip(actual, declared)
+        )
+    if (
+        type_argument
+        and type(actual) is str
+        and type(declared) is str
+        and actual == declared
+    ):
+        resolved, source = _annotation_string_state(declared, namespace)
+        return _same_annotation(resolved, source, namespace, type(resolved) is not str)
+    return actual is declared or (
+        type(actual)
+        in (type(None), bool, int, float, complex, str, bytes, type(Ellipsis))
+        and _same_literal(actual, declared)
+    )
+
+
+def _annotation_string_state(
+    value: str, namespace: Mapping[str, Any]
+) -> tuple[Any, Any]:
+    """Resolve root annotation strings while checking every quoted expression."""
+
+    seen: set[str] = set()
+    while type(value) is str:
+        if value in seen:
+            raise ValueError("an annotation string has a resolution cycle")
+        seen.add(value)
+        try:
+            expression = ast.parse(value, mode="eval").body
+        except SyntaxError:
+            return value, value
+        if not _is_annotation_expression(expression):
+            raise ValueError("an annotation string computes a value")
+        try:
+            resolved = eval(
+                compile(
+                    ast.Expression(expression),
+                    "<annotation>",
+                    "eval",
+                    dont_inherit=True,
+                ),
+                dict(namespace),
+            )
+        except (NameError, AttributeError):
+            return value, value
+        declared = _source_annotation(expression, namespace)
+        if type(resolved) is str and resolved == declared and resolved != value:
+            value = resolved
+        else:
+            return resolved, declared
+    return value, value
+
+
+def _source_annotation(expression: ast.expr, namespace: Mapping[str, Any]) -> Any:
+    """Resolve source arguments without typing's order-insensitive alias cache.
+
+    GenericAlias is only a structural comparison value here; it does not run
+    the annotation. Re-evaluating a whole List[Union[X, Y]] can return an alias
+    cached for List[Union[Y, X]], so each source argument must be read separately.
+    """
+
+    def evaluate(node: ast.expr) -> Any:
+        return eval(
+            compile(ast.Expression(node), "<annotation>", "eval", dont_inherit=True),
+            dict(namespace),
+        )
+
+    def union(arguments: Sequence[Any], origin: Any) -> Any:
+        members: list[Any] = []
+        for argument in arguments:
+            if argument is None:
+                argument = type(None)
+            argument_origin = get_origin(argument)
+            values = (
+                get_args(argument)
+                if argument_origin is Union or argument_origin is UnionType
+                else (argument,)
+            )
+            for value in values:
+                if not any(
+                    _same_annotation(value, member, namespace) for member in members
+                ):
+                    members.append(value)
+        return members[0] if len(members) == 1 else GenericAlias(origin, tuple(members))
+
+    if isinstance(expression, (ast.List, ast.Tuple)):
+        values = [_source_annotation(item, namespace) for item in expression.elts]
+        return values if isinstance(expression, ast.List) else tuple(values)
+    if isinstance(expression, ast.BinOp):
+        return union(
+            [
+                _source_annotation(expression.left, namespace),
+                _source_annotation(expression.right, namespace),
+            ],
+            get_origin(evaluate(expression)),
+        )
+    if not isinstance(expression, ast.Subscript):
+        return evaluate(expression)
+    base = evaluate(expression.value)
+    arguments = _source_annotation(expression.slice, namespace)
+    args = arguments if isinstance(arguments, tuple) else (arguments,)
+
+    def forward_argument(value: Any, *, is_class: bool = False) -> Any:
+        if type(value) is str:
+            return ForwardRef(value, is_class=is_class)
+        if type(value) in (list, tuple):
+            values = [forward_argument(item, is_class=is_class) for item in value]
+            return values if type(value) is list else tuple(values)
+        return value
+
+    if base is Union:
+        return union(
+            [forward_argument(item) for item in args], get_origin(evaluate(expression))
+        )
+    if base is Optional:
+        return union(
+            [*[forward_argument(item) for item in args], type(None)],
+            get_origin(evaluate(expression)),
+        )
+    if base is Annotated:
+        first, *metadata_args = args
+        first = forward_argument(first, is_class=True)
+        if get_origin(first) is Annotated:
+            first, *existing = get_args(first)
+            metadata_args = [*existing, *metadata_args]
+        return GenericAlias(Annotated, (first, *metadata_args))
+    if base is Literal:
+        values: list[Any] = []
+        for argument in args:
+            members = (
+                get_args(argument) if get_origin(argument) is Literal else (argument,)
+            )
+            for member in members:
+                if not any(
+                    _same_annotation(member, value, namespace, False)
+                    for value in values
+                ):
+                    values.append(member)
+        return GenericAlias(Literal, tuple(values))
+    if get_args(base):
+        # A parameterised alias (for example numpy.typing.NDArray) substitutes
+        # its arguments into a template rather than taking them directly.
+        # typing's parameterised aliases can use the same ambiguous cache.
+        if type(base) is not GenericAlias:
+            raise ValueError("a parameterised typing alias cannot be checked")
+        return base[arguments]
+    if getattr(base, "__module__", None) == "typing":
+        args = tuple(
+            forward_argument(item, is_class=base is ClassVar or base is Final)
+            for item in args
+        )
+    declared = evaluate(expression)
+    origin = get_origin(declared)
+    if origin is None:
+        # Generated classes (for example Pydantic generics) do not expose
+        # their arguments through typing, so their source order cannot be checked.
+        raise ValueError("a subscripted annotation has no typing origin")
+    declared_args = get_args(declared)
+    if len(args) == len(declared_args):
+        args = tuple(
+            type(None) if value is None and old is type(None) else value
+            for value, old in zip(args, declared_args)
+        )
+    return GenericAlias(origin, args)
 
 
 def _function_state_problem(
@@ -1788,28 +2033,20 @@ def _function_state_problem(
         )
         declared_annotations = namespace["_annotation_probe"].__annotations__
     else:
-        namespace = dict(function.__globals__)
-        # Generic functions bind their type parameters in the compiler's
-        # wrapper, rather than in the module's globals.
-        namespace.update(
-            (parameter.__name__, parameter)
-            for parameter in getattr(function, "__type_params__", ())
-        )
         declared_annotations = {}
+    namespace = dict(function.__globals__)
+    # Generic functions bind their type parameters in the compiler's
+    # wrapper, rather than in the module's globals.
+    namespace.update(
+        (parameter.__name__, parameter)
+        for parameter in getattr(function, "__type_params__", ())
+    )
     for parameter, expression in expected.items():
         try:
             declared = (
                 declared_annotations[parameter]
                 if postponed
-                else eval(
-                    compile(
-                        ast.Expression(expression),
-                        "<annotation>",
-                        "eval",
-                        dont_inherit=True,
-                    ),
-                    namespace,
-                )
+                else _source_annotation(expression, namespace)
             )
             actual = annotations[parameter]
             proxy = isinstance(declared, (ParamSpecArgs, ParamSpecKwargs))
@@ -1818,11 +2055,14 @@ def _function_state_problem(
             elif isinstance(expression, (ast.Name, ast.Attribute)) and not proxy:
                 same = actual is declared
             elif isinstance(expression, (ast.Subscript, ast.BinOp)) or proxy:
-                # Generics, unions and ParamSpec's argument proxies can be
-                # new objects; equality compares their resolved types.
-                same = actual == declared
+                # Generics and ParamSpec proxies can be new objects. Their
+                # resolved origins and arguments must match in source order.
+                same = _same_annotation(actual, declared, namespace)
             else:
                 same = _same_literal(actual, declared)
+            if same and type(actual) is str:
+                resolved, source = _annotation_string_state(actual, namespace)
+                same = _same_annotation(resolved, source, namespace)
         except Exception:
             return f"function {name}'s annotation for {parameter} cannot be checked"
         if not same:
@@ -2363,7 +2603,10 @@ def _refuse_loaded_package_origin(name: str) -> None:
     try:
         loaded_path = Path(loaded_file).resolve()
         direct_url = _distribution_direct_url(name, distribution)
-        if direct_url is not None and "dir_info" in direct_url:
+        if (
+            direct_url is not None
+            and direct_url.get("dir_info", {}).get("editable") is True
+        ):
             url = urlparse(direct_url["url"])
             if url.scheme != "file" or url.netloc not in ("", "localhost"):
                 raise ReceiptError(problem + ": the install directory is not local.")

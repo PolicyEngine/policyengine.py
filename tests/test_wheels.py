@@ -29,6 +29,7 @@ import math
 import os
 import sys
 import zipfile
+from importlib import metadata
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -124,6 +125,24 @@ def fake_metadata(site: Path, record_lines):
     return SimpleNamespace(distribution=distribution)
 
 
+def installed_metadata(site: Path, record_lines):
+    """Read the installed RECORD through the same metadata API as pip and uv."""
+
+    dist_info = site / DIST_INFO
+    (dist_info / "RECORD").write_text("\n".join(record_lines) + "\n")
+    distribution = metadata.Distribution.at(dist_info)
+    return SimpleNamespace(distribution=lambda name: distribution)
+
+
+def build_signed_wheel(tmp_path: Path, signature: str):
+    wheel, site, record = build_wheel(tmp_path)
+    path = f"{DIST_INFO}/{signature}"
+    data = b"signature bytes"
+    write_wheel(wheel, {**FILES, path: data}, record[: len(FILES) + 1])
+    (site / path).write_bytes(data)
+    return wheel, site, record, path, data
+
+
 def test_record_hash_decoding():
     data = b"hello"
     assert (
@@ -147,6 +166,90 @@ def test_untouched_install_verifies(tmp_path):
     assert evidence["archive_members_verified"] == len(FILES)
     assert evidence["generated_launchers"] == sorted(LAUNCHERS)
     assert evidence["wheel_sha256"] == hashlib.sha256(wheel.read_bytes()).hexdigest()
+
+
+@pytest.mark.parametrize("signature", ["RECORD.jws", "RECORD.p7s"])
+@pytest.mark.parametrize("hashed", [False, True])
+def test_installed_record_signatures_match_archive(tmp_path, signature, hashed):
+    wheel, site, record, path, data = build_signed_wheel(tmp_path, signature)
+    record.append(_line(path, data) if hashed else f"{path},,")
+    evidence = verify_installed_against_wheel(
+        "policyengine-uk", wheel, metadata=installed_metadata(site, record)
+    )
+    assert evidence["problems"] == []
+    assert evidence["unexpected_installed_files"] == []
+
+
+@pytest.mark.parametrize("signature", ["RECORD.jws", "RECORD.p7s"])
+def test_an_installer_may_omit_record_signatures(tmp_path, signature):
+    wheel, site, record, path, _ = build_signed_wheel(tmp_path, signature)
+    (site / path).unlink()
+    evidence = verify_installed_against_wheel(
+        "policyengine-uk", wheel, metadata=installed_metadata(site, record)
+    )
+    assert evidence["problems"] == []
+
+
+@pytest.mark.parametrize("signature", ["RECORD.jws", "RECORD.p7s"])
+def test_installed_record_signature_needs_an_archive_member(tmp_path, signature):
+    wheel, site, record = build_wheel(tmp_path)
+    path = f"{DIST_INFO}/{signature}"
+    (site / path).write_bytes(b"signature bytes")
+    record.append(f"{path},,")
+    evidence = verify_installed_against_wheel(
+        "policyengine-uk", wheel, metadata=installed_metadata(site, record)
+    )
+    assert evidence["problems"] == [f"{path}: installed but not in the wheel"]
+
+
+@pytest.mark.parametrize("signature", ["RECORD.jws", "RECORD.p7s"])
+@pytest.mark.parametrize("edit", ["change", "remove"])
+def test_installed_record_signature_bytes_are_checked(tmp_path, signature, edit):
+    wheel, site, record, path, data = build_signed_wheel(tmp_path, signature)
+    record.append(f"{path},,")  # pip preserves signature entries without hashes
+    if edit == "change":
+        (site / path).write_bytes(data + b"changed")
+        problem = "bytes differ from the wheel"
+    else:
+        (site / path).unlink()
+        problem = "missing on disk"
+    evidence = verify_installed_against_wheel(
+        "policyengine-uk", wheel, metadata=installed_metadata(site, record)
+    )
+    assert evidence["problems"] == [f"{path}: {problem}"]
+
+
+def test_uv_build_bookkeeping_verifies(tmp_path):
+    wheel, site, record = build_wheel(tmp_path)
+    path = f"{DIST_INFO}/uv_build.json"
+    (site / path).write_bytes(b"{}")
+    record.append(_line(path, b"{}"))
+    evidence = verify_installed_against_wheel(
+        "policyengine-uk", wheel, metadata=installed_metadata(site, record)
+    )
+    assert evidence["problems"] == []
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "policyengine_uk/uv_build.json",
+        "other-1.0.dist-info/uv_build.json",
+        f"{DIST_INFO}/nested/uv_build.json",
+        f"{DIST_INFO}/injected.json",
+        "other-1.0.dist-info/RECORD.jws",
+        "policyengine_uk/RECORD.p7s",
+    ],
+)
+def test_installer_exceptions_do_not_allow_other_files(tmp_path, path):
+    wheel, site, record = build_wheel(tmp_path)
+    (site / path).parent.mkdir(parents=True, exist_ok=True)
+    (site / path).write_bytes(b"{}")
+    record.append(_line(path, b"{}"))
+    evidence = verify_installed_against_wheel(
+        "policyengine-uk", wheel, metadata=installed_metadata(site, record)
+    )
+    assert evidence["problems"] == [f"{path}: installed but not in the wheel"]
 
 
 @pytest.mark.parametrize("origin", ["directory", "editable", "vcs"])
