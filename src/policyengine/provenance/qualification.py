@@ -42,6 +42,7 @@ from pydantic import (
 )
 
 from policyengine.provenance.canonical import canonical_sha256
+from policyengine.provenance.manifest import ArtifactPathReference
 from policyengine.provenance.receipt import (
     GIT_SHA_PATTERN,
     SHA256_PATTERN,
@@ -222,6 +223,9 @@ class PreviousCertificate(_Contract):
     qualification_pair_id: Optional[str] = Field(default=None, pattern=SHA256_PATTERN)
     model_wheel_sha256: Optional[str] = Field(default=None, pattern=SHA256_PATTERN)
     core_wheel_sha256: Optional[str] = Field(default=None, pattern=SHA256_PATTERN)
+    dataset_reference: Optional[ArtifactPathReference] = None
+    dataset_name: Optional[str] = None
+    release_manifest_reference: Optional[ArtifactPathReference] = None
 
 
 class ReplayReference(_Contract):

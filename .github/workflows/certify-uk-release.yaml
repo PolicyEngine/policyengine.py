@@ -57,6 +57,9 @@ jobs:
     if: github.event_name != 'workflow_dispatch' || inputs.accept_pair_id == ''
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
     outputs:
       action: ${{ steps.resolve.outputs.action }}
       pair_id: ${{ steps.resolve.outputs.pair_id }}
@@ -81,6 +84,7 @@ jobs:
       - name: Resolve and deduplicate the candidate
         id: resolve
         env:
+          GH_TOKEN: ${{ github.token }}
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_TYPE: ${{ github.event.action }}
@@ -112,7 +116,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     concurrency:
-      group: uk-candidate-${{ needs.resolve.outputs.pair_id }}
+      # Head replacement and readiness must hold the same lock. Otherwise
+      # promotion can ready a replacement after checking the previous head.
+      group: promote-uk
       cancel-in-progress: false
     outputs:
       candidate_commit: ${{ steps.stage.outputs.candidate_commit }}
@@ -130,7 +136,7 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
       # Another run may have staged this attempt while this one waited for
-      # the pair's concurrency group; never overwrite its evidence.
+      # the promotion concurrency group; never overwrite its evidence.
       - name: Check for an attempt staged by another run
         id: duplicate
         env:
@@ -286,6 +292,10 @@ jobs:
     if: always() && needs.prepare.result == 'success' && needs.prepare.outputs.duplicate == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 355
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -319,6 +329,10 @@ jobs:
           python scripts/check_uk_candidate.py finalize --attempt "$ATTEMPT" --ledger ledger --pr-body "$RUNNER_TEMP/pr-body.md"
           .github/qualification-ledger.sh publish ledger \
             "Qualification receipt for UK candidate ${{ needs.resolve.outputs.pair_id }}"
+      - name: Refresh failed candidate PR checks against the published receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/check_uk_candidate.py refresh-pr-checks --ledger ledger
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v1
@@ -335,6 +349,10 @@ jobs:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -348,11 +366,35 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install policyengine without country models
         run: uv pip install --system -e .
-      - name: Finish attempts whose replay outlasted their run
+      - name: Restart abandoned attempts without replay requests
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           .github/qualification-ledger.sh checkout ledger
+          python scripts/check_uk_candidate.py recoverable --ledger ledger > recoverable.jsonl
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          for line in Path("recoverable.jsonl").read_text().splitlines():
+              pair = json.loads(line)["pair"]
+              subprocess.run(
+                  [
+                      "gh", "workflow", "run", "certify-uk-release.yaml",
+                      "--repo", os.environ["GITHUB_REPOSITORY"], "--ref", "main",
+                      "-f", f"model_version={pair['model']['version']}",
+                      "-f", f"data_version={pair['data']['release_version']}",
+                      "-f", "force=false",
+                  ],
+                  check=True,
+              )
+          PY
+      - name: Finish attempts whose replay outlasted their run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
           python scripts/check_uk_candidate.py waiting --ledger ledger > waiting.txt
           while read -r attempt; do
             [[ -z "$attempt" ]] && continue
@@ -360,11 +402,19 @@ jobs:
             python scripts/check_uk_candidate.py finalize --attempt "$attempt" --ledger ledger
           done < waiting.txt
           .github/qualification-ledger.sh publish ledger "Catch up waiting UK replay receipts"
+      - name: Refresh failed candidate PR checks against the published receipts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/check_uk_candidate.py refresh-pr-checks --ledger ledger
 
   accept:
     if: github.event_name == 'workflow_dispatch' && inputs.accept_pair_id != ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -390,6 +440,10 @@ jobs:
             --pair-id "$PAIR_ID" --receipt-sha256 "$RECEIPT" \
             --explanation "$EXPLANATION" --reviewer "$REVIEWER"
           .github/qualification-ledger.sh publish ledger "Accept UK candidate $PAIR_ID on review by $REVIEWER"
+      - name: Refresh failed candidate PR checks against the accepted receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/check_uk_candidate.py refresh-pr-checks --ledger ledger
 
   promote:
     needs: [resolve, replay, catch-up, accept]

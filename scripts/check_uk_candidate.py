@@ -16,6 +16,7 @@ Each attempt lives in one ledger directory, ``<ledger>/uk/<pair_id>/attempts/
     python scripts/check_uk_candidate.py poll-replay --attempt <attempt dir> [--wait-minutes 340]
     python scripts/check_uk_candidate.py finalize --attempt <attempt dir> --ledger ledger/
     python scripts/check_uk_candidate.py waiting --ledger ledger/
+    python scripts/check_uk_candidate.py refresh-pr-checks --ledger ledger/
     python scripts/check_uk_candidate.py promote --ledger ledger/ [--apply]
     python scripts/check_uk_candidate.py accept --ledger ledger/ --pair-id ... \\
         --receipt-sha256 ... --explanation "..." [--reviewer login]
@@ -33,6 +34,7 @@ import os
 import subprocess
 import sys
 import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
 
@@ -62,8 +64,10 @@ from policyengine.provenance.uk_qualification import (  # noqa: E402
     ResolvedCandidate,
     WheelFile,
     accept_review,
+    attempt_is_recoverable,
     attempt_is_waiting_for_replay,
     attempt_key,
+    attempt_supersedes_receipt,
     build_replay_request,
     candidate_action,
     candidate_branch,
@@ -212,18 +216,23 @@ def cmd_resolve(args: argparse.Namespace) -> int:
         data_version=args.data_version or None,
     )
     base_commit = git("rev-parse", "HEAD")
+    resolved_at = utc_now()
     action, reason = candidate_action(
         resolved.pair,
         bundle,
         Path(args.ledger) if args.ledger else None,
         base_commit=base_commit,
         force=args.force,
+        now=resolved_at,
+        owner_is_failed=owner_run_failed,
     )
     key = attempt_key(
         resolved.pair,
         Path(args.ledger) if args.ledger else None,
         base_commit=base_commit,
         force=args.force,
+        now=resolved_at,
+        owner_is_failed=owner_run_failed,
     )
     payload = {
         "pair": resolved.pair.canonical_payload(),
@@ -239,6 +248,16 @@ def cmd_resolve(args: argparse.Namespace) -> int:
         "reason": reason,
         "previous_certificate": previous_certificate(bundle).canonical_payload(),
     }
+    if action == "qualify" and args.ledger:
+        published = (
+            pair_directory(Path(args.ledger), "uk", resolved.pair.pair_id)
+            / "qualification_receipt.json"
+        )
+        if published.exists():
+            receipt = QualificationReceipt.model_validate(read_json(published))
+            if receipt.verdict != "incomplete":
+                # Forced work, or recovery of work already bound to this receipt.
+                payload["supersedes_receipt_sha256"] = receipt.unreviewed_sha256
     write_json(Path(args.out), payload)
     print(
         f"{action}: {reason} (pair {resolved.pair.pair_id[:12]}, {resolved.pair.order_key})"
@@ -278,7 +297,13 @@ def cmd_stage(args: argparse.Namespace) -> int:
     attempt = attempt_directory(
         Path(args.ledger), "uk", payload["pair_id"], payload["attempt_key"]
     )
-    stage_attempt(attempt, payload, harness)
+    stage_attempt(
+        attempt,
+        payload,
+        harness,
+        owner_run_id=os.environ.get("GITHUB_RUN_ID"),
+        staged_at=utc_now(),
+    )
     print(f"staged {attempt} at {harness.git_commit}")
     set_output(attempt=str(attempt), candidate_commit=harness.git_commit)
     return 0
@@ -411,6 +436,60 @@ def cmd_waiting(args: argparse.Namespace) -> int:
     return 0
 
 
+@lru_cache(maxsize=256)
+def owner_run_failed(run_id: str) -> bool:
+    """Only a confirmed failed terminal run relinquishes its unexpired stage."""
+
+    result = subprocess.run(
+        [
+            "gh",
+            "run",
+            "view",
+            run_id,
+            "--repo",
+            LEDGER_REPOSITORY,
+            "--json",
+            "status,conclusion",
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        return False
+    try:
+        state = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return False
+    return state.get("status") == "completed" and state.get("conclusion") in {
+        "failure",
+        "cancelled",
+        "timed_out",
+        "startup_failure",
+        "action_required",
+        "stale",
+    }
+
+
+def cmd_recoverable(args: argparse.Namespace) -> int:
+    now = utc_now()
+    for pair_dir in sorted((Path(args.ledger) / "uk").glob("*")):
+        receipt = pair_dir / "qualification_receipt.json"
+        stages = list((pair_dir / "attempts").glob("*/staging.json"))
+        if not stages:
+            continue
+        attempt = max(stages, key=lambda path: int(read_json(path)["sequence"])).parent
+        if receipt.exists():
+            terminal = QualificationReceipt.model_validate(read_json(receipt))
+            if terminal.verdict != "incomplete" and not attempt_supersedes_receipt(
+                attempt, terminal
+            ):
+                continue
+        if attempt_is_recoverable(attempt, now=now, owner_is_failed=owner_run_failed):
+            print(json.dumps(read_json(attempt / "candidate.json")))
+    return 0
+
+
 def _open_candidate_branches() -> dict[str, str]:
     """Open candidate branches and the commit each one's pull request is at."""
 
@@ -433,6 +512,58 @@ def _open_candidate_branches() -> dict[str, str]:
         text=True,
     ).stdout
     return {item["headRefName"]: item["headRefOid"] for item in json.loads(listing)}
+
+
+def cmd_refresh_pr_checks(args: argparse.Namespace) -> int:
+    """Re-evaluate failed PR checks now that their exact receipt is published.
+
+    The PR workflow does not subscribe to edits or ready_for_review events.
+    GITHUB_TOKEN may re-run existing failed runs with actions: write.
+    """
+
+    branches = _open_candidate_branches()
+    for receipt in latest_receipts(Path(args.ledger)):
+        branch = candidate_branch(receipt.pair)
+        head = receipt.harness.git_commit
+        if not receipt.promotable or branches.get(branch) != head:
+            continue
+        listing = subprocess.run(
+            [
+                "gh",
+                "api",
+                f"repos/{LEDGER_REPOSITORY}/actions/runs"
+                f"?head_sha={head}&event=pull_request&per_page=100",
+                "--paginate",
+                "--jq",
+                ".workflow_runs[] | {id, head_sha, event, status, conclusion} | tojson",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        for line in listing.splitlines():
+            run = json.loads(line)
+            if (
+                run["head_sha"] != head
+                or run["event"] != "pull_request"
+                or run["status"] != "completed"
+                or run["conclusion"] not in {"failure", "timed_out"}
+            ):
+                continue
+            subprocess.run(
+                [
+                    "gh",
+                    "run",
+                    "rerun",
+                    str(run["id"]),
+                    "--repo",
+                    LEDGER_REPOSITORY,
+                    "--failed",
+                ],
+                check=True,
+            )
+            print(f"Re-running failed PR checks in run {run['id']} at {head}")
+    return 0
 
 
 def cmd_promote(args: argparse.Namespace) -> int:
@@ -563,6 +694,14 @@ def parser() -> argparse.ArgumentParser:
     waiting = commands.add_parser("waiting")
     waiting.add_argument("--ledger", required=True)
     waiting.set_defaults(func=cmd_waiting)
+
+    refresh = commands.add_parser("refresh-pr-checks")
+    refresh.add_argument("--ledger", required=True)
+    refresh.set_defaults(func=cmd_refresh_pr_checks)
+
+    recoverable = commands.add_parser("recoverable")
+    recoverable.add_argument("--ledger", required=True)
+    recoverable.set_defaults(func=cmd_recoverable)
 
     promote = commands.add_parser("promote")
     promote.add_argument("--ledger", required=True)

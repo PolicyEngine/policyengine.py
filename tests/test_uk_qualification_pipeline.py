@@ -773,6 +773,349 @@ elif command == "git" and args[0] == "push":
 # --- Attempt lifecycle -----------------------------------------------------------------
 
 
+@pytest.mark.parametrize("abandonment", ["expired", "failed_owner"])
+def test_abandoned_stage_recovers_without_reusing_evidence(tmp_path, abandonment):
+    from policyengine.provenance.qualification_ledger import (
+        attempt_directory,
+        read_json,
+    )
+    from policyengine.provenance.uk_qualification import (
+        attempt_is_recoverable,
+        attempt_key,
+        stage_attempt,
+    )
+
+    pair = make_pair(model="2.200.0")
+    base = "a" * 40
+    attempt = attempt_directory(tmp_path, "uk", pair.pair_id, base[:12])
+    payload = {"pair": pair.canonical_payload(), "base_commit": base}
+    stage_attempt(attempt, payload, HARNESS)
+    # The owner fails before request-replay, leaving durable but unfinished work.
+    write_json(
+        attempt / "staging.json",
+        {
+            "sequence": 1,
+            "owner_run_id": "42",
+            "staged_at": "2026-10-14T10:00:00Z",
+            "expires_at": "2026-10-14T14:00:00Z",
+        },
+    )
+    original = read_json(attempt / "candidate.json")
+    now = "2026-10-14T15:00:00Z" if abandonment == "expired" else "2026-10-14T11:00:00Z"
+
+    def failed(run_id):
+        return abandonment == "failed_owner" and run_id == "42"
+
+    assert attempt_is_recoverable(attempt, now=now, owner_is_failed=failed)
+    assert (
+        candidate_action(
+            pair, BUNDLE, tmp_path, base_commit=base, now=now, owner_is_failed=failed
+        )[0]
+        == "qualify"
+    )
+    new_key = attempt_key(
+        pair, tmp_path, base_commit=base, now=now, owner_is_failed=failed
+    )
+    assert new_key == base[:12] + "-2"
+    new_attempt = attempt_directory(tmp_path, "uk", pair.pair_id, new_key)
+    stage_attempt(new_attempt, payload, HARNESS, owner_run_id="43", staged_at=now)
+    assert read_json(attempt / "candidate.json") == original
+    assert (
+        candidate_action(
+            pair, BUNDLE, tmp_path, base_commit=base, now=now, owner_is_failed=failed
+        )[0]
+        == "duplicate"
+    )
+
+
+@pytest.mark.parametrize("protected", ["live", "request", "terminal", "missing_stage"])
+def test_recovery_preserves_live_sent_and_terminal_attempts(tmp_path, protected):
+    from policyengine.provenance.uk_qualification import (
+        attempt_is_recoverable,
+        stage_attempt,
+    )
+
+    pair = make_pair()
+    attempt = tmp_path / "attempt"
+    stage_attempt(attempt, {"pair": pair.canonical_payload()}, HARNESS)
+    write_json(
+        attempt / "staging.json",
+        {
+            "sequence": 1,
+            "owner_run_id": "42",
+            "expires_at": "2026-10-14T14:00:00Z",
+        },
+    )
+    now = "2026-10-14T15:00:00Z"
+    if protected == "live":
+        now = "2026-10-14T11:00:00Z"
+    elif protected == "request":
+        write_json(attempt / "replay" / "request.json", {"sent": True})
+    elif protected == "terminal":
+        write_json(
+            attempt / "qualification_receipt.json", make_receipt().canonical_payload()
+        )
+    else:
+        (attempt / "staging.json").unlink()
+    assert not attempt_is_recoverable(attempt, now=now, owner_is_failed=lambda _: False)
+
+
+def test_stage_records_owner_and_expiry_immutably(tmp_path):
+    from policyengine.provenance.qualification_ledger import read_json
+    from policyengine.provenance.uk_qualification import stage_attempt
+
+    payload = {"pair": make_pair().canonical_payload()}
+    stage_attempt(
+        tmp_path, payload, HARNESS, owner_run_id="42", staged_at="2026-10-14T10:00:00Z"
+    )
+    stage = read_json(tmp_path / "staging.json")
+    assert stage["owner_run_id"] == "42"
+    assert stage["expires_at"] == "2026-10-14T14:00:00Z"
+    stage_attempt(tmp_path, payload, HARNESS, owner_run_id="43")
+    assert read_json(tmp_path / "staging.json") == stage
+
+
+def test_unowned_legacy_stage_is_recoverable_on_the_same_base(tmp_path):
+    from policyengine.provenance.qualification_ledger import attempt_directory
+    from policyengine.provenance.uk_qualification import stage_attempt
+
+    pair = make_pair(model="2.200.0")
+    base = "a" * 40
+    attempt = attempt_directory(tmp_path, "uk", pair.pair_id, base[:12])
+    stage_attempt(attempt, {"pair": pair.canonical_payload()}, HARNESS)
+    write_json(attempt / "staging.json", {"sequence": 1})
+    assert candidate_action(pair, BUNDLE, tmp_path, base_commit=base)[0] == "qualify"
+
+
+def test_newer_abandoned_stage_recovers_despite_an_older_replay_request(tmp_path):
+    from policyengine.provenance.qualification_ledger import attempt_directory
+    from policyengine.provenance.uk_qualification import attempt_key, stage_attempt
+
+    pair = make_pair(model="2.200.0")
+    base = "a" * 40
+    payload = {"pair": pair.canonical_payload()}
+    earlier = attempt_directory(tmp_path, "uk", pair.pair_id, base[:12])
+    stage_attempt(
+        earlier, payload, HARNESS, owner_run_id="41", staged_at="2026-10-14T09:00:00Z"
+    )
+    write_json(earlier / "replay" / "request.json", {"sent": True})
+    newer = attempt_directory(tmp_path, "uk", pair.pair_id, base[:12] + "-2")
+    stage_attempt(
+        newer, payload, HARNESS, owner_run_id="42", staged_at="2026-10-14T10:00:00Z"
+    )
+    now = "2026-10-14T15:00:00Z"
+    assert (
+        candidate_action(pair, BUNDLE, tmp_path, base_commit=base, now=now)[0]
+        == "qualify"
+    )
+    assert attempt_key(pair, tmp_path, base_commit=base, now=now) == base[:12] + "-3"
+    assert (earlier / "replay" / "request.json").exists()
+
+
+@pytest.mark.parametrize("verdict", ["qualified", "rejected"])
+def test_forced_stage_recovery_binds_the_terminal_receipt_it_supersedes(
+    tmp_path, verdict, monkeypatch, capsys
+):
+    import importlib.util
+
+    from policyengine.provenance.qualification_ledger import attempt_directory
+    from policyengine.provenance.uk_qualification import stage_attempt
+
+    pair = make_pair(model="2.200.0")
+    results = gates(wheel_hashes="fail") if verdict == "rejected" else gates()
+    terminal = make_receipt(pair=pair, gate_results=results)
+    base = "a" * 40
+    published = tmp_path / "uk" / pair.pair_id / "qualification_receipt.json"
+    write_json(published, terminal.canonical_payload())
+    attempt = attempt_directory(tmp_path, "uk", pair.pair_id, base[:12] + "-2")
+    payload = {
+        "pair": pair.canonical_payload(),
+        "supersedes_receipt_sha256": terminal.unreviewed_sha256,
+    }
+    stage_attempt(
+        attempt, payload, HARNESS, owner_run_id="42", staged_at="2026-10-14T10:00:00Z"
+    )
+    now = "2026-10-14T15:00:00Z"
+    assert (
+        candidate_action(pair, BUNDLE, tmp_path, base_commit=base, now=now)[0]
+        == "qualify"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "check_uk_bound_recovery_for_test", REPO_ROOT / "scripts/check_uk_candidate.py"
+    )
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    monkeypatch.setattr(cli, "utc_now", lambda: now)
+    assert cli.main(["recoverable", "--ledger", str(tmp_path)]) == 0
+    assert json.loads(capsys.readouterr().out) == payload
+    changed = make_receipt(pair=pair, gate_results=gates(replay="fail"))
+    write_json(published, changed.canonical_payload())
+    assert (
+        candidate_action(pair, BUNDLE, tmp_path, base_commit=base, now=now)[0]
+        == "duplicate"
+    )
+    with pytest.raises(ValueError, match="exact receipt"):
+        stage_attempt(attempt.parent / (base[:12] + "-3"), payload, HARNESS)
+    assert cli.main(["recoverable", "--ledger", str(tmp_path)]) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_resolution_preserves_authorization_to_recover_forced_work(
+    tmp_path, monkeypatch
+):
+    import importlib.util
+
+    from policyengine.provenance.qualification_ledger import attempt_directory
+    from policyengine.provenance.uk_qualification import stage_attempt
+
+    spec = importlib.util.spec_from_file_location(
+        "check_uk_resolve_recovery_for_test",
+        REPO_ROOT / "scripts/check_uk_candidate.py",
+    )
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    pair = make_pair(model="2.200.0")
+    terminal = make_receipt(pair=pair, gate_results=gates(replay="fail"))
+    write_json(
+        tmp_path / "uk" / pair.pair_id / "qualification_receipt.json",
+        terminal.canonical_payload(),
+    )
+    base = "a" * 40
+    resolved = cli.ResolvedCandidate(
+        pair,
+        cli.WheelFile(
+            "model.whl", "https://example.org/model.whl", pair.model.wheel_sha256
+        ),
+        cli.WheelFile(
+            "core.whl", "https://example.org/core.whl", pair.core.wheel_sha256
+        ),
+        "hf://model/example@pin/manifest.json",
+        ">=3.33.0",
+    )
+    monkeypatch.setattr(cli, "resolve_candidate", lambda **kwargs: resolved)
+    monkeypatch.setattr(cli, "git", lambda *args: base)
+    monkeypatch.setattr(cli, "owner_run_failed", lambda _: False)
+    monkeypatch.setattr(cli, "utc_now", lambda: "2026-10-14T15:00:00Z")
+    monkeypatch.setattr(cli, "set_output", lambda **kwargs: None)
+    out = tmp_path / "candidate.json"
+    args = SimpleNamespace(
+        model_version=None,
+        data_version=None,
+        ledger=str(tmp_path),
+        force=True,
+        out=str(out),
+    )
+    assert cli.cmd_resolve(args) == 0
+    payload = json.loads(out.read_text())
+    assert payload["supersedes_receipt_sha256"] == terminal.unreviewed_sha256
+    attempt = attempt_directory(tmp_path, "uk", pair.pair_id, payload["attempt_key"])
+    stage_attempt(
+        attempt, payload, HARNESS, owner_run_id="42", staged_at="2026-10-14T10:00:00Z"
+    )
+    args.force = False
+    assert cli.cmd_resolve(args) == 0
+    recovery = json.loads(out.read_text())
+    assert recovery["action"] == "qualify"
+    assert recovery["attempt_key"] == base[:12] + "-2"
+    assert recovery["supersedes_receipt_sha256"] == terminal.unreviewed_sha256
+
+
+@pytest.mark.parametrize(
+    ("status", "conclusion", "expected"),
+    [
+        ("completed", "failure", True),
+        ("completed", "cancelled", True),
+        ("completed", "timed_out", True),
+        ("in_progress", "failure", False),
+        ("completed", "success", False),
+        ("queued", None, False),
+    ],
+)
+def test_recovery_requires_a_confirmed_failed_owner(
+    monkeypatch, status, conclusion, expected
+):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "check_uk_owner_for_test", REPO_ROOT / "scripts/check_uk_candidate.py"
+    )
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        return subprocess.CompletedProcess(
+            argv, 0, json.dumps({"status": status, "conclusion": conclusion})
+        )
+
+    monkeypatch.setattr(cli, "subprocess", SimpleNamespace(run=run))
+    assert cli.owner_run_failed("42") is expected
+    assert "42" in calls[0] and cli.LEDGER_REPOSITORY in calls[0]
+    cli.owner_run_failed.cache_clear()
+    monkeypatch.setattr(
+        cli,
+        "subprocess",
+        SimpleNamespace(run=lambda *a, **k: subprocess.CompletedProcess(a, 1, "")),
+    )
+    assert not cli.owner_run_failed("42")
+
+
+def test_catchup_finds_abandoned_stages_without_replay_requests(
+    tmp_path, monkeypatch, capsys
+):
+    import importlib.util
+
+    from policyengine.provenance.qualification_ledger import attempt_directory
+    from policyengine.provenance.uk_qualification import stage_attempt
+
+    spec = importlib.util.spec_from_file_location(
+        "check_uk_recovery_for_test", REPO_ROOT / "scripts/check_uk_candidate.py"
+    )
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    pair = make_pair()
+    attempt = attempt_directory(tmp_path, "uk", pair.pair_id, "a" * 12)
+    payload = {"pair": pair.canonical_payload()}
+    stage_attempt(attempt, payload, HARNESS)
+    write_json(
+        attempt / "staging.json",
+        {
+            "sequence": 1,
+            "owner_run_id": "42",
+            "expires_at": "2026-10-14T14:00:00Z",
+        },
+    )
+    monkeypatch.setattr(cli, "utc_now", lambda: "2026-10-14T11:00:00Z")
+    monkeypatch.setattr(cli, "owner_run_failed", lambda run_id: run_id == "42")
+    assert cli.main(["recoverable", "--ledger", str(tmp_path)]) == 0
+    assert json.loads(capsys.readouterr().out) == payload
+    replacement = attempt_directory(tmp_path, "uk", pair.pair_id, "a" * 12 + "-2")
+    stage_attempt(
+        replacement,
+        payload,
+        HARNESS,
+        owner_run_id="43",
+        staged_at="2026-10-14T11:00:00Z",
+    )
+    assert cli.main(["recoverable", "--ledger", str(tmp_path)]) == 0
+    assert capsys.readouterr().out == ""
+    write_json(
+        attempt / "staging.json",
+        {
+            "sequence": 3,
+            "owner_run_id": "42",
+            "expires_at": "2026-10-14T14:00:00Z",
+        },
+    )
+    write_json(
+        tmp_path / "uk" / pair.pair_id / "qualification_receipt.json",
+        make_receipt(pair=pair).canonical_payload(),
+    )
+    assert cli.main(["recoverable", "--ledger", str(tmp_path)]) == 0
+    assert capsys.readouterr().out == ""
+
+
 def test_attempt_lifecycle(tmp_path):
     from policyengine.provenance.qualification import GateResult
     from policyengine.provenance.qualification_ledger import (

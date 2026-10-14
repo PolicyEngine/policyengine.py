@@ -644,7 +644,7 @@ def _contract_coverage(module: Any) -> Optional[dict[str, Any]]:
             )
         ]
         checks: list[tuple[str, str, Optional[str]]] = []
-        pending: dict[tuple[str, str, Optional[str]], str] = {}
+        assertions: dict[tuple[str, str, str, str], dict[str, Any]] = {}
         unsupported = getattr(module, "UNSUPPORTED_ROUTES", {})
         country_routes = set(
             getattr(
@@ -665,15 +665,18 @@ def _contract_coverage(module: Any) -> Optional[dict[str, Any]]:
                 elif getattr(case, "expect_error", None) is not None:
                     checks.append((str(case.id), str(route), "rejected"))
                 else:
-                    for check in getattr(case, "checks", ()):
+                    for index, check in enumerate(getattr(case, "checks", ())):
                         key = (
                             str(case.id),
                             str(route),
                             f"{check.target}:{check.name}:{check.year}",
                         )
                         checks.append(key)
-                        if getattr(check, "pending", None) is not None:
-                            pending[key] = str(check.pending)
+                        assertion_id = f"{key[2]}:{index}"
+                        assertions[(*key, assertion_id)] = {
+                            "oracle": getattr(check, "oracle", None),
+                            "pending": getattr(check, "pending", None),
+                        }
                         # evaluate_case declares these per-check exemptions;
                         # route-wide exemptions above replace the entire case.
                         if check.target == "parameter" and route not in country_routes:
@@ -746,7 +749,7 @@ def _contract_coverage(module: Any) -> Optional[dict[str, Any]]:
                     ("baseline_isolation:", "unreformed_after_reform:")
                 )
             },
-            "pending_checks": pending,
+            "assertions": assertions,
             "pending_decisions": {
                 str(decision) for decision in getattr(module, "PENDING_DECISIONS", ())
             },
@@ -757,30 +760,86 @@ def _contract_coverage(module: Any) -> Optional[dict[str, Any]]:
                 if any(route not in unsupported for route in routes)
                 else []
             ),
-            "population": getattr(module, "POPULATION_CHECKS", None),
+            "population": getattr(module, "POPULATION_CHECK_ROUTES", None),
         }
     except AttributeError:
         return None
 
 
 def _declared_population_checks(
-    module_name: str, importer: Callable[[str], Any]
-) -> list[str]:
-    """Population check IDs documented by W1's population runner itself.
-
-    W1 currently exposes no machine-readable per-route population coverage
-    matrix. Its module docstring declares the checks by ID, which supports
-    requiring every declared check, but not inventing route counts. Prefer
-    an explicit declaration if the runner adds one.
-    """
+    module_name: str, importer: Callable[[str], Any], routes: Sequence[str]
+) -> list[tuple[str, str]]:
+    """The runner's complete population check/route multiset."""
 
     module = importer(module_name.rsplit(".", 1)[0] + ".budget_reform_population")
-    declared = getattr(module, "POPULATION_CHECKS", None)
+    declared = getattr(module, "POPULATION_CHECK_ROUTES", None)
     if declared is not None:
-        return [str(check) for check in declared]
-    return re.findall(
+        return [(str(check), str(route)) for check, route in declared]
+    coverage = getattr(module, "population_check_routes", None)
+    if callable(coverage):
+        return [(str(check), str(route)) for check, route in coverage(routes)]
+    # IDs alone cannot prove that every route ran. Retain their names in the
+    # diagnostic, while refusing a runner with no per-route declaration.
+    ids = getattr(module, "POPULATION_CHECKS", None) or re.findall(
         r"^``([a-z][a-z0-9_]+)``$", inspect.getdoc(module) or "", re.MULTILINE
     )
+    raise AttributeError(
+        "the population runner declares no population check routes"
+        + (": " + ", ".join(str(check) for check in ids) if ids else "")
+    )
+
+
+def _reported_assertions(
+    rows: Sequence[Mapping[str, Any]], coverage: Mapping[str, Any]
+) -> tuple[dict[int, tuple[str, str, str, str]], list[str]]:
+    """Resolve current assertion IDs and unambiguous historical oracle rows.
+
+    Released reports predate assertion IDs. Their oracles distinguish checks
+    with the same label. Whole-route exemptions have no values or oracles;
+    their interchangeable rows are consumed in declaration order instead.
+    """
+    resolved = {}
+    problems = []
+    used: Counter[tuple[str, str, str, str]] = Counter()
+    by_label: dict[tuple[str, str, str], list[tuple[str, str, str, str]]] = {}
+    for key in coverage["assertions"]:
+        by_label.setdefault(key[:3], []).append(key)
+    for row in rows:
+        label = (str(row.get("case_id")), str(row.get("route")), row.get("check"))
+        matches = list(by_label.get(label, ()))
+        if not matches:
+            continue  # Isolation, run-level and rejected-case rows are separate.
+        assertion_id = row.get("assertion_id")
+        if assertion_id is not None:
+            matches = [key for key in matches if key[3] == assertion_id]
+            if row.get("oracle") is not None:
+                matches = [
+                    key
+                    for key in matches
+                    if coverage["assertions"][key]["oracle"] == row["oracle"]
+                ]
+        elif len(matches) > 1:
+            if row.get("oracle") is not None:
+                matches = [
+                    key
+                    for key in matches
+                    if coverage["assertions"][key]["oracle"] == row["oracle"]
+                ]
+            elif (
+                row.get("status") == "unsupported"
+                and label in coverage["unsupported_checks"]
+            ):
+                matches = [key for key in matches if not used[key]][:1]
+            else:
+                matches = []
+        if len(matches) != 1:
+            problems.append(
+                f"case {label[0]}@{label[1]}:{label[2]} has no unique declared assertion identity"
+            )
+            continue
+        resolved[id(row)] = matches[0]
+        used[matches[0]] += 1
+    return resolved, problems
 
 
 #: Report sections: the key that names each row, and what a row is called.
@@ -859,6 +918,12 @@ def reform_contract(
     unsupported: list[str] = []
     counts = dict.fromkeys(_CONTRACT_STATUSES, 0)
     coverage = _contract_coverage(runner_module)
+    reported_assertions = {}
+    if coverage is not None:
+        reported_assertions, assertion_problems = _reported_assertions(
+            report.get("cases") or [], coverage
+        )
+        malformed.extend(assertion_problems)
     population_exemptions = {}
     population_module = None
     if dataset_path is not None:
@@ -890,13 +955,9 @@ def reform_contract(
             elif status == "pending":
                 decision = row.get("decision_id")
                 declared_decision = (
-                    coverage["pending_checks"].get(
-                        (
-                            str(row.get("case_id")),
-                            str(row.get("route")),
-                            row.get("check"),
-                        )
-                    )
+                    coverage["assertions"]
+                    .get(reported_assertions.get(id(row)), {})
+                    .get("pending")
                     if coverage and section == "cases"
                     else None
                 )
@@ -904,8 +965,20 @@ def reform_contract(
                     malformed.append(
                         f"{label} did not run: properties cannot be pending"
                     )
+                elif section == "population":
+                    malformed.append(
+                        f"{label} is a mandatory assertion: population checks cannot be pending"
+                    )
                 elif not decision:
                     malformed.append(f"{label} is pending without a decision_id")
+                elif section == "cases" and declared_decision is None:
+                    malformed.append(
+                        f"{label} is a mandatory assertion relabelled pending"
+                    )
+                elif section == "cases" and decision != declared_decision:
+                    malformed.append(
+                        f"{label} is pending for undeclared decision {decision}"
+                    )
                 elif decision != declared_decision and decision not in allowed_pending:
                     malformed.append(
                         f"{label} is pending for undeclared decision {decision}"
@@ -1013,6 +1086,43 @@ def reform_contract(
                     for case, route, check in list(absent_checks)[:4]
                 )
             )
+        # A pending decision belongs to one declared assertion. Count each
+        # assertion separately and never let pending rows satisfy mandatory
+        # rows, even where the runner reads the same parameter twice.
+        for category in ("mandatory", "pending"):
+            expected = Counter(
+                key
+                for key, declaration in coverage["assertions"].items()
+                if key[:2] not in crashed
+                and (
+                    "pending"
+                    if declaration["pending"] is not None
+                    and key[:3] not in coverage["unsupported_checks"]
+                    else "mandatory"
+                )
+                == category
+            )
+            actual = Counter(
+                reported_assertions[id(row)]
+                for row in report.get("cases") or []
+                if id(row) in reported_assertions
+                and ("pending" if row.get("status") == "pending" else "mandatory")
+                == category
+            )
+            absent_assertions = expected - actual
+            excess_assertions = actual - expected
+            if absent_assertions or excess_assertions:
+                malformed.append(
+                    f"{category} assertion multiplicities differ: "
+                    f"{sum(absent_assertions.values())} missing, "
+                    f"{sum(excess_assertions.values())} extra; "
+                    + ", ".join(
+                        f"{case}@{route}:{assertion_id}"
+                        for case, route, _, assertion_id in list(
+                            absent_assertions or excess_assertions
+                        )[:4]
+                    )
+                )
         for case, route in coverage["run_pairs"]:
             rows = [
                 row
@@ -1060,23 +1170,34 @@ def reform_contract(
                         else entrypoint.rpartition(".")[0]
                     )
                     declared_population = _declared_population_checks(
-                        module_name, importer
+                        module_name, importer, coverage["routes"]
                     )
-                except (ImportError, AttributeError):
+                except (ImportError, AttributeError) as exc:
+                    malformed.append(str(exc))
                     declared_population = []
             if not declared_population:
                 malformed.append(
                     "the runner declares no population checks, so population coverage cannot be checked"
                 )
             else:
-                population = {
-                    str(row.get("check_id")) for row in report.get("population") or []
-                }
-                absent_population = sorted(set(declared_population) - population)
-                if absent_population:
+                population = Counter(
+                    (str(row.get("check_id")), str(row.get("route")))
+                    for row in report.get("population") or []
+                )
+                expected_population = Counter(declared_population)
+                absent_population = expected_population - population
+                excess_population = population - expected_population
+                if absent_population or excess_population:
                     malformed.append(
-                        "declared population check(s) have no row: "
-                        + ", ".join(absent_population)
+                        "declared population check route multiplicities differ: "
+                        f"{sum(absent_population.values())} missing, "
+                        f"{sum(excess_population.values())} extra; "
+                        + ", ".join(
+                            f"{check}@{route}"
+                            for check, route in list(
+                                absent_population or excess_population
+                            )
+                        )
                     )
         properties = {
             str(row.get("property_id")): row for row in report.get("properties") or []
@@ -1871,18 +1992,179 @@ def run_metrics_report(
     return report
 
 
-def previous_pair_python(
+class PreviousPairUnavailable(ValueError):
+    """The exact certified baseline cannot be constructed or verified."""
+
+
+def _previous_pair_pins(
+    previous: Mapping[str, Any], ledger_root: Optional[Path] = None
+) -> dict[str, Any]:
+    """Certificate pins, completed by its exact ledger receipt when available."""
+
+    pins = dict(previous)
+    pair_id = previous.get("qualification_pair_id")
+    if ledger_root is not None and pair_id:
+        try:
+            receipt = QualificationReceipt.model_validate_json(
+                (
+                    ledger_root / "uk" / pair_id / "qualification_receipt.json"
+                ).read_text()
+            )
+        except (OSError, ValueError) as exc:
+            raise PreviousPairUnavailable(
+                "The previous pair's ledger receipt is unavailable."
+            ) from exc
+        pair = receipt.pair
+        expected = {
+            "model_version": pair.model.version,
+            "core_version": pair.core.version,
+            "data_release_version": pair.data.release_version,
+            "dataset_sha256": pair.data.dataset_sha256,
+            "model_wheel_sha256": pair.model.wheel_sha256,
+            "core_wheel_sha256": pair.core.wheel_sha256,
+        }
+        if (
+            not receipt.promotable
+            or receipt.pair_id != pair_id
+            or any(
+                previous.get(key) is not None and previous[key] != value
+                for key, value in expected.items()
+            )
+        ):
+            raise PreviousPairUnavailable(
+                "The previous certificate and ledger name different pairs."
+            )
+        reference = {
+            "repo_id": pair.data.repo_id,
+            "repo_type": pair.data.repo_type,
+            "path": pair.data.dataset_path,
+            "revision": pair.data.dataset_revision,
+            "sha256": pair.data.dataset_sha256,
+        }
+        recorded_reference = previous.get("dataset_reference")
+        if recorded_reference and any(
+            recorded_reference.get(key) != value for key, value in reference.items()
+        ):
+            raise PreviousPairUnavailable(
+                "The previous dataset reference differs from its ledger pair."
+            )
+        pins.update(
+            expected,
+            dataset_reference=reference,
+            dataset_name=pair.data.dataset,
+            release_manifest_reference={
+                "repo_id": pair.data.repo_id,
+                "repo_type": pair.data.repo_type,
+                "path": pair.data.release_manifest_path,
+                "revision": pair.data.release_manifest_revision,
+                "sha256": pair.data.release_manifest_sha256,
+            },
+        )
+    for key in (
+        "bundle_version",
+        "model_version",
+        "core_version",
+        "data_release_version",
+        "dataset_sha256",
+    ):
+        if not isinstance(pins.get(key), str) or not pins[key]:
+            raise PreviousPairUnavailable(f"The previous certificate has no {key} pin.")
+    reference = pins.get("dataset_reference")
+    if (
+        not isinstance(reference, Mapping)
+        or any(
+            not isinstance(reference.get(key), str) or not reference[key]
+            for key in ("repo_id", "path", "revision")
+        )
+        or reference.get("repo_type") not in ("model", "dataset")
+        or reference.get("sha256") != pins["dataset_sha256"]
+        or not re.fullmatch(r"[a-f0-9]{64}", pins["dataset_sha256"])
+    ):
+        raise PreviousPairUnavailable(
+            "The previous certificate has no exact dataset reference."
+        )
+    return pins
+
+
+# This verification subprocess uses the current verifier, independently of
+# whether the older published wrapper included it. Its namespace is isolated
+# from the later metrics subprocess, which uses the installed previous wrapper.
+PREVIOUS_IDENTITY_RUNNER = """
+import importlib.metadata as metadata, json, sys, types
+from pathlib import Path
+settings, out = json.loads(sys.argv[1]), Path(sys.argv[2])
+package = types.ModuleType("policyengine")
+package.__path__ = [settings["source"]]
+sys.modules["policyengine"] = package
+from policyengine.provenance.wheels import verify_installed_against_wheel
+problems = []
+for wheel in settings["wheels"]:
+    name = wheel["name"]
+    try:
+        if metadata.version(name) != wheel["version"]:
+            problems.append(name + ": installed version differs from the previous certificate")
+        evidence = verify_installed_against_wheel(name, Path(wheel["path"]))
+        if evidence["wheel_sha256"] != wheel["sha256"]:
+            problems.append(name + ": wheel hash differs from the previous certificate")
+        problems.extend(evidence["problems"])
+    except (metadata.PackageNotFoundError, OSError, ValueError) as exc:
+        problems.append(name + ": cannot verify installation: " + str(exc))
+out.write_text(json.dumps({"problems": problems}))
+"""
+
+
+def _construct_previous_pair_python(
     previous: Mapping[str, Any],
     work_dir: Path,
     *,
+    ledger_root: Optional[Path] = None,
     run: Optional[Callable[..., Any]] = None,
 ) -> str:
-    """A throwaway venv with the previous certified release installed."""
+    """Install and verify the certificate's wheels, independently of wrapper extras."""
 
     import subprocess
 
+    import requests
+
+    from policyengine.provenance.uk_qualification import _wheel
+
     run = run if run is not None else subprocess.run
-    venv = work_dir / f"previous-{previous['bundle_version']}"
+    pins = _previous_pair_pins(previous, ledger_root)
+    wheels = []
+    for name, kind in (("policyengine-uk", "model"), ("policyengine-core", "core")):
+        version = pins[f"{kind}_version"]
+        response = requests.get(
+            f"https://pypi.org/pypi/{name}/{version}/json", timeout=30
+        )
+        response.raise_for_status()
+        wheel = _wheel(response.json()["urls"], name, version)
+        expected_sha256 = pins.get(f"{kind}_wheel_sha256") or wheel.sha256
+        if wheel.sha256 != expected_sha256:
+            raise PreviousPairUnavailable(
+                f"{name}: PyPI wheel differs from the previous certificate."
+            )
+        path = _download(
+            wheel.url,
+            work_dir / "previous-wheels" / expected_sha256 / wheel.filename,
+            get=requests.get,
+        )
+        if sha256_file(path) != expected_sha256:
+            raise PreviousPairUnavailable(
+                f"{name}: downloaded wheel differs from the previous certificate."
+            )
+        wheels.append(
+            {
+                "name": name,
+                "version": version,
+                "sha256": expected_sha256,
+                "path": str(path),
+            }
+        )
+    # Same wrapper version can certify several pairs during its publication window.
+    # The environment cache must include the resolved wheel and dataset pins.
+    venv = (
+        work_dir / f"previous-{content_sha256({'pins': pins, 'wheels': wheels})[:24]}"
+    )
     python = venv / "bin" / "python"
     if not python.exists():
         run(["uv", "venv", str(venv), "--python", "3.13"], check=True)
@@ -1893,11 +2175,174 @@ def previous_pair_python(
                 "install",
                 "--python",
                 str(python),
-                f"policyengine[uk]=={previous['bundle_version']}",
+                f"policyengine=={pins['bundle_version']}",
+                *(wheel["path"] for wheel in wheels),
             ],
             check=True,
         )
+    output = work_dir / "previous-identity.json"
+    output.unlink(missing_ok=True)
+    run(
+        [
+            str(python),
+            "-c",
+            PREVIOUS_IDENTITY_RUNNER,
+            json.dumps(
+                {
+                    "source": str(Path(__file__).resolve().parents[1]),
+                    "wheels": wheels,
+                }
+            ),
+            str(output),
+        ],
+        check=True,
+    )
+    identity = json.loads(output.read_text())
+    if not isinstance(identity, Mapping) or identity.get("problems") != []:
+        raise PreviousPairUnavailable(
+            f"The installed previous pair does not match its pins: {identity}."
+        )
     return str(python)
+
+
+def _materialize_previous_pair_dataset(
+    previous: Mapping[str, Any], work_dir: Path, *, ledger_root: Optional[Path] = None
+) -> Path:
+    """Materialize the previous certificate's exact data, bypassing wrapper defaults."""
+
+    import os
+
+    import requests
+
+    pins = _previous_pair_pins(previous, ledger_root)
+    reference = pins["dataset_reference"]
+    path = (
+        work_dir
+        / "previous-data"
+        / pins["dataset_sha256"]
+        / Path(reference["path"]).name
+    )
+    if not path.exists():
+        token = os.environ.get("HUGGING_FACE_TOKEN") or os.environ.get("HF_TOKEN")
+        url = _hf_url(
+            reference["repo_id"],
+            reference["repo_type"],
+            reference["revision"],
+            reference["path"],
+        )
+        _download(
+            url,
+            path,
+            get=lambda *args, **kwargs: requests.get(
+                *args,
+                **kwargs,
+                headers={"Authorization": f"Bearer {token}"} if token else {},
+            ),
+        )
+    if sha256_file(path) != pins["dataset_sha256"]:
+        raise PreviousPairUnavailable(
+            "The previous dataset bytes differ from the certificate."
+        )
+    manifest_reference = pins.get("release_manifest_reference") or {}
+    if (
+        any(
+            not isinstance(manifest_reference.get(key), str)
+            or not manifest_reference[key]
+            for key in ("repo_id", "path", "revision")
+        )
+        or manifest_reference.get("repo_type") not in ("model", "dataset")
+        or not pins.get("dataset_name")
+    ):
+        raise PreviousPairUnavailable(
+            "The previous data release has no pinned manifest reference."
+        )
+    token = os.environ.get("HUGGING_FACE_TOKEN") or os.environ.get("HF_TOKEN")
+    response = requests.get(
+        _hf_url(
+            manifest_reference["repo_id"],
+            manifest_reference["repo_type"],
+            manifest_reference["revision"],
+            manifest_reference["path"],
+        ),
+        headers={"Authorization": f"Bearer {token}"} if token else {},
+        timeout=30,
+    )
+    response.raise_for_status()
+    if (
+        manifest_reference.get("sha256")
+        and hashlib.sha256(response.content).hexdigest() != manifest_reference["sha256"]
+    ):
+        raise PreviousPairUnavailable(
+            "The previous release manifest bytes differ from the ledger."
+        )
+    manifest = DataReleaseManifest.model_validate_json(response.content)
+    artifact = manifest.artifacts.get(pins["dataset_name"])
+    if (
+        manifest.data_package.version != pins["data_release_version"]
+        or manifest.default_datasets.get("national") != pins["dataset_name"]
+        or artifact is None
+        or artifact.sha256 != pins["dataset_sha256"]
+        or artifact.path != reference["path"]
+        or artifact.revision != reference["revision"]
+        or artifact.repo_id != reference["repo_id"]
+        or (artifact.repo_type or manifest_reference["repo_type"])
+        != reference["repo_type"]
+    ):
+        raise PreviousPairUnavailable(
+            "The previous release manifest does not match the certified data pair."
+        )
+    return path
+
+
+def previous_pair_python(
+    previous: Mapping[str, Any],
+    work_dir: Path,
+    *,
+    ledger_root: Optional[Path] = None,
+    run: Optional[Callable[..., Any]] = None,
+) -> str:
+    """Construct a verified baseline, or report that it is unavailable."""
+
+    import subprocess
+
+    import requests
+
+    try:
+        return _construct_previous_pair_python(
+            previous, work_dir, ledger_root=ledger_root, run=run
+        )
+    except PreviousPairUnavailable:
+        raise
+    except (
+        OSError,
+        ValueError,
+        KeyError,
+        TypeError,
+        subprocess.CalledProcessError,
+        requests.RequestException,
+    ) as exc:
+        raise PreviousPairUnavailable(
+            f"The exact previous environment could not be verified: {exc}"
+        ) from exc
+
+
+def previous_pair_dataset(
+    previous: Mapping[str, Any], work_dir: Path, *, ledger_root: Optional[Path] = None
+) -> Path:
+    """Materialize verified previous data, or report that it is unavailable."""
+
+    import requests
+
+    try:
+        return _materialize_previous_pair_dataset(
+            previous, work_dir, ledger_root=ledger_root
+        )
+    except PreviousPairUnavailable:
+        raise
+    except (OSError, ValueError, KeyError, TypeError, requests.RequestException) as exc:
+        raise PreviousPairUnavailable(
+            f"The exact previous data could not be verified: {exc}"
+        ) from exc
 
 
 # --- Orchestration -------------------------------------------------------------
@@ -1908,6 +2353,10 @@ def run_gate(gate_id: str, function: Callable[[], GateOutcome]) -> GateOutcome:
 
     try:
         return function()
+    except PreviousPairUnavailable as exc:
+        return _result(
+            gate_id, "unavailable", str(exc), {"previous_pair_unavailable": str(exc)}
+        )
     except Exception as exc:
         return _result(
             gate_id,
@@ -2118,6 +2567,16 @@ def run_candidate_gates(
             state["manifest"] = manifest
         return result, evidence
 
+    def previous_environment() -> tuple[str, Path]:
+        if "previous_environment" not in state:
+            assert previous_certificate is not None
+            pins = _previous_pair_pins(previous_certificate, ledger_root)
+            state["previous_environment"] = (
+                previous_pair_python(pins, work_dir),
+                previous_pair_dataset(pins, work_dir),
+            )
+        return state["previous_environment"]
+
     def previous_snapshot() -> Optional[dict[str, Any]]:
         """The previous pair's inputs and years: from the ledger, else computed."""
 
@@ -2135,11 +2594,12 @@ def run_candidate_gates(
                 "source": "ledger",
             }
         elif previous_certificate:
+            previous_python, previous_dataset = previous_environment()
             snapshot = run_inputs_snapshot(
-                previous_pair_python(previous_certificate, work_dir),
+                previous_python,
                 critical=critical_spec["critical"],
                 out=work_dir / "previous-inputs.json",
-                data_dir=work_dir / "previous-data",
+                dataset_path=previous_dataset,
             )
             snapshot["source"] = (
                 f"computed with policyengine {previous_certificate['bundle_version']}"
@@ -2275,15 +2735,16 @@ def run_candidate_gates(
                 unavailable_reason="No previous certificate to compare against.",
             )
         bounds = json.loads((qualification_dir / settings["bounds"]).read_text())
+        previous_python, previous_dataset = previous_environment()
         vendor_root = metrics_tool()
         years = settings["years"]
         candidate_report = candidate_metrics()
         previous_report = run_metrics_report(
-            previous_pair_python(previous_certificate, work_dir),
+            previous_python,
             vendor_root,
             years=years,
             out=work_dir / "metrics-previous.json",
-            data_dir=work_dir / "previous-data",
+            dataset_path=previous_dataset,
             label="previous",
         )
         cross_report = None

@@ -40,6 +40,7 @@ import re
 import subprocess
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, Optional
 
@@ -330,6 +331,8 @@ def certified_order_key(bundle: Mapping[str, Any]) -> tuple[str, str, str]:
 
 def previous_certificate(bundle: Mapping[str, Any]) -> PreviousCertificate:
     record = bundle["data_releases"]["uk"]
+    reference = record["datasets"][record["default_dataset"]]
+    data_package = record["data_package"]
     return PreviousCertificate(
         bundle_version=bundle["policyengine_version"],
         model_version=record["model_package"]["version"],
@@ -342,6 +345,19 @@ def previous_certificate(bundle: Mapping[str, Any]) -> PreviousCertificate:
         ),
         model_wheel_sha256=record["model_package"].get("sha256"),
         core_wheel_sha256=bundle["packages"][CORE_PACKAGE].get("sha256"),
+        dataset_reference={
+            **reference,
+            "repo_id": reference.get("repo_id") or data_package["repo_id"],
+            "repo_type": reference.get("repo_type")
+            or data_package.get("repo_type", "model"),
+        },
+        dataset_name=record["default_dataset"],
+        release_manifest_reference={
+            "repo_id": data_package["repo_id"],
+            "repo_type": data_package.get("repo_type", "model"),
+            "path": data_package["release_manifest_path"],
+            "revision": data_package["release_manifest_revision"],
+        },
     )
 
 
@@ -352,6 +368,8 @@ def candidate_action(
     *,
     base_commit: str,
     force: bool = False,
+    now: Optional[str] = None,
+    owner_is_failed: Optional[Callable[[str], bool]] = None,
 ) -> tuple[Action, str]:
     """Whether to qualify ``pair`` now, and why."""
 
@@ -367,12 +385,25 @@ def candidate_action(
         return "qualify", "forced" if force else "no ledger"
     pair_dir = pair_directory(ledger_root, "uk", pair.pair_id)
     latest = pair_dir / "qualification_receipt.json"
-    if latest.exists():
-        receipt = QualificationReceipt.model_validate(read_json(latest))
-        if receipt.verdict != "incomplete":
-            return "duplicate", f"pair already {receipt.verdict} in the ledger"
-    attempt = attempt_directory(ledger_root, "uk", pair.pair_id, base_commit[:12])
-    if attempt.exists():
+    receipt = (
+        QualificationReceipt.model_validate(read_json(latest))
+        if latest.exists()
+        else None
+    )
+    attempt = _latest_base_attempt(pair, ledger_root, base_commit)
+    if (
+        attempt is not None
+        and attempt_is_recoverable(attempt, now=now, owner_is_failed=owner_is_failed)
+        and (
+            receipt is None
+            or receipt.verdict == "incomplete"
+            or attempt_supersedes_receipt(attempt, receipt)
+        )
+    ):
+        return "qualify", "recoverable abandoned staged attempt"
+    if receipt is not None and receipt.verdict != "incomplete":
+        return "duplicate", f"pair already {receipt.verdict} in the ledger"
+    if attempt is not None:
         return "duplicate", f"an attempt from base {base_commit[:12]} exists"
     return "qualify", "new pair, or an incomplete pair on a new base commit"
 
@@ -462,17 +493,24 @@ def attempt_key(
     *,
     base_commit: str,
     force: bool = False,
+    now: Optional[str] = None,
+    owner_is_failed: Optional[Callable[[str], bool]] = None,
 ) -> str:
     """The ledger key of the attempt a qualification run would stage.
 
-    One attempt per base commit, so concurrent runs for the same pair and
-    base deduplicate. A forced run after such an attempt gets the next free
-    key instead, so it stages a fresh attempt and is not mistaken for the
-    old one.
+    Concurrent runs for the same pair and base deduplicate. Forced runs and
+    recovery of abandoned stages use the next free key, preserving earlier
+    evidence. A live replacement blocks further recovery on that base.
     """
 
     key = base_commit[:12]
-    if not force or ledger_root is None:
+    if ledger_root is None:
+        return key
+    attempt = _latest_base_attempt(pair, ledger_root, base_commit)
+    recovering = attempt is not None and attempt_is_recoverable(
+        attempt, now=now, owner_is_failed=owner_is_failed
+    )
+    if not force and not recovering:
         return key
     if not attempt_directory(ledger_root, "uk", pair.pair_id, key).exists():
         return key
@@ -482,6 +520,26 @@ def attempt_key(
     ).exists():
         repeat += 1
     return f"{key}-{repeat}"
+
+
+def _latest_base_attempt(
+    pair: CandidatePair, ledger_root: Path, base_commit: str
+) -> Optional[Path]:
+    base = base_commit[:12]
+    parent = pair_directory(ledger_root, "uk", pair.pair_id) / "attempts"
+    attempts = [
+        path
+        for path in parent.glob(f"{base}*")
+        if path.is_dir() and re.fullmatch(re.escape(base) + r"(?:-\d+)?", path.name)
+    ]
+
+    def order(path: Path) -> tuple[int, int]:
+        stage = path / "staging.json"
+        sequence = int(read_json(stage)["sequence"]) if stage.exists() else 0
+        repeat = int(path.name[len(base) + 1 :]) if path.name != base else 1
+        return sequence, repeat
+
+    return max(attempts, key=order, default=None)
 
 
 def changelog_fragment(pair: CandidatePair, basis_note: str) -> str:
@@ -836,6 +894,9 @@ def stage_attempt(
     attempt_dir: Path,
     candidate_payload: Mapping[str, Any],
     harness: QualificationHarness,
+    *,
+    owner_run_id: Optional[str] = None,
+    staged_at: Optional[str] = None,
 ) -> None:
     payloads = {
         attempt_dir / "candidate.json": dict(candidate_payload),
@@ -853,7 +914,30 @@ def stage_attempt(
             int(read_json(path)["sequence"])
             for path in attempt_dir.parent.glob("*/staging.json")
         ]
-        write_json(staging_path, {"sequence": max(prior_orders, default=0) + 1})
+        staged = _attempt_time(staged_at)
+        stage = {
+            "sequence": max(prior_orders, default=0) + 1,
+            "owner_run_id": owner_run_id,
+            "staged_at": staged.isoformat().replace("+00:00", "Z"),
+            "expires_at": (staged + timedelta(hours=4))
+            .isoformat()
+            .replace("+00:00", "Z"),
+        }
+        supersedes = candidate_payload.get("supersedes_receipt_sha256")
+        if supersedes:
+            published = attempt_dir.parent.parent / "qualification_receipt.json"
+            if (
+                not published.exists()
+                or QualificationReceipt.model_validate(
+                    read_json(published)
+                ).unreviewed_sha256
+                != supersedes
+            ):
+                raise ValueError(
+                    "Recovery must bind the exact receipt the forced attempt supersedes"
+                )
+            stage["supersedes_receipt_sha256"] = supersedes
+        write_json(staging_path, stage)
     for path, payload in payloads.items():
         if not path.exists():
             write_json(path, payload)
@@ -1032,6 +1116,65 @@ def attempt_is_waiting_for_replay(attempt_dir: Path) -> bool:
     if not result.exists():
         return True
     return GateResult.model_validate(read_json(result)).status == "unavailable"
+
+
+def _attempt_time(value: Optional[str]) -> datetime:
+    instant = (
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if value
+        else datetime.now(UTC)
+    )
+    if instant.tzinfo is None:
+        raise ValueError("Attempt timestamps must have a timezone")
+    return instant.astimezone(UTC)
+
+
+def attempt_is_recoverable(
+    attempt_dir: Path,
+    *,
+    now: Optional[str] = None,
+    owner_is_failed: Optional[Callable[[str], bool]] = None,
+) -> bool:
+    """An abandoned stage can be retried in a new immutable attempt directory.
+
+    Sent requests retain the replay catch-up path. A live owner retains its
+    stage until expiry; unknown GitHub status never implies owner failure.
+    Older stages without ownership metadata are recoverable as unowned work.
+    """
+
+    if (attempt_dir / "replay" / "request.json").exists():
+        return False
+    receipt_path = attempt_dir / "qualification_receipt.json"
+    if (
+        receipt_path.exists()
+        and QualificationReceipt.model_validate(read_json(receipt_path)).verdict
+        != "incomplete"
+    ):
+        return False
+    stage_path = attempt_dir / "staging.json"
+    if not stage_path.exists() or not (attempt_dir / "candidate.json").exists():
+        return False
+    stage = read_json(stage_path)
+    expires = stage.get("expires_at")
+    if expires and _attempt_time(now) >= _attempt_time(expires):
+        return True
+    owner = stage.get("owner_run_id")
+    if owner and owner_is_failed is not None and owner_is_failed(str(owner)):
+        return True
+    return not owner and not expires
+
+
+def attempt_supersedes_receipt(
+    attempt_dir: Path, receipt: QualificationReceipt
+) -> bool:
+    """Only explicitly authorized newer work may supersede a terminal receipt."""
+
+    stage = attempt_dir / "staging.json"
+    return (
+        stage.exists()
+        and read_json(stage).get("supersedes_receipt_sha256")
+        == receipt.unreviewed_sha256
+    )
 
 
 # --- Promotion ----------------------------------------------------------------
