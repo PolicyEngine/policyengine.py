@@ -177,6 +177,52 @@ def test_passing_failing_pending_and_isolation_rows(monkeypatch):
     assert rows["baseline_isolation:income_tax:2027"]["status"] == "pass"
 
 
+@pytest.mark.parametrize("route", ["country.reform_dict", "wrapper.household"])
+def test_assertions_with_the_same_value_request_have_distinct_identities(
+    monkeypatch, route
+):
+    from dataclasses import replace
+
+    duplicate = replace(
+        CASE,
+        checks=(
+            Check("parameter", RATE, 2027, 0.21, "mandatory oracle"),
+            Check("parameter", RATE, 2027, 0.20, "pending oracle", pending="d1344"),
+        ),
+    )
+    fake(
+        monkeypatch,
+        FakeRoute(reformed={("parameter", RATE, 2027): 0.21}, unreformed={}),
+    )
+    rows = evaluate_case(duplicate, route)
+    assert [row["status"] for row in rows] == (
+        ["pass", "pending"]
+        if route == "country.reform_dict"
+        else ["unsupported", "unsupported"]
+    )
+    assert len({row["check"] for row in rows}) == 1
+    assert all(
+        isinstance(row["assertion_id"], str) and row["assertion_id"] for row in rows
+    )
+    assert len({row["assertion_id"] for row in rows}) == 2
+
+
+def test_assertion_ids_change_no_verdict():
+    """Labelling rows changes no status, expected value or actual value.
+
+    The fixture holds the rows the runner produced on main 9d0c7c57, before
+    rows carried an ``assertion_id``, for every case and route under three
+    fake routes (see ``tests/uk_contract_row_scenarios.py``).
+    """
+
+    from pathlib import Path
+
+    from tests.uk_contract_row_scenarios import scenario_rows
+
+    fixture = Path(__file__).parent / "fixtures/uk_contract/evaluate_case_rows.json"
+    assert scenario_rows(contract, CASES) == json.loads(fixture.read_text())
+
+
 def test_a_wrong_value_fails_and_a_leaking_baseline_fails(monkeypatch):
     fake(
         monkeypatch,
@@ -502,6 +548,7 @@ def test_the_subsample_is_deterministic_and_keeps_whole_households(tmp_path):
 def test_population_checks_hold_on_a_tiny_dataset(tmp_path):
     pytest.importorskip("policyengine_uk.utils.dated_reforms")
     from policyengine.tax_benefit_models.uk.budget_reform_population import (
+        population_check_routes,
         run_population_checks,
     )
 
@@ -511,6 +558,11 @@ def test_population_checks_hold_on_a_tiny_dataset(tmp_path):
         seed=0,
     )
     assert rows and all(row["status"] == "pass" for row in rows), rows
+    from collections import Counter
+
+    assert Counter((row["check_id"], row["route"]) for row in rows) == Counter(
+        population_check_routes(list(contract.COUNTRY_ROUTES))
+    )
 
 
 def test_responsiveness_checks_fail_with_no_award_to_move(tmp_path):
