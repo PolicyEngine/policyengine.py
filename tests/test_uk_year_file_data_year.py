@@ -540,7 +540,9 @@ def test_projected_input_is_ordered_and_leaves_weights_to_the_model(year_files):
 
     built = _policyengine_uk_input(dataset)
 
-    assert built.years == [2024, 2025, 2026, 2027, 2028, 2029, 2030]
+    # policyengine-uk projects single-year datasets through 2032 from 2.130.0
+    # (policyengine-uk#2376); years through 2030 are projected as before.
+    assert built.years == list(range(2024, 2033))
     for year in built.years:
         if year == 2026:
             continue
