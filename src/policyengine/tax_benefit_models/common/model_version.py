@@ -388,6 +388,28 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     "inputs were mapped when it was calculated; run again "
                     "before saving"
                 )
+        if self.country_code == "uk":
+            from policyengine.tax_benefit_models.uk.capital_gains_responses import (
+                RECORD_KEY,
+                simulation_request,
+            )
+
+            # ``PolicyEngineUKDataset.save()`` writes the record into the
+            # file, and ``load()`` refuses an output without it.
+            record = (getattr(simulation.output_dataset, "metadata", None) or {}).get(
+                RECORD_KEY
+            )
+            if record is None:
+                raise ValueError(
+                    "This UK output does not record the capital gains "
+                    "realisation response it was calculated under; run again "
+                    "before saving"
+                )
+            if record["request"]["digest"] != simulation_request(simulation)["digest"]:
+                raise ValueError(
+                    "Capital gains response settings changed since this output "
+                    "was calculated; run again before saving"
+                )
         simulation.output_dataset.save()
         if serialized_spm is not None:
             # Store UTF-8 JSON in a dataset rather than an attribute: the
@@ -476,6 +498,26 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     "Saved UK simulation predates anchoring on the observed "
                     "data year (it records none); run it again"
                 )
+            from policyengine.tax_benefit_models.uk.capital_gains_responses import (
+                read_record,
+                saved_record_problem,
+                simulation_request,
+            )
+
+            # An output is reused only under the capital gains realisation
+            # response it was calculated with: the same policyengine-uk
+            # release (whose default may differ from another's) and the same
+            # explicit settings.
+            with pd.HDFStore(filepath, mode="r") as store:
+                response_record = read_record(store)
+            problem = saved_record_problem(
+                response_record, simulation_request(simulation)
+            )
+            if problem is not None:
+                raise ValueError(
+                    f"Saved UK simulation output is out of date: {problem}; "
+                    "run it again"
+                )
 
         simulation.output_dataset = self._dataset_class(
             id=simulation.id,
@@ -497,6 +539,12 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 simulation.output_dataset.metadata[LEGACY_SPM_RECORD_KEY] = (
                     recorded_legacy_spm
                 )
+        if self.country_code == "uk":
+            from policyengine.tax_benefit_models.uk.capital_gains_responses import (
+                RECORD_KEY,
+            )
+
+            simulation.output_dataset.metadata[RECORD_KEY] = response_record
 
         if os.path.exists(filepath):
             simulation.created_at = datetime.datetime.fromtimestamp(

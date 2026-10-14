@@ -172,6 +172,7 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
     def run(self, simulation: "Simulation") -> "Simulation":
         from policyengine_uk import Microsimulation
 
+        from policyengine.tax_benefit_models.uk import capital_gains_responses
         from policyengine.utils.parametric_reforms import (
             build_reform_dict,
             merge_reform_dicts,
@@ -253,6 +254,14 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
         if dynamic_modifier is not None:
             dynamic_modifier(microsim)
 
+        # The capital gains realisation response this run applies, read once
+        # every reform and modifier has run.
+        response_record = capital_gains_responses.build_record(
+            microsim,
+            simulation.dataset.year,
+            capital_gains_responses.simulation_request(simulation),
+        )
+
         data = {
             "person": pd.DataFrame(),
             "benunit": pd.DataFrame(),
@@ -297,6 +306,7 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
                 benunit=data["benunit"],
                 household=data["household"],
             ),
+            metadata={capital_gains_responses.RECORD_KEY: response_record},
         )
 
 
@@ -466,6 +476,12 @@ def managed_microsimulation(
             source.path,
             source.bundle_dataset,
         )
+    )
+    from policyengine.tax_benefit_models.uk import capital_gains_responses
+
+    # The capital gains realisation response, for each year of the dataset.
+    microsim.policyengine_bundle[capital_gains_responses.RECORD_KEY] = (
+        capital_gains_responses.managed_records(microsim)
     )
     return microsim
 

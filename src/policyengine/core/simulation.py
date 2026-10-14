@@ -1,3 +1,4 @@
+import copy
 import hashlib
 import json
 import logging
@@ -124,12 +125,22 @@ class Simulation(BaseModel):
 
     @property
     def storage_id(self) -> str:
-        """Include resolved SPM settings in cache and saved-result identity."""
+        """Include resolved SPM settings, and a UK run's explicit capital
+        gains response settings, in cache and saved-result identity."""
+        storage_id = self.id
         config = self.spm_config
-        if config is None:
-            return self.id
-        encoded = json.dumps(config, sort_keys=True, separators=(",", ":")).encode()
-        return f"{self.id}-spm-{hashlib.sha256(encoded).hexdigest()}"
+        if config is not None:
+            encoded = json.dumps(config, sort_keys=True, separators=(",", ":"))
+            storage_id += f"-spm-{hashlib.sha256(encoded.encode()).hexdigest()}"
+        if getattr(self.tax_benefit_model_version, "country_code", None) == "uk":
+            from policyengine.tax_benefit_models.uk.capital_gains_responses import (
+                simulation_request,
+            )
+
+            digest = simulation_request(self)["digest"]
+            if digest is not None:
+                storage_id += f"-cgr-{digest}"
+        return storage_id
 
     @model_validator(mode="after")
     def _compile_dict_reforms(self) -> "Simulation":
@@ -266,4 +277,11 @@ class Simulation(BaseModel):
         ).get("legacy_spm_declarations")
         if legacy_spm_declarations is not None:
             result["legacy_spm_declarations"] = dict(legacy_spm_declarations)
+        # The capital gains realisation response a UK run applied. See
+        # ``policyengine.tax_benefit_models.uk.capital_gains_responses``.
+        capital_gains_responses = (
+            getattr(self.output_dataset, "metadata", None) or {}
+        ).get("capital_gains_responses")
+        if capital_gains_responses is not None:
+            result["capital_gains_responses"] = copy.deepcopy(capital_gains_responses)
         return result

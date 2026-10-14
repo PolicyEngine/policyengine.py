@@ -1,9 +1,9 @@
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import pandas as pd
 from microdf import MicroDataFrame
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 
 from policyengine.core import Dataset, YearData
 from policyengine.provenance.dataset_materialization import (
@@ -74,6 +74,11 @@ class PolicyEngineUKDataset(Dataset):
     instead of the triple lock.
     """
 
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    """Records about how an output was calculated, such as the capital gains
+    realisation response a run applied (see ``capital_gains_responses``).
+    ``save()`` writes them into the file and ``load()`` reads them back."""
+
     def model_post_init(self, __context):
         """Called after Pydantic initialization.
 
@@ -140,20 +145,35 @@ class PolicyEngineUKDataset(Dataset):
         if not filepath.parent.exists():
             filepath.parent.mkdir(parents=True, exist_ok=True)
 
+        from policyengine.tax_benefit_models.uk.capital_gains_responses import (
+            RECORD_KEY,
+            write_record,
+        )
+
         with pd.HDFStore(filepath, mode="w") as store:
             _put_year_data(store, self.data)
             if self.data_year_data is not None:
                 _put_year_data(store, self.data_year_data, DATA_YEAR_TABLE_PREFIX)
+            if RECORD_KEY in self.metadata:
+                write_record(store, self.metadata[RECORD_KEY])
             # Written last: its presence marks a complete file.
             if self.data_year is not None:
                 store.put(DATA_YEAR_KEY, pd.Series([int(self.data_year)]))
 
     def load(self) -> None:
         """Load dataset from HDF5 file into this instance."""
+        from policyengine.tax_benefit_models.uk.capital_gains_responses import (
+            RECORD_KEY,
+            read_record,
+        )
+
         filepath = self.filepath
         with pd.HDFStore(filepath, mode="r") as store:
             keys = set(store.keys())
             self.data = _read_year_data(store)
+            record = read_record(store)
+            if record is not None:
+                self.metadata[RECORD_KEY] = record
             self.data_year = (
                 int(store[DATA_YEAR_KEY].iloc[0])
                 if f"/{DATA_YEAR_KEY}" in keys
