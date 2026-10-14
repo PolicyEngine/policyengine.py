@@ -42,6 +42,7 @@ from importlib import metadata
 from pathlib import Path
 from types import CodeType, SimpleNamespace
 from typing import Union
+from urllib.parse import urlparse
 
 import jsonschema
 import numpy as np
@@ -138,6 +139,56 @@ def _build(dataset_file, bundle=None, **kwargs):
         bundle=bundle if bundle is not None else _bundle_for(dataset_file.read_bytes()),
         **kwargs,
     )
+
+
+#: The real policyengine, policyengine_uk and policyengine_core modules this
+#: test process loaded, so a test can tell them from synthetic stand-ins.
+_REAL_PACKAGE_MODULES = {
+    name.replace("-", "_"): sys.modules.get(name.replace("-", "_"))
+    for name in receipt_module.UK_PACKAGES.values()
+}
+
+
+def _this_checkout_is_the_installed_policyengine() -> bool:
+    """Whether the installed policyengine is an editable install of this checkout."""
+
+    try:
+        direct_url = receipt_module._read_direct_url("policyengine")
+    except ReceiptError:
+        return False
+    if not direct_url or not (direct_url.get("dir_info") or {}).get("editable"):
+        return False
+    loaded = Path(sys.modules["policyengine"].__file__).resolve()
+    source = Path(urlparse(direct_url["url"]).path).resolve()
+    return source in loaded.parents
+
+
+@pytest.fixture(autouse=True)
+def _real_packages_load_from_their_install(request, monkeypatch):
+    """Treat the real packages as loaded from the distributions they name.
+
+    How this repository is installed differs between environments: CI
+    installs it editable and then installs a released policyengine over it,
+    so the tests run this checkout's code under another version's metadata,
+    which the receipt rightly refuses. Receipt tests are about receipts, not
+    about the test environment, so the real modules are taken as loaded from
+    their install. Synthetic distributions and modules that tests put in
+    ``sys.modules`` are still checked, and the real check runs unchanged in
+    tests marked ``real_install``.
+    """
+
+    if request.node.get_closest_marker("real_install"):
+        return
+    original = receipt_module._refuse_loaded_package_origin
+
+    def refuse(name):
+        import_name = receipt_module.normalize_distribution_name(name).replace("-", "_")
+        module = sys.modules.get(import_name)
+        if module is not None and module is _REAL_PACKAGE_MODULES.get(import_name):
+            return None
+        return original(name)
+
+    monkeypatch.setattr(receipt_module, "_refuse_loaded_package_origin", refuse)
 
 
 @pytest.fixture
@@ -710,6 +761,12 @@ def test_install_origin_controls_certification(
     assert (receipt.certificate is not None) == (origin == "archive")
 
 
+@pytest.mark.real_install
+@pytest.mark.skipif(
+    not _this_checkout_is_the_installed_policyengine(),
+    reason="policyengine here is not an editable install of this checkout "
+    "(CI installs a released policyengine over it)",
+)
 def test_real_editable_install_is_recorded_and_uncertified(tmp_path):
     identity = installed_package_identity("policyengine")
     assert identity.install_origin == "editable"

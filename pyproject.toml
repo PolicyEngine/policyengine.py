@@ -97,6 +97,9 @@ testpaths = [
 filterwarnings = [
     "ignore::pydantic.warnings.PydanticDeprecatedSince20",
 ]
+markers = [
+    "real_install: runs the receipt's loaded-package check against the real installation",
+]
 
 [tool.ruff]
 line-length = 88
