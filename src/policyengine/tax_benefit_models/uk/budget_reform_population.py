@@ -34,8 +34,9 @@ Checks:
     then taken from the award and set as percentages of the standard
     allowance (Claims and Payments Regulations 2013, SI 2013/380, Sch 6), so
     the amount paid (``universal_credit``) can fall. The check bounds that
-    fall: no payment falls by more than its deductions rise, and no
-    deductions rise by more than the standard allowance.
+    fall: no payment falls by more than its deductions rise, no unit's
+    deduction rate changes, and no deductions rise by more than that rate
+    times the standard allowance rise.
 ``population_state_pension_plus_10``
     The basic and new State Pension rates 10% higher in 2027-28 raise each
     person's basic and new State Pension by exactly 10% and raise total
@@ -109,6 +110,7 @@ UC_ALLOWANCE_VARIABLES = (
     "universal_credit_pre_benefit_cap",
     "benefit_cap_reduction",
     "uc_deductions",
+    "uc_deduction_rate",
 )
 
 
@@ -122,8 +124,13 @@ def uc_allowance_verdict(
     over the cap (SI 2013/376 reg 81), so a capped award stays flat and no
     award before deductions may fall. Deductions are taken from the award as
     percentages of the standard allowance (SI 2013/380 Sch 6), so the amount
-    paid may fall, but by no more than the deductions rise, and deductions
-    may rise by no more than the standard allowance.
+    paid may fall, but by no more than the deductions rise. In the model a
+    unit's deductions are its ``uc_deduction_rate`` times the standard
+    allowance, capped by the award; the rate does not depend on the
+    allowance, so it must not change, and deductions may rise by no more
+    than that rate times the allowance rise. (The rate can exceed 1: the
+    excess above the deductions cap, for deductions the cap does not limit,
+    has no bound of its own.)
     """
 
     allowance, base_allowance = (
@@ -139,17 +146,24 @@ def uc_allowance_verdict(
     )
     paid, base_paid = reformed["universal_credit"], base["universal_credit"]
     deduction_rise = reformed["uc_deductions"] - base["uc_deductions"]
+    rate = reformed["uc_deduction_rate"]
+    rates_changed = int(
+        np.sum(~np.isclose(rate, base["uc_deduction_rate"], rtol=1e-9, atol=1e-12))
+    )
     awards_lower = int(np.sum(award < base_award - 1e-3))
     payments_higher = int(np.sum(paid > base_paid + 1e-3))
     beyond_deductions = int(
         np.sum((base_paid - paid) - np.maximum(deduction_rise, 0) > 1e-3)
     )
-    beyond_allowance = int(np.sum(deduction_rise - (allowance - base_allowance) > 1e-3))
+    beyond_rate = int(
+        np.sum(deduction_rise - rate * (allowance - base_allowance) > 1e-3)
+    )
     holds = (
         scaled
         and awards_lower == 0
         and beyond_deductions == 0
-        and beyond_allowance == 0
+        and rates_changed == 0
+        and beyond_rate == 0
         and payments_higher > 0
     )
     return holds, {
@@ -158,7 +172,8 @@ def uc_allowance_verdict(
         "payments_lower": int(np.sum(paid < base_paid - 1e-3)),
         "payments_higher": payments_higher,
         "payment_falls_beyond_deduction_rises": beyond_deductions,
-        "deduction_rises_beyond_allowance_rises": beyond_allowance,
+        "deduction_rates_changed": rates_changed,
+        "deduction_rises_beyond_rate_times_allowance_rise": beyond_rate,
     }
 
 
