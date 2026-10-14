@@ -61,11 +61,13 @@ import __future__
 
 import ast
 import builtins
+import csv
 import datetime
 import functools
 import hashlib
 import importlib.util
 import inspect
+import io
 import json
 import math
 import operator
@@ -74,7 +76,7 @@ import re
 import struct
 import sys
 import zipfile
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from importlib import metadata
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
@@ -82,6 +84,7 @@ from types import CodeType
 from typing import Any, ClassVar, Literal, Optional, Union
 from urllib.parse import urlparse
 
+import psutil
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from policyengine.provenance.bytecode import code_shape as _code_shape
@@ -168,6 +171,7 @@ CROSS_FIELD_RULES: tuple[str, ...] = (
     "certificate.bundle_version equals wrapper.version.",
     "reform/baseline kind current_law has no representation or reform_sha256 and binding content; kind reform has both.",
     "wheel_sha256 and wheel_sha256_evidence are present together or not at all.",
+    "certification_status certified requires each of wrapper, model and core to have install_origin absent or archive, or wheel_sha256_evidence installed_record_verified.",
     "A consumer trusts a certificate only after checking it against the data_releases.<country_id> record of the published policyengine manifest for certificate.bundle_version (verify_certificate()): certificate_sha256 is that record's digest, every other member of certificate except certificate_source, qualification_receipt_sha256 and tro_composition_fingerprint equals what the record states, and data equals the data identity the record determines. certificate_source is the producer's statement and proves nothing.",
 )
 
@@ -223,6 +227,16 @@ class PackageIdentity(_Contract):
     )
     wheel_sha256_evidence: Optional[HashEvidence] = Field(
         default=None, description="How wheel_sha256 was established."
+    )
+    install_origin: Optional[Literal["archive", "directory", "editable", "vcs"]] = (
+        Field(
+            default=None,
+            description=(
+                "Install origin recorded by PEP 610 direct_url.json; absent for an "
+                "ordinary index install. Directory, editable and VCS installs "
+                "require installed_record_verified wheel evidence for certification."
+            ),
+        )
     )
 
     @model_validator(mode="after")
@@ -366,6 +380,34 @@ class ReformIdentity(_Contract):
         default=None, description="Human label; part of no digest."
     )
 
+    # Stored outside Pydantic fields and private attributes so equality,
+    # serialization and digests ignore this process-local re-check handle.
+    _recompute_identity: ClassVar[Optional[Callable[[], ReformIdentity]]] = None
+
+    def _recheck(self) -> ReformIdentity:
+        """Recompute a live identity; loaded identities have no handle."""
+
+        if self._recompute_identity is None:
+            return self
+        try:
+            recomputed = self._recompute_identity()
+        except ReceiptError as exc:
+            raise ReceiptError(
+                f"The modifier changed after its identity was computed: {exc}"
+            ) from exc
+        differences = [
+            field
+            for field in type(self).model_fields
+            if getattr(self, field) != getattr(recomputed, field)
+        ]
+        if differences:
+            raise ReceiptError(
+                "The modifier changed after its identity was computed: "
+                + ", ".join(differences)
+                + " differs."
+            )
+        return recomputed
+
     @model_validator(mode="after")
     def _current_law_has_no_digest(self) -> ReformIdentity:
         if self.kind == "current_law":
@@ -476,6 +518,12 @@ class ExecutionReceipt(_Contract):
         certificate = self.certificate
         if certificate is None:
             raise ValueError("A certified receipt needs a certificate.")
+        for package in (self.wrapper, self.model, self.core):
+            if not _package_can_be_certified(package):
+                raise ValueError(
+                    f"A certified receipt cannot name {package.name} installed from "
+                    f"{package.install_origin} without installed_record_verified wheel evidence."
+                )
         if certificate.country_id != self.country_id:
             raise ValueError("Certificate country differs from the receipt country.")
         if certificate.certified_for_model_version != self.model.version:
@@ -1339,8 +1387,8 @@ def _is_main_guard(statement: ast.stmt) -> bool:
     )
 
 
-#: Names that reach module state, run code or compare identities without
-#: naming what they read; refused anywhere in a bound modifier's module.
+#: Names that reach module state, run code, compare identities or read annotation
+#: values; refused anywhere in a bound modifier's module.
 _REFUSED_NAMES = frozenset(
     {
         "globals",
@@ -1359,6 +1407,7 @@ _REFUSED_NAMES = frozenset(
         "get_annotations",
         "signature",
         "getfullargspec",
+        "from_callable",
     }
 )
 #: Attributes refused anywhere: operator.is_ and is_not compare identities,
@@ -1372,8 +1421,19 @@ _REFUSED_ATTRIBUTES = frozenset(
         "get_annotations",
         "signature",
         "getfullargspec",
+        "from_callable",
     }
 )
+_ANNOTATION_READERS = frozenset(
+    {
+        "get_type_hints",
+        "get_annotations",
+        "signature",
+        "getfullargspec",
+        "from_callable",
+    }
+)
+_ATTRIBUTE_OPERATIONS = frozenset({"getattr", "hasattr", "setattr", "delattr"})
 #: Dunder attributes a measure may read; any other is introspection.
 _ALLOWED_DUNDER_ATTRIBUTES = frozenset({"__init__", "__name__"})
 #: Dunder names a measure may read: its module's name and file.
@@ -1418,11 +1478,11 @@ def _introspection_problem(tree: ast.Module) -> Optional[str]:
     - ``id``, ``operator.is_``/``is_not``, ``globals``, ``vars``, ``locals``,
       ``exec``, ``eval``, ``compile``, ``__import__`` and ``breakpoint`` are
       refused by name, however imported, and so is importing ``builtins``.
+    - Annotation readers are refused: annotation values are not bound.
     - Dunder attributes other than ``__init__`` and ``__name__``, and dunder
       names other than ``__name__`` and ``__file__``, are introspection.
-
-    Code that builds such names from strings (``getattr(f, "__" + "doc__")``)
-    is beyond this check: it is not code an honest author writes by mistake.
+      Attribute operations must name a literal string, so the same check
+      applies when the attribute is accessed through ``getattr`` and friends.
     """
 
     for name, line in _bound_names(tree):
@@ -1436,7 +1496,23 @@ def _introspection_problem(tree: ast.Module) -> Optional[str]:
             )
     for node in ast.walk(tree):
         line = getattr(node, "lineno", 0)
-        if isinstance(node, ast.Compare):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in _ATTRIBUTE_OPERATIONS
+        ):
+            name = node.args[1] if len(node.args) > 1 else None
+            if not (isinstance(name, ast.Constant) and type(name.value) is str):
+                return (
+                    f"line {line} uses {node.func.id} with a non-literal attribute "
+                    "name, so introspection cannot be checked"
+                )
+            if _is_dunder(name.value) and name.value not in _ALLOWED_DUNDER_ATTRIBUTES:
+                return (
+                    f"line {line} uses {node.func.id} with {name.value}, "
+                    "which is introspection"
+                )
+        elif isinstance(node, ast.Compare):
             lefts = [node.left, *node.comparators[:-1]]
             for left, op, right in zip(lefts, node.ops, node.comparators):
                 if isinstance(op, (ast.Is, ast.IsNot)) and not (
@@ -1449,7 +1525,7 @@ def _introspection_problem(tree: ast.Module) -> Optional[str]:
                     )
         elif isinstance(node, ast.Name):
             if node.id in _REFUSED_NAMES:
-                return f"line {line} uses {node.id}, which {_REFUSED_WHY}"
+                return f"line {line} uses {node.id}, which {_refused_why(node.id)}"
             if (
                 isinstance(node.ctx, ast.Load)
                 and _is_dunder(node.id)
@@ -1458,7 +1534,7 @@ def _introspection_problem(tree: ast.Module) -> Optional[str]:
                 return f"line {line} reads {node.id}, which is introspection"
         elif isinstance(node, ast.Attribute):
             if node.attr in _REFUSED_ATTRIBUTES:
-                return f"line {line} uses .{node.attr}, which {_REFUSED_WHY}"
+                return f"line {line} uses .{node.attr}, which {_refused_why(node.attr)}"
             if _is_dunder(node.attr) and node.attr not in _ALLOWED_DUNDER_ATTRIBUTES:
                 return f"line {line} reads .{node.attr}, which is introspection"
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
@@ -1471,7 +1547,7 @@ def _introspection_problem(tree: ast.Module) -> Optional[str]:
                 return f"line {line} imports builtins"
             for alias in node.names:
                 if alias.name in _REFUSED_NAMES:
-                    return f"line {line} imports {alias.name}, which {_REFUSED_WHY}"
+                    return f"line {line} imports {alias.name}, which {_refused_why(alias.name)}"
     return None
 
 
@@ -1479,6 +1555,12 @@ _REFUSED_WHY = (
     "reaches module state, runs code or compares identities without naming "
     "what it reads"
 )
+
+
+def _refused_why(name: str) -> str:
+    if name in _ANNOTATION_READERS:
+        return "reads annotation values the digest does not bind"
+    return _REFUSED_WHY
 
 
 def _plain_identity_operand(node: ast.expr) -> bool:
@@ -1619,7 +1701,7 @@ def _function_state_problem(
     its code, so each must still be what the ``def`` in the source made. Any
     other attribute (``helper.amount = 240``) is state the digest does not
     bind. Annotation values are not compared, only which names carry one:
-    reading them is introspection, which the module may not do.
+    annotation readers and introspection that exposes those values are refused.
     """
 
     code = function.__code__
@@ -1943,8 +2025,20 @@ def scenario_reform_identity(
         raise ReceiptError("Scenario.parameter_changes must be a mapping or None.")
     if modifier is not None and not callable(modifier):
         raise ReceiptError("Scenario.simulation_modifier must be callable or None.")
+
+    def checked(identity: ReformIdentity) -> ReformIdentity:
+        revision = dict(code_revision) if code_revision is not None else None
+        object.__setattr__(
+            identity,
+            "_recompute_identity",
+            lambda: scenario_reform_identity(
+                scenario, code_revision=revision, name=name
+            ),
+        )
+        return identity
+
     if not parameter_changes and modifier is None:
-        return ReformIdentity(kind="current_law", name=name)
+        return checked(ReformIdentity(kind="current_law", name=name))
     payload: dict[str, Any] = {
         "applied_before_data_load": applied_before_data_load,
         "parameter_changes": strict_json_value(parameter_changes)
@@ -1971,13 +2065,85 @@ def scenario_reform_identity(
     digest = _payload_sha256(
         {"representation": "policyengine-uk.scenario/v1", "payload": payload}
     )
-    return ReformIdentity(
-        kind="reform",
-        representation="policyengine-uk.scenario/v1",
-        reform_sha256=digest,
-        binding=binding,
-        name=name,
+    return checked(
+        ReformIdentity(
+            kind="reform",
+            representation="policyengine-uk.scenario/v1",
+            reform_sha256=digest,
+            binding=binding,
+            name=name,
+        )
     )
+
+
+def _distribution_metadata_directory(name: str) -> Path:
+    """Locate dist-info through the distribution's public metadata API."""
+
+    distribution = metadata.distribution(name)
+    read_text = getattr(distribution, "read_text", None)
+    if read_text is None:
+        paths = (str(path) for path in distribution.files or ())
+    else:
+        # Scan RECORD strings without allocating a PackagePath per installed
+        # file; only the metadata entry needs to be resolved.
+        paths = (
+            row[0] for row in csv.reader(io.StringIO(read_text("RECORD") or "")) if row
+        )
+    directories = {
+        Path(distribution.locate_file(path)).parent
+        for path in paths
+        if path.endswith(".dist-info/METADATA")
+    }
+    if len(directories) == 1:
+        return directories.pop()
+
+    # A missing or empty RECORD leaves no file listing. Match the metadata
+    # under locate_file's public root, refusing an ambiguous location.
+    root = Path(distribution.locate_file(""))
+    directories = set()
+    for directory in root.glob("*.dist-info"):
+        candidate = metadata.Distribution.at(directory)
+        if (
+            normalize_distribution_name(candidate.metadata.get("Name", ""))
+            == normalize_distribution_name(name)
+            and candidate.version == distribution.version
+        ):
+            directories.add(directory)
+    if len(directories) == 1:
+        return directories.pop()
+    raise ReceiptError(
+        f"Cannot locate the installed metadata for {name}; restart the process "
+        "and run again after checking the installation."
+    )
+
+
+def _refuse_package_changed_after_process_start(name: str) -> None:
+    """Refuse metadata installed or changed during this process's lifetime."""
+
+    try:
+        directory = _distribution_metadata_directory(name)
+        paths = [directory]
+        paths.extend(
+            directory / filename
+            for filename in ("METADATA", "RECORD", "INSTALLER", "direct_url.json")
+            if (directory / filename).exists()
+        )
+        installed_at = max(
+            max(stat.st_mtime, stat.st_ctime)
+            for stat in (path.stat() for path in paths)
+        )
+        process_started_at = psutil.Process().create_time()
+    except (OSError, TypeError, ValueError, PackageNotFoundError, psutil.Error) as exc:
+        raise ReceiptError(
+            f"Cannot locate or read the installed metadata for {name}; restart "
+            "the process and run again after checking the installation."
+        ) from exc
+    if installed_at > process_started_at:
+        raise ReceiptError(
+            f"{name} was installed or changed after this process started, so the "
+            "installed version may not be the code that ran; restart the "
+            "process and run again."
+        )
 
 
 def installed_package_identity(
@@ -1998,6 +2164,8 @@ def installed_package_identity(
 
     normalized = normalize_distribution_name(name)
     version = metadata.version(name)
+    direct_url = _read_direct_url(name)
+    origin = _install_origin(direct_url)
     if wheel_path is not None:
         from policyengine.provenance.wheels import verify_installed_against_wheel
 
@@ -2020,31 +2188,93 @@ def installed_package_identity(
             version=version,
             wheel_sha256=evidence["wheel_sha256"],
             wheel_sha256_evidence="installed_record_verified",
+            install_origin=origin,
         )
-    archive_hash = _installer_archive_sha256(name)
+    archive_hash = _installer_archive_sha256(direct_url)
     return PackageIdentity(
         name=normalized,
         version=version,
         wheel_sha256=archive_hash,
         wheel_sha256_evidence="installer_archive_hash" if archive_hash else None,
+        install_origin=origin,
     )
 
 
-def _installer_archive_sha256(name: str) -> Optional[str]:
+def _read_direct_url(name: str) -> Optional[Mapping[str, Any]]:
+    """Read an install's PEP 610 origin, refusing malformed metadata."""
+
+    try:
+        text = metadata.distribution(name).read_text("direct_url.json")
+    except OSError as exc:
+        raise ReceiptError(f"{name} direct_url.json cannot be read: {exc}") from exc
+    if text is None:
+        return None
+    try:
+        direct_url = json.loads(text)
+    except ValueError as exc:
+        raise ReceiptError(f"{name} direct_url.json is malformed: {exc}") from exc
+    if (
+        not isinstance(direct_url, Mapping)
+        or not isinstance(direct_url.get("url"), str)
+        or not direct_url["url"]
+        or sum(key in direct_url for key in ("archive_info", "dir_info", "vcs_info"))
+        != 1
+        or any(
+            not isinstance(direct_url[key], Mapping)
+            for key in ("archive_info", "dir_info", "vcs_info")
+            if key in direct_url
+        )
+        or (
+            "editable" in direct_url.get("dir_info", {})
+            and not isinstance(direct_url["dir_info"]["editable"], bool)
+        )
+    ):
+        raise ReceiptError(
+            f"{name} direct_url.json is malformed; cannot identify its install origin."
+        )
+    archive = direct_url.get("archive_info", {})
+    if ("hash" in archive and not isinstance(archive["hash"], str)) or (
+        "hashes" in archive
+        and (
+            not isinstance(archive["hashes"], Mapping)
+            or any(not isinstance(value, str) for value in archive["hashes"].values())
+        )
+    ):
+        raise ReceiptError(
+            f"{name} direct_url.json is malformed; invalid archive hashes."
+        )
+    return direct_url
+
+
+def _install_origin(
+    direct_url: Optional[Mapping[str, Any]],
+) -> Optional[Literal["archive", "directory", "editable", "vcs"]]:
+    if direct_url is None:
+        return None
+    if "dir_info" in direct_url:
+        return (
+            "editable" if direct_url["dir_info"].get("editable", False) else "directory"
+        )
+    return "vcs" if "vcs_info" in direct_url else "archive"
+
+
+def _package_can_be_certified(package: PackageIdentity) -> bool:
+    return (
+        package.install_origin in (None, "archive")
+        or package.wheel_sha256_evidence == "installed_record_verified"
+    )
+
+
+def _installer_archive_sha256(direct_url: Optional[Mapping[str, Any]]) -> Optional[str]:
     """The SHA-256 of the wheel a PEP 610 direct URL install came from, if any.
 
     Only a ``.whl`` URL qualifies: a source archive's hash does not describe
     the installed files, so it is never recorded as ``wheel_sha256``.
     """
 
-    try:
-        text = metadata.distribution(name).read_text("direct_url.json")
-    except PackageNotFoundError:
-        return None
-    if not text:
+    if direct_url is None:
         return None
     try:
-        direct_url = json.loads(text)
         url_path = urlparse(str(direct_url.get("url") or "")).path
         archive = direct_url.get("archive_info") or {}
     except (ValueError, AttributeError):
@@ -2310,6 +2540,8 @@ def _build(
     ci_run_url: Optional[str],
 ) -> ExecutionReceipt:
     record = bundle["data_releases"][country_id]
+    reform._recheck()
+    baseline._recheck()
     wheels = {normalize_distribution_name(k): Path(v) for k, v in wheel_paths.items()}
 
     def identity(name: str) -> dict[str, Any]:
@@ -2324,6 +2556,8 @@ def _build(
     core = CoreIdentity(**identity(UK_PACKAGES["core"]))
     loaded = loaded_versions()
     for installed in (wrapper, model, core):
+        # An absent record is safe when the install predates this process:
+        # that installed version has been unchanged throughout the process.
         recorded = loaded.get(installed.name)
         if recorded is not None and recorded != installed.version:
             raise ReceiptError(
@@ -2331,6 +2565,7 @@ def _build(
                 f"{installed.version} is installed now, so the installed version "
                 "is not the code that ran; restart the process and run again."
             )
+        _refuse_package_changed_after_process_start(installed.name)
 
     dataset_name = dataset or record["default_dataset"]
     actual_sha256 = sha256_file(dataset_path)
@@ -2347,6 +2582,9 @@ def _build(
         and dataset_name == certified_artifact.get("dataset")
         and fields["bundle_version"] == wrapper.version
         and record.get("policyengine_version", wrapper.version) == wrapper.version
+        and all(
+            _package_can_be_certified(package) for package in (wrapper, model, core)
+        )
     ):
         if not fields["compatibility_basis"]:
             raise ReceiptError(
@@ -2416,6 +2654,12 @@ def verify_certificate(
     if not isinstance(record, Mapping):
         return [f"the bundle has no {receipt.country_id} data release"]
     problems = []
+    for package in (receipt.wrapper, receipt.model, receipt.core):
+        if not _package_can_be_certified(package):
+            problems.append(
+                f"{package.name} installed from {package.install_origin} lacks "
+                "installed_record_verified wheel evidence"
+            )
     expected = _certificate_fields(receipt.country_id, record, bundle)
     claimed = certificate.model_dump(include=set(CertificateIdentity.IDENTITY_FIELDS))
     for field in CertificateIdentity.IDENTITY_FIELDS:

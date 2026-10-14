@@ -8,15 +8,17 @@ Schema v1 covers UK results and is defined by `policyengine.provenance.receipt.E
 
 | Field | Contents |
 |---|---|
-| `wrapper`, `model`, `core` | The `policyengine`, `policyengine-uk` and `policyengine-core` versions that actually ran, read from the installed distributions rather than from the bundle manifest. `wheel_sha256` appears only when the receipt builder verified it. One way is `wheel_paths=` (evidence `installed_record_verified`): the installed files, and any bytecode cache the interpreter would load instead of a source file, are checked against that wheel's RECORD. The other is the installer's recorded archive hash (`installer_archive_hash`), taken only when the install came from a `.whl` URL; a source archive's hash is never recorded as a wheel hash. |
+| `wrapper`, `model`, `core` | The `policyengine`, `policyengine-uk` and `policyengine-core` versions that actually ran, read from the installed distributions rather than from the bundle manifest. `install_origin` records a PEP 610 direct URL as `archive`, `directory`, `editable` or `vcs`; it is absent for an ordinary index install with no `direct_url.json`. `wheel_sha256` appears only when the receipt builder verified it. One way is `wheel_paths=` (evidence `installed_record_verified`): the installed files, and any bytecode cache the interpreter would load instead of a source file, are checked against that wheel's RECORD. The other is the installer's recorded archive hash (`installer_archive_hash`), taken only when the install came from a `.whl` URL; a source archive's hash is never recorded as a wheel hash. |
 | `data` | The data release and build, and the model version the data was built with (`build_model_version`, distinct from `model.version`). Also the dataset's logical name, URI, revision and the SHA-256 of the bytes that were simulated. The dataset is resolved exactly as `materialize_dataset` resolves it (overlays, per-dataset repository, package and revision, and the release manifest revision when an artifact has none of its own), and the bytes must be the ones the bundle pins for it: a receipt never gives an artifact's name to other bytes. |
-| `certification_status`, `certificate` | `certified` only when the bundle certifies all of: the installed model and core versions, that dataset name and those bytes, and the running `policyengine` version. Otherwise the receipt says `uncertified` and carries no certificate. `certificate_source` records whether the builder read the certificate from the installed bundle (`packaged`) or from a manifest the caller passed (`caller_supplied`). It is the producer's statement, not evidence: trust a certificate only after `verify_certificate` (below). With the packaged bundle, the composition fingerprint of its TRACE TRO is recorded as well. |
+| `certification_status`, `certificate` | `certified` only when the bundle certifies all of: the installed model and core versions, that dataset name and those bytes, and the running `policyengine` version. Each package must also have an absent or `archive` install origin, or `installed_record_verified` wheel evidence. A directory, editable or VCS install without that evidence produces an `uncertified` receipt, which carries no certificate. `certificate_source` records whether the builder read the certificate from the installed bundle (`packaged`) or from a manifest the caller passed (`caller_supplied`). It is the producer's statement, not evidence: trust a certificate only after `verify_certificate` (below). With the packaged bundle, the composition fingerprint of its TRACE TRO is recorded as well. |
 | `reform`, `baseline` | Both are required. Each is `current_law` or a digest of the reform bound to its representation (see below). |
 | `fiscal_year` | What a year label means: year 2027 is the fiscal year from 6 April 2027 to 5 April 2028, shown as `2027-28`. v1 allows only this convention. |
 | `years` | The reported years, sorted and unique. |
 | `supported_years` | The years the installed model projects the dataset to, from the dataset's own year (policyengine-uk's `extend_single_year_dataset`, without running a formula; the same rule as the qualification `supported_years` gate). A reported year outside them is unsupported: policyengine-core fills it by carrying or uprating the latest inputs, so its results are not evidence. `unsupported_years` lists them. The certified 1.58.0 dataset projects to 2024–2030, so a 2031-32 figure on it is unsupported. |
 | `outputs_sha256` | Optional digest of the output payload the receipt binds. |
 | `runtime` | Python version, platform and CI run URL. It is for diagnosis and is part of no digest. |
+
+Malformed `direct_url.json` is refused because the builder cannot determine the package's install origin.
 
 ## Building one
 
@@ -55,6 +57,8 @@ A scenario with a module-level `simulation_modifier` needs `code_revision={"repo
 
 None of these depends on where the code is checked out or which Python version runs it, so CI, a laptop and the server compute the same digest for the same code.
 
+Build the receipt after the run. An identity returned by `scenario_reform_identity` keeps a private handle to the same scenario and code revision. Both receipt builders recompute `reform` and `baseline` identities with handles, and refuse if recomputing is refused or an identity member differs. The handle is excluded from equality, serialization, schemas and digests. A serialized identity loaded back has no handle and is not re-checked; its producer must ensure it describes the run. These checks take snapshots at identity time and receipt build time, so they cannot describe later changes.
+
 **The modifier's module.** A digest can only name what the module's source fixes, so the module holding a bound modifier must have a shape whose state that source determines. At module level it may hold only:
 - docstrings and `pass`;
 - imports;
@@ -68,17 +72,24 @@ Each name is bound once. Defaults hold no `:=`, lambda, comprehension, `await` o
 - values computed from the environment, a file or the clock;
 - decorators, class definitions, and code run at import.
 
+The accepted module shape also refuses these constructs:
+- arithmetic on literals, such as `WEEKLY = 520 / 52` or `MILLION = 10 ** 6`: use the computed literal (`WEEKLY = 10.0`, `MILLION = 1000000`), or compute the value inside a function;
+- `if TYPE_CHECKING:` blocks: put type-only imports in a `.pyi` file or inside a function;
+- `type` aliases, such as `type Rate = float`: use the concrete type in annotations, or put the alias in a `.pyi` file;
+- starred annotations such as `*args: *Ts`: use a concrete argument annotation or `ParamSpec`'s `P.args` and `P.kwargs`.
+
 Anywhere in the module, code may not:
 - tell equal values apart by identity: `is` is allowed only against `None`, `True`, `False`, `...` or `type(...)`, and `type` may not be rebound. The compiler may make equal immutable constants one object, and a digest of values cannot tell one object from two equal ones.
 - use `id`, `operator.is_` or `is_not`, `globals`, `vars`, `locals`, `exec`, `eval`, `compile`, `__import__` or `breakpoint`, however imported, or import `builtins`;
-- read annotation values through `typing.get_type_hints`, `inspect.signature`, `inspect.getfullargspec` or `get_annotations`, because the digest binds which names carry annotations, not their values.
+- read annotation values through `typing.get_type_hints`, `inspect.signature`, `inspect.getfullargspec`, `get_annotations` or `from_callable`, because the digest binds which names carry annotations, not their values.
 - declare a name `global`.
 - read dunder attributes other than `__init__` and `__name__`, or dunder names other than `__name__` and `__file__`. Reading a function's or module's own metadata is introspection.
+- use `getattr`, `hasattr`, `setattr` or `delattr` with a non-literal attribute name, or a literal dunder other than `__init__` and `__name__`.
 
 Put measure values in literal constants or in default arguments.
 
-**What was imported.** A digest must only name code that ran, so before binding, the module's source as read now is compiled and checked against what was imported, ignoring file names and line numbers:
-- **Versions.** The policyengine, policyengine-uk and policyengine-core versions recorded when policyengine and the UK model loaded in this process must still be the installed ones. Installing another version mid-session (in a notebook, say) changes the metadata but not the code already imported, so the receipt would name code that did not run; it is refused, and the fix is to restart the process.
+**What was imported.** A digest must only name code that ran, so at identity time, and again when a receipt is built with that identity's private handle, the module's source as read now is compiled and checked against what was imported, ignoring file names and line numbers:
+- **Versions.** At receipt build time, any recorded version of policyengine, policyengine-uk or policyengine-core must still match its installed version. Independently, each package's distribution metadata must not have been written after this process started: the builder compares the latest modification or change time of its `.dist-info` directory and existing `METADATA`, `RECORD`, `INSTALLER` and `direct_url.json` files against `psutil.Process().create_time()`. Metadata written after process start is refused regardless of import order or whether a version was recorded; an unavailable metadata location is refused too. Restart the process and run again. This also refuses installing a package and then importing it in the same process, such as a notebook `pip install` without a restart, even when that import loaded the new code.
 - **Functions.** The source is compiled as a whole, so each function compiles in its module's context, imports included. The modifier and every other function defined in that file must use the module's own globals and match that code, nested code and constants included. Constants are compared by exact type, by IEEE 754 bytes (so a NaN's sign counts) and by how they share objects. Annotation functions that Python 3.14 compiles (`__annotate__`) are the compiler's, not the module's, and a generic function (`def helper[T](...)`, Python 3.12+) is checked through the wrapper the compiler makes to bind its type parameters.
 - **Function names.** A `def` name must still be bound to that function, not to another function of the same file or any other object.
 - **Function metadata.** Each function's name, qualified name and docstring must still be what its `def` made, compared as the compiler stores them. It must still annotate the names its source annotates, use the builtins module, and carry no other attributes (`helper.amount = 240` is state).
@@ -88,7 +99,7 @@ Put measure values in literal constants or in default arguments.
 - **Imports.** Every imported name must still be what its import binds: `from math import floor` must still be `math.floor`, and `import math` the loaded `math` module. It must hold a module or a callable other than a `functools.partial`; `from __future__` features are the exception. An imported value such as `from params import AMOUNT` is refused even when unused, since code can read a name without naming it. For the same reason, a star import of a module that exports data values is refused; import the callables you use by name. Each name a star import provides must be that module's own.
 - **No other names.** The namespace may hold no name the source does not bind, other than the dunders the import system and annotations set. The module's docstring and builtins must be what importing it made. A name set on the module after import is refused however the code would read it.
 
-A measures file edited after import, or a constant, default, import or function reassigned while the process runs, is therefore refused rather than misdescribed. The check does not cover state in other modules (such as `params.PAYMENT` read through `import params`), or data the code reads at run time. Code in other modules is bound by `code_revision` or the installed versions, and `code_revision` names the code, not the process. Receipts are claims by their producer: these checks protect an honest producer against mistakes, not a reader against a producer who builds code to mislead. Code that assembles names from strings (`getattr(f, "__" + "doc__")`), or that reaches into frames, the garbage collector or other modules' namespaces, is beyond them.
+A measures file edited after import, or a constant, default, import or function reassigned before either snapshot, is refused. If it changes after identity time, a receipt built with the identity's handle refuses the changed modifier, naming the difference or the reason it can no longer be bound. The check does not cover state in other modules (such as `params.PAYMENT` read through `import params`), or data the code reads at run time. Code in other modules is bound by `code_revision` or the installed versions, and `code_revision` names the code, not the process. Receipts are claims by their producer: these checks protect an honest producer against mistakes, not a reader against a producer who builds code to mislead. Code that reaches into frames, the garbage collector or other modules' namespaces is beyond them.
 
 Some modifiers are refused outright because their behaviour depends on values the digest cannot bind: closures, lambdas, nested functions, methods, `functools.partial` and builtins. Anything that is not a `Scenario` is refused too, rather than read as current law.
 
@@ -139,6 +150,7 @@ Consumers that validate with the JSON Schema rather than the Python model must a
 - a certificate is present exactly when the receipt is certified, and it names the receipt's country, model and core versions, dataset digest and `policyengine` version;
 - a `current_law` reform has no digest, while any other reform has both a representation and a digest;
 - a wheel digest always comes with its evidence;
+- a certified receipt has no `directory`, `editable` or `vcs` package without `installed_record_verified` wheel evidence;
 - a certificate is trusted only after it, and the receipt's `data`, have been checked against the published manifest it names (`verify_certificate`).
 
 The schema itself fixes the package names (`policyengine`, `policyengine-uk`, `policyengine-core`) and the UK fiscal-year convention, which starts on 6 April.

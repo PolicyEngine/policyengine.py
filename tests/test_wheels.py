@@ -147,6 +147,36 @@ def test_untouched_install_verifies(tmp_path):
     assert evidence["wheel_sha256"] == hashlib.sha256(wheel.read_bytes()).hexdigest()
 
 
+@pytest.mark.parametrize("origin", ["directory", "editable", "vcs"])
+def test_verified_wheel_allows_certification_of_a_direct_install(
+    tmp_path, monkeypatch, origin
+):
+    from policyengine.provenance import receipt
+
+    wheel, site, record = build_wheel(tmp_path)
+    fake = fake_metadata(site, record)
+    distribution = fake.distribution("policyengine-uk")
+    direct_url = {"url": "file:///source"}
+    if origin == "vcs":
+        direct_url["vcs_info"] = {"vcs": "git", "commit_id": "a" * 40}
+    else:
+        direct_url["dir_info"] = {"editable": origin == "editable"}
+    import json
+
+    distribution.read_text = lambda name: json.dumps(direct_url)
+    fake.distribution = lambda name: distribution
+    fake.version = lambda name: "2.126.8"
+    monkeypatch.setattr(receipt, "metadata", fake)
+    unverified = receipt.installed_package_identity("policyengine-uk")
+    assert unverified.install_origin == origin
+    assert not receipt._package_can_be_certified(unverified)
+    verified = receipt.installed_package_identity("policyengine-uk", wheel_path=wheel)
+    assert verified.install_origin == origin
+    assert verified.wheel_sha256_evidence == "installed_record_verified"
+    assert verified.wheel_sha256 == hashlib.sha256(wheel.read_bytes()).hexdigest()
+    assert receipt._package_can_be_certified(verified)
+
+
 def test_windows_launchers_are_recognised(tmp_path):
     launchers = {
         "../../Scripts/policyengine-uk.exe": b"MZ",

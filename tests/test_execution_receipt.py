@@ -35,6 +35,8 @@ import importlib.util
 import inspect
 import json
 import linecache
+import os
+import subprocess
 import sys
 from importlib import metadata
 from pathlib import Path
@@ -138,7 +140,14 @@ def _build(dataset_file, bundle=None, **kwargs):
 
 
 @pytest.fixture
-def dataset_file(tmp_path):
+def index_installs(monkeypatch):
+    """Certification fixtures simulate index installs, without wheel evidence."""
+
+    monkeypatch.setattr(receipt_module, "_read_direct_url", lambda name: None)
+
+
+@pytest.fixture
+def dataset_file(tmp_path, index_installs):
     path = tmp_path / "enhanced_frs_2024_25.h5"
     path.write_bytes(b"certified dataset bytes")
     return path
@@ -155,6 +164,10 @@ def certified_receipt(dataset_file):
 def test_certified_when_certificate_covers_what_ran(certified_receipt, dataset_file):
     receipt = certified_receipt
     assert receipt.certification_status == "certified"
+    assert all(
+        package.install_origin is None
+        for package in (receipt.wrapper, receipt.model, receipt.core)
+    )
     assert (
         receipt.model.version
         == receipt.certificate.certified_for_model_version
@@ -320,6 +333,7 @@ def test_every_packaged_dataset_resolves_as_the_materializer_resolves_it():
         assert identity.data_package == spec.data_package_name
 
 
+@pytest.mark.usefixtures("index_installs")
 def test_packaged_bundle_certificate_records_its_source_and_tro(tmp_path, monkeypatch):
     """With the installed bundle, the certificate says packaged and names the TRO."""
 
@@ -509,6 +523,7 @@ def test_a_certifying_bundle_must_state_its_basis(dataset_file):
         st.sampled_from(sorted(FORGERIES)), min_size=1, max_size=4, unique=True
     )
 )
+@pytest.mark.usefixtures("index_installs")
 def test_every_consistent_forgery_is_reported(tmp_path_factory, names):
     dataset = tmp_path_factory.mktemp("forgery") / "data.h5"
     dataset.write_bytes(b"forgery bytes")
@@ -637,10 +652,8 @@ def test_installer_archive_hash_is_read_from_direct_url(monkeypatch):
         {"url": "file:///w-1.tar.gz", "archive_info": {"hashes": {"sha256": "b" * 64}}},
         {"url": "https://x/w-1.zip", "archive_info": {"hashes": {"sha256": "b" * 64}}},
         {"url": "file:///src/w", "dir_info": {"editable": True}},
-        {"archive_info": {"hashes": {"sha256": "b" * 64}}},
-        ["not", "an", "object"],
     ],
-    ids=["sdist", "zip", "directory", "no-url", "not-an-object"],
+    ids=["sdist", "zip", "directory"],
 )
 def test_only_a_wheel_archive_hash_is_recorded(monkeypatch, direct_url):
     """Round-4 review M6: a source archive's hash is not a wheel hash."""
@@ -660,6 +673,140 @@ def test_callers_cannot_supply_the_versions_a_receipt_records(dataset_file):
 def test_hash_without_evidence_is_refused():
     with pytest.raises(ValidationError):
         receipt_module.PackageIdentity(name="x", version="1", wheel_sha256="c" * 64)
+
+
+@pytest.mark.parametrize("package", list(receipt_module.UK_PACKAGES.values()))
+@pytest.mark.parametrize("origin", ["directory", "editable", "vcs", "archive"])
+def test_install_origin_controls_certification(
+    dataset_file, monkeypatch, package, origin
+):
+    direct_url = {"url": "file:///package"}
+    if origin in ("directory", "editable"):
+        direct_url["dir_info"] = {"editable": origin == "editable"}
+    elif origin == "vcs":
+        direct_url["vcs_info"] = {"vcs": "git", "commit_id": "a" * 40}
+    else:
+        direct_url["archive_info"] = {}
+    monkeypatch.setattr(
+        receipt_module,
+        "_read_direct_url",
+        lambda name: direct_url if name == package else None,
+    )
+    receipt = _build(dataset_file)
+    identity = next(
+        item
+        for item in (receipt.wrapper, receipt.model, receipt.core)
+        if item.name == package
+    )
+    assert identity.install_origin == origin
+    assert identity.wheel_sha256 is None
+    assert receipt.certification_status == (
+        "certified" if origin == "archive" else "uncertified"
+    )
+    assert (receipt.certificate is not None) == (origin == "archive")
+
+
+def test_real_editable_install_is_recorded_and_uncertified(tmp_path):
+    identity = installed_package_identity("policyengine")
+    assert identity.install_origin == "editable"
+    path = tmp_path / "data.h5"
+    path.write_bytes(b"dataset bytes")
+    receipt = _build(path)
+    assert receipt.wrapper.install_origin == "editable"
+    assert receipt.certification_status == "uncertified"
+    assert receipt.certificate is None
+    assert verify_certificate(receipt, _bundle_for(path.read_bytes())) == [
+        "the receipt is uncertified"
+    ]
+
+
+@pytest.mark.parametrize("role", ["wrapper", "model", "core"])
+@pytest.mark.parametrize("origin", ["directory", "editable", "vcs"])
+@pytest.mark.parametrize("archive_hash", [False, True])
+def test_certified_model_and_verification_refuse_unverified_origins(
+    certified_receipt, dataset_file, role, origin, archive_hash
+):
+    payload = certified_receipt.model_dump()
+    payload[role]["install_origin"] = origin
+    if archive_hash:
+        payload[role].update(
+            wheel_sha256="b" * 64, wheel_sha256_evidence="installer_archive_hash"
+        )
+    with pytest.raises(ValidationError, match="installed_record_verified"):
+        ExecutionReceipt.model_validate(payload)
+    package = type(getattr(certified_receipt, role)).model_validate(payload[role])
+    forged = certified_receipt.model_copy(update={role: package})
+    problems = verify_certificate(forged, _bundle_for(dataset_file.read_bytes()))
+    assert len(problems) == 1
+    assert package.name in problems[0] and "installed_record_verified" in problems[0]
+
+
+@pytest.mark.parametrize("role", ["wrapper", "model", "core"])
+@pytest.mark.parametrize("origin", ["directory", "editable", "vcs"])
+def test_verified_origin_can_be_certified(dataset_file, monkeypatch, role, origin):
+    direct_url = {"url": "file:///source"}
+    if origin == "vcs":
+        direct_url["vcs_info"] = {"vcs": "git", "commit_id": "a" * 40}
+    else:
+        direct_url["dir_info"] = {"editable": origin == "editable"}
+    package = receipt_module.UK_PACKAGES[role]
+    monkeypatch.setattr(
+        receipt_module,
+        "_read_direct_url",
+        lambda name: direct_url if name == package else None,
+    )
+    monkeypatch.setattr(
+        "policyengine.provenance.wheels.verify_installed_against_wheel",
+        lambda name, wheel_path, metadata: {"wheel_sha256": "a" * 64, "problems": []},
+    )
+    receipt = _build(dataset_file, wheel_paths={package: Path("package.whl")})
+    assert getattr(receipt, role).install_origin == origin
+    assert receipt.certification_status == "certified"
+    assert verify_certificate(receipt, _bundle_for(dataset_file.read_bytes())) == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "",
+        "{",
+        "[]",
+        "null",
+        "{}",
+        '{"url": "file:///x"}',
+        '{"archive_info": {}}',
+        '{"url": "x", "dir_info": null}',
+        '{"url": "x", "dir_info": {"editable": "yes"}}',
+        '{"url": "x", "dir_info": {}, "archive_info": {}}',
+        '{"url": "", "archive_info": {}}',
+        '{"url": "file:///source.zip", "archive_info": {"hashes": 42}}',
+        '{"url": "file:///source.zip", "archive_info": {"hash": true}}',
+        '{"url": "file:///package.whl", "archive_info": {"hashes": {"sha256": 42}}}',
+    ],
+)
+def test_malformed_direct_url_is_refused(monkeypatch, text):
+    monkeypatch.setattr(
+        receipt_module.metadata,
+        "distribution",
+        lambda name: SimpleNamespace(
+            version=INSTALLED_WRAPPER, read_text=lambda filename: text
+        ),
+    )
+    with pytest.raises(ReceiptError, match="policyengine.*direct_url.json.*malformed"):
+        installed_package_identity("policyengine")
+
+
+def test_unreadable_direct_url_is_refused(monkeypatch):
+    def read_text(filename):
+        raise OSError("unreadable")
+
+    monkeypatch.setattr(
+        receipt_module.metadata,
+        "distribution",
+        lambda name: SimpleNamespace(version=INSTALLED_WRAPPER, read_text=read_text),
+    )
+    with pytest.raises(ReceiptError, match="direct_url.json cannot be read"):
+        installed_package_identity("policyengine")
 
 
 # --- Digests ----------------------------------------------------------------------
@@ -692,6 +839,7 @@ def test_null_and_omitted_fields_digest_identically(certified_receipt):
     assert content_sha256([None, {"a": None}]) == canonical_sha256([None, {}])
 
 
+@pytest.mark.usefixtures("index_installs")
 def test_execution_identity_ignores_how_the_builder_was_called(tmp_path, monkeypatch):
     from policyengine.provenance import certification
 
@@ -1112,6 +1260,148 @@ def _measure_identity(module):
     return scenario_reform_identity(
         _scenario(simulation_modifier=module.raise_rate), code_revision=REVISION
     )
+
+
+@pytest.mark.parametrize("role", ["reform", "baseline"])
+@pytest.mark.parametrize("managed", [False, True])
+@pytest.mark.parametrize("change", ["reassign", "memo"])
+def test_builder_rechecks_modifier_after_the_run(
+    dataset_file, tmp_path, role, managed, change
+):
+    name = "w4_receipt_r10_recheck"
+    source = (
+        "CACHE = {}\n\n\ndef raise_rate(simulation):\n"
+        "    CACHE[2027] = 0.30\n    simulation.rate = CACHE[2027]\n"
+        if change == "memo"
+        else MEASURE_SOURCE.format(rate=0.21)
+    )
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        identity = _measure_identity(module)
+        if change == "reassign":
+            module.RATE = 0.30
+        simulation = SimpleNamespace()
+        module.raise_rate(simulation)
+        assert simulation.rate == 0.30
+        identities = {"reform": CURRENT_LAW, "baseline": CURRENT_LAW, role: identity}
+        with pytest.raises(
+            ReceiptError, match="modifier changed after its identity was computed"
+        ) as refused:
+            if managed:
+                bundle = _bundle_for(dataset_file.read_bytes())
+                build_execution_receipt_for_microsimulation(
+                    _managed_simulation(dataset_file, bundle),
+                    years=[2026],
+                    bundle=bundle,
+                    **identities,
+                )
+            else:
+                _build(dataset_file, **identities)
+        assert ("CACHE" if change == "memo" else "RATE") in str(refused.value)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_unchanged_scenario_still_builds_after_a_run(dataset_file):
+    scenario = _scenario(simulation_modifier=receipt_modifiers.raise_basic_rate_to)
+    identity = scenario_reform_identity(scenario, code_revision=REVISION)
+    simulation = SimpleNamespace()
+    scenario.simulation_modifier(simulation)
+    assert simulation.rate == 0.21
+    receipt = _build(dataset_file, reform=identity, baseline=identity)
+    assert receipt.reform == receipt.baseline == identity
+    loaded = ReformIdentity.model_validate_json(identity.model_dump_json())
+    from_loaded = _build(dataset_file, reform=loaded, baseline=loaded)
+    assert receipt == from_loaded
+    assert receipt.receipt_sha256 == from_loaded.receipt_sha256
+    assert receipt.execution_identity_sha256 == from_loaded.execution_identity_sha256
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("reform_sha256", "b" * 64),
+        ("binding", "content"),
+        ("representation", "policyengine.reform_dict/v1"),
+        ("name", "updated"),
+    ],
+)
+def test_copying_an_identity_with_updated_fields_does_not_bypass_recheck(
+    dataset_file, field, value
+):
+    identity = scenario_reform_identity(
+        _scenario(simulation_modifier=receipt_modifiers.raise_basic_rate),
+        code_revision=REVISION,
+    )
+    changed = identity.model_copy(update={field: value})
+    with pytest.raises(ReceiptError, match=f"{field} differs"):
+        _build(dataset_file, reform=changed)
+
+
+def test_loaded_identity_is_accepted_without_rechecking(dataset_file, tmp_path):
+    name = "w4_receipt_r10_loaded"
+    try:
+        module, _ = _import_measures(tmp_path, name)
+        identity = _measure_identity(module)
+        loaded = ReformIdentity.model_validate(identity.model_dump())
+        module.RATE = 0.30
+        assert loaded._recompute_identity is None
+        assert _build(dataset_file, reform=loaded).reform == identity
+        with pytest.raises(ReceiptError, match="modifier changed"):
+            _build(dataset_file, reform=identity)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@settings(max_examples=40, deadline=None)
+@given(
+    changes=st.none()
+    | st.dictionaries(
+        st.sampled_from(["rate", "cap"]), st.integers(0, 100), max_size=2
+    ),
+    modifier=st.booleans(),
+    label=st.none() | st.text(max_size=20),
+)
+def test_identity_handle_preserves_equality_dump_and_digest(changes, modifier, label):
+    scenario = _scenario(
+        changes, receipt_modifiers.raise_basic_rate if modifier else None
+    )
+    identity = scenario_reform_identity(scenario, code_revision=REVISION, name=label)
+    independently_bound = scenario_reform_identity(
+        scenario, code_revision=REVISION, name=label
+    )
+    loaded = ReformIdentity.model_validate(identity.model_dump())
+    loaded_json = ReformIdentity.model_validate_json(identity.model_dump_json())
+    assert identity._recompute_identity is not independently_bound._recompute_identity
+    for other in (independently_bound, loaded, loaded_json, identity.model_copy()):
+        assert identity == other and other == identity
+        assert identity.model_dump() == other.model_dump()
+        assert identity.model_dump_json() == other.model_dump_json()
+        assert content_sha256(identity.canonical_payload()) == content_sha256(
+            other.canonical_payload()
+        )
+        assert identity.reform_sha256 == other.reform_sha256
+    assert "_recompute_identity" not in identity.model_dump_json()
+    assert "_recompute_identity" not in json.dumps(ReformIdentity.model_json_schema())
+
+
+@pytest.mark.parametrize("before", [None, {"rate": 1}])
+def test_scenario_parameter_changes_are_rechecked(dataset_file, before):
+    scenario = _scenario(before)
+    identity = scenario_reform_identity(scenario)
+    scenario.parameter_changes = {"rate": 2}
+    with pytest.raises(ReceiptError, match="reform_sha256.*differs"):
+        _build(dataset_file, reform=identity)
+
+
+def test_recheck_keeps_the_original_code_revision(dataset_file):
+    revision = dict(REVISION)
+    identity = scenario_reform_identity(
+        _scenario(simulation_modifier=receipt_modifiers.raise_basic_rate),
+        code_revision=revision,
+    )
+    revision["git_sha"] = "b" * 40
+    assert _build(dataset_file, reform=identity).reform == identity
 
 
 def test_modifier_digest_does_not_depend_on_the_checkout_location(tmp_path):
@@ -1599,6 +1889,7 @@ def test_published_schema_is_current():
     git_sha=st.none() | st.just("c" * 40),
     qualification=st.none() | SHA,
 )
+@pytest.mark.usefixtures("index_installs")
 def test_schema_accepts_every_valid_receipt(
     tmp_path_factory,
     schema_validator,
@@ -2478,6 +2769,33 @@ MEASURE_TAIL = "\n\ndef raise_rate(simulation):\n    simulation.rate = 0.21\n"
             "line 2 is a module-level Expr statement",
             id="call-at-import",
         ),
+        pytest.param(
+            "WEEKLY = 520 / 52\n" + MEASURE_TAIL,
+            "line 1 assigns WEEKLY something other than a literal",
+            id="literal-arithmetic-division",
+        ),
+        pytest.param(
+            "MILLION = 10 ** 6\n" + MEASURE_TAIL,
+            "line 1 assigns MILLION something other than a literal",
+            id="literal-arithmetic-power",
+        ),
+        pytest.param(
+            "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n"
+            "    from collections import OrderedDict\n" + MEASURE_TAIL,
+            "line 2 is a module-level If statement",
+            id="type-checking-block",
+        ),
+        pytest.param(
+            "type Rate = float\n" + MEASURE_TAIL,
+            "line 1 is a module-level TypeAlias statement",
+            id="type-alias",
+        ),
+        pytest.param(
+            "def _helper[*Ts](*args: *Ts) -> tuple[*Ts]:\n    return args\n"
+            + MEASURE_TAIL,
+            "line 1 computes an annotation of _helper",
+            id="unpacked-parameter-annotation",
+        ),
     ],
 )
 def test_module_shapes_a_digest_cannot_bind_are_refused(tmp_path, source, match):
@@ -3162,17 +3480,22 @@ def test_dunder_definitions_are_refused(tmp_path, definition, match):
 # --- Round-9 review findings -------------------------------------------------------
 
 
-def test_versions_installed_after_loading_are_refused(dataset_file, monkeypatch):
+@pytest.mark.parametrize(
+    "package", ["policyengine", "policyengine-uk", "policyengine-core"]
+)
+def test_versions_installed_after_loading_are_refused(
+    dataset_file, monkeypatch, package
+):
     """Round-9 review H1: upgrading a package mid-session changes what the
     metadata says but not the code already imported."""
 
     from policyengine.provenance import loaded
 
     _build(dataset_file)  # the installed versions are what was loaded
-    monkeypatch.setitem(loaded._LOADED, "policyengine-uk", "0.0.1")
+    monkeypatch.setitem(loaded._LOADED, package, "0.0.1")
     with pytest.raises(
         ReceiptError,
-        match=r"policyengine-uk 0\.0\.1 was loaded in this process, but .* is installed now",
+        match=rf"{package} 0\.0\.1 was loaded in this process, but .* is installed now",
     ):
         _build(dataset_file)
 
@@ -3191,6 +3514,248 @@ def test_the_first_loaded_version_is_the_one_kept(monkeypatch):
     assert loaded.loaded_versions() == first
 
 
+def _assert_recording_subprocess(source):
+    result = subprocess.run(
+        [sys.executable, "-c", source],
+        env={**os.environ, "POLICYENGINE_SKIP_COUNTRY_IMPORTS": "1"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_importing_the_wrapper_records_its_actual_version():
+    _assert_recording_subprocess(
+        "from importlib import metadata\n"
+        "import policyengine\n"
+        "from policyengine.provenance.loaded import loaded_versions\n"
+        "assert loaded_versions() == {'policyengine': metadata.version('policyengine')}\n"
+    )
+
+
+def test_constructing_a_model_records_all_actual_package_versions():
+    _assert_recording_subprocess(
+        "from importlib import metadata\n"
+        "from policyengine.provenance import loaded\n"
+        "from policyengine.tax_benefit_models.common.model_version import MicrosimulationModelVersion\n"
+        "loaded._LOADED.clear()\n"
+        "class Recorded(Exception):\n    pass\n"
+        "class RecordingProbe(MicrosimulationModelVersion):\n"
+        "    country_code = 'uk'\n"
+        "    package_name = 'policyengine-uk'\n"
+        "    @classmethod\n"
+        "    def _get_runtime_data_build_metadata(cls):\n"
+        "        raise Recorded\n"
+        "try:\n    RecordingProbe()\n"
+        "except Recorded:\n    pass\n"
+        "else:\n    raise AssertionError('probe did not reach its recording hook')\n"
+        "assert loaded.loaded_versions() == {\n"
+        "    name: metadata.version(name)\n"
+        "    for name in ('policyengine', 'policyengine-uk', 'policyengine-core')\n"
+        "}\n"
+    )
+
+
+def test_missing_loaded_versions_build_when_installation_predates_process(
+    dataset_file, monkeypatch
+):
+    from policyengine.provenance import loaded
+
+    monkeypatch.setattr(loaded, "_LOADED", {})
+    receipt = _build(dataset_file)
+    assert receipt.wrapper.version == INSTALLED_WRAPPER
+    assert receipt.model.version == INSTALLED_UK
+    assert receipt.core.version == INSTALLED_CORE
+
+
+@pytest.mark.parametrize(
+    "package", ["policyengine", "policyengine-uk", "policyengine-core"]
+)
+def test_each_package_installed_during_process_is_refused(
+    dataset_file, monkeypatch, tmp_path, package
+):
+    directory = tmp_path / "new.dist-info"
+    directory.mkdir()
+    (directory / "METADATA").write_text("new installation")
+    original = receipt_module._distribution_metadata_directory
+    monkeypatch.setattr(
+        receipt_module,
+        "_distribution_metadata_directory",
+        lambda name: directory if name == package else original(name),
+    )
+    with pytest.raises(
+        ReceiptError,
+        match=rf"{package} was installed or changed after this process started.*restart",
+    ):
+        _build(dataset_file)
+
+
+@pytest.mark.parametrize(
+    "filename", ["", "METADATA", "RECORD", "INSTALLER", "direct_url.json"]
+)
+@pytest.mark.parametrize("clock", ["st_mtime", "st_ctime"])
+def test_every_install_metadata_timestamp_counts(monkeypatch, filename, clock):
+    class MetadataPath:
+        def __init__(self, name=""):
+            self.name = name
+
+        def __truediv__(self, name):
+            return MetadataPath(name)
+
+        def exists(self):
+            return True
+
+        def stat(self):
+            values = {"st_mtime": 1.0, "st_ctime": 1.0}
+            if self.name == filename:
+                values[clock] = 3.0
+            return SimpleNamespace(**values)
+
+    monkeypatch.setattr(
+        receipt_module, "_distribution_metadata_directory", lambda name: MetadataPath()
+    )
+    monkeypatch.setattr(
+        receipt_module.psutil,
+        "Process",
+        lambda: SimpleNamespace(create_time=lambda: 2.0),
+    )
+    with pytest.raises(ReceiptError, match="installed or changed after this process"):
+        receipt_module._refuse_package_changed_after_process_start("policyengine")
+
+
+def test_unlocatable_install_metadata_is_refused(monkeypatch, tmp_path):
+    distribution = SimpleNamespace(
+        files=[], locate_file=lambda path: tmp_path, version="1.0"
+    )
+    monkeypatch.setattr(
+        receipt_module.metadata, "distribution", lambda name: distribution
+    )
+    with pytest.raises(ReceiptError, match="Cannot locate.*policyengine.*restart"):
+        receipt_module._refuse_package_changed_after_process_start("policyengine")
+
+
+def test_install_metadata_with_empty_record_uses_the_public_root(monkeypatch, tmp_path):
+    directory = tmp_path / "policyengine-1.0.dist-info"
+    directory.mkdir()
+    (directory / "METADATA").write_text(
+        "Metadata-Version: 2.1\nName: policyengine\nVersion: 1.0\n"
+    )
+    (directory / "RECORD").write_text("")
+    distribution = metadata.Distribution.at(directory)
+    monkeypatch.setattr(
+        receipt_module.metadata, "distribution", lambda name: distribution
+    )
+    assert receipt_module._distribution_metadata_directory("policyengine") == directory
+
+
+@pytest.mark.parametrize("stem", ["policyengine-1.0", "policyengine,local-1.0"])
+def test_install_metadata_uses_record_without_allocating_all_file_paths(
+    monkeypatch, tmp_path, stem
+):
+    directory = tmp_path / f"{stem}.dist-info"
+    directory.mkdir()
+    record = f'\nother/module.py,,\npackage/METADATA,,\n"{stem}.dist-info/METADATA",,\n'
+
+    class Distribution:
+        @property
+        def files(self):
+            raise AssertionError(
+                "RECORD is available; a full file listing is unnecessary"
+            )
+
+        def read_text(self, filename):
+            assert filename == "RECORD"
+            return record
+
+        def locate_file(self, path):
+            return tmp_path / path if path else tmp_path / "no-root"
+
+    monkeypatch.setattr(
+        receipt_module.metadata, "distribution", lambda name: Distribution()
+    )
+    assert receipt_module._distribution_metadata_directory("policyengine") == directory
+
+
+def test_install_metadata_prefers_the_distributions_public_file_listing(
+    monkeypatch, tmp_path
+):
+    directory = tmp_path / "policyengine-1.0.dist-info"
+    directory.mkdir()
+    listed = Path("policyengine-1.0.dist-info/METADATA")
+    distribution = SimpleNamespace(
+        files=[listed],
+        locate_file=lambda path: tmp_path / path if path else tmp_path / "no-root",
+    )
+    monkeypatch.setattr(
+        receipt_module.metadata, "distribution", lambda name: distribution
+    )
+    assert receipt_module._distribution_metadata_directory("policyengine") == directory
+
+
+def test_install_metadata_fallback_matches_both_package_and_version(
+    monkeypatch, tmp_path
+):
+    for package, version in [
+        ("policyengine", "1.0"),
+        ("policyengine", "2.0"),
+        ("other", "1.0"),
+    ]:
+        directory = tmp_path / f"{package}-{version}.dist-info"
+        directory.mkdir()
+        (directory / "METADATA").write_text(
+            f"Metadata-Version: 2.1\nName: {package}\nVersion: {version}\n"
+        )
+    distribution = SimpleNamespace(
+        files=[], locate_file=lambda path: tmp_path, version="1.0"
+    )
+    monkeypatch.setattr(
+        receipt_module.metadata, "distribution", lambda name: distribution
+    )
+    assert receipt_module._distribution_metadata_directory("policyengine") == (
+        tmp_path / "policyengine-1.0.dist-info"
+    )
+
+
+def test_ambiguous_install_metadata_is_refused(monkeypatch, tmp_path):
+    for stem in ("policyengine-1.0", "policyengine_duplicate-1.0"):
+        directory = tmp_path / f"{stem}.dist-info"
+        directory.mkdir()
+        (directory / "METADATA").write_text(
+            "Metadata-Version: 2.1\nName: policyengine\nVersion: 1.0\n"
+        )
+    distribution = SimpleNamespace(
+        files=[], locate_file=lambda path: tmp_path, version="1.0"
+    )
+    monkeypatch.setattr(
+        receipt_module.metadata, "distribution", lambda name: distribution
+    )
+    with pytest.raises(ReceiptError, match="Cannot locate.*policyengine"):
+        receipt_module._distribution_metadata_directory("policyengine")
+
+
+def test_unreadable_install_metadata_is_refused(monkeypatch):
+    def unreadable(name):
+        raise OSError("metadata unreadable")
+
+    monkeypatch.setattr(receipt_module, "_distribution_metadata_directory", unreadable)
+    with pytest.raises(
+        ReceiptError, match="Cannot locate or read.*policyengine.*restart"
+    ):
+        receipt_module._refuse_package_changed_after_process_start("policyengine")
+
+
+def test_unreadable_process_start_time_is_refused(monkeypatch):
+    def unreadable():
+        raise receipt_module.psutil.AccessDenied()
+
+    monkeypatch.setattr(receipt_module.psutil, "Process", unreadable)
+    with pytest.raises(
+        ReceiptError, match="Cannot locate or read.*policyengine.*restart"
+    ):
+        receipt_module._refuse_package_changed_after_process_start("policyengine")
+
+
 @pytest.mark.parametrize(
     ("header", "body", "match"),
     [
@@ -3203,6 +3768,22 @@ def test_the_first_loaded_version_is_the_one_kept(monkeypatch):
         ("import inspect\n", "inspect.signature(_helper)", r"\.signature"),
         ("import inspect\n", "inspect.getfullargspec(_helper)", r"\.getfullargspec"),
         ("import inspect\n", "inspect.get_annotations(_helper)", r"\.get_annotations"),
+        ("from inspect import signature\n", "signature(_helper)", "signature"),
+        (
+            "from inspect import getfullargspec\n",
+            "getfullargspec(_helper)",
+            "getfullargspec",
+        ),
+        (
+            "from inspect import get_annotations\n",
+            "get_annotations(_helper)",
+            "get_annotations",
+        ),
+        (
+            "import inspect\n",
+            "inspect.Signature.from_callable(_helper)",
+            r"\.from_callable",
+        ),
     ],
     ids=[
         "get-type-hints",
@@ -3210,6 +3791,10 @@ def test_the_first_loaded_version_is_the_one_kept(monkeypatch):
         "signature",
         "argspec",
         "get-annotations",
+        "imported-signature",
+        "imported-argspec",
+        "imported-get-annotations",
+        "signature-from-callable",
     ],
 )
 def test_readers_of_annotation_values_are_refused(tmp_path, header, body, match):
@@ -3223,8 +3808,9 @@ def test_readers_of_annotation_values_are_refused(tmp_path, header, body, match)
     name = "w4_receipt_r9_annotation_readers"
     try:
         module, _ = _import_source(tmp_path, name, source)
-        with pytest.raises(ReceiptError, match=match):
+        with pytest.raises(ReceiptError, match=match) as refused:
             _identity(module.raise_rate)
+        assert "reads annotation values" in str(refused.value)
     finally:
         sys.modules.pop(name, None)
 
@@ -3338,6 +3924,151 @@ def test_is_against_a_call_other_than_type_is_refused(tmp_path):
     try:
         module, _ = _import_source(tmp_path, name, source)
         with pytest.raises(ReceiptError, match="compares identities"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_an_imported_from_callable_is_refused(tmp_path, monkeypatch):
+    provider = SimpleNamespace(from_callable=inspect.Signature.from_callable)
+    monkeypatch.setitem(sys.modules, "w4_receipt_annotation_provider", provider)
+    source = (
+        "from w4_receipt_annotation_provider import from_callable as reader\n"
+        "\n\ndef _helper(value: float) -> float:\n    return value\n\n\n"
+        "def raise_rate(simulation):\n    simulation.hints = reader(_helper)\n"
+    )
+    name = "w4_receipt_r10_imported_from_callable"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(
+            ReceiptError, match="imports from_callable.*reads annotation values"
+        ):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize("operation", ["getattr", "hasattr", "setattr", "delattr"])
+@pytest.mark.parametrize(
+    ("attribute", "match"),
+    [
+        ('"__annotations__"', "__annotations__.*introspection"),
+        ('"__doc__"', "__doc__.*introspection"),
+        ('"__anno" + "tations__"', "non-literal attribute name"),
+        ("attribute", "non-literal attribute name"),
+        ("123", "non-literal attribute name"),
+    ],
+    ids=["annotations", "docstring", "computed", "variable", "non-string"],
+)
+def test_attribute_operations_cannot_expose_unbound_state(
+    tmp_path, operation, attribute, match
+):
+    extra = ", {}" if operation == "setattr" else ""
+    source = (
+        "def _helper(value: float) -> float:\n    return value\n\n\n"
+        "def raise_rate(simulation):\n    attribute = '__annotations__'\n"
+        f"    {operation}(_helper, {attribute}{extra})\n"
+        "    simulation.rate = 0.21\n"
+    )
+    name = "w4_receipt_r10_attribute_operations"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match=match):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize("attribute", ["rate", "__init__", "__name__"])
+def test_attribute_operations_allow_plain_names_and_allowed_dunders(
+    tmp_path, attribute
+):
+    source = (
+        "def raise_rate(simulation):\n"
+        f"    simulation.rate = getattr(simulation, '{attribute}', 0.21)\n"
+    )
+    name = "w4_receipt_r10_allowed_attribute"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize("kind", [set, bytearray])
+def test_shared_set_and_bytearray_defaults_are_refused(tmp_path, kind):
+    source = (
+        f"def raise_rate(simulation, first={kind.__name__}(), second={kind.__name__}()):\n"
+        "    simulation.rate = 0.21\n"
+    )
+    name = "w4_receipt_r10_shared_defaults"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert receipt_module._shared_default_object([module.raise_rate]) is None
+        shared = kind()
+        module.raise_rate.__defaults__ = (shared, shared)
+        with pytest.raises(ReceiptError, match=f"are one {kind.__name__} object"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_shared_set_constants_are_refused(tmp_path):
+    source = (
+        "FIRST = {2026}\nSECOND = {2026}\n\n\n"
+        "def raise_rate(simulation):\n"
+        "    FIRST.add(2027)\n"
+        "    simulation.rate = 0.30 if 2027 in SECOND else 0.21\n"
+        "    FIRST.remove(2027)\n"
+    )
+    name = "w4_receipt_r10_shared_set_constants"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert _identity(module.raise_rate)
+        simulation = SimpleNamespace()
+        module.raise_rate(simulation)
+        assert simulation.rate == 0.21
+        module.SECOND = module.FIRST
+        module.raise_rate(simulation)
+        assert simulation.rate == 0.30
+        with pytest.raises(ReceiptError, match="are one set object"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize(
+    ("literal", "changed"),
+    [("1j", complex(-0.0, 1.0)), ("0j", complex(0.0, -0.0))],
+    ids=["real-zero", "imaginary-zero"],
+)
+def test_complex_literal_components_keep_the_sign_of_zero(tmp_path, literal, changed):
+    source = f"PHASE = {literal}\n" + MEASURE_TAIL
+    name = "w4_receipt_r10_complex_zero"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert _identity(module.raise_rate)
+        assert module.PHASE == changed
+        module.PHASE = changed
+        with pytest.raises(ReceiptError, match="PHASE is.*at run time"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_main_guard_redefining_a_function_is_refused(tmp_path):
+    source = (
+        "def _helper(value):\n    return value\n\n\n"
+        "def raise_rate(simulation):\n    simulation.rate = _helper(0.21)\n\n\n"
+        'if __name__ == "__main__":\n'
+        "    def _helper(value):\n        return value * 2\n"
+    )
+    name = "w4_receipt_r10_multiple_shapes"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(
+            ReceiptError, match="function _helper has 2 different definitions"
+        ):
             _identity(module.raise_rate)
     finally:
         sys.modules.pop(name, None)
