@@ -3894,3 +3894,32 @@ def test_string_subclass_keys_digest_by_their_characters():
     )
     with pytest.raises(ReceiptError, match="collide"):
         content_sha256({_EqualsNothing("a"): 1, "a": 2})
+
+
+class _HostileChar(str):
+    def __eq__(self, other):
+        return False
+
+    def __hash__(self):
+        return 0
+
+
+class _ForgedText(str):
+    """A string whose iterator would let its text escape its quotes."""
+
+    def __iter__(self):
+        return (_HostileChar(char) for char in str.__str__(self))
+
+
+def test_a_string_subclass_value_cannot_forge_an_infinity():
+    """Round-3 review: string values are written as exact strings."""
+
+    forged = _ForgedText('","2028":{"$nonfinite":"Infinity"},"2029":"')
+    payload = {CAP: {"2027": forged}}
+    assert _reform_digest(payload) == _reform_digest(
+        {CAP: {"2027": str.__str__(forged)}}
+    )
+    assert _reform_digest(payload) != _reform_digest(
+        {CAP: {"2027": "", "2028": float("inf"), "2029": ""}}
+    )
+    assert content_sha256([forged]) == content_sha256([str.__str__(forged)])

@@ -618,8 +618,11 @@ def _strict_json_value(value: Any, path: str, nonfinite: bool) -> Any:
     NaN is refused either way: it has no one value to bind.
     """
 
-    if value is None or isinstance(value, (bool, str)):
+    if value is None or isinstance(value, bool):
         return value
+    if isinstance(value, str):
+        # An exact str, so a subclass cannot choose how it is written.
+        return str.__str__(value)
     if _numpy_scalar(value):
         item = value.item()
         if _numpy_scalar(item):
@@ -692,9 +695,10 @@ def _payload_sha256(value: Any) -> str:
     removes a value that ``{"p": {}}`` keeps), so the payload is digested
     exactly as given. Infinite numbers are encoded as reserved objects
     (:func:`_strict_json_value` with ``nonfinite``); a payload without them
-    digests as it did before they were allowed, except one whose keys or
-    dates are subclasses that override how ``str`` or ``date`` render: those
-    now digest by their characters and their date, as content digests do.
+    digests as it did before they were allowed, except one whose strings,
+    keys or dates are subclasses that override how ``str`` or ``date``
+    render: those now digest by their characters and their date, as content
+    digests do.
     """
 
     try:
