@@ -68,6 +68,25 @@ def test_fiscal_year_average_is_day_weighted():
     assert fiscal_year_average(pieces, 2028) == pytest.approx(0.20)
 
 
+def test_the_response_oracle_is_the_static_one_at_an_elasticity_of_zero():
+    current_law = {
+        contract.CGT_ANNUAL_EXEMPT_AMOUNT: 3_000.0,
+        contract.CGT_BASIC_RATE: 0.18,
+    }
+    context = contract.Context(lambda path, year: current_law[path])
+    # (£10,000 - £3,000) x (20% - 18%).
+    assert contract._gains_uplift(2027, 1.0)(context) == pytest.approx(140.0)
+    assert contract._gains_response_uplift(2027, 0.20, 0.0)(context) == (
+        pytest.approx(140.0)
+    )
+    # At an elasticity of 1 the gains scale by (1 - 20%) / (1 - 18%).
+    realised = 10_000 * 0.8 / 0.82
+    assert contract._realised_gains(2027, 0.20, 1.0)(context) == pytest.approx(realised)
+    assert contract._gains_response_uplift(2027, 0.20, 1.0)(context) == (
+        pytest.approx((realised - 3_000) * 0.20 - 7_000 * 0.18)
+    )
+
+
 def test_expected_annual_for_a_single_change():
     def baseline(path, year):
         return 0.20
@@ -99,6 +118,18 @@ def test_representations():
     assert wrapper_reform_dict(changes) == {
         RATE: {"2027-04-06.2028-04-05": 0.21, "2028-04-06": 0.22}
     }
+
+
+def test_the_rate_blending_case_holds_realisations_fixed_on_every_route():
+    case = next(case for case in CASES if case.id == "mid_year_blended_rate")
+    static = {
+        contract.CGT_ELASTICITY: [0.0],
+        contract.CGT_MTR_ELASTICITY: [0.0],
+        contract.CGT_SEPARATE_BADR_ELASTICITY: [False],
+    }
+    for route in contract.COUNTRY_ROUTES + contract.WRAPPER_ROUTES:
+        reform = contract.represent(case, route)
+        assert {path: list(reform[path].values()) for path in static} == static
 
 
 def test_case_ids_are_unique_and_every_check_has_an_oracle():
@@ -390,6 +421,27 @@ def test_the_april_rate_case_holds_on_the_country_routes():
     assert any(
         row["case_id"] == "module_parameters_unchanged" for row in report["cases"]
     )
+
+
+def test_the_capital_gains_cases_hold_on_every_in_process_route():
+    pytest.importorskip("policyengine_uk.utils.dated_reforms")
+    routes = contract.COUNTRY_ROUTES + contract.WRAPPER_ROUTES
+    report = run_budget_reform_contract(
+        routes=list(routes),
+        cases=["mid_year_blended_rate", "cgt_retention_response"],
+        max_examples=0,
+    )
+    failures = [row for row in report["cases"] if row["status"] in ("fail", "error")]
+    assert failures == []
+    # The response is checked, and passes, on every route.
+    passed = {
+        row["route"]
+        for row in report["cases"]
+        if row["case_id"] == "cgt_retention_response"
+        and row["check"] == "change:capital_gains_tax:2027"
+        and row["status"] == "pass"
+    }
+    assert passed == set(routes)
 
 
 def test_a_parameter_modifier_writes_the_annualised_parameters():
