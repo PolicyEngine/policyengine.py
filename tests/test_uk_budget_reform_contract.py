@@ -512,7 +512,13 @@ def stub_population_checks(monkeypatch):
             ):
                 return [2.0]
             if self.reform == {"response": population.UC_STANDARD_ALLOWANCES}:
-                if variable in ("uc_standard_allowance", "universal_credit"):
+                # The award before deductions rises with the payment, so the
+                # payment is the award less (unchanged) deductions.
+                if variable in (
+                    "uc_standard_allowance",
+                    "universal_credit",
+                    "universal_credit_pre_benefit_cap",
+                ):
                     return [1.1]
             if self.reform == {"response": population.STATE_PENSION_RATES}:
                 if variable in (
