@@ -620,3 +620,104 @@ def test_household_result_totals_read_each_variable_from_its_own_entity():
     assert _result_total(result, "income_tax") == 150.0
     with pytest.raises(KeyError, match="benunit"):
         _result_total({"household": {"universal_credit": 1.0}}, "universal_credit")
+
+
+# The Universal Credit allowance check's verdict, on synthetic benefit units.
+
+
+def _uc_units(**columns):
+    import numpy as np
+
+    defaults = {
+        "uc_standard_allowance": [400.0],
+        "universal_credit": [500.0],
+        "universal_credit_pre_benefit_cap": [500.0],
+        "benefit_cap_reduction": [0.0],
+        "uc_deductions": [0.0],
+    }
+    defaults.update(columns)
+    return {name: np.array(values, dtype=float) for name, values in defaults.items()}
+
+
+def _verdict(base, reformed):
+    from policyengine.tax_benefit_models.uk.budget_reform_population import (
+        uc_allowance_verdict,
+    )
+
+    return uc_allowance_verdict(base, reformed)
+
+
+def _lawful_pair():
+    """A capped unit with deductions and an uncapped unit that gains."""
+
+    base = _uc_units(
+        uc_standard_allowance=[400.0, 400.0],
+        universal_credit_pre_benefit_cap=[900.0, 500.0],
+        benefit_cap_reduction=[100.0, 0.0],
+        uc_deductions=[20.0, 0.0],
+        universal_credit=[780.0, 500.0],
+    )
+    reformed = _uc_units(
+        uc_standard_allowance=[440.0, 440.0],
+        universal_credit_pre_benefit_cap=[940.0, 540.0],
+        benefit_cap_reduction=[140.0, 0.0],
+        uc_deductions=[22.0, 0.0],
+        universal_credit=[778.0, 540.0],
+    )
+    return base, reformed
+
+
+def test_a_capped_award_whose_deductions_rise_with_the_allowance_holds():
+    """SI 2013/376 reg 81 holds a capped award flat; SI 2013/380 Sch 6
+    deductions scale with the allowance, so the amount paid can fall."""
+
+    base, reformed = _lawful_pair()
+    holds, detail = _verdict(base, reformed)
+    assert holds, detail
+    assert detail["payments_lower"] == 1
+    assert detail["awards_lower"] == 0
+
+
+@pytest.mark.parametrize(
+    ("change", "failing_key", "passing_value"),
+    [
+        ({"benefit_cap_reduction": 150.0}, "awards_lower", 0),
+        (
+            {"universal_credit": 770.0},
+            "payment_falls_beyond_deduction_rises",
+            0,
+        ),
+        (
+            {"uc_deductions": 70.0, "universal_credit": 730.0},
+            "deduction_rises_beyond_allowance_rises",
+            0,
+        ),
+        (
+            {"uc_standard_allowance": 430.0},
+            "standard_allowance_scaled_10_percent",
+            True,
+        ),
+    ],
+    ids=[
+        "award-falls",
+        "payment-falls-beyond-deductions",
+        "deductions-beyond-allowance",
+        "not-scaled",
+    ],
+)
+def test_the_uc_allowance_check_fails_on_each_unlawful_movement(
+    change, failing_key, passing_value
+):
+    base, reformed = _lawful_pair()
+    assert _verdict(base, reformed)[0]
+    for name, value in change.items():
+        reformed[name][0] = value
+    holds, detail = _verdict(base, reformed)
+    assert not holds
+    assert detail[failing_key] != passing_value, detail
+
+
+def test_the_uc_allowance_check_fails_when_no_payment_rises():
+    base = _uc_units()
+    holds, detail = _verdict(base, _uc_units(uc_standard_allowance=[440.0]))
+    assert not holds and detail["payments_higher"] == 0
