@@ -8,7 +8,11 @@ changelog fragment.
 Usage::
 
     python scripts/bundle.py certify-data --country uk --data-producer populace \\
-        --manifest-uri "hf://dataset/policyengine/populace-uk-private@<tag>/releases/<tag>/release_manifest.json"
+        --manifest-uri "hf://dataset/policyengine/populace-uk-private@<cut-tag>/releases/<release-id>/release_manifest.json"
+
+Pin the cut tag, never a branch: each cut rewrites ``releases/<release-id>/``.
+Add ``--regional-manifest-uri`` to route local regions to a regional release
+(see docs/engineering/skills/data-certification.md).
 
 Private data (UK) requires ``HUGGING_FACE_TOKEN`` or ``HF_TOKEN`` in the
 environment. After running: commit the changed bundle manifest, pyproject.toml,
@@ -53,9 +57,28 @@ def main(argv=None) -> int:
         "--regional-manifest-uri",
         default=None,
         help=(
-            "Optional regional data release manifest to merge into US Populace "
-            "certification."
+            "Regional release_manifest.json URI whose dataset serves the local "
+            "region types (US states and districts, UK constituencies and local "
+            "authorities). Required on re-certification while the bundle routes "
+            "regions, unless --drop-regional-release is given."
         ),
+    )
+    parser.add_argument(
+        "--regional-release-kind",
+        default="local_area",
+        choices=["local_area", "area_coded_national"],
+        help=(
+            "local_area: a non-default local-area release. "
+            "area_coded_national (UK only): another certified national release "
+            "whose households carry area codes, such as the enhanced FRS; its "
+            "national dataset and area weight matrices serve constituency and "
+            "local-authority regions."
+        ),
+    )
+    parser.add_argument(
+        "--drop-regional-release",
+        action="store_true",
+        help="Remove the bundle's current regional routing on re-certification.",
     )
     parser.add_argument(
         "--regional-artifact-prefix",
@@ -118,6 +141,8 @@ def main(argv=None) -> int:
         regional_manifest_uri=args.regional_manifest_uri,
         regional_artifact_prefix=args.regional_artifact_prefix,
         regional_path_template=args.regional_path_template,
+        regional_release_kind=args.regional_release_kind,
+        drop_regional_release=args.drop_regional_release,
         core_version=args.core_version,
         qualified_pair_id=args.qualified_pair_id,
     )

@@ -23,8 +23,74 @@ the checkout is dirty).
 
 ```bash
 python scripts/bundle.py certify-data --country uk --data-producer populace \
-  --manifest-uri "hf://dataset/policyengine/populace-uk-private@<tag>/releases/<tag>/release_manifest.json"
+  --manifest-uri "hf://dataset/policyengine/populace-uk-private@<cut-tag>/releases/<release-id>/release_manifest.json"
 ```
+
+Pin the cut tag (`@<cut-tag>`), never `main`: each cut of a Microcosm release
+line rewrites that line's `releases/<release-id>/` directory, for example
+`releases/microcosm-uk-2024-25-national/`. Microcosm records the line name as
+`build.build_id` on every cut and the cut in `build.cut_tag`; certification
+uses the cut tag as the build id (`data_releases.<country>.version`, the
+certification's `data_build_id` and the changelog fragment name), so two cuts
+of one line never look identical.
+
+### UK constituency and local-authority regions
+
+UK constituency and local-authority regions row-filter the dataset a regional
+release routes them to (`region_datasets.constituency` and
+`region_datasets.local_authority`), and the national dataset when nothing is
+routed. policyengine-sim-api accepts a UK default without area codes
+(`constituency_code_oa`, `la_code_oa`) only when both are routed. Certify a
+Microcosm national release with one of:
+
+- **A Microcosm local-area release (ship together).** The release declares
+  `dataset_role: non_default_local_area`, as for the US below.
+
+  ```bash
+  python scripts/bundle.py certify-data --country uk --data-producer populace \
+    --manifest-uri "hf://dataset/policyengine/populace-uk-private@<national-cut-tag>/releases/microcosm-uk-2024-25-national/release_manifest.json" \
+    --regional-manifest-uri "hf://dataset/policyengine/populace-uk-private@<local-cut-tag>/releases/<local-release-id>/release_manifest.json" \
+    --model-version "<policyengine-uk-version>"
+  ```
+
+  This records `regional_release_kind: local_area`, and the default UK region
+  registry then includes all 650 constituencies and 361 local authorities.
+
+- **The enhanced FRS (national first).** When the national release is ready
+  before a local one, route the area regions to a certified policyengine-uk-data
+  release whose households carry area codes:
+
+  ```bash
+  python scripts/bundle.py certify-data --country uk --data-producer populace \
+    --manifest-uri "hf://dataset/policyengine/populace-uk-private@<national-cut-tag>/releases/microcosm-uk-2024-25-national/release_manifest.json" \
+    --regional-manifest-uri "hf://model/policyengine/policyengine-uk-data-private@<revision>/releases/<version>/release_manifest.json" \
+    --regional-release-kind area_coded_national \
+    --model-version "<policyengine-uk-version>"
+  ```
+
+  Certification carries that release's national dataset
+  (`enhanced_frs_2024_25`) and its `weights` artifacts (the constituency and
+  local-authority matrices and `local_geography_weights`) at their own repo
+  and revision, records `regional_release_kind: area_coded_national`, and
+  leaves area regions out of the default registry: the API keeps serving them
+  from the matrices. The enhanced FRS release must itself claim the pinned
+  policyengine-uk version (built with it or listed in
+  `compatible_model_packages`); otherwise policyengine-uk-data must publish a
+  claim first. Its `frs_2024_25` is not carried, so keep it loadable with a
+  `dataset_overlays.uk` entry.
+
+Either way, certification checks the regional release's own model
+compatibility and HEAD-checks every artifact it carries.
+
+### Re-certifying a routed bundle
+
+Certification rewrites `data_releases.<country>` from the manifests it is
+given. While the bundle routes regions (`regional_source_manifest_uri` is set),
+a run without `--regional-manifest-uri` is refused; pass the current regional
+release again (or its replacement), or `--drop-regional-release` to remove the
+routing on purpose.
+
+### US
 
 For US Populace certification, certify the Populace release manifest directly:
 
@@ -84,8 +150,10 @@ Hard failures (certification refuses): missing national default dataset,
 default dataset absent from artifacts, any artifact without a revision pin,
 unreachable certified dataset, missing required supplemental release files
 (for example Populace-US `us_source_coverage.json`), a malformed shared
-local-area release or malformed legacy per-state artifacts when
-`--regional-manifest-uri` is used, unknown country.
+local-area release, area-coded national release or legacy per-state artifacts
+when `--regional-manifest-uri` is used, a regional release that does not serve
+the pinned model version, an unreachable regional artifact, a re-certification
+that would silently drop regional routing, unknown country.
 
 Certification gate: the model version must either exactly match the
 build-time model (`compatibility_basis: built_with_model_package`) or be
@@ -97,6 +165,24 @@ refused: a new data build or a published compatibility claim is required.
 
 Warnings (recorded, not blocking): artifacts without sha256, and the
 publisher-claim basis above.
+
+## Acceptance evidence for a UK default switch
+
+A PR that changes the UK default dataset carries, besides the UK candidate
+qualification gates, the Universal Credit coverage floor from #491: benefit
+units with Universal Credit and Universal Credit spend in Great Britain within
+10% of DWP's and the OBR's figures.
+
+```bash
+python scripts/check_uk_uc_floor.py --dataset <candidate .h5 or bundle dataset name> \
+  --year 2025 --output uc_floor.json
+```
+
+The benchmarks and their sources are in
+`src/policyengine/data/qualification/uk_uc_floor.json`. The receipt holds
+weighted national totals only. Before quoting any other figure from UK data
+in a PR, apply the UKDS output rules: no unit-record values, no cells under
+10 unweighted cases, no differencing.
 
 ## Release runbooks
 
