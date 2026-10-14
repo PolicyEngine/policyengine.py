@@ -119,18 +119,22 @@ def uc_allowance_verdict(
 ) -> tuple[bool, dict]:
     """Whether a 10% higher standard allowance moved Universal Credit lawfully.
 
-    ``base`` and ``reformed`` hold ``UC_ALLOWANCE_VARIABLES`` per benefit
-    unit. The benefit cap reduces the award by the excess of welfare benefits
-    over the cap (SI 2013/376 reg 81), so a capped award stays flat and no
-    award before deductions may fall. Deductions are taken from the award as
-    percentages of the standard allowance (SI 2013/380 Sch 6), so the amount
-    paid may fall, but by no more than the deductions rise. In the model a
-    unit's deductions are its ``uc_deduction_rate`` times the standard
-    allowance, capped by the award; the rate does not depend on the
-    allowance, so it must not change, and deductions may rise by no more
-    than that rate times the allowance rise. (The rate can exceed 1: the
-    excess above the deductions cap, for deductions the cap does not limit,
-    has no bound of its own.)
+    ``base`` and ``reformed`` hold ``UC_ALLOWANCE_VARIABLES`` per benefit unit.
+    The benefit cap reduces the award by the excess of welfare benefits over the
+    cap (SI 2013/376 reg 81), counting Universal Credit before any deduction
+    (reg 80(2)), so a capped award stays flat and no award before deductions may
+    fall. That holds in the model, which applies no sanctions; a sanction is
+    taken after the cap and set by the standard allowance (regs 110 and 111), so
+    in law a sanctioned capped award can fall. Deductions are taken from the
+    award as percentages of the standard allowance (SI 2013/380 Sch 6), so the
+    amount paid may fall, but by no more than the deductions rise. Advances are
+    recovered as fixed amounts (SI 2013/383 reg 10), so the model's deduction
+    rise is an upper bound there (policyengine-uk#2410). In the model a unit's
+    deductions are its ``uc_deduction_rate`` times the standard allowance,
+    capped by the award; the rate does not depend on the allowance, so it must
+    not change, and deductions may rise by no more than that rate times the
+    allowance rise. (The rate can exceed 1: the excess above the deductions cap,
+    for deductions the cap does not limit, has no bound of its own.)
     """
 
     allowance, base_allowance = (
