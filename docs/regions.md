@@ -91,6 +91,38 @@ england = pe.uk.model.get_region("country/england")
 Pass the registry entry's `scoping_strategy` to `Simulation` when using a
 national UK dataset.
 
+## UK constituency and local-authority regions
+
+The package ships the area lists: the 650 parliamentary constituencies (2024
+boundaries, including Northern Ireland) and the 361 local authority districts
+(April 2023, including Ards and North Down, `N09000011`), each with a name and
+a hex-map position (`src/policyengine/data/uk_geography/`, sources in its
+`SOURCES.md`). Building these regions needs no network access.
+
+Constituency regions (`constituency/<code>`) row-filter `constituency_code_oa`
+and local-authority regions (`local_authority/<code>`) row-filter `la_code_oa`.
+Their `dataset_path` is the dataset the certified bundle routes them to
+(`data_releases.uk.region_datasets`), or `None`, meaning the national dataset,
+when nothing is routed:
+
+| `regional_release_kind` | Area regions load | In the default registry |
+| --- | --- | --- |
+| none (today) | the national dataset | no |
+| `area_coded_national` | another release's area-coded national dataset (the enhanced FRS), while the default is a national file without area codes | no |
+| `local_area` | a certified local-area release | yes |
+
+Pass `include_constituencies=True` and `include_local_authorities=True` to
+`build_uk_region_registry` to include them regardless.
+
+```python
+from policyengine.countries.uk.regions import build_uk_region_registry
+
+registry = build_uk_region_registry(
+    include_constituencies=True, include_local_authorities=True
+)
+registry.get("local_authority/N09000011").label  # "Ards and North Down"
+```
+
 ## UK parliamentary constituencies
 
 To publish results by constituency, local authority or region, use
@@ -99,10 +131,9 @@ The functions in this section and the next are deprecated: their output is
 not disclosure-controlled.
 
 Constituency-level impacts group household output rows by the longwise
-`constituency_code_oa` column carried by the dataset. If the constituency CSV is
-available locally or from the PolicyEngine UK GCS bucket, PolicyEngine uses it
-to attach names and map coordinates; otherwise results still compute and use
-the code as the label.
+`constituency_code_oa` column carried by the dataset. Names and map coordinates
+come from the packaged constituency list; codes it does not list use the code
+as the label.
 
 ```python
 from policyengine.outputs import compute_uk_constituency_impacts
@@ -114,10 +145,9 @@ impacts = compute_uk_constituency_impacts(
 impacts.constituency_results
 ```
 
-To force a specific metadata file, pass `constituency_csv_path`. To avoid
-downloading metadata and fall back to code-only labels, pass
-`download_missing_assets=False`. The legacy `weight_matrix_path` and `year`
-arguments are accepted for backward compatibility but ignored.
+To use a different metadata file, pass `constituency_csv_path`. The legacy
+`weight_matrix_path`, `year` and `download_missing_assets` arguments are
+accepted for backward compatibility but ignored.
 
 ## UK local authorities
 
@@ -131,11 +161,15 @@ impacts = compute_uk_local_authority_impacts(
 impacts.local_authority_results
 ```
 
-Local-authority impacts follow the same longwise pattern using `la_code_oa`.
-Pass `local_authority_csv_path` to use a specific metadata CSV, or
-`download_missing_assets=False` to skip metadata download and use code-only
-labels. The legacy `weight_matrix_path` and `year` arguments are accepted for
-backward compatibility but ignored.
+Local-authority impacts follow the same longwise pattern using `la_code_oa`,
+labelled from the packaged April 2023 list. Pass `local_authority_csv_path` to
+use a specific metadata CSV. The legacy `weight_matrix_path`, `year` and
+`download_missing_assets` arguments are accepted for backward compatibility
+but ignored.
+
+Both impacts need simulations on a dataset whose households carry the area
+codes. When the national default does not, run them on the dataset the bundle
+routes the area regions to.
 
 ## Region registries
 

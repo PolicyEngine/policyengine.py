@@ -688,6 +688,41 @@ class TestReleaseManifests:
         assert certification.built_with_model_version == "1.601.0"
         assert certification.certified_for_model_version == "1.602.0"
 
+    def test__given_release_with_cut_tag__then_cut_tag_is_the_data_build_id(self):
+        # Microcosm keeps build_id equal to the line name for every cut, so
+        # the runtime check must name the cut the same way certification did.
+        get_data_release_manifest.cache_clear()
+        payload = {
+            "schema_version": 1,
+            "data_package": {"name": "microcosm-data", "version": "0.1.0"},
+            "build": {
+                "build_id": "microcosm-uk-2024-25-national",
+                "cut_tag": "microcosm-uk-2024-25-national-20261101T000000Z-aaaaaaaa",
+                "built_with_model_package": {
+                    "name": "policyengine-us",
+                    "version": "1.601.0",
+                },
+            },
+            "compatible_model_packages": [],
+            "default_datasets": {"national": "enhanced_cps_2024"},
+            "artifacts": {},
+        }
+
+        with patch(
+            "policyengine.provenance.manifest.requests.get",
+            return_value=_response_with_json(payload),
+        ):
+            certification = certify_data_release_compatibility(
+                "us",
+                runtime_model_version="1.601.0",
+            )
+
+        assert certification.compatibility_basis == "exact_build_model_version"
+        assert certification.data_build_id == (
+            "microcosm-uk-2024-25-national-20261101T000000Z-aaaaaaaa"
+        )
+        get_data_release_manifest.cache_clear()
+
     def test__given_private_manifest_unavailable__then_bundled_certification_is_used(
         self,
     ):

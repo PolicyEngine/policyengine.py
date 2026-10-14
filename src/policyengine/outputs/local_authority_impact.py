@@ -79,13 +79,15 @@ def compute_uk_local_authority_impacts(
         reform_simulation: Completed reform simulation.
         weight_matrix_path: Deprecated and ignored. Local-authority outputs
             now group by ``la_code_oa`` on the household output.
-        local_authority_csv_path: Optional path to local_authorities_2021.csv.
-            If omitted, standard local paths are checked before downloading
-            from GCS. If still unavailable, results use geography codes as names.
+        local_authority_csv_path: Optional path to a lookup CSV with
+            ``code``, ``name``, ``x`` and ``y`` columns. If omitted, the
+            packaged April 2023 local-authority list supplies names and
+            hex positions. Codes missing from the lookup use the code as
+            the name.
         year: Deprecated and ignored.
         asset_strategies: Deprecated and ignored.
-        download_missing_assets: Whether to download the optional lookup CSV
-            from GCS when no local CSV is found.
+        download_missing_assets: Deprecated and ignored; the lookup is
+            packaged.
 
     Returns:
         LocalAuthorityImpact with local_authority_results populated.

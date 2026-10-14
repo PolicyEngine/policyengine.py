@@ -8,9 +8,11 @@ from typing import Optional
 import pandas as pd
 
 from policyengine.data.uk_geography_assets import (
+    UK_AREA_LIST_FILES,
     UKGeographyAssetSpec,
     default_download_dir,
     default_local_search_dirs,
+    packaged_uk_area_list_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,7 +47,14 @@ def resolve_uk_geography_lookup_csv_path(
     lookup_csv_path: Optional[str] = None,
     download_missing_assets: bool = True,
 ) -> Optional[str]:
-    """Resolve a UK geography lookup CSV without requiring a weight matrix."""
+    """Resolve a UK geography lookup CSV without requiring a weight matrix.
+
+    An explicit ``lookup_csv_path`` wins. Constituencies and local
+    authorities otherwise use the area list shipped with the package, so
+    labels never depend on a local file or on the unversioned GCS bucket
+    (``download_missing_assets`` then has no effect). Other geography types
+    keep the local search and GCS fallback.
+    """
     if lookup_csv_path:
         path = Path(lookup_csv_path).expanduser()
         if not path.is_file():
@@ -54,6 +63,9 @@ def resolve_uk_geography_lookup_csv_path(
                 f"or is not a file: {path}"
             )
         return str(path)
+
+    if spec.geography_type in UK_AREA_LIST_FILES:
+        return packaged_uk_area_list_path(spec.geography_type)
 
     for search_dir in default_local_search_dirs():
         path = search_dir / spec.lookup_csv_filename

@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 from microdf import MicroDataFrame
 
+from policyengine.data.uk_geography_assets import packaged_uk_area_list_path
 from policyengine.outputs.constituency_impact import (
     ConstituencyImpact,
     compute_uk_constituency_impacts,
@@ -155,31 +156,29 @@ def test_relative_change(tmp_path):
     )
 
 
-def test_compute_uses_local_lookup_csv_without_matrix_or_gcs(
+def test_compute_labels_with_packaged_area_list_by_default(
     tmp_path,
 ):
-    """The helper can enrich labels from local CSV without matrix assets."""
+    """Labels come from the packaged list, not local or downloaded files."""
     baseline = _make_sim(
         {
-            "constituency_code_oa": ["C001", "C002"],
+            "constituency_code_oa": ["E14001063", "UNLISTED"],
             "household_net_income": [100.0, 200.0],
             "household_weight": [1.0, 1.0],
         }
     )
     reform = _make_sim(
         {
-            "constituency_code_oa": ["C001", "C002"],
+            "constituency_code_oa": ["E14001063", "UNLISTED"],
             "household_net_income": [110.0, 220.0],
             "household_weight": [1.0, 1.0],
         }
     )
-    csv_path = tmp_path / CONSTITUENCY_ASSET_SPEC.lookup_csv_filename
-    pd.DataFrame(
-        [
-            {"code": "C001", "name": "A", "x": 0, "y": 0},
-            {"code": "C002", "name": "B", "x": 1, "y": 1},
-        ]
-    ).to_csv(csv_path, index=False)
+    # A stale lookup in a local search dir (the old GCS download cache) is
+    # ignored.
+    pd.DataFrame([{"code": "E14001063", "name": "Stale", "x": 0, "y": 0}]).to_csv(
+        tmp_path / CONSTITUENCY_ASSET_SPEC.lookup_csv_filename, index=False
+    )
 
     with patch(
         "policyengine.outputs.uk_geography_impact.default_local_search_dirs",
@@ -191,9 +190,13 @@ def test_compute_uses_local_lookup_csv_without_matrix_or_gcs(
             download_missing_assets=True,
         )
 
-    assert impact.constituency_csv_path == str(csv_path)
-    assert len(impact.constituency_results) == 2
-    assert impact.constituency_results[0]["constituency_name"] == "A"
+    assert impact.constituency_csv_path == packaged_uk_area_list_path("constituency")
+    assert impact.constituency_csv_path.endswith("constituencies_2024.csv")
+    by_code = {row["constituency_code"]: row for row in impact.constituency_results}
+    assert by_code["E14001063"]["constituency_name"] == "Aldershot"
+    assert (by_code["E14001063"]["x"], by_code["E14001063"]["y"]) == (56, -40)
+    assert by_code["UNLISTED"]["constituency_name"] == "UNLISTED"
+    assert by_code["UNLISTED"]["x"] is None
 
 
 def test_compute_constituency_impacts_does_not_require_lookup_csv_or_matrix(
