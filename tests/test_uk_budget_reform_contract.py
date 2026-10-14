@@ -634,6 +634,7 @@ def _uc_units(**columns):
         "universal_credit_pre_benefit_cap": [500.0],
         "benefit_cap_reduction": [0.0],
         "uc_deductions": [0.0],
+        "uc_deduction_rate": [0.0],
     }
     defaults.update(columns)
     return {name: np.array(values, dtype=float) for name, values in defaults.items()}
@@ -655,6 +656,7 @@ def _lawful_pair():
         universal_credit_pre_benefit_cap=[900.0, 500.0],
         benefit_cap_reduction=[100.0, 0.0],
         uc_deductions=[20.0, 0.0],
+        uc_deduction_rate=[0.05, 0.0],
         universal_credit=[780.0, 500.0],
     )
     reformed = _uc_units(
@@ -662,6 +664,7 @@ def _lawful_pair():
         universal_credit_pre_benefit_cap=[940.0, 540.0],
         benefit_cap_reduction=[140.0, 0.0],
         uc_deductions=[22.0, 0.0],
+        uc_deduction_rate=[0.05, 0.0],
         universal_credit=[778.0, 540.0],
     )
     return base, reformed
@@ -688,10 +691,11 @@ def test_a_capped_award_whose_deductions_rise_with_the_allowance_holds():
             0,
         ),
         (
-            {"uc_deductions": 70.0, "universal_credit": 730.0},
-            "deduction_rises_beyond_allowance_rises",
+            {"uc_deductions": 30.0, "universal_credit": 770.0},
+            "deduction_rises_beyond_rate_times_allowance_rise",
             0,
         ),
+        ({"uc_deduction_rate": 0.06}, "deduction_rates_changed", 0),
         (
             {"uc_standard_allowance": 430.0},
             "standard_allowance_scaled_10_percent",
@@ -701,7 +705,8 @@ def test_a_capped_award_whose_deductions_rise_with_the_allowance_holds():
     ids=[
         "award-falls",
         "payment-falls-beyond-deductions",
-        "deductions-beyond-allowance",
+        "deductions-beyond-rate",
+        "rate-changed",
         "not-scaled",
     ],
 )
@@ -721,3 +726,14 @@ def test_the_uc_allowance_check_fails_when_no_payment_rises():
     base = _uc_units()
     holds, detail = _verdict(base, _uc_units(uc_standard_allowance=[440.0]))
     assert not holds and detail["payments_higher"] == 0
+
+
+def test_a_deduction_rate_above_one_bounds_by_the_rate_not_the_allowance():
+    """Deductions the cap does not limit can exceed the standard allowance."""
+
+    base, reformed = _lawful_pair()
+    base["uc_deduction_rate"][0] = reformed["uc_deduction_rate"][0] = 1.5
+    base["uc_deductions"][0], reformed["uc_deductions"][0] = 600.0, 660.0
+    base["universal_credit"][0], reformed["universal_credit"][0] = 200.0, 140.0
+    holds, detail = _verdict(base, reformed)
+    assert holds, detail
