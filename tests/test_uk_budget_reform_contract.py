@@ -634,7 +634,6 @@ def _uc_units(**columns):
         "universal_credit_pre_benefit_cap": [500.0],
         "benefit_cap_reduction": [0.0],
         "uc_deductions": [0.0],
-        "uc_deduction_rate": [0.0],
     }
     defaults.update(columns)
     return {name: np.array(values, dtype=float) for name, values in defaults.items()}
@@ -649,14 +648,13 @@ def _verdict(base, reformed):
 
 
 def _lawful_pair():
-    """A capped unit with deductions and an uncapped unit that gains."""
+    """A capped unit whose deductions rise, and an uncapped unit that gains."""
 
     base = _uc_units(
         uc_standard_allowance=[400.0, 400.0],
         universal_credit_pre_benefit_cap=[900.0, 500.0],
         benefit_cap_reduction=[100.0, 0.0],
         uc_deductions=[20.0, 0.0],
-        uc_deduction_rate=[0.05, 0.0],
         universal_credit=[780.0, 500.0],
     )
     reformed = _uc_units(
@@ -664,38 +662,43 @@ def _lawful_pair():
         universal_credit_pre_benefit_cap=[940.0, 540.0],
         benefit_cap_reduction=[140.0, 0.0],
         uc_deductions=[22.0, 0.0],
-        uc_deduction_rate=[0.05, 0.0],
         universal_credit=[778.0, 540.0],
     )
     return base, reformed
 
 
 def test_a_capped_award_whose_deductions_rise_with_the_allowance_holds():
-    """SI 2013/376 reg 81 holds a capped award flat; SI 2013/380 Sch 6
-    deductions scale with the allowance, so the amount paid can fall."""
+    """SI 2013/376 reg 81 holds a capped award flat; deductions come out of it
+    (SI 2013/380 Sch 6), so the amount paid falls by exactly their rise."""
 
-    base, reformed = _lawful_pair()
-    holds, detail = _verdict(base, reformed)
+    holds, detail = _verdict(*_lawful_pair())
     assert holds, detail
     assert detail["payments_lower"] == 1
     assert detail["awards_lower"] == 0
 
 
+@pytest.mark.parametrize("rise", [2.0, 60.0, 357.0])
+def test_how_much_deductions_rise_is_not_bounded(rise):
+    """Deductions can start with a new award or exceed the allowance rise."""
+
+    base, reformed = _lawful_pair()
+    reformed["uc_deductions"][0] = 20.0 + rise
+    reformed["universal_credit"][0] = 800.0 - 20.0 - rise
+    holds, detail = _verdict(base, reformed)
+    assert holds, detail
+
+
 @pytest.mark.parametrize(
     ("change", "failing_key", "passing_value"),
     [
-        ({"benefit_cap_reduction": 150.0}, "awards_lower", 0),
+        ({"benefit_cap_reduction": 140.011}, "awards_lower", 0),
+        ({"universal_credit": 777.989}, "payments_not_award_less_deductions", 0),
+        ({"universal_credit": 778.011}, "payments_not_award_less_deductions", 0),
         (
-            {"universal_credit": 770.0},
-            "payment_falls_beyond_deduction_rises",
+            {"uc_deductions": 0.0, "universal_credit": 780.0},
+            "payments_not_award_less_deductions",
             0,
         ),
-        (
-            {"uc_deductions": 30.0, "universal_credit": 770.0},
-            "deduction_rises_beyond_rate_times_allowance_rise",
-            0,
-        ),
-        ({"uc_deduction_rate": 0.06}, "deduction_rates_changed", 0),
         (
             {"uc_standard_allowance": 430.0},
             "standard_allowance_scaled_10_percent",
@@ -703,10 +706,10 @@ def test_a_capped_award_whose_deductions_rise_with_the_allowance_holds():
         ),
     ],
     ids=[
-        "award-falls",
-        "payment-falls-beyond-deductions",
-        "deductions-beyond-rate",
-        "rate-changed",
+        "award-falls-past-a-penny",
+        "payment-below-award-less-deductions",
+        "payment-above-award-less-deductions",
+        "deductions-released-but-payment-unchanged",
         "not-scaled",
     ],
 )
@@ -722,18 +725,24 @@ def test_the_uc_allowance_check_fails_on_each_unlawful_movement(
     assert detail[failing_key] != passing_value, detail
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"benefit_cap_reduction": 140.009},
+        {"universal_credit": 777.991},
+        {"universal_credit": 778.009},
+    ],
+    ids=["award-within-a-penny", "payment-a-little-low", "payment-a-little-high"],
+)
+def test_float32_rounding_within_a_penny_holds(change):
+    base, reformed = _lawful_pair()
+    for name, value in change.items():
+        reformed[name][0] = value
+    holds, detail = _verdict(base, reformed)
+    assert holds, detail
+
+
 def test_the_uc_allowance_check_fails_when_no_payment_rises():
     base = _uc_units()
     holds, detail = _verdict(base, _uc_units(uc_standard_allowance=[440.0]))
     assert not holds and detail["payments_higher"] == 0
-
-
-def test_a_deduction_rate_above_one_bounds_by_the_rate_not_the_allowance():
-    """Deductions the cap does not limit can exceed the standard allowance."""
-
-    base, reformed = _lawful_pair()
-    base["uc_deduction_rate"][0] = reformed["uc_deduction_rate"][0] = 1.5
-    base["uc_deductions"][0], reformed["uc_deductions"][0] = 600.0, 660.0
-    base["universal_credit"][0], reformed["universal_credit"][0] = 200.0, 140.0
-    holds, detail = _verdict(base, reformed)
-    assert holds, detail

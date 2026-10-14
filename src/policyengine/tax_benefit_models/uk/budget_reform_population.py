@@ -33,10 +33,8 @@ Checks:
     2013, SI 2013/376, reg 81), so a capped award stays flat. Deductions are
     then taken from the award and set as percentages of the standard
     allowance (Claims and Payments Regulations 2013, SI 2013/380, Sch 6), so
-    the amount paid (``universal_credit``) can fall. The check bounds that
-    fall: no payment falls by more than its deductions rise, no unit's
-    deduction rate changes, and no deductions rise by more than that rate
-    times the standard allowance rise.
+    the amount paid (``universal_credit``) can fall. The check requires each
+    payment to move by its award's change less its deductions' change.
 ``population_state_pension_plus_10``
     The basic and new State Pension rates 10% higher in 2027-28 raise each
     person's basic and new State Pension by exactly 10% and raise total
@@ -110,8 +108,12 @@ UC_ALLOWANCE_VARIABLES = (
     "universal_credit_pre_benefit_cap",
     "benefit_cap_reduction",
     "uc_deductions",
-    "uc_deduction_rate",
 )
+
+#: Universal Credit amounts are float32 annual pounds; sums of them carry
+#: rounding of a few thousandths of a pound, so a penny is the smallest
+#: difference the check treats as a change.
+PENNY = 0.01
 
 
 def uc_allowance_verdict(
@@ -120,21 +122,26 @@ def uc_allowance_verdict(
     """Whether a 10% higher standard allowance moved Universal Credit lawfully.
 
     ``base`` and ``reformed`` hold ``UC_ALLOWANCE_VARIABLES`` per benefit unit.
-    The benefit cap reduces the award by the excess of welfare benefits over the
-    cap (SI 2013/376 reg 81), counting Universal Credit before any deduction
-    (reg 80(2)), so a capped award stays flat and no award before deductions may
-    fall. That holds in the model, which applies no sanctions; a sanction is
-    taken after the cap and set by the standard allowance (regs 110 and 111), so
-    in law a sanctioned capped award can fall. Deductions are taken from the
-    award as percentages of the standard allowance (SI 2013/380 Sch 6), so the
-    amount paid may fall, but by no more than the deductions rise. Advances are
-    recovered as fixed amounts (SI 2013/383 reg 10), so the model's deduction
-    rise is an upper bound there (policyengine-uk#2410). In the model a unit's
-    deductions are its ``uc_deduction_rate`` times the standard allowance,
-    capped by the award; the rate does not depend on the allowance, so it must
-    not change, and deductions may rise by no more than that rate times the
-    allowance rise. (The rate can exceed 1: the excess above the deductions cap,
-    for deductions the cap does not limit, has no bound of its own.)
+
+    No award before deductions (``universal_credit_pre_benefit_cap`` less
+    ``benefit_cap_reduction``) may fall by more than a penny. The benefit cap
+    reduces the award by the excess of welfare benefits over the cap (SI
+    2013/376 reg 81), counting Universal Credit before any deduction (reg
+    80(2)), so a capped award stays flat. That holds in the model, which
+    applies no sanctions; in law a sanction, taken after the cap and set by
+    the standard allowance (regs 110 and 111), can lower a capped award.
+
+    Each payment (``universal_credit``) must move by its award's change less
+    its deductions' change, to the penny. Deductions are taken from the award
+    (SI 2013/380 Sch 6), so with the award unchanged a capped claimant's
+    payment falls by exactly as much as their deductions rise.
+
+    How much deductions rise is not checked here. The law sets some
+    deductions as percentages of the standard allowance and others as fixed
+    amounts (advances, SI 2013/383 reg 10), starts deductions with a new
+    award, and keeps a penny payable; the model scales every deduction type
+    with the allowance (policyengine-uk#2410), so no allowance-proportional
+    bound is an invariant of both.
     """
 
     allowance, base_allowance = (
@@ -149,35 +156,23 @@ def uc_allowance_verdict(
         base["universal_credit_pre_benefit_cap"] - base["benefit_cap_reduction"]
     )
     paid, base_paid = reformed["universal_credit"], base["universal_credit"]
-    deduction_rise = reformed["uc_deductions"] - base["uc_deductions"]
-    rate = reformed["uc_deduction_rate"]
-    rates_changed = int(
-        np.sum(~np.isclose(rate, base["uc_deduction_rate"], rtol=1e-9, atol=1e-12))
-    )
-    awards_lower = int(np.sum(award < base_award - 1e-3))
-    payments_higher = int(np.sum(paid > base_paid + 1e-3))
-    beyond_deductions = int(
-        np.sum((base_paid - paid) - np.maximum(deduction_rise, 0) > 1e-3)
-    )
-    beyond_rate = int(
-        np.sum(deduction_rise - rate * (allowance - base_allowance) > 1e-3)
-    )
+    deduction_change = reformed["uc_deductions"] - base["uc_deductions"]
+    unaccounted = (paid - base_paid) - ((award - base_award) - deduction_change)
+    awards_lower = int(np.sum(award < base_award - PENNY))
+    payments_unaccounted = int(np.sum(np.abs(unaccounted) > PENNY))
+    payments_higher = int(np.sum(paid > base_paid + PENNY))
     holds = (
         scaled
         and awards_lower == 0
-        and beyond_deductions == 0
-        and rates_changed == 0
-        and beyond_rate == 0
+        and payments_unaccounted == 0
         and payments_higher > 0
     )
     return holds, {
         "standard_allowance_scaled_10_percent": scaled,
         "awards_lower": awards_lower,
-        "payments_lower": int(np.sum(paid < base_paid - 1e-3)),
+        "payments_lower": int(np.sum(paid < base_paid - PENNY)),
         "payments_higher": payments_higher,
-        "payment_falls_beyond_deduction_rises": beyond_deductions,
-        "deduction_rates_changed": rates_changed,
-        "deduction_rises_beyond_rate_times_allowance_rise": beyond_rate,
+        "payments_not_award_less_deductions": payments_unaccounted,
     }
 
 
