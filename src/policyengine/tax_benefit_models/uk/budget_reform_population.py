@@ -63,6 +63,35 @@ STATE_PENSION_RATES = (
 )
 RESPONSE_YEAR = 2027
 
+COUNTRY_POPULATION_CHECKS = (
+    "population_baseline_isolation",
+    "population_april_rate_change",
+    "population_finite_change_expires",
+    "population_uc_standard_allowance_plus_10",
+    "population_state_pension_plus_10",
+)
+UNREFORMED_POPULATION_CHECKS = (
+    "population_baseline_isolation",
+    "population_query_order",
+)
+
+
+def population_check_routes(routes: Sequence[str]) -> tuple[tuple[str, str], ...]:
+    """The complete full-run coverage, including comparison and baseline routes."""
+    country = [route for route in routes if route.startswith("country.")]
+    if not country:
+        return (("population", "-"),)
+    return (
+        tuple(
+            (check, route) for check in COUNTRY_POPULATION_CHECKS for route in country
+        )
+        + tuple((check, "unreformed") for check in UNREFORMED_POPULATION_CHECKS)
+        + tuple(
+            ("population_routes_agree", f"{country[0]} = {route}")
+            for route in country[1:]
+        )
+    )
+
 
 def plus_ten_percent(paths: Sequence[str]) -> dict:
     """Each parameter 10% above current law for the response year."""
