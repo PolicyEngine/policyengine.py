@@ -444,6 +444,28 @@ def test_levels_published_together_need_a_declared_relation():
         Release(acknowledge=[RECOVERABLE_REMAINDER])
 
 
+def _withhold_suggestions(release, rounds=20):
+    """Resolve blocking findings one at a time, as a person would."""
+    withheld = set()
+    for _ in range(rounds):
+        blocking = [finding for finding in release.check() if finding.blocking]
+        if not blocking:
+            return withheld
+        finding = blocking[0]
+        level = finding.level if finding.suggested else finding.group_level
+        area = finding.suggested or finding.group
+        withheld.add((level, area))
+        family = finding.family
+        release.withhold(
+            level=level,
+            area_code=area,
+            reform="reform",
+            year=2026,
+            outcome="average_change" if family == "change" else family,
+        )
+    raise AssertionError("findings did not resolve")
+
+
 def test_an_area_minus_the_public_areas_inside_it_is_checked():
     """A local authority that is one seat plus a few households of another."""
     data = _records(STRONG)
@@ -457,11 +479,16 @@ def test_an_area_minus_the_public_areas_inside_it_is_checked():
     findings = release.check()
 
     blocking = _blocking(findings, RECOVERABLE_REMAINDER)
+    # The five households are recovered three ways: L1 minus S1, S1's
+    # authorities minus S1, and S2 to S6 minus L2.
     assert {
         (f.relation, f.level, f.group, f.group_level, f.suggested) for f in blocking
-    } == {("containment", "constituency", "L1", "local_authority", "S1")}
-    # The rest is five households. Every family fails on it: also the share
-    # losing, because "none of these five lose" is a statement about five.
+    } == {
+        ("containment", "constituency", "L1", "local_authority", "S1"),
+        ("containment", "local_authority", "S1", "constituency", "L1"),
+        ("containment", "constituency", "L2", "local_authority", "S2"),
+    }
+    # Also the share losing: "none of these five lose" is a statement about five.
     assert {f.family for f in blocking} == {"change", "share_gaining", "share_losing"}
     overlap = [f for f in findings if f.code == UNCHECKED_OVERLAP]
     assert [f.blocking for f in overlap] == [False]
@@ -469,16 +496,75 @@ def test_an_area_minus_the_public_areas_inside_it_is_checked():
     with pytest.raises(DisclosureError, match=RECOVERABLE_REMAINDER):
         release.to_public()
 
-    for outcome in ("average_change", "share_gaining", "share_losing"):
-        release.withhold(
-            level="constituency",
-            area_code="S1",
-            reform="reform",
-            year=2026,
-            outcome=outcome,
-        )
-    assert not any(finding.blocking for finding in release.check())
+    withheld = _withhold_suggestions(release)
+
+    # Two cells must go: one that breaks L1 minus S1, one that breaks the
+    # seats around L2.
+    assert len(withheld) == 2
+    assert ("constituency", "S2") in withheld
     release.to_public()
+
+
+def test_an_area_covered_by_the_areas_that_meet_it_is_checked():
+    """Two seats that cover an authority, each with a few households outside it."""
+    seats = ["S1"] * 200 + ["S2"] * 200 + ["S3"] * 200 + ["S4"] * 200
+    authorities = (
+        ["L1"] * 197
+        + ["L2"] * 3
+        + ["L1"] * 198
+        + ["L2"] * 2
+        + ["L2"] * 100
+        + ["L3"] * 100
+        + ["L2"] * 100
+        + ["L3"] * 100
+    )
+    n = len(seats)
+    baseline = np.random.default_rng(1).uniform(20_000.0, 60_000.0, n)
+    data = {
+        "seats": np.array(seats, dtype=object),
+        "local_authoritys": np.array(authorities, dtype=object),
+        "weights": np.full(n, 100.0),
+        "source_ids": np.arange(n),
+        "baseline": baseline,
+        "change": np.full(n, 200.0),
+    }
+    release = Release(acknowledge=[UNCHECKED_OVERLAP])
+    release.add(_estimates(data, "constituency"))
+    release.add(_estimates(data, "local_authority"))
+
+    blocking = _blocking(release.check(), RECOVERABLE_REMAINDER)
+
+    # No area of either level lies wholly inside an area of the other, yet
+    # S1 + S2 - L1 gives the five households that the two seats hold in L2.
+    assert {(f.level, f.group, f.group_level) for f in blocking} == {
+        ("constituency", "L1", "local_authority")
+    }
+    assert {f.suggested for f in blocking} <= {"S1", "S2"}
+    _withhold_suggestions(release)
+    release.to_public()
+
+
+def test_public_areas_inside_a_withheld_area_cannot_add_up_to_it():
+    data = _records(STRONG)
+    data["local_authoritys"] = np.where(
+        np.isin(data["seats"], ["S1", "S2"]), "L1", "L2"
+    ).astype(object)
+    release = Release(acknowledge=[UNCHECKED_OVERLAP])
+    release.add(_estimates(data, "constituency"))
+    release.add(_estimates(data, "local_authority"))
+    release.withhold(
+        level="local_authority",
+        area_code="L1",
+        reform="reform",
+        year=2026,
+        outcome="average_change",
+    )
+
+    findings = _blocking(release.check(), RECOVERABLE_PARENT)
+
+    assert [(f.relation, f.group, f.group_level, f.family) for f in findings] == [
+        ("containment", "L1", "local_authority", "change")
+    ]
 
 
 def test_a_cell_that_is_already_public_is_not_a_secret():

@@ -57,13 +57,15 @@ must pass: the households that gain and those that do not.
 **Dominance.** While noise is off, a number is withheld in two cases:
 
 - one survey household carries more than half of it, by size;
-- what is left of it without its largest household, or without its two
-  largest, is less than 10% of the largest household's part (the p% rule).
-  This catches a total whose other parts cancel, and a total that two
-  households carry between them.
+- the p% rule: a reader of the number, or one household that knows its own
+  part, could estimate some household's part to within 10%. Every household
+  is a possible target and every other household a possible reader, so the
+  rule also catches a total whose other parts cancel.
 
-These rules protect one or two households. They do not stop a number that
-three or more households carry almost alone, as long as 10 contribute.
+These rules protect each household against any reader and against any one
+other household. They do not stop two or more households that pool what they
+know: a number that three households carry almost alone passes, as long as 10
+contribute.
 
 **Effective sample.** Weights that differ a lot make an estimate less precise
 than its household count suggests. Where the data gives one area and one
@@ -105,8 +107,9 @@ looks for such remainders:
 - child areas against their parent area (constituencies in regions, regions in
   the nation);
 - the components of a package against the package;
-- an area against the areas of another level that lie wholly inside it, when
-  two levels that do not nest are released together;
+- when two levels that do not nest are released together, an area against
+  the areas of the other level that lie wholly inside it, and against the
+  areas that meet it (their sum minus the area is what they hold outside it);
 - earlier publications, passed as `prior_public`.
 
 A remainder gets the rules of a cell. Estimates added with `publish=False`
@@ -143,9 +146,9 @@ Two findings can be accepted after review, with `acknowledge=[...]`:
 
 - `unchecked_overlap`: levels that overlap without nesting, such as
   constituencies and local authorities, are released together. The release
-  checks each area against the areas wholly inside it. It does not check
-  other differences between overlapping areas, and on weight-matrix data it
-  checks none.
+  checks each area against the areas wholly inside it and against the areas
+  that meet it. It does not check other differences between overlapping
+  areas, and on weight-matrix data it checks none.
 - `noise_reference_public`: an earlier table shows the same cells under
   another noise setting.
 
@@ -155,7 +158,13 @@ Noise is off by default. With `DisclosureSettings(noise=True)`, each survey
 household's change is scaled by a fixed factor between 8% and 12% away from 1,
 derived from its id and a secret key. The same household has the same factor
 in every table and every rebuild. Noise replaces the dominance rule; the count
-floor still applies.
+floor still applies. The range cannot start closer to 1 than 8%.
+
+A number that one household dominates, published with noise, gives that
+household's part to within 8 to 12%. The p% rule treats 10% as the line, so
+noise puts such a number right at that line, not safely past it. Whether the
+UK Data Service accepts noise in place of the dominance rule is a licence
+question, which is why noise stays off by default.
 
 - **Size.** The noise in a total is about a tenth of that total's sampling
   error.

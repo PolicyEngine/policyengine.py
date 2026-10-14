@@ -135,6 +135,54 @@ def test_two_households_that_carry_a_total_are_dominated():
     assert primary_tier(cell, SETTINGS, **LABELS) == (WITHHELD, PRIVATE_DOMINANT)
 
 
+def test_any_household_can_be_the_attacker():
+    """The -400 household knows its own part and learns the +1,000."""
+    contributions = np.array([1000.0, 500.0, -400.0] + [-495.0 / 17] * 17)
+    cell = support(np.ones(20), contributions, np.arange(20))
+
+    assert cell.top_share < SETTINGS.max_top_share
+    assert cell.rest_share == pytest.approx(5.0 / 1000.0)
+    assert primary_tier(cell, SETTINGS, **LABELS) == (WITHHELD, PRIVATE_DOMINANT)
+
+
+def test_any_household_can_be_the_target():
+    """Two large parts cancel, and the total gives the +600 away."""
+    contributions = np.array([1000.0, -990.0, 600.0] + [2.0, -2.0] * 8 + [2.0])
+    cell = support(np.ones(20), contributions, np.arange(20))
+
+    # Any reader is 12 off; a +2 household that knows its own part is 10 off.
+    assert cell.rest_share == pytest.approx(10.0 / 600.0)
+    assert primary_tier(cell, SETTINGS, **LABELS) == (WITHHELD, PRIVATE_DOMINANT)
+
+
+def test_the_rest_share_agrees_with_a_direct_search():
+    """Every household as target, every other household or none as attacker."""
+    rng = np.random.default_rng(0)
+    for _ in range(500):
+        n = int(rng.integers(1, 25))
+        parts = rng.normal(0.0, 100.0, n) * rng.choice([1.0, 0.01], n)
+        cell = support(np.ones(n), parts, np.arange(n))
+        total = parts.sum()
+        direct = min(
+            min(
+                [abs(total - part)]
+                + [abs(total - part - other) for j, other in enumerate(parts) if j != i]
+            )
+            / abs(part)
+            for i, part in enumerate(parts)
+        )
+        assert cell.rest_share == pytest.approx(direct, rel=1e-9, abs=1e-12)
+
+
+def test_three_households_that_carry_a_total_are_not_caught():
+    """The rules protect against one reader or one household, not a coalition."""
+    contributions = np.array([500.0] * 3 + [2.0] * 17)
+    cell = support(np.ones(20), contributions, np.arange(20))
+
+    assert cell.rest_share > SETTINGS.min_rest_share
+    assert primary_tier(cell, SETTINGS, **LABELS)[0] != WITHHELD
+
+
 def test_the_rest_share_measures_what_is_left_without_the_largest():
     even = support(np.ones(40), np.full(40, 50.0), np.arange(40))
     skewed = support(np.ones(3), np.array([100.0, 50.0, 50.0]), np.arange(3))

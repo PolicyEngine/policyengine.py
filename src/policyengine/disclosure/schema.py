@@ -116,6 +116,12 @@ ALREADY_PUBLIC = "already_public"
 ACKNOWLEDGEABLE_FINDINGS = (UNCHECKED_OVERLAP, NOISE_REFERENCE_PUBLIC)
 
 
+# The lowest distance of a noise factor from 1. Noise stands in for the
+# dominance rule, so it may not come closer to 1 than the p% rule's 10%
+# allows, give or take the noise range.
+MIN_NOISE_DISTANCE = 0.08
+
+
 def is_power_of_ten(value: float) -> bool:
     if not math.isfinite(value) or value <= 0:
         return False
@@ -142,6 +148,7 @@ class DisclosureSettings(BaseModel):
     change_tolerance: float = Field(default=1.0, ge=1.0)
     noise: bool = False
     # Distance of a noise factor from 1: uniform on this range, either side.
+    # Noise replaces the dominance rule, so the range cannot start below 8%.
     noise_distance: tuple[float, float] = (0.08, 0.12)
     n_replicates: int = Field(default=1000, ge=200)
     interval: float = Field(default=0.90, gt=0.5, lt=1.0)
@@ -164,8 +171,10 @@ class DisclosureSettings(BaseModel):
         cls, value: tuple[float, float]
     ) -> tuple[float, float]:
         low, high = value
-        if not 0.0 < low < high < 1.0:
-            raise ValueError("noise_distance must satisfy 0 < low < high < 1")
+        if not MIN_NOISE_DISTANCE <= low < high < 1.0:
+            raise ValueError(
+                f"noise_distance must satisfy {MIN_NOISE_DISTANCE} <= low < high < 1"
+            )
         return value
 
     @field_validator("min_rounding_base")

@@ -281,7 +281,11 @@ class Release:
     def _passes(
         self, estimates: AreaEstimates, weights: np.ndarray, family: str
     ) -> tuple[bool, bool]:
-        """Whether a remainder may be recovered, and whether it is empty.
+        """Whether a remainder passes, and whether it holds no records at all.
+
+        Only a remainder with no records gives a withheld parent away by
+        addition. A remainder whose records happen not to change still hides
+        them: a reader cannot know that they did not.
 
         A remainder gets the rules of a cell, no more and no less. The count
         floor always applies. With noise on, what subtraction recovers is the
@@ -301,8 +305,7 @@ class Release:
             one_area_per_record=estimates.areas.one_area_per_record,
             noise=estimates.noise,
         )
-        empty = supports[0].n_sources == 0
-        return tier != WITHHELD, empty
+        return tier != WITHHELD, not len(records)
 
     @staticmethod
     def _require_same_records(first: AreaEstimates, second: AreaEstimates) -> None:
@@ -638,8 +641,9 @@ class Release:
                 for outer, inner in ((first, second), (second, first))
             ]
             scope = (
-                "Areas that lie wholly inside an area of the other level are "
-                "checked. Other differences between overlapping areas are not."
+                "Each area is checked against the areas of the other level that "
+                "lie wholly inside it and against those that meet it. Other "
+                "differences between overlapping areas are not."
                 if all(contained)
                 else "Differences between overlapping areas are not checked."
             )
@@ -664,11 +668,14 @@ class Release:
         known: set[tuple[str, str, str, int, str]],
         findings: list[Finding],
     ) -> bool:
-        """Check an outer area against the inner areas wholly inside it.
+        """Check each outer area against the inner areas inside it and around it.
 
-        An outer area minus its public inner areas is a remainder. Returns
-        False when the two levels do not allow the check: they must hold the
-        same records with one area and one weight per record.
+        Two remainders come from one outer area: the area minus the public
+        inner areas wholly inside it, and the public inner areas that meet it
+        minus the area. The second is the households those inner areas hold
+        outside it. Returns False when the two levels do not allow the check:
+        they must hold the same records with one area and one weight per
+        record.
         """
         outer, inner = self._estimates[outer_key], self._estimates[inner_key]
         outer_level, reform, year = outer_key
@@ -688,59 +695,111 @@ class Release:
         pairs = pairs[inner_weights > 0].drop_duplicates()
         whole = pairs[~pairs["inner"].duplicated(keep=False) & (pairs["outer"] != "")]
         inside = whole.groupby("outer")["inner"].apply(sorted).to_dict()
+        meeting = (
+            pairs[pairs["outer"] != ""]
+            .groupby("outer")["inner"]
+            .apply(sorted)
+            .to_dict()
+        )
         for family in FAMILIES:
             outer_tiers = tiers[(outer_key, family)]
             inner_tiers = tiers[(inner_key, family)]
             sources = inner.family_sources(family)
-            for code, members in inside.items():
-                if (
-                    outer_tiers.get(code) == WITHHELD
-                    and (outer_level, code, reform, year, family) not in known
-                ):
-                    continue
-                public = [
-                    c
-                    for c in members
-                    if inner_tiers[c] != WITHHELD
-                    or (inner_level, c, reform, year, family) in known
-                ]
-                if not public:
-                    continue
-                weights = outer.areas.record_weights([code])
-                weights = np.clip(weights - inner.areas.record_weights(public), 0, None)
-                passes, _ = self._passes(outer, weights, family)
-                if passes:
-                    continue
+
+            def public(cell: str) -> bool:
+                return (
+                    inner_tiers[cell] != WITHHELD
+                    or (inner_level, cell, reform, year, family) in known
+                )
+
+            def suggest(cells: list[str]) -> Optional[str]:
+                # A cell that is public elsewhere cannot be withheld here.
                 shown = [
                     c
-                    for c in public
+                    for c in cells
                     if self._published[inner_key]
                     and inner_tiers[c] != WITHHELD
                     and sources[c] > 0
                 ]
-                findings.append(
-                    Finding(
-                        code=RECOVERABLE_REMAINDER,
-                        blocking=True,
-                        relation="containment",
-                        message=(
-                            f"{outer_level} {code!r} minus the public "
-                            f"{inner_level} cells inside it fails the rules, so "
-                            "subtraction recovers the rest. Withhold one of "
-                            f"those cells, or the {outer_level} cell."
-                        ),
-                        level=inner_level,
-                        reform=reform,
-                        year=year,
-                        family=family,
-                        group=code,
-                        group_level=outer_level,
-                        members=sorted(set(members) - set(public)),
-                        suggested=min(
-                            shown, key=lambda c: (sources[c], c), default=None
-                        ),
-                    )
+                return min(shown, key=lambda c: (sources[c], c), default=None)
+
+            location: dict[str, Any] = {
+                "relation": "containment",
+                "level": inner_level,
+                "reform": reform,
+                "year": year,
+                "family": family,
+                "group_level": outer_level,
+            }
+            for code in outer.areas.area_codes:
+                outer_public = (
+                    outer_tiers.get(code) != WITHHELD
+                    or (outer_level, code, reform, year, family) in known
                 )
+                members = inside.get(code, [])
+                shown_inside = [c for c in members if public(c)]
+                if shown_inside:
+                    weights = outer.areas.record_weights([code])
+                    weights -= inner.areas.record_weights(shown_inside)
+                    weights = np.clip(weights, 0, None)
+                    weights[np.abs(weights) < 1e-9] = 0.0
+                    passes, empty = self._passes(outer, weights, family)
+                    if not outer_public and empty:
+                        findings.append(
+                            Finding(
+                                code=RECOVERABLE_PARENT,
+                                blocking=True,
+                                message=(
+                                    f"{outer_level} {code!r} is withheld but the "
+                                    f"public {inner_level} cells inside it add up "
+                                    "to it, so addition recovers it."
+                                ),
+                                group=code,
+                                **location,
+                            )
+                        )
+                    elif outer_public and not passes:
+                        findings.append(
+                            Finding(
+                                code=RECOVERABLE_REMAINDER,
+                                blocking=True,
+                                message=(
+                                    f"{outer_level} {code!r} minus the public "
+                                    f"{inner_level} cells inside it fails the "
+                                    "rules, so subtraction recovers the rest. "
+                                    "Withhold one of those cells, or the "
+                                    f"{outer_level} cell."
+                                ),
+                                group=code,
+                                members=sorted(set(members) - set(shown_inside)),
+                                suggested=suggest(shown_inside),
+                                **location,
+                            )
+                        )
+                around = meeting.get(code, [])
+                if not outer_public or not around or not all(map(public, around)):
+                    continue
+                weights = inner.areas.record_weights(around)
+                weights -= outer.areas.record_weights([code])
+                passes, _ = self._passes(outer, np.clip(weights, 0, None), family)
+                if not passes:
+                    findings.append(
+                        Finding(
+                            code=RECOVERABLE_REMAINDER,
+                            blocking=True,
+                            message=(
+                                f"The public {inner_level} cells that meet "
+                                f"{outer_level} {code!r} cover it. Their sum "
+                                "minus it fails the rules, so subtraction "
+                                "recovers the households they hold outside it. "
+                                "Withhold one of those cells, or the "
+                                f"{outer_level} cell."
+                            ),
+                            group=code,
+                            suggested=suggest(around),
+                            **location,
+                        )
+                    )
         return True
 
     def _check_prior(

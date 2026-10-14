@@ -57,23 +57,35 @@ def support(
 
 
 def _rest_share(signed: np.ndarray) -> float:
-    """The rest of a total next to its largest household: the p% measure.
+    """The p% measure on signed parts, for every household and every attacker.
 
     ``top_share`` works on magnitudes, so it misses a total whose other parts
-    cancel: the total is then one household's contribution. This measure
-    works on the signed total. It takes what is left without the largest
-    household, and what is left without the two largest, as a share of the
-    largest household's part. A small value means the number gives that part
-    away, to any reader or to the second-largest household.
+    cancel. This measure works on the signed parts, one per survey household.
+    For a household *i*, the rest of the total without it is ``R = T - c_i``.
+    Any reader of the total estimates ``c_i`` with error ``R``. A household
+    *j* that knows its own part estimates it with error ``R - c_j``. The
+    measure is the smallest such error as a share of ``|c_i|``, over every
+    *i* and every *j*. A small value means the number gives one household's
+    part away, to any reader or to one other household.
     """
-    order = np.argsort(-np.abs(signed))
-    largest = abs(float(signed[order[0]]))
-    if largest == 0:
+    parts = signed[signed != 0]
+    if not len(parts):
         return math.inf
-    total = float(signed.sum())
-    without_one = abs(total - float(signed[order[0]]))
-    without_two = abs(total - float(signed[order[:2]].sum()))
-    return min(without_one, without_two) / largest
+    rest = float(signed.sum()) - parts
+    order = np.argsort(parts, kind="stable")
+    ranked = parts[order]
+    rank = np.empty(len(parts), dtype=int)
+    rank[order] = np.arange(len(parts))
+    # The part nearest to each R is next to where R would sort. If that part
+    # is the household's own, the nearest other part is one step further.
+    slot = np.searchsorted(ranked, rest)
+    error = np.abs(rest)
+    for step in (-2, -1, 0, 1):
+        position = slot + step
+        valid = (position >= 0) & (position < len(ranked)) & (position != rank)
+        nearest = ranked[np.clip(position, 0, len(ranked) - 1)]
+        error = np.where(valid, np.minimum(error, np.abs(rest - nearest)), error)
+    return float(np.min(error / np.abs(parts)))
 
 
 def family_supports(

@@ -36,6 +36,8 @@ PACKAGE = Path(__file__).parents[1] / "src" / "policyengine" / "disclosure"
         {"change_tolerance": 0.0},
         {"change_tolerance": 1e-9},
         {"min_rest_share": 0.01},
+        {"noise_distance": (1e-6, 2e-6)},
+        {"noise_distance": (0.05, 0.1)},
         {"n_replicates": 50},
     ],
 )
