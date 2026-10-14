@@ -640,7 +640,8 @@ def _strict_json_value(value: Any, path: str, nonfinite: bool) -> Any:
     if isinstance(value, datetime.datetime):
         raise ReceiptError(f"{path}: datetimes are ambiguous; pass an ISO 8601 string.")
     if isinstance(value, datetime.date):
-        return value.isoformat()
+        # The date's own method, so a subclass cannot choose its text.
+        return datetime.date.isoformat(value)
     if isinstance(value, Mapping):
         result: dict[str, Any] = {}
         for key, item in value.items():
@@ -691,7 +692,9 @@ def _payload_sha256(value: Any) -> str:
     removes a value that ``{"p": {}}`` keeps), so the payload is digested
     exactly as given. Infinite numbers are encoded as reserved objects
     (:func:`_strict_json_value` with ``nonfinite``); a payload without them
-    digests as it did before they were allowed.
+    digests as it did before they were allowed, except one whose keys or
+    dates are subclasses that override how ``str`` or ``date`` render: those
+    now digest by their characters and their date, as content digests do.
     """
 
     try:
@@ -2048,16 +2051,21 @@ def composed_reform_identity(
     and which leaves the order to the engine (policyengine-uk 2.125.1 runs a
     Scenario's modifier before its parameter changes).
 
-    On policyengine-uk 2.126.12, which applies a Scenario's own parameter
-    changes before its modifier, run it as one Scenario that carries the
-    members' merged changes as its own ``parameter_changes`` and whose
-    modifier runs only the members' modifiers. Do not apply the changes
-    inside a modifier there: that version applies a Scenario's own changes
-    before the construction steps that read parameters (the Universal Credit
-    rebalancing inputs and the structural reforms switched on by parameters)
-    and runs its modifier after them, so a change made inside a modifier
-    reaches neither step and the combined run can differ from a member run
-    alone.
+    On policyengine-uk 2.126.12, run it as one Scenario assembled from each
+    member's own Scenario (``Scenario.from_reform(d)`` for a reform
+    dictionary member, the scenario itself for a scenario member): the
+    scenario members' merged ``parameter_changes``, every member's
+    ``dated_reforms`` in member order, and a modifier that runs every
+    member's modifier in member order, including the one ``from_reform``
+    adds. Do not merge a reform dictionary into ``parameter_changes``: that
+    version reads a scalar value in a reform dictionary as applying from
+    2023, and in ``parameter_changes`` as applying from 2000. Do not apply
+    changes inside a modifier either: when ``applied_before_data_load`` is
+    false, that version applies a Scenario's own changes before the
+    construction steps that read parameters (the Universal Credit
+    rebalancing inputs and the structural reforms switched on by
+    parameters) and runs its modifier after them, so a change made inside
+    a modifier reaches neither step.
 
     The composer must also make sure no two members change the same
     parameter, in any form: with disjoint changes the merged result does not

@@ -3840,3 +3840,57 @@ def test_an_infinite_modifier_default_binds_and_nan_is_refused(tmp_path, monkeyp
             _identity(module.raise_rate)
     finally:
         sys.modules.pop(name, None)
+
+
+def test_typed_infinities_are_spelled_by_float_hex():
+    """Round-2 review: the typed encoding of an infinite default is pinned."""
+
+    typed = receipt_module._typed_value
+    assert typed(float("inf")) == {"type": "float", "hex": "inf"}
+    assert typed(float("-inf")) == {"type": "float", "hex": "-inf"}
+
+
+class _ForgedDate(datetime.date):
+    """A date whose own ``isoformat`` spells a reserved object."""
+
+    def isoformat(self):
+        return {"$nonfinite": "Infinity"}
+
+
+def test_a_date_subclass_digests_as_its_date():
+    """Round-2 review: a subclass cannot choose its text, or forge an infinity."""
+
+    forged = _reform_digest({CAP: {"2027": _ForgedDate(2027, 4, 6)}})
+    assert forged == _reform_digest({CAP: {"2027": datetime.date(2027, 4, 6)}})
+    assert forged != _reform_digest({CAP: {"2027": float("inf")}})
+    assert content_sha256([_ForgedDate(2027, 4, 6)]) == content_sha256(["2027-04-06"])
+
+
+class _OtherText(str):
+    """A key whose ``str()`` differs from its characters."""
+
+    def __str__(self):
+        return "other"
+
+
+class _OtherBytes(str):
+    """A key whose ``encode`` would change RFC 8785's key order."""
+
+    def encode(self, *args, **kwargs):
+        return b"\xff"
+
+
+def test_string_subclass_keys_digest_by_their_characters():
+    """Round-2 review: keys become exact strings in content and reform digests.
+
+    Before #588, an overridden ``encode`` changed the key order RFC 8785
+    sorted by; now the key sorts by its characters, as an exact string does.
+    """
+
+    assert content_sha256({_OtherText("a"): 1}) == content_sha256({"a": 1})
+    assert _reform_digest({_OtherText(CAP): 1.0}) == _reform_digest({CAP: 1.0})
+    assert content_sha256({_OtherBytes("z"): 1, "a": 2}) == content_sha256(
+        {"z": 1, "a": 2}
+    )
+    with pytest.raises(ReceiptError, match="collide"):
+        content_sha256({_EqualsNothing("a"): 1, "a": 2})
