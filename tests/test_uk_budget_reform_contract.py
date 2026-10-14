@@ -210,9 +210,10 @@ def test_assertions_with_the_same_value_request_have_distinct_identities(
 def test_assertion_ids_change_no_verdict():
     """Labelling rows changes no status, expected value or actual value.
 
-    The fixture holds the rows the runner produced on main 9d0c7c57, before
-    rows carried an ``assertion_id``, for every case and route under three
-    fake routes (see ``tests/uk_contract_row_scenarios.py``).
+    The fixture holds the rows the runner produced on main 503d4998, before
+    rows carried an ``assertion_id``, for every case and route under fixed
+    fake routes plus focused verdict scenarios (see
+    ``tests/uk_contract_row_scenarios.py``).
     """
 
     from pathlib import Path
@@ -480,6 +481,175 @@ def test_modifier_cases_differ_only_in_order_and_skip_the_household_route():
 
 
 # Population checks.
+
+
+@pytest.fixture
+def stub_population_checks(monkeypatch):
+    """Run every population branch with deterministic, responsive fake arrays."""
+    from types import SimpleNamespace
+
+    import policyengine_uk
+    from policyengine_core.reforms import Reform
+    from policyengine_uk.utils import scenario
+
+    from policyengine.tax_benefit_models.uk import (
+        budget_reform_population as population,
+    )
+
+    class Simulation:
+        def __init__(self, dataset, reform=None, scenario=None):
+            self.reform = reform if scenario is None else scenario.parameter_changes
+
+        @property
+        def baseline(self):
+            return Simulation(dataset=None)
+
+        def calculate(self, variable, year):
+            if (
+                variable == "income_tax"
+                and year == 2027
+                and self.reform in (population.APRIL, population.FINITE)
+            ):
+                return [2.0]
+            if self.reform == {"response": population.UC_STANDARD_ALLOWANCES}:
+                if variable in ("uc_standard_allowance", "universal_credit"):
+                    return [1.1]
+            if self.reform == {"response": population.STATE_PENSION_RATES}:
+                if variable in (
+                    "basic_state_pension",
+                    "new_state_pension",
+                    "state_pension",
+                ):
+                    return [1.1]
+            return [1.0]
+
+    monkeypatch.setattr(policyengine_uk, "Microsimulation", Simulation)
+    monkeypatch.setattr(
+        scenario, "Scenario", lambda **kwargs: SimpleNamespace(**kwargs)
+    )
+    monkeypatch.setattr(
+        Reform, "from_dict", staticmethod(lambda reform, **kwargs: reform)
+    )
+    monkeypatch.setattr(
+        population, "subsample", lambda *args: SimpleNamespace(copy=lambda: None)
+    )
+    monkeypatch.setattr(
+        population, "plus_ten_percent", lambda paths: {"response": paths}
+    )
+    return population
+
+
+@pytest.mark.parametrize("failure", ["early", "partial"])
+def test_population_errors_emit_only_the_declared_diagnostic_after_progress(
+    monkeypatch, stub_population_checks, failure
+):
+    population = stub_population_checks
+    route = "country.reform_dict"
+
+    def fail(*args):
+        raise OSError("forced population failure")
+
+    monkeypatch.setattr(
+        population, "subsample" if failure == "early" else "plus_ten_percent", fail
+    )
+    rows = population.run_population_checks("unused.h5", [route], seed=7)
+    diagnostic = {
+        "check_id": population.POPULATION_ERROR_DIAGNOSTIC[0],
+        "route": population.POPULATION_ERROR_DIAGNOSTIC[1],
+        "status": "error",
+        "detail": "OSError: forced population failure",
+        "subsample_households": population.SUBSAMPLE_HOUSEHOLDS,
+        "seed": 7,
+    }
+    assert population.POPULATION_ERROR_DIAGNOSTIC == ("population", "-")
+    assert population.POPULATION_ERROR_DIAGNOSTIC not in (
+        population.population_check_routes([route])
+    )
+    expected_progress = (
+        []
+        if failure == "early"
+        else [
+            (population.POPULATION_BASELINE_ISOLATION, route),
+            (population.POPULATION_BASELINE_ISOLATION, "unreformed"),
+            (population.POPULATION_QUERY_ORDER, "unreformed"),
+            (population.POPULATION_APRIL_RATE_CHANGE, route),
+            (population.POPULATION_FINITE_CHANGE_EXPIRES, route),
+        ]
+    )
+    assert rows[-1] == diagnostic
+    assert [(row["check_id"], row["route"]) for row in rows[:-1]] == expected_progress
+    assert all(row["status"] == "pass" for row in rows[:-1])
+    assert [row for row in rows if row["status"] == "error"] == [diagnostic]
+
+
+def test_a_report_with_the_population_error_diagnostic_does_not_hold(
+    monkeypatch, stub_population_checks
+):
+    population = stub_population_checks
+    diagnostic = {
+        "check_id": population.POPULATION_ERROR_DIAGNOSTIC[0],
+        "route": population.POPULATION_ERROR_DIAGNOSTIC[1],
+        "status": "error",
+        "detail": "forced population failure",
+    }
+    monkeypatch.setattr(population, "run_population_checks", lambda *args: [diagnostic])
+    monkeypatch.setattr(contract, "evaluate_case", lambda *args: [{"status": "pass"}])
+    monkeypatch.setattr(contract, "release_dead_variable_modules", lambda: None)
+    monkeypatch.setattr(contract, "PROPERTIES", ())
+    monkeypatch.setattr(contract, "reference_parameters", lambda: None)
+    monkeypatch.setattr(contract, "parameter_reader", lambda parameters: None)
+    monkeypatch.setattr(contract, "shared_state", lambda: {})
+    monkeypatch.setattr(
+        contract, "module_parameters_unchanged", lambda before: {"status": "pass"}
+    )
+    monkeypatch.setattr(contract, "_sha256", lambda path: "unused")
+    report = run_budget_reform_contract(
+        routes=["country.reform_dict"],
+        cases=["april_rate_change"],
+        dataset_path="unused.h5",
+        max_examples=0,
+    )
+    assert report["population"] == [diagnostic]
+    assert report["summary"]["error"] == 1
+    assert report["holds"] is False
+
+
+@pytest.mark.parametrize(
+    "routes",
+    [
+        ["country.reform_dict", "country.reform_dict"],
+        ["country.reform_dict", "country.scenario_parameter_changes"],
+        [
+            "country.reform_dict",
+            "country.scenario_parameter_changes",
+            "country.reform_dict",
+            "country.reform_from_dict",
+        ],
+    ],
+)
+def test_population_coverage_deduplicates_only_country_baseline_rows(
+    stub_population_checks, routes
+):
+    from collections import Counter
+
+    population = stub_population_checks
+    rows = population.run_population_checks("unused.h5", routes)
+    declared = Counter(population.population_check_routes(routes))
+    assert rows and all(row["status"] == "pass" for row in rows), rows
+    assert Counter((row["check_id"], row["route"]) for row in rows) == declared
+    route_counts = Counter(routes)
+    for route, count in route_counts.items():
+        assert declared[(population.POPULATION_BASELINE_ISOLATION, route)] == 1
+        for check in population.COUNTRY_POPULATION_CHECKS[1:]:
+            assert declared[(check, route)] == count
+    assert (
+        sum(
+            count
+            for (check, route), count in declared.items()
+            if check == population.POPULATION_ROUTES_AGREE
+        )
+        == len(routes) - 1
+    )
 
 
 def _tiny_dataset_file(tmp_path, households=5, recipients=False):
