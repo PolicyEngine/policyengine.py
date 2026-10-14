@@ -41,6 +41,7 @@ import sys
 from importlib import metadata
 from pathlib import Path
 from types import CodeType, SimpleNamespace
+from typing import Union
 
 import jsonschema
 import numpy as np
@@ -141,7 +142,7 @@ def _build(dataset_file, bundle=None, **kwargs):
 
 @pytest.fixture
 def index_installs(monkeypatch):
-    """Certification fixtures simulate index installs, without wheel evidence."""
+    """Simulate index certification; loaded paths still use real install metadata."""
 
     monkeypatch.setattr(receipt_module, "_read_direct_url", lambda name: None)
 
@@ -617,6 +618,9 @@ def test_unreadable_wheels_raise_receipt_errors(tmp_path, content):
 
 
 def _direct_url_identity(monkeypatch, direct_url):
+    # These metadata-only fixtures do not load a country package.
+    monkeypatch.delitem(sys.modules, "policyengine_uk", raising=False)
+
     class Distribution:
         version = INSTALLED_UK
 
@@ -718,6 +722,260 @@ def test_real_editable_install_is_recorded_and_uncertified(tmp_path):
     assert verify_certificate(receipt, _bundle_for(path.read_bytes())) == [
         "the receipt is uncertified"
     ]
+
+
+def _loaded_distribution(tmp_path, monkeypatch, package, *, direct_url=None):
+    import_name = package.replace("-", "_")
+    version = metadata.version(package)
+    root = tmp_path / "installed"
+    source = root / import_name / "__init__.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("VALUE = 1\n")
+    directory = root / f"{import_name}-{version}.dist-info"
+    directory.mkdir()
+    (directory / "METADATA").write_text(f"Name: {package}\nVersion: {version}\n")
+    (directory / "RECORD").write_text(f"{import_name}/__init__.py,,\n")
+    if direct_url is not None:
+        (directory / "direct_url.json").write_text(json.dumps(direct_url))
+    distribution = metadata.Distribution.at(directory)
+    original = metadata.distribution
+    monkeypatch.setattr(
+        receipt_module.metadata,
+        "distribution",
+        lambda name: distribution if name == package else original(name),
+    )
+    module = SimpleNamespace(__file__=str(source))
+    monkeypatch.setitem(sys.modules, import_name, module)
+    return distribution, module, source, directory
+
+
+@pytest.mark.parametrize("package", list(receipt_module.UK_PACKAGES.values()))
+@pytest.mark.parametrize("archive", [False, True])
+def test_loaded_index_and_archive_packages_match_record(
+    tmp_path, monkeypatch, package, archive
+):
+    direct_url = {"url": "file:///package.whl", "archive_info": {}} if archive else None
+    _, _, source, _ = _loaded_distribution(
+        tmp_path, monkeypatch, package, direct_url=direct_url
+    )
+    identity = installed_package_identity(package)
+    assert identity.name == package
+    assert identity.install_origin == ("archive" if archive else None)
+    assert source.is_file()
+
+
+@pytest.mark.parametrize("package", list(receipt_module.UK_PACKAGES.values()))
+@pytest.mark.parametrize("archive", [False, True])
+def test_loaded_checkout_cannot_name_an_index_or_archive_install(
+    tmp_path, monkeypatch, package, archive
+):
+    direct_url = {"url": "file:///package.whl", "archive_info": {}} if archive else None
+    _, module, source, _ = _loaded_distribution(
+        tmp_path, monkeypatch, package, direct_url=direct_url
+    )
+    checkout = tmp_path / "checkout" / source.parent.name / "__init__.py"
+    checkout.parent.mkdir(parents=True)
+    checkout.write_text("VALUE = 2\n")
+    module.__file__ = str(checkout)
+    with pytest.raises(ReceiptError) as error:
+        installed_package_identity(package)
+    message = str(error.value)
+    assert package in message and str(checkout) in message
+    assert (
+        "installed distribution" in message
+        and "cannot name the code that ran" in message
+    )
+
+
+@pytest.mark.parametrize("package", list(receipt_module.UK_PACKAGES.values()))
+def test_verified_wheel_cannot_name_another_loaded_checkout(
+    tmp_path, monkeypatch, package
+):
+    from policyengine.provenance import wheels
+
+    _, module, _, _ = _loaded_distribution(tmp_path, monkeypatch, package)
+    module.__file__ = str(tmp_path / "checkout" / "__init__.py")
+    verified = []
+    monkeypatch.setattr(
+        wheels,
+        "verify_installed_against_wheel",
+        lambda *args, **kwargs: verified.append(args),
+    )
+    with pytest.raises(ReceiptError, match="cannot name the code that ran"):
+        installed_package_identity(package, wheel_path=tmp_path / "package.whl")
+    assert verified == []
+
+
+@pytest.mark.parametrize("builder", ["direct", "microsimulation"])
+@pytest.mark.parametrize("package", list(receipt_module.UK_PACKAGES.values()))
+def test_receipt_builders_refuse_loaded_checkout(
+    dataset_file, tmp_path, monkeypatch, builder, package
+):
+    bundle = _bundle_for(dataset_file.read_bytes())
+    if builder == "microsimulation":
+        simulation = _managed_simulation(dataset_file, bundle)
+    _, module, _, _ = _loaded_distribution(tmp_path, monkeypatch, package)
+    module.__file__ = str(tmp_path / "checkout" / "__init__.py")
+    with pytest.raises(ReceiptError, match="cannot name the code that ran"):
+        if builder == "direct":
+            _build(dataset_file)
+        else:
+            _microsimulation_receipt(simulation, bundle)
+
+
+@pytest.mark.parametrize("package", list(receipt_module.UK_PACKAGES.values()))
+@pytest.mark.parametrize("editable", [False, True])
+@pytest.mark.parametrize("layout", ["", "src"])
+def test_loaded_directory_packages_are_under_the_direct_url(
+    tmp_path, monkeypatch, package, editable, layout
+):
+    checkout = tmp_path / "checkout with spaces"
+    direct_url = {"url": checkout.as_uri(), "dir_info": {"editable": editable}}
+    _, module, _, _ = _loaded_distribution(
+        tmp_path, monkeypatch, package, direct_url=direct_url
+    )
+    source = checkout / layout / package.replace("-", "_") / "__init__.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("VALUE = 1\n")
+    module.__file__ = str(source)
+    identity = installed_package_identity(package)
+    assert identity.install_origin == ("editable" if editable else "directory")
+
+
+@pytest.mark.parametrize("package", list(receipt_module.UK_PACKAGES.values()))
+@pytest.mark.parametrize("editable", [False, True])
+def test_loaded_directory_packages_refuse_another_checkout(
+    tmp_path, monkeypatch, package, editable
+):
+    checkout = tmp_path / "checkout"
+    direct_url = {"url": checkout.as_uri(), "dir_info": {"editable": editable}}
+    _loaded_distribution(tmp_path, monkeypatch, package, direct_url=direct_url)
+    with pytest.raises(
+        ReceiptError, match="cannot name the code that ran.*expected code under"
+    ):
+        installed_package_identity(package)
+
+
+def test_loaded_directory_origin_requires_path_components(tmp_path, monkeypatch):
+    checkout = tmp_path / "checkout"
+    _, module, _, _ = _loaded_distribution(
+        tmp_path,
+        monkeypatch,
+        "policyengine",
+        direct_url={"url": checkout.as_uri(), "dir_info": {"editable": True}},
+    )
+    module.__file__ = str(tmp_path / "checkout-copy" / "policyengine" / "__init__.py")
+    with pytest.raises(ReceiptError, match="cannot name the code that ran"):
+        installed_package_identity("policyengine")
+
+
+@pytest.mark.parametrize("package", list(receipt_module.UK_PACKAGES.values()))
+def test_loaded_package_origin_compares_real_paths(tmp_path, monkeypatch, package):
+    _, module, source, _ = _loaded_distribution(tmp_path, monkeypatch, package)
+    link = tmp_path / "linked-package"
+    link.symlink_to(source.parent, target_is_directory=True)
+    module.__file__ = str(link / "__init__.py")
+    assert installed_package_identity(package).name == package
+
+
+def test_loaded_package_origin_resolves_record_paths(tmp_path, monkeypatch):
+    distribution, _, source, _ = _loaded_distribution(
+        tmp_path, monkeypatch, "policyengine"
+    )
+    link = tmp_path / "linked-installation"
+    link.symlink_to(source.parent.parent, target_is_directory=True)
+    monkeypatch.setattr(distribution, "locate_file", lambda entry: link / entry)
+    assert installed_package_identity("policyengine").name == "policyengine"
+
+
+def test_loaded_directory_origin_resolves_its_url(tmp_path, monkeypatch):
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    link = tmp_path / "linked-checkout"
+    link.symlink_to(checkout, target_is_directory=True)
+    _, module, _, _ = _loaded_distribution(
+        tmp_path,
+        monkeypatch,
+        "policyengine",
+        direct_url={"url": link.as_uri(), "dir_info": {}},
+    )
+    module.__file__ = str(checkout / "src" / "policyengine" / "__init__.py")
+    assert installed_package_identity("policyengine").install_origin == "directory"
+
+
+@pytest.mark.parametrize("package", list(receipt_module.UK_PACKAGES.values()))
+def test_unloaded_packages_have_no_source_to_compare(tmp_path, monkeypatch, package):
+    _, _, _, directory = _loaded_distribution(tmp_path, monkeypatch, package)
+    (directory / "RECORD").unlink()
+    monkeypatch.delitem(sys.modules, package.replace("-", "_"))
+    assert installed_package_identity(package).name == package
+
+
+def test_package_identity_remains_available_for_other_distributions(monkeypatch):
+    distribution = SimpleNamespace(version="1", read_text=lambda name: None)
+    original = metadata.distribution
+    monkeypatch.setattr(
+        metadata,
+        "distribution",
+        lambda name: distribution if name == "example" else original(name),
+    )
+    monkeypatch.setitem(sys.modules, "example", SimpleNamespace(__file__="example.py"))
+    assert installed_package_identity("example").version == "1"
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        None,
+        "",
+        "other.py,,\n",
+        "policyengine/__init__.py,\n",
+        '"unclosed,,\n',
+        'policyengine/__init__.py,"hash","3"junk\n',
+    ],
+)
+def test_loaded_package_requires_its_record_entry(tmp_path, monkeypatch, record):
+    _, _, _, directory = _loaded_distribution(tmp_path, monkeypatch, "policyengine")
+    if record is None:
+        (directory / "RECORD").unlink()
+    else:
+        (directory / "RECORD").write_text(record)
+    with pytest.raises(ReceiptError, match="cannot name the code that ran"):
+        installed_package_identity("policyengine")
+
+
+@pytest.mark.parametrize("loaded_file", [None, "", 7])
+def test_loaded_package_requires_a_source_file(tmp_path, monkeypatch, loaded_file):
+    _, module, _, _ = _loaded_distribution(tmp_path, monkeypatch, "policyengine")
+    module.__file__ = loaded_file
+    with pytest.raises(ReceiptError, match="loaded package has no source file"):
+        installed_package_identity("policyengine")
+
+
+def test_loaded_package_refuses_an_unreadable_record(tmp_path, monkeypatch):
+    distribution, _, _, _ = _loaded_distribution(tmp_path, monkeypatch, "policyengine")
+    original = distribution.read_text
+
+    def read_text(name):
+        if name == "RECORD":
+            raise OSError("unreadable")
+        return original(name)
+
+    monkeypatch.setattr(distribution, "read_text", read_text)
+    with pytest.raises(ReceiptError, match="source location cannot be read"):
+        installed_package_identity("policyengine")
+
+
+@pytest.mark.parametrize("url", ["https://localhost", "file://other-host"])
+def test_loaded_directory_origin_requires_a_local_file_url(tmp_path, monkeypatch, url):
+    _loaded_distribution(
+        tmp_path,
+        monkeypatch,
+        "policyengine",
+        direct_url={"url": url + str(tmp_path / "installed"), "dir_info": {}},
+    )
+    with pytest.raises(ReceiptError, match="install directory is not local"):
+        installed_package_identity("policyengine")
 
 
 @pytest.mark.parametrize("role", ["wrapper", "model", "core"])
@@ -3798,8 +4056,8 @@ def test_unreadable_process_start_time_is_refused(monkeypatch):
     ],
 )
 def test_readers_of_annotation_values_are_refused(tmp_path, header, body, match):
-    """Round-9 review M2: annotation values are not bound, so code may not
-    read them."""
+    """Explicit annotation readers remain outside the accepted module shape,
+    even though annotation values are checked."""
 
     source = (
         header + "\n\ndef _helper(value: float) -> float:\n    return value\n\n\n"
@@ -3815,10 +4073,249 @@ def test_readers_of_annotation_values_are_refused(tmp_path, header, body, match)
         sys.modules.pop(name, None)
 
 
+DISPATCH_SOURCE = (
+    "import functools\n\n\n"
+    "def default_annual_income(income):\n    return income\n\n\n"
+    "def weekly_annual_income(income: int):\n    return income * 52\n\n\n"
+    "def raise_rate(simulation):\n"
+    "    annual_income = functools.singledispatch(default_annual_income)\n"
+    "    annual_income.register(weekly_annual_income)\n"
+    "    simulation.result = annual_income(simulation.income)\n"
+)
+
+
+@pytest.mark.parametrize("managed", [False, True], ids=["builder", "microsimulation"])
+def test_singledispatch_annotations_are_rechecked_at_receipt_build(
+    tmp_path, dataset_file, managed
+):
+    name = "w4_receipt_r11_dispatch"
+    try:
+        module, _ = _import_source(tmp_path, name, DISPATCH_SOURCE)
+        identity = scenario_reform_identity(
+            _scenario(simulation_modifier=module.raise_rate), code_revision=REVISION
+        )
+        bundle = _bundle_for(dataset_file.read_bytes())
+
+        def build(result):
+            if managed:
+                return build_execution_receipt_for_microsimulation(
+                    _managed_simulation(dataset_file, bundle),
+                    years=[2026],
+                    reform=identity,
+                    baseline=reform_identity(None),
+                    bundle=bundle,
+                    outputs={"annual_income": result},
+                )
+            return _build(
+                dataset_file, reform=identity, outputs={"annual_income": result}
+            )
+
+        simulation = SimpleNamespace(income=1)
+        module.raise_rate(simulation)
+        assert simulation.result == 52
+        assert build(simulation.result).certification_status == "certified"
+        module.weekly_annual_income.__annotations__["income"] = float
+        module.raise_rate(simulation)
+        assert simulation.result == 1
+        with pytest.raises(
+            ReceiptError,
+            match="weekly_annual_income.*annotation for income.*source names",
+        ):
+            build(simulation.result)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_unedited_singledispatch_helper_binds(tmp_path):
+    name = "w4_receipt_r11_unedited_dispatch"
+    try:
+        module, _ = _import_source(tmp_path, name, DISPATCH_SOURCE)
+        before = _identity(module.raise_rate)
+        simulation = SimpleNamespace(income=1)
+        module.raise_rate(simulation)
+        assert simulation.result == 52
+        assert _identity(module.raise_rate) == before
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize(
+    ("annotation", "changed"),
+    [
+        ("int", float),
+        ("datetime.date", datetime.datetime),
+        ("list[int]", list[float]),
+        ("dict[str, list[int]]", dict[str, list[float]]),
+        ("int | str", int | float),
+        ("'int'", "float"),
+        ("None", float),
+        ("1", True),
+    ],
+    ids=[
+        "name",
+        "attribute",
+        "generic",
+        "nested-generic",
+        "union",
+        "string",
+        "none",
+        "literal-type",
+    ],
+)
+def test_annotation_values_must_match_source(tmp_path, annotation, changed):
+    source = (
+        "import datetime\n\n\n"
+        f"def _helper(value: {annotation}):\n    return value\n\n\n"
+        "def raise_rate(simulation):\n    simulation.rate = _helper(0.21)\n"
+    )
+    name = "w4_receipt_r11_annotation_values"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert _identity(module.raise_rate)
+        module._helper.__annotations__["value"] = changed
+        with pytest.raises(
+            ReceiptError, match="_helper.*annotation for value.*source names"
+        ):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize("parameter", ["value", "args", "keyword", "kwargs", "return"])
+def test_each_annotation_position_is_checked(tmp_path, parameter):
+    source = (
+        "def _helper(value: int, /, *args: int, keyword: int, **kwargs: int) -> int:\n"
+        "    return value\n\n\n"
+        "def raise_rate(simulation):\n    simulation.rate = 0.21\n"
+    )
+    name = "w4_receipt_r11_annotation_positions"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert _identity(module.raise_rate)
+        module._helper.__annotations__[parameter] = float
+        with pytest.raises(
+            ReceiptError, match=f"_helper.*annotation for {parameter}.*source names"
+        ):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize(
+    ("annotation", "changed"),
+    [
+        ("list[int]", list[int]),
+        ("int | str", str | int),
+        ("int | str", Union[int, str]),
+    ],
+    ids=["generic", "union", "typing-union"],
+)
+def test_equal_reconstructed_annotations_bind(tmp_path, annotation, changed):
+    source = (
+        f"def _helper(value: {annotation}):\n    return value\n\n\n"
+        "def raise_rate(simulation):\n    simulation.rate = 0.21\n"
+    )
+    name = "w4_receipt_r11_equal_annotations"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        before = _identity(module.raise_rate)
+        original = module._helper.__annotations__["value"]
+        assert changed is not original
+        assert changed == original
+        module._helper.__annotations__["value"] = changed
+        assert _identity(module.raise_rate) == before
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_named_annotation_types_are_compared_by_identity(tmp_path, monkeypatch):
+    class EqualTypes(type):
+        def __eq__(self, other):
+            return True
+
+    class NamedType(metaclass=EqualTypes):
+        pass
+
+    class OtherType(metaclass=EqualTypes):
+        pass
+
+    provider = SimpleNamespace(NamedType=NamedType)
+    monkeypatch.setitem(sys.modules, "w4_receipt_named_type", provider)
+    source = (
+        "from w4_receipt_named_type import NamedType\n\n\n"
+        "def _helper(value: NamedType):\n    return value\n\n\n"
+        "def raise_rate(simulation):\n    simulation.rate = 0.21\n"
+    )
+    name = "w4_receipt_r11_named_type_identity"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert _identity(module.raise_rate)
+        module._helper.__annotations__["value"] = OtherType
+        with pytest.raises(
+            ReceiptError, match="_helper.*annotation for value.*source names"
+        ):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_future_annotations_match_the_compilers_strings(tmp_path):
+    source = (
+        "from __future__ import annotations\n\n\n"
+        "def _helper(value: ((list [ int ])), literal: 'str', /, "
+        "*args: tuple[int, ...], optional: (int | None), "
+        "**kwargs: dict[str, list[float]]) -> 'return':\n"
+        "    return value\n\n\n"
+        "def raise_rate(simulation):\n    simulation.rate = 0.21\n"
+    )
+    name = "w4_receipt_r11_future_annotations"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert module._helper.__annotations__ == {
+            "value": "list[int]",
+            "literal": "'str'",
+            "args": "tuple[int, ...]",
+            "optional": "int | None",
+            "kwargs": "dict[str, list[float]]",
+            "return": "'return'",
+        }
+        assert _identity(module.raise_rate)
+        module._helper.__annotations__["value"] = "list[float]"
+        with pytest.raises(
+            ReceiptError, match="_helper.*annotation for value.*source names"
+        ):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
 GENERIC_SOURCE = (
     "def helper[T](value: T) -> T:\n    return value\n\n\n"
     "def raise_rate(simulation):\n    simulation.rate = helper(0.21)\n"
 )
+
+
+def test_generic_paramspec_annotations_bind_and_are_checked(tmp_path):
+    if sys.version_info < (3, 12):
+        pytest.skip("type parameters need Python 3.12")
+    from typing import ParamSpec
+
+    source = (
+        "def helper[**P](*args: P.args, **kwargs: P.kwargs):\n"
+        "    return args\n\n\n"
+        "def raise_rate(simulation):\n    simulation.rate = helper(0.21)[0]\n"
+    )
+    name = "w4_receipt_r11_generic_paramspec"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert _identity(module.raise_rate)
+        module.helper.__annotations__["kwargs"] = ParamSpec("Other").kwargs
+        with pytest.raises(
+            ReceiptError, match="helper.*annotation for kwargs.*source names"
+        ):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
 
 
 def test_generic_helpers_bind_and_are_checked(tmp_path):

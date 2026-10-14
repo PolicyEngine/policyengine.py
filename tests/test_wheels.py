@@ -12,9 +12,11 @@ Invariants:
   optimisation level, listed in the RECORD or not, timestamp or hash based)
   verifies only when it compiles from that source; caches the interpreter
   would ignore are inert and reported, never failed;
-- the wheel itself verifies only when its members and its RECORD match one to
-  one: changing, adding or removing any archive member fails, so a copied
-  RECORD in a junk zip never names a wheel the files did not come from.
+- the wheel itself verifies only when its members and its RECORD match, with
+  RECORD listing itself with empty hash and size fields, and the optional
+  RECORD.jws and RECORD.p7s signatures absent from RECORD. Changing, adding
+  or removing other archive members fails, so a copied RECORD in a junk zip
+  never names a wheel the files did not come from.
 """
 
 from __future__ import annotations
@@ -167,6 +169,8 @@ def test_verified_wheel_allows_certification_of_a_direct_install(
     fake.distribution = lambda name: distribution
     fake.version = lambda name: "2.126.8"
     monkeypatch.setattr(receipt, "metadata", fake)
+    # This fixture verifies installed files without loading a country package.
+    monkeypatch.delitem(sys.modules, "policyengine_uk", raising=False)
     unverified = receipt.installed_package_identity("policyengine-uk")
     assert unverified.install_origin == origin
     assert not receipt._package_can_be_certified(unverified)
@@ -598,6 +602,50 @@ def test_an_untouched_archive_verifies(tmp_path):
     assert archive["problems"] == []
     assert archive["members_verified"] == len(FILES)
     assert archive["scripts"] == {"policyengine-uk", "policyengine-uk-gui"}
+
+
+@pytest.mark.parametrize("signature", [None, "RECORD.jws", "RECORD.p7s"])
+def test_record_must_list_itself(tmp_path, signature):
+    members = dict(FILES)
+    if signature is not None:
+        members[f"{DIST_INFO}/{signature}"] = b"signature"
+    record = [_line(path, data) for path, data in FILES.items()]
+    wheel = write_wheel(tmp_path / "w-1-py3-none-any.whl", members, record)
+    assert verify_wheel_archive(wheel)["problems"] == [
+        f"{DIST_INFO}/RECORD: RECORD does not list itself"
+    ]
+
+
+@pytest.mark.parametrize(
+    "fields",
+    ["", ",", ",0", f"sha256={_b64(b'not RECORD')},", ",,extra"],
+)
+def test_record_self_entry_needs_empty_hash_and_size(tmp_path, fields):
+    record = [_line(path, data) for path, data in FILES.items()]
+    record.append(f"{DIST_INFO}/RECORD,{fields}")
+    wheel = write_wheel(tmp_path / "w-1-py3-none-any.whl", FILES, record)
+    if fields == ",":
+        assert verify_wheel_archive(wheel)["problems"] == []
+    else:
+        assert verify_wheel_archive(wheel)["problems"] == [
+            f"{DIST_INFO}/RECORD: RECORD needs empty hash and size fields"
+        ]
+
+
+@pytest.mark.parametrize("signature", ["RECORD.jws", "RECORD.p7s"])
+@pytest.mark.parametrize("listed", [None, "unhashed", "hashed"])
+def test_record_signatures_are_absent_from_record(tmp_path, signature, listed):
+    path = f"{DIST_INFO}/{signature}"
+    data = b"signature"
+    members = {**FILES, path: data}
+    record = [_line(path, data) for path, data in FILES.items()]
+    record.append(f"{DIST_INFO}/RECORD,,")
+    if listed is not None:
+        record.append(_line(path, data) if listed == "hashed" else f"{path},,")
+    wheel = write_wheel(tmp_path / "w-1-py3-none-any.whl", members, record)
+    assert verify_wheel_archive(wheel)["problems"] == (
+        [] if listed is None else [f"{path}: signature files must not be in RECORD"]
+    )
 
 
 def test_a_wheel_needs_exactly_one_record(tmp_path):

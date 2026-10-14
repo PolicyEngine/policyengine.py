@@ -81,8 +81,17 @@ from importlib import metadata
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 from types import CodeType
-from typing import Any, ClassVar, Literal, Optional, Union
+from typing import (
+    Any,
+    ClassVar,
+    Literal,
+    Optional,
+    ParamSpecArgs,
+    ParamSpecKwargs,
+    Union,
+)
 from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 import psutil
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -1402,7 +1411,7 @@ _REFUSED_NAMES = frozenset(
         "id",
         "is_",
         "is_not",
-        # Readers of annotation values, which the digest does not bind.
+        # Annotation metadata readers remain outside the accepted shape.
         "get_type_hints",
         "get_annotations",
         "signature",
@@ -1411,8 +1420,8 @@ _REFUSED_NAMES = frozenset(
     }
 )
 #: Attributes refused anywhere: operator.is_ and is_not compare identities,
-#: and typing.get_type_hints, inspect.signature and the like read annotation
-#: values, which are not bound (only which names carry one).
+#: and typing.get_type_hints, inspect.signature and the like expose metadata
+#: through introspection, outside the accepted module shape.
 _REFUSED_ATTRIBUTES = frozenset(
     {
         "is_",
@@ -1478,7 +1487,7 @@ def _introspection_problem(tree: ast.Module) -> Optional[str]:
     - ``id``, ``operator.is_``/``is_not``, ``globals``, ``vars``, ``locals``,
       ``exec``, ``eval``, ``compile``, ``__import__`` and ``breakpoint`` are
       refused by name, however imported, and so is importing ``builtins``.
-    - Annotation readers are refused: annotation values are not bound.
+    - Explicit annotation readers are refused as introspection.
     - Dunder attributes other than ``__init__`` and ``__name__``, and dunder
       names other than ``__name__`` and ``__file__``, are introspection.
       Attribute operations must name a literal string, so the same check
@@ -1559,7 +1568,7 @@ _REFUSED_WHY = (
 
 def _refused_why(name: str) -> str:
     if name in _ANNOTATION_READERS:
-        return "reads annotation values the digest does not bind"
+        return "reads annotation values through introspection"
     return _REFUSED_WHY
 
 
@@ -1700,8 +1709,7 @@ def _function_state_problem(
     and its builtins are those of the namespace it was created in; none is in
     its code, so each must still be what the ``def`` in the source made. Any
     other attribute (``helper.amount = 240``) is state the digest does not
-    bind. Annotation values are not compared, only which names carry one:
-    annotation readers and introspection that exposes those values are refused.
+    bind. Annotation values must still be what their source names.
     """
 
     code = function.__code__
@@ -1722,8 +1730,8 @@ def _function_state_problem(
     expected_doc = code.co_consts[0] if declared and code.co_consts else None
     if function.__doc__ != expected_doc:
         return f"function {name}'s __doc__ is not its source docstring"
-    expected = [
-        argument.arg
+    expected = {
+        argument.arg: argument.annotation
         for argument in [
             *node.args.posonlyargs,
             *node.args.args,
@@ -1732,13 +1740,93 @@ def _function_state_problem(
             *(node.args.kwarg,) * bool(node.args.kwarg),
         ]
         if argument is not None and argument.annotation is not None
-    ] + (["return"] if node.returns is not None else [])
+    }
+    if node.returns is not None:
+        expected["return"] = node.returns
     try:
-        annotated = list(function.__annotations__)
+        annotations = function.__annotations__
     except Exception:  # evaluating postponed annotations can fail
         return f"function {name}'s annotations cannot be read"
-    if sorted(annotated) != sorted(expected):
-        return f"function {name}'s annotations are not those its source declares"
+    if sorted(annotations) != sorted(expected):
+        differing = ", ".join(sorted(set(annotations) ^ set(expected)))
+        return (
+            f"function {name}'s annotations are not those its source declares "
+            f"({differing})"
+        )
+    postponed = bool(code.co_flags & __future__.annotations.compiler_flag)
+    if postponed:
+        # Compile only the annotations: no defaults, decorators or body can
+        # run. This gives the strings this Python's compiler actually stores.
+        arguments = node.args
+        probe = ast.FunctionDef(
+            name="_annotation_probe",
+            args=ast.arguments(
+                posonlyargs=arguments.posonlyargs,
+                args=arguments.args,
+                vararg=arguments.vararg,
+                kwonlyargs=arguments.kwonlyargs,
+                kw_defaults=[None] * len(arguments.kwonlyargs),
+                kwarg=arguments.kwarg,
+                defaults=[],
+            ),
+            body=[ast.Pass()],
+            decorator_list=[],
+            returns=node.returns,
+            type_params=[],
+        )
+        source = ast.fix_missing_locations(ast.Module(body=[probe], type_ignores=[]))
+        namespace: dict[str, Any] = {}
+        exec(
+            compile(
+                source,
+                "<annotations>",
+                "exec",
+                flags=__future__.annotations.compiler_flag,
+                dont_inherit=True,
+            ),
+            namespace,
+        )
+        declared_annotations = namespace["_annotation_probe"].__annotations__
+    else:
+        namespace = dict(function.__globals__)
+        # Generic functions bind their type parameters in the compiler's
+        # wrapper, rather than in the module's globals.
+        namespace.update(
+            (parameter.__name__, parameter)
+            for parameter in getattr(function, "__type_params__", ())
+        )
+        declared_annotations = {}
+    for parameter, expression in expected.items():
+        try:
+            declared = (
+                declared_annotations[parameter]
+                if postponed
+                else eval(
+                    compile(
+                        ast.Expression(expression),
+                        "<annotation>",
+                        "eval",
+                        dont_inherit=True,
+                    ),
+                    namespace,
+                )
+            )
+            actual = annotations[parameter]
+            proxy = isinstance(declared, (ParamSpecArgs, ParamSpecKwargs))
+            if postponed:
+                same = type(actual) is str and actual == declared
+            elif isinstance(expression, (ast.Name, ast.Attribute)) and not proxy:
+                same = actual is declared
+            elif isinstance(expression, (ast.Subscript, ast.BinOp)) or proxy:
+                # Generics, unions and ParamSpec's argument proxies can be
+                # new objects; equality compares their resolved types.
+                same = actual == declared
+            else:
+                same = _same_literal(actual, declared)
+        except Exception:
+            return f"function {name}'s annotation for {parameter} cannot be checked"
+        if not same:
+            return f"function {name}'s annotation for {parameter} is not what its source names"
     return None
 
 
@@ -2164,6 +2252,7 @@ def installed_package_identity(
 
     normalized = normalize_distribution_name(name)
     version = metadata.version(name)
+    _refuse_loaded_package_origin(name)
     direct_url = _read_direct_url(name)
     origin = _install_origin(direct_url)
     if wheel_path is not None:
@@ -2203,8 +2292,14 @@ def installed_package_identity(
 def _read_direct_url(name: str) -> Optional[Mapping[str, Any]]:
     """Read an install's PEP 610 origin, refusing malformed metadata."""
 
+    return _distribution_direct_url(name, metadata.distribution(name))
+
+
+def _distribution_direct_url(
+    name: str, distribution: metadata.Distribution
+) -> Optional[Mapping[str, Any]]:
     try:
-        text = metadata.distribution(name).read_text("direct_url.json")
+        text = distribution.read_text("direct_url.json")
     except OSError as exc:
         raise ReceiptError(f"{name} direct_url.json cannot be read: {exc}") from exc
     if text is None:
@@ -2244,6 +2339,54 @@ def _read_direct_url(name: str) -> Optional[Mapping[str, Any]]:
             f"{name} direct_url.json is malformed; invalid archive hashes."
         )
     return direct_url
+
+
+def _refuse_loaded_package_origin(name: str) -> None:
+    normalized = normalize_distribution_name(name)
+    if normalized not in UK_PACKAGES.values():
+        return
+    import_name = normalized.replace("-", "_")
+    module = sys.modules.get(import_name)
+    # An unloaded package has no running source to compare. The version
+    # checks still cover the installed package that will be loaded.
+    if module is None:
+        return
+    distribution = metadata.distribution(name)
+    loaded_file = getattr(module, "__file__", None)
+    problem = (
+        f"{import_name} loaded from {loaded_file!r} does not match installed "
+        f"distribution {name} {distribution.version}; the receipt cannot name "
+        "the code that ran"
+    )
+    if not isinstance(loaded_file, (str, Path)) or not loaded_file:
+        raise ReceiptError(problem + ": the loaded package has no source file.")
+    try:
+        loaded_path = Path(loaded_file).resolve()
+        direct_url = _distribution_direct_url(name, distribution)
+        if direct_url is not None and "dir_info" in direct_url:
+            url = urlparse(direct_url["url"])
+            if url.scheme != "file" or url.netloc not in ("", "localhost"):
+                raise ReceiptError(problem + ": the install directory is not local.")
+            directory = Path(url2pathname(url.path)).resolve()
+            if not loaded_path.is_relative_to(directory):
+                raise ReceiptError(problem + f": expected code under {directory}.")
+        else:
+            record = distribution.read_text("RECORD")
+            rows = list(csv.reader(io.StringIO(record or ""), strict=True))
+            if any(len(row) != 3 for row in rows):
+                raise ReceiptError(problem + ": the installed RECORD is malformed.")
+            entry = f"{import_name}/__init__.py"
+            if not any(row[0] == entry for row in rows):
+                raise ReceiptError(problem + f": the installed RECORD lacks {entry}.")
+            expected = Path(distribution.locate_file(entry)).resolve()
+            if loaded_path != expected:
+                raise ReceiptError(problem + f": expected {expected} from RECORD.")
+    except ReceiptError:
+        raise
+    except (OSError, ValueError, csv.Error) as exc:
+        raise ReceiptError(
+            problem + f": its source location cannot be read ({exc})."
+        ) from exc
 
 
 def _install_origin(
