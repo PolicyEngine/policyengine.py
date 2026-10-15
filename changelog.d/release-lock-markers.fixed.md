@@ -1,1 +1,0 @@
-Re-locked `uv.lock` with the pinned uv 0.12.14. Two dependency markers written by another uv version made the release's version bump rewrite the lock, which the reviewed-lock check rejects, so no release has published since #571.

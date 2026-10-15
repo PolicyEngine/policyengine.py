@@ -1,3 +1,25 @@
+## [6.5.0] - 2026-10-15
+
+### Added
+
+- Updated the UK Budget reform contract to version 1.1.0. Its rate-blending case, `mid_year_blended_rate`, now holds capital gains realisations fixed (both elasticity conventions zero and no separate Business Asset Disposal Relief elasticity), so its static expected values hold whatever realisation response policyengine-uk applies by default. Added `cgt_retention_response`, which checks the response itself: with a retention-rate elasticity of 1, a 20% basic rate from 6 April 2027 scales realised gains by (1 - 20%) / (1 - 18%) on every route. Added `cgt_default_response`, the same reform with no response settings, so the report shows the default response policyengine-uk applies; its checks expect the retention-rate elasticity of 1 that policyengine-uk#2396 makes the default, and report as pending (without gating) until policyengine.py pins that release. Each case also checks that all three response settings reached the model. `capital_gains_response()` builds a case's elasticity changes.
+- Added a record of the capital gains realisation response to UK runs (`policyengine.tax_benefit_models.uk.capital_gains_responses`). Each population run records the policyengine-uk release and where it was installed from when that is not a package index, the caller's explicit `gov.simulation.capital_gains_responses` settings in the order they apply and, where the installed policyengine-uk reports it, the response it resolved after every reform and modifier. The record is kept with the output dataset (`metadata`), in the release bundle, the run record and the saved output file; household results carry it under `provenance`, and managed microsimulations under `policyengine_bundle["capital_gains_responses"]` for each year. UK cache and saved-output identity now includes a digest of the explicit settings, and a saved UK output is reused only under the same settings and the same policyengine-uk release from the same source (never from a local directory install). Each saved UK output is therefore calculated once more after upgrading, so a job that relies on a warm UK cache takes as long as a cold run the first time. Added `StaleOutputError`, a `ValueError` that `load()` raises for a saved output it refuses (UK and US alike); `Simulation.ensure()` logs the reason at INFO and runs the simulation again, instead of logging a warning with a traceback.
+- Add execution receipt schema v1 (`policyengine.provenance.receipt`), which records exactly what produced a UK result. It records the installed wrapper, model and core versions, with wheel hashes only when the builder verified them against the wheel RECORD, plus the data release and the SHA-256 of the simulated dataset bytes. The certificate digest is attached only when the certificate covers that model, core, dataset and wrapper. The receipt also carries reform and baseline digests, which refuse modifiers they cannot bind, and the fiscal-year convention. Digests use RFC 8785 canonical JSON over strict JSON values (`policyengine.provenance.canonical`), and the JSON Schema ships at `policyengine/data/schemas/execution_receipt.v1.schema.json`.
+- Added `composed_reform_identity` and the `policyengine-uk.scenario_composition/v1` representation, so an execution receipt can bind several reforms applied in one run, in order.
+- Execution receipt reform digests accept infinite parameter values (an uncapped threshold is `.inf`), encoding `inf` and `-inf` as `{"$nonfinite": "Infinity"}` and `{"$nonfinite": "-Infinity"}`. A payload that uses the key `$nonfinite` itself is refused, and finite payloads digest as before.
+- Budget reform contract case rows now carry `reform_identity`, the reform as a receipt binds it (`ReformIdentity`, named by the case id), for the representation each route consumes, or `null` with `reform_identity_unavailable` where receipt schema v1 cannot bind it; property, population and run-level rows carry `null` with the reason.
+
+### Changed
+
+- The pull-request Test job may run for 90 minutes instead of 60. It now takes 30 to 54 minutes per Python version, and runs on 3.12 and 3.13 were cancelled at the 60-minute limit.
+
+### Fixed
+
+- Receipts no longer refuse a process started within a second of an install: on Linux, psutil's process start time can read about a second early, so install metadata written just before the start looked newer than the process. Metadata written more than two seconds after the reported start is still refused. An install within two seconds after the reported start is therefore not detected.
+- Re-locked `uv.lock` with the pinned uv 0.12.14. Two dependency markers written by another uv version made the release's version bump rewrite the lock, which the reviewed-lock check rejects, so no release has published since #571.
+- The UK Budget reform contract's shared-parameter check now catches list-valued parameters changed in place and changes to node or scale metadata or a scale's band count.
+
+
 ## [6.4.3] - 2026-10-15
 
 ### Changed
