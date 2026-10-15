@@ -197,7 +197,7 @@ name = "cffi"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser" },
+    { name = "pycparser", marker = "implementation_name != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/eb/56/b1ba7935a17738ae8453301356628e8147c79dbb825bcbc73dc7401f9846/cffi-2.0.0.tar.gz", hash = "sha256:44d1b5909021139fe36001ae048dbdde8214afa20200eda0f64c068cac5d5529", size = 523588, upload-time = "2025-09-08T23:24:04.541Z" }
 wheels = [
@@ -1767,7 +1767,7 @@ name = "pexpect"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ptyprocess" },
+    { name = "ptyprocess", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450, upload-time = "2023-11-25T09:07:26.339Z" }
 wheels = [
@@ -1807,7 +1807,7 @@ wheels = [
 
 [[package]]
 name = "policyengine"
-version = "6.4.0"
+version = "6.4.3"
 source = { editable = "." }
 dependencies = [
     { name = "h5py" },
@@ -1836,6 +1836,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
+    { name = "rfc8785" },
     { name = "ruff" },
     { name = "spm-calculator" },
     { name = "towncrier" },
@@ -1884,18 +1885,19 @@ requires-dist = [
     { name = "policyengine-core", marker = "extra == 'models'", specifier = "==3.33.0" },
     { name = "policyengine-core", marker = "extra == 'uk'", specifier = "==3.33.0" },
     { name = "policyengine-core", marker = "extra == 'us'", specifier = "==3.33.0" },
-    { name = "policyengine-uk", marker = "extra == 'dev'", specifier = "==2.126.12" },
-    { name = "policyengine-uk", marker = "extra == 'models'", specifier = "==2.126.12" },
-    { name = "policyengine-uk", marker = "extra == 'uk'", specifier = "==2.126.12" },
+    { name = "policyengine-uk", marker = "extra == 'dev'", specifier = "==2.130.1" },
+    { name = "policyengine-uk", marker = "extra == 'models'", specifier = "==2.130.1" },
+    { name = "policyengine-uk", marker = "extra == 'uk'", specifier = "==2.130.1" },
     { name = "policyengine-us", marker = "extra == 'dev'", specifier = "==2.2.1" },
     { name = "policyengine-us", marker = "extra == 'models'", specifier = "==2.2.1" },
     { name = "policyengine-us", marker = "extra == 'us'", specifier = "==2.2.1" },
     { name = "psutil", specifier = ">=5.9.0" },
-    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "pydantic", specifier = ">=2.10.0" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.26.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0.0" },
     { name = "requests", specifier = ">=2.31.0" },
+    { name = "rfc8785", marker = "extra == 'dev'", specifier = ">=0.1.4" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9.0" },
     { name = "spm-calculator", marker = "extra == 'dev'", specifier = "==1.0.0" },
     { name = "spm-calculator", marker = "extra == 'models'", specifier = "==1.0.0" },
@@ -1935,7 +1937,7 @@ wheels = [
 
 [[package]]
 name = "policyengine-uk"
-version = "2.126.12"
+version = "2.130.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "microdf-python" },
@@ -1943,9 +1945,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "tables" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4c/c9/5ad8f2c5833742db4873098f2689cd45cf7bc7f3d79755d5e13b98dd8ab4/policyengine_uk-2.126.12.tar.gz", hash = "sha256:86ac5ac83f7a22b6ef69ca701b0a87017c4a143f2f34937c74d5311786ed34b4", size = 2277744, upload-time = "2026-10-12T04:31:37.012Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/17/27/82a97f5ec344d4be34db17bd26fe35077f1fe22f15c99818514d704262e9/policyengine_uk-2.130.1.tar.gz", hash = "sha256:1ce0a924a847b4e3e8ea8ba9702a84b267a0490c84a55ef94da6ed2efd965b34", size = 2496922, upload-time = "2026-10-14T01:58:47.232Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4f/3f/0a611e9b25beb75db3f2f521d359eabad0d1ab4e50194b866663355591ff/policyengine_uk-2.126.12-py3-none-any.whl", hash = "sha256:4aa6d7ba411de0009d460efdc4e4992f2e8c89cbf8ec419024b1bce89d407ace", size = 3524817, upload-time = "2026-10-12T04:31:34.999Z" },
+    { url = "https://files.pythonhosted.org/packages/1a/21/88e8addba0eabd9a7d3a29fa5293e141feb405baf0432209387f9a1f467a/policyengine_uk-2.130.1-py3-none-any.whl", hash = "sha256:f8b1b8b917c9297ff66937811dbebd9a62d3b1796ce894c326e98051cac4c873", size = 3804651, upload-time = "2026-10-14T01:58:44.937Z" },
 ]
 
 [[package]]
@@ -2443,6 +2445,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c9/74/b3ff8e6c8446842c3f5c837e9c3dfcfe2018ea6ecef224c710c85ef728f4/requests-2.32.5.tar.gz", hash = "sha256:dbba0bac56e100853db0ea71b82b4dfd5fe2bf6d3754a8893c3af500cec7d7cf", size = 134517, upload-time = "2025-08-18T20:46:02.573Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl", hash = "sha256:2462f94637a34fd532264295e186976db0f5d453d1cdd31473c85a6a161affb6", size = 64738, upload-time = "2025-08-18T20:46:00.542Z" },
+]
+
+[[package]]
+name = "rfc8785"
+version = "0.1.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ef/2f/fa1d2e740c490191b572d33dbca5daa180cb423c24396b856f5886371d8b/rfc8785-0.1.4.tar.gz", hash = "sha256:e545841329fe0eee4f6a3b44e7034343100c12b4ec566dc06ca9735681deb4da", size = 14321, upload-time = "2024-09-27T16:33:31.206Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4d/78/119878110660b2ad709888c8a1614fce7e2fab39080ab960656dc8605bf6/rfc8785-0.1.4-py3-none-any.whl", hash = "sha256:520d690b448ecf0703691c76e1a34a24ddcd4fc5bc41d589cb7c58ec651bcd48", size = 9240, upload-time = "2024-09-27T16:33:29.683Z" },
 ]
 
 [[package]]
