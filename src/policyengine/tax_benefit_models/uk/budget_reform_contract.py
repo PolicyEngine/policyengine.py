@@ -1409,27 +1409,51 @@ def _baseline_parameter_reader() -> Callable[[str, int], float]:
     return parameter_reader(reference_parameters())
 
 
-def _parameter_values(parameters) -> dict[str, list[tuple]]:
-    """Each parameter's dated values and metadata, by name.
+def _frozen(value: Any) -> str:
+    """A value as text, so a list or dict changed in place still shows.
 
-    Every entry of its timeline (date and value) and its metadata, so a
-    change on any date, or to how it is uprated, shows. A name can occur
-    more than once (``parameters.baseline`` repeats the tree), so every
-    occurrence is kept, in tree order.
+    JSON where it can be (key order ignored); otherwise ``repr``, so an
+    unusual value (non-string keys, a cycle) cannot stop the run.
     """
-    from policyengine_core.parameters import Parameter
+    try:
+        return json.dumps(value, sort_keys=True, default=str)
+    except (TypeError, ValueError):
+        return repr(value)
+
+
+def _parameter_values(parameters) -> dict[str, list[tuple]]:
+    """Each parameter's dated values and metadata, and each node's metadata.
+
+    For a parameter, every entry of its timeline (date and value) and its
+    metadata, so a change on any date, or to how it is uprated, shows; for
+    the root, every node and every scale, its metadata and, for a scale,
+    its bands' names in order, so an added, removed or reordered band
+    shows. Values are recorded as text, so a list changed in place is
+    caught. A name can occur more than once (``parameters.baseline``
+    repeats the tree), so every occurrence is kept, in tree order.
+    """
+    from policyengine_core.parameters import Parameter, ParameterScale
 
     values: dict[str, list[tuple]] = {}
-    for parameter in parameters.get_descendants():
-        if isinstance(parameter, Parameter):
-            values.setdefault(parameter.name, []).append(
+    for item in [parameters, *parameters.get_descendants()]:
+        if isinstance(item, Parameter):
+            values.setdefault(item.name, []).append(
                 (
                     tuple(
-                        (entry.instant_str, entry.value)
-                        for entry in parameter.values_list
+                        (entry.instant_str, _frozen(entry.value))
+                        for entry in item.values_list
                     ),
-                    json.dumps(parameter.metadata, sort_keys=True, default=str),
+                    _frozen(item.metadata),
                 )
+            )
+        else:
+            bands = (
+                tuple(band.name for band in item.brackets)
+                if isinstance(item, ParameterScale)
+                else None
+            )
+            values.setdefault(f"{item.name}#node", []).append(
+                (_frozen(getattr(item, "metadata", None)), bands)
             )
     return values
 
@@ -1468,7 +1492,9 @@ def _state_values(tree) -> dict:
     if isinstance(tree, Mapping):
         # Timelines by name: each entry's date and value.
         return {
-            name: [(entry.instant_str, entry.value) for entry in timeline or []]
+            name: [
+                (entry.instant_str, _frozen(entry.value)) for entry in timeline or []
+            ]
             for name, timeline in tree.items()
         }
     return _parameter_values(tree)
@@ -1500,9 +1526,10 @@ def module_parameters_unchanged(before: dict) -> dict:
         "case_id": "module_parameters_unchanged",
         "route": "all",
         "reform_digest": None,
+        **RUN_LEVEL_IDENTITY,
         "check": (
-            "every parameter's dated values and metadata in "
-            f"{', '.join(sorted(before))}"
+            "every parameter's dated values and metadata, and every node's "
+            f"metadata and band order, in {', '.join(sorted(before))}"
         ),
         "status": FAIL if changed else PASS,
         "expected": "policyengine-uk's shared parameters as they were before the run",
@@ -1515,6 +1542,96 @@ def _row(case: Case, route: str, digest: Optional[str], **fields) -> dict:
     row = {"case_id": case.id, "route": route, "reform_digest": digest}
     row.update(fields)
     return row
+
+
+#: The receipt representation (``policyengine.provenance.receipt``,
+#: docs/receipts.md) of the reform each route consumes, for its rows'
+#: ``reform_identity``. Both wrapper routes hand the wrapper the same
+#: ``{parameter: {date key: value}}`` dict: ``calculate_household(reform=...)``
+#: takes it, and the policy route compiles it with ``compile_reform_to_policy``.
+#: None where receipt schema v1 names no representation for what the route
+#: consumes.
+ROUTE_REPRESENTATIONS = {
+    "country.reform_dict": "policyengine-uk.reform_dict/v1",
+    "country.scenario_parameter_changes": "policyengine-uk.scenario/v1",
+    "country.reform_from_dict": None,
+    "wrapper.household": "policyengine.reform_dict/v1",
+    "wrapper.policy": "policyengine.reform_dict/v1",
+}
+
+
+def row_reform_identity(
+    case: Case, route: str, representation: Any
+) -> tuple[Optional[dict], Optional[str]]:
+    """The reform a row ran, as a receipt binds it, or why it cannot be bound.
+
+    ``ReformIdentity.model_dump(mode="json")``, the shape of a receipt's
+    ``reform`` field, named by the case id. Digests are never normalized
+    across representations, so a route whose input has no representation in
+    receipt schema v1 gets None and a reason rather than another route's.
+    """
+    from policyengine.provenance.receipt import (
+        reform_identity,
+        scenario_reform_identity,
+    )
+
+    if route in UNSUPPORTED_ROUTES:
+        return None, "the route does not run in-process"
+    if case.modifier:
+        return None, (
+            "the case's simulation modifier is a closure, which "
+            "scenario_reform_identity refuses to bind"
+        )
+    kind = ROUTE_REPRESENTATIONS.get(route)
+    if kind is None:
+        return (
+            None,
+            f"receipt schema v1 has no representation for what {route} consumes",
+        )
+    try:
+        if kind == "policyengine-uk.scenario/v1":
+            from policyengine_uk.utils.scenario import Scenario
+
+            identity = scenario_reform_identity(
+                Scenario(parameter_changes=representation), name=case.id
+            )
+        else:
+            identity = reform_identity(representation, kind, name=case.id)
+    except Exception as error:  # noqa: BLE001 - recorded on the row, never raised
+        # ReceiptError for a value receipts refuse; a Scenario's own
+        # validation for a change it cannot hold, which the route then
+        # reports itself.
+        return None, f"{type(error).__name__}: {error}"
+    return identity.model_dump(mode="json"), None
+
+
+def _with_reform_identity(rows: list[dict], identity, unavailable) -> list[dict]:
+    for row in rows:
+        row["reform_identity"] = identity
+        if identity is None:
+            row["reform_identity_unavailable"] = unavailable
+    return rows
+
+
+#: The ``reform_identity`` fields of a run-level row, which runs no reform.
+RUN_LEVEL_IDENTITY = {
+    "reform_identity": None,
+    "reform_identity_unavailable": "a run-level row runs no reform",
+}
+#: The ``reform_identity`` fields of a sampled property's row and of a
+#: population check's row, which carry no single reform's identity.
+PROPERTY_IDENTITY = {
+    "reform_identity": None,
+    "reform_identity_unavailable": (
+        "a sampled property runs many sampled reforms, so its row binds none"
+    ),
+}
+POPULATION_IDENTITY = {
+    "reform_identity": None,
+    "reform_identity_unavailable": (
+        "population check rows are not bound to a reform identity"
+    ),
+}
 
 
 def _close(actual: float, expected: float, tolerance: float) -> bool:
@@ -1530,8 +1647,26 @@ def evaluate_case(
     """Run one case through one route; one report row per check.
 
     ``reference`` reads current law's annual parameters for expected values;
-    by default, a copy taken now.
+    by default, a copy taken now. Each row carries ``reform_digest`` and
+    ``reform_identity`` (see :func:`row_reform_identity`).
     """
+    representation = None if route in UNSUPPORTED_ROUTES else represent(case, route)
+    identity, unavailable = row_reform_identity(case, route, representation)
+    # The run uses the very representation the identity binds.
+    return _with_reform_identity(
+        _evaluate_case(case, route, cache, reference, representation),
+        identity,
+        unavailable,
+    )
+
+
+def _evaluate_case(
+    case: Case,
+    route: str,
+    cache: Optional[dict],
+    reference: Optional[Callable[[str, int], float]],
+    representation: Any,
+) -> list[dict]:
     cache = {} if cache is None else cache
     if route in UNSUPPORTED_ROUTES:
         return [
@@ -1544,7 +1679,6 @@ def evaluate_case(
                 reason=UNSUPPORTED_ROUTES[route],
             )
         ]
-    representation = represent(case, route)
     digest = reform_digest(representation, route, case)
     context = Context(reference or _baseline_parameter_reader())
     if case.expect_error is not None:
@@ -2068,6 +2202,10 @@ def run_budget_reform_contract(
         )
 
         population = run_population_checks(dataset_path, selected_routes, seed)
+    for row in properties:
+        row.update(PROPERTY_IDENTITY)
+    for row in population:
+        row.update(POPULATION_IDENTITY)
     # Whether any check passed, before the run-level row (which passes
     # whenever nothing leaked, including when nothing ran).
     passed = any(row["status"] == PASS for row in rows + properties + population)
@@ -2080,6 +2218,7 @@ def run_budget_reform_contract(
                 "case_id": "run",
                 "route": "all",
                 "reform_digest": None,
+                **RUN_LEVEL_IDENTITY,
                 "check": "at least one check passed",
                 "status": ERROR,
                 "detail": "no case, property or population check passed",

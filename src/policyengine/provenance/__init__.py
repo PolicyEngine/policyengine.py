@@ -100,6 +100,9 @@ from .receipt import (
     build_execution_receipt as build_execution_receipt,
 )
 from .receipt import (
+    composed_reform_identity as composed_reform_identity,
+)
+from .receipt import (
     reform_identity as reform_identity,
 )
 from .receipt import (

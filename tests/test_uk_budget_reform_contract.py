@@ -429,6 +429,75 @@ def test_module_parameters_unchanged_compares_the_shared_state():
     assert row["status"] == "fail" and f"{tree}:{RATE}" in row["actual"]
 
 
+def _fake_shared_tree(monkeypatch, data):
+    from policyengine_core.parameters import ParameterNode
+
+    tree = ParameterNode("", data=data)
+    monkeypatch.setattr(contract, "_shared_trees", lambda: {"system": tree})
+    return tree
+
+
+def test_a_list_value_changed_in_place_is_caught(monkeypatch):
+    tree = _fake_shared_tree(
+        monkeypatch, {"sources": {"values": {"2000-01-01": ["earnings"]}}}
+    )
+    before = contract.shared_state()
+    tree.sources.values_list[0].value.append("pensions")
+    row = contract.module_parameters_unchanged(before)
+    assert row["status"] == "fail" and "system:sources" in row["actual"]
+
+
+def test_a_scale_metadata_or_band_change_is_caught(monkeypatch):
+    band = {
+        "threshold": {"values": {"2000-01-01": 0}},
+        "amount": {"values": {"2000-01-01": 100}},
+    }
+    tree = _fake_shared_tree(
+        monkeypatch,
+        {"scale": {"metadata": {"type": "single_amount"}, "brackets": [band]}},
+    )
+    before = contract.shared_state()
+    tree.scale.metadata["type"] = "marginal_amount"
+    row = contract.module_parameters_unchanged(before)
+    assert row["status"] == "fail" and "system:scale#node" in row["actual"]
+    tree.scale.metadata["type"] = "single_amount"
+    assert contract.module_parameters_unchanged(before)["status"] == "pass"
+    tree.scale.brackets.append(tree.scale.brackets[0].clone())
+    assert contract.module_parameters_unchanged(before)["status"] == "fail"
+
+
+def test_reordered_bands_and_root_metadata_are_caught(monkeypatch):
+    def band(rate):
+        return {
+            "threshold": {"values": {"2000-01-01": 0}},
+            "rate": {"values": {"2000-01-01": rate}},
+        }
+
+    tree = _fake_shared_tree(
+        monkeypatch, {"scale": {"brackets": [band(0.1), band(0.2)]}}
+    )
+    before = contract.shared_state()
+    tree.scale.brackets.reverse()
+    row = contract.module_parameters_unchanged(before)
+    assert row["status"] == "fail" and "system:scale#node" in row["actual"]
+    tree.scale.brackets.reverse()
+    assert contract.module_parameters_unchanged(before)["status"] == "pass"
+    tree.metadata["uprating"] = "wages"
+    row = contract.module_parameters_unchanged(before)
+    assert row["status"] == "fail" and "system:#node" in row["actual"]
+
+
+def test_an_unusual_value_is_compared_without_stopping_the_run(monkeypatch):
+    import datetime as dt
+
+    tree = _fake_shared_tree(monkeypatch, {"p": {"values": {"2000-01-01": 1}}})
+    tree.p.values_list[0].value = {dt.date(2020, 1, 1): 1}
+    before = contract.shared_state()
+    assert contract.module_parameters_unchanged(before)["status"] == "pass"
+    tree.p.values_list[0].value[dt.date(2020, 1, 1)] = 2
+    assert contract.module_parameters_unchanged(before)["status"] == "fail"
+
+
 def test_module_parameters_unchanged_compares_projected_timelines():
     before = contract.shared_state()
     if "projected" not in before:
@@ -1168,3 +1237,144 @@ def test_an_award_below_the_floor_is_paid_in_full():
             run[name] = np.append(run[name], value)
     holds, detail = _verdict(base, reformed)
     assert holds, detail
+
+
+# Reform identities on rows (receipt schema v1).
+
+
+def test_each_route_binds_the_reform_it_consumes():
+    from policyengine_uk.utils.scenario import Scenario
+
+    from policyengine.provenance.receipt import (
+        reform_identity,
+        scenario_reform_identity,
+    )
+
+    case = next(case for case in CASES if case.id == "april_rate_change")
+    expected = {
+        "country.reform_dict": reform_identity(
+            contract.represent(case, "country.reform_dict"),
+            "policyengine-uk.reform_dict/v1",
+            name=case.id,
+        ),
+        "country.scenario_parameter_changes": scenario_reform_identity(
+            Scenario(
+                parameter_changes=contract.represent(
+                    case, "country.scenario_parameter_changes"
+                )
+            ),
+            name=case.id,
+        ),
+        "wrapper.household": reform_identity(
+            contract.represent(case, "wrapper.household"),
+            "policyengine.reform_dict/v1",
+            name=case.id,
+        ),
+        "wrapper.policy": reform_identity(
+            contract.represent(case, "wrapper.policy"),
+            "policyengine.reform_dict/v1",
+            name=case.id,
+        ),
+    }
+    for route, identity in expected.items():
+        bound, unavailable = contract.row_reform_identity(
+            case, route, contract.represent(case, route)
+        )
+        assert bound == identity.model_dump(mode="json"), route
+        assert unavailable is None
+        assert bound["name"] == case.id and bound["kind"] == "reform"
+    # The two dict representations of one change differ, and are not merged.
+    assert (
+        expected["country.reform_dict"].reform_sha256
+        != expected["wrapper.household"].reform_sha256
+    )
+
+
+@pytest.mark.parametrize(
+    "case_id, route, reason",
+    [
+        ("april_rate_change", "country.reform_from_dict", "no representation"),
+        ("april_rate_change", "api.sim_api", "in-process"),
+        ("modifier_then_parameter_changes", "country.reform_dict", "closure"),
+        ("parameter_changes_then_modifier", "wrapper.policy", "closure"),
+    ],
+)
+def test_an_unbindable_reform_has_no_identity_and_says_why(case_id, route, reason):
+    case = next(case for case in CASES if case.id == case_id)
+    representation = (
+        None
+        if route in contract.UNSUPPORTED_ROUTES
+        else contract.represent(case, route)
+    )
+    bound, unavailable = contract.row_reform_identity(case, route, representation)
+    assert bound is None and reason in unavailable
+
+
+def test_a_value_receipts_refuse_gives_no_identity_rather_than_an_error(
+    monkeypatch,
+):
+    import policyengine.provenance.receipt as receipt
+
+    def refuse(*args, **kwargs):
+        raise receipt.ReceiptError("$.payload.p.2027: inf is not a finite number.")
+
+    monkeypatch.setattr(receipt, "reform_identity", refuse)
+    case = next(case for case in CASES if case.id == "april_rate_change")
+    bound, unavailable = contract.row_reform_identity(
+        case, "country.reform_dict", contract.represent(case, "country.reform_dict")
+    )
+    assert bound is None and unavailable.startswith("ReceiptError")
+
+
+def test_rows_carry_their_reform_identity(monkeypatch):
+    fake(
+        monkeypatch,
+        FakeRoute(
+            reformed={
+                ("parameter", RATE, 2027): 0.21,
+                ("variable", "income_tax", 2027): 3_660.30,
+            },
+            unreformed={("variable", "income_tax", 2027): 3_486.00},
+        ),
+    )
+    rows = evaluate_case(CASE, "country.reform_dict")
+    identities = {json.dumps(row["reform_identity"], sort_keys=True) for row in rows}
+    assert len(identities) == 1
+    (identity,) = [row["reform_identity"] for row in rows[:1]]
+    assert identity["representation"] == "policyengine-uk.reform_dict/v1"
+    assert identity["name"] == CASE.id
+    assert all("reform_identity_unavailable" not in row for row in rows)
+    (unsupported,) = evaluate_case(CASE, "api.sim_api")
+    assert unsupported["reform_identity"] is None
+    assert unsupported["reform_identity_unavailable"]
+
+
+def test_run_level_rows_say_they_run_no_reform():
+    row = contract.module_parameters_unchanged(contract.shared_state())
+    assert row["reform_identity"] is None
+    assert row["reform_identity_unavailable"] == "a run-level row runs no reform"
+
+
+def test_a_scenario_that_cannot_hold_a_change_gives_no_identity(monkeypatch):
+    import policyengine_uk.utils.scenario as scenario_module
+
+    class Refusing:
+        def __init__(self, **kwargs):
+            raise ValueError("parameter_changes: not a number")
+
+    monkeypatch.setattr(scenario_module, "Scenario", Refusing)
+    case = next(case for case in CASES if case.id == "april_rate_change")
+    route = "country.scenario_parameter_changes"
+    bound, unavailable = contract.row_reform_identity(
+        case, route, contract.represent(case, route)
+    )
+    assert bound is None and unavailable.startswith("ValueError")
+
+
+def test_every_report_row_has_a_reform_identity_field():
+    report = run_budget_reform_contract(routes=["api.sim_api"], max_examples=1)
+    for section in ("cases", "properties", "population"):
+        for row in report[section]:
+            assert "reform_identity" in row, (section, row)
+            if row["reform_identity"] is None:
+                assert row["reform_identity_unavailable"], (section, row)
