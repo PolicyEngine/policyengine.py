@@ -39,6 +39,7 @@ website:
           - impact-analysis.md
           - outputs.md
           - regions.md
+          - disclosure.md
           - visualisation.md
       - section: "Methodology"
         contents:
@@ -54,6 +55,7 @@ website:
           - reference/index.md
           - countries.md
           - release-bundles.md
+          - receipts.md
           - data-publishing-design.md
           - examples.md
           - dev.md

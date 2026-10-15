@@ -207,7 +207,8 @@ python scripts/bundle.py certify-data --country us --data-producer populace \
 
 That produces one US bundle manifest entry containing the Populace national
 default dataset and the certified ACS-local regional dataset. State and
-congressional-district simulations use the latter with runtime row filters, so
+congressional-district simulations use one of them with runtime row filters (for now the
+national dataset; see [Regions](regions.md)), so
 derived `states/*.h5` or `districts/*.h5` files are not vendored into
 `data_releases.us.datasets`.
 

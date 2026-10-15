@@ -1565,8 +1565,11 @@ def evaluate_case(
             )
         ]
     rows = []
-    for check in case.checks:
+    for assertion_index, check in enumerate(case.checks):
         label = f"{check.target}:{check.name}:{check.year}"
+        # Several assertions can read the same value under different oracles.
+        # The index identifies each declared assertion even when labels collide.
+        assertion_id = f"{label}:{assertion_index}"
         if check.target == "parameter" and route not in COUNTRY_ROUTES:
             rows.append(
                 _row(
@@ -1574,6 +1577,7 @@ def evaluate_case(
                     route,
                     digest,
                     check=label,
+                    assertion_id=assertion_id,
                     status=UNSUPPORTED,
                     reason="this route exposes outputs, not parameter values",
                 )
@@ -1586,6 +1590,7 @@ def evaluate_case(
                     route,
                     digest,
                     check=label,
+                    assertion_id=assertion_id,
                     status=UNSUPPORTED,
                     reason="the policy route's output dataset holds the reformed run only",
                 )
@@ -1618,6 +1623,7 @@ def evaluate_case(
                     route,
                     digest,
                     check=label,
+                    assertion_id=assertion_id,
                     status=PENDING if check.pending is not None else ERROR,
                     decision_id=check.pending,
                     detail=repr(error)[:500],
@@ -1634,6 +1640,7 @@ def evaluate_case(
                 route,
                 digest,
                 check=label,
+                assertion_id=assertion_id,
                 status=status,
                 expected=float(expected),
                 actual=actual,

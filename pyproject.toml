@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "policyengine"
-version = "6.2.7"
+version = "6.4.3"
 description = "A package to conduct policy analysis using PolicyEngine tax-benefit models."
 readme = "README.md"
 authors = [
@@ -19,7 +19,7 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-    "pydantic>=2.0.0",
+    "pydantic>=2.10.0",
     "pandas>=2.0.0",
     "h5py>=3.0.0",
     "microdf_python>=1.3.0,<1.4",
@@ -42,12 +42,12 @@ graph = [
 models = [
     "policyengine-core==3.33.0",
     "policyengine-us==2.2.1",
-    "policyengine-uk==2.125.1",
+    "policyengine-uk==2.130.1",
     "spm-calculator==1.0.0",
 ]
 uk = [
     "policyengine-core==3.33.0",
-    "policyengine-uk==2.125.1",
+    "policyengine-uk==2.130.1",
 ]
 us = [
     "policyengine-core==3.33.0",
@@ -69,9 +69,10 @@ dev = [
     "mypy>=1.11.0",
     "pytest-cov>=5.0.0",
     "hypothesis>=6.100.0",
+    "rfc8785>=0.1.4",
     "policyengine-core==3.33.0",
     "policyengine-us==2.2.1",
-    "policyengine-uk==2.125.1",
+    "policyengine-uk==2.130.1",
     "spm-calculator==1.0.0",
 ]
 
@@ -95,6 +96,9 @@ testpaths = [
 ]
 filterwarnings = [
     "ignore::pydantic.warnings.PydanticDeprecatedSince20",
+]
+markers = [
+    "real_install: runs the receipt's loaded-package check against the real installation",
 ]
 
 [tool.ruff]

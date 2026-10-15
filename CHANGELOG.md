@@ -1,3 +1,77 @@
+## [6.4.3] - 2026-10-15
+
+### Changed
+
+- The UK Budget reform contract's Universal Credit allowance check is tested on both runs: each must hold finite values and keep every payment at or above the payable floor, to within a penny. Beyond the payable floor, the check does not bound how far deductions rise: policyengine-uk scales every deduction type with the standard allowance, while the law holds some, such as advance recovery, fixed (policyengine-uk#2410).
+
+
+## [6.4.2] - 2026-10-15
+
+### Fixed
+
+- The UK Budget reform contract's Universal Credit allowance check now asserts on the award before deductions, and bounds how far deductions can lower the amount paid.
+
+
+## [6.4.1] - 2026-10-15
+
+### Changed
+
+- The UK Budget reform contract report gives each assertion a unique id, and the population checks declare the rows a full run emits.
+- Certify policyengine-uk 2.130.1 with policyengine-uk-data 1.58.1 (enhanced_frs_2024_25) as the UK default pair, on the publisher's compatibility claim.
+
+
+## [6.4.0] - 2026-10-14
+
+### Added
+
+- Added `policyengine.disclosure`, a self-contained layer for statistical disclosure control and uncertainty on area-level outputs, and `compute_uk_geography_disclosure` for UK regions, constituencies and local authorities. Each published number rests on at least 10 distinct survey households (clones counted once through `source_household_id`), carries a 90% bootstrap interval and is rounded to the order of its standard error. Rows are `reported`, `approximate` or `withheld`. A release check reports numbers a reader could recover by subtraction across geography levels, a package and its components, and earlier publications. Keyed noise per survey household is available behind `DisclosureSettings(noise=True)`. `validate_public` and `python -m policyengine.disclosure validate` check the format of published files. UK runs now keep `source_household_id` and `region` on the household output when the dataset provides them.
+
+### Changed
+
+- Deprecated `compute_uk_constituency_impacts`, `compute_uk_local_authority_impacts` and their `ConstituencyImpact` and `LocalAuthorityImpact` classes. Their output is not disclosure-controlled; use `compute_uk_geography_disclosure` instead. They now log a warning through the `policyengine` logger and emit a `DeprecationWarning`, and otherwise behave as before.
+
+
+## [6.3.4] - 2026-10-13
+
+### Changed
+
+- `Poverty.rate` is now `None`, not `0.0`, when nobody in the group is measured (its weighted population with a poverty status is zero), for every source. `headcount` and `total_population` are unchanged, and the poverty DataFrame helpers report the rate as missing. Callers that format or subtract rates must handle `None`.
+- US state and congressional-district regions temporarily filter the certified national dataset again, as in 6.2.1, because the ACS-local release lacks source-backed SPM independence and canonical SPM refused every state-region run (PolicyEngine/microcosm#1263).
+
+### Fixed
+
+- Measure SPM poverty on legacy certified US sources that predate SPM measurement-scope declarations, such as the ACS-local Build O release. Following Census's ACS household-population method, ACS group-quarters units are outside the SPM measurement: their SPM results are missing instead of stopping the run with `SPM_COMPOSITION_REQUIRED`, and poverty rates count measured people only. Ordinary tax and benefit results are unchanged.
+- Supply the certified SPM independence role from the national release for the ASEC and PUF records of legacy certified US sources, so independent-teen SPM units are measured instead of stopping SPM calculations.
+
+
+## [6.3.3] - 2026-10-13
+
+### Changed
+
+- `create_datasets` stamps each US year file with the register of renamed stored inputs it was cut under and a year-file format revision. `ensure_datasets` creates a year file again, and `load_datasets` refuses it, unless its stamp matches this release exactly. A year file cut before a rename was registered, which may have lost that input, is therefore not reused. `load_datasets` says why it refuses a file, naming the renames the file may lack when its register is the reason. Year files written before the stamp existed are created again once.
+
+
+## [6.3.2] - 2026-10-12
+
+### Changed
+
+- - Publish to PyPI with trusted publishing instead of the organisation-wide PyPI token.
+
+
+## [6.3.1] - 2026-10-12
+
+### Changed
+
+- Certify policyengine-uk 2.126.12 with policyengine-uk-data 1.58.0 (`enhanced_frs_2024_25`), on the publisher's compatibility claim in the 1.58.0 release manifest; policyengine-core stays at 3.33.0. Reforms keyed from 6 April, such as `2026-04-06.2100-12-31`, now apply in that fiscal year. Baseline UK results change with policyengine-uk 2.125.2 to 2.126.12, chiefly fuel duty (+2.04%, from litre divisors on DESNZ pump prices), income tax (+0.29% to +0.45%, from banding savings and dividend income above property income), Carer's Allowance (-2.2% to -3.5%, from applying the earnings limit) and Pension Credit in 2025.
+
+
+## [6.3.0] - 2026-10-12
+
+### Added
+
+- Added the UK Budget reform contract (`policyengine.tax_benefit_models.uk.budget_reform_contract`), version 1.0.0. `run_budget_reform_contract()` checks that dated reforms (an April rate change, a finite change, an extended freeze, an April uprating schedule, a mid-year blended rate, a CPI-driven indexation change, a scenario or policy combining a parameter-setting modifier with dated changes, an unknown path, and each route's documented key readings) give independently derived results through the policyengine-uk and policyengine.py routes, leave the baseline and later unreformed runs unchanged, and survive bounded property sampling. It returns a JSON report for release qualification.
+
+
 ## [6.2.7] - 2026-10-12
 
 ### Fixed
