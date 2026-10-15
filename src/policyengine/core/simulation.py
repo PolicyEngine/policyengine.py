@@ -14,7 +14,7 @@ from .dynamic import Dynamic
 from .policy import Policy
 from .scoping_strategy import ScopingStrategy
 from .spm import SPMProvenance, SPMSelection
-from .tax_benefit_model_version import TaxBenefitModelVersion
+from .tax_benefit_model_version import StaleOutputError, TaxBenefitModelVersion
 
 logger = logging.getLogger(__name__)
 
@@ -201,6 +201,12 @@ class Simulation(BaseModel):
         try:
             self.tax_benefit_model_version.load(self)
         except FileNotFoundError:
+            self.run()
+            self.save()
+        except StaleOutputError as error:
+            # An expected rerun, such as the first after an upgrade that
+            # changes what saved outputs record.
+            logger.info("Running simulation %s again: %s", self.id, error)
             self.run()
             self.save()
         except Exception:

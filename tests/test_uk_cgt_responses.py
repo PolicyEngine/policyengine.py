@@ -14,15 +14,18 @@ whatever the installed default is, and check that:
   paths, and conflicting settings raise;
 - each run records the response it applied, and the record survives saving,
   loading, run records and JSON, while a saved output is not reused under
-  other settings or another model release;
+  other settings or another model release or install, and
+  ``Simulation.ensure()`` runs it again as an expected rerun;
 - the household route records the response too.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import math
 import shutil
+import uuid
 
 import pandas as pd
 import pytest
@@ -31,7 +34,7 @@ from microdf import MicroDataFrame
 pytest.importorskip("policyengine_uk")
 
 import policyengine as pe  # noqa: E402
-from policyengine.core import Policy, Simulation  # noqa: E402
+from policyengine.core import Policy, Simulation, StaleOutputError  # noqa: E402
 from policyengine.core.run_record import (  # noqa: E402
     build_simulation_run_record_payloads,
 )
@@ -67,6 +70,14 @@ GAINS_VARIABLES = {
         "capital_gains_badr_behavioural_response",
     ]
 }
+
+
+@pytest.fixture(autouse=True)
+def _index_install(monkeypatch):
+    """Run as if policyengine-uk came from a package index, however it is
+    installed here: a local directory install refuses every saved output.
+    Tests of other sources set their own."""
+    monkeypatch.setattr(records, "installed_model_source", lambda: None)
 
 
 def settings(**values) -> dict:
@@ -247,6 +258,7 @@ def test_a_run_records_the_response_it_applied():
     assert record["model"] == {
         "package": "policyengine-uk",
         "version": records.installed_model_version(),
+        "source": None,
     }
     assert record["period"] == "2027"
     assert record["request"]["settings"] == [
@@ -320,6 +332,51 @@ def test_a_saved_output_is_not_reused_under_another_model_release(
 
     with pytest.raises(ValueError, match="calculated with policyengine-uk"):
         reloaded.load()
+
+
+def test_a_saved_output_is_not_reused_from_another_install(tmp_path, monkeypatch):
+    # A branch installed from git can report the version of a published
+    # release whose default differs.
+    original = saved(tmp_path, id="cgt-run", policy=RATE_RISE)
+    monkeypatch.setattr(
+        records,
+        "installed_model_source",
+        lambda: {"kind": "vcs", "vcs": "git", "commit": "c6c77ef3"},
+    )
+    reloaded = simulation(id="cgt-run", policy=RATE_RISE)
+    reloaded.dataset.filepath = original.dataset.filepath
+
+    with pytest.raises(
+        StaleOutputError, match="from a package index, not from git commit c6c77ef3"
+    ):
+        reloaded.load()
+
+
+def test_ensure_runs_an_out_of_date_output_again_without_a_warning(
+    tmp_path, monkeypatch, caplog
+):
+    # An id of its own, so no earlier test's in-memory cache entry answers.
+    run_id = f"cgt-rerun-{uuid.uuid4().hex}"
+    original = saved(tmp_path, id=run_id, policy=RATE_RISE)
+    monkeypatch.setattr(records, "installed_model_version", lambda: "0.0.1")
+    reloaded = simulation(id=run_id, policy=RATE_RISE)
+    reloaded.dataset.filepath = original.dataset.filepath
+
+    with caplog.at_level(logging.INFO, logger="policyengine.core.simulation"):
+        reloaded.ensure()
+
+    assert reloaded.output_dataset.metadata[records.RECORD_KEY]["model"] == {
+        "package": "policyengine-uk",
+        "version": "0.0.1",
+        "source": None,
+    }
+    logged = [
+        (record.levelno, record.getMessage())
+        for record in caplog.records
+        if record.name == "policyengine.core.simulation"
+    ]
+    assert [level for level, _ in logged] == [logging.INFO]
+    assert "calculated with policyengine-uk" in logged[0][1]
 
 
 def test_a_saved_output_without_a_record_is_not_reused(tmp_path):

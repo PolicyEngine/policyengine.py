@@ -32,6 +32,7 @@ import pandas as pd
 from policyengine.core import (
     Parameter,
     ParameterNode,
+    StaleOutputError,
     TaxBenefitModelVersion,
     Variable,
 )
@@ -461,19 +462,21 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 )
             recorded_renames = read_renames_record(filepath)
             if raw is None:
-                raise ValueError(
+                raise StaleOutputError(
                     "Saved US simulation has no SPM configuration or receipt"
                 )
             recorded = json.loads(raw)
             if recorded["config"] != simulation.spm_config:
-                raise ValueError("Saved US simulation uses different SPM settings")
+                raise StaleOutputError(
+                    "Saved US simulation uses different SPM settings"
+                )
             receipt = SPMProvenance.model_validate(recorded["provenance"])
             # Outputs saved before stored inputs were mapped onto renamed
             # live inputs were calculated without them (for example with
             # every WIC-eligible person taking WIC up), so they are not
             # reused. ``Simulation.ensure()`` runs such a simulation again.
             if recorded_renames is None:
-                raise ValueError(
+                raise StaleOutputError(
                     "Saved US simulation predates the mapping of renamed "
                     "stored inputs (it has no record of them); run it again"
                 )
@@ -484,7 +487,7 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 recorded_legacy_spm, expected_profile_for_dataset(simulation.dataset)
             )
             if legacy_problem is not None:
-                raise ValueError(
+                raise StaleOutputError(
                     f"Saved US simulation output is out of date: {legacy_problem}; "
                     "run it again"
                 )
@@ -499,7 +502,7 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             # observed and uprated the State Pension by CPI, so they are not
             # reused. ``Simulation.ensure()`` runs such a simulation again.
             if not _year_file_records_data_year(Path(filepath)):
-                raise ValueError(
+                raise StaleOutputError(
                     "Saved UK simulation predates anchoring on the observed "
                     "data year (it records none); run it again"
                 )
@@ -519,7 +522,7 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 response_record, simulation_request(simulation)
             )
             if problem is not None:
-                raise ValueError(
+                raise StaleOutputError(
                     f"Saved UK simulation output is out of date: {problem}; "
                     "run it again"
                 )

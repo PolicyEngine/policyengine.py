@@ -24,6 +24,16 @@ if TYPE_CHECKING:
     from .variable import Variable
 
 
+class StaleOutputError(ValueError):
+    """A saved output that ``load()`` refuses to reuse, and why.
+
+    The output was calculated under something that has since changed (a
+    model release, settings, or how outputs are recorded).
+    ``Simulation.ensure()`` runs the simulation again and logs the reason at
+    INFO, as an expected rerun rather than an error.
+    """
+
+
 class TaxBenefitModelVersion(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
@@ -77,6 +87,8 @@ class TaxBenefitModelVersion(BaseModel):
         )
 
     def load(self, simulation: "Simulation"):
+        """Load a saved output: ``FileNotFoundError`` when there is none,
+        ``StaleOutputError`` when it must not be reused."""
         raise NotImplementedError(
             "The TaxBenefitModel class must define a method to load simulations."
         )

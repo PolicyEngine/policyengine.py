@@ -298,7 +298,10 @@ records the response it applied, read after every reform and modifier.
 - **Where it is kept.** It is in `simulation.release_bundle["capital_gains_responses"]`,
   the run record's `results.json` and the saved output file.
 - **What it holds.**
-  - `model`: the policyengine-uk release.
+  - `model`: the policyengine-uk release. Its `source` is `null` for a
+    release from a package index; otherwise it says where the install came
+    from: a version control commit, an archive's SHA-256, or a local
+    directory and whether it is editable.
   - `request`: the caller's explicit settings under that path, in the order
     they apply (policy, then dynamic), and their digest.
   - `resolved`: the assumption the release reports. That is the convention,
@@ -308,13 +311,27 @@ records the response it applied, read after every reform and modifier.
     elasticity. It is `null` with a release that doesn't report it.
 - **Modifiers.** Changes a simulation modifier makes aren't listed under
   `request`, as run records don't describe modifiers. `resolved` reflects them.
+  Neither the `storage_id` nor `Simulation.load()` sees them, so two
+  simulations with the same `id` whose modifiers set the response differently
+  share a saved output. Give such simulations different ids.
 - **Identity.** A simulation with explicit settings adds `-cgr-<digest>` to its
   `storage_id`, so its cache entry and saved output are kept apart from runs
-  with other settings.
+  with other settings. The digest covers each setting as given, including
+  whether it came from the policy or the dynamic and its dates. So the same
+  value set another way, or with an explicit end date instead of none, is
+  saved separately.
 - **Reuse.** `Simulation.load()` reuses a saved UK output only when its record
-  shows the same policyengine-uk release and the same settings, and
-  `Simulation.ensure()` runs it again otherwise. Outputs saved before outputs
-  recorded the response are calculated once more.
+  shows the same policyengine-uk release, installed from the same source, and
+  the same settings. A branch installed from git or a local directory can
+  carry the version number of a published release with another default.
+  With policyengine-uk installed from a local directory, editable or not, no
+  saved UK output is reused, as its code can change without its version
+  changing.
+- **Reruns.** Otherwise `load()` raises `StaleOutputError`, and
+  `Simulation.ensure()` runs the simulation again and logs the reason at INFO.
+  Outputs saved before outputs recorded the response are calculated once
+  more, so a job that relies on a warm UK cache takes as long as a cold run
+  the first time it runs after the upgrade.
 
 ## Simulations
 
