@@ -1,0 +1,1 @@
+Receipts no longer refuse a process started within a second of an install: on Linux, psutil's process start time can read up to a second early, so install metadata written just before the start looked newer than the process. Metadata written more than two seconds after the reported start is still refused.

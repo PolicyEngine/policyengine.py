@@ -2746,8 +2746,21 @@ def _distribution_metadata_directory(name: str) -> Path:
     )
 
 
+#: How far ``psutil.Process().create_time()`` can read before the true start.
+#: On Linux psutil adds the start offset in clock ticks to the boot time from
+#: /proc/stat, which is whole seconds, so the reported start can be up to a
+#: second early; metadata an installer finished writing just before the
+#: process started would then look newer than the process.
+PROCESS_START_RESOLUTION_SECONDS = 2.0
+
+
 def _refuse_package_changed_after_process_start(name: str) -> None:
-    """Refuse metadata installed or changed during this process's lifetime."""
+    """Refuse metadata installed or changed during this process's lifetime.
+
+    Metadata written more than :data:`PROCESS_START_RESOLUTION_SECONDS` after
+    the reported process start is refused; within that margin the clock
+    cannot tell an install just before the start from one just after it.
+    """
 
     try:
         directory = _distribution_metadata_directory(name)
@@ -2767,7 +2780,7 @@ def _refuse_package_changed_after_process_start(name: str) -> None:
             f"Cannot locate or read the installed metadata for {name}; restart "
             "the process and run again after checking the installation."
         ) from exc
-    if installed_at > process_started_at:
+    if installed_at > process_started_at + PROCESS_START_RESOLUTION_SECONDS:
         raise ReceiptError(
             f"{name} was installed or changed after this process started, so the "
             "installed version may not be the code that ran; restart the "
