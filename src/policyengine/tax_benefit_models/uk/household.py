@@ -186,11 +186,10 @@ def calculate_household(
         names=extra_variables or [],
     )
     output_columns = _default_output_columns(extra_by_entity)
-    reform_dict = reform_dict_from_parameter_values(
-        _reform_dict_to_parameter_values(
-            reform or {}, year=year, model_version=uk_latest
-        )
+    reform_values = _reform_dict_to_parameter_values(
+        reform or {}, year=year, model_version=uk_latest
     )
+    reform_dict = reform_dict_from_parameter_values(reform_values)
     normalized_axes = normalize_axes(axes=axes, year=year, model_version=uk_latest)
     axes_active = normalized_axes is not None
 
@@ -203,6 +202,15 @@ def calculate_household(
             axes=normalized_axes,
         ),
         reform=reform_dict,
+    )
+
+    from policyengine.tax_benefit_models.uk import capital_gains_responses
+
+    # The capital gains realisation response the calculation applies.
+    response_record = capital_gains_responses.build_record(
+        simulation,
+        year,
+        capital_gains_responses.request((("reform", reform_values),)),
     )
 
     result = HouseholdResult()
@@ -237,4 +245,5 @@ def calculate_household(
                     for variable in columns
                 }
             )
+    result["provenance"] = {capital_gains_responses.RECORD_KEY: response_record}
     return result

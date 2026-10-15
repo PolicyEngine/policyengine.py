@@ -559,6 +559,27 @@ def _declared_coverage(source):
     by_case = {}
     for row in source.get("cases") or []:
         by_case.setdefault(row.get("case_id"), []).append(row)
+    # A historical report came from a runner whose oracle wording may differ
+    # from today's. Checks sharing a label are told apart by oracle, so
+    # declare them as that runner did: one reworded declaration takes the one
+    # recorded oracle no current declaration matches.
+    for (case_id, *label), checks in declared_checks.items():
+        check_label = ":".join(str(part) for part in label)
+        recorded = {
+            row.get("oracle")
+            for row in by_case.get(case_id, ())
+            if row.get("check") == check_label and row.get("oracle") is not None
+        }
+        current = {getattr(check, "oracle", None) for check in checks}
+        reworded = [check for check in checks if check.oracle not in recorded]
+        unmatched = recorded - current
+        if len(checks) > 1 and len(reworded) == 1 and len(unmatched) == 1:
+            declared_checks[(case_id, *label)] = [
+                SimpleNamespace(**{**vars(check), "oracle": next(iter(unmatched))})
+                if check is reworded[0]
+                else check
+                for check in checks
+            ]
     return {
         "ROUTES": tuple(source.get("routes") or ()),
         "CASES": tuple(

@@ -95,6 +95,29 @@ def test_every_uv_step_runs_the_environment_its_job_installed():
     ]
 
 
+def test_preparation_syncs_the_candidate_lock_before_using_it():
+    """Snapshots, the bundle check and staging must run in the candidate's
+    environment: synced from the lock preparation regenerates, after it is
+    regenerated, with the 3.13 interpreter and both extras."""
+
+    steps = _workflow()["jobs"]["prepare"]["steps"]
+    runs = [step.get("run", "") for step in steps]
+    sync = "uv sync --frozen --extra uk --extra dev --python ${{ env.PYTHON_VERSION }}"
+
+    def position(text):
+        return next(index for index, run in enumerate(runs) if text in run)
+
+    syncs = [index for index, run in enumerate(runs) if sync in run]
+    regenerate = position("check_uk_candidate.py prepare")
+    assert len(syncs) == 2 and syncs[0] < regenerate < syncs[1]
+    for later in (
+        "tests/test_household_calculator_snapshot.py",
+        "scripts/bundle.py check",
+        "check_uk_candidate.py stage",
+    ):
+        assert syncs[1] < position(later), later
+
+
 @pytest.mark.parametrize("prepare_first", [False, True])
 def test_head_replacement_and_readiness_share_one_serialization(
     monkeypatch, tmp_path, prepare_first
