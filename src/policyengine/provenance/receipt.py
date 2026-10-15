@@ -81,7 +81,7 @@ import re
 import struct
 import sys
 import zipfile
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from importlib import metadata
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
@@ -2269,6 +2269,40 @@ def _holds_union(value: Any, depth: int = 0) -> bool:
     return any(_holds_union(argument, depth + 1) for argument in arguments)
 
 
+_TYPE_PARAMETERS = tuple(
+    getattr(ast, name)
+    for name in ("TypeVar", "ParamSpec", "TypeVarTuple")
+    if hasattr(ast, name)
+)
+
+
+def _names_bound_without_import(nodes: Iterable[ast.AST]) -> set[str]:
+    """Every name these nodes bind other than by import: parameters (lambda
+    ones included), assignment, loop, ``with``, comprehension and ``:=``
+    targets, deletions, ``except`` and ``match`` captures, nested function
+    and class names, type parameters, and ``global`` or ``nonlocal``
+    declarations."""
+
+    names: set[str] = set()
+    for node in nodes:
+        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
+            names.add(node.id)
+        elif isinstance(node, ast.arg):
+            names.add(node.arg)
+        elif isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        ) or isinstance(node, _TYPE_PARAMETERS):
+            names.add(node.name)
+        elif isinstance(node, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar)):
+            if node.name:
+                names.add(node.name)
+        elif isinstance(node, ast.MatchMapping) and node.rest:
+            names.add(node.rest)
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            names.update(node.names)
+    return names
+
+
 def _function_bindings(module: Any, nodes: Sequence[ast.AST]) -> dict[str, list[Any]]:
     """What each name an import inside a function binds, across all its scopes.
 
@@ -2334,6 +2368,34 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
             continue
         nodes = [node for root in statement.body for node in ast.walk(root)]
         local = _function_bindings(module, nodes)
+        # Names the code rebinds other than by import, in any scope and in
+        # any forward reference (through := or a lambda's parameters), are
+        # not resolved, so they never earn the Literal or Annotated
+        # exemption. Past the size limit nothing does.
+        rebound = _names_bound_without_import([*ast.walk(statement.args), *nodes])
+        strings = [
+            node
+            for node in nodes
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        ]
+        parsed_nodes = 0
+        exemptions_sound = True
+        while strings:
+            text = strings.pop().value
+            try:
+                walked = list(ast.walk(ast.parse(text.strip(), mode="eval")))
+            except (SyntaxError, ValueError):
+                continue
+            parsed_nodes += len(walked)
+            if parsed_nodes > 100_000:
+                exemptions_sound = False
+                break
+            rebound |= _names_bound_without_import(walked)
+            strings.extend(
+                node
+                for node in walked
+                if isinstance(node, ast.Constant) and isinstance(node.value, str)
+            )
 
         def resolve(node: ast.AST) -> list[Any]:
             # Iterative: a quoted forward reference can nest attributes deeper
@@ -2365,9 +2427,19 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
             """Whether every object the name can stand for is one of ``forms``.
 
             Exemptions need this: a name a helper rebinds (``from typing
-            import Tuple as Annotated``) must not exempt the strings under it.
+            import Tuple as Annotated``, ``Annotated = Tuple``, a parameter
+            named ``Annotated``) must not exempt the strings under it.
             """
 
+            root = node
+            while isinstance(root, ast.Attribute):
+                root = root.value
+            if (
+                not exemptions_sound
+                or not isinstance(root, ast.Name)
+                or root.id in rebound
+            ):
+                return False
             values = resolve(node)
             return bool(values) and all(
                 _is_typing_form(value, *forms) for value in values

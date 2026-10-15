@@ -29,6 +29,7 @@ Invariants tested here:
 
 from __future__ import annotations
 
+import ast
 import copy
 import datetime
 import decimal
@@ -43,10 +44,11 @@ import os
 import re
 import subprocess
 import sys
+import typing
 from collections.abc import Mapping
 from importlib import metadata
 from pathlib import Path
-from types import CodeType, SimpleNamespace
+from types import CodeType, ModuleType, SimpleNamespace
 from typing import Union, get_args
 from urllib.parse import urlparse
 
@@ -5854,6 +5856,44 @@ RUNTIME_ALIAS_HEAD = (
             id="unquoted-annotated-rebound-to-tuple",
         ),
         pytest.param(
+            # Round-18 review P2: an assignment rebinds the name too.
+            "    Annotated = typing.Tuple\n\n"
+            "    shape = List['Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="annotated-assigned-a-tuple",
+        ),
+        pytest.param(
+            "    def helper(Annotated):\n"
+            "        return List[Annotated[float, 'List[Union[Decimal, float]]']]\n\n"
+            "    simulation.rate = 0.21 if helper(typing.Tuple) else 0.0\n",
+            "List",
+            id="nested-parameter-named-annotated",
+        ),
+        pytest.param(
+            "    Literal = typing.Tuple\n\n"
+            "    shape = Literal['List[Union[Decimal, float]]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "Literal",
+            id="literal-assigned-a-tuple",
+        ),
+        pytest.param(
+            # A forward reference evaluated without locals binds := targets
+            # in the module, so a later reference reads the new object.
+            "    first = List['(Annotated := typing.Tuple)']\n"
+            "    shape = List['Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if first and shape else 0.0\n",
+            "List",
+            id="walrus-in-a-forward-reference",
+        ),
+        pytest.param(
+            "    shape = List['(lambda Annotated: "
+            'Annotated[float, "List[Union[Decimal, float]]"])(typing.Tuple)\']\n'
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="lambda-parameter-in-a-forward-reference",
+        ),
+        pytest.param(
             "    from typing import Tuple as Literal\n\n"
             "    shape = Literal['List[Union[Decimal, float]]']\n"
             "    simulation.rate = 0.21 if shape else 0.0\n",
@@ -5998,6 +6038,41 @@ def test_ordinary_types_and_subscripts_inside_functions_bind(tmp_path, body):
         assert _identity(module.raise_rate)
     finally:
         sys.modules.pop(name, None)
+
+
+def test_a_deep_attribute_chain_is_resolved_and_reported_without_recursion():
+    """Round-18 review: resolution and the refusal message must not recurse
+    once per attribute. The tree is built directly, deeper than the
+    interpreter's recursion limit, as no parse of source could be relied on
+    to produce it."""
+
+    chain = ModuleType("w4_receipt_r18_chain")
+    chain.me = chain
+    chain.List = typing.List
+    sys.modules[chain.__name__] = chain
+    try:
+        base: ast.expr = ast.Name("me", ast.Load())
+        for _ in range(3 * sys.getrecursionlimit()):
+            base = ast.Attribute(base, "me", ast.Load())
+        base = ast.Attribute(base, "List", ast.Load())
+        function = ast.parse(
+            "def raise_rate(simulation):\n"
+            "    from w4_receipt_r18_chain import me\n\n"
+            "    shape = None\n"
+        ).body[0]
+        function.body[1].value = ast.Subscript(
+            base, ast.parse("Union[Decimal, float]", mode="eval").body, ast.Load()
+        )
+        module = ModuleType("w4_receipt_r18_deep")
+        module.Union = typing.Union
+        module.Decimal = decimal.Decimal
+        problem = receipt_module._runtime_alias_problem(
+            module, ast.Module([function], [])
+        )
+        assert problem is not None
+        assert "subscripts a deeply nested expression with a union" in problem
+    finally:
+        sys.modules.pop(chain.__name__, None)
 
 
 @pytest.mark.skipif(
