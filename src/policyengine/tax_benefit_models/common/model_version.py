@@ -32,6 +32,7 @@ import pandas as pd
 from policyengine.core import (
     Parameter,
     ParameterNode,
+    StaleOutputError,
     TaxBenefitModelVersion,
     Variable,
 )
@@ -393,6 +394,28 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     "inputs were mapped when it was calculated; run again "
                     "before saving"
                 )
+        if self.country_code == "uk":
+            from policyengine.tax_benefit_models.uk.capital_gains_responses import (
+                RECORD_KEY,
+                simulation_request,
+            )
+
+            # ``PolicyEngineUKDataset.save()`` writes the record into the
+            # file, and ``load()`` refuses an output without it.
+            record = (getattr(simulation.output_dataset, "metadata", None) or {}).get(
+                RECORD_KEY
+            )
+            if record is None:
+                raise ValueError(
+                    "This UK output does not record the capital gains "
+                    "realisation response it was calculated under; run again "
+                    "before saving"
+                )
+            if record["request"]["digest"] != simulation_request(simulation)["digest"]:
+                raise ValueError(
+                    "Capital gains response settings changed since this output "
+                    "was calculated; run again before saving"
+                )
         simulation.output_dataset.save()
         if serialized_spm is not None:
             # Store UTF-8 JSON in a dataset rather than an attribute: the
@@ -439,19 +462,21 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 )
             recorded_renames = read_renames_record(filepath)
             if raw is None:
-                raise ValueError(
+                raise StaleOutputError(
                     "Saved US simulation has no SPM configuration or receipt"
                 )
             recorded = json.loads(raw)
             if recorded["config"] != simulation.spm_config:
-                raise ValueError("Saved US simulation uses different SPM settings")
+                raise StaleOutputError(
+                    "Saved US simulation uses different SPM settings"
+                )
             receipt = SPMProvenance.model_validate(recorded["provenance"])
             # Outputs saved before stored inputs were mapped onto renamed
             # live inputs were calculated without them (for example with
             # every WIC-eligible person taking WIC up), so they are not
             # reused. ``Simulation.ensure()`` runs such a simulation again.
             if recorded_renames is None:
-                raise ValueError(
+                raise StaleOutputError(
                     "Saved US simulation predates the mapping of renamed "
                     "stored inputs (it has no record of them); run it again"
                 )
@@ -462,7 +487,7 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 recorded_legacy_spm, expected_profile_for_dataset(simulation.dataset)
             )
             if legacy_problem is not None:
-                raise ValueError(
+                raise StaleOutputError(
                     f"Saved US simulation output is out of date: {legacy_problem}; "
                     "run it again"
                 )
@@ -477,9 +502,29 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             # observed and uprated the State Pension by CPI, so they are not
             # reused. ``Simulation.ensure()`` runs such a simulation again.
             if not _year_file_records_data_year(Path(filepath)):
-                raise ValueError(
+                raise StaleOutputError(
                     "Saved UK simulation predates anchoring on the observed "
                     "data year (it records none); run it again"
+                )
+            from policyengine.tax_benefit_models.uk.capital_gains_responses import (
+                read_record,
+                saved_record_problem,
+                simulation_request,
+            )
+
+            # An output is reused only under the capital gains realisation
+            # response it was calculated with: the same policyengine-uk
+            # release (whose default may differ from another's) and the same
+            # explicit settings.
+            with pd.HDFStore(filepath, mode="r") as store:
+                response_record = read_record(store)
+            problem = saved_record_problem(
+                response_record, simulation_request(simulation)
+            )
+            if problem is not None:
+                raise StaleOutputError(
+                    f"Saved UK simulation output is out of date: {problem}; "
+                    "run it again"
                 )
 
         simulation.output_dataset = self._dataset_class(
@@ -502,6 +547,12 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 simulation.output_dataset.metadata[LEGACY_SPM_RECORD_KEY] = (
                     recorded_legacy_spm
                 )
+        if self.country_code == "uk":
+            from policyengine.tax_benefit_models.uk.capital_gains_responses import (
+                RECORD_KEY,
+            )
+
+            simulation.output_dataset.metadata[RECORD_KEY] = response_record
 
         if os.path.exists(filepath):
             simulation.created_at = datetime.datetime.fromtimestamp(

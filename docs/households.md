@@ -165,6 +165,8 @@ For UK households, a `YYYY-MM-DD` key is effective from that date until the next
 
 UK households reject bare years such as `"2027"` or `2027`, because the underlying packages assign different meanings to them. Use `"2027-04-06.2028-04-05"` for one UK fiscal year or `"2027-01-01"` for an effective date. See [Reforms](reforms.md) for the shared `Simulation(policy=...)` and `Simulation(dynamic=...)` date contract. The US household route retains its country package's period-key handling.
 
+UK household results record the capital gains realisation response the calculation applied, under `result["provenance"]["capital_gains_responses"]`: the policyengine-uk release, the reform's explicit `gov.simulation.capital_gains_responses` settings, and the assumption policyengine-uk resolved (see [The UK capital gains realisation response](microsim.md#the-uk-capital-gains-realisation-response)). `result.write(...)` includes it.
+
 Structural reforms (new variables, formula swaps) require the `Simulation` path — see [Reforms](reforms.md).
 
 ## Year
