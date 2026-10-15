@@ -39,6 +39,7 @@ website:
           - impact-analysis.md
           - outputs.md
           - regions.md
+          - disclosure.md
           - visualisation.md
       - section: "Methodology"
         contents:

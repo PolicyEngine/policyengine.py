@@ -422,6 +422,14 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 RENAMES_RECORD_KEY,
                 read_renames_record,
             )
+            from policyengine.tax_benefit_models.us.legacy_spm import (
+                RECORD_KEY as LEGACY_SPM_RECORD_KEY,
+            )
+            from policyengine.tax_benefit_models.us.legacy_spm import (
+                expected_profile_for_dataset,
+                read_record_value,
+                record_problem,
+            )
 
             with h5py.File(filepath, "r") as stream:
                 raw = (
@@ -446,6 +454,17 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 raise ValueError(
                     "Saved US simulation predates the mapping of renamed "
                     "stored inputs (it has no record of them); run it again"
+                )
+            # BACKWARD COMPATIBILITY (#597, #598): an output is reused only
+            # under exactly the legacy SPM declarations its input needs.
+            recorded_legacy_spm = read_record_value(filepath)
+            legacy_problem = record_problem(
+                recorded_legacy_spm, expected_profile_for_dataset(simulation.dataset)
+            )
+            if legacy_problem is not None:
+                raise ValueError(
+                    f"Saved US simulation output is out of date: {legacy_problem}; "
+                    "run it again"
                 )
 
         if self.country_code == "uk":
@@ -479,6 +498,10 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             simulation.output_dataset.metadata.update(
                 {"spm_config": recorded["config"], RENAMES_RECORD_KEY: recorded_renames}
             )
+            if isinstance(recorded_legacy_spm, dict):
+                simulation.output_dataset.metadata[LEGACY_SPM_RECORD_KEY] = (
+                    recorded_legacy_spm
+                )
 
         if os.path.exists(filepath):
             simulation.created_at = datetime.datetime.fromtimestamp(

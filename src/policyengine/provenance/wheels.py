@@ -1,19 +1,21 @@
 """Check that an installed distribution is byte-identical to a wheel.
 
-A wheel's ``*.dist-info/RECORD`` lists every file in the archive with its
-SHA-256. Verification has two halves, and both must hold:
+A wheel's ``*.dist-info/RECORD`` lists its files and their SHA-256 hashes.
+Verification has three parts, and all must hold:
 
 1. **The wheel is what its RECORD says.** Every archive member is listed in
    the RECORD with the hash of its bytes, and every RECORD entry is an
-   archive member: a one-to-one match. Only the RECORD itself (and a RECORD
-   signature) is listed without a hash. Without this, a zip holding a copied
-   RECORD would "verify" and its SHA-256 would name a wheel the installed
-   files never came from.
+   archive member. RECORD lists itself with empty hash and size fields.
+   The only membership exceptions are the optional ``RECORD.jws`` and
+   ``RECORD.p7s`` signatures, which the wheel specification excludes from
+   RECORD. Without this, a zip holding a copied RECORD would "verify" and
+   its SHA-256 would name a wheel the installed files never came from.
 2. **The installed files are the wheel's.** Every hashed file in the wheel's
    RECORD is installed with the same hash, and the bytes on disk hash to it.
    Nothing else is installed beyond what an installer adds: ``INSTALLER``,
-   ``REQUESTED``, ``direct_url.json`` and ``uv_cache.json`` in the
-   ``.dist-info`` directory, the rewritten ``RECORD``, bytecode caches, and
+   ``REQUESTED``, ``direct_url.json``, ``uv_cache.json`` and ``uv_build.json``
+   in its ``.dist-info`` directory, the rewritten ``RECORD``, signatures
+   whose bytes match the archive, bytecode caches, and
    the console and GUI script launchers it generates in the scripts
    directory, outside the site directory, for the entry points the wheel's
    ``entry_points.txt`` declares. Launchers are generated per environment
@@ -65,7 +67,7 @@ __all__ = [
 
 #: Files an installer adds to a distribution that are not in the wheel RECORD.
 INSTALLER_FILES = frozenset(
-    {"INSTALLER", "REQUESTED", "direct_url.json", "uv_cache.json"}
+    {"INSTALLER", "REQUESTED", "direct_url.json", "uv_cache.json", "uv_build.json"}
 )
 
 #: Directories installers write entry-point launchers to (POSIX, Windows).
@@ -77,7 +79,7 @@ SCRIPT_GROUPS = ("console_scripts", "gui_scripts")
 #: Windows launcher suffixes, longest first.
 _LAUNCHER_SUFFIXES = ("-script.pyw", "-script.py", ".exe")
 
-_UNHASHED_RECORD_FILES = ("RECORD", "RECORD.jws", "RECORD.p7s")
+_RECORD_SIGNATURE_FILES = ("RECORD.jws", "RECORD.p7s")
 
 
 def record_digest_to_hex(value: str) -> str:
@@ -148,8 +150,9 @@ def verify_wheel_archive(wheel_path: Path) -> dict[str, Any]:
 
     Returns ``record`` (``{path: hex sha256 or None}``), ``scripts`` (entry
     point names an installer turns into launchers), ``members_verified`` and
-    ``problems`` (empty when members and RECORD match one to one). A wheel
-    without exactly one top-level ``*.dist-info/RECORD`` raises ``ValueError``.
+    ``problems`` (empty when members and RECORD match, except the optional
+    signature files). A wheel without exactly one top-level
+    ``*.dist-info/RECORD`` raises ``ValueError``.
     """
 
     problems: list[str] = []
@@ -162,13 +165,28 @@ def verify_wheel_archive(wheel_path: Path) -> dict[str, Any]:
             if name in seen:
                 problems.append(f"{name}: the wheel holds it twice")
             seen.add(name)
-        record = parse_record(archive.read(record_name).decode("utf-8"))
-        unhashed = {f"{dist_info}/{name}" for name in _UNHASHED_RECORD_FILES}
+        record_text = archive.read(record_name).decode("utf-8")
+        record = parse_record(record_text)
+        self_entry = next(
+            (
+                row
+                for row in csv.reader(io.StringIO(record_text))
+                if row and row[0] == record_name
+            ),
+            None,
+        )
+        if self_entry is None:
+            problems.append(f"{record_name}: RECORD does not list itself")
+        elif self_entry[1:] != ["", ""]:
+            problems.append(f"{record_name}: RECORD needs empty hash and size fields")
+        signatures = {f"{dist_info}/{name}" for name in _RECORD_SIGNATURE_FILES}
         verified = 0
         for name in sorted(seen):
-            if name in unhashed:
-                if record.get(name) is not None:
-                    problems.append(f"{name}: RECORD hashes a file it cannot hash")
+            if name == record_name:
+                continue
+            if name in signatures:
+                if name in record:
+                    problems.append(f"{name}: signature files must not be in RECORD")
                 continue
             if name not in record:
                 problems.append(f"{name}: in the wheel but not in its RECORD")
@@ -192,8 +210,13 @@ def verify_wheel_archive(wheel_path: Path) -> dict[str, Any]:
                 )
             except (configparser.Error, UnicodeDecodeError) as exc:
                 problems.append(f"{entry_points}: unreadable ({type(exc).__name__})")
+        signature_hashes = {
+            path: _member_sha256(archive, path) for path in sorted(seen & signatures)
+        }
     return {
         "record": record,
+        "dist_info": dist_info,
+        "signatures": signature_hashes,
         "scripts": scripts,
         "members_verified": verified,
         "problems": problems,
@@ -226,11 +249,11 @@ def _launcher_located(distribution: Any, path: str) -> bool:
     )
 
 
-def _installer_file(path: str) -> bool:
+def _installer_file(path: str, dist_info: str) -> bool:
     """Whether an installed path is one an installer writes in ``.dist-info``."""
 
     location = PurePosixPath(path)
-    return location.parent.name.endswith(".dist-info") and (
+    return str(location.parent) == dist_info and (
         location.name in INSTALLER_FILES or location.name == "RECORD"
     )
 
@@ -363,6 +386,21 @@ def verify_installed_against_wheel(
             problems.append(f"{path}: bytes differ from the wheel")
             continue
         verified += 1
+    signatures = archive["signatures"]
+    listed_signatures = installed.keys() & signatures.keys()
+    read_text = getattr(distribution, "read_text", None)
+    if signatures and callable(read_text):
+        installed_record = read_text("RECORD")
+        if installed_record is not None:
+            # Distribution.files omits listed files that are missing on disk.
+            record_paths = parse_record(installed_record)
+            listed_signatures |= record_paths.keys() & signatures.keys()
+    for path in sorted(listed_signatures):
+        located = Path(distribution.locate_file(path))
+        if not located.is_file():
+            problems.append(f"{path}: missing on disk")
+        elif sha256_file(located) != signatures[path]:
+            problems.append(f"{path}: bytes differ from the wheel")
     launchers = sorted(
         path
         for path in installed
@@ -374,8 +412,9 @@ def verify_installed_against_wheel(
         path
         for path in installed
         if path not in expected
+        and path not in signatures
         and path not in launchers
-        and not _installer_file(path)
+        and not _installer_file(path, archive["dist_info"])
         and _cache_entry(path) is None
     )
     problems.extend(f"{path}: installed but not in the wheel" for path in extra)

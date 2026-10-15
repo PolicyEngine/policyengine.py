@@ -164,6 +164,10 @@ jobs:
   Publish:
     runs-on: ubuntu-latest
     if: github.event.head_commit.message == 'Update package version'
+    # PyPI trusted publishing: PyPI accepts uploads only from this workflow in
+    # the pypi environment, which is limited to main. id-token: write comes
+    # from the workflow-level permissions. No stored PyPI token.
+    environment: pypi
     env:
       GH_TOKEN: ${{ github.token }}
     outputs:
@@ -213,8 +217,6 @@ jobs:
       - name: Publish a Python distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          user: __token__
-          password: ${{ secrets.PYPI }}
           skip-existing: true
           packages-dir: dist
       - name: Create GitHub Release
