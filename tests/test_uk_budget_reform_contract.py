@@ -1041,7 +1041,9 @@ def test_any_non_finite_value_in_either_run_fails(state, name, value):
 
 
 @pytest.mark.parametrize("state", ["base", "reformed"])
-@pytest.mark.parametrize(("payment", "holds"), [(0.12, True), (0.109, False)])
+@pytest.mark.parametrize(
+    ("payment", "holds"), [(0.12, True), (0.115, True), (0.109, False)]
+)
 def test_the_payable_floor_holds_in_both_runs(state, payment, holds):
     """#614 round-3 review: a payment pushed below the floor fails in either run.
 
@@ -1062,3 +1064,23 @@ def test_the_payable_floor_holds_in_both_runs(state, payment, holds):
     other["universal_credit"][0] = 0.12
     result, detail = _verdict(base, reformed)
     assert result is holds, detail
+
+
+def test_an_award_below_the_floor_is_paid_in_full():
+    """#622 review: the floor is the lesser of the award and 12p a year."""
+
+    import numpy as np
+
+    base, reformed = _lawful_pair()
+    for run in (base, reformed):
+        unit = {
+            "uc_standard_allowance": run["uc_standard_allowance"][0],
+            "universal_credit_pre_benefit_cap": 0.05,
+            "benefit_cap_reduction": 0.0,
+            "uc_deductions": 0.0,
+            "universal_credit": 0.05,
+        }
+        for name, value in unit.items():
+            run[name] = np.append(run[name], value)
+    holds, detail = _verdict(base, reformed)
+    assert holds, detail
