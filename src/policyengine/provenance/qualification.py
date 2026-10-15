@@ -28,6 +28,7 @@ the scorecard computes. W4's own receipts use the receipt-v1 rule of
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, ClassVar, Literal, Optional
 
@@ -52,6 +53,7 @@ from policyengine.provenance.receipt import (
 
 __all__ = [
     "BLOCKING_REPLAY_FLAGS",
+    "REPLAY_POLICY_ID",
     "REQUIRED_GATES",
     "REVIEW_REPLAY_FLAGS",
     "CandidatePair",
@@ -100,12 +102,31 @@ _SEVERITY: dict[str, int] = {
     "error": 3,
 }
 
-#: Replay diff flags that block promotion whatever their size. Proposed
-#: policy pending cos d1344; numerical and support flags need review.
-BLOCKING_REPLAY_FLAGS: frozenset[str] = frozenset(
-    {"structural", "coverage", "mapping", "inertness", "construction"}
+#: The replay gate's policy (cos d1344): fail on the regressions a receipt
+#: identifies, call a gap known only on base-side evidence, and send every
+#: other flagged move to a named reviewer. Its text ships as
+#: ``data/qualification/replay_policy.md`` and each receipt records its digest.
+REPLAY_POLICY_ID = "d1344-replay-regressions-v1"
+REPLAY_POLICY_FILE = "replay_policy.md"
+#: Flags that fail whatever the row says.
+BLOCKING_REPLAY_FLAGS: frozenset[str] = frozenset({"mapping"})
+#: Flags that need review unless the row is a lost result or lost response.
+REVIEW_REPLAY_FLAGS: frozenset[str] = frozenset(
+    {"numerical", "structural", "coverage", "support", "inertness", "construction"}
 )
-REVIEW_REPLAY_FLAGS: frozenset[str] = frozenset({"numerical", "support"})
+#: The diff's numerical bound: a move needs at least max(this, 1% of the
+#: base's absolute value) to be flagged.
+REPLAY_ABSOLUTE_BOUND_GBP = 1_000_000.0
+REPLAY_RELATIVE_BOUND = 0.01
+
+
+def replay_policy_sha256() -> str:
+    """SHA-256 of the replay policy text this package applies."""
+
+    from importlib.resources import files
+
+    data = files("policyengine.data.qualification") / REPLAY_POLICY_FILE
+    return hashlib.sha256(data.read_bytes()).hexdigest()
 
 
 class GateResult(_Contract):
@@ -746,18 +767,27 @@ def evaluate_replay_receipt(
     """The ``replay`` gate for a terminal replay status and its receipt.
 
     The receipt must answer this exact request, be the bytes the status
-    names, and report an execution of exactly the requested artifacts.
-    Rejected or failed replays, incomplete runs and blocking flags fail the
-    gate; numerical and support flags need review. Unsupported years are
-    reported, never failed on their own.
+    names, and report an execution of exactly the requested artifacts. Its
+    contents are then judged by policy ``d1344-replay-regressions-v1``
+    (``data/qualification/replay_policy.md``):
+
+    - fail on rejected or failed replays, mapping flags, lost results
+      (a base value with no candidate value), lost responses (a measure-year
+      the candidate lists as inert, or a measure-year total of exactly £0
+      against a base at least the diff's bound away) and incomplete grids,
+      unless a gap is known from base-side evidence;
+    - send every other flagged move to review.
+
+    Unsupported years are reported, never failed on their own. The gate's
+    details record the policy id, the policy text's SHA-256, the known gaps,
+    the regressions and the review items.
 
     The receipt is read as a whole, not by its summary counters: a flag
     counts when either ``flag_counts`` or a flagged row carries it, and a
     receipt that contradicts itself fails (failures listed under a complete
     integrity, more flagged rows of a kind than its count, supported years
     with no artifacts, nothing replayed at all) or contradicts the request
-    (a comparison base other than the ``compare_to`` asked for). Inert
-    measure-years with no inertness flag need review.
+    (a comparison base other than the ``compare_to`` asked for).
     """
 
     request_id = request.request_id
@@ -901,17 +931,6 @@ def evaluate_replay_receipt(
             "inert_measure_years": [list(item) for item in inert],
         }
     )
-    if receipt.integrity.status != "complete" or incomplete_events:
-        return GateResult(
-            gate_id="replay",
-            status="fail",
-            summary=(
-                "Replay did not complete every supported measure-year"
-                + (f" ({', '.join(incomplete_events)})" if incomplete_events else "")
-                + "; mandatory gates take no partial evidence."
-            ),
-            details={**details, "incomplete_events": incomplete_events},
-        )
     # A receipt whose parts disagree is not evidence of anything.
     contradictions: list[str] = []
     if receipt.integrity.failures:
@@ -961,43 +980,122 @@ def evaluate_replay_receipt(
             details={**details, "contradictions": contradictions},
         )
     # Flags come from every place the receipt can state them, never from the
-    # summary counters alone.
+    # summary counters alone: a flag a counter states but no row carries
+    # still needs review.
     present = {kind for kind, n in counts.items() if n} | set(row_counts)
-    blocking = sorted(present & BLOCKING_REPLAY_FLAGS)
-    review = sorted(present & REVIEW_REPLAY_FLAGS)
+    # No receipt yet records the base's own inert and missing measure-years,
+    # so no gap is known and every inert or incomplete measure-year fails.
+    known_gaps: list[dict[str, Any]] = []
+    known = {(gap["event"], gap["measure_key"], gap["year"]) for gap in known_gaps}
+    listed_inert = set(inert)
+    candidate_inert = {where for where in listed_inert if where not in known}
+    regressions: list[dict[str, Any]] = []
+    review_items: list[dict[str, Any]] = []
 
-    def tally(kinds: Sequence[str]) -> str:
-        return ", ".join(
-            f"{kind} {max(counts.get(kind, 0), row_counts.get(kind, 0))}"
-            for kind in kinds
+    def item(kind: str, row: Any = None, **fields: Any) -> dict[str, Any]:
+        record: dict[str, Any] = {"kind": kind}
+        if row is not None:
+            record.update(
+                event=row.event,
+                measure_key=row.measure_key,
+                year=row.year,
+                level=row.level,
+                key=row.key,
+                flags=sorted(row.flags),
+                base_gbp=row.base_gbp,
+                head_gbp=row.head_gbp,
+            )
+        record.update(fields)
+        return record
+
+    for event, measure_key, year in sorted(candidate_inert):
+        regressions.append(
+            item(
+                "lost_response",
+                event=event,
+                measure_key=measure_key,
+                year=year,
+                why="inert in the candidate",
+            )
         )
+    for name in incomplete_events:
+        regressions.append(
+            item(
+                "incomplete",
+                event=name,
+                why="the supported grid is incomplete and no gap in it is known",
+            )
+        )
+    if receipt.integrity.status == "incomplete" and not incomplete_events:
+        regressions.append(
+            item("incomplete", why="integrity is incomplete with no incomplete event")
+        )
+    for row in rows:
+        flags = set(row.flags)
+        where = (row.event, row.measure_key, row.year)
+        lost = False
+        if flags & BLOCKING_REPLAY_FLAGS:
+            regressions.append(item("mapping", row))
+            lost = True
+        if "coverage" in flags and row.base_gbp is not None and row.head_gbp is None:
+            regressions.append(item("lost_result", row))
+            lost = True
+        zero_total = (
+            row.level == "measure_year"
+            and row.head_gbp == 0
+            and row.base_gbp is not None
+            and abs(row.base_gbp)
+            >= max(REPLAY_ABSOLUTE_BOUND_GBP, REPLAY_RELATIVE_BOUND * abs(row.base_gbp))
+        )
+        if where in listed_inert and (zero_total or "inertness" in flags):
+            # The candidate's own inert list decides: a lost response above,
+            # or a known gap.
+            lost = True
+        elif zero_total and where not in known:
+            regressions.append(item("lost_response", row, why="£0 against the base"))
+            lost = True
+        if not lost and flags & REVIEW_REPLAY_FLAGS:
+            if "coverage" in flags and row.base_gbp is None:
+                kind = (
+                    "coverage_gain"
+                    if row.head_gbp is not None
+                    else "coverage_without_values"
+                )
+            elif flags == {"inertness"}:
+                kind = "base_only_inertness"
+            else:
+                kind = "flagged_move"
+            review_items.append(item(kind, row))
+    for kind in sorted(present - row_counts.keys()):
+        review_items.append(item("counted_flag", flag=kind, count=counts.get(kind, 0)))
+    details.update(
+        {
+            "policy": REPLAY_POLICY_ID,
+            "policy_sha256": replay_policy_sha256(),
+            "known_gaps": known_gaps,
+            "regressions": regressions,
+            "review_items": review_items,
+        }
+    )
 
-    if blocking:
+    def tally(records: Sequence[dict[str, Any]]) -> str:
+        kinds: dict[str, int] = {}
+        for record in records:
+            kinds[record["kind"]] = kinds.get(record["kind"], 0) + 1
+        return ", ".join(f"{kind} {n}" for kind, n in sorted(kinds.items()))
+
+    if regressions:
         return GateResult(
             gate_id="replay",
             status="fail",
-            summary="Blocking replay flags: " + tally(blocking),
+            summary="Replay regressions: " + tally(regressions),
             details=details,
         )
-    if review:
+    if review_items:
         return GateResult(
             gate_id="replay",
             status="needs_review",
-            summary="Replay moves need review: " + tally(review),
-            details=details,
-        )
-    if inert:
-        # A measure that does nothing in a supported year, with no inertness
-        # flag against the base: unchanged from the base, but still a measure
-        # the model does not respond to. A person decides whether it is known.
-        return GateResult(
-            gate_id="replay",
-            status="needs_review",
-            summary=(
-                f"{len(inert)} replayed measure-year(s) are inert, with no "
-                "inertness flag against the base: "
-                + ", ".join(f"{m} {y}" for _, m, y in inert[:6])
-            ),
+            summary="Replay moves need review: " + tally(review_items),
             details=details,
         )
     if receipt.diff is None:

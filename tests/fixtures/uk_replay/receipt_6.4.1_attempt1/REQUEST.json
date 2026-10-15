@@ -1,0 +1,59 @@
+{
+ "attempt": 1,
+ "candidate": {
+  "data": {
+   "build_id": "policyengine-uk-data-1.58.1",
+   "dataset": "enhanced_frs_2024_25",
+   "path": "enhanced_frs_2024_25.h5",
+   "release_manifest_sha256": "545797bf231cd3681e64b677065d921304e9a32f1e46e757a940a412b4136c17",
+   "repo_id": "policyengine/policyengine-uk-data-private",
+   "repo_type": "model",
+   "revision": "1.58.1",
+   "sha256": "056e80fd8e9151d78f432a25cde863340baee81304c6216a37fb575ce8563784",
+   "size_bytes": 128409762
+  },
+  "expected_release_bundle": {
+   "bundle_id": "uk-6.4.1",
+   "certified_by": "policyengine.py bundle certification",
+   "certified_data_artifact_sha256": "056e80fd8e9151d78f432a25cde863340baee81304c6216a37fb575ce8563784",
+   "certified_data_build_id": "policyengine-uk-data-1.58.1",
+   "compatibility_basis": "legacy_compatible_model_package",
+   "country_id": "uk",
+   "data_build_fingerprint": "sha256:c094d7006fdd81df220090284212f16bbffb15624643bc442c4bb3e1b1e5dac8",
+   "data_build_model_git_sha": "daad71cd26c107f1b784ff600d1464ba59c70e4a",
+   "data_build_model_version": "2.122.2",
+   "data_package": "policyengine-uk-data",
+   "data_version": "1.58.1",
+   "default_dataset": "enhanced_frs_2024_25",
+   "default_dataset_uri": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2024_25.h5@1.58.1",
+   "model_package": "policyengine-uk",
+   "model_version": "2.130.1",
+   "policyengine_version": "6.4.1"
+  },
+  "policyengine": {
+   "packaged_bundle_manifest_sha256": "fc1abd76660e9b0bdfe6319a2ae5f221847750e087143e5ba6da859a9422e333",
+   "source": {
+    "pypi": {
+     "wheel_sha256": "550c3a9ae9c74d409d2fa81b7090850c2e5115b57f91ef1814f3c5fddaca36f2"
+    }
+   },
+   "version": "6.4.1"
+  },
+  "policyengine_core": {
+   "version": "3.33.0",
+   "wheel_sha256": "2e32d02a8910ab683a2b7600987904b351d058fc2bd5910a8ea6641438bcd789"
+  },
+  "policyengine_uk": {
+   "version": "2.130.1",
+   "wheel_sha256": "f8b1b8b917c9297ff66937811dbebd9a62d3b1796ce894c326e98051cac4c873"
+  }
+ },
+ "compare_to": "latest_certified",
+ "kind": "released_bundle",
+ "requested_by": {
+  "commit": "0ccad05d2eecb99acbfa125599a419b51d07f0e1",
+  "note": "Built by hand by the W4 session on 2026-10-15 for policyengine 6.4.1 (release commit 0ccad05d), with released_bundle_request from policyengine.py PR #574 at 769d5efa, because the push workflow's NotifyConsumers request is not on main yet. No workflow run produced it.",
+  "repository": "PolicyEngine/policyengine.py"
+ },
+ "schema": "policyengine.uk-replay-qualification-request/v1"
+}
