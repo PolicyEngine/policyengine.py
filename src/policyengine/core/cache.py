@@ -6,7 +6,7 @@ import psutil
 
 logger = logging.getLogger(__name__)
 
-_MEMORY_THRESHOLDS_GB = [8, 16, 32]
+_MEMORY_THRESHOLDS_GIB = [16, 32]
 _warned_thresholds: set[int] = set()
 
 T = TypeVar("T")
@@ -50,10 +50,11 @@ class LRUCache(Generic[T]):
         process = psutil.Process()
         memory_gb = process.memory_info().rss / (1024**3)
 
-        for threshold in _MEMORY_THRESHOLDS_GB:
+        for threshold in _MEMORY_THRESHOLDS_GIB:
             if memory_gb >= threshold and threshold not in _warned_thresholds:
                 logger.warning(
-                    f"Memory usage has reached {memory_gb:.2f}GB (threshold: {threshold}GB). "
+                    f"Memory usage has reached {memory_gb:.2f} GiB "
+                    f"(threshold: {threshold} GiB). "
                     f"Cache contains {len(self._cache)} items."
                 )
                 _warned_thresholds.add(threshold)
