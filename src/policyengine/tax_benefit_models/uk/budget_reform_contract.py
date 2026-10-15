@@ -47,8 +47,8 @@ reading cases.
 Prior law after a bounded change
 --------------------------------
 
-Contract 1.0.0 expects prior law's projected path to resume after a bounded
-change (``PRIOR_LAW_OPTION = "projected"``). Whether indexation should
+The contract expects prior law's projected path to resume after a bounded
+change (``PRIOR_LAW_OPTION = "projected"``, since contract 1.0.0). Whether indexation should
 instead resume from a changed statutory amount (Income Tax Act 2007 s57
 indexes "the amount ... for the previous tax year") is an open methodology
 call (cos d1344). Checks that depend on it carry ``pending`` and never gate.
@@ -64,7 +64,10 @@ policyengine-uk applies by default. A case about the response sets its
 elasticity, and expects realised gains scaled by
 ``((1 - t1) / (1 - t0)) ** elasticity``, where ``t0`` and ``t1`` are the
 marginal rates on the gains without and with the reform. Contract 1.1.0
-added both.
+added both, and a case with no response settings that shows the default
+response policyengine-uk applies. Its checks expect the retention-rate
+elasticity of 1 that policyengine-uk#2396 makes the default, and carry
+``pending`` until policyengine.py pins a release with it.
 
 Report
 ------
@@ -103,7 +106,7 @@ import re
 import sys
 import traceback
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import ROUND_CEILING, Decimal
 from typing import Any, Optional, Union
 
@@ -111,6 +114,9 @@ CONTRACT_ID = "policyengine-uk/budget-reform-contract"
 CONTRACT_VERSION = "1.1.0"
 PRIOR_LAW_OPTION = "projected"
 PRIOR_LAW_DECISION = "d1344"
+# The capital gains response default: policyengine-uk#2396 makes it a
+# retention-rate elasticity of 1. Its checks gate once policyengine.py pins it.
+DEFAULT_RESPONSE_DECISION = "policyengine-uk#2396"
 FLAT_STOP = datetime.date(2100, 12, 31)
 
 COUNTRY_ROUTES = (
@@ -382,6 +388,19 @@ def capital_gains_response(
     )
 
 
+def _response_settings_checks(
+    year: int, elasticity: float, oracle: str
+) -> tuple[Check, ...]:
+    """Checks that each response setting reached the built system: the
+    retention-rate elasticity, no marginal tax rate elasticity, and the
+    separate relief elasticity off (a switch reads as 0 when off)."""
+    return (
+        Check("parameter", CGT_ELASTICITY, year, elasticity, oracle),
+        Check("parameter", CGT_MTR_ELASTICITY, year, 0.0, oracle),
+        Check("parameter", CGT_SEPARATE_BADR_ELASTICITY, year, 0.0, oracle),
+    )
+
+
 def _realised_gains(
     year: int, rate: float, elasticity: float
 ) -> Callable[[Context], float]:
@@ -622,7 +641,7 @@ CASES: tuple[Case, ...] = (
                 PERSONAL_ALLOWANCE,
                 2034,
                 _baseline_value(PERSONAL_ALLOWANCE, 2034),
-                "contract 1.0.0: prior law's projected path resumes",
+                "prior law's projected path resumes (PRIOR_LAW_OPTION)",
             ),
             Check(
                 "parameter",
@@ -765,7 +784,7 @@ CASES: tuple[Case, ...] = (
             ),
             Check("parameter", CGT_BASIC_RATE, 2028, 0.20, "in force all year"),
             Check("parameter", CGT_BASIC_RATE, 2026, 0.18, "before the change"),
-            Check("parameter", CGT_ELASTICITY, 2027, 0.0, "set by the case"),
+            *_response_settings_checks(2027, 0.0, "set by the case"),
             Check("change", "capital_gains_tax", 2026, 0.0, "before the change", 0.005),
             Check(
                 "change",
@@ -800,7 +819,7 @@ CASES: tuple[Case, ...] = (
         household=adult(20_000, capital_gains=GAINS),
         checks=(
             Check("parameter", CGT_BASIC_RATE, 2027, 0.20, "in force all year"),
-            Check("parameter", CGT_ELASTICITY, 2027, 1.0, "set by the case"),
+            *_response_settings_checks(2027, 1.0, "set by the case"),
             Check("change", "capital_gains_tax", 2026, 0.0, "before the change", 0.005),
             Check(
                 "variable",
@@ -826,6 +845,40 @@ CASES: tuple[Case, ...] = (
                 GAINS_RESPONSE_UPLIFT_ORACLE,
                 0.005,
             ),
+        ),
+    ),
+    Case(
+        id="cgt_default_response",
+        title=(
+            "CGT basic rate 20% from 6 April 2027, at policyengine-uk's "
+            "default response"
+        ),
+        # No response settings, so the report shows the default. The expected
+        # values are cgt_retention_response's, the default policyengine-uk#2396
+        # sets; they report without gating until policyengine.py pins it.
+        changes=(Change(CGT_BASIC_RATE, _date("2027-04-06"), 0.20),),
+        household=adult(20_000, capital_gains=GAINS),
+        checks=tuple(
+            replace(check, pending=DEFAULT_RESPONSE_DECISION)
+            for check in (
+                *_response_settings_checks(2027, 1.0, "policyengine-uk's default"),
+                Check(
+                    "variable",
+                    "capital_gains",
+                    2027,
+                    _realised_gains(2027, 0.20, 1.0),
+                    REALISED_GAINS_ORACLE + ", at the default elasticity of 1",
+                    0.01,
+                ),
+                Check(
+                    "change",
+                    "capital_gains_tax",
+                    2027,
+                    _gains_response_uplift(2027, 0.20, 1.0),
+                    GAINS_RESPONSE_UPLIFT_ORACLE + ", at the default elasticity of 1",
+                    0.005,
+                ),
+            )
         ),
     ),
     Case(
@@ -1811,7 +1864,8 @@ def _sampled_change(rng: random.Random) -> Change:
 def expected_annual(
     change: Change, year: int, baseline: Callable[[str, int], float]
 ) -> float:
-    """The annual value a single change gives, under contract 1.0.0.
+    """The annual value a single change gives, under the contract's prior-law
+    option (``PRIOR_LAW_OPTION``).
 
     Prior law is current law's annual value outside the change. Blended
     parameters are sampled only from 2025 on, where current law holds one
