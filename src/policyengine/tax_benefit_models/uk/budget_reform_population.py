@@ -143,6 +143,10 @@ UC_ALLOWANCE_VARIABLES = (
 #: difference the check treats as a change.
 PENNY = 0.01
 
+#: Deductions may not reduce the amount payable below a penny an assessment
+#: period (SI 2013/380 Sch 6 para 3(1)(a)), twelve of them a year.
+MINIMUM_PAYABLE_A_YEAR = 0.12
+
 
 def uc_allowance_verdict(
     base: dict[str, np.ndarray], reformed: dict[str, np.ndarray]
@@ -164,6 +168,11 @@ def uc_allowance_verdict(
     (SI 2013/380 Sch 6), so with the award unchanged a capped claimant's
     payment falls by exactly as much as their deductions rise.
 
+    Whatever deductions are taken, at least a penny an assessment period
+    stays payable (SI 2013/380 Sch 6 para 3(1)(a)), so no payment falls below
+    the lesser of its award and 12p a year. Every value must be finite in both
+    runs: a missing value would otherwise pass every comparison.
+
     How much deductions rise is not checked here. The law sets some
     deductions as percentages of the standard allowance and others as fixed
     amounts (advances, SI 2013/383 reg 10), starts deductions with a new
@@ -172,6 +181,18 @@ def uc_allowance_verdict(
     bound is an invariant of both.
     """
 
+    non_finite = int(
+        np.sum(
+            ~np.all(
+                [
+                    np.isfinite(state[name])
+                    for state in (base, reformed)
+                    for name in UC_ALLOWANCE_VARIABLES
+                ],
+                axis=0,
+            )
+        )
+    )
     allowance, base_allowance = (
         reformed["uc_standard_allowance"],
         base["uc_standard_allowance"],
@@ -189,10 +210,21 @@ def uc_allowance_verdict(
     awards_lower = int(np.sum(award < base_award - PENNY))
     payments_unaccounted = int(np.sum(np.abs(unaccounted) > PENNY))
     payments_higher = int(np.sum(paid > base_paid + PENNY))
+    payments_below_floor = int(
+        sum(
+            np.sum(
+                state_paid
+                < np.minimum(np.maximum(state_award, 0), MINIMUM_PAYABLE_A_YEAR) - PENNY
+            )
+            for state_paid, state_award in ((base_paid, base_award), (paid, award))
+        )
+    )
     holds = (
-        scaled
+        non_finite == 0
+        and scaled
         and awards_lower == 0
         and payments_unaccounted == 0
+        and payments_below_floor == 0
         and payments_higher > 0
     )
     return holds, {
@@ -201,6 +233,8 @@ def uc_allowance_verdict(
         "payments_lower": int(np.sum(paid < base_paid - PENNY)),
         "payments_higher": payments_higher,
         "payments_not_award_less_deductions": payments_unaccounted,
+        "payments_below_the_payable_floor": payments_below_floor,
+        "units_with_non_finite_values": non_finite,
     }
 
 

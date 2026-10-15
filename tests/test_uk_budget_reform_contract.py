@@ -505,6 +505,9 @@ def stub_population_checks(monkeypatch):
             return Simulation(dataset=None)
 
         def calculate(self, variable, year):
+            # No cap reduction or deductions, so a payment equals its award.
+            if variable in ("benefit_cap_reduction", "uc_deductions"):
+                return [0.0]
             if (
                 variable == "income_tax"
                 and year == 2027
@@ -867,7 +870,22 @@ def test_how_much_deductions_rise_is_not_bounded(rise):
 @pytest.mark.parametrize(
     ("change", "failing_key", "passing_value"),
     [
-        ({"benefit_cap_reduction": 140.011}, "awards_lower", 0),
+        (
+            {"benefit_cap_reduction": 150.0, "universal_credit": 768.0},
+            "awards_lower",
+            0,
+        ),
+        (
+            {"uc_deductions": 800.0, "universal_credit": 0.0},
+            "payments_below_the_payable_floor",
+            0,
+        ),
+        ({"uc_deductions": float("nan")}, "units_with_non_finite_values", 0),
+        (
+            {"benefit_cap_reduction": float("nan")},
+            "units_with_non_finite_values",
+            0,
+        ),
         ({"universal_credit": 777.989}, "payments_not_award_less_deductions", 0),
         ({"universal_credit": 778.011}, "payments_not_award_less_deductions", 0),
         (
@@ -882,7 +900,10 @@ def test_how_much_deductions_rise_is_not_bounded(rise):
         ),
     ],
     ids=[
-        "award-falls-past-a-penny",
+        "award-falls-with-its-payment",
+        "deductions-take-the-whole-award",
+        "deductions-not-finite",
+        "cap-reduction-not-finite",
         "payment-below-award-less-deductions",
         "payment-above-award-less-deductions",
         "deductions-released-but-payment-unchanged",
@@ -922,3 +943,76 @@ def test_the_uc_allowance_check_fails_when_no_payment_rises():
     base = _uc_units()
     holds, detail = _verdict(base, _uc_units(uc_standard_allowance=[440.0]))
     assert not holds and detail["payments_higher"] == 0
+
+
+def test_errors_that_cancel_across_units_still_fail():
+    """The accounting identity holds per unit, not in aggregate."""
+
+    base, reformed = _lawful_pair()
+    reformed["universal_credit"][0] -= 5.0
+    reformed["universal_credit"][1] += 5.0
+    holds, detail = _verdict(base, reformed)
+    assert not holds
+    assert detail["payments_not_award_less_deductions"] == 2
+
+
+@pytest.mark.parametrize(("gain", "holds"), [(0.009, False), (0.011, True)])
+def test_a_gain_must_exceed_a_penny(gain, holds):
+    """Only a payment more than a penny higher counts as responsive."""
+
+    base = _uc_units(
+        universal_credit_pre_benefit_cap=[900.0],
+        benefit_cap_reduction=[100.0],
+        universal_credit=[800.0],
+    )
+    reformed = _uc_units(
+        uc_standard_allowance=[440.0],
+        universal_credit_pre_benefit_cap=[940.0],
+        benefit_cap_reduction=[140.0 - gain],
+        universal_credit=[800.0 + gain],
+    )
+    assert _verdict(base, reformed)[0] is holds
+
+
+@pytest.mark.parametrize(("relative", "holds"), [(5e-7, True), (2e-6, False)])
+def test_the_allowance_must_scale_by_ten_percent(relative, holds):
+    base, reformed = _lawful_pair()
+    reformed["uc_standard_allowance"] = reformed["uc_standard_allowance"] * (
+        1 + relative
+    )
+    assert _verdict(base, reformed)[0] is holds
+
+
+def test_deductions_may_leave_exactly_the_payable_floor():
+    """A penny an assessment period, 12p a year, is the lowest lawful payment."""
+
+    base, reformed = _lawful_pair()
+    reformed["uc_deductions"][0] = 800.0 - 0.12
+    reformed["universal_credit"][0] = 0.12
+    holds, detail = _verdict(base, reformed)
+    assert holds, detail
+
+
+@pytest.mark.parametrize("route", ["country.reform_dict", "wrapper.policy"])
+def test_extraction_errors_and_unsupported_rows_carry_distinct_ids(monkeypatch, route):
+    """#612 review: ids also label error, pending and unsupported rows."""
+
+    from dataclasses import replace
+
+    checks = (
+        Check("variable", "income_tax", 2027, 0.0, "missing value"),
+        Check("variable", "income_tax", 2027, 0.0, "missing pending", pending="d1344"),
+        Check("baseline_equals", "income_tax", 2027, "income_tax", "baseline"),
+    )
+    fake(monkeypatch, FakeRoute(reformed={}, unreformed={}))
+    rows = [
+        row
+        for row in evaluate_case(replace(CASE, checks=checks), route)
+        if "assertion_id" in row
+    ]
+    assert len(rows) == len(checks)
+    assert len({row["assertion_id"] for row in rows}) == len(checks)
+    statuses = [row["status"] for row in rows]
+    assert statuses[:2] == ["error", "pending"]
+    if route == "wrapper.policy":
+        assert statuses[2] == "unsupported"
