@@ -3802,6 +3802,62 @@ def test_aliases_of_refused_names_are_refused(tmp_path, header, body, match):
         sys.modules.pop(name, None)
 
 
+@pytest.mark.parametrize(
+    ("body", "refused"),
+    [
+        pytest.param(
+            "    def helper(id):\n        return id\n\n"
+            "    simulation.rate = helper(0.21)\n",
+            True,
+            id="read-parameter",
+        ),
+        pytest.param(
+            "    for id in [0.21]:\n        simulation.rate = 0.21\n",
+            True,
+            id="assignment-target",
+        ),
+        pytest.param(
+            "    def helper(id):\n        return 0.21\n\n"
+            "    simulation.rate = helper(1)\n",
+            False,
+            id="unread-parameter",
+        ),
+        pytest.param(
+            "    def id():\n        return 0.21\n\n    simulation.rate = 0.21\n",
+            False,
+            id="unread-function-name",
+        ),
+        pytest.param(
+            "    simulation.id = 3\n    simulation.rate = 0.21\n",
+            False,
+            id="attribute",
+        ),
+        pytest.param(
+            "    def helper(**amounts):\n        return 0.21\n\n"
+            "    simulation.rate = helper(id=3)\n",
+            False,
+            id="keyword-argument",
+        ),
+    ],
+)
+def test_refused_names_are_refused_where_code_uses_them_as_variables(
+    tmp_path, body, refused
+):
+    """Round-17 review P3: the guard reads names, as docs/receipts.md says."""
+
+    source = "def raise_rate(simulation):\n" + body
+    name = "w4_receipt_r17_names"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        if refused:
+            with pytest.raises(ReceiptError, match="uses id"):
+                _identity(module.raise_rate)
+        else:
+            assert _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
 def test_an_import_rebound_at_run_time_is_refused(tmp_path):
     """Round-7 review M4: the name must still be what its import binds."""
 
@@ -5614,6 +5670,17 @@ def test_generic_type_parameters_must_be_those_the_def_made(tmp_path, change, ma
         sys.modules.pop(name, None)
 
 
+def _deeply_quoted(leaf: str, depth: int = 80, layers: int = 4) -> str:
+    """``leaf`` under ``layers`` quoted forward references, each nesting it in
+    ``depth`` builtin tuples: within the parser's limit per string, and deeper
+    than a recursive walk of the whole expression can go."""
+
+    expression = leaf
+    for _ in range(layers):
+        expression = repr("tuple[int, " * depth + expression + "]" * depth)
+    return expression
+
+
 RUNTIME_ALIAS_HEAD = (
     "import collections.abc\nimport typing\nfrom decimal import Decimal\n"
     "from typing import Annotated, Dict, List, Literal, Optional, Union\n\n\n"
@@ -5770,6 +5837,39 @@ RUNTIME_ALIAS_HEAD = (
             "RootModel",
             id="pydantic-generic-model",
         ),
+        pytest.param(
+            # Round-17 review P2: a helper rebinds Annotated to Tuple, so the
+            # quoted "metadata" may be a type argument.
+            "    from typing import Tuple as Annotated\n\n"
+            "    shape = List['Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="annotated-rebound-to-tuple",
+        ),
+        pytest.param(
+            "    from typing import Tuple as Annotated\n\n"
+            "    shape = List[Annotated[float, 'List[Union[Decimal, float]]']]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="unquoted-annotated-rebound-to-tuple",
+        ),
+        pytest.param(
+            "    from typing import Tuple as Literal\n\n"
+            "    shape = Literal['List[Union[Decimal, float]]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "Literal",
+            id="literal-rebound-to-tuple",
+        ),
+        pytest.param(
+            # Round-17 review P3: quoted layers nest deeper than the
+            # interpreter's recursion limit allows a recursive walk.
+            "    def helper(value: List["
+            + _deeply_quoted("Union[Decimal, float]")
+            + "]):\n        return value\n\n"
+            "    simulation.rate = 0.21\n",
+            "List",
+            id="union-under-deeply-quoted-layers",
+        ),
     ],
 )
 def test_typing_aliases_built_with_a_union_inside_functions_are_refused(
@@ -5876,6 +5976,13 @@ def test_typing_aliases_built_with_a_union_inside_functions_are_refused(
             "    label = 'income_tax'\n    path = 'gov.hmrc.rates[0]'\n"
             "    simulation.rate = 0.21 if label and path else 0.0\n",
             id="ordinary-strings",
+        ),
+        pytest.param(
+            "    def helper(value: List["
+            + _deeply_quoted("float")
+            + "]):\n        return value\n\n"
+            "    simulation.rate = 0.21\n",
+            id="deeply-quoted-layers-without-a-union",
         ),
     ],
 )

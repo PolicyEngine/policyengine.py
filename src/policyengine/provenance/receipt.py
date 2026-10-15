@@ -2336,22 +2336,42 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
         local = _function_bindings(module, nodes)
 
         def resolve(node: ast.AST) -> list[Any]:
-            if isinstance(node, ast.Name):
-                values = list(local.get(node.id, ()))
-                if node.id in namespace:
-                    values.append(namespace[node.id])
-                # A builtin (list, dict, type) never reuses equal aliases.
-                return values
-            if isinstance(node, ast.Attribute):
-                return [
-                    getattr(owner, node.attr)
-                    for owner in resolve(node.value)
-                    if isinstance(owner, ModuleType) and hasattr(owner, node.attr)
+            # Iterative: a quoted forward reference can nest attributes deeper
+            # than the interpreter's recursion limit.
+            attributes: list[str] = []
+            while isinstance(node, ast.Attribute):
+                attributes.append(node.attr)
+                node = node.value
+            if not isinstance(node, ast.Name):
+                return []
+            values = list(local.get(node.id, ()))
+            if node.id in namespace:
+                values.append(namespace[node.id])
+            # A builtin (list, dict, type) never reuses equal aliases.
+            for attribute in reversed(attributes):
+                values = [
+                    getattr(owner, attribute)
+                    for owner in values
+                    if isinstance(owner, ModuleType) and hasattr(owner, attribute)
                 ]
-            return []
+            return values
 
         def is_form(node: ast.AST, *forms: str) -> bool:
+            """Whether any object the name can stand for is one of ``forms``."""
+
             return any(_is_typing_form(value, *forms) for value in resolve(node))
+
+        def is_only_form(node: ast.AST, *forms: str) -> bool:
+            """Whether every object the name can stand for is one of ``forms``.
+
+            Exemptions need this: a name a helper rebinds (``from typing
+            import Tuple as Annotated``) must not exempt the strings under it.
+            """
+
+            values = resolve(node)
+            return bool(values) and all(
+                _is_typing_form(value, *forms) for value in values
+            )
 
         # Strings that are values, not forward references. ast.walk yields a
         # node before its children, so a Literal or Annotated subscript marks
@@ -2363,9 +2383,9 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
             node = inspected[position]
             position += 1
             if isinstance(node, ast.Subscript):
-                if is_form(node.value, "Literal"):
+                if is_only_form(node.value, "Literal"):
                     values.update(id(child) for child in ast.walk(node.slice))
-                elif is_form(node.value, "Annotated") and isinstance(
+                elif is_only_form(node.value, "Annotated") and isinstance(
                     node.slice, ast.Tuple
                 ):
                     for metadata in node.slice.elts[1:]:
@@ -2389,36 +2409,42 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
 
             ``Literal`` values and ``Annotated`` metadata are values, not types,
             so a quoted string there is never read as a type, including inside
-            a forward reference parsed here.
+            a forward reference parsed here, when every object the subscripted
+            name can stand for is that form. The walk is iterative: quoted
+            layers can nest deeper than the interpreter's recursion limit.
             """
 
-            if isinstance(expression, ast.BinOp) and isinstance(
-                expression.op, ast.BitOr
-            ):
-                return True
-            if isinstance(expression, ast.Subscript):
-                if is_form(expression.value, "Union", "Optional", "Literal"):
+            pending = [expression]
+            while pending:
+                node = pending.pop()
+                if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
                     return True
-                if is_form(expression.value, "Annotated"):
-                    elements = (
-                        expression.slice.elts
-                        if isinstance(expression.slice, ast.Tuple)
-                        else [expression.slice]
-                    )
-                    return bool(elements) and holds_union(elements[0])
-            if isinstance(expression, (ast.Name, ast.Attribute)) and any(
-                _holds_union(value) for value in resolve(expression)
-            ):
-                return True
-            if isinstance(expression, ast.Constant):
-                if not isinstance(expression.value, str) or id(expression) in values:
-                    return False
-                try:
-                    parsed = ast.parse(expression.value.strip(), mode="eval").body
-                except (SyntaxError, ValueError):
-                    return False
-                return holds_union(parsed)
-            return any(holds_union(child) for child in ast.iter_child_nodes(expression))
+                if isinstance(node, ast.Subscript):
+                    if is_form(node.value, "Union", "Optional", "Literal"):
+                        return True
+                    if is_only_form(node.value, "Annotated"):
+                        elements = (
+                            node.slice.elts
+                            if isinstance(node.slice, ast.Tuple)
+                            else [node.slice]
+                        )
+                        pending.extend(elements[:1])
+                        continue
+                if isinstance(node, (ast.Name, ast.Attribute)) and any(
+                    _holds_union(value) for value in resolve(node)
+                ):
+                    return True
+                if isinstance(node, ast.Constant):
+                    if isinstance(node.value, str) and id(node) not in values:
+                        try:
+                            pending.append(
+                                ast.parse(node.value.strip(), mode="eval").body
+                            )
+                        except (SyntaxError, ValueError):
+                            pass
+                    continue
+                pending.extend(ast.iter_child_nodes(node))
+            return False
 
         for node in inspected:
             if not isinstance(node, ast.Subscript):
@@ -2427,9 +2453,13 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
                 _subscript_reuses_equal_aliases(value) for value in resolve(node.value)
             ) and holds_union(node.slice):
                 line = getattr(node, "lineno", statement.lineno)
+                try:
+                    base = ast.unparse(node.value)
+                except RecursionError:
+                    base = "a deeply nested expression"
                 return (
                     f"function {statement.name} subscripts "
-                    f"{ast.unparse(node.value)} with a union (line {line}); typing "
+                    f"{base} with a union (line {line}); typing "
                     "can return an alias it cached for the same members in another "
                     "order, so earlier code decides what runs (use a builtin "
                     "generic such as list[Decimal | float])"
