@@ -128,6 +128,11 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             kwargs["version"] = manifest.model_package.version
 
         installed_model_version = metadata.version(self.package_name)
+        # What this process loads: a receipt refuses a run whose installed
+        # versions change afterwards.
+        from policyengine.provenance.loaded import record_loaded_versions
+
+        record_loaded_versions((self.package_name, "policyengine-core", "policyengine"))
         if installed_model_version != manifest.model_package.version:
             warnings.warn(
                 f"Installed {self.package_name} version "

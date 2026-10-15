@@ -1,3 +1,25 @@
+## [6.4.3] - 2026-10-15
+
+### Changed
+
+- The UK Budget reform contract's Universal Credit allowance check is tested on both runs: each must hold finite values and keep every payment at or above the payable floor, to within a penny. Beyond the payable floor, the check does not bound how far deductions rise: policyengine-uk scales every deduction type with the standard allowance, while the law holds some, such as advance recovery, fixed (policyengine-uk#2410).
+
+
+## [6.4.2] - 2026-10-15
+
+### Fixed
+
+- The UK Budget reform contract's Universal Credit allowance check now asserts on the award before deductions, and bounds how far deductions can lower the amount paid.
+
+
+## [6.4.1] - 2026-10-15
+
+### Changed
+
+- The UK Budget reform contract report gives each assertion a unique id, and the population checks declare the rows a full run emits.
+- Certify policyengine-uk 2.130.1 with policyengine-uk-data 1.58.1 (enhanced_frs_2024_25) as the UK default pair, on the publisher's compatibility claim.
+
+
 ## [6.4.0] - 2026-10-14
 
 ### Added

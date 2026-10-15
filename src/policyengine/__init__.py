@@ -48,3 +48,11 @@ else:  # pragma: no cover
     uk = None  # type: ignore[assignment]
 
 __all__ = ["Simulation", "outputs", "uk", "us"]
+
+# The wrapper's own version as imported, for receipts to compare with what is
+# installed when they are built.
+from policyengine.provenance.loaded import (  # noqa: E402
+    record_loaded_versions as _record_loaded_versions,
+)
+
+_record_loaded_versions(("policyengine",))
