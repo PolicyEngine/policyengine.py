@@ -1,3 +1,11 @@
+## [6.4.1] - 2026-10-15
+
+### Changed
+
+- The UK Budget reform contract report gives each assertion a unique id, and the population checks declare the rows a full run emits.
+- Certify policyengine-uk 2.130.1 with policyengine-uk-data 1.58.1 (enhanced_frs_2024_25) as the UK default pair, on the publisher's compatibility claim.
+
+
 ## [6.4.0] - 2026-10-14
 
 ### Added
