@@ -4414,7 +4414,7 @@ def test_every_install_metadata_timestamp_counts(monkeypatch, filename, clock):
         def stat(self):
             values = {"st_mtime": 1.0, "st_ctime": 1.0}
             if self.name == filename:
-                values[clock] = 3.0
+                values[clock] = 4.5
             return SimpleNamespace(**values)
 
     monkeypatch.setattr(
@@ -4427,6 +4427,65 @@ def test_every_install_metadata_timestamp_counts(monkeypatch, filename, clock):
     )
     with pytest.raises(ReceiptError, match="installed or changed after this process"):
         receipt_module._refuse_package_changed_after_process_start("policyengine")
+
+
+def _metadata_written_at(monkeypatch, written_at, reported_start):
+    class MetadataPath:
+        def __truediv__(self, name):
+            return self
+
+        def exists(self):
+            return True
+
+        def stat(self):
+            return SimpleNamespace(st_mtime=written_at, st_ctime=written_at)
+
+    monkeypatch.setattr(
+        receipt_module, "_distribution_metadata_directory", lambda name: MetadataPath()
+    )
+    monkeypatch.setattr(
+        receipt_module.psutil,
+        "Process",
+        lambda: SimpleNamespace(create_time=lambda: reported_start),
+    )
+
+
+@pytest.mark.parametrize(
+    ("written_at", "refused"),
+    [
+        (1000.0, False),
+        (1001.5, False),
+        (1002.0, False),
+        (1002.01, True),
+        (1100.0, True),
+    ],
+)
+def test_metadata_is_refused_only_beyond_the_start_time_resolution(
+    monkeypatch, written_at, refused
+):
+    """psutil's Linux start time is boot time in whole seconds plus clock
+    ticks, so it can read up to a second early."""
+
+    _metadata_written_at(monkeypatch, written_at, reported_start=1000.0)
+    check = receipt_module._refuse_package_changed_after_process_start
+    if refused:
+        with pytest.raises(ReceiptError, match="installed or changed after"):
+            check("policyengine")
+    else:
+        check("policyengine")
+
+
+def test_an_install_finished_just_before_the_process_started_is_accepted(
+    monkeypatch,
+):
+    """CI ran pytest 50 ms after uv finished installing, and psutil reported
+    the start 0.9 s early (boot time truncated to whole seconds)."""
+
+    true_start = 1_760_522_248.86
+    _metadata_written_at(
+        monkeypatch, written_at=true_start - 0.05, reported_start=true_start - 0.9
+    )
+    receipt_module._refuse_package_changed_after_process_start("policyengine")
 
 
 def test_unlocatable_install_metadata_is_refused(monkeypatch, tmp_path):

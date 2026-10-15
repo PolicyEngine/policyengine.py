@@ -1348,27 +1348,51 @@ def _baseline_parameter_reader() -> Callable[[str, int], float]:
     return parameter_reader(reference_parameters())
 
 
-def _parameter_values(parameters) -> dict[str, list[tuple]]:
-    """Each parameter's dated values and metadata, by name.
+def _frozen(value: Any) -> str:
+    """A value as text, so a list or dict changed in place still shows.
 
-    Every entry of its timeline (date and value) and its metadata, so a
-    change on any date, or to how it is uprated, shows. A name can occur
-    more than once (``parameters.baseline`` repeats the tree), so every
-    occurrence is kept, in tree order.
+    JSON where it can be (key order ignored); otherwise ``repr``, so an
+    unusual value (non-string keys, a cycle) cannot stop the run.
     """
-    from policyengine_core.parameters import Parameter
+    try:
+        return json.dumps(value, sort_keys=True, default=str)
+    except (TypeError, ValueError):
+        return repr(value)
+
+
+def _parameter_values(parameters) -> dict[str, list[tuple]]:
+    """Each parameter's dated values and metadata, and each node's metadata.
+
+    For a parameter, every entry of its timeline (date and value) and its
+    metadata, so a change on any date, or to how it is uprated, shows; for
+    the root, every node and every scale, its metadata and, for a scale,
+    its bands' names in order, so an added, removed or reordered band
+    shows. Values are recorded as text, so a list changed in place is
+    caught. A name can occur more than once (``parameters.baseline``
+    repeats the tree), so every occurrence is kept, in tree order.
+    """
+    from policyengine_core.parameters import Parameter, ParameterScale
 
     values: dict[str, list[tuple]] = {}
-    for parameter in parameters.get_descendants():
-        if isinstance(parameter, Parameter):
-            values.setdefault(parameter.name, []).append(
+    for item in [parameters, *parameters.get_descendants()]:
+        if isinstance(item, Parameter):
+            values.setdefault(item.name, []).append(
                 (
                     tuple(
-                        (entry.instant_str, entry.value)
-                        for entry in parameter.values_list
+                        (entry.instant_str, _frozen(entry.value))
+                        for entry in item.values_list
                     ),
-                    json.dumps(parameter.metadata, sort_keys=True, default=str),
+                    _frozen(item.metadata),
                 )
+            )
+        else:
+            bands = (
+                tuple(band.name for band in item.brackets)
+                if isinstance(item, ParameterScale)
+                else None
+            )
+            values.setdefault(f"{item.name}#node", []).append(
+                (_frozen(getattr(item, "metadata", None)), bands)
             )
     return values
 
@@ -1407,7 +1431,9 @@ def _state_values(tree) -> dict:
     if isinstance(tree, Mapping):
         # Timelines by name: each entry's date and value.
         return {
-            name: [(entry.instant_str, entry.value) for entry in timeline or []]
+            name: [
+                (entry.instant_str, _frozen(entry.value)) for entry in timeline or []
+            ]
             for name, timeline in tree.items()
         }
     return _parameter_values(tree)
@@ -1440,8 +1466,8 @@ def module_parameters_unchanged(before: dict) -> dict:
         "route": "all",
         "reform_digest": None,
         "check": (
-            "every parameter's dated values and metadata in "
-            f"{', '.join(sorted(before))}"
+            "every parameter's dated values and metadata, and every node's "
+            f"metadata and band order, in {', '.join(sorted(before))}"
         ),
         "status": FAIL if changed else PASS,
         "expected": "policyengine-uk's shared parameters as they were before the run",
