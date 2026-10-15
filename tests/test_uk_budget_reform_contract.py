@@ -475,11 +475,7 @@ def test_the_capital_gains_cases_hold_on_every_in_process_route():
     routes = contract.COUNTRY_ROUTES + contract.WRAPPER_ROUTES
     report = run_budget_reform_contract(
         routes=list(routes),
-        cases=[
-            "mid_year_blended_rate",
-            "cgt_retention_response",
-            "cgt_default_response",
-        ],
+        cases=["mid_year_blended_rate", "cgt_retention_response"],
         max_examples=0,
     )
     failures = [row for row in report["cases"] if row["status"] in ("fail", "error")]
@@ -493,18 +489,33 @@ def test_the_capital_gains_cases_hold_on_every_in_process_route():
         and row["status"] == "pass"
     }
     assert passed == set(routes)
-    # The default response is reported on every route without gating.
-    default_rows = {
-        row["route"]: row
-        for row in report["cases"]
-        if row["case_id"] == "cgt_default_response"
-        and row["check"] == "change:capital_gains_tax:2027"
-    }
-    assert set(default_rows) == set(routes)
-    assert {row["status"] for row in default_rows.values()} == {"pending"}
-    assert {row["decision_id"] for row in default_rows.values()} == {
+
+
+def test_the_default_response_is_reported_without_gating():
+    """The default case's checks all wait on policyengine-uk#2396, so it
+    reports the default response on every route without failing a run. The
+    golden rows cover its rows on every route under fake routes; one real
+    route checks that it runs and reports pending there."""
+    pytest.importorskip("policyengine_uk.utils.dated_reforms")
+    case = next(case for case in CASES if case.id == "cgt_default_response")
+    assert {check.pending for check in case.checks} == {
         contract.DEFAULT_RESPONSE_DECISION
     }
+    # No response settings: the case runs on whatever default is installed.
+    assert not any(change.path.startswith("gov.simulation.") for change in case.changes)
+
+    report = run_budget_reform_contract(
+        routes=["country.reform_dict"],
+        cases=["cgt_default_response"],
+        max_examples=0,
+    )
+    rows = [row for row in report["cases"] if row["case_id"] == case.id]
+    assert {row["status"] for row in rows} <= {"pass", "pending"}
+    (response,) = (
+        row for row in rows if row["check"] == "change:capital_gains_tax:2027"
+    )
+    assert response["status"] == "pending"
+    assert response["decision_id"] == contract.DEFAULT_RESPONSE_DECISION
 
 
 def test_a_parameter_modifier_writes_the_annualised_parameters():
