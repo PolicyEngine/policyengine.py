@@ -13,6 +13,8 @@ draw ``True``). Both children are WIC-eligible, which each test checks.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import h5py
 import numpy as np
 import pandas as pd
@@ -25,6 +27,7 @@ pytest.importorskip("policyengine_us")
 pytest.importorskip("spm_calculator.policyengine_adapter")
 
 import policyengine as pe  # noqa: E402
+from policyengine.tax_benefit_models.us import datasets as us_datasets  # noqa: E402
 from policyengine.tax_benefit_models.us import legacy_inputs  # noqa: E402
 from policyengine.tax_benefit_models.us.datasets import (  # noqa: E402
     PolicyEngineUSDataset,
@@ -35,9 +38,13 @@ from policyengine.tax_benefit_models.us.datasets import (  # noqa: E402
 )
 from policyengine.tax_benefit_models.us.legacy_inputs import (  # noqa: E402
     RENAMES_H5_DATASET,
+    YEAR_FILE_STAMP_H5_DATASET,
     apply_legacy_input_renames,
     apply_legacy_input_renames_to_microsimulation,
     read_renames_record,
+    read_year_file_stamp,
+    year_file_stamp,
+    year_file_stamp_problem,
 )
 from policyengine.tax_benefit_models.us.model import (  # noqa: E402
     PolicyEngineUSLatest,
@@ -558,6 +565,9 @@ def test_create_datasets_extracts_the_draw_under_the_live_name(tmp_path):
     assert dataset.metadata["legacy_input_renames"] == RENAME
     # The year file keeps the record, so reloading it keeps the chain.
     assert read_renames_record(dataset.filepath) == RENAME
+    # It is stamped with the register it was cut under, so it is current.
+    assert read_year_file_stamp(dataset.filepath) == year_file_stamp()
+    assert year_file_stamp_problem(dataset.filepath) is None
     reloaded = PolicyEngineUSDataset(
         name=dataset.name,
         description=dataset.description,
@@ -630,6 +640,194 @@ def test_ensure_datasets_regenerates_a_year_file_cut_before_the_mapping(tmp_path
     simulation = _run(loaded)
     assert _person_outputs(simulation)["wic"].iloc[INFANT] == 0
     assert simulation.release_bundle["legacy_input_renames"] == RENAME
+
+
+# --- The year-file stamp: the register a year file was cut under --------
+
+
+def _ensure(source, data_folder):
+    (dataset,) = ensure_datasets(
+        datasets=[source],
+        years=[YEAR],
+        data_folder=str(data_folder),
+        allow_unmanaged=True,
+    ).values()
+    return dataset
+
+
+def _assert_reused(source, data_folder):
+    """A current year file is loaded, never cut again."""
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("a current year file was cut again")
+
+    with patch.object(us_datasets, "create_datasets", refuse):
+        return _ensure(source, data_folder)
+
+
+def test_a_year_file_cut_before_a_register_entry_is_regenerated(tmp_path):
+    """Replay the WIC history without a real engine rename.
+
+    Cutting under an empty register is what policyengine.py did before the
+    WIC entry existed: the engine skips the stored legacy column, so the year
+    file stores neither name.
+    """
+    with patch.object(legacy_inputs, "LEGACY_INPUT_RENAMES", {}):
+        source, dataset = _create_year_file(tmp_path)
+        # Under the register it was cut with, the file is current.
+        assert year_file_stamp_problem(dataset.filepath) is None
+    path = dataset.filepath
+    person = pd.DataFrame(dataset.data.person)
+    assert LIVE not in person.columns
+    assert LEGACY not in person.columns
+    assert read_renames_record(path) == {}
+    assert read_year_file_stamp(path) == {"register": {}, "revision": 1}
+    # The draw is lost from it: a run gives the infant WIC.
+    assert _person_outputs(_run(dataset))["wic"].iloc[INFANT] > 0
+
+    # Under this release's register, the file is out of date.
+    reason = (
+        "it was cut before these renames were registered, so it may have lost "
+        f"them: {LEGACY} -> {LIVE}"
+    )
+    assert year_file_stamp_problem(path) == reason
+    with pytest.raises(ValueError, match=f"is out of date: {reason}"):
+        load_datasets(
+            datasets=[source], years=[YEAR], data_folder=str(tmp_path / "data")
+        )
+
+    regenerated = _ensure(source, tmp_path / "data")
+
+    assert regenerated.filepath == path
+    assert read_year_file_stamp(path) == year_file_stamp()
+    assert pd.DataFrame(regenerated.data.person)[LIVE].tolist() == DRAW
+    loaded = _assert_reused(source, tmp_path / "data")
+    assert _person_outputs(_run(loaded))["wic"].iloc[INFANT] == 0
+
+
+def test_a_future_register_entry_regenerates_year_files(tmp_path):
+    """An entry the engine does not need still makes older year files stale."""
+    from policyengine_us.system import system
+
+    future = {"fictitious_old_input": "fictitious_new_input"}
+    for name in (*future, *future.values()):
+        assert name not in system.variables
+    source, dataset = _create_year_file(tmp_path)
+    data_folder = tmp_path / "data"
+
+    with patch.object(legacy_inputs, "LEGACY_INPUT_RENAMES", {**RENAME, **future}):
+        reason = year_file_stamp_problem(dataset.filepath)
+        assert reason == (
+            "it was cut before these renames were registered, so it may have "
+            "lost them: fictitious_old_input -> fictitious_new_input"
+        )
+        with pytest.raises(ValueError, match="fictitious_old_input"):
+            load_datasets(datasets=[source], years=[YEAR], data_folder=str(data_folder))
+
+        created = []
+        create = us_datasets.create_datasets
+
+        def spy(*args, **kwargs):
+            created.append(kwargs["years"])
+            return create(*args, **kwargs)
+
+        with patch.object(us_datasets, "create_datasets", spy):
+            regenerated = _ensure(source, data_folder)
+
+        assert created == [[YEAR]]
+        assert read_year_file_stamp(dataset.filepath) == {
+            "register": {**RENAME, **future},
+            "revision": 1,
+        }
+        # Only the entry the engine needs was applied, and the data is as
+        # before.
+        assert read_renames_record(dataset.filepath) == RENAME
+        assert pd.DataFrame(regenerated.data.person)[LIVE].tolist() == DRAW
+        _assert_reused(source, data_folder)
+
+    # Back under this release's register, the newer file is out of date too.
+    assert "does not register: fictitious_old_input" in year_file_stamp_problem(
+        dataset.filepath
+    )
+
+
+def test_ensure_datasets_regenerates_a_year_file_with_only_the_renames_record(
+    tmp_path,
+):
+    """A year file written with the record but before the stamp existed."""
+    source, dataset = _create_year_file(tmp_path)
+    with h5py.File(dataset.filepath, "a") as file:
+        del file[YEAR_FILE_STAMP_H5_DATASET]
+    data_folder = tmp_path / "data"
+
+    with pytest.raises(ValueError, match="it has no stamp of the register"):
+        load_datasets(datasets=[source], years=[YEAR], data_folder=str(data_folder))
+
+    regenerated = _ensure(source, data_folder)
+
+    assert read_year_file_stamp(regenerated.filepath) == year_file_stamp()
+    assert pd.DataFrame(regenerated.data.person)[LIVE].tolist() == DRAW
+    _assert_reused(source, data_folder)
+
+
+def test_create_datasets_stamps_each_year_file_after_saving_it(tmp_path):
+    source = _write_entity_tables(tmp_path / "populace_layout.h5")
+    events = []
+    save = PolicyEngineUSDataset.save
+    stamp = us_datasets.write_year_file_stamp
+
+    def recording_save(self):
+        save(self)
+        events.append(("save", self.filepath))
+
+    def recording_stamp(path, value):
+        stamp(path, value)
+        events.append(("stamp", path))
+
+    with (
+        patch.object(PolicyEngineUSDataset, "save", recording_save),
+        patch.object(us_datasets, "write_year_file_stamp", recording_stamp),
+    ):
+        created = create_datasets(
+            datasets=[source],
+            years=[YEAR, YEAR + 1],
+            data_folder=str(tmp_path / "data"),
+            allow_unmanaged=True,
+        )
+
+    paths = [dataset.filepath for dataset in created.values()]
+    assert events == [
+        ("save", paths[0]),
+        ("stamp", paths[0]),
+        ("save", paths[1]),
+        ("stamp", paths[1]),
+    ]
+    for path in paths:
+        assert year_file_stamp_problem(path) is None
+
+
+def test_a_year_file_whose_stamp_was_never_written_is_out_of_date(tmp_path):
+    source = _write_entity_tables(tmp_path / "populace_layout.h5")
+
+    def stop(path, value):
+        raise RuntimeError("stopped before stamping")
+
+    with patch.object(us_datasets, "write_year_file_stamp", stop):
+        with pytest.raises(RuntimeError, match="stopped before stamping"):
+            create_datasets(
+                datasets=[source],
+                years=[YEAR],
+                data_folder=str(tmp_path / "data"),
+                allow_unmanaged=True,
+            )
+
+    (path,) = (tmp_path / "data").glob("*_year_*.h5")
+    # The tables and the record were written, but without the stamp the file
+    # is cut again.
+    assert read_renames_record(path) == RENAME
+    assert year_file_stamp_problem(path).startswith("it has no stamp")
+    assert _ensure(source, tmp_path / "data").filepath == str(path)
+    assert year_file_stamp_problem(path) is None
 
 
 # --- Saved outputs and run records keep the record ----------------------

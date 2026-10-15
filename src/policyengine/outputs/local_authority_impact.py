@@ -17,6 +17,7 @@ from policyengine.outputs.uk_geography_assets import (
 from policyengine.outputs.uk_geography_impact import (
     compute_longwise_uk_geography_impacts,
     resolve_uk_geography_lookup_csv_path,
+    warn_unprotected_uk_geography_output,
 )
 
 if TYPE_CHECKING:
@@ -43,6 +44,10 @@ class LocalAuthorityImpact(Output):
 
     def run(self) -> None:
         """Group household output rows and compute per-local-authority metrics."""
+        warn_unprotected_uk_geography_output("LocalAuthorityImpact", "local_authority")
+        self._compute()
+
+    def _compute(self) -> None:
         baseline_hh = self.baseline_simulation.output_dataset.data.household
         reform_hh = self.reform_simulation.output_dataset.data.household
 
@@ -65,6 +70,9 @@ def compute_uk_local_authority_impacts(
     download_missing_assets: bool = True,
 ) -> LocalAuthorityImpact:
     """Compute per-local-authority income changes for UK.
+
+    Deprecated: the output is not disclosure-controlled. Use
+    ``compute_uk_geography_disclosure(levels=("local_authority",))`` instead.
 
     Args:
         baseline_simulation: Completed baseline simulation.
@@ -94,5 +102,8 @@ def compute_uk_local_authority_impacts(
         local_authority_csv_path=lookup_csv_path,
         year=year,
     )
-    impact.run()
+    warn_unprotected_uk_geography_output(
+        "compute_uk_local_authority_impacts", "local_authority"
+    )
+    impact._compute()
     return impact

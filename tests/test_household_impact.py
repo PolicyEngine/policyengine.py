@@ -67,10 +67,9 @@ class TestUKCalculateHousehold:
             year=2026,
             reform={"gov.hmrc.child_benefit.amount.eldest": 50.0},
         )
-        # If the param path is valid the calc runs; if results differ the reform took.
-        # Accept either: the key thing is the reform dict was accepted without error.
         assert isinstance(reformed.benunit.child_benefit, float)
         assert isinstance(baseline.benunit.child_benefit, float)
+        assert reformed.benunit.child_benefit > baseline.benunit.child_benefit
 
     def test__monthly_year_period__then_raises_before_calculation(self):
         with pytest.raises(ValueError, match="Monthly periods are not supported"):

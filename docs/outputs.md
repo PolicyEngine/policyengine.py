@@ -167,6 +167,12 @@ rate.run()
 rate.headcount, rate.total_population, rate.rate
 ```
 
+`rate.rate` is `None` when nobody in the group is measured: the group's
+weighted population with a poverty status is zero, for example a filter that
+matches no one, or a group whose members are all outside the SPM measurement
+on a legacy source. That is not a measured rate of zero, so handle `None`
+before formatting or subtracting rates.
+
 For all canonical poverty measures over one simulation:
 
 ```python
@@ -260,7 +266,28 @@ for row in impacts.district_results:
     print(row["district_geoid"], row["avg_change"], row["winner_percentage"])
 ```
 
-### UK constituencies / local authorities
+### UK regions, constituencies and local authorities
+
+`compute_uk_geography_disclosure` returns results by area under disclosure
+control: each number passes a floor on the survey households behind it and
+carries a 90% interval. Use it for anything you publish. See
+[Disclosure control](disclosure.md).
+
+```python
+from policyengine.outputs import compute_uk_geography_disclosure
+
+impact = compute_uk_geography_disclosure(
+    baseline_simulation=baseline,
+    reform_simulation=reform,
+    year=2026,
+    levels=("region", "constituency"),
+)
+impact.public.to_frame()
+```
+
+The two older functions below are deprecated. Their output is not
+disclosure-controlled, so do not publish it when the data is licensed survey
+microdata.
 
 Constituency and local-authority breakdowns group household output rows by
 dataset-provided longwise geography columns. Constituencies use
