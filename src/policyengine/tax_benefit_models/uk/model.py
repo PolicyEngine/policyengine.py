@@ -35,6 +35,12 @@ UK_HOUSEHOLD_PASSTHROUGH_COLUMNS = [
     "constituency_code_oa",
     "la_code_oa",
     "region_code_oa",
+    # The stored region, for region-level outputs on datasets that carry no
+    # ``region_code_oa``.
+    "region",
+    # The survey household a row was copied or cloned from. Disclosure
+    # control counts support by this id, never by ``household_id``.
+    "source_household_id",
 ]
 
 

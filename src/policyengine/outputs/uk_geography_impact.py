@@ -1,5 +1,7 @@
 """Longwise UK geography impact helpers."""
 
+import logging
+import warnings
 from pathlib import Path
 from typing import Optional
 
@@ -10,6 +12,23 @@ from policyengine.data.uk_geography_assets import (
     default_download_dir,
     default_local_search_dirs,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def warn_unprotected_uk_geography_output(name: str, level: str) -> None:
+    """Warn that an output without disclosure control is deprecated.
+
+    policyengine-core silences Python warnings in every process that loads a
+    country model, so the message also goes to the log, which it leaves alone.
+    """
+    message = (
+        f"{name} is deprecated. Its output is not disclosure-controlled, so it "
+        "must not be published when the data is licensed survey microdata. Use "
+        f"compute_uk_geography_disclosure(levels=({level!r},)) instead."
+    )
+    logger.warning(message)
+    warnings.warn(message, DeprecationWarning, stacklevel=3)
 
 
 def _normalise_code(value) -> str:
