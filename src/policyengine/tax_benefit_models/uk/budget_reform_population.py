@@ -63,6 +63,63 @@ STATE_PENSION_RATES = (
 )
 RESPONSE_YEAR = 2027
 
+POPULATION_BASELINE_ISOLATION = "population_baseline_isolation"
+POPULATION_QUERY_ORDER = "population_query_order"
+POPULATION_ROUTES_AGREE = "population_routes_agree"
+POPULATION_APRIL_RATE_CHANGE = "population_april_rate_change"
+POPULATION_FINITE_CHANGE_EXPIRES = "population_finite_change_expires"
+POPULATION_UC_STANDARD_ALLOWANCE_PLUS_10 = "population_uc_standard_allowance_plus_10"
+POPULATION_STATE_PENSION_PLUS_10 = "population_state_pension_plus_10"
+
+COUNTRY_POPULATION_CHECKS = (
+    POPULATION_BASELINE_ISOLATION,
+    POPULATION_APRIL_RATE_CHANGE,
+    POPULATION_FINITE_CHANGE_EXPIRES,
+    POPULATION_UC_STANDARD_ALLOWANCE_PLUS_10,
+    POPULATION_STATE_PENSION_PLUS_10,
+)
+UNREFORMED_POPULATION_CHECKS = (
+    POPULATION_BASELINE_ISOLATION,
+    POPULATION_QUERY_ORDER,
+)
+
+POPULATION_ERROR_DIAGNOSTIC = ("population", "-")
+"""Permitted diagnostic identity after an early or partial population error.
+
+This is separate from required successful coverage. A report containing this
+row with status ``error`` does not hold, even if preceding rows passed. The
+same identity labels the existing ``unsupported`` row when no country route
+is selected.
+"""
+
+
+def population_check_routes(routes: Sequence[str]) -> tuple[tuple[str, str], ...]:
+    """Required coverage for a completed run, including comparisons and baselines.
+
+    For country routes this declares successful coverage, independently of the
+    permitted :data:`POPULATION_ERROR_DIAGNOSTIC`. A report containing that row
+    with status ``error`` does not hold. With no country route, the existing
+    ``unsupported`` diagnostic is declared instead.
+    """
+    country = [route for route in routes if route.startswith("country.")]
+    if not country:
+        return (POPULATION_ERROR_DIAGNOSTIC,)
+    baseline_country = tuple(dict.fromkeys(country))
+    return (
+        tuple(
+            (check, route)
+            for check in COUNTRY_POPULATION_CHECKS
+            for route in (
+                baseline_country if check == POPULATION_BASELINE_ISOLATION else country
+            )
+        )
+        + tuple((check, "unreformed") for check in UNREFORMED_POPULATION_CHECKS)
+        + tuple(
+            (POPULATION_ROUTES_AGREE, f"{country[0]} = {route}")
+            for route in country[1:]
+        )
+    )
+
 
 def plus_ten_percent(paths: Sequence[str]) -> dict:
     """Each parameter 10% above current law for the response year."""
@@ -156,7 +213,12 @@ def _row(check_id: str, route: str, status: str, **fields: Any) -> dict:
 def run_population_checks(
     dataset_path: str, routes: Sequence[str], seed: int = 0
 ) -> list[dict]:
-    """Run the population checks; one report row per check."""
+    """Run population checks, preserving progress before an error diagnostic.
+
+    Completed coverage is declared by :func:`population_check_routes`. An early
+    or partial failure appends :data:`POPULATION_ERROR_DIAGNOSTIC` with status
+    ``error``; a report containing that error row does not hold.
+    """
     from policyengine_core.reforms import Reform
     from policyengine_uk import Microsimulation
     from policyengine_uk.utils.scenario import Scenario
@@ -165,8 +227,7 @@ def run_population_checks(
     if not country:
         return [
             _row(
-                "population",
-                "-",
+                *POPULATION_ERROR_DIAGNOSTIC,
                 "unsupported",
                 reason="population checks need a country route",
             )
@@ -195,7 +256,7 @@ def run_population_checks(
             different = _same(before, _arrays(simulation.baseline))
             rows.append(
                 _row(
-                    "population_baseline_isolation",
+                    POPULATION_BASELINE_ISOLATION,
                     route,
                     "fail" if different else "pass",
                     detail=different or None,
@@ -205,7 +266,7 @@ def run_population_checks(
         different = _same(before, after)
         rows.append(
             _row(
-                "population_baseline_isolation",
+                POPULATION_BASELINE_ISOLATION,
                 "unreformed",
                 "fail" if different else "pass",
                 detail=different or None,
@@ -214,7 +275,7 @@ def run_population_checks(
         different = _same(before, _arrays(build(None, None), order=-1))
         rows.append(
             _row(
-                "population_query_order",
+                POPULATION_QUERY_ORDER,
                 "unreformed",
                 "fail" if different else "pass",
                 detail=different or None,
@@ -235,7 +296,7 @@ def run_population_checks(
             )
             rows.append(
                 _row(
-                    "population_routes_agree",
+                    POPULATION_ROUTES_AGREE,
                     f"{first} = {route}",
                     "pass" if same else "fail",
                 )
@@ -251,7 +312,7 @@ def run_population_checks(
             ok = unchanged_2026 and total_rises
             rows.append(
                 _row(
-                    "population_april_rate_change",
+                    POPULATION_APRIL_RATE_CHANGE,
                     route,
                     "pass" if ok else "fail",
                     detail={
@@ -270,7 +331,7 @@ def run_population_checks(
             )
             rows.append(
                 _row(
-                    "population_finite_change_expires",
+                    POPULATION_FINITE_CHANGE_EXPIRES,
                     route,
                     "pass" if same else "fail",
                 )
@@ -303,7 +364,7 @@ def run_population_checks(
             higher = int(np.sum(award > base["universal_credit"] + 1e-3))
             rows.append(
                 _row(
-                    "population_uc_standard_allowance_plus_10",
+                    POPULATION_UC_STANDARD_ALLOWANCE_PLUS_10,
                     route,
                     "pass" if scaled and lower == 0 and higher > 0 else "fail",
                     detail={
@@ -326,7 +387,7 @@ def run_population_checks(
             higher = int(np.sum(pension > base["state_pension"] + 1e-3))
             rows.append(
                 _row(
-                    "population_state_pension_plus_10",
+                    POPULATION_STATE_PENSION_PLUS_10,
                     route,
                     "pass" if scaled and lower == 0 and higher > 0 else "fail",
                     detail={
@@ -339,8 +400,7 @@ def run_population_checks(
     except Exception as error:  # noqa: BLE001 - reported, never swallowed
         rows.append(
             _row(
-                "population",
-                "-",
+                *POPULATION_ERROR_DIAGNOSTIC,
                 "error",
                 detail="".join(
                     traceback.format_exception_only(type(error), error)
