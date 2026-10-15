@@ -522,9 +522,13 @@ def test_a_cache_whose_nan_constant_has_the_other_sign_fails(tmp_path):
     path = _write_cache(site, source)
     code = compile(source, "system.py", "exec", dont_inherit=True, optimize=0)
     assert any(isinstance(c, float) and math.isnan(c) for c in code.co_consts)
-    namespace: dict = {}
-    exec(_with_nan_sign_flipped(code), namespace)
-    assert namespace["system"] == -1.0  # it behaves differently
+    # inf - inf is a NaN whose sign depends on the CPU (negative on x86-64,
+    # positive on arm64); either way the flipped constant behaves differently.
+    original: dict = {}
+    exec(code, original)
+    flipped: dict = {}
+    exec(_with_nan_sign_flipped(code), flipped)
+    assert flipped["system"] == -original["system"]
     data = path.read_bytes()
     path.write_bytes(data[:16] + marshal.dumps(_with_nan_sign_flipped(code)))
     problems = _verify(site, wheel, record)["problems"]

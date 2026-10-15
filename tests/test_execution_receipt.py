@@ -150,6 +150,20 @@ _REAL_PACKAGE_MODULES = {
 }
 
 
+#: The interpreter's import path when this module is collected. Release-script
+#: tests import scripts/bundle.py at module level, which puts the checkout's
+#: ``src`` first on sys.path. An editable build leaves
+#: ``src/policyengine.egg-info`` there, which then shadows the installed
+#: distribution's metadata (receipts rightly refuse that), so each receipt test
+#: runs with the import path as it was before those modules were collected.
+_COLLECTION_SYS_PATH = list(sys.path)
+
+
+@pytest.fixture(autouse=True)
+def _import_path_as_collected(monkeypatch):
+    monkeypatch.setattr(sys, "path", list(_COLLECTION_SYS_PATH))
+
+
 #: The distribution lookup the receipt module's origin check uses, before any
 #: test replaces it.
 _REAL_DISTRIBUTION = receipt_module.metadata.distribution
