@@ -1,3 +1,10 @@
+## [6.4.2] - 2026-10-15
+
+### Fixed
+
+- The UK Budget reform contract's Universal Credit allowance check now asserts on the award before deductions, and bounds how far deductions can lower the amount paid.
+
+
 ## [6.4.1] - 2026-10-15
 
 ### Changed
