@@ -46,6 +46,7 @@ website:
           - methodology/index.md
           - methodology/model-architecture.md
           - methodology/us-health-costs.md
+          - methodology/uk-capital-gains-responses.md
       - section: "Programs"
         contents:
           - programs/index.md

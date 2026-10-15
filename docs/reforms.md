@@ -91,6 +91,76 @@ reformed = Simulation(
 )
 ```
 
+## Behavioural responses: UK capital gains
+
+policyengine-uk realises capital gains in response to any reform that changes
+a person's marginal rate on gains. From policyengine-uk {X}, pinned by
+policyengine.py {Y}, the default is a retention-rate elasticity of 1.0. Each
+person's realised gains scale by $((1 - t_1) / (1 - t_0))^{e}$, where $t_0$
+and $t_1$ are their marginal rates on gains without and with the reform. Gains
+qualifying for Business Asset Disposal Relief take the same 1.0. Before, the
+elasticity was 0, so a CGT reform was costed statically unless the caller set
+an elasticity.
+
+For a marginal rate on gains rising from 24% to 45%, realised gains scale by
+$0.55 / 0.76 \approx 0.7237$. A marginal tax rate elasticity of $-0.7$, a
+different convention, gives $(0.45 / 0.24)^{-0.7} \approx 0.6440$: the two
+are not interchangeable.
+
+- **Who is affected.** Any reform that moves someone's marginal rate on gains
+  is affected. That includes CGT rates, and also income tax bands and
+  allowances, because gains are taxed on top of income. Results without a
+  reform are unchanged.
+- **The static costing.** Set the elasticities to zero for the years you run,
+  as below:
+  - on `Simulation`, pass them as `dynamic=`;
+  - on `calculate_household`, merge them into `reform=`;
+  - on `managed_microsimulation`, merge them into `reform=`, whose keys
+    policyengine-uk reads itself.
+- **Sensitivities.** The elasticity can be 0.5 or 2.0, the range CenTax
+  consider. For the OBR's elasticities, set it to 3.6 and
+  `separate_badr_elasticity` to true; `badr_elasticity` stays 1.4. That
+  compares elasticities, not the OBR's full costing.
+- **The marginal tax rate convention.** An `mtr_elasticity` set on its own
+  applies alone in its periods, with a `CapitalGainsResponseWarning`. Setting
+  `elasticity` to 0 for the same periods silences it. Setting both to nonzero
+  values raises an error.
+- **Precedence.** A dynamic's settings win over a policy's. With a policy
+  modifier, the dynamic's values are written after the modifier, onto the
+  annualised parameters, where a value dated after 1 January misses that year.
+  Date them from 1 January.
+- **Both sides of a comparison.** Set the same `dynamic` on the baseline and
+  the reform. A response set on the reform side only also answers the
+  baseline's policy, since each simulation's response is measured against
+  current law.
+- **The assumption's limits.** CenTax's 1.0 is a medium-term value for a
+  package that also reforms the base and adjusts for income shifted between
+  taxes. For a change to rates alone their reasoning points higher, and a
+  first-year response is likely larger, so the default can overstate what a
+  rate rise raises. Income tax on shifted income is not added back. See
+  [the methodology page](methodology/uk-capital-gains-responses.md).
+
+```python
+RESPONSES = "gov.simulation.capital_gains_responses"
+EVERY_YEAR = "2000-01-01.2100-12-31"
+static = {
+    f"{RESPONSES}.elasticity": {EVERY_YEAR: 0},
+    f"{RESPONSES}.mtr_elasticity": {EVERY_YEAR: 0},
+    f"{RESPONSES}.separate_badr_elasticity": {EVERY_YEAR: False},
+}
+static_costing = Simulation(
+    dataset=dataset,
+    tax_benefit_model_version=pe.uk.model,
+    policy={"gov.hmrc.cgt.higher_rate": {"2027-04-06": 0.45}},
+    dynamic=static,
+)
+```
+
+Every UK run records the response it applied (see
+[The UK capital gains realisation response](microsim.md#the-uk-capital-gains-realisation-response)),
+and [the methodology page](methodology/uk-capital-gains-responses.md)
+explains how the response is measured.
+
 ## Structural reforms
 
 For rule changes that can't be expressed as a parameter change — swapping a formula, adding a variable, neutralising a program — drop down to the underlying country package. Both `policyengine_us` and `policyengine_uk` expose `Reform.from_dict(...)` and class-based reforms with overridable formulas; use them directly and run the simulation via `managed_microsimulation` (or by constructing a country-package `Microsimulation` yourself).
