@@ -2275,6 +2275,27 @@ def test_the_tools_verdict_is_checked_against_its_own_numbers():
     assert _responsiveness(short).status in ("fail", "error")
 
 
+@pytest.mark.parametrize("direction", ["up", "down"])
+def test_a_large_move_in_the_wrong_direction_is_not_a_response(direction):
+    """A reform that moves its target the wrong way, by far more than the
+    minimum, has not responded, whatever the tool's verdict says. The
+    magnitude alone must never pass: the comparison is signed."""
+
+    reform = next(r for r in _standard_reforms() if r["direction"] == direction)
+    sign = 1.0 if direction == "up" else -1.0
+    wrong_way = {
+        (reform["id"], year): -sign * reform["minimum"] * 5.0 for year in RESPONSE_YEARS
+    }
+    honest = _responsiveness(_responsive_report(overrides=wrong_way))
+    assert honest.status == "fail"
+    assert f"({reform['id']}) did not respond" in honest.summary, honest.summary
+    lying_pass = _responsiveness(
+        _responsive_report(overrides=wrong_way, lie=reform["id"])
+    )
+    assert lying_pass.status == "error", lying_pass.summary
+    assert "do not meet the minimum" in lying_pass.summary
+
+
 def test_responsiveness_is_never_skipped_or_guessed():
     from policyengine.provenance.qualification import (
         REQUIRED_GATES,

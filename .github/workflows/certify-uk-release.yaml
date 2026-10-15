@@ -51,12 +51,19 @@ env:
   LEDGER_BRANCH: uk-qualification-ledger
   UV_VERSION: "0.12.14"
   PYTHON_VERSION: "3.13"
+  # Keep equal to PYTHON_VERSION. The repository's .python-version asks for a
+  # newer Python, and every uv command here must use the 3.13 environment the
+  # job installed. For the same reason each `uv run` passes --no-sync: the
+  # environment is synchronized explicitly (with the uk and dev extras), and
+  # a step must run exactly that environment.
+  UV_PYTHON: "3.13"
   # Run by .github/qualification-ledger.sh, inside the ledger worktree, when a
   # concurrent publish touched a pair's published files: recompute them from
-  # the attempts rather than let git merge two receipts.
+  # the attempts rather than let git merge two receipts. This default uses
+  # the system Python that `uv pip install --system` provisions; jobs that
+  # `uv sync` override it with the synchronized environment's interpreter.
   LEDGER_REDERIVE: >-
-    uv run --project ${{ github.workspace }} python
-    ${{ github.workspace }}/scripts/check_uk_candidate.py rederive-ledger
+    python ${{ github.workspace }}/scripts/check_uk_candidate.py rederive-ledger
 
 jobs:
   resolve:
@@ -129,6 +136,10 @@ jobs:
     outputs:
       candidate_commit: ${{ steps.stage.outputs.candidate_commit }}
       duplicate: ${{ steps.duplicate.outputs.duplicate }}
+    env:
+      LEDGER_REDERIVE: >-
+        ${{ github.workspace }}/.venv/bin/python
+        ${{ github.workspace }}/scripts/check_uk_candidate.py rederive-ledger
     steps:
       - name: Generate GitHub App token
         id: app-token
@@ -179,7 +190,7 @@ jobs:
           BRANCH: ${{ needs.resolve.outputs.branch }}
         run: |
           git switch -C "$BRANCH"
-          uv run python scripts/check_uk_candidate.py prepare \
+          uv run --no-sync python scripts/check_uk_candidate.py prepare \
             --candidate "$RUNNER_TEMP/candidate/candidate.json" \
             --out "$RUNNER_TEMP/prepared.json" --skip-snapshots
       - name: Install the candidate environment from the regenerated lock
@@ -190,12 +201,12 @@ jobs:
         env:
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
           PE_UPDATE_SNAPSHOTS: "1"
-        run: uv run pytest tests/test_household_calculator_snapshot.py -q
+        run: uv run --no-sync pytest tests/test_household_calculator_snapshot.py -q
       - name: Check the regenerated bundle
         if: steps.duplicate.outputs.duplicate == 'false'
         env:
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
-        run: uv run python scripts/bundle.py check --include-tros --strict-tros
+        run: uv run --no-sync python scripts/bundle.py check --include-tros --strict-tros
       - name: Commit and push the candidate commit
         if: steps.duplicate.outputs.duplicate == 'false'
         env:
@@ -220,7 +231,7 @@ jobs:
         if: steps.duplicate.outputs.duplicate == 'false'
         run: |
           .github/qualification-ledger.sh checkout ledger
-          uv run python scripts/check_uk_candidate.py stage \
+          uv run --no-sync python scripts/check_uk_candidate.py stage \
             --candidate "$RUNNER_TEMP/candidate/candidate.json" --ledger ledger
           .github/qualification-ledger.sh publish ledger \
             "Stage UK candidate ${{ needs.resolve.outputs.pair_id }} attempt ${{ needs.resolve.outputs.attempt_key }}"
@@ -251,6 +262,10 @@ jobs:
     concurrency:
       group: uk-candidate-${{ needs.resolve.outputs.pair_id }}
       cancel-in-progress: false
+    env:
+      LEDGER_REDERIVE: >-
+        ${{ github.workspace }}/.venv/bin/python
+        ${{ github.workspace }}/scripts/check_uk_candidate.py rederive-ledger
     steps:
       - uses: actions/checkout@v6
         with:
@@ -270,7 +285,7 @@ jobs:
         env:
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
           ATTEMPT: ledger/uk/${{ needs.resolve.outputs.pair_id }}/attempts/${{ needs.resolve.outputs.attempt_key }}
-        run: uv run python scripts/check_uk_candidate.py gates --attempt "$ATTEMPT" --work-dir "$RUNNER_TEMP/qualification"
+        run: uv run --no-sync python scripts/check_uk_candidate.py gates --attempt "$ATTEMPT" --work-dir "$RUNNER_TEMP/qualification"
       - name: Generate a GitHub App token for the scorecard
         id: scorecard-token
         continue-on-error: true
@@ -286,7 +301,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.scorecard-token.outputs.token }}
           ATTEMPT: ledger/uk/${{ needs.resolve.outputs.pair_id }}/attempts/${{ needs.resolve.outputs.attempt_key }}
-        run: uv run python scripts/check_uk_candidate.py request-replay --attempt "$ATTEMPT" --dispatch
+        run: uv run --no-sync python scripts/check_uk_candidate.py request-replay --attempt "$ATTEMPT" --dispatch
       - name: Publish the gate evidence
         if: always()
         run: |

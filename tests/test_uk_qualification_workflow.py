@@ -50,6 +50,51 @@ def test_resolution_can_authenticate_the_staged_attempt_owner_lookup():
     assert step["env"]["GH_TOKEN"] == "${{ github.token }}"
 
 
+def test_every_uv_step_runs_the_environment_its_job_installed():
+    """The repository's .python-version asks for a newer Python than the 3.13
+    environment each job installs. A syncing `uv run` would replace that
+    environment, extras and all, so every step and the ledger re-derivation
+    must run the interpreter the job provisioned."""
+    workflow = _workflow()
+    assert (REPO_ROOT / ".python-version").read_text().strip() != (
+        workflow["env"]["PYTHON_VERSION"]
+    )
+    assert workflow["env"]["UV_PYTHON"] == workflow["env"]["PYTHON_VERSION"]
+    command = "${{ github.workspace }}/scripts/check_uk_candidate.py rederive-ledger"
+    publishing_jobs = []
+    for name, job in workflow["jobs"].items():
+        runs = [step.get("run", "") for step in job["steps"]]
+        synced = any(
+            "uv sync --frozen --extra uk --extra dev --python "
+            "${{ env.PYTHON_VERSION }}" in run
+            for run in runs
+        )
+        system = any("uv pip install --system" in run for run in runs)
+        assert not (synced and system), name
+        for line in (line for run in runs for line in run.splitlines()):
+            if "uv run" in line:
+                assert synced, (name, line)
+                assert "uv run --no-sync " in line, (name, line)
+        if any(".github/qualification-ledger.sh publish" in run for run in runs):
+            publishing_jobs.append(name)
+            rederive = job.get("env", {}).get(
+                "LEDGER_REDERIVE", workflow["env"]["LEDGER_REDERIVE"]
+            )
+            if synced:
+                interpreter = "${{ github.workspace }}/.venv/bin/python"
+            else:
+                assert system, name
+                interpreter = "python"
+            assert rederive == f"{interpreter} {command}", name
+    assert sorted(publishing_jobs) == [
+        "accept",
+        "catch-up",
+        "prepare",
+        "qualify",
+        "replay",
+    ]
+
+
 @pytest.mark.parametrize("prepare_first", [False, True])
 def test_head_replacement_and_readiness_share_one_serialization(
     monkeypatch, tmp_path, prepare_first

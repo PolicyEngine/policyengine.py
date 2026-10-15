@@ -34,6 +34,7 @@ from policyengine.provenance.qualification import (
     QualificationReceipt,
     ReplayReceipt,
     ReplayStatus,
+    ReviewAcceptance,
     evaluate_replay_receipt,
 )
 from policyengine.provenance.qualification_ledger import (
@@ -404,6 +405,61 @@ def test_rederivation_keeps_a_review_acceptance_of_exactly_that_receipt(tmp_path
         "attempt_key": "a",
         "sequence": read_json(pair_dir / "attempts" / "a" / "staging.json")["sequence"],
     }
+
+
+@pytest.mark.parametrize("flaw", ["of another receipt", "not a valid acceptance"])
+def test_rederivation_drops_a_review_that_does_not_accept_that_receipt(tmp_path, flaw):
+    """Offered as the published file and as a stored review, an acceptance is
+    kept only if it promotes exactly the latest attempt's receipt."""
+
+    from tests.qualification_fixtures import make_receipt
+
+    pair_dir = tmp_path / "ledger" / "uk" / PAIR.pair_id
+    _stage(pair_dir / "attempts" / "a", HARNESS, "1", "2026-10-15T09:00:00Z")
+    receipt = make_receipt(pair=PAIR, gate_results=gates(metrics_review="needs_review"))
+    write_json(
+        pair_dir / "attempts" / "a" / "qualification_receipt.json",
+        receipt.canonical_payload(),
+    )
+    if flaw == "of another receipt":
+        other = make_receipt(
+            pair=PAIR,
+            gate_results=gates(metrics_review="needs_review"),
+            completed_at="2026-10-15T10:00:00Z",
+        )
+        assert other.unreviewed_sha256 != receipt.unreviewed_sha256
+        offered = accept_review(
+            other,
+            reviewer="reviewer",
+            accepted_receipt_sha256=other.unreviewed_sha256,
+            explanation="expected",
+            accepted_at="2026-10-15T11:00:00Z",
+        )
+        assert offered.promotable
+    else:
+        offered = QualificationReceipt.model_validate(
+            {
+                **receipt.canonical_payload(),
+                "review": ReviewAcceptance(
+                    reviewer="reviewer",
+                    accepted_at="2026-10-15T11:00:00Z",
+                    accepted_receipt_sha256="0" * 64,
+                    explanation="expected",
+                ).canonical_payload(),
+            }
+        )
+        assert offered.unreviewed_sha256 == receipt.unreviewed_sha256
+        assert offered.review is not None and not offered.promotable
+    write_json(
+        pair_dir / "reviews" / f"{offered.receipt_sha256}.json",
+        offered.canonical_payload(),
+    )
+    write_json(pair_dir / "qualification_receipt.json", offered.canonical_payload())
+
+    rederived = rederive_publication(pair_dir)
+    assert rederived.review is None and not rederived.promotable
+    assert rederived.unreviewed_sha256 == receipt.unreviewed_sha256
+    assert published_receipt(pair_dir) == rederived
 
 
 class _Response:
