@@ -12,9 +12,9 @@ from tests.fixtures.filtering_fixtures import (  # noqa: F401
     us_test_dataset,
 )
 from tests.fixtures.import_path import (  # noqa: F401
-    ADDED_BY_COLLECTION,
-    checkout_entries_added,
+    COLLECTION_IMPORT_PATH_CHANGES,
     checkout_stays_off_import_path,
+    import_path_changes,
     scripts_on_path,
 )
 from tests.fixtures.parametric_reforms_fixtures import (  # noqa: F401
@@ -40,13 +40,13 @@ _IMPORT_PATH_BEFORE_COLLECTION = list(sys.path)
 
 
 def pytest_collection_finish(session):
-    """Record any checkout directory that importing the test modules added.
+    """Record how importing the test modules changed ``sys.path``.
 
-    ``tests/test_script_imports.py`` fails on it; a test module that put
+    ``tests/test_script_imports.py`` fails on any change; a test module that put
     ``src`` or ``scripts`` on ``sys.path`` would leave it there for the session.
     """
 
-    session.config.stash[ADDED_BY_COLLECTION] = checkout_entries_added(
+    session.config.stash[COLLECTION_IMPORT_PATH_CHANGES] = import_path_changes(
         _IMPORT_PATH_BEFORE_COLLECTION, sys.path
     )
 

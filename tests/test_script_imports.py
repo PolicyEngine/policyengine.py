@@ -16,11 +16,18 @@ from importlib import metadata
 from pathlib import Path
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
-from tests.fixtures.import_path import ADDED_BY_COLLECTION, CHECKOUT, SCRIPTS_DIR
+from tests.fixtures.import_path import (
+    CHECKOUT,
+    COLLECTION_IMPORT_PATH_CHANGES,
+    SCRIPTS_DIR,
+    SKIP_COUNTRY_IMPORTS,
+    import_path_changes,
+)
 
 SCRIPT_NAMES = sorted(path.stem for path in SCRIPTS_DIR.glob("*.py"))
-SKIP_COUNTRY_IMPORTS = "POLICYENGINE_SKIP_COUNTRY_IMPORTS"
 
 # Runs in a fresh interpreter, so no earlier import is cached and each script's
 # module code (and its sibling scripts') runs again for every name.
@@ -102,20 +109,76 @@ def test_importing_a_script_leaves_the_environment_alone(script_imports, name):
     assert outcome["environment_changes"] == {}
 
 
-def test_collecting_tests_adds_no_checkout_directory_to_sys_path(pytestconfig):
-    assert pytestconfig.stash[ADDED_BY_COLLECTION] == []
+def test_collecting_tests_leaves_sys_path_alone(pytestconfig):
+    assert pytestconfig.stash[COLLECTION_IMPORT_PATH_CHANGES] == []
 
 
-def test_policyengine_metadata_is_not_read_from_the_source_tree():
-    src = (CHECKOUT / "src").resolve()
-    locations = [
-        Path(distribution.locate_file("")).resolve()
-        for distribution in metadata.distributions(name="policyengine")
-    ]
-    if all(location == src for location in locations):
-        pytest.skip("policyengine is installed only from the checkout's src")
-    # importlib.metadata.distribution() returns the first one on sys.path.
-    assert locations[0] != src
+def test_policyengine_metadata_is_read_as_in_a_fresh_interpreter():
+    """Nothing in the session changes which policyengine metadata is read.
+
+    A fresh interpreter in the same environment is the baseline, so a setup
+    that reads ``src``'s egg-info from the start (``PYTHONPATH=src``) passes.
+    """
+
+    fresh = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from importlib import metadata; "
+            "print(metadata.distribution('policyengine').locate_file(''))",
+        ],
+        cwd=CHECKOUT,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=True,
+    )
+    here = metadata.distribution("policyengine").locate_file("")
+    assert Path(here).resolve() == Path(fresh.stdout.strip()).resolve()
+
+
+SRC = str(CHECKOUT / "src")
+CHECKOUT_ENTRIES = [SRC, str(SCRIPTS_DIR), str(CHECKOUT)]
+OUTSIDE_ENTRIES = ["/opt/python/lib", "/opt/python/site-packages", "/opt/vendor"]
+paths = st.lists(st.sampled_from(CHECKOUT_ENTRIES + OUTSIDE_ENTRIES), max_size=8)
+
+
+def test_a_second_src_ahead_of_site_packages_is_a_change():
+    # An editable install's .pth lists src after site-packages, so prepending
+    # the same string adds no new entry but changes which metadata is read.
+    before = ["/opt/python/lib", "/opt/python/site-packages", SRC]
+    assert import_path_changes(before, [SRC, *before]) == [f"added another {SRC!r}"]
+
+
+@given(paths)
+def test_an_unchanged_path_has_no_changes(path):
+    assert import_path_changes(path, list(path)) == []
+
+
+@given(paths, st.data())
+def test_adding_a_checkout_entry_anywhere_is_a_change(path, data):
+    index = data.draw(st.integers(0, len(path)))
+    entry = data.draw(st.sampled_from(CHECKOUT_ENTRIES))
+    assert import_path_changes(path, [*path[:index], entry, *path[index:]])
+
+
+@given(paths, st.data())
+def test_adding_a_new_entry_outside_the_checkout_is_not_a_change(path, data):
+    index = data.draw(st.integers(0, len(path)))
+    after = [*path[:index], "/opt/new", *path[index:]]
+    assert import_path_changes(path, after) == []
+
+
+@given(paths.filter(bool), st.data())
+def test_removing_an_entry_is_a_change(path, data):
+    index = data.draw(st.integers(0, len(path) - 1))
+    assert import_path_changes(path, [*path[:index], *path[index + 1 :]])
+
+
+@given(paths, st.data())
+def test_reordering_entries_is_a_change_exactly_when_the_order_differs(path, data):
+    after = data.draw(st.permutations(path))
+    assert bool(import_path_changes(path, after)) == (list(after) != path)
 
 
 @pytest.mark.parametrize(
