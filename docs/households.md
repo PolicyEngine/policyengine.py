@@ -150,7 +150,7 @@ Scale parameters use bracket indexing:
 reform = {"gov.irs.credits.ctc.amount.base[0].amount": 3_000}
 ```
 
-Time-varying reforms use a nested dict of `YYYY-MM-DD → value`:
+Time-varying reforms use a nested dict of date keys to values:
 
 ```python
 reform = {
@@ -160,6 +160,10 @@ reform = {
     },
 }
 ```
+
+For UK households, a `YYYY-MM-DD` key is effective from that date until the next value for the same parameter, or December 31, 2100 if no later value follows. A `YYYY-MM-DD.YYYY-MM-DD` key applies over that inclusive interval. Scalar values default to January 1 of `year`.
+
+UK households reject bare years such as `"2027"` or `2027`, because the underlying packages assign different meanings to them. Use `"2027-04-06.2028-04-05"` for one UK fiscal year or `"2027-01-01"` for an effective date. See [Reforms](reforms.md) for the shared `Simulation(policy=...)` and `Simulation(dynamic=...)` date contract. The US household route retains its country package's period-key handling.
 
 Structural reforms (new variables, formula swaps) require the `Simulation` path — see [Reforms](reforms.md).
 

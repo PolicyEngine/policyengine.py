@@ -7,9 +7,16 @@ import pytest
 from microdf import MicroDataFrame
 
 from policyengine.outputs.local_authority_impact import (
+    LocalAuthorityImpact,
     compute_uk_local_authority_impacts,
 )
 from policyengine.outputs.uk_geography_assets import LOCAL_AUTHORITY_ASSET_SPEC
+
+# These outputs are deprecated: they are not disclosure-controlled. The tests
+# below still pin their behaviour until they are removed.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:.*not disclosure-controlled.*:DeprecationWarning"
+)
 
 
 def _make_sim(household_data: dict) -> MagicMock:
@@ -250,3 +257,27 @@ def test_compute_local_authority_impacts_requires_longwise_geography_column():
             reform,
             download_missing_assets=False,
         )
+
+
+def test_local_authority_impacts_warn_that_they_are_not_disclosure_controlled(caplog):
+    household = {
+        "household_net_income": [100.0],
+        "household_weight": [1.0],
+        "la_code_oa": ["A001"],
+    }
+    baseline, reform = _make_sim(household), _make_sim(household)
+    message = "not disclosure-controlled.*compute_uk_geography_disclosure"
+
+    with pytest.warns(DeprecationWarning, match=message):
+        compute_uk_local_authority_impacts(
+            baseline, reform, download_missing_assets=False
+        )
+    impact = LocalAuthorityImpact.model_construct(
+        baseline_simulation=baseline, reform_simulation=reform
+    )
+    with pytest.warns(DeprecationWarning, match=message):
+        impact.run()
+    # policyengine-core silences Python warnings once a country model loads,
+    # so the message must also reach the log.
+    logged = [record.getMessage() for record in caplog.records]
+    assert sum("not disclosure-controlled" in line for line in logged) == 2

@@ -29,7 +29,19 @@ reform = {
 }
 ```
 
-Dates that haven't passed become "from this date onward." Earlier dates replace the baseline schedule.
+A `YYYY-MM-DD` key is an effective date: its value applies from that date until the next date in the same parameter's reform schedule. If no later value follows, the wrapper emits an interval ending on December 31, 2100.
+
+Use `YYYY-MM-DD.YYYY-MM-DD` for an inclusive interval. For example, this UK reform applies for fiscal year 2027 only:
+
+```python
+reform = {
+    "gov.hmrc.income_tax.rates.uk[0].rate": {
+        "2027-04-06.2028-04-05": 0.21,
+    },
+}
+```
+
+`Simulation(policy=...)`, `Simulation(dynamic=...)`, and UK `calculate_household(reform=...)` accept these two date formats and reject an interval whose end precedes its start. They reject bare years such as `"2027"` or `2027`, because policyengine-uk reads them as fiscal year 2027 only, while policyengine-core's `Reform.from_dict` reads them as from 2027 onward. Use `"2027-04-06.2028-04-05"` for one UK fiscal year or `"2027-01-01"` for an effective date. The US household route retains its country package's period-key handling.
 
 ### Multiple changes
 

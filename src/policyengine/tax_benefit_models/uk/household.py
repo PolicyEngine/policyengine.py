@@ -26,13 +26,16 @@ from typing import Any, Optional
 from policyengine.tax_benefit_models.common import (
     EntityResult,
     HouseholdResult,
-    compile_reform,
     dispatch_extra_variables,
     normalize_axes,
     validate_annual_household_inputs,
     values_for_entity,
 )
+from policyengine.tax_benefit_models.common.reform import (
+    _reform_dict_to_parameter_values,
+)
 from policyengine.utils.household_validation import validate_household_input
+from policyengine.utils.parametric_reforms import reform_dict_from_parameter_values
 
 from .model import uk_latest
 
@@ -129,9 +132,11 @@ def calculate_household(
             Must be non-empty.
         benunit, household: Optional per-entity overrides.
         year: Calendar year. Defaults to 2026.
-        reform: Optional reform dict. Scalar values default to
-            ``{year}-01-01``; invalid parameter paths raise with a
-            close-match suggestion.
+        reform: Optional reform dict. Scalars start at ``{year}-01-01``.
+            ``YYYY-MM-DD`` keys are effective dates; a value lasts until
+            the next effective date or the end of the model horizon.
+            ``YYYY-MM-DD.YYYY-MM-DD`` keys specify inclusive intervals.
+            Invalid parameter paths raise with a close-match suggestion.
         extra_variables: Flat list of extra UK variables to compute;
             the library dispatches each to its entity.
         axes: Optional household-calculator axes. Pass either the lower-level
@@ -181,7 +186,11 @@ def calculate_household(
         names=extra_variables or [],
     )
     output_columns = _default_output_columns(extra_by_entity)
-    reform_dict = compile_reform(reform, year=year, model_version=uk_latest)
+    reform_dict = reform_dict_from_parameter_values(
+        _reform_dict_to_parameter_values(
+            reform or {}, year=year, model_version=uk_latest
+        )
+    )
     normalized_axes = normalize_axes(axes=axes, year=year, model_version=uk_latest)
     axes_active = normalized_axes is not None
 

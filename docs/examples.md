@@ -16,6 +16,13 @@ Applying parametric reforms, comparing baseline and reform with `ChangeAggregate
 ```{.python include="../examples/policy_change_uk.py"}
 ```
 
+## UK geography results under disclosure control
+
+Estimating results by area from per-household arrays, checking the release, withholding a cell and validating the public table. The data is synthetic.
+
+```{.python include="../examples/uk_geography_disclosure.py"}
+```
+
 ## UK income bands
 
 Calculating net income and tax by income decile using representative microdata and `Aggregate` with quantile filters.

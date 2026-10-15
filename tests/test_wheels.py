@@ -12,9 +12,11 @@ Invariants:
   optimisation level, listed in the RECORD or not, timestamp or hash based)
   verifies only when it compiles from that source; caches the interpreter
   would ignore are inert and reported, never failed;
-- the wheel itself verifies only when its members and its RECORD match one to
-  one: changing, adding or removing any archive member fails, so a copied
-  RECORD in a junk zip never names a wheel the files did not come from.
+- the wheel itself verifies only when its members and its RECORD match, with
+  RECORD listing itself with empty hash and size fields, and the optional
+  RECORD.jws and RECORD.p7s signatures absent from RECORD. Changing, adding
+  or removing other archive members fails, so a copied RECORD in a junk zip
+  never names a wheel the files did not come from.
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ import math
 import os
 import sys
 import zipfile
+from importlib import metadata
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -122,6 +125,24 @@ def fake_metadata(site: Path, record_lines):
     return SimpleNamespace(distribution=distribution)
 
 
+def installed_metadata(site: Path, record_lines):
+    """Read the installed RECORD through the same metadata API as pip and uv."""
+
+    dist_info = site / DIST_INFO
+    (dist_info / "RECORD").write_text("\n".join(record_lines) + "\n")
+    distribution = metadata.Distribution.at(dist_info)
+    return SimpleNamespace(distribution=lambda name: distribution)
+
+
+def build_signed_wheel(tmp_path: Path, signature: str):
+    wheel, site, record = build_wheel(tmp_path)
+    path = f"{DIST_INFO}/{signature}"
+    data = b"signature bytes"
+    write_wheel(wheel, {**FILES, path: data}, record[: len(FILES) + 1])
+    (site / path).write_bytes(data)
+    return wheel, site, record, path, data
+
+
 def test_record_hash_decoding():
     data = b"hello"
     assert (
@@ -145,6 +166,161 @@ def test_untouched_install_verifies(tmp_path):
     assert evidence["archive_members_verified"] == len(FILES)
     assert evidence["generated_launchers"] == sorted(LAUNCHERS)
     assert evidence["wheel_sha256"] == hashlib.sha256(wheel.read_bytes()).hexdigest()
+
+
+@pytest.mark.parametrize("signature", ["RECORD.jws", "RECORD.p7s"])
+@pytest.mark.parametrize("hashed", [False, True])
+def test_installed_record_signatures_match_archive(tmp_path, signature, hashed):
+    wheel, site, record, path, data = build_signed_wheel(tmp_path, signature)
+    record.append(_line(path, data) if hashed else f"{path},,")
+    evidence = verify_installed_against_wheel(
+        "policyengine-uk", wheel, metadata=installed_metadata(site, record)
+    )
+    assert evidence["problems"] == []
+    assert evidence["unexpected_installed_files"] == []
+
+
+@pytest.mark.parametrize("signature", ["RECORD.jws", "RECORD.p7s"])
+def test_an_installer_may_omit_record_signatures(tmp_path, signature):
+    wheel, site, record, path, _ = build_signed_wheel(tmp_path, signature)
+    (site / path).unlink()
+    evidence = verify_installed_against_wheel(
+        "policyengine-uk", wheel, metadata=installed_metadata(site, record)
+    )
+    assert evidence["problems"] == []
+
+
+@pytest.mark.parametrize("signature", ["RECORD.jws", "RECORD.p7s"])
+def test_installed_record_signature_needs_an_archive_member(tmp_path, signature):
+    wheel, site, record = build_wheel(tmp_path)
+    path = f"{DIST_INFO}/{signature}"
+    (site / path).write_bytes(b"signature bytes")
+    record.append(f"{path},,")
+    evidence = verify_installed_against_wheel(
+        "policyengine-uk", wheel, metadata=installed_metadata(site, record)
+    )
+    assert evidence["problems"] == [f"{path}: installed but not in the wheel"]
+
+
+@pytest.mark.parametrize("signature", ["RECORD.jws", "RECORD.p7s"])
+@pytest.mark.parametrize("edit", ["change", "remove"])
+def test_installed_record_signature_bytes_are_checked(tmp_path, signature, edit):
+    wheel, site, record, path, data = build_signed_wheel(tmp_path, signature)
+    record.append(f"{path},,")  # pip preserves signature entries without hashes
+    if edit == "change":
+        (site / path).write_bytes(data + b"changed")
+        problem = "bytes differ from the wheel"
+    else:
+        (site / path).unlink()
+        problem = "missing on disk"
+    evidence = verify_installed_against_wheel(
+        "policyengine-uk", wheel, metadata=installed_metadata(site, record)
+    )
+    assert evidence["problems"] == [f"{path}: {problem}"]
+
+
+def test_uv_build_bookkeeping_verifies(tmp_path):
+    wheel, site, record = build_wheel(tmp_path)
+    path = f"{DIST_INFO}/uv_build.json"
+    (site / path).write_bytes(b"{}")
+    record.append(_line(path, b"{}"))
+    evidence = verify_installed_against_wheel(
+        "policyengine-uk", wheel, metadata=installed_metadata(site, record)
+    )
+    assert evidence["problems"] == []
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "policyengine_uk/uv_build.json",
+        "other-1.0.dist-info/uv_build.json",
+        f"{DIST_INFO}/nested/uv_build.json",
+        f"{DIST_INFO}/injected.json",
+        "other-1.0.dist-info/RECORD.jws",
+        "policyengine_uk/RECORD.p7s",
+    ],
+)
+def test_installer_exceptions_do_not_allow_other_files(tmp_path, path):
+    wheel, site, record = build_wheel(tmp_path)
+    (site / path).parent.mkdir(parents=True, exist_ok=True)
+    (site / path).write_bytes(b"{}")
+    record.append(_line(path, b"{}"))
+    evidence = verify_installed_against_wheel(
+        "policyengine-uk", wheel, metadata=installed_metadata(site, record)
+    )
+    assert evidence["problems"] == [f"{path}: installed but not in the wheel"]
+
+
+@pytest.mark.parametrize("origin", ["directory", "vcs"])
+def test_verified_wheel_allows_certification_of_a_direct_install(
+    tmp_path, monkeypatch, origin
+):
+    from policyengine.provenance import receipt
+
+    wheel, site, record = build_wheel(tmp_path)
+    fake = fake_metadata(site, record)
+    distribution = fake.distribution("policyengine-uk")
+    direct_url = {"url": "file:///source"}
+    if origin == "vcs":
+        direct_url["vcs_info"] = {"vcs": "git", "commit_id": "a" * 40}
+    else:
+        direct_url["dir_info"] = {"editable": origin == "editable"}
+    import json
+
+    distribution.read_text = lambda name: json.dumps(direct_url)
+    fake.distribution = lambda name: distribution
+    fake.version = lambda name: "2.126.8"
+    monkeypatch.setattr(receipt, "metadata", fake)
+    # This fixture verifies installed files without loading a country package.
+    monkeypatch.delitem(sys.modules, "policyengine_uk", raising=False)
+    unverified = receipt.installed_package_identity("policyengine-uk")
+    assert unverified.install_origin == origin
+    assert not receipt._package_can_be_certified(unverified)
+    verified = receipt.installed_package_identity("policyengine-uk", wheel_path=wheel)
+    assert verified.install_origin == origin
+    assert verified.wheel_sha256_evidence == "installed_record_verified"
+    assert verified.wheel_sha256 == hashlib.sha256(wheel.read_bytes()).hexdigest()
+    assert receipt._package_can_be_certified(verified)
+
+
+def test_a_thin_editable_wheel_verifies_but_is_never_certified(tmp_path, monkeypatch):
+    """A PEP 660 editable wheel holds a pointer to a checkout, not its source.
+
+    Its installed files verify against it exactly, yet the code that runs is
+    whatever the checkout holds, so the install is never certified.
+    """
+
+    from policyengine.provenance import receipt
+
+    files = {
+        "__editable__.policyengine_uk-2.126.8.pth": b"/home/dev/policyengine-uk/src\n",
+        f"{DIST_INFO}/METADATA": (
+            b"Metadata-Version: 2.1\nName: policyengine-uk\nVersion: 2.126.8\n"
+        ),
+    }
+    wheel, site, record = build_wheel(tmp_path, files=files, launchers={})
+    evidence = verify_installed_against_wheel(
+        "policyengine-uk", wheel, metadata=installed_metadata(site, record)
+    )
+    assert evidence["problems"] == []
+    fake = fake_metadata(site, record)
+    distribution = fake.distribution("policyengine-uk")
+    import json
+
+    direct_url = {
+        "url": "file:///home/dev/policyengine-uk",
+        "dir_info": {"editable": True},
+    }
+    distribution.read_text = lambda name: json.dumps(direct_url)
+    fake.distribution = lambda name: distribution
+    fake.version = lambda name: "2.126.8"
+    monkeypatch.setattr(receipt, "metadata", fake)
+    monkeypatch.delitem(sys.modules, "policyengine_uk", raising=False)
+    verified = receipt.installed_package_identity("policyengine-uk", wheel_path=wheel)
+    assert verified.install_origin == "editable"
+    assert verified.wheel_sha256_evidence == "installed_record_verified"
+    assert not receipt._package_can_be_certified(verified)
 
 
 def test_windows_launchers_are_recognised(tmp_path):
@@ -346,11 +522,29 @@ def test_a_cache_whose_nan_constant_has_the_other_sign_fails(tmp_path):
     path = _write_cache(site, source)
     code = compile(source, "system.py", "exec", dont_inherit=True, optimize=0)
     assert any(isinstance(c, float) and math.isnan(c) for c in code.co_consts)
-    namespace: dict = {}
-    exec(_with_nan_sign_flipped(code), namespace)
-    assert namespace["system"] == -1.0  # it behaves differently
+    # inf - inf is a NaN whose sign depends on the CPU (negative on x86-64,
+    # positive on arm64); either way the flipped constant behaves differently.
+    original: dict = {}
+    exec(code, original)
+    flipped: dict = {}
+    exec(_with_nan_sign_flipped(code), flipped)
+    assert flipped["system"] == -original["system"]
     data = path.read_bytes()
     path.write_bytes(data[:16] + marshal.dumps(_with_nan_sign_flipped(code)))
+    problems = _verify(site, wheel, record)["problems"]
+    assert problems == [
+        f"{_relative(site, path)}: does not compile from the verified source"
+    ]
+
+
+@pytest.mark.parametrize("payload", [None, 0, b"bytes", ("a", "tuple")])
+def test_a_cache_holding_a_value_other_than_code_fails(tmp_path, payload):
+    """A well-formed marshal payload that is not code is refused, not raised."""
+
+    wheel, site, record = build_wheel(tmp_path)
+    path = _write_cache(site, FILES["policyengine_uk/system.py"])
+    data = path.read_bytes()
+    path.write_bytes(data[:16] + marshal.dumps(payload))
     problems = _verify(site, wheel, record)["problems"]
     assert problems == [
         f"{_relative(site, path)}: does not compile from the verified source"
@@ -568,6 +762,50 @@ def test_an_untouched_archive_verifies(tmp_path):
     assert archive["problems"] == []
     assert archive["members_verified"] == len(FILES)
     assert archive["scripts"] == {"policyengine-uk", "policyengine-uk-gui"}
+
+
+@pytest.mark.parametrize("signature", [None, "RECORD.jws", "RECORD.p7s"])
+def test_record_must_list_itself(tmp_path, signature):
+    members = dict(FILES)
+    if signature is not None:
+        members[f"{DIST_INFO}/{signature}"] = b"signature"
+    record = [_line(path, data) for path, data in FILES.items()]
+    wheel = write_wheel(tmp_path / "w-1-py3-none-any.whl", members, record)
+    assert verify_wheel_archive(wheel)["problems"] == [
+        f"{DIST_INFO}/RECORD: RECORD does not list itself"
+    ]
+
+
+@pytest.mark.parametrize(
+    "fields",
+    ["", ",", ",0", f"sha256={_b64(b'not RECORD')},", ",,extra"],
+)
+def test_record_self_entry_needs_empty_hash_and_size(tmp_path, fields):
+    record = [_line(path, data) for path, data in FILES.items()]
+    record.append(f"{DIST_INFO}/RECORD,{fields}")
+    wheel = write_wheel(tmp_path / "w-1-py3-none-any.whl", FILES, record)
+    if fields == ",":
+        assert verify_wheel_archive(wheel)["problems"] == []
+    else:
+        assert verify_wheel_archive(wheel)["problems"] == [
+            f"{DIST_INFO}/RECORD: RECORD needs empty hash and size fields"
+        ]
+
+
+@pytest.mark.parametrize("signature", ["RECORD.jws", "RECORD.p7s"])
+@pytest.mark.parametrize("listed", [None, "unhashed", "hashed"])
+def test_record_signatures_are_absent_from_record(tmp_path, signature, listed):
+    path = f"{DIST_INFO}/{signature}"
+    data = b"signature"
+    members = {**FILES, path: data}
+    record = [_line(path, data) for path, data in FILES.items()]
+    record.append(f"{DIST_INFO}/RECORD,,")
+    if listed is not None:
+        record.append(_line(path, data) if listed == "hashed" else f"{path},,")
+    wheel = write_wheel(tmp_path / "w-1-py3-none-any.whl", members, record)
+    assert verify_wheel_archive(wheel)["problems"] == (
+        [] if listed is None else [f"{path}: signature files must not be in RECORD"]
+    )
 
 
 def test_a_wheel_needs_exactly_one_record(tmp_path):

@@ -258,4 +258,12 @@ class Simulation(BaseModel):
         )
         if renames is not None:
             result["legacy_input_renames"] = dict(renames)
+        # BACKWARD COMPATIBILITY (#597, #598): the legacy SPM declarations a
+        # US run applied, which change its SPM results. See
+        # ``policyengine.tax_benefit_models.us.legacy_spm``.
+        legacy_spm_declarations = (
+            getattr(self.output_dataset, "metadata", None) or {}
+        ).get("legacy_spm_declarations")
+        if legacy_spm_declarations is not None:
+            result["legacy_spm_declarations"] = dict(legacy_spm_declarations)
         return result
