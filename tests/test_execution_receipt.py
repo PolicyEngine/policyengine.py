@@ -19,6 +19,10 @@ Invariants tested here:
   module source and defaults plus a revision, independent of where the code
   is checked out; code edited after import, closures, lambdas, partials,
   methods and non-Scenario objects are refused;
+- a composition's digest covers its members' representation, digest and
+  binding in application order and nothing else: reordering distinct members
+  changes it, current-law members and labels do not, and it is code-bound
+  exactly when a member is;
 - the Pydantic model and the published JSON Schema accept the same valid
   receipts and reject the same malformed ones (differential test).
 """
@@ -39,6 +43,7 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Mapping
 from importlib import metadata
 from pathlib import Path
 from types import CodeType, SimpleNamespace
@@ -53,7 +58,7 @@ from hypothesis import strategies as st
 from pydantic import ValidationError
 
 from policyengine.provenance import receipt as receipt_module
-from policyengine.provenance.canonical import canonical_sha256
+from policyengine.provenance.canonical import CanonicalJSONError, canonical_sha256
 from policyengine.provenance.receipt import (
     ExecutionReceipt,
     FiscalYearConvention,
@@ -62,6 +67,7 @@ from policyengine.provenance.receipt import (
     build_execution_receipt,
     build_execution_receipt_for_microsimulation,
     certificate_sha256,
+    composed_reform_identity,
     content_sha256,
     fiscal_year_label,
     installed_package_identity,
@@ -1511,6 +1517,264 @@ def test_reform_identity_accepts_only_json_payloads():
         ReformIdentity(kind="current_law", binding="code_revision")
 
 
+# --- Compositions ------------------------------------------------------------------
+
+
+def _member(index: int, *, code: bool = False, name=None) -> ReformIdentity:
+    return ReformIdentity(
+        kind="reform",
+        representation="policyengine-uk.scenario/v1",
+        reform_sha256=f"{index:064x}",
+        binding="code_revision" if code else "content",
+        name=name,
+    )
+
+
+def _compose(members, *, early: bool = False, name=None) -> ReformIdentity:
+    return composed_reform_identity(members, applied_before_data_load=early, name=name)
+
+
+def _composition_digest(early: bool, *members: ReformIdentity) -> str:
+    """The published preimage, restated: phase plus ordered member identities."""
+
+    return canonical_sha256(
+        {
+            "representation": "policyengine-uk.scenario_composition/v1",
+            "payload": {
+                "applied_before_data_load": early,
+                "application": "parameter_changes_then_modifiers",
+                "members": [
+                    {
+                        "representation": member.representation,
+                        "reform_sha256": member.reform_sha256,
+                        "binding": member.binding,
+                    }
+                    for member in members
+                ],
+            },
+        }
+    )
+
+
+def test_composition_digest_is_its_phase_and_ordered_member_identities():
+    basic = reform_identity(
+        {"gov.hmrc.income_tax.rates.uk[0].rate": {"2027-04-06": 0.21}},
+        "policyengine-uk.reform_dict/v1",
+        name="basic rate",
+    )
+    structural = scenario_reform_identity(
+        _scenario(simulation_modifier=receipt_modifiers.raise_higher_rate),
+        code_revision=REVISION,
+        name="higher rate",
+    )
+    package = _compose([basic, structural], name="Budget package")
+    assert package.representation == "policyengine-uk.scenario_composition/v1"
+    assert package.binding == "code_revision"
+    assert package.name == "Budget package"
+    assert package.reform_sha256 == _composition_digest(False, basic, structural)
+    assert _compose([basic]).binding == "content"
+    assert _compose([basic]).reform_sha256 == _composition_digest(False, basic)
+    assert _compose([basic]).reform_sha256 != basic.reform_sha256
+    nested = _compose([package, basic], early=True)
+    assert nested.binding == "code_revision"
+    assert nested.reform_sha256 == _composition_digest(True, package, basic)
+
+
+def test_the_phase_the_combined_scenario_runs_in_is_bound():
+    """#579 review: Scenario.__add__ resets the phase, so it must be stated."""
+
+    members = [_member(1), _member(2)]
+    early = _compose(members, early=True)
+    late = _compose(members, early=False)
+    assert early.reform_sha256 != late.reform_sha256
+    assert early.reform_sha256 == _composition_digest(True, *members)
+    with pytest.raises(TypeError):
+        composed_reform_identity(members)  # the phase has no default
+    for phase in (0, 1, None, "False"):
+        with pytest.raises(ReceiptError, match="applied_before_data_load"):
+            composed_reform_identity(members, applied_before_data_load=phase)
+
+
+@settings(max_examples=100, deadline=None)
+@given(
+    indices=st.lists(st.integers(1, 50), min_size=2, max_size=6, unique=True),
+    code=st.lists(st.booleans(), min_size=6, max_size=6),
+    random=st.randoms(),
+    gaps=st.lists(st.integers(0, 6), max_size=4),
+    labels=st.lists(st.text(max_size=5), min_size=6, max_size=6),
+    early=st.booleans(),
+)
+def test_composition_order_matters_and_current_law_and_labels_do_not(
+    indices, code, random, gaps, labels, early
+):
+    members = [_member(i, code=code[n]) for n, i in enumerate(indices)]
+    composed = _compose(members, early=early)
+    assert composed.reform_sha256 == _composition_digest(early, *members)
+    assert composed.binding == (
+        "code_revision" if any(code[: len(members)]) else "content"
+    )
+    shuffled = list(members)
+    random.shuffle(shuffled)
+    same_order = shuffled == members
+    assert (
+        _compose(shuffled, early=early).reform_sha256 == composed.reform_sha256
+    ) == same_order
+    padded = list(members)
+    for gap in gaps:
+        padded.insert(
+            min(gap, len(padded)),
+            ReformIdentity(kind="current_law", name=labels[gap % 6] or None),
+        )
+    assert _compose(padded, early=early).reform_sha256 == composed.reform_sha256
+    relabelled = [
+        member.model_copy(update={"name": labels[n] or None})
+        for n, member in enumerate(members)
+    ]
+    assert (
+        _compose(relabelled, early=early, name="x").reform_sha256
+        == composed.reform_sha256
+    )
+    # Dropping or duplicating a member changes what ran, so it changes the digest.
+    assert _compose(members[1:], early=early).reform_sha256 != composed.reform_sha256
+    assert (
+        _compose([*members, members[0]], early=early).reform_sha256
+        != composed.reform_sha256
+    )
+
+
+@settings(max_examples=50, deadline=None)
+@given(
+    indices=st.lists(st.integers(1, 50), min_size=1, max_size=5, unique=True),
+    position=st.integers(0, 4),
+    change=st.sampled_from(["digest", "representation", "binding"]),
+)
+def test_changing_any_one_member_changes_the_composition(indices, position, change):
+    """A nested identity's every bound member reaches the composition digest."""
+
+    members = [_member(i) for i in indices]
+    inner = _compose(members)
+    target = position % len(members)
+    edited = list(members)
+    if change == "digest":
+        edited[target] = _member(indices[target] + 100)
+    elif change == "representation":
+        edited[target] = edited[target].model_copy(
+            update={"representation": "policyengine-uk.reform_dict/v1"}
+        )
+    else:
+        edited[target] = _member(indices[target], code=True)
+    assert _compose(edited).reform_sha256 != inner.reform_sha256
+    # The same holds one level down, through a nested composition.
+    assert (
+        _compose([_compose(edited), _member(99)]).reform_sha256
+        != _compose([inner, _member(99)]).reform_sha256
+    )
+
+
+def test_a_composition_of_nothing_is_current_law_with_its_own_name():
+    named = ReformIdentity(kind="current_law", name="no change")
+    assert _compose([]).kind == "current_law"
+    assert _compose([CURRENT_LAW, named]) == ReformIdentity(kind="current_law")
+    assert _compose([named], name="package") == ReformIdentity(
+        kind="current_law", name="package"
+    )
+    assert (
+        _compose([named, _member(1)]).reform_sha256
+        == _compose([_member(1)]).reform_sha256
+    )
+
+
+@pytest.mark.parametrize(
+    "update",
+    [
+        {"kind": "current_law"},  # a reform's digest kept under current law
+        {"reform_sha256": "XYZ"},
+        {"reform_sha256": None},
+        {"representation": "not-a-representation"},
+        {"binding": "anything"},
+    ],
+    ids=["kind", "digest", "no-digest", "representation", "binding"],
+)
+def test_members_edited_past_their_rules_are_refused(update):
+    """#579 review: an invalid member is refused, never dropped or hashed."""
+
+    real = reform_identity(
+        {"gov.hmrc.income_tax.rates.uk[0].rate": {"2027-04-06": 0.21}},
+        "policyengine-uk.reform_dict/v1",
+    )
+    forged = real.model_copy(update=update)
+    with pytest.raises(ReceiptError, match="Member 1 is not a valid identity"):
+        _compose([_member(1), forged])
+
+
+@pytest.mark.parametrize(
+    "members",
+    [
+        {"gov.x": {"2027": 1}},
+        "abc",
+        [{"gov.x": {"2027": 1}}],
+        [_member(1), "member"],
+        [_member(1), None],
+        _member(1),
+        {},
+        "",
+        b"",
+        (member for member in [_member(1)]),
+        frozenset(),
+    ],
+    ids=[
+        "dict",
+        "string",
+        "raw payload",
+        "string member",
+        "none member",
+        "bare",
+        "empty dict",
+        "empty string",
+        "empty bytes",
+        "generator",
+        "set",
+    ],
+)
+def test_compositions_take_only_bound_identities(members):
+    with pytest.raises(ReceiptError):
+        _compose(members)
+
+
+def test_any_sequence_of_members_is_the_same_composition():
+    """Round-4 review: a tuple, a list and a UserList are one composition."""
+
+    from collections import UserList
+
+    members = [_member(1), _member(2, code=True)]
+    assert _compose(tuple(members)) == _compose(list(members))
+    assert _compose(UserList(members)) == _compose(list(members))
+
+
+@pytest.mark.parametrize("members", [[], [CURRENT_LAW], [CURRENT_LAW, CURRENT_LAW]])
+@pytest.mark.parametrize("phase", [0, 1, None, "True"])
+def test_the_phase_is_checked_even_when_nothing_changes(members, phase):
+    """Round-3 review: an invalid phase is refused before members are read."""
+
+    with pytest.raises(ReceiptError, match="applied_before_data_load"):
+        composed_reform_identity(members, applied_before_data_load=phase)
+
+
+def test_reform_identity_refuses_the_composition_representation():
+    with pytest.raises(ReceiptError, match="composed_reform_identity"):
+        reform_identity({"members": []}, "policyengine-uk.scenario_composition/v1")
+
+
+def test_a_composed_reform_makes_a_valid_receipt(dataset_file, schema_validator):
+    package = _compose([_member(1), _member(2, code=True)])
+    receipt = _build(dataset_file, reform=package)
+    schema_validator.validate(json.loads(receipt.model_dump_json()))
+    assert ExecutionReceipt.model_validate_json(receipt.to_canonical_json()) == receipt
+    other = _build(dataset_file, reform=_compose([_member(2, code=True), _member(1)]))
+    assert other.receipt_sha256 != receipt.receipt_sha256
+    assert other.execution_identity_sha256 == receipt.execution_identity_sha256
+
+
 # --- Scenario binding -------------------------------------------------------------
 
 
@@ -1742,6 +2006,73 @@ def test_builder_rechecks_modifier_after_the_run(
         assert ("CACHE" if change == "memo" else "RATE") in str(refused.value)
     finally:
         sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("managed", [False, True])
+def test_builder_rechecks_each_composition_member_after_the_run(
+    dataset_file, tmp_path, nested, managed
+):
+    """A composition keeps its members' re-check handles: a member whose
+    module changed after composing is refused when the receipt is built."""
+
+    name = "w4_receipt_compose_recheck"
+    try:
+        module, _ = _import_source(tmp_path, name, MEASURE_SOURCE.format(rate=0.21))
+        member = _measure_identity(module)
+        other = _member(7)
+        identity = composed_reform_identity(
+            [other, member], applied_before_data_load=False
+        )
+        if nested:
+            identity = composed_reform_identity(
+                [identity], applied_before_data_load=False
+            )
+        module.RATE = 0.30
+        with pytest.raises(
+            ReceiptError, match="modifier changed after its identity was computed"
+        ) as refused:
+            if managed:
+                bundle = _bundle_for(dataset_file.read_bytes())
+                build_execution_receipt_for_microsimulation(
+                    _managed_simulation(dataset_file, bundle),
+                    years=[2026],
+                    bundle=bundle,
+                    reform=identity,
+                    baseline=CURRENT_LAW,
+                )
+            else:
+                _build(dataset_file, reform=identity, baseline=CURRENT_LAW)
+        assert "RATE" in str(refused.value)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_composing_refuses_a_member_that_changed_since_it_was_bound(tmp_path):
+    name = "w4_receipt_compose_stale_member"
+    try:
+        module, _ = _import_source(tmp_path, name, MEASURE_SOURCE.format(rate=0.21))
+        member = _measure_identity(module)
+        module.RATE = 0.30
+        with pytest.raises(ReceiptError, match="Member 0: The modifier changed"):
+            composed_reform_identity([member], applied_before_data_load=False)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_an_unchanged_composition_still_builds_and_ignores_later_list_edits(
+    dataset_file,
+):
+    scenario = _scenario(simulation_modifier=receipt_modifiers.raise_basic_rate_to)
+    member = scenario_reform_identity(scenario, code_revision=REVISION)
+    members = [member]
+    identity = composed_reform_identity(members, applied_before_data_load=False)
+    members.append(_member(7))
+    receipt = _build(dataset_file, reform=identity, baseline=CURRENT_LAW)
+    assert receipt.reform == identity
+    # The handle is process-local: it is not part of equality or the dump.
+    loaded = type(identity).model_validate(identity.model_dump())
+    assert loaded == identity and loaded._recompute_identity is None
 
 
 def test_unchanged_scenario_still_builds_after_a_run(dataset_file):
@@ -4083,7 +4414,7 @@ def test_every_install_metadata_timestamp_counts(monkeypatch, filename, clock):
         def stat(self):
             values = {"st_mtime": 1.0, "st_ctime": 1.0}
             if self.name == filename:
-                values[clock] = 3.0
+                values[clock] = 4.5
             return SimpleNamespace(**values)
 
     monkeypatch.setattr(
@@ -4096,6 +4427,65 @@ def test_every_install_metadata_timestamp_counts(monkeypatch, filename, clock):
     )
     with pytest.raises(ReceiptError, match="installed or changed after this process"):
         receipt_module._refuse_package_changed_after_process_start("policyengine")
+
+
+def _metadata_written_at(monkeypatch, written_at, reported_start):
+    class MetadataPath:
+        def __truediv__(self, name):
+            return self
+
+        def exists(self):
+            return True
+
+        def stat(self):
+            return SimpleNamespace(st_mtime=written_at, st_ctime=written_at)
+
+    monkeypatch.setattr(
+        receipt_module, "_distribution_metadata_directory", lambda name: MetadataPath()
+    )
+    monkeypatch.setattr(
+        receipt_module.psutil,
+        "Process",
+        lambda: SimpleNamespace(create_time=lambda: reported_start),
+    )
+
+
+@pytest.mark.parametrize(
+    ("written_at", "refused"),
+    [
+        (1000.0, False),
+        (1001.5, False),
+        (1002.0, False),
+        (1002.01, True),
+        (1100.0, True),
+    ],
+)
+def test_metadata_is_refused_only_beyond_the_start_time_resolution(
+    monkeypatch, written_at, refused
+):
+    """psutil's Linux start time is boot time in whole seconds plus clock
+    ticks, so it can read up to a second early."""
+
+    _metadata_written_at(monkeypatch, written_at, reported_start=1000.0)
+    check = receipt_module._refuse_package_changed_after_process_start
+    if refused:
+        with pytest.raises(ReceiptError, match="installed or changed after"):
+            check("policyengine")
+    else:
+        check("policyengine")
+
+
+def test_an_install_finished_just_before_the_process_started_is_accepted(
+    monkeypatch,
+):
+    """CI ran pytest 50 ms after uv finished installing, and psutil reported
+    the start 0.9 s early (boot time truncated to whole seconds)."""
+
+    true_start = 1_760_522_248.86
+    _metadata_written_at(
+        monkeypatch, written_at=true_start - 0.05, reported_start=true_start - 0.9
+    )
+    receipt_module._refuse_package_changed_after_process_start("policyengine")
 
 
 def test_unlocatable_install_metadata_is_refused(monkeypatch, tmp_path):
@@ -5632,6 +6022,241 @@ def test_shared_set_and_bytearray_defaults_are_refused(tmp_path, kind):
         sys.modules.pop(name, None)
 
 
+# --- Infinite parameter values in reform payloads ---------------------------------
+
+
+CAP = "gov.hmrc.pensions.salary_sacrifice_pension_cap"
+
+
+def _reform_digest(payload):
+    return reform_identity(payload, "policyengine-uk.reform_dict/v1").reform_sha256
+
+
+@pytest.mark.parametrize(
+    ("value", "spelling"),
+    [(float("inf"), "Infinity"), (float("-inf"), "-Infinity")],
+    ids=["inf", "-inf"],
+)
+def test_an_infinite_parameter_value_binds_by_its_reserved_encoding(value, spelling):
+    """An uncapped threshold is ``inf`` in PolicyEngine; the digest names it.
+
+    Round-1 review M2: the spellings are a published contract, so both are
+    pinned by their exact canonical bytes.
+    """
+
+    from policyengine.provenance.canonical import canonical_json
+
+    payload = {CAP: {"2026-04-06.2100-12-31": value}}
+    expected = {
+        "representation": "policyengine-uk.reform_dict/v1",
+        "payload": {CAP: {"2026-04-06.2100-12-31": {"$nonfinite": spelling}}},
+    }
+    assert canonical_json(expected) == (
+        b'{"payload":{"gov.hmrc.pensions.salary_sacrifice_pension_cap":'
+        b'{"2026-04-06.2100-12-31":{"$nonfinite":"' + spelling.encode() + b'"}}},'
+        b'"representation":"policyengine-uk.reform_dict/v1"}'
+    )
+    assert _reform_digest(payload) == canonical_sha256(expected)
+
+
+def test_an_infinity_in_a_tuple_binds_as_one_in_a_list():
+    """Round-1 review L1: tuples are walked like lists."""
+
+    assert _reform_digest({CAP: (float("inf"), 1.0)}) == _reform_digest(
+        {CAP: [float("inf"), 1.0]}
+    )
+
+
+def test_infinities_differ_from_each_other_and_from_any_finite_cap():
+    values = [float("inf"), float("-inf"), 1e308, 2000.0, 0.0]
+    digests = {_reform_digest({CAP: {"2027": value}}) for value in values}
+    assert len(digests) == len(values)
+
+
+def test_a_numpy_infinity_binds_as_a_float_one():
+    numpy = pytest.importorskip("numpy")
+    for value in (numpy.float64("inf"), numpy.float32("-inf")):
+        assert _reform_digest({CAP: {"2027": value}}) == _reform_digest(
+            {CAP: {"2027": float(value)}}
+        )
+
+
+class _EqualsNothing(str):
+    """A key whose own ``__eq__`` would hide that it spells a reserved key."""
+
+    def __eq__(self, other):
+        return False
+
+    __hash__ = str.__hash__
+
+
+class _Pairs(Mapping):
+    """A mapping that yields its pairs as given, equal keys included."""
+
+    def __init__(self, pairs):
+        self._pairs = pairs
+
+    def __getitem__(self, key):
+        for candidate, value in reversed(self._pairs):
+            if candidate is key or candidate == key:
+                return value
+        raise KeyError(key)
+
+    def __iter__(self):
+        return (key for key, _ in self._pairs)
+
+    def __len__(self):
+        return len(self._pairs)
+
+
+class _Level(enum.IntEnum):
+    ONE = 1
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {CAP: {"2027": {"$nonfinite": "Infinity"}}},
+        {"$nonfinite": "Infinity"},
+        [{"$nonfinite": "-Infinity"}],
+        {CAP: ({"$nonfinite": "Infinity"},)},
+        {CAP: {"2027": {_EqualsNothing("$nonfinite"): "Infinity"}}},
+    ],
+    ids=["value", "top-level", "array-member", "tuple-member", "str-subclass-key"],
+)
+def test_a_payload_using_the_reserved_key_is_refused(payload):
+    """Otherwise the object would digest like the infinity it spells.
+
+    Round-1 review L1 and L3: a tuple is walked like a list, and a ``str``
+    subclass that compares unequal to everything is checked by its text.
+    """
+
+    with pytest.raises(ReceiptError, match=r"\$nonfinite is reserved"):
+        _reform_digest(payload)
+
+
+@pytest.mark.parametrize(
+    "pairs",
+    [
+        [("2027", 2000.0), ("2027", 1000.0)],
+        [("2027", 2000.0), ("2027", float("inf"))],
+        [(2027, 2000.0), ("2027", 1000.0)],
+        [(_Level.ONE, 2.0), (1, 2.0)],
+        [(_EqualsNothing("2027"), 1.0), ("2027", float("inf"))],
+    ],
+    ids=[
+        "duplicate",
+        "duplicate-inf",
+        "int-and-str",
+        "intenum-and-int",
+        "str-subclass",
+    ],
+)
+def test_colliding_keys_are_still_refused_with_infinities_allowed(pairs):
+    """Round-1 review M1: encoding first used to drop one of the entries."""
+
+    with pytest.raises(ReceiptError, match="collide"):
+        _reform_digest({CAP: _Pairs(pairs)})
+
+
+def test_nan_is_still_refused():
+    with pytest.raises(ReceiptError, match="not a finite number"):
+        _reform_digest({CAP: {"2027": float("nan")}})
+
+
+def test_a_scenario_with_an_infinite_parameter_change_binds():
+    identity = scenario_reform_identity(
+        _scenario(parameter_changes={CAP: {"2027": float("inf")}})
+    )
+    assert identity.binding == "content"
+    assert (
+        identity.reform_sha256
+        != scenario_reform_identity(
+            _scenario(parameter_changes={CAP: {"2027": 1e308}})
+        ).reform_sha256
+    )
+
+
+_FINITE_LEAVES = (
+    st.none()
+    | st.booleans()
+    | st.integers(min_value=-(2**60), max_value=2**60)
+    | st.floats(allow_nan=False, allow_infinity=False)
+    | st.floats(allow_nan=False, allow_infinity=False).map(np.float64)
+    | st.floats(allow_nan=False, allow_infinity=False, width=32).map(np.float32)
+    | st.integers(min_value=-(2**31), max_value=2**31).map(np.int64)
+    | st.booleans().map(np.bool_)
+    | st.sampled_from([_Level.ONE])
+    | st.text(max_size=6)
+    | st.dates()
+)
+_PAYLOAD_KEYS = st.text(max_size=4).filter(
+    lambda key: key != "$nonfinite"
+) | st.integers(min_value=-3, max_value=3)
+#: Nested payloads of every kind strict conversion takes, finite numbers only.
+FINITE_PAYLOADS = st.recursive(
+    _FINITE_LEAVES,
+    lambda children: (
+        st.lists(children, max_size=4)
+        | st.lists(children, max_size=4).map(tuple)
+        | st.lists(st.tuples(_PAYLOAD_KEYS, children), max_size=4).map(_Pairs)
+    ),
+    max_leaves=20,
+)
+
+
+def _outcome(digest):
+    try:
+        return digest()
+    except (ReceiptError, CanonicalJSONError):
+        return "refused"
+
+
+@settings(max_examples=300, deadline=None)
+@given(payload=st.one_of(REFORM_PAYLOADS, FINITE_PAYLOADS))
+def test_payloads_without_infinities_digest_as_before(payload):
+    """Differential: allowing infinities changes no finite payload's digest.
+
+    Round-1 review L6: payloads cover nesting, int and colliding keys,
+    tuples, nulls, strings, dates, numpy scalars and integers past 2**53;
+    each is either digested as before or refused by both.
+    """
+
+    from policyengine.provenance.receipt import strict_json_value
+
+    representation = "policyengine-uk.reform_dict/v1"
+    if isinstance(payload, (Mapping, list, tuple)) and payload:
+        before = _outcome(
+            lambda: canonical_sha256(
+                strict_json_value(
+                    {"representation": representation, "payload": payload}
+                )
+            )
+        )
+        assert _outcome(lambda: _reform_digest(payload)) == before
+
+
+def test_an_infinite_modifier_default_binds_and_nan_is_refused(tmp_path, monkeypatch):
+    """Round-1 review L5: an uncapped default binds by ``float.hex()``."""
+
+    plus = _computed_default_identity(tmp_path / "a", monkeypatch, "1e999")
+    again = _computed_default_identity(tmp_path / "b", monkeypatch, "1e999")
+    minus = _computed_default_identity(tmp_path / "c", monkeypatch, "-1e999")
+    largest = _computed_default_identity(
+        tmp_path / "d", monkeypatch, "1.7976931348623157e308"
+    )
+    assert plus == again
+    assert len({plus, minus, largest}) == 3
+    source = "def raise_rate(simulation, cap=float('nan')):\n    simulation.cap = cap\n"
+    name = "w4_receipt_588_nan_default"
+    try:
+        module, _ = _import_source(tmp_path / "e", name, source)
+        with pytest.raises(ReceiptError, match="NaN has no one value"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
 def test_shared_set_constants_are_refused(tmp_path):
     source = (
         "FIRST = {2026}\nSECOND = {2026}\n\n\n"
@@ -5691,3 +6316,86 @@ def test_a_main_guard_redefining_a_function_is_refused(tmp_path):
             _identity(module.raise_rate)
     finally:
         sys.modules.pop(name, None)
+
+
+def test_typed_infinities_are_spelled_by_float_hex():
+    """Round-2 review: the typed encoding of an infinite default is pinned."""
+
+    typed = receipt_module._typed_value
+    assert typed(float("inf")) == {"type": "float", "hex": "inf"}
+    assert typed(float("-inf")) == {"type": "float", "hex": "-inf"}
+
+
+class _ForgedDate(datetime.date):
+    """A date whose own ``isoformat`` spells a reserved object."""
+
+    def isoformat(self):
+        return {"$nonfinite": "Infinity"}
+
+
+def test_a_date_subclass_digests_as_its_date():
+    """Round-2 review: a subclass cannot choose its text, or forge an infinity."""
+
+    forged = _reform_digest({CAP: {"2027": _ForgedDate(2027, 4, 6)}})
+    assert forged == _reform_digest({CAP: {"2027": datetime.date(2027, 4, 6)}})
+    assert forged != _reform_digest({CAP: {"2027": float("inf")}})
+    assert content_sha256([_ForgedDate(2027, 4, 6)]) == content_sha256(["2027-04-06"])
+
+
+class _OtherText(str):
+    """A key whose ``str()`` differs from its characters."""
+
+    def __str__(self):
+        return "other"
+
+
+class _OtherBytes(str):
+    """A key whose ``encode`` would change RFC 8785's key order."""
+
+    def encode(self, *args, **kwargs):
+        return b"\xff"
+
+
+def test_string_subclass_keys_digest_by_their_characters():
+    """Round-2 review: keys become exact strings in content and reform digests.
+
+    Before #588, an overridden ``encode`` changed the key order RFC 8785
+    sorted by; now the key sorts by its characters, as an exact string does.
+    """
+
+    assert content_sha256({_OtherText("a"): 1}) == content_sha256({"a": 1})
+    assert _reform_digest({_OtherText(CAP): 1.0}) == _reform_digest({CAP: 1.0})
+    assert content_sha256({_OtherBytes("z"): 1, "a": 2}) == content_sha256(
+        {"z": 1, "a": 2}
+    )
+    with pytest.raises(ReceiptError, match="collide"):
+        content_sha256({_EqualsNothing("a"): 1, "a": 2})
+
+
+class _HostileChar(str):
+    def __eq__(self, other):
+        return False
+
+    def __hash__(self):
+        return 0
+
+
+class _ForgedText(str):
+    """A string whose iterator would let its text escape its quotes."""
+
+    def __iter__(self):
+        return (_HostileChar(char) for char in str.__str__(self))
+
+
+def test_a_string_subclass_value_cannot_forge_an_infinity():
+    """Round-3 review: string values are written as exact strings."""
+
+    forged = _ForgedText('","2028":{"$nonfinite":"Infinity"},"2029":"')
+    payload = {CAP: {"2027": forged}}
+    assert _reform_digest(payload) == _reform_digest(
+        {CAP: {"2027": str.__str__(forged)}}
+    )
+    assert _reform_digest(payload) != _reform_digest(
+        {CAP: {"2027": "", "2028": float("inf"), "2029": ""}}
+    )
+    assert content_sha256([forged]) == content_sha256([str.__str__(forged)])

@@ -51,6 +51,8 @@ Rules every valid v1 receipt satisfies:
   caller's code revision,
   and says so (``binding="code_revision"``). The digest is the same wherever
   the code is checked out and whichever Python runs it.
+- Several reforms applied in one run are bound as an ordered composition of
+  their identities (:func:`composed_reform_identity`).
 - A certificate is trusted only after :func:`verify_certificate` has checked
   it, and the receipt's data identity, against the published bundle manifest
   it names. ``certificate_source`` is the producer's statement, not evidence.
@@ -141,6 +143,7 @@ __all__ = [
     "build_execution_receipt",
     "build_execution_receipt_for_microsimulation",
     "certificate_sha256",
+    "composed_reform_identity",
     "content_sha256",
     "fiscal_year_label",
     "installed_package_identity",
@@ -183,7 +186,15 @@ ReformRepresentation = Literal[
     # A policyengine-uk ``Scenario`` built from parameter changes and, at
     # most, a module-level modifier: see scenario_reform_identity().
     "policyengine-uk.scenario/v1",
+    # Several reforms applied in one policyengine-uk ``Scenario``, in a stated
+    # order: see composed_reform_identity().
+    "policyengine-uk.scenario_composition/v1",
 ]
+
+#: Representation of a composition of member reforms.
+COMPOSITION_REPRESENTATION: Literal["policyengine-uk.scenario_composition/v1"] = (
+    "policyengine-uk.scenario_composition/v1"
+)
 
 #: v1 rules that JSON Schema cannot express. Published in the schema file.
 CROSS_FIELD_RULES: tuple[str, ...] = (
@@ -207,7 +218,7 @@ DIGEST_RULES: dict[str, str] = {
     "execution_identity_sha256": "{schema_version, country_id, wrapper, model, core, data, certification_status, certificate?} where certificate keeps only bundle_version, country_id, certificate_sha256, compatibility_basis, certified_for_model_version, certified_for_core_version, certified_dataset_sha256 and certified_by",
     "receipt_sha256": "the whole receipt without runtime and without reform.name and baseline.name",
     "certificate.certificate_sha256": "the bundle manifest's data_releases.<country_id> record",
-    "reform.reform_sha256": "RFC 8785 over {representation, payload} where payload is the reform exactly as given in that representation, nulls kept (a null in a reform can mean something, unlike an absent receipt field)",
+    "reform.reform_sha256": 'RFC 8785 over {representation, payload} where payload is the reform exactly as given in that representation, nulls kept (a null in a reform can mean something, unlike an absent receipt field); for policyengine-uk.scenario_composition/v1 the payload is {applied_before_data_load, application: parameter_changes_then_modifiers, members: [{representation, reform_sha256, binding}, ...]} with members in application order; an infinite number in a payload is the object {"$nonfinite": "Infinity"} or {"$nonfinite": "-Infinity"}, and a payload may not use the key $nonfinite itself',
     "outputs_sha256": "the canonical output payload the receipt binds",
 }
 
@@ -662,14 +673,31 @@ def strict_json_value(value: Any, path: str = "$") -> Any:
     """
 
     try:
-        return _strict_json_value(value, path)
+        return _strict_json_value(value, path, nonfinite=False)
     except RecursionError as exc:
         raise ReceiptError(f"{path}: the value is nested too deeply.") from exc
 
 
-def _strict_json_value(value: Any, path: str) -> Any:
-    if value is None or isinstance(value, (bool, str)):
+#: The reserved member that stands for an infinite number in a reform payload.
+NONFINITE_KEY = "$nonfinite"
+
+
+def _strict_json_value(value: Any, path: str, nonfinite: bool) -> Any:
+    """The strict conversion; with ``nonfinite``, infinities become reserved objects.
+
+    With ``nonfinite`` set, ``inf`` becomes ``{"$nonfinite": "Infinity"}`` and
+    ``-inf`` becomes ``{"$nonfinite": "-Infinity"}``, and a mapping key that
+    converts to ``$nonfinite`` is refused, so no other payload converts to the
+    same JSON. The encoding happens inside the one walk, so a payload this
+    refuses without infinities (colliding keys, say) is refused with them too.
+    NaN is refused either way: it has no one value to bind.
+    """
+
+    if value is None or isinstance(value, bool):
         return value
+    if isinstance(value, str):
+        # An exact str, so a subclass cannot choose how it is written.
+        return str.__str__(value)
     if _numpy_scalar(value):
         item = value.item()
         if _numpy_scalar(item):
@@ -677,31 +705,40 @@ def _strict_json_value(value: Any, path: str) -> Any:
             raise ReceiptError(
                 f"{path}: {type(value).__name__} has no exact JSON form; convert it first."
             )
-        return _strict_json_value(item, path)
+        return _strict_json_value(item, path, nonfinite)
     if isinstance(value, int):
         return int(value)
     if isinstance(value, float):
         number = float(value)
+        if nonfinite and math.isinf(number):
+            return {NONFINITE_KEY: "Infinity" if number > 0 else "-Infinity"}
         if not math.isfinite(number):
             raise ReceiptError(f"{path}: {number} is not a finite number.")
         return number
     if isinstance(value, datetime.datetime):
         raise ReceiptError(f"{path}: datetimes are ambiguous; pass an ISO 8601 string.")
     if isinstance(value, datetime.date):
-        return value.isoformat()
+        # The date's own method, so a subclass cannot choose its text.
+        return datetime.date.isoformat(value)
     if isinstance(value, Mapping):
         result: dict[str, Any] = {}
         for key, item in value.items():
             if isinstance(key, bool) or not isinstance(key, (str, int)):
                 raise ReceiptError(f"{path}: object keys must be strings, not {key!r}.")
-            text = key if isinstance(key, str) else str(int(key))
+            # An exact str, so a subclass's own __eq__ or __hash__ cannot hide
+            # a collision or the reserved key.
+            text = str.__str__(key) if isinstance(key, str) else str(int(key))
             if text in result:
                 raise ReceiptError(f"{path}: keys {key!r} and {text!r} collide.")
-            result[text] = _strict_json_value(item, f"{path}.{text}")
+            if nonfinite and text == NONFINITE_KEY:
+                raise ReceiptError(
+                    f"{path}: the key {NONFINITE_KEY} is reserved for infinite numbers."
+                )
+            result[text] = _strict_json_value(item, f"{path}.{text}", nonfinite)
         return result
     if isinstance(value, (list, tuple)):
         return [
-            _strict_json_value(item, f"{path}[{index}]")
+            _strict_json_value(item, f"{path}[{index}]", nonfinite)
             for index, item in enumerate(value)
         ]
     raise ReceiptError(
@@ -731,11 +768,16 @@ def _payload_sha256(value: Any) -> str:
     Unlike :func:`content_sha256`, nulls are not removed: in a reform a null
     can mean something (``Scenario.from_reform({"p": {"2027": None}})``
     removes a value that ``{"p": {}}`` keeps), so the payload is digested
-    exactly as given.
+    exactly as given. Infinite numbers are encoded as reserved objects
+    (:func:`_strict_json_value` with ``nonfinite``); a payload without them
+    digests as it did before they were allowed, except one whose strings,
+    keys or dates are subclasses that override how ``str`` or ``date``
+    render: those now digest by their characters and their date, as content
+    digests do.
     """
 
-    converted = strict_json_value(value)
     try:
+        converted = _strict_json_value(value, "$", nonfinite=True)
         return canonical_sha256(converted)
     except RecursionError as exc:
         raise ReceiptError("The value is nested too deeply.") from exc
@@ -806,6 +848,8 @@ def reform_identity(
         raise ReceiptError("A non-empty reform needs its representation.")
     if representation == "policyengine-uk.scenario/v1":
         raise ReceiptError("Bind a Scenario with scenario_reform_identity().")
+    if representation == COMPOSITION_REPRESENTATION:
+        raise ReceiptError("Bind a composition with composed_reform_identity().")
     digest = _payload_sha256({"representation": representation, "payload": payload})
     return ReformIdentity(
         kind="reform", representation=representation, reform_sha256=digest, name=name
@@ -875,9 +919,10 @@ def _typed_value(value: Any, path: str = "$") -> dict[str, Any]:
             raise ReceiptError(f"{path}: {value} is outside +/-(2**53 - 1).")
         return {"type": "int", "value": value}
     if kind is float:
-        if not math.isfinite(value):
-            raise ReceiptError(f"{path}: {value} is not a finite number.")
+        if math.isnan(value):
+            raise ReceiptError(f"{path}: NaN has no one value to bind.")
         # By its bits: 0.0 and -0.0 compare equal but behave differently.
+        # float.hex() writes the infinities exactly, as "inf" and "-inf".
         return {"type": "float", "hex": value.hex()}
     if kind is str:
         return {"type": "str", "value": value}
@@ -2670,9 +2715,8 @@ def scenario_reform_identity(
         return checked(ReformIdentity(kind="current_law", name=name))
     payload: dict[str, Any] = {
         "applied_before_data_load": applied_before_data_load,
-        "parameter_changes": strict_json_value(parameter_changes)
-        if parameter_changes
-        else None,
+        # Converted once, with infinities encoded, when the payload is digested.
+        "parameter_changes": parameter_changes if parameter_changes else None,
         "simulation_modifier": None,
     }
     binding: Literal["content", "code_revision"] = "content"
@@ -2698,6 +2742,146 @@ def scenario_reform_identity(
         ReformIdentity(
             kind="reform",
             representation="policyengine-uk.scenario/v1",
+            reform_sha256=digest,
+            binding=binding,
+            name=name,
+        )
+    )
+
+
+#: The order a ``policyengine-uk.scenario_composition/v1`` run applies its
+#: members in. It is part of the payload, so the digest states it.
+COMPOSITION_APPLICATION = "parameter_changes_then_modifiers"
+
+
+def composed_reform_identity(
+    members: Sequence[ReformIdentity],
+    *,
+    applied_before_data_load: bool,
+    name: Optional[str] = None,
+) -> ReformIdentity:
+    """Bind several reforms applied together in one run, in a stated order.
+
+    ``members`` are complete identities from :func:`reform_identity`,
+    :func:`scenario_reform_identity` or this function, in application order.
+    The digest covers ``applied_before_data_load``, the application order and
+    each member's representation, digest and binding, in member order, and
+    nothing else: member labels are not part of it.
+
+    What ``policyengine-uk.scenario_composition/v1`` means, whatever the
+    policyengine-uk version: one simulation, in the phase given by
+    ``applied_before_data_load``, that applies every member's parameter
+    changes (a reform dictionary member's entries, a scenario member's
+    ``parameter_changes``) and then runs each member's simulation modifier in
+    member order. The changes are applied where the engine applies a
+    Scenario's own parameter changes, so each member's changes act as they do
+    when that member runs alone. This is what the composer must run; it is
+    not ``Scenario.__add__``, whose merge depends on how members are grouped
+    and which leaves the order to the engine (policyengine-uk 2.125.1 runs a
+    Scenario's modifier before its parameter changes).
+
+    On policyengine-uk 2.126.12, run it as one Scenario assembled from each
+    member's own Scenario (``Scenario.from_reform(d)`` for a reform
+    dictionary member, the scenario itself for a scenario member): the
+    scenario members' merged ``parameter_changes``, every member's
+    ``dated_reforms`` in member order, and a modifier that runs every
+    member's modifier in member order, including the one ``from_reform``
+    adds. Do not merge a reform dictionary into ``parameter_changes``: that
+    version reads a scalar value in a reform dictionary as applying from
+    2023, and in ``parameter_changes`` as applying from 2000. Do not apply
+    changes inside a modifier either: when ``applied_before_data_load`` is
+    false, that version applies a Scenario's own changes before the
+    construction steps that read parameters (the Universal Credit
+    rebalancing inputs and the structural reforms switched on by
+    parameters) and runs its modifier after them, so a change made inside
+    a modifier reaches neither step.
+
+    The composer must also make sure no two members change the same
+    parameter, in any form: with disjoint changes the merged result does not
+    depend on grouping or order. This function sees only identities and
+    cannot check either.
+
+    A member's own phase is overridden by the composition's, and a nested
+    composition's members are applied as if listed in its place.
+
+    - Each member is revalidated, so an identity edited past its model's
+      rules (``model_copy(update=...)``) is refused rather than dropped.
+    - A member with a re-check handle (from :func:`scenario_reform_identity`,
+      or a composition) is recomputed first and refused if it changed, and
+      the result keeps a handle that recomposes from those members, so the
+      receipt builders re-check every member again.
+    - ``current_law`` members change nothing and are dropped; if none
+      remains the result is ``current_law``.
+    - A single remaining member still gets the composition representation,
+      so its digest differs from the member's own, as across any two
+      representations.
+    - The binding is ``code_revision`` if any member's is, else ``content``.
+    """
+
+    if type(applied_before_data_load) is not bool:
+        raise ReceiptError("applied_before_data_load must be True or False.")
+    if isinstance(members, (str, bytes, Mapping)) or not isinstance(members, Sequence):
+        raise ReceiptError("A composition is a sequence of reform identities.")
+    # The members as given, handles included; a later edit to the caller's
+    # list does not change what the handle recomposes.
+    members = tuple(members)
+
+    def checked(identity: ReformIdentity) -> ReformIdentity:
+        object.__setattr__(
+            identity,
+            "_recompute_identity",
+            lambda: composed_reform_identity(
+                members,
+                applied_before_data_load=applied_before_data_load,
+                name=name,
+            ),
+        )
+        return identity
+
+    bound: list[dict[str, Any]] = []
+    binding: Literal["content", "code_revision"] = "content"
+    for index, member in enumerate(members):
+        if not isinstance(member, ReformIdentity):
+            raise ReceiptError(
+                f"Member {index} is {type(member).__name__}, not a ReformIdentity; "
+                "bind it with reform_identity() or scenario_reform_identity() first."
+            )
+        try:
+            member._recheck()
+            member = ReformIdentity.model_validate(member.model_dump())
+        except ReceiptError as exc:
+            raise ReceiptError(f"Member {index}: {exc}") from exc
+        except ValueError as exc:  # pydantic's ValidationError included
+            raise ReceiptError(
+                f"Member {index} is not a valid identity: {exc}"
+            ) from exc
+        if member.kind == "current_law":
+            continue
+        bound.append(
+            {
+                "representation": member.representation,
+                "reform_sha256": member.reform_sha256,
+                "binding": member.binding,
+            }
+        )
+        if member.binding == "code_revision":
+            binding = "code_revision"
+    if not bound:
+        return checked(ReformIdentity(kind="current_law", name=name))
+    digest = _payload_sha256(
+        {
+            "representation": COMPOSITION_REPRESENTATION,
+            "payload": {
+                "applied_before_data_load": applied_before_data_load,
+                "application": COMPOSITION_APPLICATION,
+                "members": bound,
+            },
+        }
+    )
+    return checked(
+        ReformIdentity(
+            kind="reform",
+            representation=COMPOSITION_REPRESENTATION,
             reform_sha256=digest,
             binding=binding,
             name=name,
@@ -2746,8 +2930,21 @@ def _distribution_metadata_directory(name: str) -> Path:
     )
 
 
+#: How far ``psutil.Process().create_time()`` can read before the true start.
+#: On Linux psutil adds the start offset in clock ticks to the boot time from
+#: /proc/stat, which is whole seconds, so the reported start can be about a
+#: second early (one second plus one clock tick); metadata an installer finished writing just before the
+#: process started would then look newer than the process.
+PROCESS_START_RESOLUTION_SECONDS = 2.0
+
+
 def _refuse_package_changed_after_process_start(name: str) -> None:
-    """Refuse metadata installed or changed during this process's lifetime."""
+    """Refuse metadata installed or changed during this process's lifetime.
+
+    Metadata written more than :data:`PROCESS_START_RESOLUTION_SECONDS` after
+    the reported process start is refused; within that margin the clock
+    cannot tell an install just before the start from one just after it.
+    """
 
     try:
         directory = _distribution_metadata_directory(name)
@@ -2767,7 +2964,7 @@ def _refuse_package_changed_after_process_start(name: str) -> None:
             f"Cannot locate or read the installed metadata for {name}; restart "
             "the process and run again after checking the installation."
         ) from exc
-    if installed_at > process_started_at:
+    if installed_at > process_started_at + PROCESS_START_RESOLUTION_SECONDS:
         raise ReceiptError(
             f"{name} was installed or changed after this process started, so the "
             "installed version may not be the code that ran; restart the "
