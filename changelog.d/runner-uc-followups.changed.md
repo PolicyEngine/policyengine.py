@@ -1,0 +1,1 @@
+The UK Budget reform contract's Universal Credit allowance check is tested on both runs: each must hold finite values and keep every payment at or above the payable floor. How far deductions may rise is left to policyengine-uk's own tests of the Schedule 6 limits (policyengine-uk#2410).
