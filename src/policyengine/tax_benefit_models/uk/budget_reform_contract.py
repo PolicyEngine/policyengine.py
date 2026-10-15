@@ -47,11 +47,27 @@ reading cases.
 Prior law after a bounded change
 --------------------------------
 
-Contract 1.0.0 expects prior law's projected path to resume after a bounded
-change (``PRIOR_LAW_OPTION = "projected"``). Whether indexation should
+The contract expects prior law's projected path to resume after a bounded
+change (``PRIOR_LAW_OPTION = "projected"``, since contract 1.0.0). Whether indexation should
 instead resume from a changed statutory amount (Income Tax Act 2007 s57
 indexes "the amount ... for the previous tax year") is an open methodology
 call (cos d1344). Checks that depend on it carry ``pending`` and never gate.
+
+Behavioural responses
+---------------------
+
+A case about statutory arithmetic holds capital gains realisations fixed: it
+sets both elasticity conventions to zero and the separate Business Asset
+Disposal Relief elasticity off (:func:`capital_gains_response` with an
+elasticity of 0), so its expected values hold whatever response
+policyengine-uk applies by default. A case about the response sets its
+elasticity, and expects realised gains scaled by
+``((1 - t1) / (1 - t0)) ** elasticity``, where ``t0`` and ``t1`` are the
+marginal rates on the gains without and with the reform. Contract 1.1.0
+added both, and a case with no response settings that shows the default
+response policyengine-uk applies. Its checks expect the retention-rate
+elasticity of 1 that policyengine-uk#2396 makes the default, and carry
+``pending`` until policyengine.py pins a release with it.
 
 Report
 ------
@@ -90,14 +106,17 @@ import re
 import sys
 import traceback
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import ROUND_CEILING, Decimal
 from typing import Any, Optional, Union
 
 CONTRACT_ID = "policyengine-uk/budget-reform-contract"
-CONTRACT_VERSION = "1.0.0"
+CONTRACT_VERSION = "1.1.0"
 PRIOR_LAW_OPTION = "projected"
 PRIOR_LAW_DECISION = "d1344"
+# The capital gains response default: policyengine-uk#2396 makes it a
+# retention-rate elasticity of 1. Its checks gate once policyengine.py pins it.
+DEFAULT_RESPONSE_DECISION = "policyengine-uk#2396"
 FLAT_STOP = datetime.date(2100, 12, 31)
 
 COUNTRY_ROUTES = (
@@ -132,6 +151,10 @@ UC_SINGLE_OLD = "gov.dwp.universal_credit.standard_allowance.amount.SINGLE_OLD"
 NEW_STATE_PENSION = "gov.dwp.state_pension.new_state_pension.amount"
 CGT_BASIC_RATE = "gov.hmrc.cgt.basic_rate"
 CGT_ANNUAL_EXEMPT_AMOUNT = "gov.hmrc.cgt.annual_exempt_amount"
+CGT_RESPONSES = "gov.simulation.capital_gains_responses"
+CGT_ELASTICITY = f"{CGT_RESPONSES}.elasticity"
+CGT_MTR_ELASTICITY = f"{CGT_RESPONSES}.mtr_elasticity"
+CGT_SEPARATE_BADR_ELASTICITY = f"{CGT_RESPONSES}.separate_badr_elasticity"
 VAT_STANDARD_RATE = "gov.hmrc.vat.standard_rate"
 VAT_COVERAGE = "gov.simulation.microdata_vat_coverage"
 PROTECTED_LCWRA = "gov.dwp.universal_credit.rebalancing.protected_health_element"
@@ -342,8 +365,83 @@ def _gains_uplift(year: int, share_of_year: float) -> Callable[[Context], float]
 
 GAINS_UPLIFT_ORACLE = (
     "(£10,000 of gains - the annual exempt amount) x (20% - current rate) x "
-    "the share of the tax year at 20%; the gains sit wholly in the basic rate "
-    "band, and the exempt amount and current rate are read from current law"
+    "the share of the tax year at 20%, with realisations held fixed; the "
+    "gains sit wholly in the basic rate band, and the exempt amount and "
+    "current rate are read from current law"
+)
+
+
+def capital_gains_response(
+    start: datetime.date, elasticity: float = 0.0
+) -> tuple[Change, ...]:
+    """Changes fixing the capital gains realisation response from ``start`` on.
+
+    A retention-rate elasticity of ``elasticity``, no marginal tax rate
+    elasticity and no separate Business Asset Disposal Relief elasticity, so
+    every gain responds with ``elasticity``. An elasticity of 0 holds
+    realisations fixed, whatever response the model applies by default.
+    """
+    return (
+        Change(CGT_ELASTICITY, start, elasticity),
+        Change(CGT_MTR_ELASTICITY, start, 0.0),
+        Change(CGT_SEPARATE_BADR_ELASTICITY, start, False),
+    )
+
+
+def _response_settings_checks(
+    year: int, elasticity: float, oracle: str
+) -> tuple[Check, ...]:
+    """Checks that each response setting reached the built system: the
+    retention-rate elasticity, no marginal tax rate elasticity, and the
+    separate relief elasticity off (a switch reads as 0 when off)."""
+    return (
+        Check("parameter", CGT_ELASTICITY, year, elasticity, oracle),
+        Check("parameter", CGT_MTR_ELASTICITY, year, 0.0, oracle),
+        Check("parameter", CGT_SEPARATE_BADR_ELASTICITY, year, 0.0, oracle),
+    )
+
+
+def _realised_gains(
+    year: int, rate: float, elasticity: float
+) -> Callable[[Context], float]:
+    """Gains after the realisation response to a basic rate of ``rate``.
+
+    The gains sit wholly in the basic rate band, so the marginal rates on
+    them without and with the reform are the two basic rates.
+    """
+
+    def expected(context: Context) -> float:
+        current = context.baseline(CGT_BASIC_RATE, year)
+        return GAINS * ((1 - rate) / (1 - current)) ** elasticity
+
+    return expected
+
+
+def _gains_response_uplift(
+    year: int, rate: float, elasticity: float
+) -> Callable[[Context], float]:
+    """Extra CGT at a basic rate of ``rate`` all year, after the response."""
+
+    def expected(context: Context) -> float:
+        exempt = context.baseline(CGT_ANNUAL_EXEMPT_AMOUNT, year)
+        current = context.baseline(CGT_BASIC_RATE, year)
+        realised = _realised_gains(year, rate, elasticity)(context)
+        return (realised - exempt) * rate - (GAINS - exempt) * current
+
+    return expected
+
+
+REALISED_GAINS_ORACLE = (
+    "£10,000 of gains x ((1 - 20%) / (1 - current rate)) to the power of the "
+    "elasticity: the gains sit wholly in the basic rate band, so the marginal "
+    "rates on them are the basic rates; the current rate is read from "
+    "current law"
+)
+
+GAINS_RESPONSE_UPLIFT_ORACLE = (
+    "(realised gains - the annual exempt amount) x 20% - (£10,000 of gains - "
+    "the annual exempt amount) x current rate, with the realised gains above; "
+    "the exempt amount and current rate are read from current law"
 )
 
 DIVIDENDS = 10_000
@@ -543,7 +641,7 @@ CASES: tuple[Case, ...] = (
                 PERSONAL_ALLOWANCE,
                 2034,
                 _baseline_value(PERSONAL_ALLOWANCE, 2034),
-                "contract 1.0.0: prior law's projected path resumes",
+                "prior law's projected path resumes (PRIOR_LAW_OPTION)",
             ),
             Check(
                 "parameter",
@@ -663,8 +761,13 @@ CASES: tuple[Case, ...] = (
     ),
     Case(
         id="mid_year_blended_rate",
-        title="CGT basic rate 20% from 30 October 2027",
-        changes=(Change(CGT_BASIC_RATE, _date("2027-10-30"), 0.20),),
+        title="CGT basic rate 20% from 30 October 2027, realisations held fixed",
+        changes=(
+            Change(CGT_BASIC_RATE, _date("2027-10-30"), 0.20),
+            # The case checks the blending of the rate, so the realisation
+            # response is off.
+            *capital_gains_response(_date("2025-01-01")),
+        ),
         # £20,000 of earnings and £10,000 of gains: the taxable gains sit
         # wholly in the basic rate band.
         household=adult(20_000, capital_gains=GAINS),
@@ -681,6 +784,7 @@ CASES: tuple[Case, ...] = (
             ),
             Check("parameter", CGT_BASIC_RATE, 2028, 0.20, "in force all year"),
             Check("parameter", CGT_BASIC_RATE, 2026, 0.18, "before the change"),
+            *_response_settings_checks(2027, 0.0, "set by the case"),
             Check("change", "capital_gains_tax", 2026, 0.0, "before the change", 0.005),
             Check(
                 "change",
@@ -698,6 +802,83 @@ CASES: tuple[Case, ...] = (
                 GAINS_UPLIFT_ORACLE + "; all of 2028-29",
                 0.005,
             ),
+        ),
+    ),
+    Case(
+        id="cgt_retention_response",
+        title=(
+            "CGT basic rate 20% from 6 April 2027, with a retention-rate "
+            "elasticity of 1"
+        ),
+        changes=(
+            Change(CGT_BASIC_RATE, _date("2027-04-06"), 0.20),
+            *capital_gains_response(_date("2025-01-01"), elasticity=1.0),
+        ),
+        # As above, the gains sit wholly in the basic rate band, before and
+        # after the response.
+        household=adult(20_000, capital_gains=GAINS),
+        checks=(
+            Check("parameter", CGT_BASIC_RATE, 2027, 0.20, "in force all year"),
+            *_response_settings_checks(2027, 1.0, "set by the case"),
+            Check("change", "capital_gains_tax", 2026, 0.0, "before the change", 0.005),
+            Check(
+                "variable",
+                "capital_gains",
+                2026,
+                float(GAINS),
+                "no rate change before 2027-28, so no response",
+                0.01,
+            ),
+            Check(
+                "variable",
+                "capital_gains",
+                2027,
+                _realised_gains(2027, 0.20, 1.0),
+                REALISED_GAINS_ORACLE,
+                0.01,
+            ),
+            Check(
+                "change",
+                "capital_gains_tax",
+                2027,
+                _gains_response_uplift(2027, 0.20, 1.0),
+                GAINS_RESPONSE_UPLIFT_ORACLE,
+                0.005,
+            ),
+        ),
+    ),
+    Case(
+        id="cgt_default_response",
+        title=(
+            "CGT basic rate 20% from 6 April 2027, at policyengine-uk's "
+            "default response"
+        ),
+        # No response settings, so the report shows the default. The expected
+        # values are cgt_retention_response's, the default policyengine-uk#2396
+        # sets; they report without gating until policyengine.py pins it.
+        changes=(Change(CGT_BASIC_RATE, _date("2027-04-06"), 0.20),),
+        household=adult(20_000, capital_gains=GAINS),
+        checks=tuple(
+            replace(check, pending=DEFAULT_RESPONSE_DECISION)
+            for check in (
+                *_response_settings_checks(2027, 1.0, "policyengine-uk's default"),
+                Check(
+                    "variable",
+                    "capital_gains",
+                    2027,
+                    _realised_gains(2027, 0.20, 1.0),
+                    REALISED_GAINS_ORACLE + ", at the default elasticity of 1",
+                    0.01,
+                ),
+                Check(
+                    "change",
+                    "capital_gains_tax",
+                    2027,
+                    _gains_response_uplift(2027, 0.20, 1.0),
+                    GAINS_RESPONSE_UPLIFT_ORACLE + ", at the default elasticity of 1",
+                    0.005,
+                ),
+            )
         ),
     ),
     Case(
@@ -1348,27 +1529,51 @@ def _baseline_parameter_reader() -> Callable[[str, int], float]:
     return parameter_reader(reference_parameters())
 
 
-def _parameter_values(parameters) -> dict[str, list[tuple]]:
-    """Each parameter's dated values and metadata, by name.
+def _frozen(value: Any) -> str:
+    """A value as text, so a list or dict changed in place still shows.
 
-    Every entry of its timeline (date and value) and its metadata, so a
-    change on any date, or to how it is uprated, shows. A name can occur
-    more than once (``parameters.baseline`` repeats the tree), so every
-    occurrence is kept, in tree order.
+    JSON where it can be (key order ignored); otherwise ``repr``, so an
+    unusual value (non-string keys, a cycle) cannot stop the run.
     """
-    from policyengine_core.parameters import Parameter
+    try:
+        return json.dumps(value, sort_keys=True, default=str)
+    except (TypeError, ValueError):
+        return repr(value)
+
+
+def _parameter_values(parameters) -> dict[str, list[tuple]]:
+    """Each parameter's dated values and metadata, and each node's metadata.
+
+    For a parameter, every entry of its timeline (date and value) and its
+    metadata, so a change on any date, or to how it is uprated, shows; for
+    the root, every node and every scale, its metadata and, for a scale,
+    its bands' names in order, so an added, removed or reordered band
+    shows. Values are recorded as text, so a list changed in place is
+    caught. A name can occur more than once (``parameters.baseline``
+    repeats the tree), so every occurrence is kept, in tree order.
+    """
+    from policyengine_core.parameters import Parameter, ParameterScale
 
     values: dict[str, list[tuple]] = {}
-    for parameter in parameters.get_descendants():
-        if isinstance(parameter, Parameter):
-            values.setdefault(parameter.name, []).append(
+    for item in [parameters, *parameters.get_descendants()]:
+        if isinstance(item, Parameter):
+            values.setdefault(item.name, []).append(
                 (
                     tuple(
-                        (entry.instant_str, entry.value)
-                        for entry in parameter.values_list
+                        (entry.instant_str, _frozen(entry.value))
+                        for entry in item.values_list
                     ),
-                    json.dumps(parameter.metadata, sort_keys=True, default=str),
+                    _frozen(item.metadata),
                 )
+            )
+        else:
+            bands = (
+                tuple(band.name for band in item.brackets)
+                if isinstance(item, ParameterScale)
+                else None
+            )
+            values.setdefault(f"{item.name}#node", []).append(
+                (_frozen(getattr(item, "metadata", None)), bands)
             )
     return values
 
@@ -1407,7 +1612,9 @@ def _state_values(tree) -> dict:
     if isinstance(tree, Mapping):
         # Timelines by name: each entry's date and value.
         return {
-            name: [(entry.instant_str, entry.value) for entry in timeline or []]
+            name: [
+                (entry.instant_str, _frozen(entry.value)) for entry in timeline or []
+            ]
             for name, timeline in tree.items()
         }
     return _parameter_values(tree)
@@ -1439,9 +1646,10 @@ def module_parameters_unchanged(before: dict) -> dict:
         "case_id": "module_parameters_unchanged",
         "route": "all",
         "reform_digest": None,
+        **RUN_LEVEL_IDENTITY,
         "check": (
-            "every parameter's dated values and metadata in "
-            f"{', '.join(sorted(before))}"
+            "every parameter's dated values and metadata, and every node's "
+            f"metadata and band order, in {', '.join(sorted(before))}"
         ),
         "status": FAIL if changed else PASS,
         "expected": "policyengine-uk's shared parameters as they were before the run",
@@ -1454,6 +1662,96 @@ def _row(case: Case, route: str, digest: Optional[str], **fields) -> dict:
     row = {"case_id": case.id, "route": route, "reform_digest": digest}
     row.update(fields)
     return row
+
+
+#: The receipt representation (``policyengine.provenance.receipt``,
+#: docs/receipts.md) of the reform each route consumes, for its rows'
+#: ``reform_identity``. Both wrapper routes hand the wrapper the same
+#: ``{parameter: {date key: value}}`` dict: ``calculate_household(reform=...)``
+#: takes it, and the policy route compiles it with ``compile_reform_to_policy``.
+#: None where receipt schema v1 names no representation for what the route
+#: consumes.
+ROUTE_REPRESENTATIONS = {
+    "country.reform_dict": "policyengine-uk.reform_dict/v1",
+    "country.scenario_parameter_changes": "policyengine-uk.scenario/v1",
+    "country.reform_from_dict": None,
+    "wrapper.household": "policyengine.reform_dict/v1",
+    "wrapper.policy": "policyengine.reform_dict/v1",
+}
+
+
+def row_reform_identity(
+    case: Case, route: str, representation: Any
+) -> tuple[Optional[dict], Optional[str]]:
+    """The reform a row ran, as a receipt binds it, or why it cannot be bound.
+
+    ``ReformIdentity.model_dump(mode="json")``, the shape of a receipt's
+    ``reform`` field, named by the case id. Digests are never normalized
+    across representations, so a route whose input has no representation in
+    receipt schema v1 gets None and a reason rather than another route's.
+    """
+    from policyengine.provenance.receipt import (
+        reform_identity,
+        scenario_reform_identity,
+    )
+
+    if route in UNSUPPORTED_ROUTES:
+        return None, "the route does not run in-process"
+    if case.modifier:
+        return None, (
+            "the case's simulation modifier is a closure, which "
+            "scenario_reform_identity refuses to bind"
+        )
+    kind = ROUTE_REPRESENTATIONS.get(route)
+    if kind is None:
+        return (
+            None,
+            f"receipt schema v1 has no representation for what {route} consumes",
+        )
+    try:
+        if kind == "policyengine-uk.scenario/v1":
+            from policyengine_uk.utils.scenario import Scenario
+
+            identity = scenario_reform_identity(
+                Scenario(parameter_changes=representation), name=case.id
+            )
+        else:
+            identity = reform_identity(representation, kind, name=case.id)
+    except Exception as error:  # noqa: BLE001 - recorded on the row, never raised
+        # ReceiptError for a value receipts refuse; a Scenario's own
+        # validation for a change it cannot hold, which the route then
+        # reports itself.
+        return None, f"{type(error).__name__}: {error}"
+    return identity.model_dump(mode="json"), None
+
+
+def _with_reform_identity(rows: list[dict], identity, unavailable) -> list[dict]:
+    for row in rows:
+        row["reform_identity"] = identity
+        if identity is None:
+            row["reform_identity_unavailable"] = unavailable
+    return rows
+
+
+#: The ``reform_identity`` fields of a run-level row, which runs no reform.
+RUN_LEVEL_IDENTITY = {
+    "reform_identity": None,
+    "reform_identity_unavailable": "a run-level row runs no reform",
+}
+#: The ``reform_identity`` fields of a sampled property's row and of a
+#: population check's row, which carry no single reform's identity.
+PROPERTY_IDENTITY = {
+    "reform_identity": None,
+    "reform_identity_unavailable": (
+        "a sampled property runs many sampled reforms, so its row binds none"
+    ),
+}
+POPULATION_IDENTITY = {
+    "reform_identity": None,
+    "reform_identity_unavailable": (
+        "population check rows are not bound to a reform identity"
+    ),
+}
 
 
 def _close(actual: float, expected: float, tolerance: float) -> bool:
@@ -1469,8 +1767,26 @@ def evaluate_case(
     """Run one case through one route; one report row per check.
 
     ``reference`` reads current law's annual parameters for expected values;
-    by default, a copy taken now.
+    by default, a copy taken now. Each row carries ``reform_digest`` and
+    ``reform_identity`` (see :func:`row_reform_identity`).
     """
+    representation = None if route in UNSUPPORTED_ROUTES else represent(case, route)
+    identity, unavailable = row_reform_identity(case, route, representation)
+    # The run uses the very representation the identity binds.
+    return _with_reform_identity(
+        _evaluate_case(case, route, cache, reference, representation),
+        identity,
+        unavailable,
+    )
+
+
+def _evaluate_case(
+    case: Case,
+    route: str,
+    cache: Optional[dict],
+    reference: Optional[Callable[[str, int], float]],
+    representation: Any,
+) -> list[dict]:
     cache = {} if cache is None else cache
     if route in UNSUPPORTED_ROUTES:
         return [
@@ -1483,7 +1799,6 @@ def evaluate_case(
                 reason=UNSUPPORTED_ROUTES[route],
             )
         ]
-    representation = represent(case, route)
     digest = reform_digest(representation, route, case)
     context = Context(reference or _baseline_parameter_reader())
     if case.expect_error is not None:
@@ -1683,7 +1998,8 @@ def _sampled_change(rng: random.Random) -> Change:
 def expected_annual(
     change: Change, year: int, baseline: Callable[[str, int], float]
 ) -> float:
-    """The annual value a single change gives, under contract 1.0.0.
+    """The annual value a single change gives, under the contract's prior-law
+    option (``PRIOR_LAW_OPTION``).
 
     Prior law is current law's annual value outside the change. Blended
     parameters are sampled only from 2025 on, where current law holds one
@@ -1987,6 +2303,10 @@ def run_budget_reform_contract(
         )
 
         population = run_population_checks(dataset_path, selected_routes, seed)
+    for row in properties:
+        row.update(PROPERTY_IDENTITY)
+    for row in population:
+        row.update(POPULATION_IDENTITY)
     # Whether any check passed, before the run-level row (which passes
     # whenever nothing leaked, including when nothing ran).
     passed = any(row["status"] == PASS for row in rows + properties + population)
@@ -1999,6 +2319,7 @@ def run_budget_reform_contract(
                 "case_id": "run",
                 "route": "all",
                 "reform_digest": None,
+                **RUN_LEVEL_IDENTITY,
                 "check": "at least one check passed",
                 "status": ERROR,
                 "detail": "no case, property or population check passed",
