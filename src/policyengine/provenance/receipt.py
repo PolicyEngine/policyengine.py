@@ -1860,17 +1860,11 @@ def _annotation_string_state(
     return value, value
 
 
-@functools.cache
-def _special_form_forward_is_class(base: Any) -> bool:
-    """Whether this Python's ``ClassVar``/``Final`` mark a quoted argument as a class.
-
-    Python 3.13 made ``Final['int']`` and ``ClassVar['int']`` build
-    ``ForwardRef('int', is_class=True)``; 3.11 and 3.12 build it with
-    ``is_class=False``. Ask typing rather than assume either.
-    """
-
-    (probe,) = get_args(base["_receipt_forward_probe"])
-    return bool(probe.__forward_is_class__)
+#: Python 3.13 made ``Final['int']`` and ``ClassVar['int']`` build
+#: ``ForwardRef('int', is_class=True)``; 3.11 and 3.12 build it with
+#: ``is_class=False``. A fixed fact of the interpreter, so no probe of
+#: typing's (cached, mutable) objects decides it.
+_SPECIAL_FORM_FORWARD_IS_CLASS = sys.version_info >= (3, 13)
 
 
 def _source_annotation(expression: ast.expr, namespace: Mapping[str, Any]) -> Any:
@@ -1971,7 +1965,7 @@ def _source_annotation(expression: ast.expr, namespace: Mapping[str, Any]) -> An
             forward_argument(
                 item,
                 is_class=(base is ClassVar or base is Final)
-                and _special_form_forward_is_class(base),
+                and _SPECIAL_FORM_FORWARD_IS_CLASS,
             )
             for item in args
         )

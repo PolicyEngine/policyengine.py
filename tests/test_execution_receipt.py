@@ -42,7 +42,7 @@ import sys
 from importlib import metadata
 from pathlib import Path
 from types import CodeType, SimpleNamespace
-from typing import Union
+from typing import Union, get_args
 from urllib.parse import urlparse
 
 import jsonschema
@@ -4587,6 +4587,43 @@ def test_generic_forward_reference_annotations_bind(tmp_path, annotation):
     try:
         module, _ = _import_source(tmp_path, name, source)
         assert _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize("special", ["Final", "ClassVar"])
+def test_quoted_special_form_flags_match_this_python(special):
+    """Round-18 review: the reconstruction's is_class flag is the
+    interpreter's own, so it matches a fresh typing object, not a cached
+    (and mutable) one."""
+
+    import typing
+
+    fresh = typing.ForwardRef(
+        "x", is_class=receipt_module._SPECIAL_FORM_FORWARD_IS_CLASS
+    )
+    (built,) = typing.get_args(getattr(typing, special)["_w4_flag_check_" + special])
+    assert built.__forward_is_class__ == fresh.__forward_is_class__
+
+
+@pytest.mark.parametrize("quoted", ["int", "_receipt_forward_probe"])
+def test_a_quoted_special_form_with_a_flipped_flag_is_refused(tmp_path, quoted):
+    """Round-18 review P2: flipping a quoted Final's ForwardRef flag is an
+    annotation that no longer matches its source."""
+
+    source = (
+        "from typing import Final\n\n\n"
+        f"def _helper(value: Final['{quoted}']):\n    return value\n\n\n"
+        "def raise_rate(simulation):\n    simulation.rate = 0.21\n"
+    )
+    name = "w4_receipt_r18_flipped_flag"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert _identity(module.raise_rate)
+        (reference,) = get_args(module._helper.__annotations__["value"])
+        reference.__forward_is_class__ = not reference.__forward_is_class__
+        with pytest.raises(ReceiptError, match="_helper.*annotation for value"):
+            _identity(module.raise_rate)
     finally:
         sys.modules.pop(name, None)
 
