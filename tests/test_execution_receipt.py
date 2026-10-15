@@ -36,6 +36,7 @@ import inspect
 import json
 import linecache
 import os
+import re
 import subprocess
 import sys
 from importlib import metadata
@@ -149,8 +150,8 @@ _REAL_PACKAGE_MODULES = {
 }
 
 
-#: The install metadata the receipt module reads, before any test replaces it.
-_REAL_METADATA = receipt_module.metadata
+#: The distribution lookup the receipt module's origin check uses, before any
+#: test replaces it.
 _REAL_DISTRIBUTION = receipt_module.metadata.distribution
 
 
@@ -177,7 +178,8 @@ def _real_packages_load_from_their_install(request, monkeypatch):
     so the tests run this checkout's code under another version's metadata,
     which the receipt rightly refuses. Receipt tests are about receipts, not
     about the test environment, so the real modules are taken as loaded from
-    their install, but only while their install metadata is the real one too.
+    their install, but only while the distribution lookup the check reads
+    (``metadata.distribution``) is the real one too.
     A synthetic module a test puts in ``sys.modules``, or a synthetic
     distribution it supplies for a real module, is still checked, and the
     real check runs unchanged in tests marked ``real_install``.
@@ -193,8 +195,8 @@ def _real_packages_load_from_their_install(request, monkeypatch):
         if (
             module is not None
             and module is _REAL_PACKAGE_MODULES.get(import_name)
-            and receipt_module.metadata is _REAL_METADATA
-            and receipt_module.metadata.distribution is _REAL_DISTRIBUTION
+            and getattr(receipt_module.metadata, "distribution", None)
+            is _REAL_DISTRIBUTION
         ):
             return None
         return original(name)
@@ -2003,6 +2005,7 @@ def test_literal_defaults_changed_at_run_time_are_refused():
 COMPUTED_DEFAULT_SOURCE = """
 import ast
 import os
+import re
 
 
 def _helper(value, scale=ast.literal_eval(os.environ["W4_HELPER_DEFAULT"])):
@@ -5018,6 +5021,7 @@ def _replacement_type_parameters(module, change):
         "constraints": (TypeVar("T", int, float, infer_variance=True),),
         "covariant": (TypeVar("T", covariant=True),),
         "declared-invariant": (TypeVar("T"),),
+        "default": (TypeVar("T", default=int, infer_variance=True),),
     }[change]
 
 
@@ -5033,6 +5037,13 @@ def _replacement_type_parameters(module, change):
         ("constraints", "type parameter T holds a bound"),
         ("covariant", "type parameter T holds a bound"),
         ("declared-invariant", "type parameter T holds a bound"),
+        pytest.param(
+            "default",
+            "type parameter T holds a bound",
+            marks=pytest.mark.skipif(
+                sys.version_info < (3, 13), reason="type parameter defaults need 3.13"
+            ),
+        ),
         # A bare stand-in passes the parameter check, but the annotation
         # still names the parameter the def made.
         ("stand-in", "annotation for value is not what its source names"),
@@ -5059,6 +5070,221 @@ def test_generic_type_parameters_must_be_those_the_def_made(tmp_path, change, ma
             _identity(module.raise_rate)
     finally:
         sys.modules.pop(name, None)
+
+
+RUNTIME_ALIAS_HEAD = (
+    "import collections.abc\nimport typing\nfrom decimal import Decimal\n"
+    "from typing import Dict, List, Optional, Union\n\n\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("body", "base"),
+    [
+        pytest.param(
+            "    def pennies(amounts: List[Union[Decimal, float]]):\n"
+            "        return int(amounts[0] * 100)\n\n"
+            "    simulation.rate = pennies([0.21])\n",
+            "List",
+            id="nested-annotation",
+        ),
+        pytest.param(
+            "    def pennies[T: List[Union[Decimal, float]]](amounts: T):\n"
+            "        return int(amounts[0] * 100)\n\n"
+            "    simulation.rate = pennies([0.21])\n",
+            "List",
+            id="nested-generic-bound",
+        ),
+        pytest.param(
+            "    def pennies(amounts: 'List[Union[Decimal, float]]'):\n"
+            "        return int(amounts[0] * 100)\n\n"
+            "    simulation.rate = pennies([0.21])\n",
+            "List",
+            id="quoted-nested-annotation",
+        ),
+        pytest.param(
+            "    def pennies(amount: Optional[Decimal | float] = None):\n"
+            "        return amount\n\n"
+            "    simulation.rate = pennies(0.21)\n",
+            "Optional",
+            id="optional-of-a-union",
+        ),
+        pytest.param(
+            "    shape = Dict[str, Union[Decimal, float]]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "Dict",
+            id="expression-in-the-body",
+        ),
+        pytest.param(
+            "    shape = typing.List[Decimal | float]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "typing.List",
+            id="attribute-of-typing",
+        ),
+        pytest.param(
+            "    from typing import Sequence as Seq\n\n"
+            "    shape = Seq[Union[Decimal, float]]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "Seq",
+            id="import-inside-the-function",
+        ),
+        pytest.param(
+            "    class Amounts(typing.NamedTuple):\n"
+            "        values: List[Decimal | float]\n\n"
+            "    simulation.rate = 0.21 if Amounts else 0.0\n",
+            "List",
+            id="class-body-annotation",
+        ),
+        pytest.param(
+            "    class Amounts(typing.NamedTuple):\n"
+            "        values: 'List[Decimal | float]'\n\n"
+            "    simulation.rate = 0.21 if Amounts else 0.0\n",
+            "List",
+            id="quoted-class-body-annotation",
+        ),
+        pytest.param(
+            "    shape = Union[Union[Decimal, float], None]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "Union",
+            id="union-of-a-union",
+        ),
+    ],
+)
+def test_typing_aliases_built_with_a_union_inside_functions_are_refused(
+    tmp_path, body, base
+):
+    """Round-14 review M1: code inside a function runs after import, so a
+    typing generic subscripted with a union there can return an alias cached
+    for the same members in another order; Pydantic tries them in order."""
+
+    source = RUNTIME_ALIAS_HEAD + "def raise_rate(simulation):\n" + body
+    try:
+        compile(source, "x", "exec", dont_inherit=True)
+    except SyntaxError:
+        pytest.skip("this Python refuses the construct itself")
+    name = "w4_receipt_r14_runtime_alias"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(
+            ReceiptError,
+            match=rf"function raise_rate subscripts {re.escape(base)} with a union",
+        ) as refused:
+            _identity(module.raise_rate)
+        assert "cannot be bound" in str(refused.value)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param(
+            "    def pennies(amounts: list[Decimal | float]):\n"
+            "        return int(amounts[0] * 100)\n\n"
+            "    simulation.rate = pennies([0.21])\n",
+            id="builtin-generic-of-a-union",
+        ),
+        pytest.param(
+            "    def pennies(amounts: dict[str, Decimal | float] | None = None):\n"
+            "        return amounts\n\n"
+            "    simulation.rate = 0.21 if pennies() is None else 0.0\n",
+            id="builtin-dict-and-pipe",
+        ),
+        pytest.param(
+            "    def pennies(amounts: collections.abc.Sequence[Decimal | float]):\n"
+            "        return int(amounts[0] * 100)\n\n"
+            "    simulation.rate = pennies([0.21])\n",
+            id="collections-abc-generic-of-a-union",
+        ),
+        pytest.param(
+            "    def pennies(amount: Union[Decimal, float]):\n"
+            "        return amount\n\n"
+            "    simulation.rate = pennies(0.21)\n",
+            id="bare-union",
+        ),
+        pytest.param(
+            "    def pennies(amounts: List[float], scale: Optional[float] = None):\n"
+            "        return amounts\n\n"
+            "    simulation.rate = pennies([0.21])[0]\n",
+            id="typing-generics-without-a-union",
+        ),
+        pytest.param(
+            "    rates = [0.20, 0.21]\n    mask = 1 | 0\n"
+            "    simulation.rate = rates[mask | 1]\n",
+            id="value-subscript-with-bitwise-or",
+        ),
+        pytest.param(
+            "    def helper[T](value: T) -> T:\n        return value\n\n"
+            "    simulation.rate = helper(0.21)\n",
+            id="nested-bare-generic",
+        ),
+    ],
+)
+def test_ordinary_types_and_subscripts_inside_functions_bind(tmp_path, body):
+    source = RUNTIME_ALIAS_HEAD + "def raise_rate(simulation):\n" + body
+    try:
+        compile(source, "x", "exec", dont_inherit=True)
+    except SyntaxError:
+        pytest.skip("this Python refuses the construct itself")
+    name = "w4_receipt_r14_runtime_alias_ok"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_top_level_signature_with_a_typing_union_still_binds(tmp_path):
+    """Module-level signatures are compared with their source in order, so
+    the function-code rule leaves them alone."""
+
+    source = (
+        RUNTIME_ALIAS_HEAD
+        + "def _pennies(amounts: List[Union[Decimal, float]]) -> int:\n"
+        "    return int(amounts[0] * 100)\n" + MEASURE_TAIL
+    )
+    name = "w4_receipt_r14_top_level_union"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize("replaced", ["distribution", "metadata"])
+def test_the_install_fixture_still_checks_synthetic_metadata(
+    tmp_path, monkeypatch, replaced
+):
+    """Round-14 review L: the fixture takes a real module as loaded from its
+    install only while the install metadata is the real one too."""
+
+    site = tmp_path / "site"
+    real = receipt_module.metadata
+    synthetic = SimpleNamespace(
+        version=real.version("policyengine"),
+        read_text=lambda name: (
+            "policyengine/__init__.py,,\n" if name == "RECORD" else None
+        ),
+        locate_file=lambda name: site / name,
+    )
+
+    def distribution(name):
+        return synthetic if name == "policyengine" else real.distribution(name)
+
+    if replaced == "distribution":
+        monkeypatch.setattr(real, "distribution", distribution)
+    else:
+        monkeypatch.setattr(
+            receipt_module,
+            "metadata",
+            SimpleNamespace(
+                distribution=distribution,
+                version=real.version,
+                PackageNotFoundError=real.PackageNotFoundError,
+            ),
+        )
+    with pytest.raises(ReceiptError, match="from RECORD"):
+        receipt_module._refuse_loaded_package_origin("policyengine")
 
 
 def _code(source, name):

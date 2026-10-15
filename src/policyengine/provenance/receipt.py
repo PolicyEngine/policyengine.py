@@ -39,7 +39,10 @@ Rules every valid v1 receipt satisfies:
   ``.whl`` direct URL.
 - The execution identity digest covers only what determines the execution
   (wrapper, model, core, data and the certificate's content); two results
-  with the same digest ran on the same runtime, data and certificate. The
+  with the same digest recorded the same package identities, data and
+  certificate. Certified, those identities name the code that ran; an
+  uncertified receipt (an editable install, say) does not bind its
+  packages' contents. The
   receipt digest also covers reform, baseline, years, convention and
   outputs, but not runtime context or human labels.
 - A reform digest binds content (``binding="content"``) unless the reform
@@ -80,7 +83,7 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from importlib import metadata
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
-from types import CodeType, GenericAlias, UnionType
+from types import CodeType, GenericAlias, ModuleType, UnionType
 from typing import (
     Annotated,
     Any,
@@ -2150,6 +2153,169 @@ def _module_docstring(module_source: str, tree: ast.Module) -> Optional[str]:
     return namespace.get("__doc__")
 
 
+_TYPING_MODULES = frozenset({"typing", "typing_extensions"})
+
+#: Builtin generics: subscripting one builds a new ``types.GenericAlias`` in
+#: source order, never a cached alias.
+_ORDERED_GENERICS = (list, tuple, dict, set, frozenset, type)
+
+
+def _subscript_reuses_equal_aliases(base: Any) -> bool:
+    """Whether ``base[...]`` can return an alias cached for equal arguments.
+
+    typing caches its generic aliases (``List``, ``Dict``, ``Optional``,
+    ``Annotated``) and user generics (``Generic`` subclasses, Pydantic models)
+    by argument equality, and a union or ``Literal`` equals one holding its
+    members in any order. Builtin generics and ``collections.abc`` classes
+    build a new ``types.GenericAlias`` in source order.
+    """
+
+    if isinstance(base, type):
+        if base in _ORDERED_GENERICS:
+            return False
+        try:
+            static = inspect.getattr_static(base, "__class_getitem__")
+        except AttributeError:
+            return base.__module__ in _TYPING_MODULES
+        return not (isinstance(static, classmethod) and static.__func__ is GenericAlias)
+    return type(base).__module__ in _TYPING_MODULES
+
+
+def _is_union_form(value: Any) -> bool:
+    return any(
+        value is getattr(sys.modules.get(name), form, None)
+        for name in _TYPING_MODULES
+        for form in ("Union", "Optional", "Literal")
+    )
+
+
+def _holds_union(value: Any, depth: int = 0) -> bool:
+    """Whether a resolved type holds a union or ``Literal``, at any depth."""
+
+    if depth > 20:
+        return True
+    if isinstance(value, UnionType) or get_origin(value) in (Union, Literal):
+        return True
+    try:
+        arguments = get_args(value)
+    except Exception:
+        return False
+    return any(_holds_union(argument, depth + 1) for argument in arguments)
+
+
+def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
+    """Where a module function's code builds a type typing may reuse reordered.
+
+    Code inside a function runs after import: its expressions, and the
+    annotations, defaults and type-parameter bounds of helpers and classes
+    it defines, are evaluated (or read by Pydantic) when it runs. A typing
+    generic subscripted with a union (``List[Union[Decimal, float]]``,
+    ``Optional[Decimal | float]``) can then return an alias cached earlier
+    for ``List[Union[float, Decimal]]``, and Pydantic tries a union's members
+    in order, so earlier code decides what runs. The module's own function
+    signatures are compared against source elsewhere; this covers the code
+    inside them. Names resolve against the module, the builtins and imports
+    made inside the function; local aliases of typing objects are not
+    followed.
+    """
+
+    namespace = vars(module)
+    for statement in tree.body:
+        if not isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        local: dict[str, Any] = {}
+        nodes = [node for root in statement.body for node in ast.walk(root)]
+        for node in nodes:
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.asname:
+                        local[alias.asname] = sys.modules.get(alias.name)
+                    else:
+                        top = alias.name.split(".")[0]
+                        local[top] = sys.modules.get(top)
+            elif isinstance(node, ast.ImportFrom):
+                try:
+                    name = (
+                        importlib.util.resolve_name(
+                            "." * node.level + (node.module or ""), module.__package__
+                        )
+                        if node.level
+                        else node.module or ""
+                    )
+                except (ImportError, ValueError):
+                    continue
+                source = sys.modules.get(name)
+                for alias in node.names:
+                    if alias.name != "*":
+                        local[alias.asname or alias.name] = getattr(
+                            source, alias.name, sys.modules.get(f"{name}.{alias.name}")
+                        )
+
+        def resolve(node: ast.AST) -> Any:
+            if isinstance(node, ast.Name):
+                if node.id in local:
+                    return local[node.id]
+                if node.id in namespace:
+                    return namespace[node.id]
+                return vars(builtins).get(node.id)
+            if isinstance(node, ast.Attribute):
+                owner = resolve(node.value)
+                if isinstance(owner, ModuleType):
+                    return getattr(owner, node.attr, None)
+            return None
+
+        def holds_union(expression: ast.AST) -> bool:
+            for child in ast.walk(expression):
+                if isinstance(child, ast.BinOp) and isinstance(child.op, ast.BitOr):
+                    return True
+                if isinstance(child, ast.Subscript) and _is_union_form(
+                    resolve(child.value)
+                ):
+                    return True
+                if isinstance(child, (ast.Name, ast.Attribute)) and _holds_union(
+                    resolve(child)
+                ):
+                    return True
+            return False
+
+        expressions: list[ast.AST] = list(nodes)
+        for node in nodes:
+            annotations: list[Optional[ast.expr]] = []
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                annotations = [node.returns] + [
+                    argument.annotation
+                    for argument in ast.walk(node.args)
+                    if isinstance(argument, ast.arg)
+                ]
+            elif isinstance(node, ast.AnnAssign):
+                annotations = [node.annotation]
+            for annotation in annotations:
+                # A quoted annotation is evaluated when something resolves it.
+                if isinstance(annotation, ast.Constant) and isinstance(
+                    annotation.value, str
+                ):
+                    try:
+                        parsed = ast.parse(annotation.value, mode="eval").body
+                    except SyntaxError:
+                        continue
+                    expressions.extend(ast.walk(parsed))
+        for node in expressions:
+            if not isinstance(node, ast.Subscript):
+                continue
+            if _subscript_reuses_equal_aliases(resolve(node.value)) and holds_union(
+                node.slice
+            ):
+                line = getattr(node, "lineno", statement.lineno)
+                return (
+                    f"function {statement.name} subscripts "
+                    f"{ast.unparse(node.value)} with a union (line {line}); typing "
+                    "can return an alias it cached for the same members in another "
+                    "order, so earlier code decides what runs (use a builtin "
+                    "generic such as list[Decimal | float])"
+                )
+    return None
+
+
 def _module_state_problem(
     module: Any, tree: ast.Module, functions: Sequence[Any], module_source: str
 ) -> Optional[str]:
@@ -2353,7 +2519,9 @@ def _modifier_identity(
         _module_functions(module, code.co_filename),
         key=lambda f: f.__code__.co_qualname,
     )
-    state = _module_state_problem(module, tree, functions, module_source)
+    state = _module_state_problem(
+        module, tree, functions, module_source
+    ) or _runtime_alias_problem(module, tree)
     if state is not None:
         raise ReceiptError(
             f"{modifier.__module__}: {state}, so the modifier cannot be bound."
