@@ -41,6 +41,7 @@ from policyengine.provenance.uk_qualification import (
     core_requirement,
     latest_data_release,
     plan_promotion,
+    previous_certificate,
     read_replay,
     resolve_candidate,
     rewrite_certified_constants,
@@ -560,23 +561,31 @@ def test_acceptance_is_bound_to_the_receipt():
         )
 
 
+def _promotion_receipt(**kwargs):
+    return make_receipt(**kwargs).model_copy(
+        update={"previous_certificate": previous_certificate(BUNDLE)}
+    )
+
+
 def test_promotion_plan():
     current = (
         BUNDLE["data_releases"]["uk"]["model_package"]["version"],
         BUNDLE["data_releases"]["uk"]["data_package"]["version"],
         BUNDLE["packages"]["policyengine-core"]["version"],
     )
-    newest = make_receipt(
+    newest = _promotion_receipt(
         pair=make_pair(model="2.200.0", data=current[1], core=current[2])
     )
-    older = make_receipt(
+    older = _promotion_receipt(
         pair=make_pair(model="2.199.0", data=current[1], core=current[2])
     )
-    rejected = make_receipt(
+    rejected = _promotion_receipt(
         pair=make_pair(model="2.201.0", data=current[1], core=current[2]),
         gate_results=gates(replay="fail"),
     )
-    stale = make_receipt(pair=make_pair(model="2.0.0", data="1.0.0", core="3.0.0"))
+    stale = _promotion_receipt(
+        pair=make_pair(model="2.0.0", data="1.0.0", core="3.0.0")
+    )
     branches = {
         candidate_branch(r.pair): r.harness.git_commit
         for r in (newest, older, rejected, stale)
@@ -607,7 +616,7 @@ def test_pairs_that_share_versions_never_share_a_branch():
     assert qualified_pair.pair_id != other_core.pair_id
     assert candidate_branch(qualified_pair) != candidate_branch(other_core)
     assert qualified_pair.pair_id[:12] in candidate_branch(qualified_pair)
-    qualified = make_receipt(pair=qualified_pair)
+    qualified = _promotion_receipt(pair=qualified_pair)
     incomplete = make_receipt(pair=other_core, gate_results=gates(replay="unavailable"))
     plan = plan_promotion(
         [qualified, incomplete],
@@ -622,7 +631,7 @@ def test_pairs_that_share_versions_never_share_a_branch():
 def test_a_branch_that_moved_off_the_qualified_commit_is_not_promoted():
     """The replayed and tested commit must be the promoted commit."""
 
-    qualified = make_receipt(pair=_promotable_pair_and_branch())
+    qualified = _promotion_receipt(pair=_promotable_pair_and_branch())
     branch = candidate_branch(qualified.pair)
     plan = plan_promotion([qualified], BUNDLE, {branch: "f" * 40})
     assert plan.target == qualified and plan.ready_branch is None
@@ -635,7 +644,7 @@ def test_promote_readies_and_merges_only_the_qualified_commit(monkeypatch, tmp_p
     import argparse
     import importlib.util
 
-    qualified = make_receipt(pair=_promotable_pair_and_branch())
+    qualified = _promotion_receipt(pair=_promotable_pair_and_branch())
     branch = candidate_branch(qualified.pair)
     spec = importlib.util.spec_from_file_location(
         "check_uk_candidate_for_test",
@@ -660,6 +669,162 @@ def test_promote_readies_and_merges_only_the_qualified_commit(monkeypatch, tmp_p
     assert cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True)) == 0
     assert calls[0][:3] == ["gh", "pr", "ready"] and calls[0][3] == branch
     assert calls[1][-2:] == ["--match-head-commit", qualified.harness.git_commit]
+
+
+def test_promotion_requires_the_current_supported_years_baseline(monkeypatch):
+    """C passed against A, but loses the year B added before C finished."""
+
+    from policyengine.provenance.certification import (
+        BASIS_QUALIFIED_PAIR,
+        build_bundle_data_release_payload,
+        build_country_manifest_payload,
+    )
+    from policyengine.provenance.manifest import (
+        CountryReleaseManifest,
+        DataReleaseManifest,
+    )
+    from policyengine.provenance.uk_candidate import supported_years
+
+    core = BUNDLE["packages"]["policyengine-core"]["version"]
+    pair_b = make_pair(model="2.131.0", data="1.58.2", core=core)
+    pair_c = make_pair(model="2.132.0", data="1.58.3", core=core)
+    years_a = list(range(2025, 2032))
+    years_b = list(range(2025, 2033))
+    monkeypatch.setattr(
+        "policyengine.provenance.uk_candidate.data_year", lambda _: 2024
+    )
+
+    def gate(pair, years, previous_years):
+        return supported_years(
+            pair,
+            Path("projected.h5"),
+            required_years=years_a[:-1],
+            budget_horizon_years=years_a[1:],
+            previous_supported_years=previous_years,
+            projected_years=lambda _: years,
+        )[0]
+
+    gate_b = gate(pair_b, years_b, years_a)
+    gate_c = gate(pair_c, years_a, years_a)
+    assert gate_b.status == gate_c.status == "pass"
+    assert gate(pair_c, years_a, years_b).status == "fail"
+    receipt_b = _promotion_receipt(
+        pair=pair_b,
+        gate_results=[gate_b if g.gate_id == "supported_years" else g for g in gates()],
+    )
+    receipt_c = _promotion_receipt(
+        pair=pair_c,
+        gate_results=[gate_c if g.gate_id == "supported_years" else g for g in gates()],
+    )
+    assert receipt_b.promotable and receipt_c.promotable
+
+    release = json.loads(json.dumps(MANIFEST))
+    release["data_package"]["version"] = pair_b.data.release_version
+    release["build"]["build_id"] = pair_b.data.build_id
+    release["artifacts"][pair_b.data.dataset]["revision"] = pair_b.data.dataset_revision
+    manifest = DataReleaseManifest.model_validate(release)
+    uri_parts = {
+        "repo_id": pair_b.data.repo_id,
+        "repo_type": pair_b.data.repo_type,
+        "path": pair_b.data.release_manifest_path,
+        "revision": pair_b.data.release_manifest_revision,
+    }
+    country = build_country_manifest_payload(
+        country="uk",
+        manifest=manifest,
+        uri_parts=uri_parts,
+        policyengine_version=BUNDLE["policyengine_version"],
+        model_package=pair_b.model.name,
+        model_version=pair_b.model.version,
+        model_wheel={"sha256": pair_b.model.wheel_sha256},
+        compatibility_basis=BASIS_QUALIFIED_PAIR,
+        core_version=core,
+        qualified_pair_id=pair_b.pair_id,
+    )
+    record_b = build_bundle_data_release_payload(
+        country_payload=country,
+        data_producer="populace",
+        manifest_uri=f"hf://model/{pair_b.data.repo_id}@{pair_b.data.release_manifest_revision}/{pair_b.data.release_manifest_path}",
+        uri_parts=uri_parts,
+    )
+    CountryReleaseManifest.model_validate(record_b)
+    current_b = json.loads(json.dumps(BUNDLE))
+    current_b["data_releases"]["uk"] = record_b
+    branches = {candidate_branch(pair_c): receipt_c.harness.git_commit}
+
+    assert plan_promotion([receipt_b, receipt_c], BUNDLE, branches).ready_branch
+    plan = plan_promotion([receipt_b, receipt_c], current_b, branches)
+    assert plan.target == receipt_c
+    assert plan.ready_branch is None and plan.ready_commit is None
+    assert "requalif" in plan.reason and "--force" in plan.reason
+
+
+@pytest.mark.parametrize(
+    "field",
+    [None, *type(previous_certificate(BUNDLE)).model_fields],
+)
+def test_promotion_binds_every_previous_certificate_field(field):
+    qualified = _promotion_receipt(pair=_promotable_pair_and_branch())
+    previous = qualified.previous_certificate
+    if field is None:
+        previous = None
+    else:
+        value = getattr(previous, field)
+        if field in {"dataset_reference", "release_manifest_reference"}:
+            value = value.model_copy(update={"revision": "0" * 40})
+        elif field.endswith("sha256") or field == "qualification_pair_id":
+            value = "0" * 64
+        else:
+            value = "different"
+        previous = previous.model_copy(update={field: value})
+    stale = qualified.model_copy(update={"previous_certificate": previous})
+    plan = plan_promotion(
+        [stale], BUNDLE, {candidate_branch(stale.pair): stale.harness.git_commit}
+    )
+    assert plan.target == stale
+    assert plan.ready_branch is None and plan.ready_commit is None
+    assert "requalif" in plan.reason
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_stale_baseline_does_not_close_or_fall_back_to_other_candidates(missing):
+    previous = previous_certificate(BUNDLE)
+    newest = _promotion_receipt(pair=_promotable_pair_and_branch()).model_copy(
+        update={
+            "previous_certificate": None
+            if missing
+            else previous.model_copy(update={"bundle_version": "different"})
+        }
+    )
+    older = _promotion_receipt(
+        pair=make_pair(
+            model="2.199.0",
+            data=newest.pair.data.release_version,
+            core=newest.pair.core.version,
+        )
+    )
+    superseded_by_main = _promotion_receipt(
+        pair=make_pair(model="2.0.0", data="1.0.0", core="3.0.0")
+    )
+    receipts = [newest, older, superseded_by_main]
+    branches = {candidate_branch(r.pair): r.harness.git_commit for r in receipts}
+    plan = plan_promotion(receipts, BUNDLE, branches)
+    assert plan.target == newest
+    assert plan.ready_branch is None and plan.ready_commit is None
+    assert plan.close_branches == [candidate_branch(superseded_by_main.pair)]
+
+
+def test_promotion_on_an_unrelated_main_commit_keeps_the_same_baseline():
+    qualified = _promotion_receipt(pair=_promotable_pair_and_branch())
+    unrelated_main = json.loads(json.dumps(BUNDLE))
+    unrelated_main["data_releases"]["us"]["data_package"]["version"] = "99.0.0"
+    assert previous_certificate(unrelated_main) == qualified.previous_certificate
+    branch = candidate_branch(qualified.pair)
+    plan = plan_promotion(
+        [qualified], unrelated_main, {branch: qualified.harness.git_commit}
+    )
+    assert plan.ready_branch == branch
+    assert plan.ready_commit == qualified.harness.git_commit
 
 
 def test_a_forced_rerun_stages_a_new_attempt(tmp_path):
@@ -913,8 +1078,10 @@ def test_newer_abandoned_stage_recovers_despite_an_older_replay_request(tmp_path
 
 
 @pytest.mark.parametrize("verdict", ["qualified", "rejected"])
+@pytest.mark.parametrize("main_advanced", [False, True])
+@pytest.mark.parametrize("staged_base", ["a" * 40, "f" * 40])
 def test_forced_stage_recovery_binds_the_terminal_receipt_it_supersedes(
-    tmp_path, verdict, monkeypatch, capsys
+    tmp_path, verdict, main_advanced, staged_base, monkeypatch, capsys
 ):
     import importlib.util
 
@@ -924,7 +1091,7 @@ def test_forced_stage_recovery_binds_the_terminal_receipt_it_supersedes(
     pair = make_pair(model="2.200.0")
     results = gates(wheel_hashes="fail") if verdict == "rejected" else gates()
     terminal = make_receipt(pair=pair, gate_results=results)
-    base = "a" * 40
+    base = staged_base
     published = tmp_path / "uk" / pair.pair_id / "qualification_receipt.json"
     write_json(published, terminal.canonical_payload())
     attempt = attempt_directory(tmp_path, "uk", pair.pair_id, base[:12] + "-2")
@@ -935,6 +1102,8 @@ def test_forced_stage_recovery_binds_the_terminal_receipt_it_supersedes(
     stage_attempt(
         attempt, payload, HARNESS, owner_run_id="42", staged_at="2026-10-14T10:00:00Z"
     )
+    if main_advanced:
+        base = "b" * 40
     now = "2026-10-14T15:00:00Z"
     assert (
         candidate_action(pair, BUNDLE, tmp_path, base_commit=base, now=now)[0]
@@ -960,8 +1129,59 @@ def test_forced_stage_recovery_binds_the_terminal_receipt_it_supersedes(
     assert capsys.readouterr().out == ""
 
 
+@pytest.mark.parametrize("protected", ["live", "request", "terminal", "unbound"])
+def test_forced_recovery_preserves_newer_work_on_another_base(tmp_path, protected):
+    from policyengine.provenance.qualification_ledger import attempt_directory
+    from policyengine.provenance.uk_qualification import stage_attempt
+
+    pair = make_pair(model="2.200.0")
+    terminal = make_receipt(pair=pair)
+    write_json(
+        tmp_path / "uk" / pair.pair_id / "qualification_receipt.json",
+        terminal.canonical_payload(),
+    )
+    original_base, replacement_base = "f" * 40, "b" * 40
+    payload = {
+        "pair": pair.canonical_payload(),
+        "supersedes_receipt_sha256": terminal.unreviewed_sha256,
+    }
+    original = attempt_directory(tmp_path, "uk", pair.pair_id, original_base[:12])
+    stage_attempt(
+        original, payload, HARNESS, owner_run_id="42", staged_at="2026-10-14T10:00:00Z"
+    )
+    replacement = attempt_directory(tmp_path, "uk", pair.pair_id, replacement_base[:12])
+    replacement_payload = (
+        {"pair": pair.canonical_payload()} if protected == "unbound" else payload
+    )
+    stage_attempt(
+        replacement,
+        replacement_payload,
+        HARNESS,
+        owner_run_id="43",
+        staged_at=(
+            "2026-10-14T14:00:00Z" if protected == "live" else "2026-10-14T10:00:00Z"
+        ),
+    )
+    if protected == "request":
+        write_json(replacement / "replay" / "request.json", {"sent": True})
+    elif protected == "terminal":
+        write_json(
+            replacement / "qualification_receipt.json", terminal.canonical_payload()
+        )
+    for base in (original_base, replacement_base, "c" * 40):
+        assert (
+            candidate_action(
+                pair, BUNDLE, tmp_path, base_commit=base, now="2026-10-14T15:00:00Z"
+            )[0]
+            == "duplicate"
+        )
+
+
+@pytest.mark.parametrize("verdict", ["qualified", "rejected"])
+@pytest.mark.parametrize("main_advanced", [False, True])
+@pytest.mark.parametrize("abandonment", ["expired", "failed_owner"])
 def test_resolution_preserves_authorization_to_recover_forced_work(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, verdict, main_advanced, abandonment
 ):
     import importlib.util
 
@@ -975,7 +1195,10 @@ def test_resolution_preserves_authorization_to_recover_forced_work(
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
     pair = make_pair(model="2.200.0")
-    terminal = make_receipt(pair=pair, gate_results=gates(replay="fail"))
+    terminal = make_receipt(
+        pair=pair,
+        gate_results=gates(replay="fail") if verdict == "rejected" else gates(),
+    )
     write_json(
         tmp_path / "uk" / pair.pair_id / "qualification_receipt.json",
         terminal.canonical_payload(),
@@ -994,8 +1217,13 @@ def test_resolution_preserves_authorization_to_recover_forced_work(
     )
     monkeypatch.setattr(cli, "resolve_candidate", lambda **kwargs: resolved)
     monkeypatch.setattr(cli, "git", lambda *args: base)
-    monkeypatch.setattr(cli, "owner_run_failed", lambda _: False)
-    monkeypatch.setattr(cli, "utc_now", lambda: "2026-10-14T15:00:00Z")
+    monkeypatch.setattr(
+        cli,
+        "owner_run_failed",
+        lambda run_id: abandonment == "failed_owner" and run_id == "42",
+    )
+    now = "2026-10-14T15:00:00Z" if abandonment == "expired" else "2026-10-14T11:00:00Z"
+    monkeypatch.setattr(cli, "utc_now", lambda: now)
     monkeypatch.setattr(cli, "set_output", lambda **kwargs: None)
     out = tmp_path / "candidate.json"
     args = SimpleNamespace(
@@ -1012,12 +1240,61 @@ def test_resolution_preserves_authorization_to_recover_forced_work(
     stage_attempt(
         attempt, payload, HARNESS, owner_run_id="42", staged_at="2026-10-14T10:00:00Z"
     )
+    original_candidate = (attempt / "candidate.json").read_bytes()
+    if main_advanced:
+        base = "b" * 40
     args.force = False
     assert cli.cmd_resolve(args) == 0
     recovery = json.loads(out.read_text())
     assert recovery["action"] == "qualify"
-    assert recovery["attempt_key"] == base[:12] + "-2"
+    assert recovery["base_commit"] == base
+    assert recovery["attempt_key"] == (base[:12] if main_advanced else base[:12] + "-2")
     assert recovery["supersedes_receipt_sha256"] == terminal.unreviewed_sha256
+    replacement = attempt_directory(
+        tmp_path, "uk", pair.pair_id, recovery["attempt_key"]
+    )
+    stage_attempt(replacement, recovery, HARNESS, owner_run_id="43", staged_at=now)
+    assert (attempt / "candidate.json").read_bytes() == original_candidate
+    assert cli.cmd_resolve(args) == 0
+    assert json.loads(out.read_text())["action"] == "duplicate"
+
+
+def test_cross_base_recovery_allocates_new_keys_without_overwriting_evidence(tmp_path):
+    from policyengine.provenance.qualification_ledger import attempt_directory
+    from policyengine.provenance.uk_qualification import attempt_key, stage_attempt
+
+    pair = make_pair(model="2.200.0")
+    old_base, current_base = "a" * 40, "b" * 40
+    existing = attempt_directory(tmp_path, "uk", pair.pair_id, current_base[:12])
+    sent_payload = {"pair": pair.canonical_payload(), "base_commit": current_base}
+    stage_attempt(
+        existing,
+        sent_payload,
+        HARNESS,
+        owner_run_id="41",
+        staged_at="2026-10-14T09:00:00Z",
+    )
+    write_json(existing / "replay" / "request.json", {"sent": True})
+    abandoned = attempt_directory(tmp_path, "uk", pair.pair_id, old_base[:12])
+    stage_attempt(
+        abandoned,
+        {"pair": pair.canonical_payload(), "base_commit": old_base},
+        HARNESS,
+        owner_run_id="42",
+        staged_at="2026-10-14T10:00:00Z",
+    )
+    now = "2026-10-14T15:00:00Z"
+    assert (
+        candidate_action(pair, BUNDLE, tmp_path, base_commit=current_base, now=now)[0]
+        == "qualify"
+    )
+    assert attempt_key(pair, tmp_path, base_commit=current_base, now=now) == (
+        current_base[:12] + "-2"
+    )
+    assert json.loads((existing / "candidate.json").read_text()) == sent_payload
+    assert json.loads((existing / "replay" / "request.json").read_text()) == {
+        "sent": True
+    }
 
 
 @pytest.mark.parametrize(

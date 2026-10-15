@@ -391,13 +391,14 @@ def candidate_action(
         else None
     )
     attempt = _latest_base_attempt(pair, ledger_root, base_commit)
+    recovery = _latest_staged_attempt(pair, ledger_root)
     if (
-        attempt is not None
-        and attempt_is_recoverable(attempt, now=now, owner_is_failed=owner_is_failed)
+        recovery is not None
+        and attempt_is_recoverable(recovery, now=now, owner_is_failed=owner_is_failed)
         and (
             receipt is None
             or receipt.verdict == "incomplete"
-            or attempt_supersedes_receipt(attempt, receipt)
+            or attempt_supersedes_receipt(recovery, receipt)
         )
     ):
         return "qualify", "recoverable abandoned staged attempt"
@@ -500,13 +501,14 @@ def attempt_key(
 
     Concurrent runs for the same pair and base deduplicate. Forced runs and
     recovery of abandoned stages use the next free key, preserving earlier
-    evidence. A live replacement blocks further recovery on that base.
+    evidence. Recovery follows the newest stage across bases so an unrelated
+    main commit cannot strand an authorized forced replacement.
     """
 
     key = base_commit[:12]
     if ledger_root is None:
         return key
-    attempt = _latest_base_attempt(pair, ledger_root, base_commit)
+    attempt = _latest_staged_attempt(pair, ledger_root)
     recovering = attempt is not None and attempt_is_recoverable(
         attempt, now=now, owner_is_failed=owner_is_failed
     )
@@ -520,6 +522,23 @@ def attempt_key(
     ).exists():
         repeat += 1
     return f"{key}-{repeat}"
+
+
+def _latest_staged_attempt(pair: CandidatePair, ledger_root: Path) -> Optional[Path]:
+    """The pair's newest durable stage, independent of its main base commit.
+
+    A newer stage supersedes older recovery work across bases. Inspecting just
+    the current base could overlook abandoned forced work or retry an older
+    stage while its replacement is live.
+    """
+
+    parent = pair_directory(ledger_root, "uk", pair.pair_id) / "attempts"
+    stage = max(
+        parent.glob("*/staging.json"),
+        key=lambda path: int(read_json(path)["sequence"]),
+        default=None,
+    )
+    return stage.parent if stage is not None else None
 
 
 def _latest_base_attempt(
@@ -1201,12 +1220,18 @@ def plan_promotion(
     commit. The target's branch is readied only while its head is exactly
     the commit the target's qualification ran on
     (``receipt.harness.git_commit``): the replayed and tested bytes are the
-    promoted bytes. A branch that moved since is left alone and reported.
+    promoted bytes. The comparison certificate must also still equal main's;
+    otherwise the candidate needs a forced qualification of all gates against
+    the current baseline. A stale baseline cannot supersede other candidates.
+    A branch that moved since is left alone and reported.
     """
 
     receipts = list(receipts)
     current = certified_order_key(bundle)
     target = select_promotion_target(receipts, current)
+    baseline_matches = target is not None and (
+        target.previous_certificate == previous_certificate(bundle)
+    )
     branch_pairs = {}
     for receipt in receipts:
         branch_pairs[candidate_branch(receipt.pair)] = receipt.pair.order_key
@@ -1217,7 +1242,7 @@ def plan_promotion(
             continue
         if key == current or dominates(current, key):
             close.append(branch)
-        elif target is not None and dominates(target.pair.order_key, key):
+        elif baseline_matches and dominates(target.pair.order_key, key):
             close.append(branch)
     if target is None:
         return PromotionPlan(
@@ -1225,6 +1250,17 @@ def plan_promotion(
             ready_branch=None,
             close_branches=sorted(close),
             reason=f"no promotable pair advances {current}",
+        )
+    if not baseline_matches:
+        return PromotionPlan(
+            target=target,
+            ready_branch=None,
+            close_branches=sorted(close),
+            reason=(
+                f"{target.pair.order_key} advances {current}, but its previous "
+                "certificate differs from current main; requalify with --force "
+                "against current main before promotion"
+            ),
         )
     branch = candidate_branch(target.pair)
     qualified_commit = target.harness.git_commit

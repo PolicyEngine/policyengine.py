@@ -14,7 +14,11 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from policyengine.provenance.uk_qualification import accept_review, candidate_branch
+from policyengine.provenance.uk_qualification import (
+    accept_review,
+    candidate_branch,
+    previous_certificate,
+)
 from tests.qualification_fixtures import gates, make_pair, make_receipt
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -67,7 +71,7 @@ def test_head_replacement_and_readiness_share_one_serialization(
             data=bundle["data_releases"]["uk"]["data_package"]["version"],
             core=bundle["packages"]["policyengine-core"]["version"],
         )
-    )
+    ).model_copy(update={"previous_certificate": previous_certificate(bundle)})
     branch = candidate_branch(qualified.pair)
     state_path = tmp_path / "state.json"
     state_path.write_text(
