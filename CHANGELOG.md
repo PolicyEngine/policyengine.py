@@ -1,3 +1,22 @@
+## [6.4.1] - 2026-10-15
+
+### Changed
+
+- The UK Budget reform contract report gives each assertion a unique id, and the population checks declare the rows a full run emits.
+- Certify policyengine-uk 2.130.1 with policyengine-uk-data 1.58.1 (enhanced_frs_2024_25) as the UK default pair, on the publisher's compatibility claim.
+
+
+## [6.4.0] - 2026-10-14
+
+### Added
+
+- Added `policyengine.disclosure`, a self-contained layer for statistical disclosure control and uncertainty on area-level outputs, and `compute_uk_geography_disclosure` for UK regions, constituencies and local authorities. Each published number rests on at least 10 distinct survey households (clones counted once through `source_household_id`), carries a 90% bootstrap interval and is rounded to the order of its standard error. Rows are `reported`, `approximate` or `withheld`. A release check reports numbers a reader could recover by subtraction across geography levels, a package and its components, and earlier publications. Keyed noise per survey household is available behind `DisclosureSettings(noise=True)`. `validate_public` and `python -m policyengine.disclosure validate` check the format of published files. UK runs now keep `source_household_id` and `region` on the household output when the dataset provides them.
+
+### Changed
+
+- Deprecated `compute_uk_constituency_impacts`, `compute_uk_local_authority_impacts` and their `ConstituencyImpact` and `LocalAuthorityImpact` classes. Their output is not disclosure-controlled; use `compute_uk_geography_disclosure` instead. They now log a warning through the `policyengine` logger and emit a `DeprecationWarning`, and otherwise behave as before.
+
+
 ## [6.3.4] - 2026-10-13
 
 ### Changed

@@ -33,10 +33,8 @@ Checks:
     2013, SI 2013/376, reg 81), so a capped award stays flat. Deductions are
     then taken from the award and set as percentages of the standard
     allowance (Claims and Payments Regulations 2013, SI 2013/380, Sch 6), so
-    the amount paid (``universal_credit``) can fall. The check bounds that
-    fall: no payment falls by more than its deductions rise, no unit's
-    deduction rate changes, and no deductions rise by more than that rate
-    times the standard allowance rise.
+    the amount paid (``universal_credit``) can fall. The check requires each
+    payment to move by its award's change less its deductions' change.
 ``population_state_pension_plus_10``
     The basic and new State Pension rates 10% higher in 2027-28 raise each
     person's basic and new State Pension by exactly 10% and raise total
@@ -73,31 +71,59 @@ STATE_PENSION_RATES = (
 )
 RESPONSE_YEAR = 2027
 
+POPULATION_BASELINE_ISOLATION = "population_baseline_isolation"
+POPULATION_QUERY_ORDER = "population_query_order"
+POPULATION_ROUTES_AGREE = "population_routes_agree"
+POPULATION_APRIL_RATE_CHANGE = "population_april_rate_change"
+POPULATION_FINITE_CHANGE_EXPIRES = "population_finite_change_expires"
+POPULATION_UC_STANDARD_ALLOWANCE_PLUS_10 = "population_uc_standard_allowance_plus_10"
+POPULATION_STATE_PENSION_PLUS_10 = "population_state_pension_plus_10"
+
 COUNTRY_POPULATION_CHECKS = (
-    "population_baseline_isolation",
-    "population_april_rate_change",
-    "population_finite_change_expires",
-    "population_uc_standard_allowance_plus_10",
-    "population_state_pension_plus_10",
+    POPULATION_BASELINE_ISOLATION,
+    POPULATION_APRIL_RATE_CHANGE,
+    POPULATION_FINITE_CHANGE_EXPIRES,
+    POPULATION_UC_STANDARD_ALLOWANCE_PLUS_10,
+    POPULATION_STATE_PENSION_PLUS_10,
 )
 UNREFORMED_POPULATION_CHECKS = (
-    "population_baseline_isolation",
-    "population_query_order",
+    POPULATION_BASELINE_ISOLATION,
+    POPULATION_QUERY_ORDER,
 )
+
+POPULATION_ERROR_DIAGNOSTIC = ("population", "-")
+"""Permitted diagnostic identity after an early or partial population error.
+
+This is separate from required successful coverage. A report containing this
+row with status ``error`` does not hold, even if preceding rows passed. The
+same identity labels the existing ``unsupported`` row when no country route
+is selected.
+"""
 
 
 def population_check_routes(routes: Sequence[str]) -> tuple[tuple[str, str], ...]:
-    """The complete full-run coverage, including comparison and baseline routes."""
+    """Required coverage for a completed run, including comparisons and baselines.
+
+    For country routes this declares successful coverage, independently of the
+    permitted :data:`POPULATION_ERROR_DIAGNOSTIC`. A report containing that row
+    with status ``error`` does not hold. With no country route, the existing
+    ``unsupported`` diagnostic is declared instead.
+    """
     country = [route for route in routes if route.startswith("country.")]
     if not country:
-        return (("population", "-"),)
+        return (POPULATION_ERROR_DIAGNOSTIC,)
+    baseline_country = tuple(dict.fromkeys(country))
     return (
         tuple(
-            (check, route) for check in COUNTRY_POPULATION_CHECKS for route in country
+            (check, route)
+            for check in COUNTRY_POPULATION_CHECKS
+            for route in (
+                baseline_country if check == POPULATION_BASELINE_ISOLATION else country
+            )
         )
         + tuple((check, "unreformed") for check in UNREFORMED_POPULATION_CHECKS)
         + tuple(
-            ("population_routes_agree", f"{country[0]} = {route}")
+            (POPULATION_ROUTES_AGREE, f"{country[0]} = {route}")
             for route in country[1:]
         )
     )
@@ -110,8 +136,16 @@ UC_ALLOWANCE_VARIABLES = (
     "universal_credit_pre_benefit_cap",
     "benefit_cap_reduction",
     "uc_deductions",
-    "uc_deduction_rate",
 )
+
+#: Universal Credit amounts are float32 annual pounds; sums of them carry
+#: rounding of a few thousandths of a pound, so a penny is the smallest
+#: difference the check treats as a change.
+PENNY = 0.01
+
+#: Deductions may not reduce the amount payable below a penny an assessment
+#: period (SI 2013/380 Sch 6 para 3(1)(a)), twelve of them a year.
+MINIMUM_PAYABLE_A_YEAR = 0.12
 
 
 def uc_allowance_verdict(
@@ -119,20 +153,46 @@ def uc_allowance_verdict(
 ) -> tuple[bool, dict]:
     """Whether a 10% higher standard allowance moved Universal Credit lawfully.
 
-    ``base`` and ``reformed`` hold ``UC_ALLOWANCE_VARIABLES`` per benefit
-    unit. The benefit cap reduces the award by the excess of welfare benefits
-    over the cap (SI 2013/376 reg 81), so a capped award stays flat and no
-    award before deductions may fall. Deductions are taken from the award as
-    percentages of the standard allowance (SI 2013/380 Sch 6), so the amount
-    paid may fall, but by no more than the deductions rise. In the model a
-    unit's deductions are its ``uc_deduction_rate`` times the standard
-    allowance, capped by the award; the rate does not depend on the
-    allowance, so it must not change, and deductions may rise by no more
-    than that rate times the allowance rise. (The rate can exceed 1: the
-    excess above the deductions cap, for deductions the cap does not limit,
-    has no bound of its own.)
+    ``base`` and ``reformed`` hold ``UC_ALLOWANCE_VARIABLES`` per benefit unit.
+
+    No award before deductions (``universal_credit_pre_benefit_cap`` less
+    ``benefit_cap_reduction``) may fall by more than a penny. The benefit cap
+    reduces the award by the excess of welfare benefits over the cap (SI
+    2013/376 reg 81), counting Universal Credit before any deduction (reg
+    80(2)), so a capped award stays flat. That holds in the model, which
+    applies no sanctions; in law a sanction, taken after the cap and set by
+    the standard allowance (regs 110 and 111), can lower a capped award.
+
+    Each payment (``universal_credit``) must move by its award's change less
+    its deductions' change, to the penny. Deductions are taken from the award
+    (SI 2013/380 Sch 6), so with the award unchanged a capped claimant's
+    payment falls by exactly as much as their deductions rise.
+
+    Whatever deductions are taken, at least a penny an assessment period
+    stays payable (SI 2013/380 Sch 6 para 3(1)(a)), so no payment falls below
+    the lesser of its award and 12p a year. Every value must be finite in both
+    runs: a missing value would otherwise pass every comparison.
+
+    How much deductions rise is not checked here. The law sets some
+    deductions as percentages of the standard allowance and others as fixed
+    amounts (advances, SI 2013/383 reg 10), starts deductions with a new
+    award, and keeps a penny payable; the model scales every deduction type
+    with the allowance (policyengine-uk#2410), so no allowance-proportional
+    bound is an invariant of both.
     """
 
+    non_finite = int(
+        np.sum(
+            ~np.all(
+                [
+                    np.isfinite(state[name])
+                    for state in (base, reformed)
+                    for name in UC_ALLOWANCE_VARIABLES
+                ],
+                axis=0,
+            )
+        )
+    )
     allowance, base_allowance = (
         reformed["uc_standard_allowance"],
         base["uc_standard_allowance"],
@@ -145,35 +205,36 @@ def uc_allowance_verdict(
         base["universal_credit_pre_benefit_cap"] - base["benefit_cap_reduction"]
     )
     paid, base_paid = reformed["universal_credit"], base["universal_credit"]
-    deduction_rise = reformed["uc_deductions"] - base["uc_deductions"]
-    rate = reformed["uc_deduction_rate"]
-    rates_changed = int(
-        np.sum(~np.isclose(rate, base["uc_deduction_rate"], rtol=1e-9, atol=1e-12))
-    )
-    awards_lower = int(np.sum(award < base_award - 1e-3))
-    payments_higher = int(np.sum(paid > base_paid + 1e-3))
-    beyond_deductions = int(
-        np.sum((base_paid - paid) - np.maximum(deduction_rise, 0) > 1e-3)
-    )
-    beyond_rate = int(
-        np.sum(deduction_rise - rate * (allowance - base_allowance) > 1e-3)
+    deduction_change = reformed["uc_deductions"] - base["uc_deductions"]
+    unaccounted = (paid - base_paid) - ((award - base_award) - deduction_change)
+    awards_lower = int(np.sum(award < base_award - PENNY))
+    payments_unaccounted = int(np.sum(np.abs(unaccounted) > PENNY))
+    payments_higher = int(np.sum(paid > base_paid + PENNY))
+    payments_below_floor = int(
+        sum(
+            np.sum(
+                state_paid
+                < np.minimum(np.maximum(state_award, 0), MINIMUM_PAYABLE_A_YEAR) - PENNY
+            )
+            for state_paid, state_award in ((base_paid, base_award), (paid, award))
+        )
     )
     holds = (
-        scaled
+        non_finite == 0
+        and scaled
         and awards_lower == 0
-        and beyond_deductions == 0
-        and rates_changed == 0
-        and beyond_rate == 0
+        and payments_unaccounted == 0
+        and payments_below_floor == 0
         and payments_higher > 0
     )
     return holds, {
         "standard_allowance_scaled_10_percent": scaled,
         "awards_lower": awards_lower,
-        "payments_lower": int(np.sum(paid < base_paid - 1e-3)),
+        "payments_lower": int(np.sum(paid < base_paid - PENNY)),
         "payments_higher": payments_higher,
-        "payment_falls_beyond_deduction_rises": beyond_deductions,
-        "deduction_rates_changed": rates_changed,
-        "deduction_rises_beyond_rate_times_allowance_rise": beyond_rate,
+        "payments_not_award_less_deductions": payments_unaccounted,
+        "payments_below_the_payable_floor": payments_below_floor,
+        "units_with_non_finite_values": non_finite,
     }
 
 
@@ -269,7 +330,12 @@ def _row(check_id: str, route: str, status: str, **fields: Any) -> dict:
 def run_population_checks(
     dataset_path: str, routes: Sequence[str], seed: int = 0
 ) -> list[dict]:
-    """Run the population checks; one report row per check."""
+    """Run population checks, preserving progress before an error diagnostic.
+
+    Completed coverage is declared by :func:`population_check_routes`. An early
+    or partial failure appends :data:`POPULATION_ERROR_DIAGNOSTIC` with status
+    ``error``; a report containing that error row does not hold.
+    """
     from policyengine_core.reforms import Reform
     from policyengine_uk import Microsimulation
     from policyengine_uk.utils.scenario import Scenario
@@ -278,8 +344,7 @@ def run_population_checks(
     if not country:
         return [
             _row(
-                "population",
-                "-",
+                *POPULATION_ERROR_DIAGNOSTIC,
                 "unsupported",
                 reason="population checks need a country route",
             )
@@ -308,7 +373,7 @@ def run_population_checks(
             different = _same(before, _arrays(simulation.baseline))
             rows.append(
                 _row(
-                    "population_baseline_isolation",
+                    POPULATION_BASELINE_ISOLATION,
                     route,
                     "fail" if different else "pass",
                     detail=different or None,
@@ -318,7 +383,7 @@ def run_population_checks(
         different = _same(before, after)
         rows.append(
             _row(
-                "population_baseline_isolation",
+                POPULATION_BASELINE_ISOLATION,
                 "unreformed",
                 "fail" if different else "pass",
                 detail=different or None,
@@ -327,7 +392,7 @@ def run_population_checks(
         different = _same(before, _arrays(build(None, None), order=-1))
         rows.append(
             _row(
-                "population_query_order",
+                POPULATION_QUERY_ORDER,
                 "unreformed",
                 "fail" if different else "pass",
                 detail=different or None,
@@ -348,7 +413,7 @@ def run_population_checks(
             )
             rows.append(
                 _row(
-                    "population_routes_agree",
+                    POPULATION_ROUTES_AGREE,
                     f"{first} = {route}",
                     "pass" if same else "fail",
                 )
@@ -364,7 +429,7 @@ def run_population_checks(
             ok = unchanged_2026 and total_rises
             rows.append(
                 _row(
-                    "population_april_rate_change",
+                    POPULATION_APRIL_RATE_CHANGE,
                     route,
                     "pass" if ok else "fail",
                     detail={
@@ -383,7 +448,7 @@ def run_population_checks(
             )
             rows.append(
                 _row(
-                    "population_finite_change_expires",
+                    POPULATION_FINITE_CHANGE_EXPIRES,
                     route,
                     "pass" if same else "fail",
                 )
@@ -413,7 +478,7 @@ def run_population_checks(
             holds, detail = uc_allowance_verdict(base, uc_reformed)
             rows.append(
                 _row(
-                    "population_uc_standard_allowance_plus_10",
+                    POPULATION_UC_STANDARD_ALLOWANCE_PLUS_10,
                     route,
                     "pass" if holds else "fail",
                     detail=detail,
@@ -432,7 +497,7 @@ def run_population_checks(
             higher = int(np.sum(pension > base["state_pension"] + 1e-3))
             rows.append(
                 _row(
-                    "population_state_pension_plus_10",
+                    POPULATION_STATE_PENSION_PLUS_10,
                     route,
                     "pass" if scaled and lower == 0 and higher > 0 else "fail",
                     detail={
@@ -445,8 +510,7 @@ def run_population_checks(
     except Exception as error:  # noqa: BLE001 - reported, never swallowed
         rows.append(
             _row(
-                "population",
-                "-",
+                *POPULATION_ERROR_DIAGNOSTIC,
                 "error",
                 detail="".join(
                     traceback.format_exception_only(type(error), error)
