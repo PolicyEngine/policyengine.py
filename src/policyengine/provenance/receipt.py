@@ -2748,8 +2748,8 @@ def _distribution_metadata_directory(name: str) -> Path:
 
 #: How far ``psutil.Process().create_time()`` can read before the true start.
 #: On Linux psutil adds the start offset in clock ticks to the boot time from
-#: /proc/stat, which is whole seconds, so the reported start can be up to a
-#: second early; metadata an installer finished writing just before the
+#: /proc/stat, which is whole seconds, so the reported start can be about a
+#: second early (one second plus one clock tick); metadata an installer finished writing just before the
 #: process started would then look newer than the process.
 PROCESS_START_RESOLUTION_SECONDS = 2.0
 
