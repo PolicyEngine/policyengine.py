@@ -47,11 +47,26 @@ reading cases.
 Prior law after a bounded change
 --------------------------------
 
-Contract 1.0.0 expects prior law's projected path to resume after a bounded
-change (``PRIOR_LAW_OPTION = "projected"``). Whether indexation should
-instead resume from a changed statutory amount (Income Tax Act 2007 s57
-indexes "the amount ... for the previous tax year") is an open methodology
-call (cos d1344). Checks that depend on it carry ``pending`` and never gate.
+Where the timeline states no later value, what prior law is after a change
+ends depends on how the parameter's future is made. Contract 2.0.0
+(``PRIOR_LAW_OPTION = "statutory"``) records the Budget CI workstream's
+call under cos d1344, taken with independent review:
+
+- A threshold indexed from its own previous year (the personal allowance,
+  the basic rate limit and the NICs thresholds aligned with them) resumes
+  indexation from the changed amount. Income Tax Act 2007 s57(3) Step 1
+  multiplies "the allowance ... for the previous tax year" and s21(3) Step 1
+  increases "the basic rate limit for the previous tax year"; freezes are
+  legislated by fixing the amount and disapplying the indexation for named
+  years (Finance Act 2021 s5), so the frozen amount is indexed after them.
+  Returning to the path the threshold would have taken without the change,
+  contract 1.0.0's reading, has no statutory basis.
+- An amount uprated from an index (benefit and pension rates) returns to its
+  uprated underlying path, as contract 1.0.0 expected. Temporary changes to
+  such amounts are period-limited modifications that leave the underlying
+  amount (the 2020 Universal Credit uplift, SI 2020/371 reg 3).
+
+``Check.pending`` remains for any later open call; no check carries it now.
 
 Report
 ------
@@ -95,9 +110,13 @@ from decimal import ROUND_CEILING, Decimal
 from typing import Any, Optional, Union
 
 CONTRACT_ID = "policyengine-uk/budget-reform-contract"
-CONTRACT_VERSION = "1.0.0"
-PRIOR_LAW_OPTION = "projected"
+CONTRACT_VERSION = "2.0.0"
+PRIOR_LAW_OPTION = "statutory"
+# The cos decision under which the prior-law call was taken.
 PRIOR_LAW_DECISION = "d1344"
+# Finance Act 2021 s5, as amended by Finance Act 2026 s10, fixes the
+# personal allowance and basic rate limit for 2022-23 to 2030-31.
+LAST_FROZEN_TAX_YEAR = 2030
 FLAT_STOP = datetime.date(2100, 12, 31)
 
 COUNTRY_ROUTES = (
@@ -312,18 +331,51 @@ def _freeze_change(year: int) -> Callable[[Context], float]:
     return expected
 
 
-def _statutory_resumption(path: str) -> Callable[[Context], float]:
+def _resumed_after_freeze(path: str, year: int) -> Callable[[Context], float]:
+    """A threshold frozen to 2033-34, indexed from the frozen amount after it.
+
+    ITA 2007 s57(3) for the personal allowance and s21(3) for the basic rate
+    limit, each year from the year before, with current law's September CPI
+    rise for that year.
+    """
+
     def expected(context: Context) -> float:
-        increase = context.baseline(SEPTEMBER_CPI_RISE, 2034)
+        allowance, limit = 12_570.0, 37_700.0
+        for each in range(2034, year + 1):
+            increase = context.baseline(SEPTEMBER_CPI_RISE, each)
+            allowance = s57_personal_allowance(allowance, increase)
+            limit = s21_basic_rate_limit(limit, increase)
         if path == PERSONAL_ALLOWANCE:
-            return s57_personal_allowance(12_570, increase)
-        return s21_basic_rate_limit(37_700, increase)
+            return allowance
+        if path == BASIC_RATE_LIMIT:
+            return limit
+        if path == LOWER_PROFITS_LIMIT:
+            return allowance
+        if path == UPPER_PROFITS_LIMIT:
+            return allowance + limit
+        if path == PRIMARY_THRESHOLD:
+            return weekly(allowance)
+        if path == UPPER_EARNINGS_LIMIT:
+            return weekly(allowance + limit)
+        raise ValueError(path)
 
     return expected
 
 
-def _baseline_value(path: str, year: int) -> Callable[[Context], float]:
-    return lambda context: context.baseline(path, year)
+def _resumed_freeze_change(year: int) -> Callable[[Context], float]:
+    def expected(context: Context) -> float:
+        allowance = _resumed_after_freeze(PERSONAL_ALLOWANCE, year)(context)
+        frozen_out = context.baseline(PERSONAL_ALLOWANCE, year) - allowance
+        return context.baseline(BASIC_RATE, year) * frozen_out
+
+    return expected
+
+
+RESUMPTION_ORACLE = (
+    "indexed from the frozen amount after the freeze (ITA 2007 s57(3) and "
+    "s21(3), the previous tax year's amount; cos d1344), with current law's "
+    "September CPI rise"
+)
 
 
 GAINS = 10_000
@@ -537,30 +589,37 @@ CASES: tuple[Case, ...] = (
                 ),
             )
         )
-        + (
-            Check(
-                "parameter",
-                PERSONAL_ALLOWANCE,
-                2034,
-                _baseline_value(PERSONAL_ALLOWANCE, 2034),
-                "contract 1.0.0: prior law's projected path resumes",
-            ),
-            Check(
-                "parameter",
-                PERSONAL_ALLOWANCE,
-                2034,
-                _statutory_resumption(PERSONAL_ALLOWANCE),
-                "ITA 2007 s57 from the frozen £12,570 with 2034's September CPI rise",
-                pending=PRIOR_LAW_DECISION,
-            ),
-            Check(
-                "parameter",
-                BASIC_RATE_LIMIT,
-                2034,
-                _statutory_resumption(BASIC_RATE_LIMIT),
-                "ITA 2007 s21 from the frozen £37,700 with 2034's September CPI rise",
-                pending=PRIOR_LAW_DECISION,
-            ),
+        + tuple(
+            check
+            for year in (2034, 2035)
+            for check in (
+                *(
+                    Check(
+                        "parameter",
+                        path,
+                        year,
+                        _resumed_after_freeze(path, year),
+                        RESUMPTION_ORACLE,
+                    )
+                    for path in (
+                        PERSONAL_ALLOWANCE,
+                        BASIC_RATE_LIMIT,
+                        LOWER_PROFITS_LIMIT,
+                        UPPER_PROFITS_LIMIT,
+                        PRIMARY_THRESHOLD,
+                        UPPER_EARNINGS_LIMIT,
+                    )
+                ),
+                Check(
+                    "change",
+                    "income_tax",
+                    year,
+                    _resumed_freeze_change(year),
+                    "basic rate x (current law's allowance - the allowance "
+                    "indexed from the frozen amount)",
+                    0.005,
+                ),
+            )
         ),
     ),
     Case(
@@ -1683,15 +1742,21 @@ def _sampled_change(rng: random.Random) -> Change:
 def expected_annual(
     change: Change, year: int, baseline: Callable[[str, int], float]
 ) -> float:
-    """The annual value a single change gives, under contract 1.0.0.
+    """The annual value a single change gives, under contract 2.0.0.
 
-    Prior law is current law's annual value outside the change. Blended
-    parameters are sampled only from 2025 on, where current law holds one
-    value through each fiscal year, so each day of the year takes the
-    change's value inside the change and prior law's outside it.
+    For the personal allowance, prior law is statute: tax years the change
+    covers take its value, years to 2030-31 take current law (Finance Act
+    2021 s5 fixes them), and every later year is ITA 2007 s57(3) applied to
+    the year before. For the other sampled parameters prior law is current
+    law's annual value outside the change. Blended parameters are sampled
+    only from 2025 on, where current law holds one value through each fiscal
+    year, so each day of the year takes the change's value inside the change
+    and prior law's outside it.
     """
     blend, _ = SAMPLED_PARAMETERS[change.path]
     stop = change.stop or FLAT_STOP
+    if change.path == PERSONAL_ALLOWANCE:
+        return _statutory_allowance(change, year, baseline)
     prior = baseline(change.path, year)
     if not blend:
         sample = datetime.date(year, 4, 30)
@@ -1705,6 +1770,20 @@ def expected_annual(
         days += 1
         day += datetime.timedelta(days=1)
     return total / days
+
+
+def _statutory_allowance(
+    change: Change, year: int, baseline: Callable[[str, int], float]
+) -> float:
+    sample = datetime.date(year, 4, 30)
+    if change.start <= sample <= (change.stop or FLAT_STOP):
+        return float(change.value)
+    if year <= LAST_FROZEN_TAX_YEAR:
+        return baseline(PERSONAL_ALLOWANCE, year)
+    return s57_personal_allowance(
+        _statutory_allowance(change, year - 1, baseline),
+        baseline(SEPTEMBER_CPI_RISE, year),
+    )
 
 
 def _property_annual_values(

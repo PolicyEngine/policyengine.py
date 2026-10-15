@@ -85,6 +85,89 @@ def test_expected_annual_for_a_single_change():
     assert expected_annual(may, 2027, baseline) == 0.20
 
 
+def test_the_statutory_allowance_oracle_indexes_from_the_year_before():
+    """ITA 2007 s57(3) after a change; Finance Act 2021 s5 years as stated."""
+    from policyengine.tax_benefit_models.uk.budget_reform_contract import (
+        PERSONAL_ALLOWANCE,
+        SEPTEMBER_CPI_RISE,
+    )
+
+    def baseline(path, year):
+        if path == SEPTEMBER_CPI_RISE:
+            return 0.02
+        # A current-law path distinct from statute after 2030, so the oracle
+        # is seen not to read it there.
+        return 12_570.0 if year <= 2030 else 99_999.0
+
+    one_year = Change(
+        PERSONAL_ALLOWANCE,
+        datetime.date(2031, 4, 6),
+        15_000,
+        datetime.date(2032, 4, 5),
+    )
+    assert [expected_annual(one_year, y, baseline) for y in (2030, 2031)] == [
+        12_570.0,
+        15_000.0,
+    ]
+    # 15,000 x 2% = 300; 15,300 x 2% = 306, rounded up to 310.
+    assert expected_annual(one_year, 2032, baseline) == 15_300.0
+    assert expected_annual(one_year, 2033, baseline) == 15_610.0
+    # A change ending inside the frozen years leaves them as stated, and
+    # 2031 is indexed from 2030's frozen amount: 12,570 x 2% = 251.4 -> 260.
+    early = Change(
+        PERSONAL_ALLOWANCE,
+        datetime.date(2027, 4, 6),
+        13_000,
+        datetime.date(2028, 4, 5),
+    )
+    assert expected_annual(early, 2027, baseline) == 13_000.0
+    assert expected_annual(early, 2029, baseline) == 12_570.0
+    assert expected_annual(early, 2031, baseline) == 12_830.0
+
+
+def test_the_extended_freeze_resumes_from_the_frozen_amounts():
+    case = next(case for case in CASES if case.id == "extended_freeze")
+    cpi = contract.SEPTEMBER_CPI_RISE
+
+    def baseline(path, year):
+        if path == cpi:
+            return 0.02
+        if path == contract.BASIC_RATE:
+            return 0.20
+        if path == contract.PERSONAL_ALLOWANCE:
+            return {2034: 13_630.0, 2035: 13_910.0}[year]
+        raise KeyError(path)
+
+    context = contract.Context(baseline)
+    expected = {
+        (check.target, check.name, check.year): check.expected(context)
+        for check in case.checks
+        if check.year >= 2034
+    }
+    pa, brl = contract.PERSONAL_ALLOWANCE, contract.BASIC_RATE_LIMIT
+    # 12,570 + 260 = 12,830; 37,700 x 1.02 = 38,454 -> 38,500.
+    assert expected[("parameter", pa, 2034)] == 12_830.0
+    assert expected[("parameter", brl, 2034)] == 38_500.0
+    # 12,830 x 2% = 256.6 -> 260; 38,500 x 1.02 = 39,270 -> 39,300.
+    assert expected[("parameter", pa, 2035)] == 13_090.0
+    assert expected[("parameter", brl, 2035)] == 39_300.0
+    assert expected[("parameter", contract.PRIMARY_THRESHOLD, 2034)] == 246.73
+    assert expected[("parameter", contract.UPPER_PROFITS_LIMIT, 2034)] == 51_330.0
+    assert expected[("change", "income_tax", 2034)] == pytest.approx(
+        0.20 * (13_630 - 12_830)
+    )
+
+
+def test_no_check_waits_on_an_open_decision():
+    assert contract.PRIOR_LAW_OPTION == "statutory"
+    assert [
+        (case.id, check.name, check.year)
+        for case in CASES
+        for check in case.checks
+        if check.pending is not None
+    ] == []
+
+
 # Representations.
 
 
@@ -211,9 +294,10 @@ def test_assertion_ids_change_no_verdict():
     """Labelling rows changes no status, expected value or actual value.
 
     The fixture holds the rows the runner produced on main 503d4998, before
-    rows carried an ``assertion_id``, for every case and route under fixed
-    fake routes plus focused verdict scenarios (see
-    ``tests/uk_contract_row_scenarios.py``).
+    rows carried an ``assertion_id``, recorded again for contract 2.0.0
+    (only the extended freeze's checks after 2033-34 changed), for every
+    case and route under fixed fake routes plus focused verdict scenarios
+    (see ``tests/uk_contract_row_scenarios.py``).
     """
 
     from pathlib import Path
@@ -278,7 +362,7 @@ def test_report_shape_for_an_unsupported_route():
     json.dumps(report)
     assert report["contract_id"] == contract.CONTRACT_ID
     assert report["contract_version"] == contract.CONTRACT_VERSION
-    assert report["prior_law_option"] == "projected"
+    assert report["prior_law_option"] == "statutory"
     unsupported = [row for row in report["cases"] if row["case_id"] != "run"]
     assert {row["status"] for row in unsupported} == {"unsupported"}
     assert all(row["reason"] for row in unsupported)
