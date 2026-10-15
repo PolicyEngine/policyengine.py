@@ -48,16 +48,18 @@ from policyengine.provenance.qualification import (  # noqa: E402
     CandidatePair,
     IssuedBy,
     QualificationHarness,
-    QualificationReceipt,
     ReplayQualificationRequest,
 )
 from policyengine.provenance.qualification_ledger import (  # noqa: E402
     LEDGER_BRANCH,
     LEDGER_REPOSITORY,
+    LedgerInconsistency,
     attempt_directory,
     latest_receipts,
     pair_directory,
+    published_receipt,
     read_json,
+    rederive_publication,
     write_json,
 )
 from policyengine.provenance.uk_qualification import (  # noqa: E402
@@ -249,12 +251,9 @@ def cmd_resolve(args: argparse.Namespace) -> int:
         "previous_certificate": previous_certificate(bundle).canonical_payload(),
     }
     if action == "qualify" and args.ledger:
-        published = (
-            pair_directory(Path(args.ledger), "uk", resolved.pair.pair_id)
-            / "qualification_receipt.json"
-        )
-        if published.exists():
-            receipt = QualificationReceipt.model_validate(read_json(published))
+        pair_dir = pair_directory(Path(args.ledger), "uk", resolved.pair.pair_id)
+        if (pair_dir / "qualification_receipt.json").exists():
+            receipt = published_receipt(pair_dir)
             if receipt.verdict != "incomplete":
                 # Forced work, or recovery of work already bound to this receipt.
                 payload["supersedes_receipt_sha256"] = receipt.unreviewed_sha256
@@ -480,7 +479,11 @@ def cmd_recoverable(args: argparse.Namespace) -> int:
             continue
         attempt = max(stages, key=lambda path: int(read_json(path)["sequence"])).parent
         if receipt.exists():
-            terminal = QualificationReceipt.model_validate(read_json(receipt))
+            try:
+                terminal = published_receipt(pair_dir)
+            except LedgerInconsistency as error:
+                print(f"::warning::{error}", file=sys.stderr)
+                continue
             if terminal.verdict != "incomplete" and not attempt_supersedes_receipt(
                 attempt, terminal
             ):
@@ -568,7 +571,11 @@ def cmd_refresh_pr_checks(args: argparse.Namespace) -> int:
 
 def cmd_promote(args: argparse.Namespace) -> int:
     bundle = json.loads(BUNDLE_PATH.read_text())
-    receipts = latest_receipts(Path(args.ledger))
+    problems: list[str] = []
+    receipts = latest_receipts(Path(args.ledger), problems=problems)
+    for problem in problems:
+        # Such a pair is left out of the plan until its files are rederived.
+        print(f"::warning::{problem}")
     branches = _open_candidate_branches() if args.apply else {}
     plan = plan_promotion(receipts, bundle, branches)
     print(f"promotion: {plan.reason}")
@@ -622,11 +629,10 @@ def cmd_promote(args: argparse.Namespace) -> int:
 
 
 def cmd_accept(args: argparse.Namespace) -> int:
-    path = (
-        pair_directory(Path(args.ledger), "uk", args.pair_id)
-        / "qualification_receipt.json"
-    )
-    receipt = QualificationReceipt.model_validate(read_json(path))
+    pair_dir = pair_directory(Path(args.ledger), "uk", args.pair_id)
+    path = pair_dir / "qualification_receipt.json"
+    # Accept only a receipt that is an attempt's own, never a merged one.
+    receipt = published_receipt(pair_dir)
     reviewed = accept_review(
         receipt,
         reviewer=args.reviewer or os.environ.get("GITHUB_ACTOR", ""),
@@ -715,7 +721,24 @@ def parser() -> argparse.ArgumentParser:
     accept.add_argument("--explanation", required=True)
     accept.add_argument("--reviewer")
     accept.set_defaults(func=cmd_accept)
+
+    rederive = commands.add_parser("rederive-ledger")
+    rederive.add_argument("ledger")
+    rederive.set_defaults(func=cmd_rederive_ledger)
     return parser
+
+
+def cmd_rederive_ledger(args: argparse.Namespace) -> int:
+    """Recompute every pair's published files from its attempts.
+
+    Called by .github/qualification-ledger.sh after a concurrent publish
+    changed a pair's published files on both sides.
+    """
+
+    for pair_dir in sorted((Path(args.ledger) / "uk").glob("*")):
+        if pair_dir.is_dir():
+            rederive_publication(pair_dir)
+    return 0
 
 
 def main(argv: Optional[list[str]] = None) -> int:

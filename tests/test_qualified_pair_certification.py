@@ -535,10 +535,13 @@ def test_any_certified_field_differing_from_the_receipt_is_refused(field, value)
 
 def test_ledger_listing(tmp_path):
     qualified = make_receipt()
+    pair_dir = tmp_path / "uk" / qualified.pair_id
+    # A published receipt counts only as its latest attempt's own receipt.
     write_json(
-        tmp_path / "uk" / qualified.pair_id / "qualification_receipt.json",
+        pair_dir / "attempts" / "a" / "qualification_receipt.json",
         qualified.canonical_payload(),
     )
+    write_json(pair_dir / "qualification_receipt.json", qualified.canonical_payload())
     pending = (
         tmp_path / "uk" / ("b" * 64) / "attempts" / "abc" / "replay" / "request.json"
     )

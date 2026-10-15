@@ -160,7 +160,7 @@ elif command == "git" and args[0] == "push":
         state_path.write_text(json.dumps(state))
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr(cli, "latest_receipts", lambda root: [qualified])
+    monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: [qualified])
     monkeypatch.setattr(cli, "subprocess", SimpleNamespace(run=fake_run))
     monkeypatch.setattr(cli, "config", lambda: {"promotion": {"automatic": False}})
     if prepare_first:
@@ -293,7 +293,7 @@ def test_refresh_checks_reruns_only_failed_pr_runs_for_the_qualified_head(
         )
     branch = candidate_branch(receipt.pair)
     head = receipt.harness.git_commit if head_matches else "f" * 40
-    monkeypatch.setattr(cli, "latest_receipts", lambda root: [receipt])
+    monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: [receipt])
     monkeypatch.setattr(cli, "_open_candidate_branches", lambda: {branch: head})
     runs = [
         {

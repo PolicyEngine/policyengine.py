@@ -7,6 +7,7 @@ concurrent qualifications never write the same file::
     <country>/<pair_id>/
         pair.json                       the CandidatePair
         qualification_receipt.json      the latest terminal receipt for the pair
+        latest_attempt.json             which attempt that receipt came from
         attempts/<attempt_key>/
             harness.json                the candidate commit that ran it
             gates/<gate_id>.json        each gate's evidence
@@ -16,6 +17,10 @@ concurrent qualifications never write the same file::
             qualification_receipt.json  this attempt's receipt
 
 Failed and incomplete attempts are kept: the ledger never deletes evidence.
+A pair's published files are derived from its attempts and are trusted only
+when the published receipt is one attempt's own receipt
+(:func:`published_receipt`): concurrent publishes must never yield a receipt
+that mixes two attempts.
 A bundle certificate with basis ``qualified_exact_pair`` must point at a pair
 whose latest receipt is promotable and matches the certificate exactly
 (:func:`verify_certification_evidence`).
@@ -39,14 +44,22 @@ RAW_LEDGER_URL = (
 __all__ = [
     "LEDGER_BRANCH",
     "LEDGER_REPOSITORY",
+    "LedgerInconsistency",
     "attempt_directory",
     "fetch_ledger_receipt",
     "latest_receipts",
     "pair_directory",
     "pending_attempts",
+    "latest_attempt_receipt",
+    "published_receipt",
+    "rederive_publication",
     "verify_certification_evidence",
     "write_json",
 ]
+
+
+class LedgerInconsistency(ValueError):
+    """A pair's published receipt is not any one attempt's receipt."""
 
 
 def write_json(path: Path, value: Any) -> None:
@@ -75,15 +88,133 @@ def attempt_directory(
     return pair_directory(root, country_id, pair_id) / "attempts" / attempt_key
 
 
-def latest_receipts(root: Path, country_id: str = "uk") -> list[QualificationReceipt]:
-    """Every pair's latest terminal receipt in a checked-out ledger."""
+def _matches_an_attempt(
+    receipt: QualificationReceipt, attempt_receipts: Iterable[QualificationReceipt]
+) -> bool:
+    """Whether ``receipt`` is one attempt's receipt, a review acceptance aside.
+
+    ``unreviewed_sha256`` covers every field but ``review``, so a receipt that
+    joins one attempt's harness to another's replay or gates matches neither.
+    """
+
+    return any(
+        attempt.unreviewed_sha256 == receipt.unreviewed_sha256
+        for attempt in attempt_receipts
+    )
+
+
+def latest_attempt_receipt(
+    pair_dir: Path,
+) -> Optional[tuple[str, int, QualificationReceipt]]:
+    """The receipt a pair publishes: its latest-staged attempt's current receipt.
+
+    Attempts are ordered by the ``sequence`` in their ``staging.json`` (0 when
+    absent); an attempt without a receipt yet does not count. Returns the
+    attempt key, its sequence and its receipt, or None if no attempt has one.
+    """
+
+    latest: Optional[tuple[int, str, Path]] = None
+    for path in pair_dir.glob("attempts/*/qualification_receipt.json"):
+        stage = path.parent / "staging.json"
+        sequence = int(read_json(stage)["sequence"]) if stage.exists() else 0
+        candidate = (sequence, path.parent.name, path)
+        if latest is None or candidate[:2] > latest[:2]:
+            latest = candidate
+    if latest is None:
+        return None
+    sequence, key, path = latest
+    return key, sequence, QualificationReceipt.model_validate(read_json(path))
+
+
+def published_receipt(pair_dir: Path) -> QualificationReceipt:
+    """A pair's published receipt, verified against the attempts it derives from.
+
+    It must be the current receipt of the pair's latest-staged attempt
+    (:func:`latest_attempt_receipt`), up to a review acceptance, which is added
+    afterwards. Raises :class:`LedgerInconsistency` otherwise, for instance
+    after a textual merge of two attempts' receipts.
+    """
+
+    receipt = QualificationReceipt.model_validate(
+        read_json(pair_dir / "qualification_receipt.json")
+    )
+    latest = latest_attempt_receipt(pair_dir)
+    if latest is None:
+        raise LedgerInconsistency(
+            f"{pair_dir.name}: a qualification receipt is published but no "
+            "attempt has one"
+        )
+    key, _, attempt = latest
+    if not _matches_an_attempt(receipt, [attempt]):
+        raise LedgerInconsistency(
+            f"{pair_dir.name}: the published qualification receipt "
+            f"({receipt.unreviewed_sha256}) is not the receipt of attempt {key}, "
+            "the latest staged"
+        )
+    return receipt
+
+
+def rederive_publication(pair_dir: Path) -> Optional[QualificationReceipt]:
+    """Rewrite a pair's published files from its attempts.
+
+    Writes ``qualification_receipt.json`` (the latest-staged attempt's
+    receipt), ``latest_attempt.json`` and ``pair.json``. A review acceptance of
+    exactly that receipt is kept, from the published receipt if it validates or
+    from ``reviews/``, the latest acceptance first. Used after a concurrent
+    publish, so that git never decides these files by merging two attempts.
+    """
+
+    latest = latest_attempt_receipt(pair_dir)
+    if latest is None:
+        return None
+    key, sequence, receipt = latest
+    published = pair_dir / "qualification_receipt.json"
+    accepted: list[QualificationReceipt] = []
+    for source in [published, *sorted(pair_dir.glob("reviews/*.json"))]:
+        if not source.exists():
+            continue
+        try:
+            candidate = QualificationReceipt.model_validate(read_json(source))
+        except ValueError:
+            continue
+        if (
+            candidate.review is not None
+            and candidate.promotable
+            and candidate.unreviewed_sha256 == receipt.unreviewed_sha256
+        ):
+            accepted.append(candidate)
+    if accepted:
+        receipt = max(accepted, key=lambda item: item.review.accepted_at)
+    write_json(published, receipt.canonical_payload())
+    write_json(
+        pair_dir / "latest_attempt.json", {"attempt_key": key, "sequence": sequence}
+    )
+    write_json(pair_dir / "pair.json", receipt.pair.canonical_payload())
+    return receipt
+
+
+def latest_receipts(
+    root: Path,
+    country_id: str = "uk",
+    *,
+    problems: Optional[list[str]] = None,
+) -> list[QualificationReceipt]:
+    """Every pair's latest terminal receipt in a checked-out ledger.
+
+    A pair whose published receipt is not one of its attempts' receipts is
+    left out, and the reason is appended to ``problems`` when given.
+    """
 
     base = root / country_id
     if not base.is_dir():
         return []
     receipts = []
     for path in sorted(base.glob("*/qualification_receipt.json")):
-        receipts.append(QualificationReceipt.model_validate(read_json(path)))
+        try:
+            receipts.append(published_receipt(path.parent))
+        except LedgerInconsistency as error:
+            if problems is not None:
+                problems.append(str(error))
     return receipts
 
 
@@ -106,20 +237,47 @@ def fetch_ledger_receipt(
     *,
     get: Optional[Callable[..., Any]] = None,
 ) -> Optional[QualificationReceipt]:
-    """Read a pair's latest receipt from the published ledger branch."""
+    """Read a pair's latest receipt from the published ledger branch.
+
+    The receipt must be the receipt of the attempt ``latest_attempt.json``
+    names (a review acceptance aside), as :func:`published_receipt` requires
+    of a checked-out ledger; otherwise :class:`LedgerInconsistency` is raised.
+    """
 
     if get is None:
         import requests
 
         get = requests.get
-    response = get(
-        f"{RAW_LEDGER_URL}/{country_id}/{pair_id}/qualification_receipt.json",
-        timeout=30,
-    )
+    base = f"{RAW_LEDGER_URL}/{country_id}/{pair_id}"
+    response = get(f"{base}/qualification_receipt.json", timeout=30)
     if response.status_code == 404:
         return None
     response.raise_for_status()
-    return QualificationReceipt.model_validate_json(response.text)
+    receipt = QualificationReceipt.model_validate_json(response.text)
+    pointer_response = get(f"{base}/latest_attempt.json", timeout=30)
+    if pointer_response.status_code == 404:
+        raise LedgerInconsistency(
+            f"{pair_id}: the published receipt names no attempt (no latest_attempt.json)"
+        )
+    pointer_response.raise_for_status()
+    attempt_key = json.loads(pointer_response.text).get("attempt_key")
+    if not isinstance(attempt_key, str) or not attempt_key or "/" in attempt_key:
+        raise LedgerInconsistency(f"{pair_id}: latest_attempt.json is malformed")
+    attempt_response = get(
+        f"{base}/attempts/{attempt_key}/qualification_receipt.json", timeout=30
+    )
+    if attempt_response.status_code == 404:
+        raise LedgerInconsistency(
+            f"{pair_id}: attempt {attempt_key} has no qualification receipt"
+        )
+    attempt_response.raise_for_status()
+    attempt = QualificationReceipt.model_validate_json(attempt_response.text)
+    if not _matches_an_attempt(receipt, [attempt]):
+        raise LedgerInconsistency(
+            f"{pair_id}: the published qualification receipt is not attempt "
+            f"{attempt_key}'s receipt"
+        )
+    return receipt
 
 
 def verify_certification_evidence(

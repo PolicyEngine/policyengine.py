@@ -653,7 +653,7 @@ def test_promote_readies_and_merges_only_the_qualified_commit(monkeypatch, tmp_p
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
     calls = []
-    monkeypatch.setattr(cli, "latest_receipts", lambda root: [qualified])
+    monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: [qualified])
     monkeypatch.setattr(
         cli, "subprocess", SimpleNamespace(run=lambda argv, **k: calls.append(argv))
     )
@@ -1077,6 +1077,21 @@ def test_newer_abandoned_stage_recovers_despite_an_older_replay_request(tmp_path
     assert (earlier / "replay" / "request.json").exists()
 
 
+def _publish_as_attempt(ledger, pair, receipt, key):
+    """Publish ``receipt`` as an earlier, unstaged attempt's own receipt.
+
+    A published receipt counts only as its latest attempt's receipt
+    (``published_receipt``), so the fixture records the attempt it came from.
+    """
+
+    pair_dir = ledger / "uk" / pair.pair_id
+    write_json(
+        pair_dir / "attempts" / key / "qualification_receipt.json",
+        receipt.canonical_payload(),
+    )
+    write_json(pair_dir / "qualification_receipt.json", receipt.canonical_payload())
+
+
 @pytest.mark.parametrize("verdict", ["qualified", "rejected"])
 @pytest.mark.parametrize("main_advanced", [False, True])
 @pytest.mark.parametrize("staged_base", ["a" * 40, "f" * 40])
@@ -1092,8 +1107,7 @@ def test_forced_stage_recovery_binds_the_terminal_receipt_it_supersedes(
     results = gates(wheel_hashes="fail") if verdict == "rejected" else gates()
     terminal = make_receipt(pair=pair, gate_results=results)
     base = staged_base
-    published = tmp_path / "uk" / pair.pair_id / "qualification_receipt.json"
-    write_json(published, terminal.canonical_payload())
+    _publish_as_attempt(tmp_path, pair, terminal, "terminal")
     attempt = attempt_directory(tmp_path, "uk", pair.pair_id, base[:12] + "-2")
     payload = {
         "pair": pair.canonical_payload(),
@@ -1118,7 +1132,7 @@ def test_forced_stage_recovery_binds_the_terminal_receipt_it_supersedes(
     assert cli.main(["recoverable", "--ledger", str(tmp_path)]) == 0
     assert json.loads(capsys.readouterr().out) == payload
     changed = make_receipt(pair=pair, gate_results=gates(replay="fail"))
-    write_json(published, changed.canonical_payload())
+    _publish_as_attempt(tmp_path, pair, changed, "terminal-later")
     assert (
         candidate_action(pair, BUNDLE, tmp_path, base_commit=base, now=now)[0]
         == "duplicate"
@@ -1199,10 +1213,7 @@ def test_resolution_preserves_authorization_to_recover_forced_work(
         pair=pair,
         gate_results=gates(replay="fail") if verdict == "rejected" else gates(),
     )
-    write_json(
-        tmp_path / "uk" / pair.pair_id / "qualification_receipt.json",
-        terminal.canonical_payload(),
-    )
+    _publish_as_attempt(tmp_path, pair, terminal, "terminal")
     base = "a" * 40
     resolved = cli.ResolvedCandidate(
         pair,

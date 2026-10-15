@@ -51,6 +51,12 @@ env:
   LEDGER_BRANCH: uk-qualification-ledger
   UV_VERSION: "0.12.14"
   PYTHON_VERSION: "3.13"
+  # Run by .github/qualification-ledger.sh, inside the ledger worktree, when a
+  # concurrent publish touched a pair's published files: recompute them from
+  # the attempts rather than let git merge two receipts.
+  LEDGER_REDERIVE: >-
+    uv run --project ${{ github.workspace }} python
+    ${{ github.workspace }}/scripts/check_uk_candidate.py rederive-ledger
 
 jobs:
   resolve:
