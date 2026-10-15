@@ -5025,18 +5025,19 @@ def _replacement_type_parameters(module, change):
     from typing import ParamSpec, TypeVar, TypeVarTuple
 
     original = module.helper.__type_params__
+    # Built only for the case asked for: TypeVar(default=...) needs 3.13.
     return {
-        "none": (),
-        "extra": (*original, TypeVar("U", infer_variance=True)),
-        "renamed": (TypeVar("U", infer_variance=True),),
-        "paramspec": (ParamSpec("T", infer_variance=True),),
-        "typevartuple": (TypeVarTuple("T"),),
-        "bound": (TypeVar("T", bound=int, infer_variance=True),),
-        "constraints": (TypeVar("T", int, float, infer_variance=True),),
-        "covariant": (TypeVar("T", covariant=True),),
-        "declared-invariant": (TypeVar("T"),),
-        "default": (TypeVar("T", default=int, infer_variance=True),),
-    }[change]
+        "none": lambda: (),
+        "extra": lambda: (*original, TypeVar("U", infer_variance=True)),
+        "renamed": lambda: (TypeVar("U", infer_variance=True),),
+        "paramspec": lambda: (ParamSpec("T", infer_variance=True),),
+        "typevartuple": lambda: (TypeVarTuple("T"),),
+        "bound": lambda: (TypeVar("T", bound=int, infer_variance=True),),
+        "constraints": lambda: (TypeVar("T", int, float, infer_variance=True),),
+        "covariant": lambda: (TypeVar("T", covariant=True),),
+        "declared-invariant": lambda: (TypeVar("T"),),
+        "default": lambda: (TypeVar("T", default=int, infer_variance=True),),
+    }[change]()
 
 
 @pytest.mark.parametrize(
@@ -5161,6 +5162,11 @@ RUNTIME_ALIAS_HEAD = (
             "    simulation.rate = 0.21 if shape else 0.0\n",
             "Union",
             id="union-of-a-union",
+            # Python 3.14 made Union a class that builds unions in source
+            # order without typing's cache, so the rule rightly allows it.
+            marks=pytest.mark.skipif(
+                sys.version_info >= (3, 14), reason="ordered on Python 3.14"
+            ),
         ),
         pytest.param(
             # Round-15 review M1: one name, imported differently in two scopes.
@@ -5337,6 +5343,23 @@ def test_ordinary_types_and_subscripts_inside_functions_bind(tmp_path, body):
     except SyntaxError:
         pytest.skip("this Python refuses the construct itself")
     name = "w4_receipt_r14_runtime_alias_ok"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 14), reason="Union caches by equality before 3.14"
+)
+def test_a_union_of_a_union_binds_where_typing_keeps_its_order(tmp_path):
+    source = (
+        RUNTIME_ALIAS_HEAD + "def raise_rate(simulation):\n"
+        "    shape = Union[Union[Decimal, float], None]\n"
+        "    simulation.rate = 0.21 if shape else 0.0\n"
+    )
+    name = "w4_receipt_union_of_union_314"
     try:
         module, _ = _import_source(tmp_path, name, source)
         assert _identity(module.raise_rate)
