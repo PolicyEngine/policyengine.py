@@ -62,9 +62,11 @@ call under cos d1344, taken with independent review:
   Returning to the path the threshold would have taken without the change,
   contract 1.0.0's reading, has no statutory basis.
 - An amount uprated from an index (benefit and pension rates) returns to its
-  uprated underlying path, as contract 1.0.0 expected. Temporary changes to
-  such amounts are period-limited modifications that leave the underlying
-  amount (the 2020 Universal Credit uplift, SI 2020/371 reg 3).
+  uprated path, as contract 1.0.0 expected. That reading is not settled:
+  freezes of such amounts resumed from the frozen amount (Welfare Reform and
+  Work Act 2016 s11), while a period-limited modification reverts (SI
+  2020/371 reg 3). It is open in policyengine-uk#2430; the contract's
+  checks on it stay as they were until that is decided.
 
 ``Check.pending`` remains for any later open call; no check carries it now.
 
