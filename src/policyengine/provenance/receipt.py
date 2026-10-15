@@ -89,8 +89,11 @@ from typing import (
     ForwardRef,
     Literal,
     Optional,
+    ParamSpec,
     ParamSpecArgs,
     ParamSpecKwargs,
+    TypeVar,
+    TypeVarTuple,
     Union,
     get_args,
     get_origin,
@@ -185,7 +188,7 @@ CROSS_FIELD_RULES: tuple[str, ...] = (
     "certificate.bundle_version equals wrapper.version.",
     "reform/baseline kind current_law has no representation or reform_sha256 and binding content; kind reform has both.",
     "wheel_sha256 and wheel_sha256_evidence are present together or not at all.",
-    "certification_status certified requires each of wrapper, model and core to have install_origin absent or archive, or wheel_sha256_evidence installed_record_verified.",
+    "certification_status certified requires each of wrapper, model and core to have install_origin absent or archive, or install_origin directory or vcs with wheel_sha256_evidence installed_record_verified; an editable install is never certified.",
     "A consumer trusts a certificate only after checking it against the data_releases.<country_id> record of the published policyengine manifest for certificate.bundle_version (verify_certificate()): certificate_sha256 is that record's digest, every other member of certificate except certificate_source, qualification_receipt_sha256 and tro_composition_fingerprint equals what the record states, and data equals the data identity the record determines. certificate_source is the producer's statement and proves nothing.",
 )
 
@@ -247,8 +250,9 @@ class PackageIdentity(_Contract):
             default=None,
             description=(
                 "Install origin recorded by PEP 610 direct_url.json; absent for an "
-                "ordinary index install. Directory, editable and VCS installs "
-                "require installed_record_verified wheel evidence for certification."
+                "ordinary index install. Directory and VCS installs require "
+                "installed_record_verified wheel evidence for certification; an "
+                "editable install is never certified."
             ),
         )
     )
@@ -536,7 +540,7 @@ class ExecutionReceipt(_Contract):
             if not _package_can_be_certified(package):
                 raise ValueError(
                     f"A certified receipt cannot name {package.name} installed from "
-                    f"{package.install_origin} without installed_record_verified wheel evidence."
+                    f"{package.install_origin}: {_uncertifiable_reason(package)}."
                 )
         if certificate.country_id != self.country_id:
             raise ValueError("Certificate country differs from the receipt country.")
@@ -1614,7 +1618,10 @@ def _module_statement_problem(tree: ast.Module) -> Optional[str]:
     At module level the module may hold only docstrings, ``pass``, imports,
     assignments of a literal to one name (annotated or not), undecorated
     ``def`` statements, and an ``if __name__ == "__main__":`` block (which
-    never runs on import). Each name is bound once. Definition-time code
+    never runs on import). A generic function's type parameters carry no
+    bound, constraints or default: Python evaluates those only when something
+    first reads them, so typing's order-insensitive alias cache can decide
+    what they hold. Each name is bound once. Definition-time code
     (defaults, annotations) holds no ``:=``, lambda, comprehension, ``await``
     or ``yield``. Then every module-level name is a literal (checked by
     value), a function (checked against the source) or an import (checked
@@ -1687,6 +1694,18 @@ def _module_statement_problem(tree: ast.Module) -> Optional[str]:
         elif isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
             if statement.decorator_list:
                 return f"line {line} decorates {statement.name}"
+            qualified = [
+                parameter.name
+                for parameter in getattr(statement, "type_params", None) or []
+                if getattr(parameter, "bound", None) is not None
+                or getattr(parameter, "default_value", None) is not None
+            ]
+            if qualified:
+                return (
+                    f"line {line}: type parameter {qualified[0]} of "
+                    f"{statement.name} has a bound, constraints or default, "
+                    "which Python evaluates only when first read"
+                )
             if evaluates(_definition_time_expressions(statement)):
                 return (
                     f"line {line}: a default or annotation of {statement.name} "
@@ -1945,6 +1964,52 @@ def _source_annotation(expression: ast.expr, namespace: Mapping[str, Any]) -> An
     return GenericAlias(origin, args)
 
 
+_TYPE_PARAMETER_KINDS = {
+    "TypeVar": TypeVar,
+    "ParamSpec": ParamSpec,
+    "TypeVarTuple": TypeVarTuple,
+}
+
+
+def _type_parameters_problem(
+    function: Any, node: Union[ast.FunctionDef, ast.AsyncFunctionDef]
+) -> Optional[str]:
+    """Why a generic function's type parameters are not those its ``def`` made.
+
+    ``__type_params__`` is writable, so each parameter must still be a bare
+    TypeVar, ParamSpec or TypeVarTuple of the name and kind the source
+    declares, in order. The module shape check refuses source that gives one
+    a bound, constraints or default, so none may hold one, nor a declared
+    variance (the ``def`` infers it).
+    """
+
+    declared = getattr(node, "type_params", None) or []
+    actual = getattr(function, "__type_params__", ())
+    if type(actual) is not tuple or len(actual) != len(declared):
+        return "type parameters are not those its source declares"
+    for parameter, source in zip(actual, declared):
+        kind = _TYPE_PARAMETER_KINDS.get(type(source).__name__)
+        if type(parameter) is not kind or parameter.__name__ != source.name:
+            return "type parameters are not those its source declares"
+        has_default = getattr(parameter, "has_default", None)
+        qualified = has_default is not None and has_default()
+        if kind is not TypeVarTuple:
+            qualified = (
+                qualified
+                or parameter.__bound__ is not None
+                or getattr(parameter, "__constraints__", ()) != ()
+                or parameter.__covariant__
+                or parameter.__contravariant__
+                or not parameter.__infer_variance__
+            )
+        if qualified:
+            return (
+                f"type parameter {source.name} holds a bound, constraints, "
+                "default or variance its source does not declare"
+            )
+    return None
+
+
 def _function_state_problem(
     function: Any, nodes: Mapping[str, Union[ast.FunctionDef, ast.AsyncFunctionDef]]
 ) -> Optional[str]:
@@ -1975,6 +2040,9 @@ def _function_state_problem(
     expected_doc = code.co_consts[0] if declared and code.co_consts else None
     if function.__doc__ != expected_doc:
         return f"function {name}'s __doc__ is not its source docstring"
+    problem = _type_parameters_problem(function, node)
+    if problem:
+        return f"function {name}'s {problem}"
     expected = {
         argument.arg: argument.annotation
         for argument in [
@@ -2645,10 +2713,25 @@ def _install_origin(
 
 
 def _package_can_be_certified(package: PackageIdentity) -> bool:
+    """Whether a receipt can name this installed package as the code that ran.
+
+    An editable install never can: its wheel holds a pointer to a source tree
+    (a ``.pth`` file or an import hook) rather than the source, so verifying
+    the installed files against that wheel says nothing about the code loaded.
+    """
+
+    if package.install_origin == "editable":
+        return False
     return (
         package.install_origin in (None, "archive")
         or package.wheel_sha256_evidence == "installed_record_verified"
     )
+
+
+def _uncertifiable_reason(package: PackageIdentity) -> str:
+    if package.install_origin == "editable":
+        return "an editable install's wheel does not hold the source that runs"
+    return "it lacks installed_record_verified wheel evidence"
 
 
 def _installer_archive_sha256(direct_url: Optional[Mapping[str, Any]]) -> Optional[str]:
@@ -3043,8 +3126,8 @@ def verify_certificate(
     for package in (receipt.wrapper, receipt.model, receipt.core):
         if not _package_can_be_certified(package):
             problems.append(
-                f"{package.name} installed from {package.install_origin} lacks "
-                "installed_record_verified wheel evidence"
+                f"{package.name} installed from {package.install_origin}: "
+                f"{_uncertifiable_reason(package)}"
             )
     expected = _certificate_fields(receipt.country_id, record, bundle)
     claimed = certificate.model_dump(include=set(CertificateIdentity.IDENTITY_FIELDS))

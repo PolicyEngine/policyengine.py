@@ -149,6 +149,11 @@ _REAL_PACKAGE_MODULES = {
 }
 
 
+#: The install metadata the receipt module reads, before any test replaces it.
+_REAL_METADATA = receipt_module.metadata
+_REAL_DISTRIBUTION = receipt_module.metadata.distribution
+
+
 def _this_checkout_is_the_installed_policyengine() -> bool:
     """Whether the installed policyengine is an editable install of this checkout."""
 
@@ -172,9 +177,10 @@ def _real_packages_load_from_their_install(request, monkeypatch):
     so the tests run this checkout's code under another version's metadata,
     which the receipt rightly refuses. Receipt tests are about receipts, not
     about the test environment, so the real modules are taken as loaded from
-    their install. Synthetic distributions and modules that tests put in
-    ``sys.modules`` are still checked, and the real check runs unchanged in
-    tests marked ``real_install``.
+    their install, but only while their install metadata is the real one too.
+    A synthetic module a test puts in ``sys.modules``, or a synthetic
+    distribution it supplies for a real module, is still checked, and the
+    real check runs unchanged in tests marked ``real_install``.
     """
 
     if request.node.get_closest_marker("real_install"):
@@ -184,7 +190,12 @@ def _real_packages_load_from_their_install(request, monkeypatch):
     def refuse(name):
         import_name = receipt_module.normalize_distribution_name(name).replace("-", "_")
         module = sys.modules.get(import_name)
-        if module is not None and module is _REAL_PACKAGE_MODULES.get(import_name):
+        if (
+            module is not None
+            and module is _REAL_PACKAGE_MODULES.get(import_name)
+            and receipt_module.metadata is _REAL_METADATA
+            and receipt_module.metadata.distribution is _REAL_DISTRIBUTION
+        ):
             return None
         return original(name)
 
@@ -1114,18 +1125,46 @@ def test_certified_model_and_verification_refuse_unverified_origins(
         payload[role].update(
             wheel_sha256="b" * 64, wheel_sha256_evidence="installer_archive_hash"
         )
-    with pytest.raises(ValidationError, match="installed_record_verified"):
+    reason = (
+        "an editable install's wheel does not hold the source that runs"
+        if origin == "editable"
+        else "installed_record_verified"
+    )
+    with pytest.raises(ValidationError, match=reason):
         ExecutionReceipt.model_validate(payload)
     package = type(getattr(certified_receipt, role)).model_validate(payload[role])
     forged = certified_receipt.model_copy(update={role: package})
     problems = verify_certificate(forged, _bundle_for(dataset_file.read_bytes()))
     assert len(problems) == 1
-    assert package.name in problems[0] and "installed_record_verified" in problems[0]
+    assert package.name in problems[0] and reason in problems[0]
+
+
+@pytest.mark.parametrize("role", ["wrapper", "model", "core"])
+def test_certified_model_and_verification_refuse_verified_editable_installs(
+    certified_receipt, dataset_file, role
+):
+    payload = certified_receipt.model_dump()
+    payload[role].update(
+        install_origin="editable",
+        wheel_sha256="b" * 64,
+        wheel_sha256_evidence="installed_record_verified",
+    )
+    with pytest.raises(ValidationError, match="editable install"):
+        ExecutionReceipt.model_validate(payload)
+    package = type(getattr(certified_receipt, role)).model_validate(payload[role])
+    forged = certified_receipt.model_copy(update={role: package})
+    problems = verify_certificate(forged, _bundle_for(dataset_file.read_bytes()))
+    assert problems == [
+        f"{package.name} installed from editable: an editable install's wheel "
+        "does not hold the source that runs"
+    ]
 
 
 @pytest.mark.parametrize("role", ["wrapper", "model", "core"])
 @pytest.mark.parametrize("origin", ["directory", "editable", "vcs"])
-def test_verified_origin_can_be_certified(dataset_file, monkeypatch, role, origin):
+def test_verified_origin_can_be_certified_unless_editable(
+    dataset_file, monkeypatch, role, origin
+):
     direct_url = {"url": "file:///source"}
     if origin == "vcs":
         direct_url["vcs_info"] = {"vcs": "git", "commit_id": "a" * 40}
@@ -1143,8 +1182,13 @@ def test_verified_origin_can_be_certified(dataset_file, monkeypatch, role, origi
     )
     receipt = _build(dataset_file, wheel_paths={package: Path("package.whl")})
     assert getattr(receipt, role).install_origin == origin
-    assert receipt.certification_status == "certified"
-    assert verify_certificate(receipt, _bundle_for(dataset_file.read_bytes())) == []
+    assert getattr(receipt, role).wheel_sha256_evidence == "installed_record_verified"
+    if origin == "editable":
+        assert receipt.certification_status == "uncertified"
+        assert receipt.certificate is None
+    else:
+        assert receipt.certification_status == "certified"
+        assert verify_certificate(receipt, _bundle_for(dataset_file.read_bytes())) == []
 
 
 @pytest.mark.parametrize(
@@ -3178,6 +3222,37 @@ MEASURE_TAIL = "\n\ndef raise_rate(simulation):\n    simulation.rate = 0.21\n"
             "line 1 computes an annotation of _helper",
             id="unpacked-parameter-annotation",
         ),
+        pytest.param(
+            # Round-13 review M1: Pydantic reads the bound when it validates,
+            # and typing's cache can hand it List[Union[float, Decimal]].
+            "from decimal import Decimal\nfrom typing import List, Union\n\n\n"
+            "def _pennies[T: List[Union[Decimal, float]]](amounts: T):\n"
+            "    return int(amounts[0] * 100)\n" + MEASURE_TAIL,
+            "line 5: type parameter T of _pennies has a bound",
+            id="type-parameter-bound",
+        ),
+        pytest.param(
+            "def _helper[T: (int, float)](value: T) -> T:\n    return value\n"
+            + MEASURE_TAIL,
+            "line 1: type parameter T of _helper has a bound, constraints",
+            id="type-parameter-constraints",
+        ),
+        pytest.param(
+            "def _helper[T = float](value: T) -> T:\n    return value\n" + MEASURE_TAIL,
+            "line 1: type parameter T of _helper has a bound, constraints or default",
+            id="type-parameter-default",
+        ),
+        pytest.param(
+            "def _helper[U, **P = [int]](*args: P.args, **kwargs: P.kwargs):\n"
+            "    return args\n" + MEASURE_TAIL,
+            "line 1: type parameter P of _helper has a bound, constraints or default",
+            id="paramspec-default",
+        ),
+        pytest.param(
+            "def _helper[*Ts = *tuple[int]](*args):\n    return args\n" + MEASURE_TAIL,
+            "line 1: type parameter Ts of _helper has a bound, constraints or default",
+            id="typevartuple-default",
+        ),
     ],
 )
 def test_module_shapes_a_digest_cannot_bind_are_refused(tmp_path, source, match):
@@ -4924,6 +4999,63 @@ def test_generic_helpers_bind_and_are_checked(tmp_path):
         assert _identity(module.raise_rate)
         _edit(path, "return value", "return value * 2")
         with pytest.raises(ReceiptError, match="no longer matches"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def _replacement_type_parameters(module, change):
+    from typing import ParamSpec, TypeVar, TypeVarTuple
+
+    original = module.helper.__type_params__
+    return {
+        "none": (),
+        "extra": (*original, TypeVar("U", infer_variance=True)),
+        "renamed": (TypeVar("U", infer_variance=True),),
+        "paramspec": (ParamSpec("T", infer_variance=True),),
+        "typevartuple": (TypeVarTuple("T"),),
+        "bound": (TypeVar("T", bound=int, infer_variance=True),),
+        "constraints": (TypeVar("T", int, float, infer_variance=True),),
+        "covariant": (TypeVar("T", covariant=True),),
+        "declared-invariant": (TypeVar("T"),),
+    }[change]
+
+
+@pytest.mark.parametrize(
+    ("change", "match"),
+    [
+        ("none", "type parameters are not those its source declares"),
+        ("extra", "type parameters are not those its source declares"),
+        ("renamed", "type parameters are not those its source declares"),
+        ("paramspec", "type parameters are not those its source declares"),
+        ("typevartuple", "type parameters are not those its source declares"),
+        ("bound", "type parameter T holds a bound"),
+        ("constraints", "type parameter T holds a bound"),
+        ("covariant", "type parameter T holds a bound"),
+        ("declared-invariant", "type parameter T holds a bound"),
+        # A bare stand-in passes the parameter check, but the annotation
+        # still names the parameter the def made.
+        ("stand-in", "annotation for value is not what its source names"),
+    ],
+)
+def test_generic_type_parameters_must_be_those_the_def_made(tmp_path, change, match):
+    """Round-13 review M1: ``__type_params__`` is writable, and a bound,
+    constraints or default would be read lazily through typing's cache."""
+
+    if sys.version_info < (3, 12):
+        pytest.skip("type parameters need Python 3.12")
+    from typing import TypeVar
+
+    name = "w4_receipt_r13_type_parameters"
+    try:
+        module, _ = _import_source(tmp_path, name, GENERIC_SOURCE)
+        assert _identity(module.raise_rate)
+        module.helper.__type_params__ = (
+            (TypeVar("T", infer_variance=True),)
+            if change == "stand-in"
+            else _replacement_type_parameters(module, change)
+        )
+        with pytest.raises(ReceiptError, match=f"helper's {match}"):
             _identity(module.raise_rate)
     finally:
         sys.modules.pop(name, None)

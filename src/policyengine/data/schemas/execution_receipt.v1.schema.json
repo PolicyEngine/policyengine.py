@@ -121,7 +121,7 @@
             }
           ],
           "default": null,
-          "description": "Install origin recorded by PEP 610 direct_url.json; absent for an ordinary index install. Directory, editable and VCS installs require installed_record_verified wheel evidence for certification.",
+          "description": "Install origin recorded by PEP 610 direct_url.json; absent for an ordinary index install. Directory and VCS installs require installed_record_verified wheel evidence for certification; an editable install is never certified.",
           "title": "Install Origin"
         },
         "name": {
@@ -328,7 +328,7 @@
             }
           ],
           "default": null,
-          "description": "Install origin recorded by PEP 610 direct_url.json; absent for an ordinary index install. Directory, editable and VCS installs require installed_record_verified wheel evidence for certification.",
+          "description": "Install origin recorded by PEP 610 direct_url.json; absent for an ordinary index install. Directory and VCS installs require installed_record_verified wheel evidence for certification; an editable install is never certified.",
           "title": "Install Origin"
         },
         "name": {
@@ -522,7 +522,7 @@
             }
           ],
           "default": null,
-          "description": "Install origin recorded by PEP 610 direct_url.json; absent for an ordinary index install. Directory, editable and VCS installs require installed_record_verified wheel evidence for certification.",
+          "description": "Install origin recorded by PEP 610 direct_url.json; absent for an ordinary index install. Directory and VCS installs require installed_record_verified wheel evidence for certification; an editable install is never certified.",
           "title": "Install Origin"
         },
         "name": {
@@ -713,7 +713,7 @@
     "certificate.bundle_version equals wrapper.version.",
     "reform/baseline kind current_law has no representation or reform_sha256 and binding content; kind reform has both.",
     "wheel_sha256 and wheel_sha256_evidence are present together or not at all.",
-    "certification_status certified requires each of wrapper, model and core to have install_origin absent or archive, or wheel_sha256_evidence installed_record_verified.",
+    "certification_status certified requires each of wrapper, model and core to have install_origin absent or archive, or install_origin directory or vcs with wheel_sha256_evidence installed_record_verified; an editable install is never certified.",
     "A consumer trusts a certificate only after checking it against the data_releases.<country_id> record of the published policyengine manifest for certificate.bundle_version (verify_certificate()): certificate_sha256 is that record's digest, every other member of certificate except certificate_source, qualification_receipt_sha256 and tro_composition_fingerprint equals what the record states, and data equals the data identity the record determines. certificate_source is the producer's statement and proves nothing."
   ]
 }

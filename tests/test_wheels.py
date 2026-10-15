@@ -252,7 +252,7 @@ def test_installer_exceptions_do_not_allow_other_files(tmp_path, path):
     assert evidence["problems"] == [f"{path}: installed but not in the wheel"]
 
 
-@pytest.mark.parametrize("origin", ["directory", "editable", "vcs"])
+@pytest.mark.parametrize("origin", ["directory", "vcs"])
 def test_verified_wheel_allows_certification_of_a_direct_install(
     tmp_path, monkeypatch, origin
 ):
@@ -282,6 +282,45 @@ def test_verified_wheel_allows_certification_of_a_direct_install(
     assert verified.wheel_sha256_evidence == "installed_record_verified"
     assert verified.wheel_sha256 == hashlib.sha256(wheel.read_bytes()).hexdigest()
     assert receipt._package_can_be_certified(verified)
+
+
+def test_a_thin_editable_wheel_verifies_but_is_never_certified(tmp_path, monkeypatch):
+    """A PEP 660 editable wheel holds a pointer to a checkout, not its source.
+
+    Its installed files verify against it exactly, yet the code that runs is
+    whatever the checkout holds, so the install is never certified.
+    """
+
+    from policyengine.provenance import receipt
+
+    files = {
+        "__editable__.policyengine_uk-2.126.8.pth": b"/home/dev/policyengine-uk/src\n",
+        f"{DIST_INFO}/METADATA": (
+            b"Metadata-Version: 2.1\nName: policyengine-uk\nVersion: 2.126.8\n"
+        ),
+    }
+    wheel, site, record = build_wheel(tmp_path, files=files, launchers={})
+    evidence = verify_installed_against_wheel(
+        "policyengine-uk", wheel, metadata=installed_metadata(site, record)
+    )
+    assert evidence["problems"] == []
+    fake = fake_metadata(site, record)
+    distribution = fake.distribution("policyengine-uk")
+    import json
+
+    direct_url = {
+        "url": "file:///home/dev/policyengine-uk",
+        "dir_info": {"editable": True},
+    }
+    distribution.read_text = lambda name: json.dumps(direct_url)
+    fake.distribution = lambda name: distribution
+    fake.version = lambda name: "2.126.8"
+    monkeypatch.setattr(receipt, "metadata", fake)
+    monkeypatch.delitem(sys.modules, "policyengine_uk", raising=False)
+    verified = receipt.installed_package_identity("policyengine-uk", wheel_path=wheel)
+    assert verified.install_origin == "editable"
+    assert verified.wheel_sha256_evidence == "installed_record_verified"
+    assert not receipt._package_can_be_certified(verified)
 
 
 def test_windows_launchers_are_recognised(tmp_path):
@@ -488,6 +527,20 @@ def test_a_cache_whose_nan_constant_has_the_other_sign_fails(tmp_path):
     assert namespace["system"] == -1.0  # it behaves differently
     data = path.read_bytes()
     path.write_bytes(data[:16] + marshal.dumps(_with_nan_sign_flipped(code)))
+    problems = _verify(site, wheel, record)["problems"]
+    assert problems == [
+        f"{_relative(site, path)}: does not compile from the verified source"
+    ]
+
+
+@pytest.mark.parametrize("payload", [None, 0, b"bytes", ("a", "tuple")])
+def test_a_cache_holding_a_value_other_than_code_fails(tmp_path, payload):
+    """A well-formed marshal payload that is not code is refused, not raised."""
+
+    wheel, site, record = build_wheel(tmp_path)
+    path = _write_cache(site, FILES["policyengine_uk/system.py"])
+    data = path.read_bytes()
+    path.write_bytes(data[:16] + marshal.dumps(payload))
     problems = _verify(site, wheel, record)["problems"]
     assert problems == [
         f"{_relative(site, path)}: does not compile from the verified source"
