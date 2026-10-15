@@ -1200,3 +1200,28 @@ def test_run_level_rows_say_they_run_no_reform():
     row = contract.module_parameters_unchanged(contract.shared_state())
     assert row["reform_identity"] is None
     assert row["reform_identity_unavailable"] == "a run-level row runs no reform"
+
+
+def test_a_scenario_that_cannot_hold_a_change_gives_no_identity(monkeypatch):
+    import policyengine_uk.utils.scenario as scenario_module
+
+    class Refusing:
+        def __init__(self, **kwargs):
+            raise ValueError("parameter_changes: not a number")
+
+    monkeypatch.setattr(scenario_module, "Scenario", Refusing)
+    case = next(case for case in CASES if case.id == "april_rate_change")
+    route = "country.scenario_parameter_changes"
+    bound, unavailable = contract.row_reform_identity(
+        case, route, contract.represent(case, route)
+    )
+    assert bound is None and unavailable.startswith("ValueError")
+
+
+def test_every_report_row_has_a_reform_identity_field():
+    report = run_budget_reform_contract(routes=["api.sim_api"], max_examples=1)
+    for section in ("cases", "properties", "population"):
+        for row in report[section]:
+            assert "reform_identity" in row, (section, row)
+            if row["reform_identity"] is None:
+                assert row["reform_identity_unavailable"], (section, row)

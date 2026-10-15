@@ -1484,7 +1484,6 @@ def row_reform_identity(
     receipt schema v1 gets None and a reason rather than another route's.
     """
     from policyengine.provenance.receipt import (
-        ReceiptError,
         reform_identity,
         scenario_reform_identity,
     )
@@ -1511,8 +1510,11 @@ def row_reform_identity(
             )
         else:
             identity = reform_identity(representation, kind, name=case.id)
-    except ReceiptError as error:
-        return None, f"ReceiptError: {error}"
+    except Exception as error:  # noqa: BLE001 - recorded on the row, never raised
+        # ReceiptError for a value receipts refuse; a Scenario's own
+        # validation for a change it cannot hold, which the route then
+        # reports itself.
+        return None, f"{type(error).__name__}: {error}"
     return identity.model_dump(mode="json"), None
 
 
@@ -1528,6 +1530,20 @@ def _with_reform_identity(rows: list[dict], identity, unavailable) -> list[dict]
 RUN_LEVEL_IDENTITY = {
     "reform_identity": None,
     "reform_identity_unavailable": "a run-level row runs no reform",
+}
+#: The ``reform_identity`` fields of a sampled property's row and of a
+#: population check's row, which carry no single reform's identity.
+PROPERTY_IDENTITY = {
+    "reform_identity": None,
+    "reform_identity_unavailable": (
+        "a sampled property runs many sampled reforms, so its row binds none"
+    ),
+}
+POPULATION_IDENTITY = {
+    "reform_identity": None,
+    "reform_identity_unavailable": (
+        "population check rows are not bound to a reform identity"
+    ),
 }
 
 
@@ -1549,8 +1565,11 @@ def evaluate_case(
     """
     representation = None if route in UNSUPPORTED_ROUTES else represent(case, route)
     identity, unavailable = row_reform_identity(case, route, representation)
+    # The run uses the very representation the identity binds.
     return _with_reform_identity(
-        _evaluate_case(case, route, cache, reference), identity, unavailable
+        _evaluate_case(case, route, cache, reference, representation),
+        identity,
+        unavailable,
     )
 
 
@@ -1559,6 +1578,7 @@ def _evaluate_case(
     route: str,
     cache: Optional[dict],
     reference: Optional[Callable[[str, int], float]],
+    representation: Any,
 ) -> list[dict]:
     cache = {} if cache is None else cache
     if route in UNSUPPORTED_ROUTES:
@@ -1572,7 +1592,6 @@ def _evaluate_case(
                 reason=UNSUPPORTED_ROUTES[route],
             )
         ]
-    representation = represent(case, route)
     digest = reform_digest(representation, route, case)
     context = Context(reference or _baseline_parameter_reader())
     if case.expect_error is not None:
@@ -2076,6 +2095,10 @@ def run_budget_reform_contract(
         )
 
         population = run_population_checks(dataset_path, selected_routes, seed)
+    for row in properties:
+        row.update(PROPERTY_IDENTITY)
+    for row in population:
+        row.update(POPULATION_IDENTITY)
     # Whether any check passed, before the run-level row (which passes
     # whenever nothing leaked, including when nothing ran).
     passed = any(row["status"] == PASS for row in rows + properties + population)
