@@ -505,6 +505,9 @@ def stub_population_checks(monkeypatch):
             return Simulation(dataset=None)
 
         def calculate(self, variable, year):
+            # No cap reduction or deductions, so a payment equals its award.
+            if variable in ("benefit_cap_reduction", "uc_deductions"):
+                return [0.0]
             if (
                 variable == "income_tax"
                 and year == 2027
@@ -512,7 +515,13 @@ def stub_population_checks(monkeypatch):
             ):
                 return [2.0]
             if self.reform == {"response": population.UC_STANDARD_ALLOWANCES}:
-                if variable in ("uc_standard_allowance", "universal_credit"):
+                # The award before deductions rises with the payment, so the
+                # payment is the award less (unchanged) deductions.
+                if variable in (
+                    "uc_standard_allowance",
+                    "universal_credit",
+                    "universal_credit_pre_benefit_cap",
+                ):
                     return [1.1]
             if self.reform == {"response": population.STATE_PENSION_RATES}:
                 if variable in (
@@ -790,3 +799,220 @@ def test_household_result_totals_read_each_variable_from_its_own_entity():
     assert _result_total(result, "income_tax") == 150.0
     with pytest.raises(KeyError, match="benunit"):
         _result_total({"household": {"universal_credit": 1.0}}, "universal_credit")
+
+
+# The Universal Credit allowance check's verdict, on synthetic benefit units.
+
+
+def _uc_units(**columns):
+    import numpy as np
+
+    defaults = {
+        "uc_standard_allowance": [400.0],
+        "universal_credit": [500.0],
+        "universal_credit_pre_benefit_cap": [500.0],
+        "benefit_cap_reduction": [0.0],
+        "uc_deductions": [0.0],
+    }
+    defaults.update(columns)
+    return {name: np.array(values, dtype=float) for name, values in defaults.items()}
+
+
+def _verdict(base, reformed):
+    from policyengine.tax_benefit_models.uk.budget_reform_population import (
+        uc_allowance_verdict,
+    )
+
+    return uc_allowance_verdict(base, reformed)
+
+
+def _lawful_pair():
+    """A capped unit whose deductions rise, and an uncapped unit that gains."""
+
+    base = _uc_units(
+        uc_standard_allowance=[400.0, 400.0],
+        universal_credit_pre_benefit_cap=[900.0, 500.0],
+        benefit_cap_reduction=[100.0, 0.0],
+        uc_deductions=[20.0, 0.0],
+        universal_credit=[780.0, 500.0],
+    )
+    reformed = _uc_units(
+        uc_standard_allowance=[440.0, 440.0],
+        universal_credit_pre_benefit_cap=[940.0, 540.0],
+        benefit_cap_reduction=[140.0, 0.0],
+        uc_deductions=[22.0, 0.0],
+        universal_credit=[778.0, 540.0],
+    )
+    return base, reformed
+
+
+def test_a_capped_award_whose_deductions_rise_with_the_allowance_holds():
+    """SI 2013/376 reg 81 holds a capped award flat; deductions come out of it
+    (SI 2013/380 Sch 6), so the amount paid falls by exactly their rise."""
+
+    holds, detail = _verdict(*_lawful_pair())
+    assert holds, detail
+    assert detail["payments_lower"] == 1
+    assert detail["awards_lower"] == 0
+
+
+@pytest.mark.parametrize("rise", [2.0, 60.0, 357.0])
+def test_how_much_deductions_rise_is_not_bounded(rise):
+    """Deductions can start with a new award or exceed the allowance rise."""
+
+    base, reformed = _lawful_pair()
+    reformed["uc_deductions"][0] = 20.0 + rise
+    reformed["universal_credit"][0] = 800.0 - 20.0 - rise
+    holds, detail = _verdict(base, reformed)
+    assert holds, detail
+
+
+@pytest.mark.parametrize(
+    ("change", "failing_key", "passing_value"),
+    [
+        (
+            {"benefit_cap_reduction": 150.0, "universal_credit": 768.0},
+            "awards_lower",
+            0,
+        ),
+        (
+            {"uc_deductions": 800.0, "universal_credit": 0.0},
+            "payments_below_the_payable_floor",
+            0,
+        ),
+        ({"uc_deductions": float("nan")}, "units_with_non_finite_values", 0),
+        (
+            {"benefit_cap_reduction": float("nan")},
+            "units_with_non_finite_values",
+            0,
+        ),
+        ({"universal_credit": 777.989}, "payments_not_award_less_deductions", 0),
+        ({"universal_credit": 778.011}, "payments_not_award_less_deductions", 0),
+        (
+            {"uc_deductions": 0.0, "universal_credit": 780.0},
+            "payments_not_award_less_deductions",
+            0,
+        ),
+        (
+            {"uc_standard_allowance": 430.0},
+            "standard_allowance_scaled_10_percent",
+            True,
+        ),
+    ],
+    ids=[
+        "award-falls-with-its-payment",
+        "deductions-take-the-whole-award",
+        "deductions-not-finite",
+        "cap-reduction-not-finite",
+        "payment-below-award-less-deductions",
+        "payment-above-award-less-deductions",
+        "deductions-released-but-payment-unchanged",
+        "not-scaled",
+    ],
+)
+def test_the_uc_allowance_check_fails_on_each_unlawful_movement(
+    change, failing_key, passing_value
+):
+    base, reformed = _lawful_pair()
+    assert _verdict(base, reformed)[0]
+    for name, value in change.items():
+        reformed[name][0] = value
+    holds, detail = _verdict(base, reformed)
+    assert not holds
+    assert detail[failing_key] != passing_value, detail
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"benefit_cap_reduction": 140.009},
+        {"universal_credit": 777.991},
+        {"universal_credit": 778.009},
+    ],
+    ids=["award-within-a-penny", "payment-a-little-low", "payment-a-little-high"],
+)
+def test_float32_rounding_within_a_penny_holds(change):
+    base, reformed = _lawful_pair()
+    for name, value in change.items():
+        reformed[name][0] = value
+    holds, detail = _verdict(base, reformed)
+    assert holds, detail
+
+
+def test_the_uc_allowance_check_fails_when_no_payment_rises():
+    base = _uc_units()
+    holds, detail = _verdict(base, _uc_units(uc_standard_allowance=[440.0]))
+    assert not holds and detail["payments_higher"] == 0
+
+
+def test_errors_that_cancel_across_units_still_fail():
+    """The accounting identity holds per unit, not in aggregate."""
+
+    base, reformed = _lawful_pair()
+    reformed["universal_credit"][0] -= 5.0
+    reformed["universal_credit"][1] += 5.0
+    holds, detail = _verdict(base, reformed)
+    assert not holds
+    assert detail["payments_not_award_less_deductions"] == 2
+
+
+@pytest.mark.parametrize(("gain", "holds"), [(0.009, False), (0.011, True)])
+def test_a_gain_must_exceed_a_penny(gain, holds):
+    """Only a payment more than a penny higher counts as responsive."""
+
+    base = _uc_units(
+        universal_credit_pre_benefit_cap=[900.0],
+        benefit_cap_reduction=[100.0],
+        universal_credit=[800.0],
+    )
+    reformed = _uc_units(
+        uc_standard_allowance=[440.0],
+        universal_credit_pre_benefit_cap=[940.0],
+        benefit_cap_reduction=[140.0 - gain],
+        universal_credit=[800.0 + gain],
+    )
+    assert _verdict(base, reformed)[0] is holds
+
+
+@pytest.mark.parametrize(("relative", "holds"), [(5e-7, True), (2e-6, False)])
+def test_the_allowance_must_scale_by_ten_percent(relative, holds):
+    base, reformed = _lawful_pair()
+    reformed["uc_standard_allowance"] = reformed["uc_standard_allowance"] * (
+        1 + relative
+    )
+    assert _verdict(base, reformed)[0] is holds
+
+
+def test_deductions_may_leave_exactly_the_payable_floor():
+    """A penny an assessment period, 12p a year, is the lowest lawful payment."""
+
+    base, reformed = _lawful_pair()
+    reformed["uc_deductions"][0] = 800.0 - 0.12
+    reformed["universal_credit"][0] = 0.12
+    holds, detail = _verdict(base, reformed)
+    assert holds, detail
+
+
+@pytest.mark.parametrize("route", ["country.reform_dict", "wrapper.policy"])
+def test_extraction_errors_and_unsupported_rows_carry_distinct_ids(monkeypatch, route):
+    """#612 review: ids also label error, pending and unsupported rows."""
+
+    from dataclasses import replace
+
+    checks = (
+        Check("variable", "income_tax", 2027, 0.0, "missing value"),
+        Check("variable", "income_tax", 2027, 0.0, "missing pending", pending="d1344"),
+        Check("baseline_equals", "income_tax", 2027, "income_tax", "baseline"),
+    )
+    fake(monkeypatch, FakeRoute(reformed={}, unreformed={}))
+    rows = [
+        row
+        for row in evaluate_case(replace(CASE, checks=checks), route)
+        if "assertion_id" in row
+    ]
+    assert len(rows) == len(checks)
+    assert len({row["assertion_id"] for row in rows}) == len(checks)
+    statuses = [row["status"] for row in rows]
+    assert statuses[:2] == ["error", "pending"]
+    if route == "wrapper.policy":
+        assert statuses[2] == "unsupported"

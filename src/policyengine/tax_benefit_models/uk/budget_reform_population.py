@@ -26,7 +26,15 @@ Checks:
 ``population_uc_standard_allowance_plus_10``
     Every Universal Credit standard allowance 10% higher in 2027-28 raises
     each benefit unit's standard allowance by exactly 10%, lowers no award
-    and raises total Universal Credit.
+    before deductions and raises total Universal Credit. The award before
+    deductions is ``universal_credit_pre_benefit_cap`` less
+    ``benefit_cap_reduction``: the benefit cap reduces the award by the
+    excess of welfare benefits over the cap (Universal Credit Regulations
+    2013, SI 2013/376, reg 81), so a capped award stays flat. Deductions are
+    then taken from the award and set as percentages of the standard
+    allowance (Claims and Payments Regulations 2013, SI 2013/380, Sch 6), so
+    the amount paid (``universal_credit``) can fall. The check requires each
+    payment to move by its award's change less its deductions' change.
 ``population_state_pension_plus_10``
     The basic and new State Pension rates 10% higher in 2027-28 raise each
     person's basic and new State Pension by exactly 10% and raise total
@@ -119,6 +127,115 @@ def population_check_routes(routes: Sequence[str]) -> tuple[tuple[str, str], ...
             for route in country[1:]
         )
     )
+
+
+#: What the Universal Credit allowance check reads from each simulation.
+UC_ALLOWANCE_VARIABLES = (
+    "uc_standard_allowance",
+    "universal_credit",
+    "universal_credit_pre_benefit_cap",
+    "benefit_cap_reduction",
+    "uc_deductions",
+)
+
+#: Universal Credit amounts are float32 annual pounds; sums of them carry
+#: rounding of a few thousandths of a pound, so a penny is the smallest
+#: difference the check treats as a change.
+PENNY = 0.01
+
+#: Deductions may not reduce the amount payable below a penny an assessment
+#: period (SI 2013/380 Sch 6 para 3(1)(a)), twelve of them a year.
+MINIMUM_PAYABLE_A_YEAR = 0.12
+
+
+def uc_allowance_verdict(
+    base: dict[str, np.ndarray], reformed: dict[str, np.ndarray]
+) -> tuple[bool, dict]:
+    """Whether a 10% higher standard allowance moved Universal Credit lawfully.
+
+    ``base`` and ``reformed`` hold ``UC_ALLOWANCE_VARIABLES`` per benefit unit.
+
+    No award before deductions (``universal_credit_pre_benefit_cap`` less
+    ``benefit_cap_reduction``) may fall by more than a penny. The benefit cap
+    reduces the award by the excess of welfare benefits over the cap (SI
+    2013/376 reg 81), counting Universal Credit before any deduction (reg
+    80(2)), so a capped award stays flat. That holds in the model, which
+    applies no sanctions; in law a sanction, taken after the cap and set by
+    the standard allowance (regs 110 and 111), can lower a capped award.
+
+    Each payment (``universal_credit``) must move by its award's change less
+    its deductions' change, to the penny. Deductions are taken from the award
+    (SI 2013/380 Sch 6), so with the award unchanged a capped claimant's
+    payment falls by exactly as much as their deductions rise.
+
+    Whatever deductions are taken, at least a penny an assessment period
+    stays payable (SI 2013/380 Sch 6 para 3(1)(a)), so no payment falls below
+    the lesser of its award and 12p a year. Every value must be finite in both
+    runs: a missing value would otherwise pass every comparison.
+
+    How much deductions rise is not checked here. The law sets some
+    deductions as percentages of the standard allowance and others as fixed
+    amounts (advances, SI 2013/383 reg 10), starts deductions with a new
+    award, and keeps a penny payable; the model scales every deduction type
+    with the allowance (policyengine-uk#2410), so no allowance-proportional
+    bound is an invariant of both.
+    """
+
+    non_finite = int(
+        np.sum(
+            ~np.all(
+                [
+                    np.isfinite(state[name])
+                    for state in (base, reformed)
+                    for name in UC_ALLOWANCE_VARIABLES
+                ],
+                axis=0,
+            )
+        )
+    )
+    allowance, base_allowance = (
+        reformed["uc_standard_allowance"],
+        base["uc_standard_allowance"],
+    )
+    scaled = bool(np.allclose(allowance, 1.1 * base_allowance, rtol=1e-6))
+    award = (
+        reformed["universal_credit_pre_benefit_cap"] - reformed["benefit_cap_reduction"]
+    )
+    base_award = (
+        base["universal_credit_pre_benefit_cap"] - base["benefit_cap_reduction"]
+    )
+    paid, base_paid = reformed["universal_credit"], base["universal_credit"]
+    deduction_change = reformed["uc_deductions"] - base["uc_deductions"]
+    unaccounted = (paid - base_paid) - ((award - base_award) - deduction_change)
+    awards_lower = int(np.sum(award < base_award - PENNY))
+    payments_unaccounted = int(np.sum(np.abs(unaccounted) > PENNY))
+    payments_higher = int(np.sum(paid > base_paid + PENNY))
+    payments_below_floor = int(
+        sum(
+            np.sum(
+                state_paid
+                < np.minimum(np.maximum(state_award, 0), MINIMUM_PAYABLE_A_YEAR) - PENNY
+            )
+            for state_paid, state_award in ((base_paid, base_award), (paid, award))
+        )
+    )
+    holds = (
+        non_finite == 0
+        and scaled
+        and awards_lower == 0
+        and payments_unaccounted == 0
+        and payments_below_floor == 0
+        and payments_higher > 0
+    )
+    return holds, {
+        "standard_allowance_scaled_10_percent": scaled,
+        "awards_lower": awards_lower,
+        "payments_lower": int(np.sum(paid < base_paid - PENNY)),
+        "payments_higher": payments_higher,
+        "payments_not_award_less_deductions": payments_unaccounted,
+        "payments_below_the_payable_floor": payments_below_floor,
+        "units_with_non_finite_values": non_finite,
+    }
 
 
 def plus_ten_percent(paths: Sequence[str]) -> dict:
@@ -346,8 +463,7 @@ def run_population_checks(
         base = {
             variable: values(unreformed, variable)
             for variable in (
-                "uc_standard_allowance",
-                "universal_credit",
+                *UC_ALLOWANCE_VARIABLES,
                 "basic_state_pension",
                 "new_state_pension",
                 "state_pension",
@@ -355,23 +471,17 @@ def run_population_checks(
         }
         for route in country:
             simulation = build(route, plus_ten_percent(UC_STANDARD_ALLOWANCES))
-            allowance = values(simulation, "uc_standard_allowance")
-            award = values(simulation, "universal_credit")
-            scaled = bool(
-                np.allclose(allowance, 1.1 * base["uc_standard_allowance"], rtol=1e-6)
-            )
-            lower = int(np.sum(award < base["universal_credit"] - 1e-3))
-            higher = int(np.sum(award > base["universal_credit"] + 1e-3))
+            uc_reformed = {
+                variable: values(simulation, variable)
+                for variable in UC_ALLOWANCE_VARIABLES
+            }
+            holds, detail = uc_allowance_verdict(base, uc_reformed)
             rows.append(
                 _row(
                     POPULATION_UC_STANDARD_ALLOWANCE_PLUS_10,
                     route,
-                    "pass" if scaled and lower == 0 and higher > 0 else "fail",
-                    detail={
-                        "standard_allowance_scaled_10_percent": scaled,
-                        "awards_lower": lower,
-                        "awards_higher": higher,
-                    },
+                    "pass" if holds else "fail",
+                    detail=detail,
                 )
             )
         for route in country:
