@@ -5074,7 +5074,7 @@ def test_generic_type_parameters_must_be_those_the_def_made(tmp_path, change, ma
 
 RUNTIME_ALIAS_HEAD = (
     "import collections.abc\nimport typing\nfrom decimal import Decimal\n"
-    "from typing import Dict, List, Optional, Union\n\n\n"
+    "from typing import Annotated, Dict, List, Literal, Optional, Union\n\n\n"
 )
 
 
@@ -5148,6 +5148,74 @@ RUNTIME_ALIAS_HEAD = (
             "Union",
             id="union-of-a-union",
         ),
+        pytest.param(
+            # Round-15 review M1: one name, imported differently in two scopes.
+            "    def pennies(amounts):\n"
+            "        from typing import Sequence\n\n"
+            "        shape = Sequence[Union[Decimal, float]]\n"
+            "        return shape and amounts\n\n"
+            "    def is_many(values):\n"
+            "        from collections.abc import Sequence\n\n"
+            "        return isinstance(values, Sequence)\n\n"
+            "    simulation.rate = 0.21 if is_many(pennies([1])) else 0.0\n",
+            "Sequence",
+            id="name-imported-in-two-scopes",
+        ),
+        pytest.param(
+            "    def is_many(values):\n"
+            "        from collections.abc import Sequence\n\n"
+            "        return isinstance(values, Sequence)\n\n"
+            "    def pennies(amounts):\n"
+            "        from typing import Sequence\n\n"
+            "        shape = Sequence[Union[Decimal, float]]\n"
+            "        return shape and amounts\n\n"
+            "    simulation.rate = 0.21 if is_many(pennies([1])) else 0.0\n",
+            "Sequence",
+            id="name-imported-in-two-scopes-typing-last",
+        ),
+        pytest.param(
+            "    from w4_receipt_r15_aliases import MONEY\n\n"
+            "    shape = List[MONEY]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="imported-union-alias",
+        ),
+        pytest.param(
+            # Round-15 review M2: a forward reference inside a subscript.
+            "    def pennies(amounts: Optional['List[Union[Decimal, float]]'] = None):\n"
+            "        return amounts\n\n"
+            "    simulation.rate = 0.21 if pennies() is None else 0.0\n",
+            "Optional",
+            id="forward-reference-inside-a-subscript",
+        ),
+        pytest.param(
+            "    def pennies[T: 'List[Union[Decimal, float]]'](amounts: T):\n"
+            "        return amounts\n\n"
+            "    simulation.rate = pennies([0.21])[0]\n",
+            "List",
+            id="quoted-nested-generic-bound",
+        ),
+        pytest.param(
+            "    def pennies[T = 'List[Union[Decimal, float]]'](amounts: T):\n"
+            "        return amounts\n\n"
+            "    simulation.rate = pennies([0.21])[0]\n",
+            "List",
+            id="quoted-nested-generic-default",
+        ),
+        pytest.param(
+            "    def period(kind: List[Literal['weekly', 'monthly']]):\n"
+            "        return kind\n\n"
+            "    simulation.rate = 0.21 if period(['weekly']) else 0.0\n",
+            "List",
+            id="list-of-a-literal",
+        ),
+        pytest.param(
+            "    from pydantic import RootModel\n\n"
+            "    amount = RootModel[Decimal | float](0.21)\n"
+            "    simulation.rate = float(amount.root)\n",
+            "RootModel",
+            id="pydantic-generic-model",
+        ),
     ],
 )
 def test_typing_aliases_built_with_a_union_inside_functions_are_refused(
@@ -5164,6 +5232,11 @@ def test_typing_aliases_built_with_a_union_inside_functions_are_refused(
         pytest.skip("this Python refuses the construct itself")
     name = "w4_receipt_r14_runtime_alias"
     try:
+        _import_source(
+            tmp_path,
+            "w4_receipt_r15_aliases",
+            "from decimal import Decimal\n\nMONEY = Decimal | float\n",
+        )
         module, _ = _import_source(tmp_path, name, source)
         with pytest.raises(
             ReceiptError,
@@ -5173,6 +5246,7 @@ def test_typing_aliases_built_with_a_union_inside_functions_are_refused(
         assert "cannot be bound" in str(refused.value)
     finally:
         sys.modules.pop(name, None)
+        sys.modules.pop("w4_receipt_r15_aliases", None)
 
 
 @pytest.mark.parametrize(
@@ -5217,6 +5291,28 @@ def test_typing_aliases_built_with_a_union_inside_functions_are_refused(
             "    def helper[T](value: T) -> T:\n        return value\n\n"
             "    simulation.rate = helper(0.21)\n",
             id="nested-bare-generic",
+        ),
+        pytest.param(
+            # Round-15 review L1: NumPy builds an ordered types.GenericAlias.
+            "    import numpy as np\n\n"
+            "    def scale(values: np.ndarray[tuple[int], np.dtype[np.float64 | np.int64]]):\n"
+            "        return values\n\n"
+            "    simulation.rate = float(scale(np.array([0.21]))[0])\n",
+            id="numpy-array-of-a-union",
+        ),
+        pytest.param(
+            # Literal values and Annotated metadata are strings, not types.
+            "    def period(kind: list[Literal['List[Union[Decimal, float]]']]):\n"
+            "        return kind\n\n"
+            "    def rate(value: Annotated[float, 'Optional[Decimal | float]']):\n"
+            "        return value\n\n"
+            "    simulation.rate = rate(0.21)\n",
+            id="literal-values-and-annotated-metadata",
+        ),
+        pytest.param(
+            "    label = 'income_tax'\n    path = 'gov.hmrc.rates[0]'\n"
+            "    simulation.rate = 0.21 if label and path else 0.0\n",
+            id="ordinary-strings",
         ),
     ],
 )

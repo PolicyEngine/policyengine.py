@@ -83,7 +83,13 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from importlib import metadata
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
-from types import CodeType, GenericAlias, ModuleType, UnionType
+from types import (
+    ClassMethodDescriptorType,
+    CodeType,
+    GenericAlias,
+    ModuleType,
+    UnionType,
+)
 from typing import (
     Annotated,
     Any,
@@ -2166,8 +2172,10 @@ def _subscript_reuses_equal_aliases(base: Any) -> bool:
     typing caches its generic aliases (``List``, ``Dict``, ``Optional``,
     ``Annotated``) and user generics (``Generic`` subclasses, Pydantic models)
     by argument equality, and a union or ``Literal`` equals one holding its
-    members in any order. Builtin generics and ``collections.abc`` classes
-    build a new ``types.GenericAlias`` in source order.
+    members in any order. Builtin generics, ``collections.abc`` classes and
+    classes whose ``__class_getitem__`` is implemented in C (NumPy's
+    ``ndarray`` and ``dtype``) build a new ``types.GenericAlias`` in source
+    order.
     """
 
     if isinstance(base, type):
@@ -2177,15 +2185,17 @@ def _subscript_reuses_equal_aliases(base: Any) -> bool:
             static = inspect.getattr_static(base, "__class_getitem__")
         except AttributeError:
             return base.__module__ in _TYPING_MODULES
+        if isinstance(static, ClassMethodDescriptorType):
+            return False
         return not (isinstance(static, classmethod) and static.__func__ is GenericAlias)
     return type(base).__module__ in _TYPING_MODULES
 
 
-def _is_union_form(value: Any) -> bool:
+def _is_typing_form(value: Any, *forms: str) -> bool:
     return any(
         value is getattr(sys.modules.get(name), form, None)
         for name in _TYPING_MODULES
-        for form in ("Union", "Optional", "Literal")
+        for form in forms
     )
 
 
@@ -2203,6 +2213,44 @@ def _holds_union(value: Any, depth: int = 0) -> bool:
     return any(_holds_union(argument, depth + 1) for argument in arguments)
 
 
+def _function_bindings(module: Any, nodes: Sequence[ast.AST]) -> dict[str, list[Any]]:
+    """What each name an import inside a function binds, across all its scopes.
+
+    Every binding is kept, so a name one helper imports from typing and
+    another from collections.abc counts as both.
+    """
+
+    bindings: dict[str, list[Any]] = {}
+    for node in nodes:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                name = alias.asname or alias.name.split(".")[0]
+                target = alias.name if alias.asname else name
+                bindings.setdefault(name, []).append(sys.modules.get(target))
+        elif isinstance(node, ast.ImportFrom):
+            try:
+                source_name = (
+                    importlib.util.resolve_name(
+                        "." * node.level + (node.module or ""), module.__package__
+                    )
+                    if node.level
+                    else node.module or ""
+                )
+            except (ImportError, ValueError):
+                continue
+            source = sys.modules.get(source_name)
+            for alias in node.names:
+                if alias.name != "*":
+                    bindings.setdefault(alias.asname or alias.name, []).append(
+                        getattr(
+                            source,
+                            alias.name,
+                            sys.modules.get(f"{source_name}.{alias.name}"),
+                        )
+                    )
+    return bindings
+
+
 def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
     """Where a module function's code builds a type typing may reuse reordered.
 
@@ -2214,97 +2262,103 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
     for ``List[Union[float, Decimal]]``, and Pydantic tries a union's members
     in order, so earlier code decides what runs. The module's own function
     signatures are compared against source elsewhere; this covers the code
-    inside them. Names resolve against the module, the builtins and imports
-    made inside the function; local aliases of typing objects are not
-    followed.
+    inside them.
+
+    Resolution is conservative: a name stands for every object the module
+    or any import inside the function binds it to, and every string in the
+    function's code that parses as an expression is inspected as a type
+    (except ``Literal`` values and ``Annotated`` metadata), since a forward
+    reference is evaluated when something resolves it. Local aliases of
+    typing objects (``L = List``) are not followed.
     """
 
     namespace = vars(module)
     for statement in tree.body:
         if not isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        local: dict[str, Any] = {}
         nodes = [node for root in statement.body for node in ast.walk(root)]
-        for node in nodes:
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    if alias.asname:
-                        local[alias.asname] = sys.modules.get(alias.name)
-                    else:
-                        top = alias.name.split(".")[0]
-                        local[top] = sys.modules.get(top)
-            elif isinstance(node, ast.ImportFrom):
-                try:
-                    name = (
-                        importlib.util.resolve_name(
-                            "." * node.level + (node.module or ""), module.__package__
-                        )
-                        if node.level
-                        else node.module or ""
-                    )
-                except (ImportError, ValueError):
-                    continue
-                source = sys.modules.get(name)
-                for alias in node.names:
-                    if alias.name != "*":
-                        local[alias.asname or alias.name] = getattr(
-                            source, alias.name, sys.modules.get(f"{name}.{alias.name}")
-                        )
+        local = _function_bindings(module, nodes)
 
-        def resolve(node: ast.AST) -> Any:
+        def resolve(node: ast.AST) -> list[Any]:
             if isinstance(node, ast.Name):
-                if node.id in local:
-                    return local[node.id]
+                values = list(local.get(node.id, ()))
                 if node.id in namespace:
-                    return namespace[node.id]
-                return vars(builtins).get(node.id)
+                    values.append(namespace[node.id])
+                # A builtin (list, dict, type) never reuses equal aliases.
+                return values
             if isinstance(node, ast.Attribute):
-                owner = resolve(node.value)
-                if isinstance(owner, ModuleType):
-                    return getattr(owner, node.attr, None)
-            return None
+                return [
+                    getattr(owner, node.attr)
+                    for owner in resolve(node.value)
+                    if isinstance(owner, ModuleType) and hasattr(owner, node.attr)
+                ]
+            return []
+
+        def is_form(node: ast.AST, *forms: str) -> bool:
+            return any(_is_typing_form(value, *forms) for value in resolve(node))
+
+        # Strings that are values, not forward references. ast.walk yields a
+        # node before its children, so a Literal or Annotated subscript marks
+        # its values before they are reached.
+        values: set[int] = set()
+        inspected: list[ast.AST] = list(nodes)
+        position = 0
+        while position < len(inspected):
+            node = inspected[position]
+            position += 1
+            if isinstance(node, ast.Subscript):
+                if is_form(node.value, "Literal"):
+                    values.update(id(child) for child in ast.walk(node.slice))
+                elif is_form(node.value, "Annotated") and isinstance(
+                    node.slice, ast.Tuple
+                ):
+                    for metadata in node.slice.elts[1:]:
+                        values.update(id(child) for child in ast.walk(metadata))
+            if (
+                isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and id(node) not in values
+                and len(inspected) < 100_000
+            ):
+                try:
+                    parsed = ast.parse(node.value.strip(), mode="eval").body
+                except (SyntaxError, ValueError):
+                    continue
+                for child in ast.walk(parsed):
+                    ast.copy_location(child, node)
+                    inspected.append(child)
 
         def holds_union(expression: ast.AST) -> bool:
             for child in ast.walk(expression):
                 if isinstance(child, ast.BinOp) and isinstance(child.op, ast.BitOr):
                     return True
-                if isinstance(child, ast.Subscript) and _is_union_form(
-                    resolve(child.value)
+                if isinstance(child, ast.Subscript) and is_form(
+                    child.value, "Union", "Optional", "Literal"
                 ):
                     return True
-                if isinstance(child, (ast.Name, ast.Attribute)) and _holds_union(
-                    resolve(child)
+                if isinstance(child, (ast.Name, ast.Attribute)) and any(
+                    _holds_union(value) for value in resolve(child)
                 ):
                     return True
-            return False
-
-        expressions: list[ast.AST] = list(nodes)
-        for node in nodes:
-            annotations: list[Optional[ast.expr]] = []
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                annotations = [node.returns] + [
-                    argument.annotation
-                    for argument in ast.walk(node.args)
-                    if isinstance(argument, ast.arg)
-                ]
-            elif isinstance(node, ast.AnnAssign):
-                annotations = [node.annotation]
-            for annotation in annotations:
-                # A quoted annotation is evaluated when something resolves it.
-                if isinstance(annotation, ast.Constant) and isinstance(
-                    annotation.value, str
+                if (
+                    isinstance(child, ast.Constant)
+                    and isinstance(child.value, str)
+                    and id(child) not in values
                 ):
                     try:
-                        parsed = ast.parse(annotation.value, mode="eval").body
-                    except SyntaxError:
+                        parsed = ast.parse(child.value.strip(), mode="eval").body
+                    except (SyntaxError, ValueError):
                         continue
-                    expressions.extend(ast.walk(parsed))
-        for node in expressions:
+                    if holds_union(parsed):
+                        return True
+            return False
+
+        for node in inspected:
             if not isinstance(node, ast.Subscript):
                 continue
-            if _subscript_reuses_equal_aliases(resolve(node.value)) and holds_union(
-                node.slice
-            ):
+            if any(
+                _subscript_reuses_equal_aliases(value) for value in resolve(node.value)
+            ) and holds_union(node.slice):
                 line = getattr(node, "lineno", statement.lineno)
                 return (
                     f"function {statement.name} subscripts "
