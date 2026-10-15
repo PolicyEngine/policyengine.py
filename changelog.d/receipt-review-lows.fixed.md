@@ -1,0 +1,1 @@
+Receipts no longer refuse a measure helper whose quoted `Annotated` metadata contains `|` (for example `List['Annotated[float, "weekly | monthly"]']`), and the docs say that `id` and the other refused names are refused even as parameter names.

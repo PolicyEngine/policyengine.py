@@ -2385,29 +2385,40 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
                     inspected.append(child)
 
         def holds_union(expression: ast.AST) -> bool:
-            for child in ast.walk(expression):
-                if isinstance(child, ast.BinOp) and isinstance(child.op, ast.BitOr):
+            """Whether a type expression holds a union or ``Literal``.
+
+            ``Literal`` values and ``Annotated`` metadata are values, not types,
+            so a quoted string there is never read as a type, including inside
+            a forward reference parsed here.
+            """
+
+            if isinstance(expression, ast.BinOp) and isinstance(
+                expression.op, ast.BitOr
+            ):
+                return True
+            if isinstance(expression, ast.Subscript):
+                if is_form(expression.value, "Union", "Optional", "Literal"):
                     return True
-                if isinstance(child, ast.Subscript) and is_form(
-                    child.value, "Union", "Optional", "Literal"
-                ):
-                    return True
-                if isinstance(child, (ast.Name, ast.Attribute)) and any(
-                    _holds_union(value) for value in resolve(child)
-                ):
-                    return True
-                if (
-                    isinstance(child, ast.Constant)
-                    and isinstance(child.value, str)
-                    and id(child) not in values
-                ):
-                    try:
-                        parsed = ast.parse(child.value.strip(), mode="eval").body
-                    except (SyntaxError, ValueError):
-                        continue
-                    if holds_union(parsed):
-                        return True
-            return False
+                if is_form(expression.value, "Annotated"):
+                    elements = (
+                        expression.slice.elts
+                        if isinstance(expression.slice, ast.Tuple)
+                        else [expression.slice]
+                    )
+                    return bool(elements) and holds_union(elements[0])
+            if isinstance(expression, (ast.Name, ast.Attribute)) and any(
+                _holds_union(value) for value in resolve(expression)
+            ):
+                return True
+            if isinstance(expression, ast.Constant):
+                if not isinstance(expression.value, str) or id(expression) in values:
+                    return False
+                try:
+                    parsed = ast.parse(expression.value.strip(), mode="eval").body
+                except (SyntaxError, ValueError):
+                    return False
+                return holds_union(parsed)
+            return any(holds_union(child) for child in ast.iter_child_nodes(expression))
 
         for node in inspected:
             if not isinstance(node, ast.Subscript):

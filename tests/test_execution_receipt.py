@@ -2048,6 +2048,41 @@ def test_builder_rechecks_each_composition_member_after_the_run(
         sys.modules.pop(name, None)
 
 
+@pytest.mark.parametrize("stale_first", [True, False])
+def test_every_composition_member_is_rechecked_wherever_it_sits(
+    dataset_file, tmp_path, stale_first
+):
+    """#579 round-5 review: a stale member is caught in any position."""
+
+    name = "w4_receipt_compose_position"
+    try:
+        module, _ = _import_source(tmp_path, name, MEASURE_SOURCE.format(rate=0.21))
+        live = _measure_identity(module)
+        members = [live, _member(7)] if stale_first else [_member(7), live]
+        identity = composed_reform_identity(members, applied_before_data_load=False)
+        module.RATE = 0.30
+        with pytest.raises(ReceiptError, match="modifier changed after its identity"):
+            _build(dataset_file, reform=identity, baseline=CURRENT_LAW)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize("shape", ["alone", "mixed", "nested"])
+def test_a_current_law_member_that_gains_changes_is_caught(dataset_file, shape):
+    """#579 round-5 review: a member dropped as current law is still rechecked."""
+
+    scenario = _scenario()
+    member = scenario_reform_identity(scenario, code_revision=REVISION)
+    assert member.kind == "current_law"
+    members = [member] if shape == "alone" else [member, _member(7)]
+    identity = composed_reform_identity(members, applied_before_data_load=False)
+    if shape == "nested":
+        identity = composed_reform_identity([identity], applied_before_data_load=False)
+    scenario.parameter_changes = {"gov.hmrc.income_tax.rates.uk[0].rate": 0.21}
+    with pytest.raises(ReceiptError, match="changed after its identity was computed"):
+        _build(dataset_file, reform=identity, baseline=CURRENT_LAW)
+
+
 def test_composing_refuses_a_member_that_changed_since_it_was_bound(tmp_path):
     name = "w4_receipt_compose_stale_member"
     try:
@@ -2073,6 +2108,18 @@ def test_an_unchanged_composition_still_builds_and_ignores_later_list_edits(
     # The handle is process-local: it is not part of equality or the dump.
     loaded = type(identity).model_validate(identity.model_dump())
     assert loaded == identity and loaded._recompute_identity is None
+
+
+def test_a_certificate_for_other_bytes_gives_an_uncertified_receipt(dataset_file):
+    """Round-16 review: a certificate whose dataset hash differs from the bytes
+    run is not an error, just not a certificate for this run."""
+
+    bundle = _bundle_for(dataset_file.read_bytes())
+    bundle["data_releases"]["uk"]["certified_data_artifact"]["sha256"] = "0" * 64
+    receipt = _build(dataset_file, bundle=bundle)
+    assert receipt.certification_status == "uncertified"
+    assert receipt.certificate is None
+    assert receipt.data.dataset_sha256 != "0" * 64
 
 
 def test_unchanged_scenario_still_builds_after_a_run(dataset_file):
@@ -5018,6 +5065,59 @@ def test_a_quoted_special_form_with_a_flipped_flag_is_refused(tmp_path, quoted):
         sys.modules.pop(name, None)
 
 
+def test_a_flag_poisoned_before_anything_binds_is_refused(tmp_path):
+    """Round-19 review: in a fresh process, poison typing's cached
+    ``Final['_receipt_forward_probe']`` before any binding, then bind a module
+    whose annotation reuses it. The interpreter's own flag still decides."""
+
+    name = "w4_receipt_r19_fresh_poison"
+    path = tmp_path / f"{name}.py"
+    path.write_text(
+        "from typing import Final\n\n\n"
+        "def _helper(value: Final['_receipt_forward_probe']):\n    return value\n\n\n"
+        "def raise_rate(simulation):\n    simulation.rate = 0.21\n"
+    )
+    script = (
+        "import importlib.util, sys\n"
+        "from typing import Final, get_args\n"
+        # Import first: importing policyengine builds enough typing aliases to
+        # evict a poisoned entry from typing's cache before the module reuses it.
+        "from policyengine.provenance.receipt import ReceiptError, _modifier_identity\n"
+        "alias = Final['_receipt_forward_probe']\n"
+        "(ref,) = get_args(alias)\n"
+        "ref.__forward_is_class__ = not ref.__forward_is_class__\n"
+        f"spec = importlib.util.spec_from_file_location({name!r}, {str(path)!r})\n"
+        "module = importlib.util.module_from_spec(spec)\n"
+        f"sys.modules[{name!r}] = module\n"
+        "spec.loader.exec_module(module)\n"
+        "assert module._helper.__annotations__['value'] is alias, 'not poisoned'\n"
+        "try:\n"
+        "    _modifier_identity(module.raise_rate, REVISION)\n"
+        "except ReceiptError as error:\n"
+        "    print('refused:', error)\n"
+        "else:\n"
+        "    print('bound')\n"
+    ).replace("REVISION", repr(dict(REVISION)))
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        env={
+            **os.environ,
+            "POLICYENGINE_SKIP_COUNTRY_IMPORTS": "1",
+            # This process's import path, absolute, so the child imports the
+            # same policyengine whatever its working directory.
+            "PYTHONPATH": os.pathsep.join(
+                str(Path(entry).resolve()) for entry in sys.path if entry
+            ),
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=tmp_path,
+    )
+    assert result.stdout.startswith("refused:"), result.stdout + result.stderr
+    assert "annotation for value" in result.stdout
+
+
 def test_subscripted_annotations_without_typing_origins_are_refused(
     tmp_path, monkeypatch
 ):
@@ -5585,6 +5685,13 @@ RUNTIME_ALIAS_HEAD = (
             id="quoted-class-body-annotation",
         ),
         pytest.param(
+            # Round-16 review: Optional is a union too.
+            "    shape = List[Optional[Decimal]]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="list-of-an-optional",
+        ),
+        pytest.param(
             "    shape = Union[Union[Decimal, float], None]\n"
             "    simulation.rate = 0.21 if shape else 0.0\n",
             "Union",
@@ -5755,6 +5862,15 @@ def test_typing_aliases_built_with_a_union_inside_functions_are_refused(
             "        return value\n\n"
             "    simulation.rate = rate(0.21)\n",
             id="literal-values-and-annotated-metadata",
+        ),
+        pytest.param(
+            # Round-16 review: metadata inside a quoted Annotated is a value.
+            "    def period(kind: List['Annotated[float, \"weekly | monthly\"]']):\n"
+            "        return kind\n\n"
+            "    def plain(kind: List[Annotated[float, 'weekly | monthly']]):\n"
+            "        return kind\n\n"
+            "    simulation.rate = 0.21 if period([1.0]) and plain([1.0]) else 0.0\n",
+            id="quoted-annotated-metadata",
         ),
         pytest.param(
             "    label = 'income_tax'\n    path = 'gov.hmrc.rates[0]'\n"
@@ -6316,6 +6432,18 @@ def test_a_main_guard_redefining_a_function_is_refused(tmp_path):
             _identity(module.raise_rate)
     finally:
         sys.modules.pop(name, None)
+
+
+def test_a_string_subclass_hashes_as_its_value_not_its_str():
+    """#588 round-4 review: payload strings are written with str.__str__."""
+
+    class Rendered(str):
+        def __str__(self):
+            return "Infinity"
+
+    assert _reform_digest({CAP: {"2027": Rendered("1e3")}}) == _reform_digest(
+        {CAP: {"2027": "1e3"}}
+    )
 
 
 def test_typed_infinities_are_spelled_by_float_hex():
