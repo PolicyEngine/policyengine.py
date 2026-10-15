@@ -21,8 +21,13 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_DIR = REPO_ROOT / "src" / "policyengine" / "data" / "schemas"
-os.environ.setdefault("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
-sys.path.insert(0, str(REPO_ROOT / "src"))
+
+if __name__ == "__main__":
+    # Write the schemas from this checkout's models, whatever is installed,
+    # without importing the country models. Only the entry point sets this up,
+    # so importing this module leaves the import path and environment alone.
+    os.environ.setdefault("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
+    sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from policyengine.provenance.receipt import ExecutionReceipt  # noqa: E402
 
