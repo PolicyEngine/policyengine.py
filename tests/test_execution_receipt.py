@@ -19,6 +19,10 @@ Invariants tested here:
   module source and defaults plus a revision, independent of where the code
   is checked out; code edited after import, closures, lambdas, partials,
   methods and non-Scenario objects are refused;
+- a composition's digest covers its members' representation, digest and
+  binding in application order and nothing else: reordering distinct members
+  changes it, current-law members and labels do not, and it is code-bound
+  exactly when a member is;
 - the Pydantic model and the published JSON Schema accept the same valid
   receipts and reject the same malformed ones (differential test).
 """
@@ -62,6 +66,7 @@ from policyengine.provenance.receipt import (
     build_execution_receipt,
     build_execution_receipt_for_microsimulation,
     certificate_sha256,
+    composed_reform_identity,
     content_sha256,
     fiscal_year_label,
     installed_package_identity,
@@ -1511,6 +1516,264 @@ def test_reform_identity_accepts_only_json_payloads():
         ReformIdentity(kind="current_law", binding="code_revision")
 
 
+# --- Compositions ------------------------------------------------------------------
+
+
+def _member(index: int, *, code: bool = False, name=None) -> ReformIdentity:
+    return ReformIdentity(
+        kind="reform",
+        representation="policyengine-uk.scenario/v1",
+        reform_sha256=f"{index:064x}",
+        binding="code_revision" if code else "content",
+        name=name,
+    )
+
+
+def _compose(members, *, early: bool = False, name=None) -> ReformIdentity:
+    return composed_reform_identity(members, applied_before_data_load=early, name=name)
+
+
+def _composition_digest(early: bool, *members: ReformIdentity) -> str:
+    """The published preimage, restated: phase plus ordered member identities."""
+
+    return canonical_sha256(
+        {
+            "representation": "policyengine-uk.scenario_composition/v1",
+            "payload": {
+                "applied_before_data_load": early,
+                "application": "parameter_changes_then_modifiers",
+                "members": [
+                    {
+                        "representation": member.representation,
+                        "reform_sha256": member.reform_sha256,
+                        "binding": member.binding,
+                    }
+                    for member in members
+                ],
+            },
+        }
+    )
+
+
+def test_composition_digest_is_its_phase_and_ordered_member_identities():
+    basic = reform_identity(
+        {"gov.hmrc.income_tax.rates.uk[0].rate": {"2027-04-06": 0.21}},
+        "policyengine-uk.reform_dict/v1",
+        name="basic rate",
+    )
+    structural = scenario_reform_identity(
+        _scenario(simulation_modifier=receipt_modifiers.raise_higher_rate),
+        code_revision=REVISION,
+        name="higher rate",
+    )
+    package = _compose([basic, structural], name="Budget package")
+    assert package.representation == "policyengine-uk.scenario_composition/v1"
+    assert package.binding == "code_revision"
+    assert package.name == "Budget package"
+    assert package.reform_sha256 == _composition_digest(False, basic, structural)
+    assert _compose([basic]).binding == "content"
+    assert _compose([basic]).reform_sha256 == _composition_digest(False, basic)
+    assert _compose([basic]).reform_sha256 != basic.reform_sha256
+    nested = _compose([package, basic], early=True)
+    assert nested.binding == "code_revision"
+    assert nested.reform_sha256 == _composition_digest(True, package, basic)
+
+
+def test_the_phase_the_combined_scenario_runs_in_is_bound():
+    """#579 review: Scenario.__add__ resets the phase, so it must be stated."""
+
+    members = [_member(1), _member(2)]
+    early = _compose(members, early=True)
+    late = _compose(members, early=False)
+    assert early.reform_sha256 != late.reform_sha256
+    assert early.reform_sha256 == _composition_digest(True, *members)
+    with pytest.raises(TypeError):
+        composed_reform_identity(members)  # the phase has no default
+    for phase in (0, 1, None, "False"):
+        with pytest.raises(ReceiptError, match="applied_before_data_load"):
+            composed_reform_identity(members, applied_before_data_load=phase)
+
+
+@settings(max_examples=100, deadline=None)
+@given(
+    indices=st.lists(st.integers(1, 50), min_size=2, max_size=6, unique=True),
+    code=st.lists(st.booleans(), min_size=6, max_size=6),
+    random=st.randoms(),
+    gaps=st.lists(st.integers(0, 6), max_size=4),
+    labels=st.lists(st.text(max_size=5), min_size=6, max_size=6),
+    early=st.booleans(),
+)
+def test_composition_order_matters_and_current_law_and_labels_do_not(
+    indices, code, random, gaps, labels, early
+):
+    members = [_member(i, code=code[n]) for n, i in enumerate(indices)]
+    composed = _compose(members, early=early)
+    assert composed.reform_sha256 == _composition_digest(early, *members)
+    assert composed.binding == (
+        "code_revision" if any(code[: len(members)]) else "content"
+    )
+    shuffled = list(members)
+    random.shuffle(shuffled)
+    same_order = shuffled == members
+    assert (
+        _compose(shuffled, early=early).reform_sha256 == composed.reform_sha256
+    ) == same_order
+    padded = list(members)
+    for gap in gaps:
+        padded.insert(
+            min(gap, len(padded)),
+            ReformIdentity(kind="current_law", name=labels[gap % 6] or None),
+        )
+    assert _compose(padded, early=early).reform_sha256 == composed.reform_sha256
+    relabelled = [
+        member.model_copy(update={"name": labels[n] or None})
+        for n, member in enumerate(members)
+    ]
+    assert (
+        _compose(relabelled, early=early, name="x").reform_sha256
+        == composed.reform_sha256
+    )
+    # Dropping or duplicating a member changes what ran, so it changes the digest.
+    assert _compose(members[1:], early=early).reform_sha256 != composed.reform_sha256
+    assert (
+        _compose([*members, members[0]], early=early).reform_sha256
+        != composed.reform_sha256
+    )
+
+
+@settings(max_examples=50, deadline=None)
+@given(
+    indices=st.lists(st.integers(1, 50), min_size=1, max_size=5, unique=True),
+    position=st.integers(0, 4),
+    change=st.sampled_from(["digest", "representation", "binding"]),
+)
+def test_changing_any_one_member_changes_the_composition(indices, position, change):
+    """A nested identity's every bound member reaches the composition digest."""
+
+    members = [_member(i) for i in indices]
+    inner = _compose(members)
+    target = position % len(members)
+    edited = list(members)
+    if change == "digest":
+        edited[target] = _member(indices[target] + 100)
+    elif change == "representation":
+        edited[target] = edited[target].model_copy(
+            update={"representation": "policyengine-uk.reform_dict/v1"}
+        )
+    else:
+        edited[target] = _member(indices[target], code=True)
+    assert _compose(edited).reform_sha256 != inner.reform_sha256
+    # The same holds one level down, through a nested composition.
+    assert (
+        _compose([_compose(edited), _member(99)]).reform_sha256
+        != _compose([inner, _member(99)]).reform_sha256
+    )
+
+
+def test_a_composition_of_nothing_is_current_law_with_its_own_name():
+    named = ReformIdentity(kind="current_law", name="no change")
+    assert _compose([]).kind == "current_law"
+    assert _compose([CURRENT_LAW, named]) == ReformIdentity(kind="current_law")
+    assert _compose([named], name="package") == ReformIdentity(
+        kind="current_law", name="package"
+    )
+    assert (
+        _compose([named, _member(1)]).reform_sha256
+        == _compose([_member(1)]).reform_sha256
+    )
+
+
+@pytest.mark.parametrize(
+    "update",
+    [
+        {"kind": "current_law"},  # a reform's digest kept under current law
+        {"reform_sha256": "XYZ"},
+        {"reform_sha256": None},
+        {"representation": "not-a-representation"},
+        {"binding": "anything"},
+    ],
+    ids=["kind", "digest", "no-digest", "representation", "binding"],
+)
+def test_members_edited_past_their_rules_are_refused(update):
+    """#579 review: an invalid member is refused, never dropped or hashed."""
+
+    real = reform_identity(
+        {"gov.hmrc.income_tax.rates.uk[0].rate": {"2027-04-06": 0.21}},
+        "policyengine-uk.reform_dict/v1",
+    )
+    forged = real.model_copy(update=update)
+    with pytest.raises(ReceiptError, match="Member 1 is not a valid identity"):
+        _compose([_member(1), forged])
+
+
+@pytest.mark.parametrize(
+    "members",
+    [
+        {"gov.x": {"2027": 1}},
+        "abc",
+        [{"gov.x": {"2027": 1}}],
+        [_member(1), "member"],
+        [_member(1), None],
+        _member(1),
+        {},
+        "",
+        b"",
+        (member for member in [_member(1)]),
+        frozenset(),
+    ],
+    ids=[
+        "dict",
+        "string",
+        "raw payload",
+        "string member",
+        "none member",
+        "bare",
+        "empty dict",
+        "empty string",
+        "empty bytes",
+        "generator",
+        "set",
+    ],
+)
+def test_compositions_take_only_bound_identities(members):
+    with pytest.raises(ReceiptError):
+        _compose(members)
+
+
+def test_any_sequence_of_members_is_the_same_composition():
+    """Round-4 review: a tuple, a list and a UserList are one composition."""
+
+    from collections import UserList
+
+    members = [_member(1), _member(2, code=True)]
+    assert _compose(tuple(members)) == _compose(list(members))
+    assert _compose(UserList(members)) == _compose(list(members))
+
+
+@pytest.mark.parametrize("members", [[], [CURRENT_LAW], [CURRENT_LAW, CURRENT_LAW]])
+@pytest.mark.parametrize("phase", [0, 1, None, "True"])
+def test_the_phase_is_checked_even_when_nothing_changes(members, phase):
+    """Round-3 review: an invalid phase is refused before members are read."""
+
+    with pytest.raises(ReceiptError, match="applied_before_data_load"):
+        composed_reform_identity(members, applied_before_data_load=phase)
+
+
+def test_reform_identity_refuses_the_composition_representation():
+    with pytest.raises(ReceiptError, match="composed_reform_identity"):
+        reform_identity({"members": []}, "policyengine-uk.scenario_composition/v1")
+
+
+def test_a_composed_reform_makes_a_valid_receipt(dataset_file, schema_validator):
+    package = _compose([_member(1), _member(2, code=True)])
+    receipt = _build(dataset_file, reform=package)
+    schema_validator.validate(json.loads(receipt.model_dump_json()))
+    assert ExecutionReceipt.model_validate_json(receipt.to_canonical_json()) == receipt
+    other = _build(dataset_file, reform=_compose([_member(2, code=True), _member(1)]))
+    assert other.receipt_sha256 != receipt.receipt_sha256
+    assert other.execution_identity_sha256 == receipt.execution_identity_sha256
+
+
 # --- Scenario binding -------------------------------------------------------------
 
 
@@ -1742,6 +2005,73 @@ def test_builder_rechecks_modifier_after_the_run(
         assert ("CACHE" if change == "memo" else "RATE") in str(refused.value)
     finally:
         sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("managed", [False, True])
+def test_builder_rechecks_each_composition_member_after_the_run(
+    dataset_file, tmp_path, nested, managed
+):
+    """A composition keeps its members' re-check handles: a member whose
+    module changed after composing is refused when the receipt is built."""
+
+    name = "w4_receipt_compose_recheck"
+    try:
+        module, _ = _import_source(tmp_path, name, MEASURE_SOURCE.format(rate=0.21))
+        member = _measure_identity(module)
+        other = _member(7)
+        identity = composed_reform_identity(
+            [other, member], applied_before_data_load=False
+        )
+        if nested:
+            identity = composed_reform_identity(
+                [identity], applied_before_data_load=False
+            )
+        module.RATE = 0.30
+        with pytest.raises(
+            ReceiptError, match="modifier changed after its identity was computed"
+        ) as refused:
+            if managed:
+                bundle = _bundle_for(dataset_file.read_bytes())
+                build_execution_receipt_for_microsimulation(
+                    _managed_simulation(dataset_file, bundle),
+                    years=[2026],
+                    bundle=bundle,
+                    reform=identity,
+                    baseline=CURRENT_LAW,
+                )
+            else:
+                _build(dataset_file, reform=identity, baseline=CURRENT_LAW)
+        assert "RATE" in str(refused.value)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_composing_refuses_a_member_that_changed_since_it_was_bound(tmp_path):
+    name = "w4_receipt_compose_stale_member"
+    try:
+        module, _ = _import_source(tmp_path, name, MEASURE_SOURCE.format(rate=0.21))
+        member = _measure_identity(module)
+        module.RATE = 0.30
+        with pytest.raises(ReceiptError, match="Member 0: The modifier changed"):
+            composed_reform_identity([member], applied_before_data_load=False)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_an_unchanged_composition_still_builds_and_ignores_later_list_edits(
+    dataset_file,
+):
+    scenario = _scenario(simulation_modifier=receipt_modifiers.raise_basic_rate_to)
+    member = scenario_reform_identity(scenario, code_revision=REVISION)
+    members = [member]
+    identity = composed_reform_identity(members, applied_before_data_load=False)
+    members.append(_member(7))
+    receipt = _build(dataset_file, reform=identity, baseline=CURRENT_LAW)
+    assert receipt.reform == identity
+    # The handle is process-local: it is not part of equality or the dump.
+    loaded = type(identity).model_validate(identity.model_dump())
+    assert loaded == identity and loaded._recompute_identity is None
 
 
 def test_unchanged_scenario_still_builds_after_a_run(dataset_file):
