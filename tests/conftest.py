@@ -1,5 +1,7 @@
 """Pytest configuration and shared fixtures."""
 
+import sys
+
 import pytest
 
 # Import fixtures from fixtures module so pytest can discover them
@@ -8,6 +10,12 @@ from tests.fixtures.filtering_fixtures import (  # noqa: F401
     create_us_test_dataset,
     uk_test_dataset,
     us_test_dataset,
+)
+from tests.fixtures.import_path import (  # noqa: F401
+    ADDED_BY_COLLECTION,
+    checkout_entries_added,
+    checkout_stays_off_import_path,
+    scripts_on_path,
 )
 from tests.fixtures.parametric_reforms_fixtures import (  # noqa: F401
     mock_param_joint,
@@ -26,6 +34,22 @@ from tests.fixtures.us_reform_fixtures import (  # noqa: F401
     high_income_single_filer,
     married_couple_with_kids,
 )
+
+#: The import path before any test module is collected.
+_IMPORT_PATH_BEFORE_COLLECTION = list(sys.path)
+
+
+def pytest_collection_finish(session):
+    """Record any checkout directory that importing the test modules added.
+
+    ``tests/test_script_imports.py`` fails on it; a test module that put
+    ``src`` or ``scripts`` on ``sys.path`` would leave it there for the session.
+    """
+
+    session.config.stash[ADDED_BY_COLLECTION] = checkout_entries_added(
+        _IMPORT_PATH_BEFORE_COLLECTION, sys.path
+    )
+
 
 # Group (non-person) entities per country, and a helper to extract the
 # entity_data dict a scoping strategy / filter operates on. Shared so the filter
