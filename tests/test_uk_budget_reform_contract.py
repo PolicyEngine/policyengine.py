@@ -1084,3 +1084,119 @@ def test_an_award_below_the_floor_is_paid_in_full():
             run[name] = np.append(run[name], value)
     holds, detail = _verdict(base, reformed)
     assert holds, detail
+
+
+# Reform identities on rows (receipt schema v1).
+
+
+def test_each_route_binds_the_reform_it_consumes():
+    from policyengine_uk.utils.scenario import Scenario
+
+    from policyengine.provenance.receipt import (
+        reform_identity,
+        scenario_reform_identity,
+    )
+
+    case = next(case for case in CASES if case.id == "april_rate_change")
+    expected = {
+        "country.reform_dict": reform_identity(
+            contract.represent(case, "country.reform_dict"),
+            "policyengine-uk.reform_dict/v1",
+            name=case.id,
+        ),
+        "country.scenario_parameter_changes": scenario_reform_identity(
+            Scenario(
+                parameter_changes=contract.represent(
+                    case, "country.scenario_parameter_changes"
+                )
+            ),
+            name=case.id,
+        ),
+        "wrapper.household": reform_identity(
+            contract.represent(case, "wrapper.household"),
+            "policyengine.reform_dict/v1",
+            name=case.id,
+        ),
+        "wrapper.policy": reform_identity(
+            contract.represent(case, "wrapper.policy"),
+            "policyengine.reform_dict/v1",
+            name=case.id,
+        ),
+    }
+    for route, identity in expected.items():
+        bound, unavailable = contract.row_reform_identity(
+            case, route, contract.represent(case, route)
+        )
+        assert bound == identity.model_dump(mode="json"), route
+        assert unavailable is None
+        assert bound["name"] == case.id and bound["kind"] == "reform"
+    # The two dict representations of one change differ, and are not merged.
+    assert (
+        expected["country.reform_dict"].reform_sha256
+        != expected["wrapper.household"].reform_sha256
+    )
+
+
+@pytest.mark.parametrize(
+    "case_id, route, reason",
+    [
+        ("april_rate_change", "country.reform_from_dict", "no representation"),
+        ("april_rate_change", "api.sim_api", "in-process"),
+        ("modifier_then_parameter_changes", "country.reform_dict", "closure"),
+        ("parameter_changes_then_modifier", "wrapper.policy", "closure"),
+    ],
+)
+def test_an_unbindable_reform_has_no_identity_and_says_why(case_id, route, reason):
+    case = next(case for case in CASES if case.id == case_id)
+    representation = (
+        None
+        if route in contract.UNSUPPORTED_ROUTES
+        else contract.represent(case, route)
+    )
+    bound, unavailable = contract.row_reform_identity(case, route, representation)
+    assert bound is None and reason in unavailable
+
+
+def test_a_value_receipts_refuse_gives_no_identity_rather_than_an_error(
+    monkeypatch,
+):
+    import policyengine.provenance.receipt as receipt
+
+    def refuse(*args, **kwargs):
+        raise receipt.ReceiptError("$.payload.p.2027: inf is not a finite number.")
+
+    monkeypatch.setattr(receipt, "reform_identity", refuse)
+    case = next(case for case in CASES if case.id == "april_rate_change")
+    bound, unavailable = contract.row_reform_identity(
+        case, "country.reform_dict", contract.represent(case, "country.reform_dict")
+    )
+    assert bound is None and unavailable.startswith("ReceiptError")
+
+
+def test_rows_carry_their_reform_identity(monkeypatch):
+    fake(
+        monkeypatch,
+        FakeRoute(
+            reformed={
+                ("parameter", RATE, 2027): 0.21,
+                ("variable", "income_tax", 2027): 3_660.30,
+            },
+            unreformed={("variable", "income_tax", 2027): 3_486.00},
+        ),
+    )
+    rows = evaluate_case(CASE, "country.reform_dict")
+    identities = {json.dumps(row["reform_identity"], sort_keys=True) for row in rows}
+    assert len(identities) == 1
+    (identity,) = [row["reform_identity"] for row in rows[:1]]
+    assert identity["representation"] == "policyengine-uk.reform_dict/v1"
+    assert identity["name"] == CASE.id
+    assert all("reform_identity_unavailable" not in row for row in rows)
+    (unsupported,) = evaluate_case(CASE, "api.sim_api")
+    assert unsupported["reform_identity"] is None
+    assert unsupported["reform_identity_unavailable"]
+
+
+def test_run_level_rows_say_they_run_no_reform():
+    row = contract.module_parameters_unchanged(contract.shared_state())
+    assert row["reform_identity"] is None
+    assert row["reform_identity_unavailable"] == "a run-level row runs no reform"
