@@ -1,4 +1,8 @@
-"""Module-level simulation modifiers for receipt binding tests."""
+"""Module-level simulation modifiers for receipt binding tests.
+
+The module holds only functions, so its modifiers can be bound; shapes that
+cannot be bound are in ``receipt_unbindable_modifiers``.
+"""
 
 
 def raise_basic_rate(simulation):
@@ -13,28 +17,9 @@ def raise_higher_rate(simulation):
     ].rate.update(period="year:2027:10", value=0.41)
 
 
-class Measure:
-    def __init__(self, rate):
-        self.rate = rate
-
-    def apply(self, simulation):
-        simulation.rate = self.rate
-
-
-def make_modifier(rate):
-    def modifier(simulation):
-        simulation.rate = rate
-
-    return modifier
-
-
 def raise_basic_rate_to(simulation, rate=0.21):
     simulation.rate = rate
 
 
 def raise_basic_rate_from(simulation, *, start=2027):
     simulation.start = start
-
-
-def raise_with_object_default(simulation, measure=Measure(0.21)):
-    simulation.rate = measure.rate

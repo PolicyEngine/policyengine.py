@@ -6,7 +6,9 @@ figure, an API response) and names everything that determined it:
 - the wrapper, country model and core versions that actually ran, read
   from the installed distributions rather than from the bundle manifest;
 - the data release, its build identity, and the dataset's revision and
-  SHA-256 as read from the bytes that were simulated;
+  SHA-256 as read from the bytes that were simulated, resolved as
+  :func:`~policyengine.provenance.dataset_materialization.materialize_dataset`
+  resolves it;
 - the certificate that admitted that model, core and data, as a digest of
   the bundle's certification record;
 - the reform and baseline, as digests of their canonical representation;
@@ -24,15 +26,29 @@ Rules every valid v1 receipt satisfies:
   model and core versions, the simulated dataset bytes and the running
   wrapper version; otherwise the receipt is ``uncertified``.
 - ``years`` is sorted and unique, and each reported year has the meaning
-  ``fiscal_year`` gives it.
+  ``fiscal_year`` gives it. ``supported_years`` are the years the installed
+  model projects the dataset to; a reported year outside them is
+  unsupported, and its results are provisional.
+- ``data`` names the artifact the bundle resolves for ``data.dataset``, and
+  ``data.dataset_sha256`` is the hash the bundle pins for it: a receipt
+  never gives an artifact's name to other bytes. A receipt built from a
+  microsimulation also requires the bytes verified when it was loaded.
+- ``wheel_sha256`` with evidence ``installed_record_verified`` means the
+  installed files and any bytecode the interpreter would load instead of
+  them match that wheel; ``installer_archive_hash`` comes only from a
+  ``.whl`` direct URL.
 - The execution identity digest covers only what determines the execution
   (wrapper, model, core, data and the certificate's content); two results
-  with the same digest ran on the same runtime, data and certificate. The
+  with the same digest recorded the same package identities, data and
+  certificate. Certified, those identities name the code that ran; an
+  uncertified receipt (an editable install, say) does not bind its
+  packages' contents. The
   receipt digest also covers reform, baseline, years, convention and
   outputs, but not runtime context or human labels.
 - A reform digest binds content (``binding="content"``) unless the reform
   runs Python code, in which case it binds that function's source, its
-  module's source and its default arguments plus the caller's code revision,
+  module's source and its module's typed default arguments plus the
+  caller's code revision,
   and says so (``binding="code_revision"``). The digest is the same wherever
   the code is checked out and whichever Python runs it.
 - A certificate is trusted only after :func:`verify_certificate` has checked
@@ -46,31 +62,67 @@ field, or changing what a digest covers, requires schema v2.
 from __future__ import annotations
 import __future__
 
+import ast
+import builtins
+import csv
 import datetime
 import functools
 import hashlib
+import importlib.util
 import inspect
+import io
 import json
 import math
 import operator
 import platform
 import re
+import struct
 import sys
-from collections.abc import Mapping, Sequence
+import zipfile
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from importlib import metadata
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
-from types import CodeType
-from typing import Any, ClassVar, Literal, Optional, Union
+from types import (
+    ClassMethodDescriptorType,
+    CodeType,
+    GenericAlias,
+    ModuleType,
+    UnionType,
+)
+from typing import (
+    Annotated,
+    Any,
+    ClassVar,
+    Final,
+    ForwardRef,
+    Literal,
+    Optional,
+    ParamSpec,
+    ParamSpecArgs,
+    ParamSpecKwargs,
+    TypeVar,
+    TypeVarTuple,
+    Union,
+    get_args,
+    get_origin,
+)
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
+import psutil
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from policyengine.provenance.bytecode import code_shape as _code_shape
+from policyengine.provenance.bytecode import compile_source
 from policyengine.provenance.canonical import (
+    MAX_SAFE_INTEGER,
     CanonicalJSONError,
     canonical_json,
     canonical_sha256,
     drop_null_members,
 )
+from policyengine.provenance.loaded import loaded_versions
 from policyengine.utils.hashing import sha256_file
 
 __all__ = [
@@ -136,6 +188,7 @@ ReformRepresentation = Literal[
 #: v1 rules that JSON Schema cannot express. Published in the schema file.
 CROSS_FIELD_RULES: tuple[str, ...] = (
     "years is sorted ascending with no duplicates, and each year is written as an integer (2027, not 2027.0).",
+    "supported_years is sorted ascending with no duplicates. A year in years that is not in supported_years is unsupported: the model does not project the dataset to it, so a consumer must show its results as provisional or not at all.",
     "certification_status certified requires certificate; uncertified forbids it.",
     "certificate.country_id equals country_id.",
     "certificate.certified_for_model_version equals model.version.",
@@ -144,6 +197,7 @@ CROSS_FIELD_RULES: tuple[str, ...] = (
     "certificate.bundle_version equals wrapper.version.",
     "reform/baseline kind current_law has no representation or reform_sha256 and binding content; kind reform has both.",
     "wheel_sha256 and wheel_sha256_evidence are present together or not at all.",
+    "certification_status certified requires each of wrapper, model and core to have install_origin absent or archive, or install_origin directory or vcs with wheel_sha256_evidence installed_record_verified; an editable install is never certified.",
     "A consumer trusts a certificate only after checking it against the data_releases.<country_id> record of the published policyengine manifest for certificate.bundle_version (verify_certificate()): certificate_sha256 is that record's digest, every other member of certificate except certificate_source, qualification_receipt_sha256 and tro_composition_fingerprint equals what the record states, and data equals the data identity the record determines. certificate_source is the producer's statement and proves nothing.",
 )
 
@@ -153,7 +207,7 @@ DIGEST_RULES: dict[str, str] = {
     "execution_identity_sha256": "{schema_version, country_id, wrapper, model, core, data, certification_status, certificate?} where certificate keeps only bundle_version, country_id, certificate_sha256, compatibility_basis, certified_for_model_version, certified_for_core_version, certified_dataset_sha256 and certified_by",
     "receipt_sha256": "the whole receipt without runtime and without reform.name and baseline.name",
     "certificate.certificate_sha256": "the bundle manifest's data_releases.<country_id> record",
-    "reform.reform_sha256": "{representation, payload} where payload is the reform exactly as given in that representation",
+    "reform.reform_sha256": "RFC 8785 over {representation, payload} where payload is the reform exactly as given in that representation, nulls kept (a null in a reform can mean something, unlike an absent receipt field)",
     "outputs_sha256": "the canonical output payload the receipt binds",
 }
 
@@ -199,6 +253,17 @@ class PackageIdentity(_Contract):
     )
     wheel_sha256_evidence: Optional[HashEvidence] = Field(
         default=None, description="How wheel_sha256 was established."
+    )
+    install_origin: Optional[Literal["archive", "directory", "editable", "vcs"]] = (
+        Field(
+            default=None,
+            description=(
+                "Install origin recorded by PEP 610 direct_url.json; absent for an "
+                "ordinary index install. Directory and VCS installs require "
+                "installed_record_verified wheel evidence for certification; an "
+                "editable install is never certified."
+            ),
+        )
     )
 
     @model_validator(mode="after")
@@ -324,7 +389,10 @@ class ReformIdentity(_Contract):
     reform_sha256: Optional[str] = Field(
         default=None,
         pattern=SHA256_PATTERN,
-        description="content_sha256 of {'representation': ..., 'payload': ...}.",
+        description=(
+            "SHA-256 of the RFC 8785 serialisation of {'representation': ..., "
+            "'payload': ...}, nulls kept (unlike content_sha256)."
+        ),
     )
     binding: Literal["content", "code_revision"] = Field(
         default="content",
@@ -338,6 +406,34 @@ class ReformIdentity(_Contract):
     name: Optional[str] = Field(
         default=None, description="Human label; part of no digest."
     )
+
+    # Stored outside Pydantic fields and private attributes so equality,
+    # serialization and digests ignore this process-local re-check handle.
+    _recompute_identity: ClassVar[Optional[Callable[[], ReformIdentity]]] = None
+
+    def _recheck(self) -> ReformIdentity:
+        """Recompute a live identity; loaded identities have no handle."""
+
+        if self._recompute_identity is None:
+            return self
+        try:
+            recomputed = self._recompute_identity()
+        except ReceiptError as exc:
+            raise ReceiptError(
+                f"The modifier changed after its identity was computed: {exc}"
+            ) from exc
+        differences = [
+            field
+            for field in type(self).model_fields
+            if getattr(self, field) != getattr(recomputed, field)
+        ]
+        if differences:
+            raise ReceiptError(
+                "The modifier changed after its identity was computed: "
+                + ", ".join(differences)
+                + " differs."
+            )
+        return recomputed
 
     @model_validator(mode="after")
     def _current_law_has_no_digest(self) -> ReformIdentity:
@@ -403,6 +499,15 @@ class ExecutionReceipt(_Contract):
     baseline: ReformIdentity
     fiscal_year: FiscalYearConvention
     years: list[int] = Field(min_length=1)
+    supported_years: list[int] = Field(
+        description=(
+            "Years the installed model projects this dataset to, from its data "
+            "year (policyengine-uk's extend_single_year_dataset, no formula run). "
+            "A year in years that is not here is unsupported: policyengine-core "
+            "fills it by carrying or uprating the latest inputs, so its results "
+            "are not evidence and must be shown as provisional or not at all."
+        ),
+    )
     outputs_sha256: Optional[str] = Field(
         default=None,
         pattern=SHA256_PATTERN,
@@ -410,12 +515,26 @@ class ExecutionReceipt(_Contract):
     )
     runtime: Optional[RuntimeContext] = None
 
-    @field_validator("years")
+    @field_validator("schema_version", mode="before")
+    @classmethod
+    def _schema_version_is_an_integer(cls, value: Any) -> Any:
+        # ``True == 1``, so a Literal[1] alone would accept a boolean.
+        if _is_boolean(value):
+            raise ValueError("schema_version must be the integer 1, not a boolean.")
+        return value
+
+    @field_validator("years", "supported_years")
     @classmethod
     def _sorted_unique_years(cls, years: list[int]) -> list[int]:
         if years != sorted(set(years)):
             raise ValueError("years must be sorted and unique.")
         return years
+
+    @property
+    def unsupported_years(self) -> list[int]:
+        """Reported years outside the dataset's projection (see supported_years)."""
+
+        return sorted(set(self.years) - set(self.supported_years))
 
     @model_validator(mode="after")
     def _identity_rules(self) -> ExecutionReceipt:
@@ -426,6 +545,12 @@ class ExecutionReceipt(_Contract):
         certificate = self.certificate
         if certificate is None:
             raise ValueError("A certified receipt needs a certificate.")
+        for package in (self.wrapper, self.model, self.core):
+            if not _package_can_be_certified(package):
+                raise ValueError(
+                    f"A certified receipt cannot name {package.name} installed from "
+                    f"{package.install_origin}: {_uncertifiable_reason(package)}."
+                )
         if certificate.country_id != self.country_id:
             raise ValueError("Certificate country differs from the receipt country.")
         if certificate.certified_for_model_version != self.model.version:
@@ -510,11 +635,16 @@ class ExecutionReceipt(_Contract):
 
 
 def _numpy_scalar(value: Any) -> bool:
-    module = type(value).__module__
-    return (
-        module.startswith("numpy")
-        and hasattr(value, "item")
-        and getattr(value, "ndim", 0) == 0
+    """Whether ``value`` is a NumPy boolean, integer or floating scalar.
+
+    Only true scalars: a masked value (``np.ma.masked``, a masked 0-d array)
+    or a 0-d array is an array, and structured, complex, datetime and string
+    scalars have no one exact JSON number.
+    """
+
+    numpy = sys.modules.get("numpy")
+    return numpy is not None and isinstance(
+        value, (numpy.bool_, numpy.integer, numpy.floating)
     )
 
 
@@ -595,6 +725,24 @@ def content_sha256(value: Any) -> str:
         raise ReceiptError(str(exc)) from exc
 
 
+def _payload_sha256(value: Any) -> str:
+    """Digest of a reform payload: strict JSON with nulls kept, RFC 8785, SHA-256.
+
+    Unlike :func:`content_sha256`, nulls are not removed: in a reform a null
+    can mean something (``Scenario.from_reform({"p": {"2027": None}})``
+    removes a value that ``{"p": {}}`` keeps), so the payload is digested
+    exactly as given.
+    """
+
+    converted = strict_json_value(value)
+    try:
+        return canonical_sha256(converted)
+    except RecursionError as exc:
+        raise ReceiptError("The value is nested too deeply.") from exc
+    except CanonicalJSONError as exc:
+        raise ReceiptError(str(exc)) from exc
+
+
 # --- Helpers -------------------------------------------------------------
 
 
@@ -658,7 +806,7 @@ def reform_identity(
         raise ReceiptError("A non-empty reform needs its representation.")
     if representation == "policyengine-uk.scenario/v1":
         raise ReceiptError("Bind a Scenario with scenario_reform_identity().")
-    digest = content_sha256({"representation": representation, "payload": payload})
+    digest = _payload_sha256({"representation": representation, "payload": payload})
     return ReformIdentity(
         kind="reform", representation=representation, reform_sha256=digest, name=name
     )
@@ -679,49 +827,1663 @@ _SCENARIO_ATTRIBUTES = (
 )
 
 
-def _code_shape(code: CodeType) -> tuple[Any, ...]:
-    """A code object without where it was compiled: no file, no line numbers."""
+def _compile_module_source(source: str, code: CodeType) -> Optional[CodeType]:
+    """``source`` compiled as a module, with the flags ``code`` was compiled with."""
 
-    return (
-        code.co_name,
-        code.co_qualname,
-        code.co_argcount,
-        code.co_posonlyargcount,
-        code.co_kwonlyargcount,
-        code.co_flags,
-        code.co_stacksize,
-        code.co_code,
-        code.co_names,
-        code.co_varnames,
-        code.co_freevars,
-        code.co_cellvars,
-        code.co_exceptiontable,
-        tuple(
-            _code_shape(const) if isinstance(const, CodeType) else (type(const), const)
-            for const in code.co_consts
-        ),
+    return compile_source(source, code.co_filename, flags=code.co_flags & _FUTURE_FLAGS)
+
+
+def _top_level_code(module_code: CodeType) -> dict[str, list[CodeType]]:
+    """Code objects of the functions a module defines at module scope."""
+
+    found: dict[str, list[CodeType]] = {}
+    for const in module_code.co_consts:
+        if not isinstance(const, CodeType):
+            continue
+        if const.co_name.startswith("<generic parameters of "):
+            # ``def helper[T](...)`` (3.12+) compiles the function inside a
+            # wrapper that binds its type parameters; the function itself is
+            # still a module-level definition.
+            for inner in const.co_consts:
+                if isinstance(inner, CodeType) and "." not in inner.co_qualname:
+                    found.setdefault(inner.co_qualname, []).append(inner)
+            continue
+        found.setdefault(const.co_qualname, []).append(const)
+    return found
+
+
+#: Value types a typed encoding preserves exactly. Subclasses (enums, named
+#: tuples, bool-like ints) are refused rather than flattened.
+_TYPED_SCALARS = (type(None), bool, int, float, str)
+
+
+def _typed_value(value: Any, path: str = "$") -> dict[str, Any]:
+    """A lossless JSON encoding of a Python literal value, or ``ReceiptError``.
+
+    Unlike :func:`strict_json_value`, it keeps what changes a function's
+    behaviour: ``1`` and ``1.0``, a tuple and a list, ``None`` and a missing
+    member, and the order of a dictionary's keys.
+    """
+
+    kind = type(value)
+    if kind is type(None):
+        return {"type": "none"}
+    if kind is bool:
+        return {"type": "bool", "value": value}
+    if kind is int:
+        if abs(value) > MAX_SAFE_INTEGER:
+            raise ReceiptError(f"{path}: {value} is outside +/-(2**53 - 1).")
+        return {"type": "int", "value": value}
+    if kind is float:
+        if not math.isfinite(value):
+            raise ReceiptError(f"{path}: {value} is not a finite number.")
+        # By its bits: 0.0 and -0.0 compare equal but behave differently.
+        return {"type": "float", "hex": value.hex()}
+    if kind is str:
+        return {"type": "str", "value": value}
+    if kind in (tuple, list):
+        return {
+            "type": kind.__name__,
+            "items": [
+                _typed_value(item, f"{path}[{index}]")
+                for index, item in enumerate(value)
+            ],
+        }
+    if kind is dict:
+        items = []
+        for key, item in value.items():
+            if type(key) is not str:
+                raise ReceiptError(f"{path}: dictionary keys must be strings.")
+            items.append([key, _typed_value(item, f"{path}.{key}")])
+        return {"type": "dict", "items": items}
+    raise ReceiptError(
+        f"{path}: {kind.__name__} has no exact encoding; use None, bool, int, "
+        "float, str, tuple, list or dict."
     )
 
 
-def _source_matches_loaded_code(source: str, code: CodeType, qualname: str) -> bool:
-    """Whether compiling ``source`` reproduces the loaded code (nested code too)."""
+_COMPREHENSIONS = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+
+
+def _walrus_targets(node: ast.AST) -> list[str]:
+    """``:=`` targets inside a comprehension, which bind its enclosing scope.
+
+    A lambda inside it is a scope of its own: only its default values are
+    evaluated outside it.
+    """
+
+    names: list[str] = []
+    if isinstance(node, ast.NamedExpr) and isinstance(node.target, ast.Name):
+        names.append(node.target.id)
+    if isinstance(node, ast.Lambda):
+        for default in [*node.args.defaults, *node.args.kw_defaults]:
+            if default is not None:
+                names.extend(_walrus_targets(default))
+        return names
+    for child in ast.iter_child_nodes(node):
+        names.extend(_walrus_targets(child))
+    return names
+
+
+def _expression_bindings(node: Optional[ast.AST]) -> list[str]:
+    """Names an expression binds in its enclosing scope.
+
+    Plain targets bind. A comprehension's own loop variables do not, but a
+    ``:=`` inside it binds the enclosing scope (PEP 572). A lambda's body is
+    its own scope; only its default values are evaluated outside it.
+    """
+
+    if node is None:
+        return []
+    if isinstance(node, ast.Name):
+        return [node.id] if isinstance(node.ctx, ast.Store) else []
+    if isinstance(node, ast.Lambda):
+        names: list[str] = []
+        for default in [*node.args.defaults, *node.args.kw_defaults]:
+            names.extend(_expression_bindings(default))
+        return names
+    if isinstance(node, _COMPREHENSIONS):
+        return _walrus_targets(node)
+    names = []
+    for child in ast.iter_child_nodes(node):
+        names.extend(_expression_bindings(child))
+    return names
+
+
+def _definition_time_expressions(statement: ast.stmt) -> list[ast.AST]:
+    """What a ``def`` or ``class`` evaluates in its enclosing scope."""
+
+    if isinstance(statement, ast.ClassDef):
+        return [
+            *statement.decorator_list,
+            *statement.bases,
+            *(keyword.value for keyword in statement.keywords),
+        ]
+    if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        arguments = statement.args
+        annotations = [
+            argument.annotation
+            for argument in [
+                *arguments.posonlyargs,
+                *arguments.args,
+                *arguments.kwonlyargs,
+                *(item for item in (arguments.vararg, arguments.kwarg) if item),
+            ]
+            if argument.annotation is not None
+        ]
+        return [
+            *statement.decorator_list,
+            *arguments.defaults,
+            *(default for default in arguments.kw_defaults if default is not None),
+            *annotations,
+            *([statement.returns] if statement.returns is not None else []),
+        ]
+    return []
+
+
+def _scope_statements(body: Sequence[ast.stmt]) -> list[ast.stmt]:
+    """Every statement that runs at module scope, inside blocks included."""
+
+    statements: list[ast.stmt] = []
+    for statement in body:
+        if _is_main_guard(statement):
+            continue  # never runs on import
+        statements.append(statement)
+        if isinstance(statement, _SCOPES):
+            continue
+        for field in ("body", "orelse", "finalbody"):
+            statements.extend(_scope_statements(getattr(statement, field, None) or []))
+        for handler in getattr(statement, "handlers", None) or []:
+            statements.extend(_scope_statements(handler.body))
+        for case in getattr(statement, "cases", None) or []:
+            statements.extend(_scope_statements(case.body))
+    return statements
+
+
+def _statement_bindings(statement: ast.stmt) -> list[str]:
+    """Names a module-scope statement itself binds (not its nested statements)."""
+
+    if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        names = [statement.name]
+        for expression in _definition_time_expressions(statement):
+            names += _expression_bindings(expression)
+        return names
+    if isinstance(statement, (ast.Import, ast.ImportFrom)):
+        return [(alias.asname or alias.name).split(".")[0] for alias in statement.names]
+    if isinstance(statement, (ast.For, ast.AsyncFor)):
+        return _expression_bindings(statement.target) + _expression_bindings(
+            statement.iter
+        )
+    if isinstance(statement, (ast.If, ast.While)):
+        return _expression_bindings(statement.test)
+    if isinstance(statement, (ast.With, ast.AsyncWith)):
+        names = []
+        for item in statement.items:
+            names += _expression_bindings(item.context_expr)
+            names += _expression_bindings(item.optional_vars)
+        return names
+    if isinstance(statement, ast.Try) or type(statement).__name__ == "TryStar":
+        return [h.name for h in statement.handlers if h.name]  # type: ignore[attr-defined]
+    if isinstance(statement, ast.Match):
+        names = _expression_bindings(statement.subject)
+        for case in statement.cases:
+            for node in ast.walk(case.pattern):
+                for attribute in ("name", "rest"):
+                    value = getattr(node, attribute, None)
+                    if isinstance(value, str):
+                        names.append(value)
+            names += _expression_bindings(case.guard)
+        return names
+    return _expression_bindings(statement)
+
+
+def _literal_bindings(tree: ast.Module) -> dict[str, list[Any]]:
+    """Module-scope names every one of whose bindings assigns a literal.
+
+    Maps each such name to the literal values it can take, from top-level
+    assignments and assignments inside module-level blocks alike. A name
+    with any other binding (a computed value, an import, a loop variable, a
+    ``def``) is not a constant and is left out.
+    """
+
+    literals: dict[str, list[Any]] = {}
+    computed: set[str] = set()
+    for statement in _scope_statements(tree.body):
+        value: Optional[ast.expr] = None
+        names: list[str] = []
+        if isinstance(statement, ast.Assign) and all(
+            isinstance(target, ast.Name) for target in statement.targets
+        ):
+            names = [target.id for target in statement.targets]  # type: ignore[attr-defined]
+            value = statement.value
+        elif (
+            isinstance(statement, ast.AnnAssign)
+            and isinstance(statement.target, ast.Name)
+            and statement.value is not None
+        ):
+            names, value = [statement.target.id], statement.value
+            # Module annotations run unless postponed; counting a := in one
+            # when it does not run only refuses more.
+            computed.update(_expression_bindings(statement.annotation))
+        if value is not None:
+            try:
+                literal = ast.literal_eval(value)
+            except (ValueError, TypeError, SyntaxError, MemoryError, RecursionError):
+                computed.update(names)
+            else:
+                for name in names:
+                    literals.setdefault(name, []).append(literal)
+            computed.update(_expression_bindings(value))
+            continue
+        computed.update(_statement_bindings(statement))
+    return {name: values for name, values in literals.items() if name not in computed}
+
+
+def _literal_defaults(definition: ast.FunctionDef) -> Optional[dict[str, Any]]:
+    """A ``def``'s default values when every default is a literal, else ``None``."""
 
     try:
-        module_code = compile(
-            source,
-            code.co_filename,
-            "exec",
-            flags=code.co_flags & _FUTURE_FLAGS,
-            dont_inherit=True,
-        )
-    except SyntaxError:
+        defaults = [ast.literal_eval(node) for node in definition.args.defaults]
+        kwdefaults = {
+            arg.arg: ast.literal_eval(node)
+            for arg, node in zip(
+                definition.args.kwonlyargs, definition.args.kw_defaults
+            )
+            if node is not None
+        }
+    except (ValueError, TypeError, SyntaxError, MemoryError, RecursionError):
+        return None
+    return {"defaults": defaults, "kwdefaults": kwdefaults}
+
+
+def _same_literal(left: Any, right: Any) -> bool:
+    """Whether two literal values are the same value of the same types.
+
+    Covers everything ``ast.literal_eval`` returns. Unlike ``==``, ``1`` is
+    not ``1.0`` or ``True``, a tuple is not a list, floats compare by their
+    bits (``0.0`` is not ``-0.0``) and a dictionary's key order counts.
+    """
+
+    kind = type(left)
+    if kind is not type(right):
         return False
-    compiled = [
-        const
-        for const in module_code.co_consts
-        if isinstance(const, CodeType) and const.co_qualname == qualname
+    if kind is float:
+        return struct.pack("<d", left) == struct.pack("<d", right)
+    if kind is complex:
+        return _same_literal(left.real, right.real) and _same_literal(
+            left.imag, right.imag
+        )
+    if kind in (tuple, list):
+        return len(left) == len(right) and all(map(_same_literal, left, right))
+    if kind is dict:
+        return len(left) == len(right) and all(
+            _same_literal(left_key, right_key) and _same_literal(left_item, right_item)
+            for (left_key, left_item), (right_key, right_item) in zip(
+                left.items(), right.items()
+            )
+        )
+    if kind in (set, frozenset):
+        # Set members are distinct, so a match for each one is a bijection.
+        return len(left) == len(right) and all(
+            any(_same_literal(item, other) for other in right) for item in left
+        )
+    return bool(left == right)
+
+
+def _function_defaults(function: Any) -> dict[str, Any]:
+    return {
+        "defaults": list(function.__defaults__ or ()),
+        "kwdefaults": dict(function.__kwdefaults__ or {}),
+    }
+
+
+def _shared_default_object(
+    functions: Sequence[Any], constants: Optional[Mapping[str, Any]] = None
+) -> Optional[str]:
+    """Where two default values are one mutable object, if any are.
+
+    ``first=[], second=[]`` makes two lists, but ``__defaults__`` can be set
+    to one list twice, and code that mutates one or tests ``first is
+    second`` then behaves differently under the same digest. Looks through
+    every default of every function given, inside tuples, lists and
+    dictionaries too (a container holding itself counts), and through the
+    module's literal constants given as ``constants``.
+    """
+
+    owners: dict[int, str] = {}
+    roots: list[tuple[str, Any]] = [
+        (f"constant {name}", value) for name, value in (constants or {}).items()
     ]
-    return len(compiled) == 1 and _code_shape(compiled[0]) == _code_shape(code)
+    for function in functions:
+        name = function.__code__.co_qualname
+        defaults = list(enumerate(function.__defaults__ or ()))
+        kwdefaults = list((function.__kwdefaults__ or {}).items())
+        roots.extend(
+            (f"{name} default {key}", value) for key, value in defaults + kwdefaults
+        )
+    pending = roots
+    while pending:
+        path, value = pending.pop()
+        if isinstance(value, (list, dict, set, bytearray)):
+            if id(value) in owners:
+                return (
+                    f"{path} and {owners[id(value)]} are one "
+                    f"{type(value).__name__} object"
+                )
+            owners[id(value)] = path
+        if isinstance(value, dict):
+            pending.extend((f"{path}[{key!r}]", item) for key, item in value.items())
+        elif isinstance(value, (list, tuple)):
+            pending.extend(
+                (f"{path}[{index}]", item) for index, item in enumerate(value)
+            )
+    return None
+
+
+def _module_functions(module: Any, filename: str) -> list[Any]:
+    """The functions an imported module defines at module scope in ``filename``.
+
+    Includes those a decorator wrapped (found through ``__wrapped__``). A
+    function counts as module-level by its code object's own qualified name,
+    which ``functools.wraps`` cannot copy onto a wrapper.
+    """
+
+    found: dict[int, Any] = {}
+    for value in vars(module).values():
+        function = _unwrapped(value, module, filename)
+        if function is not None:
+            found[id(function)] = function
+    return list(found.values())
+
+
+def _from_this_file(value: Any, module: Any, filename: str) -> bool:
+    """A function defined at module scope in ``filename`` (not a wrapper)."""
+
+    return (
+        inspect.isfunction(value)
+        and value.__module__ == module.__name__
+        and value.__code__.co_filename == filename
+        and "." not in value.__code__.co_qualname
+        and "<" not in value.__code__.co_qualname
+        # Python 3.14 compiles a module's and each function's annotations to
+        # functions named __annotate__; they are the compiler's, not defs.
+        and value.__code__.co_name != "__annotate__"
+    )
+
+
+def _unwrapped(value: Any, module: Any, filename: str) -> Any:
+    """The function a decorator wrapped (``__wrapped__``), when there is one."""
+
+    for _ in range(16):
+        if _from_this_file(value, module, filename):
+            return value
+        value = getattr(value, "__wrapped__", None)
+        if value is None:
+            return None
+    return None
+
+
+def _module_differs_from_source(
+    module: Any, module_source: str, code: CodeType, *, also_check: Any = None
+) -> Optional[str]:
+    """How the imported module differs from its source as read now, if it does.
+
+    The source is compiled as a whole module (so a function compiles in its
+    module's context, imports included) and compared with what was imported,
+    ignoring file names and line numbers:
+    - every function defined at module scope in that file, and ``also_check``
+      (the modifier), must use the module's own globals, match that code, and,
+      where the source's defaults are literals, hold those defaults;
+    - a name the source binds only with ``def`` must still be that function
+      (or a decorator's wrapper of it, through ``__wrapped__``), not another
+      module's function or any other object;
+    - every module-scope name all of whose bindings assign literals
+      (``RATE = 0.21``, in a block or not) must still hold one of those
+      values, with the same type.
+    """
+
+    module_code = _compile_module_source(module_source, code)
+    if module_code is None:
+        return "its source no longer compiles"
+    tree = ast.parse(module_source)
+    compiled = _top_level_code(module_code)
+    filename = code.co_filename
+    definitions: dict[str, list[ast.FunctionDef]] = {}
+    otherwise_bound: set[str] = set()
+    for statement in _scope_statements(tree.body):
+        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            definitions.setdefault(statement.name, []).append(statement)  # type: ignore[arg-type]
+            for expression in _definition_time_expressions(statement):
+                otherwise_bound.update(_expression_bindings(expression))
+        else:
+            otherwise_bound.update(_statement_bindings(statement))
+    namespace = vars(module)
+    for name in definitions:
+        if name in otherwise_bound:
+            continue
+        if name not in namespace:
+            return f"function {name} is no longer defined"
+        function = _unwrapped(namespace[name], module, filename)
+        if function is None:
+            return (
+                f"{name} is no longer the function its source defines "
+                f"(it is {type(namespace[name]).__name__})"
+            )
+        if function.__code__.co_qualname != name:
+            # Another function from the file, each still matching its source.
+            return f"{name} is bound to {function.__code__.co_qualname}"
+    functions = _module_functions(module, filename)
+    if also_check is not None and all(item is not also_check for item in functions):
+        functions.append(also_check)
+    for function in functions:
+        name = function.__code__.co_qualname
+        if function.__globals__ is not namespace:
+            return f"function {name} does not use its module's globals"
+        shapes = {_code_shape(item) for item in compiled.get(name, [])}
+        if _code_shape(function.__code__) not in shapes:
+            return f"function {name} no longer matches it"
+        if len(shapes) > 1:
+            # Which branch the source selects now cannot be read from it.
+            return (
+                f"function {name} has {len(shapes)} different definitions, so "
+                "which one ran cannot be checked"
+            )
+        sources = [_literal_defaults(node) for node in definitions.get(name, [])]
+        literal_sources = [item for item in sources if item is not None]
+        if literal_sources and len(literal_sources) == len(sources):
+            if not any(
+                _same_literal(item, _function_defaults(function))
+                for item in literal_sources
+            ):
+                return f"function {name}'s default arguments differ from the source"
+    for name, values in _literal_bindings(tree).items():
+        if name not in namespace:
+            return f"{name} is no longer defined"
+        current = namespace[name]
+        if not any(_same_literal(current, value) for value in values):
+            shown = values[0] if len(values) == 1 else values
+            return f"{name} is {current!r} at run time but {shown!r} in the source"
+    return None
+
+
+#: Names the import system sets on every module. Reading one reads nothing
+#: the module's source and location do not already fix.
+_MODULE_DUNDERS = frozenset(
+    {
+        "__builtins__",
+        "__cached__",
+        "__doc__",
+        "__file__",
+        "__loader__",
+        "__name__",
+        "__package__",
+        "__spec__",
+    }
+)
+#: Dunder names a module's namespace may hold without its source binding
+#: them: those the import system sets, and the annotation machinery's.
+_NAMESPACE_DUNDERS = _MODULE_DUNDERS | {
+    "__annotations__",
+    "__annotate__",
+    "__conditional_annotations__",
+}
+
+
+def _type_name(value: Any) -> str:
+    kind = type(value)
+    if kind.__module__ == "builtins":
+        return kind.__qualname__
+    return f"{kind.__module__}.{kind.__qualname__}"
+
+
+#: Nodes that bind names or run code in a scope of their own; a module whose
+#: top level a digest can bind holds none of them in definition-time code.
+_SCOPED_EVALUATION = (
+    ast.NamedExpr,
+    ast.Lambda,
+    ast.ListComp,
+    ast.SetComp,
+    ast.DictComp,
+    ast.GeneratorExp,
+    ast.Await,
+    ast.Yield,
+    ast.YieldFrom,
+)
+#: Singletons whose identity is the same in every process.
+_IDENTITY_CONSTANTS = (None, True, False, Ellipsis)
+#: What an annotation may contain: names, attributes, subscripts, constants,
+#: tuples and lists of them, ``X | Y``, and signed numeric constants.
+_ANNOTATION_NODES = (
+    ast.Name,
+    ast.Attribute,
+    ast.Subscript,
+    ast.Constant,
+    ast.Tuple,
+    ast.List,
+    ast.BinOp,
+    ast.BitOr,
+    ast.Load,
+    ast.Slice,
+    ast.UnaryOp,
+    ast.UAdd,
+    ast.USub,
+)
+
+
+def _is_annotation_expression(expression: ast.AST) -> bool:
+    return all(
+        isinstance(node, _ANNOTATION_NODES)
+        and (
+            not isinstance(node, ast.UnaryOp)
+            or (
+                isinstance(node.operand, ast.Constant)
+                and type(node.operand.value) in (int, float, complex)
+            )
+        )
+        for node in ast.walk(expression)
+    )
+
+
+def _function_annotations(
+    statement: Union[ast.FunctionDef, ast.AsyncFunctionDef],
+) -> list[Optional[ast.expr]]:
+    arguments = statement.args
+    return [
+        argument.annotation
+        for argument in [
+            *arguments.posonlyargs,
+            *arguments.args,
+            *arguments.kwonlyargs,
+            *(item for item in (arguments.vararg, arguments.kwarg) if item),
+        ]
+    ] + [statement.returns]
+
+
+def _is_literal(node: ast.expr) -> bool:
+    try:
+        ast.literal_eval(node)
+    except (ValueError, TypeError, SyntaxError, MemoryError, RecursionError):
+        return False
+    return True
+
+
+def _is_main_guard(statement: ast.stmt) -> bool:
+    """``if __name__ == "__main__":`` with no ``else``: it never runs on import."""
+
+    if not isinstance(statement, ast.If) or statement.orelse:
+        return False
+    test = statement.test
+    if not (
+        isinstance(test, ast.Compare)
+        and len(test.ops) == 1
+        and isinstance(test.ops[0], ast.Eq)
+    ):
+        return False
+    sides = [test.left, test.comparators[0]]
+    names = [side for side in sides if isinstance(side, ast.Name)]
+    constants = [side for side in sides if isinstance(side, ast.Constant)]
+    return (
+        len(names) == 1
+        and names[0].id == "__name__"
+        and len(constants) == 1
+        and constants[0].value == "__main__"
+    )
+
+
+#: Names that reach module state, run code, compare identities or read annotation
+#: values; refused anywhere in a bound modifier's module.
+_REFUSED_NAMES = frozenset(
+    {
+        "globals",
+        "vars",
+        "locals",
+        "exec",
+        "eval",
+        "compile",
+        "__import__",
+        "breakpoint",
+        "id",
+        "is_",
+        "is_not",
+        # Annotation metadata readers remain outside the accepted shape.
+        "get_type_hints",
+        "get_annotations",
+        "signature",
+        "getfullargspec",
+        "from_callable",
+    }
+)
+#: Attributes refused anywhere: operator.is_ and is_not compare identities,
+#: and typing.get_type_hints, inspect.signature and the like expose metadata
+#: through introspection, outside the accepted module shape.
+_REFUSED_ATTRIBUTES = frozenset(
+    {
+        "is_",
+        "is_not",
+        "get_type_hints",
+        "get_annotations",
+        "signature",
+        "getfullargspec",
+        "from_callable",
+    }
+)
+_ANNOTATION_READERS = frozenset(
+    {
+        "get_type_hints",
+        "get_annotations",
+        "signature",
+        "getfullargspec",
+        "from_callable",
+    }
+)
+_ATTRIBUTE_OPERATIONS = frozenset({"getattr", "hasattr", "setattr", "delattr"})
+#: Dunder attributes a measure may read; any other is introspection.
+_ALLOWED_DUNDER_ATTRIBUTES = frozenset({"__init__", "__name__"})
+#: Dunder names a measure may read: its module's name and file.
+_ALLOWED_DUNDER_NAMES = frozenset({"__name__", "__file__"})
+
+
+def _is_dunder(name: str) -> bool:
+    return len(name) > 4 and name.startswith("__") and name.endswith("__")
+
+
+def _bound_names(tree: ast.AST) -> Iterator[tuple[str, int]]:
+    """Every name bound anywhere in ``tree``, with its line."""
+
+    for node in ast.walk(tree):
+        line = getattr(node, "lineno", 0)
+        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
+            yield node.id, line
+        elif isinstance(node, ast.arg):
+            yield node.arg, line
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            yield node.name, line
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                yield (alias.asname or alias.name).split(".")[0], line
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            for name in node.names:
+                yield name, line
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            yield node.name, line
+        elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name:
+            yield node.name, line
+        elif isinstance(node, ast.MatchMapping) and node.rest:
+            yield node.rest, line
+
+
+def _introspection_problem(tree: ast.Module) -> Optional[str]:
+    """Code that reads state a digest of values cannot bind, anywhere in the module.
+
+    - ``is`` is allowed only against ``None``, ``True``, ``False``, ``...`` or
+      ``type(...)``, and ``type`` may not be rebound anywhere in the module:
+      the compiler may make equal immutable constants one object.
+    - ``id``, ``operator.is_``/``is_not``, ``globals``, ``vars``, ``locals``,
+      ``exec``, ``eval``, ``compile``, ``__import__`` and ``breakpoint`` are
+      refused by name, however imported, and so is importing ``builtins``.
+    - Explicit annotation readers are refused as introspection.
+    - Dunder attributes other than ``__init__`` and ``__name__``, and dunder
+      names other than ``__name__`` and ``__file__``, are introspection.
+      Attribute operations must name a literal string, so the same check
+      applies when the attribute is accessed through ``getattr`` and friends.
+    """
+
+    for name, line in _bound_names(tree):
+        if name == "type":
+            return f"line {line} rebinds type, which identity checks rely on"
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Global):
+            return (
+                f"line {node.lineno} declares {', '.join(node.names)} global, so "
+                "what the module holds depends on earlier calls"
+            )
+    for node in ast.walk(tree):
+        line = getattr(node, "lineno", 0)
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in _ATTRIBUTE_OPERATIONS
+        ):
+            name = node.args[1] if len(node.args) > 1 else None
+            if not (isinstance(name, ast.Constant) and type(name.value) is str):
+                return (
+                    f"line {line} uses {node.func.id} with a non-literal attribute "
+                    "name, so introspection cannot be checked"
+                )
+            if _is_dunder(name.value) and name.value not in _ALLOWED_DUNDER_ATTRIBUTES:
+                return (
+                    f"line {line} uses {node.func.id} with {name.value}, "
+                    "which is introspection"
+                )
+        elif isinstance(node, ast.Compare):
+            lefts = [node.left, *node.comparators[:-1]]
+            for left, op, right in zip(lefts, node.ops, node.comparators):
+                if isinstance(op, (ast.Is, ast.IsNot)) and not (
+                    _plain_identity_operand(left) or _plain_identity_operand(right)
+                ):
+                    return (
+                        f"line {line} compares identities, but a digest of values "
+                        "cannot tell one object from two equal ones (compare with "
+                        "== instead)"
+                    )
+        elif isinstance(node, ast.Name):
+            if node.id in _REFUSED_NAMES:
+                return f"line {line} uses {node.id}, which {_refused_why(node.id)}"
+            if (
+                isinstance(node.ctx, ast.Load)
+                and _is_dunder(node.id)
+                and node.id not in _ALLOWED_DUNDER_NAMES
+            ):
+                return f"line {line} reads {node.id}, which is introspection"
+        elif isinstance(node, ast.Attribute):
+            if node.attr in _REFUSED_ATTRIBUTES:
+                return f"line {line} uses .{node.attr}, which {_refused_why(node.attr)}"
+            if _is_dunder(node.attr) and node.attr not in _ALLOWED_DUNDER_ATTRIBUTES:
+                return f"line {line} reads .{node.attr}, which is introspection"
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            modules = (
+                [alias.name for alias in node.names]
+                if isinstance(node, ast.Import)
+                else [node.module or ""]
+            )
+            if any(module.split(".")[0] == "builtins" for module in modules):
+                return f"line {line} imports builtins"
+            for alias in node.names:
+                if alias.name in _REFUSED_NAMES:
+                    return f"line {line} imports {alias.name}, which {_refused_why(alias.name)}"
+    return None
+
+
+_REFUSED_WHY = (
+    "reaches module state, runs code or compares identities without naming "
+    "what it reads"
+)
+
+
+def _refused_why(name: str) -> str:
+    if name in _ANNOTATION_READERS:
+        return "reads annotation values through introspection"
+    return _REFUSED_WHY
+
+
+def _plain_identity_operand(node: ast.expr) -> bool:
+    """A singleton constant or ``type(...)``, safe on one side of ``is``."""
+
+    if isinstance(node, ast.Constant) and any(
+        node.value is constant for constant in _IDENTITY_CONSTANTS
+    ):
+        return True
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "type"
+    )
+
+
+def _module_statement_problem(tree: ast.Module) -> Optional[str]:
+    """Why a modifier's module is not one whose state a digest can bind.
+
+    At module level the module may hold only docstrings, ``pass``, imports,
+    assignments of a literal to one name (annotated or not), undecorated
+    ``def`` statements, and an ``if __name__ == "__main__":`` block (which
+    never runs on import). A generic function's type parameters carry no
+    bound, constraints or default: Python evaluates those only when something
+    first reads them, so typing's order-insensitive alias cache can decide
+    what they hold. Each name is bound once. Definition-time code
+    (defaults, annotations) holds no ``:=``, lambda, comprehension, ``await``
+    or ``yield``. Then every module-level name is a literal (checked by
+    value), a function (checked against the source) or an import (checked
+    against what the import binds), and nothing else can hold state:
+    conditional or repeated bindings, objects built at import, decorators
+    and class definitions are what this shuts out.
+    """
+
+    bound: dict[str, int] = {}
+
+    def bind(name: str, line: int) -> Optional[str]:
+        if name in bound:
+            return f"{name} is bound twice (lines {bound[name]} and {line})"
+        bound[name] = line
+        return None
+
+    def evaluates(nodes: Sequence[Optional[ast.AST]]) -> Optional[ast.AST]:
+        for root in nodes:
+            if root is None:
+                continue
+            for node in ast.walk(root):
+                if isinstance(node, _SCOPED_EVALUATION):
+                    return node
+        return None
+
+    def computed_annotation(nodes: Sequence[Optional[ast.AST]]) -> bool:
+        # An annotation runs at import (before 3.14 or without postponed
+        # annotations), so it may only name types, not compute values.
+        return any(
+            not _is_annotation_expression(root) for root in nodes if root is not None
+        )
+
+    for statement in tree.body:
+        line = statement.lineno
+        problem: Optional[str] = None
+        if isinstance(statement, ast.Pass) or _is_main_guard(statement):
+            continue
+        if isinstance(statement, ast.Expr) and isinstance(
+            statement.value, ast.Constant
+        ):
+            if isinstance(statement.value.value, str):
+                continue
+        if isinstance(statement, (ast.Import, ast.ImportFrom)):
+            for alias in statement.names:
+                if alias.name == "*":
+                    continue
+                name = alias.asname or alias.name.split(".")[0]
+                problem = problem or bind(name, line)
+        elif isinstance(statement, ast.Assign):
+            if len(statement.targets) != 1 or not isinstance(
+                statement.targets[0], ast.Name
+            ):
+                return f"line {line} assigns to something other than one name"
+            name = statement.targets[0].id
+            if not _is_literal(statement.value):
+                return f"line {line} assigns {name} something other than a literal"
+            problem = bind(name, line)
+        elif isinstance(statement, ast.AnnAssign):
+            if not isinstance(statement.target, ast.Name):
+                return f"line {line} assigns to something other than one name"
+            name = statement.target.id
+            if evaluates([statement.annotation]):
+                return f"line {line} binds a name in the annotation of {name}"
+            if computed_annotation([statement.annotation]):
+                return f"line {line} computes the annotation of {name}"
+            if statement.value is not None:
+                if not _is_literal(statement.value):
+                    return f"line {line} assigns {name} something other than a literal"
+                problem = bind(name, line)
+        elif isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if statement.decorator_list:
+                return f"line {line} decorates {statement.name}"
+            qualified = [
+                parameter.name
+                for parameter in getattr(statement, "type_params", None) or []
+                if getattr(parameter, "bound", None) is not None
+                or getattr(parameter, "default_value", None) is not None
+            ]
+            if qualified:
+                return (
+                    f"line {line}: type parameter {qualified[0]} of "
+                    f"{statement.name} has a bound, constraints or default, "
+                    "which Python evaluates only when first read"
+                )
+            if evaluates(_definition_time_expressions(statement)):
+                return (
+                    f"line {line}: a default or annotation of {statement.name} "
+                    "binds a name or runs code in a scope of its own"
+                )
+            if computed_annotation(_function_annotations(statement)):
+                return f"line {line} computes an annotation of {statement.name}"
+            if _is_dunder(statement.name):
+                return f"line {line} defines {statement.name}"
+            problem = bind(statement.name, line)
+        elif isinstance(statement, ast.ClassDef):
+            return f"line {line} defines class {statement.name}"
+        else:
+            return f"line {line} is a module-level {type(statement).__name__} statement"
+        if problem:
+            return problem
+    return None
+
+
+def _module_shape_problem(tree: ast.Module) -> Optional[str]:
+    """Why a modifier's module cannot be bound, with the reason, if it cannot."""
+
+    problem = _module_statement_problem(tree)
+    if problem:
+        return (
+            f"{problem}; a module whose modifier is bound holds at module level "
+            "only imports, literal constants and undecorated functions, each "
+            "name bound once"
+        )
+    return _introspection_problem(tree)
+
+
+def _same_annotation(
+    actual: Any,
+    declared: Any,
+    namespace: Mapping[str, Any],
+    type_argument: bool = True,
+) -> bool:
+    """Compare resolved annotation origins and arguments, preserving order."""
+
+    if (
+        actual is declared
+        and type(actual) is not str
+        and not isinstance(actual, ForwardRef)
+    ):
+        return True
+    actual_origin, declared_origin = get_origin(actual), get_origin(declared)
+    if isinstance(actual, (ParamSpecArgs, ParamSpecKwargs)) or isinstance(
+        declared, (ParamSpecArgs, ParamSpecKwargs)
+    ):
+        return type(actual) is type(declared) and actual_origin is declared_origin
+    if isinstance(actual, ForwardRef) or isinstance(declared, ForwardRef):
+        same = (
+            type(actual) is type(declared)
+            and actual.__forward_arg__ == declared.__forward_arg__
+            and actual.__forward_module__ == declared.__forward_module__
+            and actual.__forward_is_argument__ == declared.__forward_is_argument__
+            and actual.__forward_is_class__ == declared.__forward_is_class__
+        )
+        if same and type_argument:
+            resolved, source = _annotation_string_state(
+                declared.__forward_arg__, namespace
+            )
+            if not _same_annotation(
+                resolved, source, namespace, type(resolved) is not str
+            ):
+                return False
+            if getattr(actual, "__forward_evaluated__", False):
+                return _same_annotation(actual.__forward_value__, source, namespace)
+        return same
+    if actual_origin is not None or declared_origin is not None:
+        actual_args, declared_args = get_args(actual), get_args(declared)
+        return (
+            actual_origin is declared_origin
+            and len(actual_args) == len(declared_args)
+            and all(
+                _same_annotation(
+                    left,
+                    right,
+                    namespace,
+                    type_argument
+                    and actual_origin is not Literal
+                    and (actual_origin is not Annotated or position == 0),
+                )
+                for position, (left, right) in enumerate(
+                    zip(actual_args, declared_args)
+                )
+            )
+        )
+    if type(actual) in (list, tuple) and type(actual) is type(declared):
+        return len(actual) == len(declared) and all(
+            _same_annotation(left, right, namespace, type_argument)
+            for left, right in zip(actual, declared)
+        )
+    if (
+        type_argument
+        and type(actual) is str
+        and type(declared) is str
+        and actual == declared
+    ):
+        resolved, source = _annotation_string_state(declared, namespace)
+        return _same_annotation(resolved, source, namespace, type(resolved) is not str)
+    return actual is declared or (
+        type(actual)
+        in (type(None), bool, int, float, complex, str, bytes, type(Ellipsis))
+        and _same_literal(actual, declared)
+    )
+
+
+def _annotation_string_state(
+    value: str, namespace: Mapping[str, Any]
+) -> tuple[Any, Any]:
+    """Resolve root annotation strings while checking every quoted expression."""
+
+    seen: set[str] = set()
+    while type(value) is str:
+        if value in seen:
+            raise ValueError("an annotation string has a resolution cycle")
+        seen.add(value)
+        try:
+            expression = ast.parse(value, mode="eval").body
+        except SyntaxError:
+            return value, value
+        if not _is_annotation_expression(expression):
+            raise ValueError("an annotation string computes a value")
+        try:
+            resolved = eval(
+                compile(
+                    ast.Expression(expression),
+                    "<annotation>",
+                    "eval",
+                    dont_inherit=True,
+                ),
+                dict(namespace),
+            )
+        except (NameError, AttributeError):
+            return value, value
+        declared = _source_annotation(expression, namespace)
+        if type(resolved) is str and resolved == declared and resolved != value:
+            value = resolved
+        else:
+            return resolved, declared
+    return value, value
+
+
+#: Python 3.13 made ``Final['int']`` and ``ClassVar['int']`` build
+#: ``ForwardRef('int', is_class=True)``; 3.11 and 3.12 build it with
+#: ``is_class=False``. A fixed fact of the interpreter, so no probe of
+#: typing's (cached, mutable) objects decides it.
+_SPECIAL_FORM_FORWARD_IS_CLASS = sys.version_info >= (3, 13)
+
+
+def _source_annotation(expression: ast.expr, namespace: Mapping[str, Any]) -> Any:
+    """Resolve source arguments without typing's order-insensitive alias cache.
+
+    GenericAlias is only a structural comparison value here; it does not run
+    the annotation. Re-evaluating a whole List[Union[X, Y]] can return an alias
+    cached for List[Union[Y, X]], so each source argument must be read separately.
+    """
+
+    def evaluate(node: ast.expr) -> Any:
+        return eval(
+            compile(ast.Expression(node), "<annotation>", "eval", dont_inherit=True),
+            dict(namespace),
+        )
+
+    def union(arguments: Sequence[Any], origin: Any) -> Any:
+        members: list[Any] = []
+        for argument in arguments:
+            if argument is None:
+                argument = type(None)
+            argument_origin = get_origin(argument)
+            values = (
+                get_args(argument)
+                if argument_origin is Union or argument_origin is UnionType
+                else (argument,)
+            )
+            for value in values:
+                if not any(
+                    _same_annotation(value, member, namespace) for member in members
+                ):
+                    members.append(value)
+        return members[0] if len(members) == 1 else GenericAlias(origin, tuple(members))
+
+    if isinstance(expression, (ast.List, ast.Tuple)):
+        values = [_source_annotation(item, namespace) for item in expression.elts]
+        return values if isinstance(expression, ast.List) else tuple(values)
+    if isinstance(expression, ast.BinOp):
+        return union(
+            [
+                _source_annotation(expression.left, namespace),
+                _source_annotation(expression.right, namespace),
+            ],
+            get_origin(evaluate(expression)),
+        )
+    if not isinstance(expression, ast.Subscript):
+        return evaluate(expression)
+    base = evaluate(expression.value)
+    arguments = _source_annotation(expression.slice, namespace)
+    args = arguments if isinstance(arguments, tuple) else (arguments,)
+
+    def forward_argument(value: Any, *, is_class: bool = False) -> Any:
+        if type(value) is str:
+            return ForwardRef(value, is_class=is_class)
+        if type(value) in (list, tuple):
+            values = [forward_argument(item, is_class=is_class) for item in value]
+            return values if type(value) is list else tuple(values)
+        return value
+
+    if base is Union:
+        return union(
+            [forward_argument(item) for item in args], get_origin(evaluate(expression))
+        )
+    if base is Optional:
+        return union(
+            [*[forward_argument(item) for item in args], type(None)],
+            get_origin(evaluate(expression)),
+        )
+    if base is Annotated:
+        first, *metadata_args = args
+        first = forward_argument(first, is_class=True)
+        if get_origin(first) is Annotated:
+            first, *existing = get_args(first)
+            metadata_args = [*existing, *metadata_args]
+        return GenericAlias(Annotated, (first, *metadata_args))
+    if base is Literal:
+        values: list[Any] = []
+        for argument in args:
+            members = (
+                get_args(argument) if get_origin(argument) is Literal else (argument,)
+            )
+            for member in members:
+                if not any(
+                    _same_annotation(member, value, namespace, False)
+                    for value in values
+                ):
+                    values.append(member)
+        return GenericAlias(Literal, tuple(values))
+    if get_args(base):
+        # A parameterised alias (for example numpy.typing.NDArray) substitutes
+        # its arguments into a template rather than taking them directly.
+        # typing's parameterised aliases can use the same ambiguous cache.
+        if type(base) is not GenericAlias:
+            raise ValueError("a parameterised typing alias cannot be checked")
+        return base[arguments]
+    if getattr(base, "__module__", None) == "typing":
+        args = tuple(
+            forward_argument(
+                item,
+                is_class=(base is ClassVar or base is Final)
+                and _SPECIAL_FORM_FORWARD_IS_CLASS,
+            )
+            for item in args
+        )
+    declared = evaluate(expression)
+    origin = get_origin(declared)
+    if origin is None:
+        # Generated classes (for example Pydantic generics) do not expose
+        # their arguments through typing, so their source order cannot be checked.
+        raise ValueError("a subscripted annotation has no typing origin")
+    declared_args = get_args(declared)
+    if len(args) == len(declared_args):
+        args = tuple(
+            type(None) if value is None and old is type(None) else value
+            for value, old in zip(args, declared_args)
+        )
+    return GenericAlias(origin, args)
+
+
+_TYPE_PARAMETER_KINDS = {
+    "TypeVar": TypeVar,
+    "ParamSpec": ParamSpec,
+    "TypeVarTuple": TypeVarTuple,
+}
+
+
+def _type_parameters_problem(
+    function: Any, node: Union[ast.FunctionDef, ast.AsyncFunctionDef]
+) -> Optional[str]:
+    """Why a generic function's type parameters are not those its ``def`` made.
+
+    ``__type_params__`` is writable, so each parameter must still be a bare
+    TypeVar, ParamSpec or TypeVarTuple of the name and kind the source
+    declares, in order. The module shape check refuses source that gives one
+    a bound, constraints or default, so none may hold one, nor a declared
+    variance (the ``def`` infers it).
+    """
+
+    declared = getattr(node, "type_params", None) or []
+    actual = getattr(function, "__type_params__", ())
+    if type(actual) is not tuple or len(actual) != len(declared):
+        return "type parameters are not those its source declares"
+    for parameter, source in zip(actual, declared):
+        kind = _TYPE_PARAMETER_KINDS.get(type(source).__name__)
+        if type(parameter) is not kind or parameter.__name__ != source.name:
+            return "type parameters are not those its source declares"
+        has_default = getattr(parameter, "has_default", None)
+        qualified = has_default is not None and has_default()
+        if kind is not TypeVarTuple:
+            qualified = (
+                qualified
+                or parameter.__bound__ is not None
+                or getattr(parameter, "__constraints__", ()) != ()
+                or parameter.__covariant__
+                or parameter.__contravariant__
+                or not parameter.__infer_variance__
+            )
+        if qualified:
+            return (
+                f"type parameter {source.name} holds a bound, constraints, "
+                "default or variance its source does not declare"
+            )
+    return None
+
+
+def _function_state_problem(
+    function: Any, nodes: Mapping[str, Union[ast.FunctionDef, ast.AsyncFunctionDef]]
+) -> Optional[str]:
+    """How a module function's own attributes differ from what its def made.
+
+    A function's name, qualified name, docstring and annotations are writable,
+    and its builtins are those of the namespace it was created in; none is in
+    its code, so each must still be what the ``def`` in the source made. Any
+    other attribute (``helper.amount = 240``) is state the digest does not
+    bind. Annotation values must still be what their source names.
+    """
+
+    code = function.__code__
+    name = code.co_qualname
+    if function.__dict__:
+        attributes = ", ".join(sorted(function.__dict__))
+        return f"function {name} carries attributes ({attributes}), state the digest does not bind"
+    if function.__name__ != code.co_name or function.__qualname__ != name:
+        return f"function {name} has been renamed to {function.__qualname__}"
+    if getattr(function, "__builtins__", vars(builtins)) is not vars(builtins):
+        return f"function {name} does not use the builtins module"
+    node = nodes.get(name)
+    if node is None:
+        return None
+    # The compiler cleans docstrings (3.13 strips indentation) and keeps the
+    # result as the first constant of the code, which matches the source.
+    declared = ast.get_docstring(node, clean=False) is not None
+    expected_doc = code.co_consts[0] if declared and code.co_consts else None
+    if function.__doc__ != expected_doc:
+        return f"function {name}'s __doc__ is not its source docstring"
+    problem = _type_parameters_problem(function, node)
+    if problem:
+        return f"function {name}'s {problem}"
+    expected = {
+        argument.arg: argument.annotation
+        for argument in [
+            *node.args.posonlyargs,
+            *node.args.args,
+            *(node.args.vararg,) * bool(node.args.vararg),
+            *node.args.kwonlyargs,
+            *(node.args.kwarg,) * bool(node.args.kwarg),
+        ]
+        if argument is not None and argument.annotation is not None
+    }
+    if node.returns is not None:
+        expected["return"] = node.returns
+    try:
+        annotations = function.__annotations__
+    except Exception:  # evaluating postponed annotations can fail
+        return f"function {name}'s annotations cannot be read"
+    if sorted(annotations) != sorted(expected):
+        differing = ", ".join(sorted(set(annotations) ^ set(expected)))
+        return (
+            f"function {name}'s annotations are not those its source declares "
+            f"({differing})"
+        )
+    postponed = bool(code.co_flags & __future__.annotations.compiler_flag)
+    if postponed:
+        # Compile only the annotations: no defaults, decorators or body can
+        # run. This gives the strings this Python's compiler actually stores.
+        arguments = node.args
+        probe = ast.FunctionDef(
+            name="_annotation_probe",
+            args=ast.arguments(
+                posonlyargs=arguments.posonlyargs,
+                args=arguments.args,
+                vararg=arguments.vararg,
+                kwonlyargs=arguments.kwonlyargs,
+                kw_defaults=[None] * len(arguments.kwonlyargs),
+                kwarg=arguments.kwarg,
+                defaults=[],
+            ),
+            body=[ast.Pass()],
+            decorator_list=[],
+            returns=node.returns,
+            type_params=[],
+        )
+        source = ast.fix_missing_locations(ast.Module(body=[probe], type_ignores=[]))
+        namespace: dict[str, Any] = {}
+        exec(
+            compile(
+                source,
+                "<annotations>",
+                "exec",
+                flags=__future__.annotations.compiler_flag,
+                dont_inherit=True,
+            ),
+            namespace,
+        )
+        declared_annotations = namespace["_annotation_probe"].__annotations__
+    else:
+        declared_annotations = {}
+    namespace = dict(function.__globals__)
+    # Generic functions bind their type parameters in the compiler's
+    # wrapper, rather than in the module's globals.
+    namespace.update(
+        (parameter.__name__, parameter)
+        for parameter in getattr(function, "__type_params__", ())
+    )
+    for parameter, expression in expected.items():
+        try:
+            declared = (
+                declared_annotations[parameter]
+                if postponed
+                else _source_annotation(expression, namespace)
+            )
+            actual = annotations[parameter]
+            proxy = isinstance(declared, (ParamSpecArgs, ParamSpecKwargs))
+            if postponed:
+                same = type(actual) is str and actual == declared
+            elif isinstance(expression, (ast.Name, ast.Attribute)) and not proxy:
+                same = actual is declared
+            elif isinstance(expression, (ast.Subscript, ast.BinOp)) or proxy:
+                # Generics and ParamSpec proxies can be new objects. Their
+                # resolved origins and arguments must match in source order.
+                same = _same_annotation(actual, declared, namespace)
+            else:
+                same = _same_literal(actual, declared)
+            if same and type(actual) is str:
+                resolved, source = _annotation_string_state(actual, namespace)
+                same = _same_annotation(resolved, source, namespace)
+        except Exception:
+            return f"function {name}'s annotation for {parameter} cannot be checked"
+        if not same:
+            return f"function {name}'s annotation for {parameter} is not what its source names"
+    return None
+
+
+def _module_docstring(module_source: str, tree: ast.Module) -> Optional[str]:
+    """The module docstring as this Python's compiler stores it, or None."""
+
+    if ast.get_docstring(tree, clean=False) is None:
+        return None
+    statement = ast.get_source_segment(module_source, tree.body[0])
+    namespace: dict[str, Any] = {"__builtins__": {}}
+    # A lone string literal: compiling and running it only sets __doc__.
+    exec(compile(statement or "", "<docstring>", "exec", dont_inherit=True), namespace)
+    return namespace.get("__doc__")
+
+
+_TYPING_MODULES = frozenset({"typing", "typing_extensions"})
+
+#: Builtin generics: subscripting one builds a new ``types.GenericAlias`` in
+#: source order, never a cached alias.
+_ORDERED_GENERICS = (list, tuple, dict, set, frozenset, type)
+
+
+def _subscript_reuses_equal_aliases(base: Any) -> bool:
+    """Whether ``base[...]`` can return an alias cached for equal arguments.
+
+    typing caches its generic aliases (``List``, ``Dict``, ``Optional``,
+    ``Annotated``) and user generics (``Generic`` subclasses, Pydantic models)
+    by argument equality, and a union or ``Literal`` equals one holding its
+    members in any order. Builtin generics, ``collections.abc`` classes and
+    classes whose ``__class_getitem__`` is implemented in C (NumPy's
+    ``ndarray`` and ``dtype``) build a new ``types.GenericAlias`` in source
+    order.
+    """
+
+    if isinstance(base, type):
+        if base in _ORDERED_GENERICS:
+            return False
+        try:
+            static = inspect.getattr_static(base, "__class_getitem__")
+        except AttributeError:
+            return base.__module__ in _TYPING_MODULES
+        if isinstance(static, ClassMethodDescriptorType):
+            return False
+        return not (isinstance(static, classmethod) and static.__func__ is GenericAlias)
+    return type(base).__module__ in _TYPING_MODULES
+
+
+def _is_typing_form(value: Any, *forms: str) -> bool:
+    return any(
+        value is getattr(sys.modules.get(name), form, None)
+        for name in _TYPING_MODULES
+        for form in forms
+    )
+
+
+def _holds_union(value: Any, depth: int = 0) -> bool:
+    """Whether a resolved type holds a union or ``Literal``, at any depth."""
+
+    if depth > 20:
+        return True
+    if isinstance(value, UnionType) or get_origin(value) in (Union, Literal):
+        return True
+    try:
+        arguments = get_args(value)
+    except Exception:
+        return False
+    return any(_holds_union(argument, depth + 1) for argument in arguments)
+
+
+def _function_bindings(module: Any, nodes: Sequence[ast.AST]) -> dict[str, list[Any]]:
+    """What each name an import inside a function binds, across all its scopes.
+
+    Every binding is kept, so a name one helper imports from typing and
+    another from collections.abc counts as both.
+    """
+
+    bindings: dict[str, list[Any]] = {}
+    for node in nodes:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                name = alias.asname or alias.name.split(".")[0]
+                target = alias.name if alias.asname else name
+                bindings.setdefault(name, []).append(sys.modules.get(target))
+        elif isinstance(node, ast.ImportFrom):
+            try:
+                source_name = (
+                    importlib.util.resolve_name(
+                        "." * node.level + (node.module or ""), module.__package__
+                    )
+                    if node.level
+                    else node.module or ""
+                )
+            except (ImportError, ValueError):
+                continue
+            source = sys.modules.get(source_name)
+            for alias in node.names:
+                if alias.name != "*":
+                    bindings.setdefault(alias.asname or alias.name, []).append(
+                        getattr(
+                            source,
+                            alias.name,
+                            sys.modules.get(f"{source_name}.{alias.name}"),
+                        )
+                    )
+    return bindings
+
+
+def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
+    """Where a module function's code builds a type typing may reuse reordered.
+
+    Code inside a function runs after import: its expressions, and the
+    annotations, defaults and type-parameter bounds of helpers and classes
+    it defines, are evaluated (or read by Pydantic) when it runs. A typing
+    generic subscripted with a union (``List[Union[Decimal, float]]``,
+    ``Optional[Decimal | float]``) can then return an alias cached earlier
+    for ``List[Union[float, Decimal]]``, and Pydantic tries a union's members
+    in order, so earlier code decides what runs. The module's own function
+    signatures are compared against source elsewhere; this covers the code
+    inside them.
+
+    Resolution is conservative: a name stands for every object the module
+    or any import inside the function binds it to, and every string in the
+    function's code that parses as an expression is inspected as a type
+    (except ``Literal`` values and ``Annotated`` metadata), since a forward
+    reference is evaluated when something resolves it. Local aliases of
+    typing objects (``L = List``) are not followed.
+    """
+
+    namespace = vars(module)
+    for statement in tree.body:
+        if not isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        nodes = [node for root in statement.body for node in ast.walk(root)]
+        local = _function_bindings(module, nodes)
+
+        def resolve(node: ast.AST) -> list[Any]:
+            if isinstance(node, ast.Name):
+                values = list(local.get(node.id, ()))
+                if node.id in namespace:
+                    values.append(namespace[node.id])
+                # A builtin (list, dict, type) never reuses equal aliases.
+                return values
+            if isinstance(node, ast.Attribute):
+                return [
+                    getattr(owner, node.attr)
+                    for owner in resolve(node.value)
+                    if isinstance(owner, ModuleType) and hasattr(owner, node.attr)
+                ]
+            return []
+
+        def is_form(node: ast.AST, *forms: str) -> bool:
+            return any(_is_typing_form(value, *forms) for value in resolve(node))
+
+        # Strings that are values, not forward references. ast.walk yields a
+        # node before its children, so a Literal or Annotated subscript marks
+        # its values before they are reached.
+        values: set[int] = set()
+        inspected: list[ast.AST] = list(nodes)
+        position = 0
+        while position < len(inspected):
+            node = inspected[position]
+            position += 1
+            if isinstance(node, ast.Subscript):
+                if is_form(node.value, "Literal"):
+                    values.update(id(child) for child in ast.walk(node.slice))
+                elif is_form(node.value, "Annotated") and isinstance(
+                    node.slice, ast.Tuple
+                ):
+                    for metadata in node.slice.elts[1:]:
+                        values.update(id(child) for child in ast.walk(metadata))
+            if (
+                isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and id(node) not in values
+                and len(inspected) < 100_000
+            ):
+                try:
+                    parsed = ast.parse(node.value.strip(), mode="eval").body
+                except (SyntaxError, ValueError):
+                    continue
+                for child in ast.walk(parsed):
+                    ast.copy_location(child, node)
+                    inspected.append(child)
+
+        def holds_union(expression: ast.AST) -> bool:
+            for child in ast.walk(expression):
+                if isinstance(child, ast.BinOp) and isinstance(child.op, ast.BitOr):
+                    return True
+                if isinstance(child, ast.Subscript) and is_form(
+                    child.value, "Union", "Optional", "Literal"
+                ):
+                    return True
+                if isinstance(child, (ast.Name, ast.Attribute)) and any(
+                    _holds_union(value) for value in resolve(child)
+                ):
+                    return True
+                if (
+                    isinstance(child, ast.Constant)
+                    and isinstance(child.value, str)
+                    and id(child) not in values
+                ):
+                    try:
+                        parsed = ast.parse(child.value.strip(), mode="eval").body
+                    except (SyntaxError, ValueError):
+                        continue
+                    if holds_union(parsed):
+                        return True
+            return False
+
+        for node in inspected:
+            if not isinstance(node, ast.Subscript):
+                continue
+            if any(
+                _subscript_reuses_equal_aliases(value) for value in resolve(node.value)
+            ) and holds_union(node.slice):
+                line = getattr(node, "lineno", statement.lineno)
+                return (
+                    f"function {statement.name} subscripts "
+                    f"{ast.unparse(node.value)} with a union (line {line}); typing "
+                    "can return an alias it cached for the same members in another "
+                    "order, so earlier code decides what runs (use a builtin "
+                    "generic such as list[Decimal | float])"
+                )
+    return None
+
+
+def _module_state_problem(
+    module: Any, tree: ast.Module, functions: Sequence[Any], module_source: str
+) -> Optional[str]:
+    """How the imported module's namespace holds state its source does not fix.
+
+    For a module :func:`_module_shape_problem` accepts. Every name in the
+    namespace other than dunders must be one the source binds: a literal or
+    a function (checked elsewhere), or an import, which must still be what
+    its import statement binds and must hold a module or a callable other
+    than a ``functools.partial`` (``from __future__`` features excepted).
+    A star import supplies names its source does not list; each must be
+    that module's own attribute, judged the same way. Functions must carry
+    no attributes, and no two literal constants or defaults may be one
+    mutable object.
+    """
+
+    namespace = vars(module)
+    missing = object()
+    literals: set[str] = set()
+    definitions: set[str] = set()
+    imported: dict[str, tuple[Any, str, bool]] = {}
+    star_modules: list[Any] = []
+    for statement in tree.body:
+        if isinstance(statement, ast.Assign):
+            literals.add(statement.targets[0].id)  # type: ignore[attr-defined]
+        elif isinstance(statement, ast.AnnAssign) and statement.value is not None:
+            literals.add(statement.target.id)  # type: ignore[attr-defined]
+        elif isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            definitions.add(statement.name)
+        elif isinstance(statement, ast.Import):
+            for alias in statement.names:
+                target = alias.name if alias.asname else alias.name.split(".")[0]
+                imported[alias.asname or target] = (
+                    sys.modules.get(target, missing),
+                    f"import {alias.name}",
+                    False,
+                )
+        elif isinstance(statement, ast.ImportFrom):
+            base = importlib.util.resolve_name(
+                "." * statement.level + (statement.module or ""),
+                module.__package__,
+            )
+            source_module = sys.modules.get(base, missing)
+            for alias in statement.names:
+                if alias.name == "*":
+                    star_modules.append(source_module)
+                    continue
+                expected = getattr(source_module, alias.name, missing)
+                if expected is missing:
+                    expected = sys.modules.get(f"{base}.{alias.name}", missing)
+                imported[alias.asname or alias.name] = (
+                    expected,
+                    f"from {base} import {alias.name}",
+                    base == "__future__",
+                )
+
+    def judged(name: str, value: Any) -> Optional[str]:
+        if inspect.ismodule(value) or (
+            callable(value) and not isinstance(value, functools.partial)
+        ):
+            return None
+        return (
+            f"{name} is an imported value of type {_type_name(value)}, which no "
+            "source the digest names fixes"
+        )
+
+    for name, (expected, statement, future) in imported.items():
+        value = namespace.get(name, missing)
+        if expected is missing or value is not expected:
+            return f"{name} is not what `{statement}` binds"
+        problem = None if future else judged(name, value)
+        if problem:
+            return problem
+    for name, value in namespace.items():
+        if name in _NAMESPACE_DUNDERS:
+            continue
+        if name in literals or name in definitions or name in imported:
+            continue
+        if any(getattr(source, name, missing) is value for source in star_modules):
+            problem = judged(name, value)
+            if problem:
+                return problem
+            continue
+        return (
+            f"{name} is a value of type {_type_name(value)} set on the module, "
+            "not bound by its source"
+        )
+    if namespace.get("__doc__") != _module_docstring(module_source, tree):
+        return "the module's __doc__ is not its source docstring"
+    if namespace.get("__builtins__") not in (builtins, vars(builtins)):
+        return "the module's __builtins__ is not the builtins module"
+    nodes = {
+        statement.name: statement
+        for statement in tree.body
+        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    for function in functions:
+        problem = _function_state_problem(function, nodes)
+        if problem:
+            return problem
+    return _shared_default_object(
+        functions, {name: namespace.get(name) for name in sorted(literals)}
+    )
 
 
 def _sha256_text(text: str) -> str:
@@ -734,19 +2496,38 @@ def _modifier_identity(
     """What binds a module-level function's behaviour, or refuse it.
 
     The identity is the function's module and qualified name, the SHA-256 of
-    its source and of its module's source, its default arguments, and
-    ``code_revision``. None of these depends on where the code is checked out
-    or which Python runs it. The source is recompiled and compared with the
-    loaded code (ignoring file name and line numbers, recursing into nested
-    code), so a file edited after import is refused rather than misdescribed.
+    its source and of its module's source as read now, its default arguments,
+    and ``code_revision``. None of these depends on where the code is checked
+    out or which Python runs it.
 
-    Closures, lambdas, nested functions, partials, bound methods, builtins
-    and functions whose defaults have no exact JSON form are refused: their
+    The module must have a shape whose state its source fixes
+    (:func:`_module_shape_problem`): at module level only imports, literal
+    constants and undecorated functions, each name bound once, and no code
+    that tells equal values apart by identity. Then the module's source is
+    checked against what was imported (ignoring file names and line numbers):
+    every function must compile to the loaded code, use the module's globals,
+    carry no attributes and keep its literal defaults; every literal constant
+    must keep its exact value; every import must still be what it binds and
+    hold a module or a callable other than a partial; the namespace may hold
+    no other names; no two constants or defaults may be one mutable object;
+    and the modifier may not reach module state through ``globals()`` and the
+    like or assign module globals. A file edited after import, or anything
+    reassigned at run time, is refused. Default arguments are bound by value,
+    with their types (``1`` is not ``1.0``, a tuple is not a list, ``None`` is
+    not a missing key).
+
+    Not covered: state in other modules (``params.PAYMENT`` read through
+    ``import params``) and data read at run time; code in other modules is
+    bound by ``code_revision`` or the installed versions, and
+    ``code_revision`` names the code, not the process. Receipts are claims by
+    their producer: this protects an honest producer against mistakes, not a
+    reader against a producer who builds code to mislead.
+
+    Closures, lambdas, nested functions, methods, partials, builtins and
+    functions whose defaults have no exact encoding are refused: their
     behaviour depends on values the digest cannot bind (two
     ``Scenario.from_reform`` closures share one source but apply different
-    reforms). What the identity cannot bind is module state changed at run
-    time (a global reassigned after import); ``code_revision`` names the code,
-    not the process.
+    reforms).
     """
 
     if isinstance(modifier, functools.partial):
@@ -768,6 +2549,11 @@ def _modifier_identity(
         raise ReceiptError(
             "Lambdas and nested functions cannot be bound; define it at module level."
         )
+    if "." in modifier.__qualname__:
+        raise ReceiptError(
+            f"{modifier.__qualname__} is a method, not a module-level function, so "
+            "it cannot be bound; define it at module level."
+        )
     module = sys.modules.get(modifier.__module__)
     if module is None or modifier.__globals__ is not vars(module):
         raise ReceiptError(
@@ -780,33 +2566,51 @@ def _modifier_identity(
         raise ReceiptError(
             "The modifier's source is unavailable, so it cannot be bound."
         ) from exc
-    if not _source_matches_loaded_code(source, code, modifier.__qualname__):
+    tree = ast.parse(module_source)
+    shape = _module_shape_problem(tree)
+    if shape is not None:
+        raise ReceiptError(f"{modifier.__module__} cannot be bound: {shape}.")
+    difference = _module_differs_from_source(
+        module, module_source, code, also_check=modifier
+    )
+    if difference is not None:
         raise ReceiptError(
-            f"{modifier.__module__}.{modifier.__qualname__} no longer matches its "
-            "source file (edited after import?), so it cannot be bound."
+            f"{modifier.__module__} no longer matches its source file: {difference} "
+            "(edited or reassigned after import?), so it cannot be bound."
         )
-    try:
-        defaults = (
-            strict_json_value(list(modifier.__defaults__))
-            if modifier.__defaults__
-            else None
-        )
-        kwdefaults = (
-            strict_json_value(dict(modifier.__kwdefaults__))
-            if modifier.__kwdefaults__
-            else None
-        )
-    except ReceiptError as exc:
+    # The modifier is among the module's functions: a def name missing from
+    # its module is refused above.
+    functions = sorted(
+        _module_functions(module, code.co_filename),
+        key=lambda f: f.__code__.co_qualname,
+    )
+    state = _module_state_problem(
+        module, tree, functions, module_source
+    ) or _runtime_alias_problem(module, tree)
+    if state is not None:
         raise ReceiptError(
-            f"The modifier's default arguments cannot be bound: {exc}"
-        ) from exc
+            f"{modifier.__module__}: {state}, so the modifier cannot be bound."
+        )
+    # Default arguments are runtime values, so they are bound by value, with
+    # their types, for the modifier and every function in its module.
+    module_defaults: dict[str, Any] = {}
+    for function in functions:
+        if not function.__defaults__ and not function.__kwdefaults__:
+            continue
+        try:
+            module_defaults[function.__code__.co_qualname] = _typed_value(
+                _function_defaults(function), function.__code__.co_qualname
+            )
+        except ReceiptError as exc:
+            raise ReceiptError(
+                f"{function.__code__.co_qualname}'s default arguments cannot be bound: {exc}"
+            ) from exc
     return {
         "module": modifier.__module__,
         "qualname": modifier.__qualname__,
         "source_sha256": _sha256_text(source),
         "module_source_sha256": _sha256_text(module_source),
-        "defaults": defaults,
-        "kwdefaults": kwdefaults,
+        "module_defaults": module_defaults or None,
         "code_revision": strict_json_value(dict(code_revision)),
     }
 
@@ -850,8 +2654,20 @@ def scenario_reform_identity(
         raise ReceiptError("Scenario.parameter_changes must be a mapping or None.")
     if modifier is not None and not callable(modifier):
         raise ReceiptError("Scenario.simulation_modifier must be callable or None.")
+
+    def checked(identity: ReformIdentity) -> ReformIdentity:
+        revision = dict(code_revision) if code_revision is not None else None
+        object.__setattr__(
+            identity,
+            "_recompute_identity",
+            lambda: scenario_reform_identity(
+                scenario, code_revision=revision, name=name
+            ),
+        )
+        return identity
+
     if not parameter_changes and modifier is None:
-        return ReformIdentity(kind="current_law", name=name)
+        return checked(ReformIdentity(kind="current_law", name=name))
     payload: dict[str, Any] = {
         "applied_before_data_load": applied_before_data_load,
         "parameter_changes": strict_json_value(parameter_changes)
@@ -875,16 +2691,88 @@ def scenario_reform_identity(
             )
         payload["simulation_modifier"] = _modifier_identity(modifier, code_revision)
         binding = "code_revision"
-    digest = content_sha256(
+    digest = _payload_sha256(
         {"representation": "policyengine-uk.scenario/v1", "payload": payload}
     )
-    return ReformIdentity(
-        kind="reform",
-        representation="policyengine-uk.scenario/v1",
-        reform_sha256=digest,
-        binding=binding,
-        name=name,
+    return checked(
+        ReformIdentity(
+            kind="reform",
+            representation="policyengine-uk.scenario/v1",
+            reform_sha256=digest,
+            binding=binding,
+            name=name,
+        )
     )
+
+
+def _distribution_metadata_directory(name: str) -> Path:
+    """Locate dist-info through the distribution's public metadata API."""
+
+    distribution = metadata.distribution(name)
+    read_text = getattr(distribution, "read_text", None)
+    if read_text is None:
+        paths = (str(path) for path in distribution.files or ())
+    else:
+        # Scan RECORD strings without allocating a PackagePath per installed
+        # file; only the metadata entry needs to be resolved.
+        paths = (
+            row[0] for row in csv.reader(io.StringIO(read_text("RECORD") or "")) if row
+        )
+    directories = {
+        Path(distribution.locate_file(path)).parent
+        for path in paths
+        if path.endswith(".dist-info/METADATA")
+    }
+    if len(directories) == 1:
+        return directories.pop()
+
+    # A missing or empty RECORD leaves no file listing. Match the metadata
+    # under locate_file's public root, refusing an ambiguous location.
+    root = Path(distribution.locate_file(""))
+    directories = set()
+    for directory in root.glob("*.dist-info"):
+        candidate = metadata.Distribution.at(directory)
+        if (
+            normalize_distribution_name(candidate.metadata.get("Name", ""))
+            == normalize_distribution_name(name)
+            and candidate.version == distribution.version
+        ):
+            directories.add(directory)
+    if len(directories) == 1:
+        return directories.pop()
+    raise ReceiptError(
+        f"Cannot locate the installed metadata for {name}; restart the process "
+        "and run again after checking the installation."
+    )
+
+
+def _refuse_package_changed_after_process_start(name: str) -> None:
+    """Refuse metadata installed or changed during this process's lifetime."""
+
+    try:
+        directory = _distribution_metadata_directory(name)
+        paths = [directory]
+        paths.extend(
+            directory / filename
+            for filename in ("METADATA", "RECORD", "INSTALLER", "direct_url.json")
+            if (directory / filename).exists()
+        )
+        installed_at = max(
+            max(stat.st_mtime, stat.st_ctime)
+            for stat in (path.stat() for path in paths)
+        )
+        process_started_at = psutil.Process().create_time()
+    except (OSError, TypeError, ValueError, PackageNotFoundError, psutil.Error) as exc:
+        raise ReceiptError(
+            f"Cannot locate or read the installed metadata for {name}; restart "
+            "the process and run again after checking the installation."
+        ) from exc
+    if installed_at > process_started_at:
+        raise ReceiptError(
+            f"{name} was installed or changed after this process started, so the "
+            "installed version may not be the code that ran; restart the "
+            "process and run again."
+        )
 
 
 def installed_package_identity(
@@ -905,12 +2793,21 @@ def installed_package_identity(
 
     normalized = normalize_distribution_name(name)
     version = metadata.version(name)
+    _refuse_loaded_package_origin(name)
+    direct_url = _read_direct_url(name)
+    origin = _install_origin(direct_url)
     if wheel_path is not None:
         from policyengine.provenance.wheels import verify_installed_against_wheel
 
-        evidence = verify_installed_against_wheel(
-            name, Path(wheel_path), metadata=metadata
-        )
+        try:
+            evidence = verify_installed_against_wheel(
+                name, Path(wheel_path), metadata=metadata
+            )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            raise ReceiptError(
+                f"{Path(wheel_path).name} cannot be verified against installed "
+                f"{name}: {exc}"
+            ) from exc
         if evidence["problems"]:
             raise ReceiptError(
                 f"Installed {name} differs from {Path(wheel_path).name}: "
@@ -921,26 +2818,170 @@ def installed_package_identity(
             version=version,
             wheel_sha256=evidence["wheel_sha256"],
             wheel_sha256_evidence="installed_record_verified",
+            install_origin=origin,
         )
-    archive_hash = _installer_archive_sha256(name)
+    archive_hash = _installer_archive_sha256(direct_url)
     return PackageIdentity(
         name=normalized,
         version=version,
         wheel_sha256=archive_hash,
         wheel_sha256_evidence="installer_archive_hash" if archive_hash else None,
+        install_origin=origin,
     )
 
 
-def _installer_archive_sha256(name: str) -> Optional[str]:
+def _read_direct_url(name: str) -> Optional[Mapping[str, Any]]:
+    """Read an install's PEP 610 origin, refusing malformed metadata."""
+
+    return _distribution_direct_url(name, metadata.distribution(name))
+
+
+def _distribution_direct_url(
+    name: str, distribution: metadata.Distribution
+) -> Optional[Mapping[str, Any]]:
     try:
-        text = metadata.distribution(name).read_text("direct_url.json")
-    except PackageNotFoundError:
-        return None
-    if not text:
+        text = distribution.read_text("direct_url.json")
+    except OSError as exc:
+        raise ReceiptError(f"{name} direct_url.json cannot be read: {exc}") from exc
+    if text is None:
         return None
     try:
-        archive = json.loads(text).get("archive_info") or {}
-    except ValueError:
+        direct_url = json.loads(text)
+    except ValueError as exc:
+        raise ReceiptError(f"{name} direct_url.json is malformed: {exc}") from exc
+    if (
+        not isinstance(direct_url, Mapping)
+        or not isinstance(direct_url.get("url"), str)
+        or not direct_url["url"]
+        or sum(key in direct_url for key in ("archive_info", "dir_info", "vcs_info"))
+        != 1
+        or any(
+            not isinstance(direct_url[key], Mapping)
+            for key in ("archive_info", "dir_info", "vcs_info")
+            if key in direct_url
+        )
+        or (
+            "editable" in direct_url.get("dir_info", {})
+            and not isinstance(direct_url["dir_info"]["editable"], bool)
+        )
+    ):
+        raise ReceiptError(
+            f"{name} direct_url.json is malformed; cannot identify its install origin."
+        )
+    archive = direct_url.get("archive_info", {})
+    if ("hash" in archive and not isinstance(archive["hash"], str)) or (
+        "hashes" in archive
+        and (
+            not isinstance(archive["hashes"], Mapping)
+            or any(not isinstance(value, str) for value in archive["hashes"].values())
+        )
+    ):
+        raise ReceiptError(
+            f"{name} direct_url.json is malformed; invalid archive hashes."
+        )
+    return direct_url
+
+
+def _refuse_loaded_package_origin(name: str) -> None:
+    normalized = normalize_distribution_name(name)
+    if normalized not in UK_PACKAGES.values():
+        return
+    import_name = normalized.replace("-", "_")
+    module = sys.modules.get(import_name)
+    # An unloaded package has no running source to compare. The version
+    # checks still cover the installed package that will be loaded.
+    if module is None:
+        return
+    distribution = metadata.distribution(name)
+    loaded_file = getattr(module, "__file__", None)
+    problem = (
+        f"{import_name} loaded from {loaded_file!r} does not match installed "
+        f"distribution {name} {distribution.version}; the receipt cannot name "
+        "the code that ran"
+    )
+    if not isinstance(loaded_file, (str, Path)) or not loaded_file:
+        raise ReceiptError(problem + ": the loaded package has no source file.")
+    try:
+        loaded_path = Path(loaded_file).resolve()
+        direct_url = _distribution_direct_url(name, distribution)
+        if (
+            direct_url is not None
+            and direct_url.get("dir_info", {}).get("editable") is True
+        ):
+            url = urlparse(direct_url["url"])
+            if url.scheme != "file" or url.netloc not in ("", "localhost"):
+                raise ReceiptError(problem + ": the install directory is not local.")
+            directory = Path(url2pathname(url.path)).resolve()
+            if not loaded_path.is_relative_to(directory):
+                raise ReceiptError(problem + f": expected code under {directory}.")
+        else:
+            record = distribution.read_text("RECORD")
+            rows = list(csv.reader(io.StringIO(record or ""), strict=True))
+            if any(len(row) != 3 for row in rows):
+                raise ReceiptError(problem + ": the installed RECORD is malformed.")
+            entry = f"{import_name}/__init__.py"
+            if not any(row[0] == entry for row in rows):
+                raise ReceiptError(problem + f": the installed RECORD lacks {entry}.")
+            expected = Path(distribution.locate_file(entry)).resolve()
+            if loaded_path != expected:
+                raise ReceiptError(problem + f": expected {expected} from RECORD.")
+    except ReceiptError:
+        raise
+    except (OSError, ValueError, csv.Error) as exc:
+        raise ReceiptError(
+            problem + f": its source location cannot be read ({exc})."
+        ) from exc
+
+
+def _install_origin(
+    direct_url: Optional[Mapping[str, Any]],
+) -> Optional[Literal["archive", "directory", "editable", "vcs"]]:
+    if direct_url is None:
+        return None
+    if "dir_info" in direct_url:
+        return (
+            "editable" if direct_url["dir_info"].get("editable", False) else "directory"
+        )
+    return "vcs" if "vcs_info" in direct_url else "archive"
+
+
+def _package_can_be_certified(package: PackageIdentity) -> bool:
+    """Whether a receipt can name this installed package as the code that ran.
+
+    An editable install never can: its wheel holds a pointer to a source tree
+    (a ``.pth`` file or an import hook) rather than the source, so verifying
+    the installed files against that wheel says nothing about the code loaded.
+    """
+
+    if package.install_origin == "editable":
+        return False
+    return (
+        package.install_origin in (None, "archive")
+        or package.wheel_sha256_evidence == "installed_record_verified"
+    )
+
+
+def _uncertifiable_reason(package: PackageIdentity) -> str:
+    if package.install_origin == "editable":
+        return "an editable install's wheel does not hold the source that runs"
+    return "it lacks installed_record_verified wheel evidence"
+
+
+def _installer_archive_sha256(direct_url: Optional[Mapping[str, Any]]) -> Optional[str]:
+    """The SHA-256 of the wheel a PEP 610 direct URL install came from, if any.
+
+    Only a ``.whl`` URL qualifies: a source archive's hash does not describe
+    the installed files, so it is never recorded as ``wheel_sha256``.
+    """
+
+    if direct_url is None:
+        return None
+    try:
+        url_path = urlparse(str(direct_url.get("url") or "")).path
+        archive = direct_url.get("archive_info") or {}
+    except (ValueError, AttributeError):
+        return None
+    if not url_path.endswith(".whl") or not isinstance(archive, Mapping):
         return None
     candidate = (archive.get("hashes") or {}).get("sha256")
     if candidate is None:
@@ -1033,6 +3074,57 @@ def build_execution_receipt(
         ) from exc
 
 
+def _is_boolean(value: Any) -> bool:
+    numpy = sys.modules.get("numpy")
+    return isinstance(value, bool) or (
+        numpy is not None and isinstance(value, numpy.bool_)
+    )
+
+
+def _receipt_years(years: Any) -> list[int]:
+    """Sorted unique years, refusing anything that is not a sequence of integers."""
+
+    if isinstance(years, (str, bytes)) or not isinstance(years, Sequence):
+        raise ReceiptError(f"years must be a sequence of integers, not {years!r}.")
+    result = set()
+    for year in years:
+        if _is_boolean(year) or not (
+            isinstance(year, int)
+            or _numpy_scalar(year)
+            and isinstance(year.item(), int)
+        ):
+            raise ReceiptError(f"years must be integers, not {year!r}.")
+        result.add(int(year))
+    if not result:
+        raise ReceiptError("A receipt covers at least one year.")
+    return sorted(result)
+
+
+@functools.lru_cache(maxsize=8)
+def _projected_years(
+    dataset_path: str, dataset_sha256: str, model_version: str
+) -> tuple[int, ...]:
+    """Years the installed policyengine-uk projects a single-year dataset to.
+
+    The same rule as the qualification ``supported_years`` gate: build the
+    multi-year dataset as ``policyengine_uk.Simulation`` does for a
+    single-year file, without running a formula, and keep the years from the
+    dataset's own year onwards. Cached by file bytes and model version.
+    """
+
+    from policyengine_uk.data.dataset_schema import UKSingleYearDataset
+    from policyengine_uk.data.economic_assumptions import extend_single_year_dataset
+    from policyengine_uk.system import system
+
+    dataset = UKSingleYearDataset(dataset_path)
+    first = int(str(dataset.time_period)[:4])
+    multi_year = extend_single_year_dataset(dataset, system.parameters)
+    years = getattr(multi_year, "years", None)
+    if years is None:
+        years = list(multi_year.datasets)
+    return tuple(sorted(int(year) for year in years if int(year) >= first))
+
+
 def _certificate_fields(
     country_id: str, record: Mapping[str, Any], bundle: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -1069,36 +3161,48 @@ def _data_identity(
 ) -> DataIdentity:
     """The data identity of ``dataset_name`` with those bytes, from the bundle.
 
+    The dataset is resolved exactly as
+    :func:`policyengine.provenance.dataset_materialization.materialize_dataset`
+    resolves it (overlays, per-dataset repository, package and revision
+    overrides, the release manifest revision), so the receipt names the
+    artifact a managed simulation downloads. The bytes must be that
+    artifact's: a receipt never gives one artifact's name to other bytes.
     Release-level members (build, fingerprint, manifest revision) are filled
     only for datasets in the certified release, never for overlays.
     """
 
-    from policyengine.provenance.manifest import _apply_dataset_overlays
+    from pydantic import ValidationError
 
-    resolved = _apply_dataset_overlays(country_id, dict(record), dict(bundle))
-    reference = (resolved.get("datasets") or {}).get(dataset_name)
-    if reference is None:
-        raise ReceiptError(
-            f"Dataset {dataset_name!r} is not in the {country_id} bundle."
+    from policyengine.provenance.dataset_materialization import (
+        DatasetMaterializationError,
+        _resolve_bundle_dataset,
+    )
+    from policyengine.provenance.manifest import (
+        CountryReleaseManifest,
+        _apply_dataset_overlays,
+    )
+
+    try:
+        manifest = CountryReleaseManifest.model_validate(
+            _apply_dataset_overlays(country_id, dict(record), dict(bundle))
         )
-    is_certified_release = dataset_name in (record.get("datasets") or {})
+        spec = _resolve_bundle_dataset(country_id, dataset_name, manifest=manifest)
+    except (DatasetMaterializationError, ValidationError, ValueError) as exc:
+        raise ReceiptError(
+            f"The {country_id} bundle cannot resolve dataset {dataset_name!r}: {exc}"
+        ) from exc
+    if spec.sha256 != dataset_sha256:
+        raise ReceiptError(
+            f"The file is not the bundle's {dataset_name!r}: it hashes to "
+            f"{dataset_sha256}, but {spec.source_uri} is {spec.sha256}."
+        )
+    release = dataset_name in (record.get("datasets") or {})
     data_package = record["data_package"]
     certified_artifact = record.get("certified_data_artifact") or {}
     certification = record.get("certification") or {}
-    revision = reference.get("revision") or data_package.get("version")
-    repo_id = reference.get("repo_id") or data_package.get("repo_id")
-    if not revision or not repo_id:
-        raise ReceiptError(
-            f"Dataset {dataset_name!r} has no repository or revision pin."
-        )
-    release = is_certified_release
     return DataIdentity(
-        data_package=(
-            data_package["name"]
-            if release
-            else reference.get("data_package_name") or data_package["name"]
-        ),
-        release_version=data_package["version"] if release else revision,
+        data_package=spec.data_package_name,
+        release_version=data_package["version"] if release else spec.revision,
         build_id=(
             certification.get("data_build_id") or certified_artifact.get("build_id")
             if release
@@ -1114,8 +3218,8 @@ def _data_identity(
         if release
         else None,
         dataset=dataset_name,
-        dataset_uri=f"hf://{repo_id}/{reference['path']}@{revision}",
-        dataset_revision=revision,
+        dataset_uri=spec.source_uri,
+        dataset_revision=spec.revision,
         dataset_sha256=dataset_sha256,
     )
 
@@ -1138,6 +3242,8 @@ def _build(
     ci_run_url: Optional[str],
 ) -> ExecutionReceipt:
     record = bundle["data_releases"][country_id]
+    reform._recheck()
+    baseline._recheck()
     wheels = {normalize_distribution_name(k): Path(v) for k, v in wheel_paths.items()}
 
     def identity(name: str) -> dict[str, Any]:
@@ -1150,6 +3256,18 @@ def _build(
     )
     model = ModelIdentity(**identity(UK_PACKAGES["model"]))
     core = CoreIdentity(**identity(UK_PACKAGES["core"]))
+    loaded = loaded_versions()
+    for installed in (wrapper, model, core):
+        # An absent record is safe when the install predates this process:
+        # that installed version has been unchanged throughout the process.
+        recorded = loaded.get(installed.name)
+        if recorded is not None and recorded != installed.version:
+            raise ReceiptError(
+                f"{installed.name} {recorded} was loaded in this process, but "
+                f"{installed.version} is installed now, so the installed version "
+                "is not the code that ran; restart the process and run again."
+            )
+        _refuse_package_changed_after_process_start(installed.name)
 
     dataset_name = dataset or record["default_dataset"]
     actual_sha256 = sha256_file(dataset_path)
@@ -1166,6 +3284,9 @@ def _build(
         and dataset_name == certified_artifact.get("dataset")
         and fields["bundle_version"] == wrapper.version
         and record.get("policyengine_version", wrapper.version) == wrapper.version
+        and all(
+            _package_can_be_certified(package) for package in (wrapper, model, core)
+        )
     ):
         if not fields["compatibility_basis"]:
             raise ReceiptError(
@@ -1192,7 +3313,10 @@ def _build(
         reform=reform,
         baseline=baseline,
         fiscal_year=uk_fiscal_year_convention(),
-        years=sorted(set(int(year) for year in years)),
+        years=_receipt_years(years),
+        supported_years=list(
+            _projected_years(str(dataset_path), actual_sha256, model.version)
+        ),
         outputs_sha256=content_sha256(outputs) if outputs is not None else None,
         runtime=RuntimeContext(
             python_version=platform.python_version(),
@@ -1232,6 +3356,12 @@ def verify_certificate(
     if not isinstance(record, Mapping):
         return [f"the bundle has no {receipt.country_id} data release"]
     problems = []
+    for package in (receipt.wrapper, receipt.model, receipt.core):
+        if not _package_can_be_certified(package):
+            problems.append(
+                f"{package.name} installed from {package.install_origin}: "
+                f"{_uncertifiable_reason(package)}"
+            )
     expected = _certificate_fields(receipt.country_id, record, bundle)
     claimed = certificate.model_dump(include=set(CertificateIdentity.IDENTITY_FIELDS))
     for field in CertificateIdentity.IDENTITY_FIELDS:
@@ -1284,9 +3414,14 @@ def build_execution_receipt_for_microsimulation(
 ) -> ExecutionReceipt:
     """Receipt for a country Microsimulation built by ``managed_microsimulation``.
 
-    Reads the dataset that was loaded from ``microsimulation.policyengine_bundle``
-    and hashes those bytes. ``reform`` and ``baseline`` must describe what the
-    microsimulation was built with (``scenario_reform_identity`` or
+    Reads the dataset that was loaded from ``microsimulation.policyengine_bundle``.
+    The bytes on disk must still be the bytes verified when it was loaded
+    (``runtime_dataset_sha256``), and the receipt must name the dataset,
+    artifact URI, revision and package recorded at load time; otherwise the
+    receipt would describe a file that did not run, so it is refused. A
+    simulation loaded from an unmanaged file or URI recorded no load-time
+    hash and cannot be receipted. ``reform`` and ``baseline`` must describe
+    what the microsimulation was built with (``scenario_reform_identity`` or
     ``reform_identity``); the microsimulation itself does not record them.
     """
 
@@ -1298,13 +3433,45 @@ def build_execution_receipt_for_microsimulation(
         )
     if bundle_fields.get("country_id") != "uk":
         raise ReceiptError("Execution receipt schema v1 covers UK results only.")
-    return build_execution_receipt(
-        country_id="uk",
-        dataset_path=bundle_fields["runtime_dataset_source"],
-        dataset=bundle_fields.get("runtime_dataset"),
-        years=years,
-        reform=reform,
-        baseline=baseline,
-        outputs=outputs,
-        **kwargs,
-    )
+    loaded_sha256 = bundle_fields.get("runtime_dataset_sha256")
+    if not loaded_sha256:
+        raise ReceiptError(
+            "This microsimulation loaded a dataset without verifying its SHA-256 "
+            "(an unmanaged file or URI), so a receipt cannot say which bytes ran; "
+            "load a bundle dataset through managed_microsimulation()."
+        )
+    try:
+        receipt = build_execution_receipt(
+            country_id="uk",
+            dataset_path=bundle_fields["runtime_dataset_source"],
+            dataset=bundle_fields.get("runtime_dataset"),
+            years=years,
+            reform=reform,
+            baseline=baseline,
+            outputs=outputs,
+            **kwargs,
+        )
+    except FileNotFoundError as exc:
+        raise ReceiptError(
+            f"The loaded dataset {bundle_fields['runtime_dataset_source']} is gone."
+        ) from exc
+    if receipt.data.dataset_sha256 != loaded_sha256:
+        raise ReceiptError(
+            f"{bundle_fields['runtime_dataset_source']} has changed since the "
+            f"microsimulation loaded it ({loaded_sha256}); it now hashes to "
+            f"{receipt.data.dataset_sha256}."
+        )
+    loaded = {
+        "dataset": bundle_fields.get("runtime_dataset"),
+        "dataset_uri": bundle_fields.get("runtime_dataset_uri"),
+        "dataset_revision": bundle_fields.get("runtime_dataset_revision"),
+        "data_package": bundle_fields.get("runtime_dataset_data_package"),
+    }
+    for field, value in loaded.items():
+        named = getattr(receipt.data, field)
+        if value is not None and named != value:
+            raise ReceiptError(
+                f"The receipt would name data.{field} {named!r}, but the "
+                f"microsimulation loaded {value!r}."
+            )
+    return receipt

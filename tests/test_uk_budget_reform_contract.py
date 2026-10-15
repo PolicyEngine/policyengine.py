@@ -1016,3 +1016,71 @@ def test_extraction_errors_and_unsupported_rows_carry_distinct_ids(monkeypatch, 
     assert statuses[:2] == ["error", "pending"]
     if route == "wrapper.policy":
         assert statuses[2] == "unsupported"
+
+
+@pytest.mark.parametrize("state", ["base", "reformed"])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "uc_standard_allowance",
+        "universal_credit",
+        "universal_credit_pre_benefit_cap",
+        "benefit_cap_reduction",
+        "uc_deductions",
+    ],
+)
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_any_non_finite_value_in_either_run_fails(state, name, value):
+    """#614 round-3 review: finiteness is required of every input in both runs."""
+
+    base, reformed = _lawful_pair()
+    {"base": base, "reformed": reformed}[state][name][0] = value
+    holds, detail = _verdict(base, reformed)
+    assert not holds
+    assert detail["units_with_non_finite_values"] == 1
+
+
+@pytest.mark.parametrize("state", ["base", "reformed"])
+@pytest.mark.parametrize(
+    ("payment", "holds"), [(0.12, True), (0.115, True), (0.109, False)]
+)
+def test_the_payable_floor_holds_in_both_runs(state, payment, holds):
+    """#614 round-3 review: a payment pushed below the floor fails in either run.
+
+    The other run's payment sits exactly at the floor, and the deductions keep
+    the accounting identity exact, so only this run's floor decides.
+    """
+
+    base, reformed = _lawful_pair()
+    run = {"base": base, "reformed": reformed}[state]
+    award = run["universal_credit_pre_benefit_cap"][0] - run["benefit_cap_reduction"][0]
+    run["uc_deductions"][0] = award - payment
+    run["universal_credit"][0] = payment
+    other = reformed if state == "base" else base
+    other_award = (
+        other["universal_credit_pre_benefit_cap"][0] - other["benefit_cap_reduction"][0]
+    )
+    other["uc_deductions"][0] = other_award - 0.12
+    other["universal_credit"][0] = 0.12
+    result, detail = _verdict(base, reformed)
+    assert result is holds, detail
+
+
+def test_an_award_below_the_floor_is_paid_in_full():
+    """#622 review: the floor is the lesser of the award and 12p a year."""
+
+    import numpy as np
+
+    base, reformed = _lawful_pair()
+    for run in (base, reformed):
+        unit = {
+            "uc_standard_allowance": run["uc_standard_allowance"][0],
+            "universal_credit_pre_benefit_cap": 0.05,
+            "benefit_cap_reduction": 0.0,
+            "uc_deductions": 0.0,
+            "universal_credit": 0.05,
+        }
+        for name, value in unit.items():
+            run[name] = np.append(run[name], value)
+    holds, detail = _verdict(base, reformed)
+    assert holds, detail

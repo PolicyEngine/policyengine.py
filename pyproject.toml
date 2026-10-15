@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "policyengine"
-version = "6.4.1"
+version = "6.4.3"
 description = "A package to conduct policy analysis using PolicyEngine tax-benefit models."
 readme = "README.md"
 authors = [
@@ -96,6 +96,9 @@ testpaths = [
 ]
 filterwarnings = [
     "ignore::pydantic.warnings.PydanticDeprecatedSince20",
+]
+markers = [
+    "real_install: runs the receipt's loaded-package check against the real installation",
 ]
 
 [tool.ruff]

@@ -26,15 +26,19 @@ Checks:
 ``population_uc_standard_allowance_plus_10``
     Every Universal Credit standard allowance 10% higher in 2027-28 raises
     each benefit unit's standard allowance by exactly 10%, lowers no award
-    before deductions and raises total Universal Credit. The award before
+    before deductions and raises at least one payment. The award before
     deductions is ``universal_credit_pre_benefit_cap`` less
     ``benefit_cap_reduction``: the benefit cap reduces the award by the
     excess of welfare benefits over the cap (Universal Credit Regulations
     2013, SI 2013/376, reg 81), so a capped award stays flat. Deductions are
-    then taken from the award and set as percentages of the standard
-    allowance (Claims and Payments Regulations 2013, SI 2013/380, Sch 6), so
-    the amount paid (``universal_credit``) can fall. The check requires each
-    payment to move by its award's change less its deductions' change.
+    then taken from the award (Claims and Payments Regulations 2013, SI
+    2013/380, Sch 6). Many are set as percentages of the standard allowance,
+    others as fixed amounts (advances, SI 2013/383 reg 10), and deductions
+    can start with a new award, so the amount paid (``universal_credit``)
+    can fall, and total payments can fall too. The check requires every
+    value to be finite in both runs, and each payment to move by its award's
+    change less its deductions' change and to stay at or above the payable
+    floor (the lesser of its award and 12p a year), each to within a penny.
 ``population_state_pension_plus_10``
     The basic and new State Pension rates 10% higher in 2027-28 raise each
     person's basic and new State Pension by exactly 10% and raise total

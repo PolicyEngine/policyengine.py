@@ -105,6 +105,25 @@
       "additionalProperties": false,
       "description": "The policyengine-core distribution.",
       "properties": {
+        "install_origin": {
+          "anyOf": [
+            {
+              "enum": [
+                "archive",
+                "directory",
+                "editable",
+                "vcs"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Install origin recorded by PEP 610 direct_url.json; absent for an ordinary index install. Directory and VCS installs require installed_record_verified wheel evidence for certification; an editable install is never certified.",
+          "title": "Install Origin"
+        },
         "name": {
           "const": "policyengine-core",
           "title": "Name",
@@ -293,6 +312,25 @@
       "additionalProperties": false,
       "description": "The country model distribution (v1: policyengine-uk).",
       "properties": {
+        "install_origin": {
+          "anyOf": [
+            {
+              "enum": [
+                "archive",
+                "directory",
+                "editable",
+                "vcs"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Install origin recorded by PEP 610 direct_url.json; absent for an ordinary index install. Directory and VCS installs require installed_record_verified wheel evidence for certification; an editable install is never certified.",
+          "title": "Install Origin"
+        },
         "name": {
           "const": "policyengine-uk",
           "title": "Name",
@@ -389,7 +427,7 @@
             }
           ],
           "default": null,
-          "description": "content_sha256 of {'representation': ..., 'payload': ...}.",
+          "description": "SHA-256 of the RFC 8785 serialisation of {'representation': ..., 'payload': ...}, nulls kept (unlike content_sha256).",
           "title": "Reform Sha256"
         },
         "representation": {
@@ -467,6 +505,25 @@
           "default": null,
           "description": "policyengine.py commit, when running from a checkout.",
           "title": "Git Sha"
+        },
+        "install_origin": {
+          "anyOf": [
+            {
+              "enum": [
+                "archive",
+                "directory",
+                "editable",
+                "vcs"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Install origin recorded by PEP 610 direct_url.json; absent for an ordinary index install. Directory and VCS installs require installed_record_verified wheel evidence for certification; an editable install is never certified.",
+          "title": "Install Origin"
         },
         "name": {
           "const": "policyengine",
@@ -600,6 +657,14 @@
       "title": "Schema Version",
       "type": "integer"
     },
+    "supported_years": {
+      "description": "Years the installed model projects this dataset to, from its data year (policyengine-uk's extend_single_year_dataset, no formula run). A year in years that is not here is unsupported: policyengine-core fills it by carrying or uprating the latest inputs, so its results are not evidence and must be shown as provisional or not at all.",
+      "items": {
+        "type": "integer"
+      },
+      "title": "Supported Years",
+      "type": "array"
+    },
     "wrapper": {
       "$ref": "#/$defs/WrapperIdentity"
     },
@@ -624,7 +689,8 @@
     "reform",
     "baseline",
     "fiscal_year",
-    "years"
+    "years",
+    "supported_years"
   ],
   "title": "ExecutionReceipt",
   "type": "object",
@@ -634,10 +700,11 @@
     "execution_identity_sha256": "{schema_version, country_id, wrapper, model, core, data, certification_status, certificate?} where certificate keeps only bundle_version, country_id, certificate_sha256, compatibility_basis, certified_for_model_version, certified_for_core_version, certified_dataset_sha256 and certified_by",
     "outputs_sha256": "the canonical output payload the receipt binds",
     "receipt_sha256": "the whole receipt without runtime and without reform.name and baseline.name",
-    "reform.reform_sha256": "{representation, payload} where payload is the reform exactly as given in that representation"
+    "reform.reform_sha256": "RFC 8785 over {representation, payload} where payload is the reform exactly as given in that representation, nulls kept (a null in a reform can mean something, unlike an absent receipt field)"
   },
   "x-policyengine-rules": [
     "years is sorted ascending with no duplicates, and each year is written as an integer (2027, not 2027.0).",
+    "supported_years is sorted ascending with no duplicates. A year in years that is not in supported_years is unsupported: the model does not project the dataset to it, so a consumer must show its results as provisional or not at all.",
     "certification_status certified requires certificate; uncertified forbids it.",
     "certificate.country_id equals country_id.",
     "certificate.certified_for_model_version equals model.version.",
@@ -646,6 +713,7 @@
     "certificate.bundle_version equals wrapper.version.",
     "reform/baseline kind current_law has no representation or reform_sha256 and binding content; kind reform has both.",
     "wheel_sha256 and wheel_sha256_evidence are present together or not at all.",
+    "certification_status certified requires each of wrapper, model and core to have install_origin absent or archive, or install_origin directory or vcs with wheel_sha256_evidence installed_record_verified; an editable install is never certified.",
     "A consumer trusts a certificate only after checking it against the data_releases.<country_id> record of the published policyengine manifest for certificate.bundle_version (verify_certificate()): certificate_sha256 is that record's digest, every other member of certificate except certificate_source, qualification_receipt_sha256 and tro_composition_fingerprint equals what the record states, and data equals the data identity the record determines. certificate_source is the producer's statement and proves nothing."
   ]
 }
