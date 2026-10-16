@@ -89,13 +89,14 @@ job fails on every scheduled run until one of these clears it:
 
 ### Another pull request from the candidate branch
 
-A pull request from a candidate branch to a base other than main runs the
-same workflows with the same commit and branch as the candidate's own pull
-request, and GitHub's run records do not say which pull request, or which
-base, a run is for. While such a pull request is open, or after one was
-closed or merged at the candidate's commit, or when a pull request from the
-branch now to main ever had another base (the candidate's own included),
-the promote job fails with
+Any other pull request from a candidate branch runs the same workflows with
+the same commit and branch as the candidate's own pull request, and
+GitHub's run records say neither which pull request a run is for nor which
+base it tested; a pull request's current base does not settle it, since a
+base renamed into main records no event. So while another pull request from
+the branch is open, or after one was closed or merged at the candidate's
+commit (whatever its base), or when the candidate's own pull request's base
+was ever changed, the promote job fails with
 `::error::<branch> is not promoted: runs at its commit may have tested another base`,
 naming the pull requests, and refresh re-runs none of the candidate's runs.
 Close those pull requests, then requalify the pair as above: the new
