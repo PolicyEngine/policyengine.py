@@ -82,6 +82,7 @@ from policyengine.provenance.uk_qualification import (  # noqa: E402
     previous_certificate,
     read_replay,
     replay_dispatch_payload,
+    requalification_target,
     resolve_candidate,
     stage_attempt,
     write_gate_results,
@@ -90,6 +91,8 @@ from policyengine.provenance.uk_qualification import (  # noqa: E402
 BUNDLE_PATH = REPO_ROOT / "src" / "policyengine" / "data" / "bundle" / "manifest.json"
 CONFIG_PATH = REPO_ROOT / "src" / "policyengine" / "data" / "qualification" / "uk.json"
 TIMEOUT = 60
+#: The pull request workflow that runs the test suite on a candidate.
+CODE_CHANGES_WORKFLOW = ".github/workflows/pr_code_changes.yaml"
 
 
 def utc_now() -> str:
@@ -216,7 +219,17 @@ def cmd_resolve(args: argparse.Namespace) -> int:
         hf_file=hf_file,
         model_version=args.model_version or None,
         data_version=args.data_version or None,
+        core_version=args.core_version or None,
     )
+    if args.pair_id and resolved.pair.pair_id != args.pair_id:
+        # A requalification or recovery names one exact pair. Resolving any
+        # other (a moved data tag, another core) must not qualify it instead.
+        print(
+            f"::error::resolved pair {resolved.pair.pair_id[:12]} "
+            f"({resolved.pair.order_key}), not the requested {args.pair_id[:12]}"
+        )
+        set_output(action="mismatch", pair_id=resolved.pair.pair_id)
+        return 1
     base_commit = git("rev-parse", "HEAD")
     resolved_at = utc_now()
     action, reason = candidate_action(
@@ -494,16 +507,20 @@ def cmd_recoverable(args: argparse.Namespace) -> int:
 
 
 def cmd_requalify(args: argparse.Namespace) -> int:
-    """Print the promotion target's pair when its baseline is stale."""
+    """Print the promotion target's pair when it must be requalified: its
+    qualification compared against an earlier certificate, or was built on
+    an earlier main commit than the one checked out."""
 
     bundle = json.loads(BUNDLE_PATH.read_text())
     problems: list[str] = []
     receipts = latest_receipts(Path(args.ledger), problems=problems)
     for problem in problems:
         print(f"::warning::{problem}", file=sys.stderr)
-    plan = plan_promotion(receipts, bundle, {})
-    if plan.requalify is not None:
-        print(json.dumps({"pair": plan.requalify.canonical_payload()}))
+    pair = requalification_target(
+        receipts, bundle, Path(args.ledger), git("rev-parse", "HEAD")
+    )
+    if pair is not None:
+        print(json.dumps({"pair": pair.canonical_payload(), "pair_id": pair.pair_id}))
     return 0
 
 
@@ -622,67 +639,103 @@ def cmd_promote(args: argparse.Namespace) -> int:
             check=False,
         )
         if config()["promotion"]["automatic"]:
-            # main is not branch-protected and the repository does not allow
-            # auto-merge, so merge only once every check on the qualified
-            # head has finished without failing; later runs retry. GitHub
-            # refuses the merge if the branch moved off the qualified commit.
-            waiting = _unfinished_checks(plan.ready_branch)
-            if waiting:
-                print(
-                    f"automatic promotion waits for {plan.ready_branch}: "
-                    + ", ".join(waiting)
-                )
-            else:
-                subprocess.run(
-                    [
-                        "gh",
-                        "pr",
-                        "merge",
-                        plan.ready_branch,
-                        "--repo",
-                        LEDGER_REPOSITORY,
-                        "--squash",
-                        "--match-head-commit",
-                        plan.ready_commit,
-                    ],
-                    check=False,
-                )
+            _promote_by_fast_forward(plan.ready_branch, plan.ready_commit)
     return 0
 
 
-def _unfinished_checks(branch: str) -> list[str]:
-    """Checks on ``branch``'s pull request that have not passed.
+def _promote_by_fast_forward(branch: str, commit: str) -> bool:
+    """Make main the qualified commit, exactly, once its checks have passed.
 
-    A skipped job counts as passed; a pending, failed or cancelled one does
-    not, and neither does a pull request reporting no checks at all.
+    The commit's parent is the main commit it was built on. A push that is
+    not forced succeeds only while main is still that parent, so main becomes
+    exactly the tested tree or nothing changes; when main has moved, the
+    catch-up requalifies the pair on the new main. GitHub then records the
+    candidate pull request as merged.
     """
 
-    listing = subprocess.run(
-        [
-            "gh",
-            "pr",
-            "checks",
-            branch,
-            "--repo",
-            LEDGER_REPOSITORY,
-            "--json",
-            "name,bucket",
-        ],
+    waiting = _unfinished_checks(commit)
+    if waiting:
+        print(f"automatic promotion waits for {branch}: " + "; ".join(waiting))
+        return False
+    fetched = subprocess.run(
+        ["git", "fetch", "origin", f"refs/heads/{branch}"],
         check=False,
         capture_output=True,
         text=True,
     )
-    try:
-        checks = json.loads(listing.stdout or "[]")
-    except json.JSONDecodeError:
-        return ["the check list could not be read"]
-    if not checks:
-        return ["no checks reported yet"]
-    return sorted(
-        f"{check.get('name')} ({check.get('bucket')})"
-        for check in checks
-        if check.get("bucket") not in ("pass", "skipping")
+    head = subprocess.run(
+        ["git", "rev-parse", "FETCH_HEAD"], check=False, capture_output=True, text=True
+    ).stdout.strip()
+    if fetched.returncode != 0 or head != commit:
+        print(f"automatic promotion skipped: {branch} is not at {commit[:12]}")
+        return False
+    pushed = subprocess.run(
+        ["git", "push", "origin", f"{commit}:refs/heads/main"],
+        check=False,
+        capture_output=True,
+        text=True,
     )
+    if pushed.returncode != 0:
+        print(
+            f"automatic promotion skipped: main has moved since {branch}'s base; "
+            "the pair is requalified on current main"
+        )
+        return False
+    print(f"promoted {branch} at {commit[:12]} to main")
+    return True
+
+
+def _unfinished_checks(commit: str) -> list[str]:
+    """Why the qualified commit's pull request checks are not complete.
+
+    Every check run on the commit must have finished as success, skipped or
+    neutral, and every pull request workflow run for it must have finished
+    successfully, including the code-changes workflow that runs the tests:
+    a run still registering its jobs is unfinished, so one early passing
+    check never lets a merge through. Nothing reported at all also waits.
+    """
+
+    def listing(path: str, jq: str) -> Optional[list[dict[str, Any]]]:
+        result = subprocess.run(
+            ["gh", "api", path, "--paginate", "--jq", jq],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return None
+        try:
+            return [json.loads(line) for line in result.stdout.splitlines() if line]
+        except json.JSONDecodeError:
+            return None
+
+    checks = listing(
+        f"repos/{LEDGER_REPOSITORY}/commits/{commit}/check-runs?per_page=100",
+        ".check_runs[] | {name, status, conclusion} | tojson",
+    )
+    runs = listing(
+        f"repos/{LEDGER_REPOSITORY}/actions/runs"
+        f"?head_sha={commit}&event=pull_request&per_page=100",
+        ".workflow_runs[] | {path, status, conclusion} | tojson",
+    )
+    if checks is None or runs is None:
+        return ["the checks could not be read"]
+    problems = [
+        f"check {check.get('name')} is {check.get('conclusion') or check.get('status')}"
+        for check in checks
+        if check.get("status") != "completed"
+        or check.get("conclusion") not in ("success", "skipped", "neutral")
+    ]
+    problems += [
+        f"workflow {run.get('path')} is {run.get('conclusion') or run.get('status')}"
+        for run in runs
+        if run.get("status") != "completed" or run.get("conclusion") != "success"
+    ]
+    if not any(run.get("path") == CODE_CHANGES_WORKFLOW for run in runs):
+        problems.append(f"no {CODE_CHANGES_WORKFLOW} run yet")
+    if not checks:
+        problems.append("no checks reported yet")
+    return sorted(problems)
 
 
 def cmd_accept(args: argparse.Namespace) -> int:
@@ -715,6 +768,8 @@ def parser() -> argparse.ArgumentParser:
     resolve = commands.add_parser("resolve")
     resolve.add_argument("--model-version")
     resolve.add_argument("--data-version")
+    resolve.add_argument("--core-version")
+    resolve.add_argument("--pair-id")
     resolve.add_argument("--ledger")
     resolve.add_argument("--force", action="store_true")
     resolve.add_argument("--out", required=True)

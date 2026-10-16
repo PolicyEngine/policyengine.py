@@ -16,7 +16,8 @@ comparison base. It sends every other flagged move to a named reviewer.
 - A rejected request, `no_supported_years`, integrity `failed` (a crash or
   missing outputs, persistent or not), or a receipt not bound to the
   request.
-- A mapping flag.
+- A mapping flag, whether a flagged row carries it or only the receipt's
+  counters state it.
 - A lost result: a coverage row with a base value and no candidate value.
 - A lost response, unless it is a known gap:
   - a measure-year the candidate lists as inert;
@@ -52,4 +53,5 @@ review:
 - a receipt with no diff against a certified variant.
 
 Unsupported years alone never fail. A move below the diff's bound raises
-no flag and is not reviewed.
+no numerical flag; it is reviewed only if another flag, such as a structural
+one, fires on it.

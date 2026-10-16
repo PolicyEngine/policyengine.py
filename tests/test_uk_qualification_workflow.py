@@ -118,6 +118,34 @@ def test_catch_up_requalifies_a_stale_target_after_finishing_receipts():
     assert job["permissions"]["actions"] == "write"
 
 
+def test_every_dispatch_names_the_exact_pair():
+    """Recovery and requalification dispatch one pair: its versions, its core
+    and its id, which resolve checks, so another pair is never qualified in
+    its place."""
+
+    workflow = _workflow()
+    inputs = workflow[True]["workflow_dispatch"]["inputs"]
+    assert {"core_version", "pair_id"} <= set(inputs)
+    resolve = next(
+        step
+        for step in workflow["jobs"]["resolve"]["steps"]
+        if step.get("name") == "Resolve and deduplicate the candidate"
+    )
+    assert '--core-version "$INPUT_CORE"' in resolve["run"]
+    assert '--pair-id "$INPUT_PAIR_ID"' in resolve["run"]
+    dispatches = [
+        step["run"]
+        for step in workflow["jobs"]["catch-up"]["steps"]
+        if 'gh", "workflow", "run' in step.get("run", "")
+        or '"gh", "workflow", "run"' in step.get("run", "")
+    ]
+    assert len(dispatches) == 2
+    for run in dispatches:
+        assert "core_version={pair['core']['version']}" in run
+        assert "pair_id={pair_id}" in run
+        assert 'entry["pair_id"]' in run
+
+
 def test_preparation_syncs_the_candidate_lock_before_using_it():
     """Snapshots, the bundle check and staging must run in the candidate's
     environment: synced from the lock preparation regenerates, after it is
@@ -297,7 +325,9 @@ def test_catch_up_dispatches_recovery_for_the_original_pair(tmp_path):
     )
     pair = make_pair(model="2.200.0", data="1.58.9")
     candidate_path = tmp_path / "candidate.json"
-    candidate_path.write_text(json.dumps({"pair": pair.canonical_payload()}))
+    candidate_path.write_text(
+        json.dumps({"pair": pair.canonical_payload(), "pair_id": pair.pair_id})
+    )
     command_log = tmp_path / "commands.jsonl"
     binary_dir = tmp_path / "bin"
     binary_dir.mkdir()
@@ -353,6 +383,10 @@ else:
             "model_version=2.200.0",
             "-f",
             "data_version=1.58.9",
+            "-f",
+            f"core_version={pair.core.version}",
+            "-f",
+            f"pair_id={pair.pair_id}",
             "-f",
             "force=false",
         ]

@@ -809,38 +809,53 @@ def evaluate_replay_receipt(
         "receipt_commit": status.receipt_commit,
         "status": receipt.status,
         "integrity": receipt.integrity.status,
+        "policy": REPLAY_POLICY_ID,
+        "policy_sha256": replay_policy_sha256(),
+        "known_gaps": [],
+        "regressions": [],
+        "review_items": [],
     }
-    if problems:
+
+    def fail_early(kind: str, summary: str, **extra: Any) -> GateResult:
+        """A failure decided before the receipt's contents are judged; the
+        policy record lists it as the regression."""
+
         return GateResult(
             gate_id="replay",
             status="fail",
-            summary="Replay receipt is not bound to this request: "
-            + "; ".join(problems),
-            details={**details, "binding_problems": problems},
+            summary=summary,
+            details={
+                **details,
+                **extra,
+                "regressions": [{"kind": kind, "why": summary}],
+            },
+        )
+
+    if problems:
+        return fail_early(
+            "unbound",
+            "Replay receipt is not bound to this request: " + "; ".join(problems),
+            binding_problems=problems,
         )
     if receipt.status == "rejected":
         assert receipt.rejection is not None
-        return GateResult(
-            gate_id="replay",
-            status="fail",
-            summary=f"Replay rejected the candidate ({receipt.rejection.code}): {receipt.rejection.detail}",
-            details={**details, "rejection": receipt.rejection.document()},
+        return fail_early(
+            "rejected",
+            f"Replay rejected the candidate ({receipt.rejection.code}): "
+            f"{receipt.rejection.detail}",
+            rejection=receipt.rejection.document(),
         )
 
     execution = receipt.execution
     if execution is None:
         codes = sorted({failure.code for failure in receipt.integrity.failures})
-        return GateResult(
-            gate_id="replay",
-            status="fail",
-            summary="Replay failed before the candidate was identified: "
+        return fail_early(
+            "failed",
+            "Replay failed before the candidate was identified: "
             + (", ".join(codes) or "no failure codes"),
-            details={
-                **details,
-                "integrity_failures": [
-                    failure.document() for failure in receipt.integrity.failures
-                ],
-            },
+            integrity_failures=[
+                failure.document() for failure in receipt.integrity.failures
+            ],
         )
     candidate = request.candidate
     mismatches: list[str] = []
@@ -884,27 +899,18 @@ def evaluate_replay_receipt(
     if execution.release_bundle != candidate.expected_release_bundle:
         mismatches.append("release bundle differs from the expected release bundle")
     if mismatches:
-        return GateResult(
-            gate_id="replay",
-            status="fail",
-            summary="Replay ran something other than the candidate: "
-            + "; ".join(mismatches),
-            details={**details, "execution_mismatches": mismatches},
+        return fail_early(
+            "unbound",
+            "Replay ran something other than the candidate: " + "; ".join(mismatches),
+            execution_mismatches=mismatches,
         )
 
     if receipt.status == "failed" or receipt.integrity.status == "failed":
         codes = sorted({failure.code for failure in receipt.integrity.failures})
-        return GateResult(
-            gate_id="replay",
-            status="fail",
-            summary="Replay integrity failed: "
-            + (", ".join(codes) or "no failure codes"),
-            details={
-                **details,
-                "integrity_failures": [
-                    f.document() for f in receipt.integrity.failures
-                ],
-            },
+        return fail_early(
+            "failed",
+            "Replay integrity failed: " + (", ".join(codes) or "no failure codes"),
+            integrity_failures=[f.document() for f in receipt.integrity.failures],
         )
     corpus = receipt.corpus
     assert corpus is not None
@@ -972,12 +978,11 @@ def evaluate_replay_receipt(
                 f"but the receipt compares with {base}"
             )
     if contradictions:
-        return GateResult(
-            gate_id="replay",
-            status="fail",
-            summary="Replay receipt contradicts itself or the request: "
+        return fail_early(
+            "contradiction",
+            "Replay receipt contradicts itself or the request: "
             + "; ".join(contradictions),
-            details={**details, "contradictions": contradictions},
+            contradictions=contradictions,
         )
     # Flags come from every place the receipt can state them, never from the
     # summary counters alone: a flag a counter states but no row carries
@@ -1067,7 +1072,11 @@ def evaluate_replay_receipt(
                 kind = "flagged_move"
             review_items.append(item(kind, row))
     for kind in sorted(present - row_counts.keys()):
-        review_items.append(item("counted_flag", flag=kind, count=counts.get(kind, 0)))
+        # A flag the counters state but no row carries: a blocking kind still
+        # fails, so a reviewer can never accept it.
+        (regressions if kind in BLOCKING_REPLAY_FLAGS else review_items).append(
+            item("counted_flag", flag=kind, count=counts.get(kind, 0))
+        )
     details.update(
         {
             "policy": REPLAY_POLICY_ID,

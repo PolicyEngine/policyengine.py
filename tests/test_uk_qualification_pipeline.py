@@ -127,6 +127,73 @@ def _resolver(**overrides):
     return resolve_candidate(**kwargs), manifest_bytes
 
 
+def test_a_pinned_core_is_used_exactly_or_refused():
+    """A requalification names its exact core: the certified one, if the
+    model accepts it, must not be chosen instead."""
+
+    resolved, _ = _resolver(model_version="2.126.8", core_version="3.34.1")
+    assert resolved.pair.core.version == "3.34.1"
+    assert _resolver(model_version="2.126.8")[0].pair.core.version == "3.33.0"
+    with pytest.raises(ValueError, match="not on PyPI"):
+        _resolver(model_version="2.126.8", core_version="9.9.9")
+    with pytest.raises(ValueError, match="requires policyengine-core"):
+        _resolver(model_version="2.126.6", core_version="3.33.0")
+
+
+def test_resolve_refuses_a_pair_other_than_the_one_requested(
+    monkeypatch, tmp_path, capsys
+):
+    """A requalification or recovery dispatch names one pair. If its versions
+    resolve to another (a moved data tag, another core), the run fails and
+    nothing else is qualified."""
+
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "check_uk_candidate_pair_pin",
+        Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
+    )
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    pair = make_pair(model="2.200.0")
+    resolved = cli.ResolvedCandidate(
+        pair,
+        cli.WheelFile("m.whl", "https://example.org/m.whl", pair.model.wheel_sha256),
+        cli.WheelFile("c.whl", "https://example.org/c.whl", pair.core.wheel_sha256),
+        "hf://model/example@pin/manifest.json",
+        ">=3.33.0",
+    )
+    seen = {}
+    monkeypatch.setattr(
+        cli,
+        "resolve_candidate",
+        lambda **kwargs: seen.update(kwargs) or resolved,
+    )
+    monkeypatch.setattr(cli, "git", lambda *args: "a" * 40)
+    outputs = []
+    monkeypatch.setattr(cli, "set_output", lambda **kwargs: outputs.append(kwargs))
+    out = tmp_path / "candidate.json"
+
+    def args(pair_id):
+        return SimpleNamespace(
+            model_version="2.200.0",
+            data_version="1.58.0",
+            core_version="3.34.1",
+            pair_id=pair_id,
+            ledger=str(tmp_path),
+            force=False,
+            out=str(out),
+        )
+
+    assert cli.cmd_resolve(args("0" * 64)) == 1
+    assert seen["core_version"] == "3.34.1"
+    assert outputs[-1]["action"] == "mismatch"
+    assert not out.exists()
+    assert "not the requested" in capsys.readouterr().out
+    assert cli.cmd_resolve(args(pair.pair_id)) == 0
+    assert json.loads(out.read_text())["pair_id"] == pair.pair_id
+
+
 def test_resolution_picks_newest_stable_and_keeps_an_accepted_core():
     resolved, manifest_bytes = _resolver()
     pair = resolved.pair
@@ -265,6 +332,63 @@ def test_a_promotable_pair_on_a_superseded_baseline_requalifies_once_per_commit(
     )
 
 
+def test_a_target_built_on_an_earlier_main_requalifies_one_attempt_at_a_time(
+    tmp_path,
+):
+    """Promotion fast-forwards main to the qualified commit, so a promotable
+    pair built on an earlier main commit is requalified on the current one:
+    once per main commit, and never while another requalification runs."""
+
+    from policyengine.provenance.qualification_ledger import attempt_directory
+    from policyengine.provenance.uk_qualification import (
+        requalification_target,
+        stage_attempt,
+    )
+
+    pair = _promotable_pair_and_branch()
+    pair_dir = tmp_path / "uk" / pair.pair_id
+    qualified = _promotion_receipt(pair=pair)
+    _publish_as_attempt(tmp_path, pair, qualified, "a" * 12)
+    write_json(
+        pair_dir / "latest_attempt.json", {"attempt_key": "a" * 12, "sequence": 0}
+    )
+    now = "2026-10-16T10:00:00Z"
+
+    def action(base):
+        return candidate_action(pair, BUNDLE, tmp_path, base_commit=base * 40, now=now)
+
+    assert action("a")[0] == "duplicate"
+    verdict, reason = action("b")
+    assert verdict == "qualify" and "qualified on main aaaaaaaaaaaa" in reason
+    assert requalification_target([qualified], BUNDLE, tmp_path, "b" * 40) == pair
+    assert requalification_target([qualified], BUNDLE, tmp_path, "a" * 40) is None
+    # A requalification from b runs; c arrives meanwhile and waits for it.
+    stage_attempt(
+        attempt_directory(tmp_path, "uk", pair.pair_id, "b" * 12),
+        {"pair": pair.canonical_payload(), "pair_id": pair.pair_id},
+        HARNESS,
+        owner_run_id="7",
+        staged_at="2026-10-16T09:30:00Z",
+    )
+    assert action("b")[0] == "duplicate"
+    verdict, reason = action("c")
+    assert verdict == "duplicate" and "in flight" in reason
+    # Once it has finished (its receipt published), c requalifies.
+    requalified = qualified.model_copy(update={"completed_at": "2026-10-16T11:00:00Z"})
+    _publish_as_attempt(tmp_path, pair, requalified, "b" * 12)
+    write_json(
+        pair_dir / "latest_attempt.json", {"attempt_key": "b" * 12, "sequence": 1}
+    )
+    assert action("b")[0] == "duplicate"
+    assert action("c")[0] == "qualify"
+    # A repeat key on the same base names the same base.
+    write_json(
+        pair_dir / "latest_attempt.json",
+        {"attempt_key": "c" * 12 + "-2", "sequence": 2},
+    )
+    assert requalification_target([requalified], BUNDLE, tmp_path, "c" * 40) is None
+
+
 def test_requalify_names_the_target_only_while_its_baseline_is_stale(
     monkeypatch, tmp_path, capsys
 ):
@@ -285,15 +409,17 @@ def test_requalify_names_the_target_only_while_its_baseline_is_stale(
             )
         }
     )
+    monkeypatch.setattr(cli, "git", lambda *args: "a" * 40)
     for receipts, expected in (([stale], [stale.pair]), ([current], []), ([], [])):
         monkeypatch.setattr(cli, "latest_receipts", lambda root, r=receipts, **_: r)
         assert cli.cmd_requalify(argparse.Namespace(ledger=str(tmp_path))) == 0
         printed = [
-            json.loads(line)["pair"]
-            for line in capsys.readouterr().out.splitlines()
-            if line
+            json.loads(line) for line in capsys.readouterr().out.splitlines() if line
         ]
-        assert printed == [pair.canonical_payload() for pair in expected]
+        assert printed == [
+            {"pair": pair.canonical_payload(), "pair_id": pair.pair_id}
+            for pair in expected
+        ]
 
 
 def test_incomplete_pairs_requalify_on_a_new_base_only(tmp_path):
@@ -736,37 +862,90 @@ def test_a_branch_that_moved_off_the_qualified_commit_is_not_promoted():
 
 
 CHECKS_PASSED = [
-    {"name": "Lint", "bucket": "pass"},
-    {"name": "Test (3.13)", "bucket": "pass"},
-    {"name": "Docs", "bucket": "skipping"},
+    {"name": "Lint", "status": "completed", "conclusion": "success"},
+    {"name": "Test (3.13)", "status": "completed", "conclusion": "success"},
+    {"name": "Docs", "status": "completed", "conclusion": "skipped"},
+]
+RUNS_PASSED = [
+    {
+        "path": ".github/workflows/pr_code_changes.yaml",
+        "status": "completed",
+        "conclusion": "success",
+    }
 ]
 
 
-@pytest.mark.parametrize(
-    ("checks", "merges"),
-    [
-        (CHECKS_PASSED, True),
-        ([*CHECKS_PASSED[:1], {"name": "Test (3.13)", "bucket": "pending"}], False),
-        ([*CHECKS_PASSED[:1], {"name": "Test (3.13)", "bucket": "fail"}], False),
-        ([{"name": "Test (3.13)", "bucket": "cancel"}], False),
-        ([], False),
-        (None, False),
-    ],
-    ids=["passed", "pending", "failed", "cancelled", "none", "unreadable"],
-)
-def test_promote_readies_and_merges_only_the_qualified_commit(
-    monkeypatch, tmp_path, checks, merges
+def _check(name, status="completed", conclusion=None):
+    return {"name": name, "status": status, "conclusion": conclusion}
+
+
+PROMOTION_CASES = {
+    "everything passed": (CHECKS_PASSED, RUNS_PASSED, True, 0, True),
+    "a test still running": (
+        [*CHECKS_PASSED[:1], _check("Test (3.13)", "in_progress")],
+        RUNS_PASSED,
+        True,
+        0,
+        False,
+    ),
+    "a test failed": (
+        [*CHECKS_PASSED[:1], _check("Test (3.13)", conclusion="failure")],
+        RUNS_PASSED,
+        True,
+        0,
+        False,
+    ),
+    "a test cancelled": (
+        [_check("Test", conclusion="cancelled")],
+        RUNS_PASSED,
+        True,
+        0,
+        False,
+    ),
+    "no checks yet": ([], RUNS_PASSED, True, 0, False),
+    "only lint so far, the test workflow still registering": (
+        CHECKS_PASSED[:1],
+        [{**RUNS_PASSED[0], "status": "in_progress", "conclusion": None}],
+        True,
+        0,
+        False,
+    ),
+    "the test workflow never ran": (
+        CHECKS_PASSED,
+        [
+            {
+                "path": ".github/workflows/pr_docs_changes.yaml",
+                "status": "completed",
+                "conclusion": "success",
+            }
+        ],
+        True,
+        0,
+        False,
+    ),
+    "the checks could not be read": (None, RUNS_PASSED, True, 0, False),
+    "the branch moved": (CHECKS_PASSED, RUNS_PASSED, False, 0, False),
+    "main moved since the base": (CHECKS_PASSED, RUNS_PASSED, True, 1, False),
+}
+
+
+@pytest.mark.parametrize("case", sorted(PROMOTION_CASES))
+def test_promotion_fast_forwards_main_to_exactly_the_qualified_commit(
+    monkeypatch, tmp_path, capsys, case
 ):
     """main is not branch-protected and the repository does not allow
-    auto-merge, so automatic promotion merges the qualified head only once
-    every check on it has passed (skipped jobs aside), and never by
-    --auto."""
+    auto-merge. Promotion pushes the qualified commit to main without force,
+    once every check and pull request workflow run on it has passed: the
+    push succeeds only while main is still the commit it was built on, so
+    main becomes exactly the tested tree or nothing changes."""
 
     import argparse
     import importlib.util
 
+    checks, runs, branch_at_commit, push_code, promotes = PROMOTION_CASES[case]
     qualified = _promotion_receipt(pair=_promotable_pair_and_branch())
     branch = candidate_branch(qualified.pair)
+    commit = qualified.harness.git_commit
     spec = importlib.util.spec_from_file_location(
         "check_uk_candidate_for_test",
         Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
@@ -777,45 +956,73 @@ def test_promote_readies_and_merges_only_the_qualified_commit(
 
     def run(argv, **kwargs):
         calls.append(argv)
-        if argv[:3] == ["gh", "pr", "checks"]:
-            assert argv[3] == branch
-            stdout = "not json" if checks is None else json.dumps(checks)
-            return SimpleNamespace(returncode=0, stdout=stdout)
-        return SimpleNamespace(returncode=0, stdout="")
+        if argv[:2] == ["gh", "api"]:
+            items = checks if "check-runs" in argv[2] else runs
+            if "check-runs" in argv[2]:
+                assert f"commits/{commit}/" in argv[2]
+            else:
+                assert f"head_sha={commit}" in argv[2]
+            if items is None:
+                return SimpleNamespace(returncode=1, stdout="")
+            return SimpleNamespace(
+                returncode=0, stdout="".join(json.dumps(i) + "\n" for i in items)
+            )
+        if argv[:2] == ["git", "rev-parse"]:
+            head = commit if branch_at_commit else "f" * 40
+            return SimpleNamespace(returncode=0, stdout=head + "\n")
+        if argv[:2] == ["git", "push"]:
+            return SimpleNamespace(returncode=push_code, stdout="", stderr="")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: [qualified])
     monkeypatch.setattr(cli, "subprocess", SimpleNamespace(run=run))
     monkeypatch.setattr(cli, "config", lambda: {"promotion": {"automatic": True}})
-    monkeypatch.setattr(cli, "_open_candidate_branches", lambda: {branch: "f" * 40})
-    assert cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True)) == 0
-    assert calls == []
-    monkeypatch.setattr(
-        cli,
-        "_open_candidate_branches",
-        lambda: {branch: qualified.harness.git_commit},
-    )
+    monkeypatch.setattr(cli, "_open_candidate_branches", lambda: {branch: commit})
     assert cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True)) == 0
     assert calls[0][:3] == ["gh", "pr", "ready"] and calls[0][3] == branch
-    merged = [argv for argv in calls if argv[:3] == ["gh", "pr", "merge"]]
-    if merges:
-        assert merged == [
-            [
-                "gh",
-                "pr",
-                "merge",
-                branch,
-                "--repo",
-                "PolicyEngine/policyengine.py",
-                "--squash",
-                "--match-head-commit",
-                qualified.harness.git_commit,
-            ]
-        ]
+    pushes = [argv for argv in calls if argv[:2] == ["git", "push"]]
+    assert all("--force" not in argv and "-f" not in argv for argv in pushes)
+    assert not [argv for argv in calls if argv[:3] == ["gh", "pr", "merge"]]
+    reached_push = (
+        checks is not None and promotes or case == "main moved since the base"
+    )
+    if reached_push:
+        assert pushes == [["git", "push", "origin", f"{commit}:refs/heads/main"]]
     else:
-        assert merged == []
-    # Without automatic promotion it only readies.
-    calls.clear()
+        assert pushes == []
+    out = capsys.readouterr().out
+    assert (f"promoted {branch}" in out) is promotes
+    if case == "main moved since the base":
+        assert "requalified on current main" in out
+
+
+def test_without_automatic_promotion_the_target_is_only_readied(monkeypatch, tmp_path):
+    import argparse
+    import importlib.util
+
+    qualified = _promotion_receipt(pair=_promotable_pair_and_branch())
+    branch = candidate_branch(qualified.pair)
+    spec = importlib.util.spec_from_file_location(
+        "check_uk_candidate_manual",
+        Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
+    )
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    calls = []
+    monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: [qualified])
+    monkeypatch.setattr(
+        cli,
+        "subprocess",
+        SimpleNamespace(
+            run=lambda argv, **k: (
+                calls.append(argv) or SimpleNamespace(returncode=0, stdout="")
+            )
+        ),
+    )
     monkeypatch.setattr(cli, "config", lambda: {"promotion": {"automatic": False}})
+    monkeypatch.setattr(
+        cli, "_open_candidate_branches", lambda: {branch: qualified.harness.git_commit}
+    )
     assert cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True)) == 0
     assert [argv[:3] for argv in calls] == [["gh", "pr", "ready"]]
 
@@ -1402,6 +1609,8 @@ def test_resolution_preserves_authorization_to_recover_forced_work(
     args = SimpleNamespace(
         model_version=None,
         data_version=None,
+        core_version=None,
+        pair_id=None,
         ledger=str(tmp_path),
         force=True,
         out=str(out),
