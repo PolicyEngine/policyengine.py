@@ -545,32 +545,50 @@ def cmd_requalify(args: argparse.Namespace) -> int:
     return 0
 
 
+#: The most open candidate pull requests the listing reads; gh stops a search
+#: at its limit (30 by default), so reaching this one is an error.
+PULL_REQUEST_LIMIT = 1000
+
+
 def _candidate_pull_requests() -> list[dict[str, Any]]:
     """Open candidate pull requests from this repository's own branches.
 
     ``head:candidate/uk/`` matches by prefix, and a fork's pull request can
-    carry the same branch name, so only same-repository ones are candidates.
+    carry the same branch name, so only same-repository ones are candidates
+    (a listing without the field counts as a fork's). The search reads up to
+    ``PULL_REQUEST_LIMIT`` pull requests, forks included, and refuses to go
+    on if it reaches the limit, since one it did not read could be the
+    target.
     """
 
-    listing = subprocess.run(
-        [
-            "gh",
-            "pr",
-            "list",
-            "--repo",
-            LEDGER_REPOSITORY,
-            "--state",
-            "open",
-            "--search",
-            "head:candidate/uk/",
-            "--json",
-            "number,headRefName,headRefOid,isDraft,isCrossRepository",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
-    return [item for item in json.loads(listing) if not item.get("isCrossRepository")]
+    listing = json.loads(
+        subprocess.run(
+            [
+                "gh",
+                "pr",
+                "list",
+                "--repo",
+                LEDGER_REPOSITORY,
+                "--state",
+                "open",
+                "--search",
+                "head:candidate/uk/",
+                "--limit",
+                str(PULL_REQUEST_LIMIT),
+                "--json",
+                "number,headRefName,headRefOid,isDraft,isCrossRepository",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    )
+    if len(listing) >= PULL_REQUEST_LIMIT:
+        raise SystemExit(
+            f"::error::{len(listing)} open pull requests match candidate/uk/; "
+            "one beyond the listing could be the target"
+        )
+    return [item for item in listing if item.get("isCrossRepository") is False]
 
 
 def _open_candidate_branches() -> dict[str, str]:
@@ -601,51 +619,117 @@ def _newest_runs(runs: list[dict[str, Any]]) -> dict[tuple[Any, Any], dict[str, 
     return newest
 
 
+#: The results refresh re-runs. GitHub re-runs a run only within 30 days of
+#: its first attempt.
+RERUN_CONCLUSIONS = frozenset({"failure", "timed_out", "cancelled"})
+RERUN_WINDOW = datetime.timedelta(days=30)
+
+
+def _now() -> datetime.datetime:
+    return datetime.datetime.now(datetime.UTC)
+
+
+def _commit_runs(commit: str) -> Optional[list[dict[str, Any]]]:
+    """Every workflow run GitHub lists at ``commit``; None if unreadable."""
+
+    result = subprocess.run(
+        [
+            "gh",
+            "api",
+            f"repos/{LEDGER_REPOSITORY}/actions/runs?head_sha={commit}&per_page=100",
+            "--paginate",
+            "--jq",
+            ".workflow_runs[] | {id, head_sha, head_branch,"
+            " head_repository: .head_repository.full_name, path, event, status,"
+            " conclusion, check_suite_id, run_attempt, created_at} | tojson",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        return [json.loads(line) for line in result.stdout.splitlines() if line]
+    except json.JSONDecodeError:
+        return None
+
+
+def _own_runs(
+    runs: list[dict[str, Any]], commit: str, branch: str
+) -> list[dict[str, Any]]:
+    """The runs of this repository's candidate branch at ``commit``.
+
+    The runs listing for a commit also holds runs of any other pull request
+    at that commit, a fork's included (round 5 of #635); only runs from this
+    repository on the candidate branch are the candidate's.
+    """
+
+    return [
+        run
+        for run in runs
+        if run.get("head_sha") == commit
+        and run.get("head_branch") == branch
+        and run.get("head_repository") == LEDGER_REPOSITORY
+    ]
+
+
+def _candidate_runs(commit: str, branch: str) -> Optional[list[dict[str, Any]]]:
+    """``_own_runs`` of the runs listed at ``commit``; None if unreadable."""
+
+    runs = _commit_runs(commit)
+    return None if runs is None else _own_runs(runs, commit, branch)
+
+
+def _rerun_due(run: dict[str, Any], now: datetime.datetime) -> bool:
+    """Whether refresh re-runs this finished run: it failed, timed out or was
+    cancelled, has attempts left, and GitHub will still re-run it."""
+
+    if run.get("status") != "completed" or run.get("conclusion") not in (
+        RERUN_CONCLUSIONS
+    ):
+        return False
+    if int(run.get("run_attempt") or 1) >= MAX_RUN_ATTEMPTS:
+        return False
+    created = run.get("created_at")
+    if isinstance(created, str) and created:
+        started = datetime.datetime.fromisoformat(created.replace("Z", "+00:00"))
+        if now - started > RERUN_WINDOW:
+            return False
+    return True
+
+
 def cmd_refresh_pr_checks(args: argparse.Namespace) -> int:
     """Re-run a candidate's unsuccessful newest runs once its receipt is out.
 
     The PR workflow does not subscribe to edits or ready_for_review events,
     and the run of the code-changes workflow on the candidate's own tree is
     dispatched once, by ``prepare``. So for each workflow and event the
-    newest run on the candidate commit is re-run when it failed, timed out
-    or was cancelled (a job timeout cancels the run): a failed or timed-out
-    one by its failed jobs, a cancelled one in full. Older runs a newer one
-    replaced are left alone, and no run is re-run past ``MAX_RUN_ATTEMPTS``.
-    GITHUB_TOKEN may re-run existing runs with actions: write.
+    newest of the candidate's own runs (``_candidate_runs``) is re-run when
+    ``_rerun_due``: a failed or timed-out one by its failed jobs, a
+    cancelled one (a job timeout cancels the run) in full. Older runs a
+    newer one replaced are left alone. GITHUB_TOKEN may re-run existing runs
+    with actions: write.
     """
 
     branches = _open_candidate_branches()
+    now = _now()
     for receipt in latest_receipts(Path(args.ledger)):
         branch = candidate_branch(receipt.pair)
         head = receipt.harness.git_commit
         if not receipt.promotable or branches.get(branch) != head:
             continue
-        listing = subprocess.run(
-            [
-                "gh",
-                "api",
-                f"repos/{LEDGER_REPOSITORY}/actions/runs?head_sha={head}&per_page=100",
-                "--paginate",
-                "--jq",
-                ".workflow_runs[] | {id, head_sha, path, event, status, conclusion,"
-                " run_attempt} | tojson",
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout
+        listed = _candidate_runs(head, branch)
+        if listed is None:
+            print(f"::warning::could not read the runs of {branch} at {head}")
+            continue
         runs = [
             run
-            for run in (json.loads(line) for line in listing.splitlines() if line)
-            if run["head_sha"] == head
-            and run["event"] in ("pull_request", "workflow_dispatch")
+            for run in listed
+            if run["event"] in ("pull_request", "workflow_dispatch")
         ]
         for run in _newest_runs(runs).values():
-            if (
-                run["status"] != "completed"
-                or run["conclusion"] not in {"failure", "timed_out", "cancelled"}
-                or int(run.get("run_attempt") or 1) >= MAX_RUN_ATTEMPTS
-            ):
+            if not _rerun_due(run, now):
                 continue
             rerun = subprocess.run(
                 ["gh", "run", "rerun", str(run["id"]), "--repo", LEDGER_REPOSITORY]
@@ -675,7 +759,11 @@ def cmd_promote(args: argparse.Namespace) -> int:
     for problem in problems:
         # Such a pair is left out of the plan until its files are rederived.
         print(f"::warning::{problem}")
-    branches = _open_candidate_branches() if args.apply else {}
+    pull_requests = _candidate_pull_requests() if args.apply else []
+    branches = {pr["headRefName"]: pr["headRefOid"] for pr in pull_requests}
+    # Every write to a pull request goes by number: gh looks a branch name up
+    # among a limited listing, which a fork's pull request can shadow.
+    numbers = {pr["headRefName"]: str(pr["number"]) for pr in pull_requests}
     plan = plan_promotion(receipts, bundle, branches)
     print(f"promotion: {plan.reason}")
     if plan.target is not None:
@@ -693,7 +781,7 @@ def cmd_promote(args: argparse.Namespace) -> int:
                 "gh",
                 "pr",
                 "close",
-                branch,
+                numbers.get(branch, branch),
                 "--repo",
                 LEDGER_REPOSITORY,
                 "--comment",
@@ -704,11 +792,10 @@ def cmd_promote(args: argparse.Namespace) -> int:
     # Only the plan's target may be ready, and only while _promote finds it
     # on current main: any other ready candidate (left by a run that could
     # not undo it, or by older code) goes back to draft.
-    # By number: a branch name alone could match a fork's pull request.
     returned = [
-        _set_ready(str(number), False)
-        for branch, number in sorted(_ready_candidate_branches().items())
-        if branch != plan.ready_branch
+        _set_ready(str(pr["number"]), False)
+        for pr in sorted(pull_requests, key=lambda pr: pr["number"])
+        if not pr["isDraft"] and pr["headRefName"] != plan.ready_branch
     ]
     safe = True
     if plan.ready_branch is not None and plan.ready_commit is not None:
@@ -716,6 +803,7 @@ def cmd_promote(args: argparse.Namespace) -> int:
             plan.ready_branch,
             plan.ready_commit,
             automatic=config()["promotion"]["automatic"],
+            pull_request=numbers.get(plan.ready_branch, plan.ready_branch),
         )
     return 0 if all(returned) and safe else 1
 
@@ -741,17 +829,9 @@ def _set_ready(pull_request: str, ready: bool) -> bool:
     return done
 
 
-def _ready_candidate_branches() -> dict[str, int]:
-    """Candidate pull requests marked ready for review: branch to number."""
-
-    return {
-        item["headRefName"]: item["number"]
-        for item in _candidate_pull_requests()
-        if not item["isDraft"]
-    }
-
-
-def _promote(branch: str, commit: str, *, automatic: bool) -> bool:
+def _promote(
+    branch: str, commit: str, *, automatic: bool, pull_request: Optional[str] = None
+) -> bool:
     """Make main exactly the qualified commit, or change nothing.
 
     The qualified commit's parent is the main commit it was built on. Only
@@ -767,8 +847,12 @@ def _promote(branch: str, commit: str, *, automatic: bool) -> bool:
     Returns False when a return to draft failed, which leaves a ready pull
     request that a merge could combine with other code, or when the
     candidate waits on runs refresh will not re-run again; either way the
-    promote run fails so someone sees it.
+    promote run fails so someone sees it. ``pull_request`` names the
+    candidate's pull request for readiness changes (its number; the branch
+    by default).
     """
+
+    target = pull_request or branch
 
     fetched = subprocess.run(
         ["git", "fetch", "origin", f"refs/heads/{branch}"],
@@ -785,24 +869,25 @@ def _promote(branch: str, commit: str, *, automatic: bool) -> bool:
             f"not promotable now: {branch} is not the qualified commit "
             f"{commit[:12]} built on current main; it is requalified on current main"
         )
-        return _set_ready(branch, False)
+        return _set_ready(target, False)
     if not automatic:
-        _set_ready(branch, True)
+        _set_ready(target, True)
         return True
-    waiting, stranded = _unfinished_checks(commit)
+    waiting, stranded = _unfinished_checks(commit, branch)
     if waiting:
         print(f"automatic promotion waits for {branch}: " + "; ".join(waiting))
         if stranded:
             # Refresh will not re-run these again, and nothing else moves
             # the candidate while main stays put: say so in the run's result.
             print(
-                f"::error::{branch} waits on runs no re-run is left for; re-run "
-                "them by hand: " + "; ".join(stranded)
+                f"::error::{branch} waits on runs refresh will not re-run; re-run "
+                "or re-dispatch them by hand, or requalify the pair: "
+                + "; ".join(stranded)
             )
         # A pull request a person or an interrupted run left ready goes back
         # to draft until every check on its own tree has passed.
-        return _set_ready(branch, False) and not stranded
-    _set_ready(branch, True)
+        return _set_ready(target, False) and not stranded
+    _set_ready(target, True)
     pushed = subprocess.run(
         [
             "git",
@@ -820,7 +905,7 @@ def _promote(branch: str, commit: str, *, automatic: bool) -> bool:
             f"automatic promotion skipped: main is no longer {parent[:12]}; "
             "the pair is requalified on current main"
         )
-        return _set_ready(branch, False)
+        return _set_ready(target, False)
     print(f"promoted {branch} at {commit[:12]} to main")
     return True
 
@@ -830,56 +915,57 @@ def _git_out(*args: str) -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
-def _unfinished_checks(commit: str) -> tuple[list[str], list[str]]:
+def _unfinished_checks(commit: str, branch: str) -> tuple[list[str], list[str]]:
     """Why the qualified commit's checks do not yet show its own tree passing,
-    and which of those runs refresh will not re-run again.
+    and which of the runs it waits on refresh will not re-run.
 
     Pull request runs test the candidate merged with main as it was then;
     the run of the code-changes workflow that the qualification dispatches on
-    the candidate branch tests the commit's own tree, and must exist. For
-    each workflow and event, the newest run must have finished successfully,
-    and for each check name the newest check must have finished as success,
-    skipped or neutral, so an older cancelled or failed execution that a
-    newer one replaced never blocks. Checks of a run that a newer run of the
-    same workflow and event replaced are not counted at all, so re-running
-    it cannot block. A run still registering its jobs, none reported, or an
-    unreadable list waits.
+    the candidate branch tests the commit's own tree, and must exist. Only
+    the candidate's own runs count (``_own_runs``): a run of another pull
+    request at the same commit, a fork's included, neither blocks nor
+    passes it. For each workflow and event, the newest own run must have
+    finished successfully, and for each check name the newest check must
+    have finished as success, skipped or neutral. Checks of any run that is
+    not a newest own run (one a newer run replaced, or another pull
+    request's) are not counted at all; checks outside any workflow run (an
+    app's) are. A run still registering its jobs, no checks, or an
+    unreadable list waits. A finished, unsuccessful newest own run that
+    refresh will not re-run (``_rerun_due``) is stranded.
     """
 
-    def listing(path: str, jq: str) -> Optional[list[dict[str, Any]]]:
-        result = subprocess.run(
-            ["gh", "api", path, "--paginate", "--jq", jq],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            return None
+    result = subprocess.run(
+        [
+            "gh",
+            "api",
+            f"repos/{LEDGER_REPOSITORY}/commits/{commit}/check-runs?per_page=100",
+            "--paginate",
+            "--jq",
+            ".check_runs[] | {id, name, status, conclusion,"
+            " check_suite_id: .check_suite.id} | tojson",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    checks: Optional[list[dict[str, Any]]] = None
+    if result.returncode == 0:
         try:
-            return [json.loads(line) for line in result.stdout.splitlines() if line]
+            checks = [json.loads(line) for line in result.stdout.splitlines() if line]
         except json.JSONDecodeError:
-            return None
-
-    checks = listing(
-        f"repos/{LEDGER_REPOSITORY}/commits/{commit}/check-runs?per_page=100",
-        ".check_runs[] | {id, name, status, conclusion,"
-        " check_suite_id: .check_suite.id} | tojson",
-    )
-    runs = listing(
-        f"repos/{LEDGER_REPOSITORY}/actions/runs?head_sha={commit}&per_page=100",
-        ".workflow_runs[] | {id, path, event, status, conclusion, check_suite_id,"
-        " run_attempt} | tojson",
-    )
+            checks = None
+    runs = _commit_runs(commit)
     if checks is None or runs is None:
         return ["the checks could not be read"], []
-    newest_runs = _newest_runs(runs)
-    replaced_suites = {run.get("check_suite_id") for run in runs} - {
+    newest_runs = _newest_runs(_own_runs(runs, commit, branch))
+    excluded_suites = {run.get("check_suite_id") for run in runs} - {
         run.get("check_suite_id") for run in newest_runs.values()
     }
+    counted = [
+        check for check in checks if check.get("check_suite_id") not in excluded_suites
+    ]
     newest_checks: dict[Any, dict[str, Any]] = {}
-    for check in checks:
-        if check.get("check_suite_id") in replaced_suites:
-            continue
+    for check in counted:
         name = check.get("name")
         if name not in newest_checks or check.get("id", 0) > newest_checks[name].get(
             "id", 0
@@ -900,15 +986,16 @@ def _unfinished_checks(commit: str) -> tuple[list[str], list[str]]:
         problems.append(
             f"no {CODE_CHANGES_WORKFLOW} run on the candidate's own tree yet"
         )
-    if not checks:
+    if not counted:
         problems.append("no checks reported yet")
+    now = _now()
     stranded = sorted(
         f"workflow {path} ({event}) is {run.get('conclusion')} after "
-        f"{run.get('run_attempt')} attempts"
+        f"{run.get('run_attempt') or 1} attempt(s)"
         for (path, event), run in newest_runs.items()
         if run.get("status") == "completed"
         and run.get("conclusion") != "success"
-        and int(run.get("run_attempt") or 1) >= MAX_RUN_ATTEMPTS
+        and not _rerun_due(run, now)
     )
     return sorted(problems), stranded
 
