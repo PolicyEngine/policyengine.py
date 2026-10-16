@@ -47,10 +47,23 @@ Checks:
 The last two are responsiveness checks: a reform that reaches the parameter
 but not the award (as when an award is fixed before the reform applies)
 fails them.
+
+Detail
+------
+
+Each row's ``detail`` states every condition the check tests as a flat
+true/false finding (``no_award_lower``, ``some_pension_higher``,
+``income_tax:2027_matches`` and so on), so a failed check can be diagnosed
+from the findings alone. Counts and totals follow them for local reruns,
+under the small-cell rule: the report is published, and the subsample's
+households are survey records, so no count from 1 to 9 appears (it reads
+``"fewer than 10"``), and a total over fewer than 10 changed records is
+withheld.
 """
 
 from __future__ import annotations
 
+import numbers
 import os
 import tempfile
 import traceback
@@ -74,6 +87,43 @@ STATE_PENSION_RATES = (
     "gov.dwp.state_pension.new_state_pension.amount",
 )
 RESPONSE_YEAR = 2027
+
+#: The small-cell rule: a count of survey records from 1 to 9 is never
+#: published, nor a total over that many.
+SMALL_CELL_LIMIT = 10
+FEWER_THAN_10 = "fewer than 10"
+WITHHELD_FEWER_THAN_10 = "withheld: fewer than 10 records"
+
+
+def is_small_cell(count: int) -> bool:
+    return 0 < count < SMALL_CELL_LIMIT
+
+
+def publishable_detail(detail: Any) -> Any:
+    """``detail`` with every count from 1 to 9, at any depth, suppressed.
+
+    Booleans are findings, not counts, and stay as they are.
+    """
+    if isinstance(detail, (bool, np.bool_)):
+        return detail
+    if isinstance(detail, numbers.Integral):
+        return FEWER_THAN_10 if is_small_cell(int(detail)) else detail
+    if isinstance(detail, dict):
+        return {key: publishable_detail(value) for key, value in detail.items()}
+    if isinstance(detail, (list, tuple)):
+        return [publishable_detail(value) for value in detail]
+    return detail
+
+
+def total_over_records(total: float, records: int) -> float | str:
+    """A total, withheld when fewer than 10 records moved it."""
+    return WITHHELD_FEWER_THAN_10 if is_small_cell(records) else total
+
+
+def matches(names: Sequence[str], different: Sequence[str]) -> dict[str, bool]:
+    """One ``<name>_matches`` finding per compared output."""
+    return {f"{name}_matches": name not in different for name in names}
+
 
 POPULATION_BASELINE_ISOLATION = "population_baseline_isolation"
 POPULATION_QUERY_ORDER = "population_query_order"
@@ -223,18 +273,22 @@ def uc_allowance_verdict(
             for state_paid, state_award in ((base_paid, base_award), (paid, award))
         )
     )
-    holds = (
-        non_finite == 0
-        and scaled
-        and awards_lower == 0
-        and payments_unaccounted == 0
-        and payments_below_floor == 0
-        and payments_higher > 0
-    )
-    return holds, {
+    payments_lower = int(np.sum(paid < base_paid - PENNY))
+    findings = {
         "standard_allowance_scaled_10_percent": scaled,
+        "no_award_lower": awards_lower == 0,
+        "payments_are_award_less_deductions": payments_unaccounted == 0,
+        "no_payment_below_the_payable_floor": payments_below_floor == 0,
+        "some_payment_higher": payments_higher > 0,
+        "no_non_finite_units": non_finite == 0,
+    }
+    holds = all(findings.values())
+    return holds, {
+        **findings,
+        # Lawful (deductions can rise more than the award), so not a condition.
+        "no_payment_lower": payments_lower == 0,
         "awards_lower": awards_lower,
-        "payments_lower": int(np.sum(paid < base_paid - PENNY)),
+        "payments_lower": payments_lower,
         "payments_higher": payments_higher,
         "payments_not_award_less_deductions": payments_unaccounted,
         "payments_below_the_payable_floor": payments_below_floor,
@@ -380,7 +434,7 @@ def run_population_checks(
                     POPULATION_BASELINE_ISOLATION,
                     route,
                     "fail" if different else "pass",
-                    detail=different or None,
+                    detail=matches(list(before), different),
                 )
             )
         after = _arrays(build(None, None))
@@ -390,7 +444,7 @@ def run_population_checks(
                 POPULATION_BASELINE_ISOLATION,
                 "unreformed",
                 "fail" if different else "pass",
-                detail=different or None,
+                detail=matches(list(before), different),
             )
         )
         different = _same(before, _arrays(build(None, None), order=-1))
@@ -399,7 +453,7 @@ def run_population_checks(
                 POPULATION_QUERY_ORDER,
                 "unreformed",
                 "fail" if different else "pass",
-                detail=different or None,
+                detail=matches(list(before), different),
             )
         )
         tax = {
@@ -411,15 +465,18 @@ def run_population_checks(
         }
         first = country[0]
         for route in country[1:]:
-            same = all(
-                np.array_equal(tax[route][year], tax[first][year])
+            agree = {
+                f"income_tax:{year}_matches": bool(
+                    np.array_equal(tax[route][year], tax[first][year])
+                )
                 for year in (2026, 2027)
-            )
+            }
             rows.append(
                 _row(
                     POPULATION_ROUTES_AGREE,
                     f"{first} = {route}",
-                    "pass" if same else "fail",
+                    "pass" if all(agree.values()) else "fail",
+                    detail=agree,
                 )
             )
         for route in country:
@@ -431,6 +488,8 @@ def run_population_checks(
             # is on the total, and the counts are reported.
             total_rises = bool(np.sum(change_2027) > 1e-6)
             ok = unchanged_2026 and total_rises
+            lower = int(np.sum(change_2027 < -1e-6))
+            higher = int(np.sum(change_2027 > 1e-6))
             rows.append(
                 _row(
                     POPULATION_APRIL_RATE_CHANGE,
@@ -438,23 +497,29 @@ def run_population_checks(
                     "pass" if ok else "fail",
                     detail={
                         "2026_unchanged": unchanged_2026,
-                        "2027_total_change": float(np.sum(change_2027)),
-                        "2027_people_with_lower_tax": int(np.sum(change_2027 < -1e-6)),
-                        "2027_people_with_higher_tax": int(np.sum(change_2027 > 1e-6)),
+                        "2027_total_rises": total_rises,
+                        "2027_total_change": total_over_records(
+                            float(np.sum(change_2027)), lower + higher
+                        ),
+                        "2027_people_with_lower_tax": lower,
+                        "2027_people_with_higher_tax": higher,
                     },
                 )
             )
         for route in country:
             simulation = build(route, FINITE)
-            same = np.array_equal(
-                np.asarray(simulation.calculate("income_tax", 2028), dtype=float),
-                before["income_tax:2028"],
+            same = bool(
+                np.array_equal(
+                    np.asarray(simulation.calculate("income_tax", 2028), dtype=float),
+                    before["income_tax:2028"],
+                )
             )
             rows.append(
                 _row(
                     POPULATION_FINITE_CHANGE_EXPIRES,
                     route,
                     "pass" if same else "fail",
+                    detail={"income_tax:2028_matches": same},
                 )
             )
 
@@ -506,6 +571,8 @@ def run_population_checks(
                     "pass" if scaled and lower == 0 and higher > 0 else "fail",
                     detail={
                         "basic_and_new_scaled_10_percent": bool(scaled),
+                        "no_pension_lower": lower == 0,
+                        "some_pension_higher": higher > 0,
                         "pensions_lower": lower,
                         "pensions_higher": higher,
                     },
@@ -516,12 +583,15 @@ def run_population_checks(
             _row(
                 *POPULATION_ERROR_DIAGNOSTIC,
                 "error",
+                reason=type(error).__name__,
                 detail="".join(
                     traceback.format_exception_only(type(error), error)
                 ).strip()[:1000],
             )
         )
     for row in rows:
+        if isinstance(row.get("detail"), dict):
+            row["detail"] = publishable_detail(row["detail"])
         row.setdefault("subsample_households", SUBSAMPLE_HOUSEHOLDS)
         row.setdefault("seed", seed)
     return rows

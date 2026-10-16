@@ -714,6 +714,7 @@ def test_population_errors_emit_only_the_declared_diagnostic_after_progress(
         "check_id": population.POPULATION_ERROR_DIAGNOSTIC[0],
         "route": population.POPULATION_ERROR_DIAGNOSTIC[1],
         "status": "error",
+        "reason": "OSError",
         "detail": "OSError: forced population failure",
         "subsample_households": population.SUBSAMPLE_HOUSEHOLDS,
         "seed": 7,
@@ -885,6 +886,7 @@ def test_population_checks_hold_on_a_tiny_dataset(tmp_path):
         seed=0,
     )
     assert rows and all(row["status"] == "pass" for row in rows), rows
+    _assert_publishable_findings(rows)
     from collections import Counter
 
     assert Counter((row["check_id"], row["route"]) for row in rows) == Counter(
@@ -901,6 +903,7 @@ def test_responsiveness_checks_fail_with_no_award_to_move(tmp_path):
     rows = run_population_checks(
         _tiny_dataset_file(tmp_path), ["country.reform_dict"], seed=0
     )
+    _assert_publishable_findings(rows)
     status = {row["check_id"]: row["status"] for row in rows}
     # Earners only: no award to show a reform reaching it.
     assert status["population_state_pension_plus_10"] == "fail"
@@ -1373,3 +1376,257 @@ def test_every_report_row_has_a_reform_identity_field():
             assert "reform_identity" in row, (section, row)
             if row["reform_identity"] is None:
                 assert row["reform_identity_unavailable"], (section, row)
+
+
+# The small-cell rule and flat findings in population rows.
+
+#: A finding reported for diagnosis that the check does not require.
+INFORMATIONAL_FINDINGS = {"no_payment_lower"}
+
+
+def _small_counts(value, path="detail"):
+    """Where ``value`` holds a count from 1 to 9."""
+    import numbers
+
+    import numpy as np
+
+    if isinstance(value, (bool, np.bool_)):
+        return []
+    if isinstance(value, numbers.Integral):
+        return [path] if 0 < value < 10 else []
+    if isinstance(value, dict):
+        return [
+            found
+            for key, item in value.items()
+            for found in _small_counts(item, f"{path}.{key}")
+        ]
+    if isinstance(value, (list, tuple)):
+        return [
+            found
+            for index, item in enumerate(value)
+            for found in _small_counts(item, f"{path}[{index}]")
+        ]
+    return []
+
+
+def _assert_publishable_findings(rows):
+    """No small count anywhere, and a row passes when all its findings hold."""
+    for row in rows:
+        assert _small_counts(row) == [], row
+        detail = row.get("detail")
+        if row["route"] == "-":
+            continue
+        assert isinstance(detail, dict), row
+        findings = {
+            key: value
+            for key, value in detail.items()
+            if isinstance(value, bool) and key not in INFORMATIONAL_FINDINGS
+        }
+        assert findings, row
+        assert (row["status"] == "pass") == all(findings.values()), row
+
+
+def test_publishable_detail_suppresses_counts_from_1_to_9_at_any_depth():
+    import numpy as np
+
+    from policyengine.tax_benefit_models.uk.budget_reform_population import (
+        FEWER_THAN_10,
+        publishable_detail,
+    )
+
+    detail = {
+        "none": 0,
+        "one": 1,
+        "nine": 9,
+        "ten": 10,
+        "negative": -3,
+        "finding": True,
+        "other_finding": False,
+        "total": 3.5,
+        "numpy_count": np.int64(5),
+        "nested": {"count": 4, "list": [2, 12, {"deep": 7}]},
+    }
+    assert publishable_detail(detail) == {
+        "none": 0,
+        "one": FEWER_THAN_10,
+        "nine": FEWER_THAN_10,
+        "ten": 10,
+        "negative": -3,
+        "finding": True,
+        "other_finding": False,
+        "total": 3.5,
+        "numpy_count": FEWER_THAN_10,
+        "nested": {
+            "count": FEWER_THAN_10,
+            "list": [FEWER_THAN_10, 12, {"deep": FEWER_THAN_10}],
+        },
+    }
+
+
+def _equal_but_small_counts(original, published):
+    """``published`` is ``original`` with only its small counts suppressed."""
+    import numbers
+
+    from policyengine.tax_benefit_models.uk.budget_reform_population import (
+        FEWER_THAN_10,
+    )
+
+    if isinstance(original, bool):
+        return published is original
+    if isinstance(original, numbers.Integral) and 0 < original < 10:
+        return published == FEWER_THAN_10
+    if isinstance(original, dict):
+        return published.keys() == original.keys() and all(
+            _equal_but_small_counts(value, published[key])
+            for key, value in original.items()
+        )
+    if isinstance(original, (list, tuple)):
+        return len(published) == len(original) and all(
+            _equal_but_small_counts(a, b) for a, b in zip(original, published)
+        )
+    return published == original
+
+
+def test_publication_removes_every_small_count_and_nothing_else():
+    pytest.importorskip("hypothesis")
+    from hypothesis import given, settings
+    from hypothesis import strategies as st
+
+    from policyengine.tax_benefit_models.uk.budget_reform_population import (
+        publishable_detail,
+    )
+
+    leaves = st.one_of(
+        st.booleans(),
+        st.integers(-20, 1_000),
+        st.floats(allow_nan=False),
+        st.text(max_size=5),
+        st.none(),
+    )
+    details = st.recursive(
+        leaves,
+        lambda children: st.one_of(
+            st.lists(children, max_size=4),
+            st.dictionaries(st.text(max_size=5), children, max_size=4),
+        ),
+        max_leaves=20,
+    )
+
+    @settings(max_examples=200, deadline=None, derandomize=True)
+    @given(details)
+    def check(detail):
+        published = publishable_detail(detail)
+        assert _small_counts(published) == []
+        assert _equal_but_small_counts(detail, published)
+        assert publishable_detail(published) == published
+
+    check()
+
+
+def test_a_total_over_fewer_than_10_changed_records_is_withheld():
+    from policyengine.tax_benefit_models.uk.budget_reform_population import (
+        WITHHELD_FEWER_THAN_10,
+        total_over_records,
+    )
+
+    assert total_over_records(12.5, 0) == 12.5
+    assert total_over_records(12.5, 1) == WITHHELD_FEWER_THAN_10
+    assert total_over_records(12.5, 9) == WITHHELD_FEWER_THAN_10
+    assert total_over_records(12.5, 10) == 12.5
+
+
+def test_uc_findings_agree_with_their_counts_and_the_verdict():
+    pytest.importorskip("hypothesis")
+    import numpy as np
+    from hypothesis import given, settings
+    from hypothesis import strategies as st
+
+    from policyengine.tax_benefit_models.uk.budget_reform_population import (
+        UC_ALLOWANCE_VARIABLES,
+    )
+
+    amounts = st.one_of(st.floats(0, 2_000), st.just(float("nan")))
+
+    @settings(max_examples=200, deadline=None, derandomize=True)
+    @given(units=st.integers(1, 4), data=st.data())
+    def check(units, data):
+        def draw():
+            return {
+                name: np.array(
+                    data.draw(st.lists(amounts, min_size=units, max_size=units)),
+                    dtype=float,
+                )
+                for name in UC_ALLOWANCE_VARIABLES
+            }
+
+        holds, detail = _verdict(draw(), draw())
+        counts = {
+            "no_award_lower": "awards_lower",
+            "payments_are_award_less_deductions": "payments_not_award_less_deductions",
+            "no_payment_below_the_payable_floor": "payments_below_the_payable_floor",
+            "no_non_finite_units": "units_with_non_finite_values",
+            "no_payment_lower": "payments_lower",
+        }
+        for finding, count in counts.items():
+            assert detail[finding] is (detail[count] == 0), finding
+        assert detail["some_payment_higher"] is (detail["payments_higher"] > 0)
+        # The verdict as it was defined from the counts.
+        assert holds == (
+            detail["units_with_non_finite_values"] == 0
+            and detail["standard_allowance_scaled_10_percent"]
+            and detail["awards_lower"] == 0
+            and detail["payments_not_award_less_deductions"] == 0
+            and detail["payments_below_the_payable_floor"] == 0
+            and detail["payments_higher"] > 0
+        )
+
+    check()
+
+
+def test_population_rows_state_each_condition_as_a_flat_finding(stub_population_checks):
+    population = stub_population_checks
+    rows = population.run_population_checks("unused.h5", list(contract.COUNTRY_ROUTES))
+    _assert_publishable_findings(rows)
+    outputs = {
+        f"{variable}:{year}_matches"
+        for variable in population.OUTPUTS
+        for year in population.YEARS
+    }
+    expected = {
+        population.POPULATION_BASELINE_ISOLATION: outputs,
+        population.POPULATION_QUERY_ORDER: outputs,
+        population.POPULATION_ROUTES_AGREE: {
+            "income_tax:2026_matches",
+            "income_tax:2027_matches",
+        },
+        population.POPULATION_APRIL_RATE_CHANGE: {"2026_unchanged", "2027_total_rises"},
+        population.POPULATION_FINITE_CHANGE_EXPIRES: {"income_tax:2028_matches"},
+        population.POPULATION_UC_STANDARD_ALLOWANCE_PLUS_10: {
+            "standard_allowance_scaled_10_percent",
+            "no_award_lower",
+            "payments_are_award_less_deductions",
+            "no_payment_below_the_payable_floor",
+            "some_payment_higher",
+            "no_non_finite_units",
+            "no_payment_lower",
+        },
+        population.POPULATION_STATE_PENSION_PLUS_10: {
+            "basic_and_new_scaled_10_percent",
+            "no_pension_lower",
+            "some_pension_higher",
+        },
+    }
+    for row in rows:
+        findings = {
+            key for key, value in row["detail"].items() if isinstance(value, bool)
+        }
+        assert findings == expected[row["check_id"]], row
+    # The stub moves one person's tax: one record, so the count reads
+    # "fewer than 10" and the total is withheld.
+    april = next(
+        row
+        for row in rows
+        if row["check_id"] == population.POPULATION_APRIL_RATE_CHANGE
+    )
+    assert april["detail"]["2027_people_with_higher_tax"] == population.FEWER_THAN_10
+    assert april["detail"]["2027_total_change"] == population.WITHHELD_FEWER_THAN_10
