@@ -19,7 +19,16 @@ from policyengine.provenance.uk_qualification import (
     candidate_branch,
     previous_certificate,
 )
-from tests.qualification_fixtures import HARNESS, gates, make_pair, make_receipt
+from tests.qualification_fixtures import (
+    HARNESS,
+    gates,
+    graphql_base_changes_output,
+    make_pair,
+    make_receipt,
+    rest_pulls_output,
+)
+
+PULLS = ["repos/PolicyEngine/policyengine.py/pulls"]
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/certify-uk-release.yaml"
@@ -275,7 +284,9 @@ from pathlib import Path
 path = Path(os.environ["PR_STATE"])
 state = json.loads(path.read_text())
 command, args = Path(sys.argv[0]).name, sys.argv[1:]
-if command == "gh" and args[:2] == ["pr", "list"]:
+if command == "gh" and args[:1] == ["api"] and "--paginate" in args:
+    # The REST listing of this repository's pull request to main, through
+    # the step's jq (only a ready one's number is printed).
     if state["status"] == "ready":
         print("574")
 elif command == "gh" and args[:2] == ["pr", "ready"]:
@@ -316,6 +327,7 @@ elif command == "git" and args[0] == "push":
                 "BRANCH": branch,
                 "PAIR_ID": qualified.pair_id,
                 "PR_STATE": str(state_path),
+                "GITHUB_REPOSITORY": "PolicyEngine/policyengine.py",
             },
             check=True,
             capture_output=True,
@@ -566,10 +578,15 @@ def test_refresh_checks_reruns_only_failed_pr_runs_for_the_qualified_head(
 
     def fake_run(argv, **kwargs):
         calls.append(argv)
-        if argv[:3] == ["gh", "pr", "list"]:
-            assert argv[argv.index("--head") + 1] == branch
+        if argv[:3] == ["gh", "api", "graphql"]:
             return SimpleNamespace(
-                returncode=0, stdout=json.dumps([_candidate_pr(1, branch, head)])
+                returncode=0, stdout=graphql_base_changes_output(argv, set())
+            )
+        if argv[:2] == ["gh", "api"] and argv[4:5] == PULLS:
+            assert f"head=PolicyEngine:{branch}" in argv
+            return SimpleNamespace(
+                returncode=0,
+                stdout=rest_pulls_output(argv, [_candidate_pr(1, branch, head)]),
             )
         if argv[:2] == ["gh", "api"]:
             assert "--paginate" in argv
@@ -675,13 +692,13 @@ def test_refresh_reruns_each_candidate_only_its_own_runs(monkeypatch, tmp_path, 
 
     def fake_run(argv, **kwargs):
         calls.append(argv)
-        if argv[:3] == ["gh", "pr", "list"]:
-            head_branch = argv[argv.index("--head") + 1]
+        if argv[:3] == ["gh", "api", "graphql"]:
             return SimpleNamespace(
-                returncode=0,
-                stdout=json.dumps(
-                    [pr for pr in pull_requests if pr["headRefName"] == head_branch]
-                ),
+                returncode=0, stdout=graphql_base_changes_output(argv, set())
+            )
+        if argv[:2] == ["gh", "api"] and argv[4:5] == PULLS:
+            return SimpleNamespace(
+                returncode=0, stdout=rest_pulls_output(argv, pull_requests)
             )
         if argv[:2] == ["gh", "api"]:
             if unreadable.pop("once", False):
@@ -699,15 +716,19 @@ def test_refresh_reruns_each_candidate_only_its_own_runs(monkeypatch, tmp_path, 
     assert [call[3] for call in calls if call[:3] == ["gh", "run", "rerun"]] == ["32"]
 
 
-@pytest.mark.parametrize("shared", ["another base", "unreadable"])
+@pytest.mark.parametrize(
+    "shared", ["another base", "a base change", "unreadable", "unreadable history"]
+)
 def test_refresh_leaves_a_candidate_whose_branch_runs_are_shared(
     monkeypatch, tmp_path, capsys, shared
 ):
     """Round 6 of #635: a pull request from the candidate branch to another
     base runs on the same commit and branch, so the candidate's runs cannot
     be told from its runs; refresh re-runs none of them (promotion refuses
-    the candidate anyway), and the next candidate is still refreshed. The
-    same holds while that branch's pull requests cannot be read."""
+    the candidate anyway), and the next candidate is still refreshed. Round
+    7: so does the candidate's own pull request once its base was changed.
+    The same holds while that branch's pull requests, or their base history,
+    cannot be read."""
 
     cli = _cli()
     first = make_receipt(pair=make_pair(model="2.200.0"))
@@ -735,14 +756,22 @@ def test_refresh_leaves_a_candidate_whose_branch_runs_are_shared(
 
     def fake_run(argv, **kwargs):
         calls.append(argv)
-        if argv[:3] == ["gh", "pr", "list"]:
-            head_branch = argv[argv.index("--head") + 1]
-            if head_branch == first_branch and shared == "unreadable":
+        if argv[:3] == ["gh", "api", "graphql"]:
+            number = int(next(v for v in argv if v.startswith("number="))[7:])
+            if number == 1 and shared == "unreadable history":
                 return SimpleNamespace(returncode=1, stdout="")
-            listing = [pr for pr in pull_requests if pr["headRefName"] == head_branch]
-            if head_branch == first_branch:
-                listing.append(other)
-            return SimpleNamespace(returncode=0, stdout=json.dumps(listing))
+            changed = {1} if shared == "a base change" else set()
+            return SimpleNamespace(
+                returncode=0, stdout=graphql_base_changes_output(argv, changed)
+            )
+        if argv[:2] == ["gh", "api"] and argv[4:5] == PULLS:
+            if f"head=PolicyEngine:{first_branch}" in argv and shared == "unreadable":
+                return SimpleNamespace(returncode=1, stdout="")
+            listing = [*pull_requests, other] if shared == "another base" else []
+            return SimpleNamespace(
+                returncode=0,
+                stdout=rest_pulls_output(argv, listing or pull_requests),
+            )
         if argv[:2] == ["gh", "api"]:
             return SimpleNamespace(
                 returncode=0, stdout="\n".join(json.dumps(run) for run in runs)
@@ -753,11 +782,15 @@ def test_refresh_leaves_a_candidate_whose_branch_runs_are_shared(
     args = cli.parser().parse_args(["refresh-pr-checks", "--ledger", str(tmp_path)])
     assert args.func(args) == 0
     output = capsys.readouterr().out
-    if shared == "unreadable":
+    if shared.startswith("unreadable"):
         assert f"::warning::could not read the pull requests from {first_branch}" in (
             output
         )
     else:
         assert f"::warning::not re-running {first_branch}'s runs" in output
-        assert "#7 (to release, open)" in output
+        assert (
+            "#7 (to release, open)"
+            if shared == "another base"
+            else "#1 (to main after a base change, open)"
+        ) in output
     assert [call[3] for call in calls if call[:3] == ["gh", "run", "rerun"]] == ["32"]

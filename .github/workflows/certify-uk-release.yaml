@@ -235,10 +235,11 @@ jobs:
           # A forced attempt may replace an already qualified head. Revoke
           # its ready status before exposing any new, unqualified commit.
           # Only this repository's pull request to main is the candidate's:
-          # a fork's can carry the same branch name.
-          ready_pr=$(gh pr list --head "$BRANCH" --base main --state open \
-            --json number,isDraft,isCrossRepository \
-            --jq '.[] | select(.isDraft == false and .isCrossRepository == false) | .number')
+          # head=<owner>:<branch> lists only this repository's, so a fork's
+          # with the same branch name can neither shadow nor crowd it out.
+          ready_pr=$(gh api -X GET "repos/$GITHUB_REPOSITORY/pulls" \
+            -f head="${GITHUB_REPOSITORY%%/*}:$BRANCH" -f base=main -f state=open \
+            --paginate --jq '.[] | select(.draft == false) | .number')
           if [[ -n "$ready_pr" ]]; then
             gh pr ready "$ready_pr" --undo
           fi
@@ -279,10 +280,10 @@ jobs:
 
           🤖 Generated with [Claude Code](https://claude.com/claude-code)"
           # By number: gh looks a branch name up among pull requests a fork's
-          # can shadow.
-          number=$(gh pr list --head "$BRANCH" --base main --state open \
-            --json number,isCrossRepository \
-            --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
+          # can shadow. head=<owner>:<branch> lists only this repository's.
+          number=$(gh api -X GET "repos/$GITHUB_REPOSITORY/pulls" \
+            -f head="${GITHUB_REPOSITORY%%/*}:$BRANCH" -f base=main -f state=open \
+            --paginate --jq '.[].number')
           if [[ -n "$number" ]]; then
             gh pr edit "$number" --body "$body"
           else
@@ -400,9 +401,9 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           BRANCH: ${{ needs.resolve.outputs.branch }}
         run: |
-          number=$(gh pr list --head "$BRANCH" --base main --state open \
-            --json number,isCrossRepository \
-            --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
+          number=$(gh api -X GET "repos/$GITHUB_REPOSITORY/pulls" \
+            -f head="${GITHUB_REPOSITORY%%/*}:$BRANCH" -f base=main -f state=open \
+            --paginate --jq '.[].number')
           if [[ -z "$number" ]]; then
             echo "::error::no open pull request from $BRANCH to main"
             exit 1
