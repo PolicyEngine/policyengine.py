@@ -129,7 +129,8 @@ only when its level, area code, reform label and year are the release's.
 `compute_uk_geography_disclosure` always checks constituencies and local
 authorities against their region, and regions against the nation, also when
 you publish one level only. A level given as a weight matrix needs
-`parent_of=` with the region of each area; without it the function raises,
+`parent_of=` with the GSS code of each area's region (see
+[UK region codes](#uk-region-codes)); without it the function raises,
 because a check against the nation alone nearly always passes.
 
 The check reports; it does not withhold cells by itself. A blocking finding
@@ -160,6 +161,41 @@ Two findings can be accepted after review, with `acknowledge=[...]`:
   areas, and on weight-matrix data it checks none.
 - `noise_reference_public`: an earlier table shows the same cells under
   another noise setting.
+
+## UK region codes
+
+`compute_uk_geography_disclosure` keys regions on their ONS GSS codes,
+whichever column the household output carries. It reads `region_code_oa`
+when the output has it, as Microcosm's local files do, and the stored
+`region` otherwise, as on the national datasets. Both give the same codes:
+
+| Region | Stored `region` | GSS code |
+|---|---|---|
+| North East | `NORTH_EAST` | `E12000001` |
+| North West | `NORTH_WEST` | `E12000002` |
+| Yorkshire and the Humber | `YORKSHIRE` | `E12000003` |
+| East Midlands | `EAST_MIDLANDS` | `E12000004` |
+| West Midlands | `WEST_MIDLANDS` | `E12000005` |
+| East of England | `EAST_OF_ENGLAND` | `E12000006` |
+| London | `LONDON` | `E12000007` |
+| South East | `SOUTH_EAST` | `E12000008` |
+| South West | `SOUTH_WEST` | `E12000009` |
+| Wales | `WALES` | `W92000004` |
+| Scotland | `SCOTLAND` | `S92000003` |
+| Northern Ireland | `NORTHERN_IRELAND` | `N92000002` |
+
+Wales, Scotland and Northern Ireland are one region each, under their country
+code. Microcosm writes the pseudo codes `W99999999`, `S99999999` and
+`N99999999` for them in `region_code_oa`, and the adapter reads those as the
+country codes. A household whose `region` is `UNKNOWN` counts in the nation
+but in no region. Any other value raises. The table is `UK_REGION_GSS_CODES`
+in `policyengine.outputs.uk_geography_disclosure`.
+
+Use the GSS codes wherever you name a region: in `parent_of`, and in the
+region cells of `prior_public`. Names such as `London` or `Eastern` are not
+codes; map them first. Then a regional release from the national dataset and
+a seat release from a local file publish the same codes, and the regional
+table can be passed as `prior_public` to the seat release.
 
 ## Noise
 
