@@ -247,6 +247,59 @@ def test_a_regional_release_is_a_prior_for_seats_from_another_dataset():
         _compute(local_baseline, local_reform, prior_public=[stale], **seats)
 
 
+def test_a_prior_cell_at_a_level_that_is_not_a_uk_level_raises():
+    """A misspelt level would match nothing, so the cell would count as hidden."""
+    baseline, reform = _households({"S1": 4, "S2": 40, "S3": 80, "S4": 80})
+    cells = [
+        ("constituencies", "S1", "reform", 2026, "average_change"),
+        ("constituencies", "S1", "reform", 2026, "share_gaining"),
+        ("ward", "W1", "reform", 2026, "average_change"),
+    ]
+    prior = PriorPublic(name="seat table", cells=cells)
+
+    with pytest.raises(
+        ValueError, match=r"not UK levels: 3, at \['constituencies', 'ward'\]"
+    ):
+        _compute(baseline, reform, levels=("constituency",), prior_public=[prior])
+
+    # A level given through area_weights is known.
+    n = len(baseline["household_id"])
+    wards = AreaWeights.from_labels(
+        np.asarray(baseline["constituency_code_oa"], dtype=object), np.full(n, 100.0)
+    )
+    ward = PriorPublic(
+        name="ward table", cells=[("ward", "S3", "reform", 2026, "average_change")]
+    )
+    impact = _compute(
+        baseline,
+        reform,
+        levels=("ward",),
+        area_weights={"ward": wards},
+        prior_public=[ward],
+    )
+    assert impact.findings is not None
+
+
+@pytest.mark.parametrize("blank", ["", "  ", None])
+def test_an_empty_region_code_column_falls_back_to_the_stored_region(blank):
+    baseline, reform = _households()
+    empty = [blank] * len(baseline["region"])
+    baseline["region_code_oa"] = reform["region_code_oa"] = empty
+
+    impact = _compute(baseline, reform)
+
+    assert set(impact.public.to_frame()["area_code"]) == {"E12000001", "E12000007"}
+
+
+def test_a_level_whose_column_gives_no_household_an_area_raises():
+    baseline, reform = _households()
+    empty = [""] * len(baseline["region"])
+    baseline["constituency_code_oa"] = reform["constituency_code_oa"] = empty
+
+    with pytest.raises(ValueError, match="no household an area"):
+        _compute(baseline, reform, levels=("constituency",))
+
+
 def test_a_dataset_without_a_source_id_is_refused_unless_ids_are_passed():
     baseline, reform = _households()
     ids = baseline.pop("source_household_id")

@@ -111,6 +111,20 @@ def _uk_region_gss_codes(values: object, column: str) -> np.ndarray:
     return np.asarray(np.array([*codes, UNASSIGNED], dtype=object)[index])
 
 
+def _assigns_an_area(codes: np.ndarray) -> bool:
+    """Whether any household has an area code, rather than a blank."""
+    values = pd.Series(codes, dtype=object)
+    present = values[values.notna()]
+    return bool(
+        present.map(
+            lambda code: (
+                code.decode("utf-8") if isinstance(code, bytes) else str(code)
+            ).strip()
+            != UNASSIGNED
+        ).any()
+    )
+
+
 class UKGeographyDisclosure(Output):
     """Income changes by UK area that are safe to publish.
 
@@ -195,6 +209,21 @@ class UKGeographyDisclosure(Output):
         weights = baseline_hh["household_weight"].to_numpy(dtype=float)
         custom = dict(area_weights or {})
         parents = dict(parent_of or {})
+        # A release ignores prior cells at levels it does not hold, since they
+        # may belong to other publications. Every UK level is known here, so a
+        # cell at any other level is a misspelling that would match nothing.
+        known = {UK_NATIONAL_LEVEL, *UK_DISCLOSURE_LEVEL_COLUMNS, *custom}
+        stray = [
+            cell[0]
+            for prior in prior_public
+            for cell in prior.cells
+            if cell[0] not in known
+        ]
+        if stray:
+            raise ValueError(
+                f"Prior cells at levels that are not UK levels: {len(stray)}, "
+                f"at {sorted(set(stray))}. The levels are {sorted(known)}."
+            )
 
         def areas_for(level: str) -> Optional[AreaWeights]:
             if level in custom:
@@ -206,10 +235,14 @@ class UKGeographyDisclosure(Output):
             if columns is None:
                 raise ValueError(f"Unknown level {level!r}")
             for column in columns:
-                if column in baseline_hh.columns:
-                    codes = baseline_hh[column].to_numpy(dtype=object)
-                    if level == UK_REGION_LEVEL:
-                        codes = _uk_region_gss_codes(codes, column)
+                if column not in baseline_hh.columns:
+                    continue
+                codes = baseline_hh[column].to_numpy(dtype=object)
+                if level == UK_REGION_LEVEL:
+                    codes = _uk_region_gss_codes(codes, column)
+                # A column that gives no household an area, such as an empty
+                # region_code_oa, says nothing: read the next one.
+                if _assigns_an_area(codes):
                     return AreaWeights.from_labels(codes, weights)
             return None
 
@@ -224,8 +257,8 @@ class UKGeographyDisclosure(Output):
                 if level in self.levels:
                     columns = UK_DISCLOSURE_LEVEL_COLUMNS[level]
                     raise ValueError(
-                        f"The household output has none of {list(columns)} for "
-                        f"level {level!r}"
+                        f"The household output gives no household an area in "
+                        f"any of {list(columns)} for level {level!r}"
                     )
                 continue
             estimated[level] = areas
