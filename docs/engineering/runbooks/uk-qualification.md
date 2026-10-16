@@ -49,3 +49,28 @@ some from fewer than 10 records, so never commit, paste or publish it.
 
 3. Read `failing[...]["detail"]` locally. Report only the finding (which
    condition failed, on which route), never the figures.
+
+## A candidate stranded before automatic promotion
+
+Automatic promotion moves main to a qualified candidate only once the newest
+run of each workflow and event on the candidate branch, from this repository,
+has passed, including a `pr_code_changes.yaml` run dispatched on the branch
+itself. Runs of other pull requests at the same commit, forks' included, do
+not count. The `refresh-pr-checks` step re-runs a failed, timed-out or
+cancelled run until it has had four attempts, within GitHub's 30 days of its
+first attempt.
+
+When the candidate waits on a run that refresh will not re-run, the promote
+job fails with `::error::<branch> waits on runs refresh will not re-run`,
+naming each run, its result and its attempts. That covers a run at four
+attempts, one older than 30 days, and one whose result refresh never re-runs
+(`action_required`, `skipped`, `stale`, `startup_failure` and the like). The
+job fails on every scheduled run until one of these clears it:
+
+- Fix the cause, then re-run the named run by hand
+  (`gh run rerun <run id> --repo PolicyEngine/policyengine.py`); a passing
+  newest attempt clears it.
+- For the run on the candidate's own tree, dispatch a new one:
+  `gh workflow run pr_code_changes.yaml --repo PolicyEngine/policyengine.py --ref <branch>`.
+- Requalify the pair: run `certify-uk-release` with its versions, `pair_id`
+  and `force` set.
