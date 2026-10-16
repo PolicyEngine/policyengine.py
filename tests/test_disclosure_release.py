@@ -60,13 +60,15 @@ def _records(affected, *, households=120, change=200.0, loose=0):
     }
 
 
-def _estimates(data, level, *, reform="reform", change=None, settings=None, key=None):
+def _estimates(
+    data, level, *, reform="reform", year=2026, change=None, settings=None, key=None
+):
     codes = data["seats"] if level == "constituency" else data[f"{level}s"]
     delta = data["change"] if change is None else change
     return estimate_change(
         level=level,
         reform=reform,
-        year=2026,
+        year=year,
         areas=AreaWeights.from_labels(codes, data["weights"]),
         source_ids=data["source_ids"],
         baseline=data["baseline"],
@@ -626,6 +628,26 @@ def test_a_prior_cell_must_name_an_area_of_a_level_the_release_holds(order):
     ) as raised:
         release.check()
     assert "North" not in str(raised.value)
+
+
+def test_a_prior_cell_must_name_an_area_of_its_own_reform_and_year():
+    """An area that only another year holds would match nothing."""
+    data = _records(STRONG)
+    later = {**data, "seats": np.char.replace(data["seats"].astype(str), "S", "B")}
+    cells = [("constituency", "B1", "reform", 2026, "average_change")]
+    release = Release(prior_public=[PriorPublic(name="seat table", cells=cells)])
+    release.add(_estimates(data, "constituency"))
+    release.add(_estimates(later, "constituency", year=2027))
+
+    with pytest.raises(DisclosureError, match="name no constituency area.*: 1"):
+        release.check()
+
+    # For a year the release does not hold, any of the level's areas will do.
+    cells = [("constituency", "B1", "reform", 2028, "average_change")]
+    release = Release(prior_public=[PriorPublic(name="seat table", cells=cells)])
+    release.add(_estimates(data, "constituency"))
+    release.add(_estimates(later, "constituency", year=2027))
+    assert release.check() == []
 
 
 def test_a_prior_cell_needs_a_known_outcome():

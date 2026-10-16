@@ -286,8 +286,10 @@ class Release:
 
         Prior cells match by code. A cell that matched nothing would be
         ignored, so a cell an earlier publication showed would still count as
-        hidden. A level the release holds is checked whatever the reform and
-        year of the cell; cells at other levels belong to other publications.
+        hidden. A cell at a level the release holds must name an area of the
+        estimates for its reform and year, or, when the release holds none,
+        of any of the level's estimates. Cells at other levels belong to other
+        publications.
         """
         areas: dict[str, set[str]] = {}
         for (level, _, _), estimates in self._estimates.items():
@@ -295,8 +297,9 @@ class Release:
         for prior in self._prior:
             unmatched = [
                 level
-                for level, area, _, _, _ in prior.cells
-                if level in areas and area not in areas[level]
+                for level, area, reform, year, _ in prior.cells
+                if level in areas
+                and area not in self._prior_areas(level, reform, year, areas)
             ]
             if unmatched:
                 levels = " or ".join(sorted(set(unmatched)))
@@ -306,6 +309,15 @@ class Release:
                     "cells match by code: use the area codes of the release's "
                     "estimates."
                 )
+
+    def _prior_areas(
+        self, level: str, reform: str, year: int, areas: dict[str, set[str]]
+    ) -> set[str]:
+        """The areas a prior cell at a held level may name."""
+        estimates = self._estimates.get((level, reform, int(year)))
+        if estimates is None:
+            return areas[level]
+        return set(estimates.areas.area_codes)
 
     def _known_cells(self) -> set[tuple[str, str, str, int, str]]:
         """Family cells an earlier publication already made public."""
