@@ -7,8 +7,8 @@
 # mandatory gates on that exact commit, replayed by policyengine-scorecard,
 # and recorded in the uk-qualification-ledger branch. Promotion is
 # serialized: it readies the newest promotable candidate PR that advances
-# main and closes superseded ones. Merging stays a reviewed step until
-# cos d1344 rules on automatic promotion.
+# main, closes superseded ones, and (cos d1344) merges it at its qualified
+# commit once every check on it has passed.
 #
 # Triggers: a policyengine-uk publish or uk-data release (repository
 # dispatch), a two-hourly catch-up, or a manual run. A manual run with

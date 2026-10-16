@@ -735,7 +735,33 @@ def test_a_branch_that_moved_off_the_qualified_commit_is_not_promoted():
     assert plan.ready_branch == branch
 
 
-def test_promote_readies_and_merges_only_the_qualified_commit(monkeypatch, tmp_path):
+CHECKS_PASSED = [
+    {"name": "Lint", "bucket": "pass"},
+    {"name": "Test (3.13)", "bucket": "pass"},
+    {"name": "Docs", "bucket": "skipping"},
+]
+
+
+@pytest.mark.parametrize(
+    ("checks", "merges"),
+    [
+        (CHECKS_PASSED, True),
+        ([*CHECKS_PASSED[:1], {"name": "Test (3.13)", "bucket": "pending"}], False),
+        ([*CHECKS_PASSED[:1], {"name": "Test (3.13)", "bucket": "fail"}], False),
+        ([{"name": "Test (3.13)", "bucket": "cancel"}], False),
+        ([], False),
+        (None, False),
+    ],
+    ids=["passed", "pending", "failed", "cancelled", "none", "unreadable"],
+)
+def test_promote_readies_and_merges_only_the_qualified_commit(
+    monkeypatch, tmp_path, checks, merges
+):
+    """main is not branch-protected and the repository does not allow
+    auto-merge, so automatic promotion merges the qualified head only once
+    every check on it has passed (skipped jobs aside), and never by
+    --auto."""
+
     import argparse
     import importlib.util
 
@@ -748,10 +774,17 @@ def test_promote_readies_and_merges_only_the_qualified_commit(monkeypatch, tmp_p
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
     calls = []
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        if argv[:3] == ["gh", "pr", "checks"]:
+            assert argv[3] == branch
+            stdout = "not json" if checks is None else json.dumps(checks)
+            return SimpleNamespace(returncode=0, stdout=stdout)
+        return SimpleNamespace(returncode=0, stdout="")
+
     monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: [qualified])
-    monkeypatch.setattr(
-        cli, "subprocess", SimpleNamespace(run=lambda argv, **k: calls.append(argv))
-    )
+    monkeypatch.setattr(cli, "subprocess", SimpleNamespace(run=run))
     monkeypatch.setattr(cli, "config", lambda: {"promotion": {"automatic": True}})
     monkeypatch.setattr(cli, "_open_candidate_branches", lambda: {branch: "f" * 40})
     assert cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True)) == 0
@@ -763,7 +796,39 @@ def test_promote_readies_and_merges_only_the_qualified_commit(monkeypatch, tmp_p
     )
     assert cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True)) == 0
     assert calls[0][:3] == ["gh", "pr", "ready"] and calls[0][3] == branch
-    assert calls[1][-2:] == ["--match-head-commit", qualified.harness.git_commit]
+    merged = [argv for argv in calls if argv[:3] == ["gh", "pr", "merge"]]
+    if merges:
+        assert merged == [
+            [
+                "gh",
+                "pr",
+                "merge",
+                branch,
+                "--repo",
+                "PolicyEngine/policyengine.py",
+                "--squash",
+                "--match-head-commit",
+                qualified.harness.git_commit,
+            ]
+        ]
+    else:
+        assert merged == []
+    # Without automatic promotion it only readies.
+    calls.clear()
+    monkeypatch.setattr(cli, "config", lambda: {"promotion": {"automatic": False}})
+    assert cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True)) == 0
+    assert [argv[:3] for argv in calls] == [["gh", "pr", "ready"]]
+
+
+def test_automatic_promotion_is_on_with_its_basis_recorded():
+    config = json.loads(
+        (
+            Path(__file__).resolve().parents[1]
+            / "src/policyengine/data/qualification/uk.json"
+        ).read_text()
+    )
+    assert config["promotion"]["automatic"] is True
+    assert "d1344" in config["promotion"]["decision"]
 
 
 def test_promotion_requires_the_current_supported_years_baseline(monkeypatch):

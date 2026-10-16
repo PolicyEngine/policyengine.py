@@ -622,24 +622,67 @@ def cmd_promote(args: argparse.Namespace) -> int:
             check=False,
         )
         if config()["promotion"]["automatic"]:
-            # GitHub refuses the merge if the branch moved off the qualified
-            # commit between the plan and the merge.
-            subprocess.run(
-                [
-                    "gh",
-                    "pr",
-                    "merge",
-                    plan.ready_branch,
-                    "--repo",
-                    LEDGER_REPOSITORY,
-                    "--auto",
-                    "--squash",
-                    "--match-head-commit",
-                    plan.ready_commit,
-                ],
-                check=False,
-            )
+            # main is not branch-protected and the repository does not allow
+            # auto-merge, so merge only once every check on the qualified
+            # head has finished without failing; later runs retry. GitHub
+            # refuses the merge if the branch moved off the qualified commit.
+            waiting = _unfinished_checks(plan.ready_branch)
+            if waiting:
+                print(
+                    f"automatic promotion waits for {plan.ready_branch}: "
+                    + ", ".join(waiting)
+                )
+            else:
+                subprocess.run(
+                    [
+                        "gh",
+                        "pr",
+                        "merge",
+                        plan.ready_branch,
+                        "--repo",
+                        LEDGER_REPOSITORY,
+                        "--squash",
+                        "--match-head-commit",
+                        plan.ready_commit,
+                    ],
+                    check=False,
+                )
     return 0
+
+
+def _unfinished_checks(branch: str) -> list[str]:
+    """Checks on ``branch``'s pull request that have not passed.
+
+    A skipped job counts as passed; a pending, failed or cancelled one does
+    not, and neither does a pull request reporting no checks at all.
+    """
+
+    listing = subprocess.run(
+        [
+            "gh",
+            "pr",
+            "checks",
+            branch,
+            "--repo",
+            LEDGER_REPOSITORY,
+            "--json",
+            "name,bucket",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    try:
+        checks = json.loads(listing.stdout or "[]")
+    except json.JSONDecodeError:
+        return ["the check list could not be read"]
+    if not checks:
+        return ["no checks reported yet"]
+    return sorted(
+        f"{check.get('name')} ({check.get('bucket')})"
+        for check in checks
+        if check.get("bucket") not in ("pass", "skipping")
+    )
 
 
 def cmd_accept(args: argparse.Namespace) -> int:
