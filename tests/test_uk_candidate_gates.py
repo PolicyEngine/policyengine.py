@@ -2003,11 +2003,8 @@ def test_totals_that_cannot_be_lined_up_are_withheld():
     candidate["metrics"][1]["exclude_signs"] = {}
     status, summary, evidence = compare_metric_reports(candidate, previous, BOUNDS)
     assert status == "fail" and "exclude_signs that are not +1 or -1" in summary
-    assert evidence["withheld_changes"][-1]["reason"] == (
-        "the reports leave out different suppressed figures, without the "
-        "signs needed to line them up"
-    )
-    assert evidence["moves_beyond_bounds"] == []
+    assert evidence["values_withheld"] is True
+    assert evidence["withheld_changes"] == evidence["moves_beyond_bounds"] == []
 
 
 def test_totals_at_equal_exclusions_compare_numerically():
@@ -2020,6 +2017,143 @@ def test_totals_at_equal_exclusions_compare_numerically():
         "model.gov_spending"
     ]
     assert evidence["withheld_changes"] == []
+
+
+@pytest.mark.parametrize(
+    "kind", ["decile", "household_total", "model_total", "balance"]
+)
+def test_the_same_figure_excluded_with_opposite_signs_is_withheld(kind):
+    """supp-r2 P1: equal excluded ids are not equal exclusions when a sign
+    differs (the tool compares the signed maps), so the change is withheld,
+    never computed, in every section and both review steps."""
+
+    def side(sign, value):
+        return _cells(
+            [
+                (DSA, 2027, "spending", None, True, ()),
+                ("total", 2027, kind, value, False, (DSA,), {DSA: sign}),
+            ]
+        )
+
+    candidate, previous = side(1, 9.0e11), side(-1, 5.0e11)
+    status, _, evidence = compare_metric_reports(candidate, previous, BOUNDS)
+    assert status == "needs_review"
+    assert evidence["moves_beyond_bounds"] == evidence["lined_up_totals"] == []
+    (row,) = evidence["withheld_changes"]
+    assert row["metric_id"] == "total"
+    result, steps = metrics_review(
+        candidate_report=candidate,
+        previous_report=previous,
+        bounds=BOUNDS,
+        cross_report=candidate,
+    )
+    assert steps["model_only"]["moves_beyond_bounds"] == []
+    assert steps["model_only"]["withheld_changes"][0]["metric_id"] == "total"
+
+
+def test_figures_both_sides_exclude_are_skipped_when_lining_up():
+    """supp-r2 M03: the candidate excludes A and B, the previous report A
+    only; B (published there) is taken out of the previous total, A of
+    neither (it is suppressed on both sides). Values synthetic."""
+
+    other = "spending.other_head"
+    candidate = _cells(
+        [
+            (DSA, 2027, "spending", None, True, ()),
+            (other, 2027, "spending", None, True, ()),
+            (
+                "total",
+                2027,
+                "model_total",
+                4.0e11,
+                False,
+                (DSA, other),
+                {DSA: 1, other: -1},
+            ),
+        ]
+    )
+    previous = _cells(
+        [
+            (DSA, 2027, "spending", None, True, ()),
+            (other, 2027, "spending", 3.0e10, False, ()),
+            ("total", 2027, "model_total", 4.0e11 - 3.0e10, False, (DSA,), {DSA: 1}),
+        ]
+    )
+    evidence = compare_metric_reports(candidate, previous, BOUNDS)[2]
+    assert evidence["lined_up_totals"] == ["total 2027"]
+    assert evidence["moves_beyond_bounds"] == []
+
+
+def test_a_caseload_can_be_suppressed_beside_its_published_head():
+    """supp-r2 P2: a published head's caseload counts only its positive
+    records, so a head with negative values can be published while its
+    caseload is suppressed. Valid, and published to the ledger."""
+
+    from policyengine.provenance.uk_candidate import publishable_metrics_report
+
+    report = _small_cell_pair(head=(2.0e6, False, ()), total=(5.4e11, False, ()))
+    report["metrics"].append(
+        {
+            "metric_id": "caseloads.disabled_students_allowance",
+            "year": 2027,
+            "kind": "caseload",
+            "value": None,
+            "suppressed": True,
+            "excludes": [],
+            "exclude_signs": {},
+        }
+    )
+    status, summary, _ = compare_metric_reports(report, report, BOUNDS)
+    assert status == "pass", summary
+    assert publishable_metrics_report(report) == report
+
+
+def test_no_value_from_an_unsafe_report_enters_the_evidence():
+    """supp-r2 P1: a report that breaks the small-cell format fails, and
+    neither the comparison's moves nor the responsiveness table carries any
+    of its values (the ledger publishes both). Values synthetic."""
+
+    marker = 123456789.25
+    legacy = _report({("income_tax", 2027, "receipt"): marker})
+    for row in legacy["metrics"]:
+        for field in ("suppressed", "excludes", "exclude_signs"):
+            row.pop(field)
+    status, _, evidence = compare_metric_reports(
+        legacy, _report({("income_tax", 2027, "receipt"): 3.0e11}), BOUNDS
+    )
+    assert status == "fail" and evidence["values_withheld"] is True
+    assert str(marker) not in json.dumps(evidence)
+    result, steps = metrics_review(
+        candidate_report=legacy,
+        previous_report=_report({("income_tax", 2027, "receipt"): 3.0e11}),
+        bounds=BOUNDS,
+        cross_report=legacy,
+    )
+    assert str(marker) not in json.dumps(steps)
+
+    report = _responsive_report()
+    for row in report["metrics"]:
+        row.pop("exclude_signs")
+    result, evidence = reform_responsiveness_gate(report)
+    assert result.status == "error"
+    assert "rows without the small-cell fields" in result.summary
+    for reform in evidence["reforms"]:
+        assert set(reform["target_changes"].values()) == {None}
+        assert reform["detail"] is None
+
+
+def test_a_report_the_tool_could_not_finish_is_still_checked_before_publication():
+    """supp-r2 M28: an unfinished report with metrics in it is held to the
+    same format before the ledger publishes it."""
+
+    from policyengine.provenance.uk_candidate import publishable_metrics_report
+
+    report = _small_cell_pair()
+    report["status"] = "error"
+    report["metrics"][1]["value"] = 2.0e6
+    assert "withheld" in publishable_metrics_report(report)
+    unfinished = {"status": "error", "error": "Traceback ..."}
+    assert publishable_metrics_report(unfinished) == unfinished
 
 
 @pytest.mark.parametrize(
@@ -2090,26 +2224,20 @@ def test_totals_at_equal_exclusions_compare_numerically():
                     **PUBLISHED,
                 }
             ),
-            "caseloads not suppressed together with their spending head: "
+            "caseloads published beside their suppressed spending head: "
             "caseloads.disabled_students_allowance 2027",
         ),
         (
-            lambda rows: (
-                rows[1].update(value=2.0e6, suppressed=False),
-                rows[2].update(excludes=[], exclude_signs={}),
-                rows.append(
-                    {
-                        "metric_id": "caseloads.disabled_students_allowance",
-                        "year": 2027,
-                        "kind": "caseload",
-                        "value": None,
-                        "suppressed": True,
-                        "excludes": [],
-                        "exclude_signs": {},
-                    }
-                ),
-            ),
-            "caseloads not suppressed together with their spending head",
+            lambda rows: rows[1].update(year=True),
+            "metric rows whose year is not an integer",
+        ),
+        (
+            lambda rows: rows[2].update(exclude_signs={DSA: 0}),
+            "exclude_signs that are not +1 or -1",
+        ),
+        (
+            lambda rows: rows.append(dict(rows[0])),
+            "duplicate metrics: income_tax 2027",
         ),
     ],
     ids=[
@@ -2127,7 +2255,9 @@ def test_totals_at_equal_exclusions_compare_numerically():
         "signs for a figure not excluded",
         "signs not a map",
         "zero caseload published beside a suppressed head",
-        "caseload suppressed beside a published head",
+        "year True",
+        "sign of 0",
+        "a figure twice",
     ],
 )
 @pytest.mark.parametrize("side", ["candidate", "previous"])
@@ -2263,24 +2393,32 @@ def test_the_small_cell_rule_against_a_reference(cells):
 
 _SIDE = st.tuples(
     st.sampled_from(["published", "suppressed"]),
-    st.floats(min_value=1.0e8, max_value=5.0e10),
+    # Heads can be negative (supp-r2 M06): their published value is taken
+    # out with the sign, whatever its own sign.
+    st.one_of(
+        st.floats(min_value=1.0e8, max_value=5.0e10),
+        st.floats(min_value=-5.0e10, max_value=-1.0e8),
+    ),
     st.floats(min_value=-0.5, max_value=0.5, allow_nan=False),
+    # Each side's sign for the head; they differ only if the partition
+    # changed (supp-r2: opposite signs for one figure were never generated).
+    st.sampled_from([1, -1]),
 )
 
 
-@settings(max_examples=400, deadline=None)
+@settings(max_examples=500, deadline=None)
 @given(
     candidate_side=_SIDE,
     previous_side=_SIDE,
-    sign=st.sampled_from([1, -1]),
     kind=st.sampled_from(["model_total", "balance", "decile"]),
 )
-def test_lining_up_against_a_reference(candidate_side, previous_side, sign, kind):
+def test_lining_up_against_a_reference(candidate_side, previous_side, kind):
     """Differential against the tool's rule, stated independently: a head
-    published or suppressed on each side, a total that holds it with
-    ``sign`` where it is published and excludes it where it is not."""
+    published or suppressed on each side, a total that holds it with that
+    side's sign where it is published and excludes it, with that sign, where
+    it is not."""
 
-    def side(state, head, change):
+    def side(state, head, change, sign):
         rest = 4.0e11 * (1 + change)
         if state == "suppressed":
             rows = [
@@ -2296,7 +2434,10 @@ def test_lining_up_against_a_reference(candidate_side, previous_side, sign, kind
 
     candidate, c_rows = side(*candidate_side)
     previous, p_rows = side(*previous_side)
-    (c_state, c_head, _), (p_state, p_head, _) = candidate_side, previous_side
+    (c_state, c_head, _, c_sign), (p_state, p_head, _, p_sign) = (
+        candidate_side,
+        previous_side,
+    )
     c_total, p_total = c_rows[1][3], p_rows[1][3]
     review, lined_up, change = False, False, None
     if c_state == p_state == "published":
@@ -2304,26 +2445,30 @@ def test_lining_up_against_a_reference(candidate_side, previous_side, sign, kind
         review |= abs(c_head - p_head) > head_threshold
         change = c_total - p_total
     elif c_state == p_state == "suppressed":
-        change = c_total - p_total
+        if c_sign == p_sign:
+            change = c_total - p_total
+        else:
+            review = True  # one figure, two signs: withheld in every section
     else:
         review = True  # the head is withheld
         if kind in ("model_total", "balance"):
             lined_up = True
             # The side that publishes the head takes it out with the sign
-            # the other side records, exactly as the gate computes it.
+            # the excluding side records, exactly as the gate computes it.
             if c_state == "published":
-                change = (c_total - sign * c_head) - p_total
+                change = (c_total - p_sign * c_head) - p_total
             else:
-                change = c_total - (p_total - sign * p_head)
-    if change is not None and abs(change) > max(0.02 * abs(p_total), 5e8):
-        review = True
+                change = c_total - (p_total - c_sign * p_head)
+    moved = change is not None and abs(change) > max(0.02 * abs(p_total), 5e8)
+    review |= moved
     status, summary, evidence = compare_metric_reports(candidate, previous, BOUNDS)
     assert status == ("needs_review" if review else "pass"), summary
     assert evidence["lined_up_totals"] == (["total 2027"] if lined_up else [])
     total_moves = [
         m for m in evidence["moves_beyond_bounds"] if m["metric_id"] == "total"
     ]
-    if total_moves:
+    assert bool(total_moves) == moved
+    if moved:
         assert total_moves[0]["change"] == change
     for row in evidence["withheld_changes"]:
         assert set(row) <= {
@@ -2909,6 +3054,7 @@ def _responsive_report(scale=5.0, overrides=None, years=RESPONSE_YEARS, lie=None
                         "year": year,
                         "value": value,
                         "kind": "reform_target",
+                        **PUBLISHED,
                     }
                 )
         finite = {y: v for y, v in changes.items() if v == v}
@@ -3186,7 +3332,12 @@ def test_a_boolean_reform_target_is_not_a_number():
         "status": "ok",
         "years": [2027],
         "metrics": [
-            {"metric_id": f"reform_targets.{reform['id']}", "year": 2027, "value": True}
+            {
+                "metric_id": f"reform_targets.{reform['id']}",
+                "year": 2027,
+                "value": True,
+                **PUBLISHED,
+            }
         ],
         "identities": [
             {"identity_id": f"reform_runs:{reform['id']}", "status": "pass"},
