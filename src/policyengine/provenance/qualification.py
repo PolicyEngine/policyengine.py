@@ -895,9 +895,10 @@ def evaluate_replay_receipt(
       unless a gap is known: the base's own record (``diff.base_events``)
       lists the same measure-year as inert, or missing and supported. A
       known gap does not block, and neither do the rows by which scorecard
-      records a mixed one (``_is_the_gap``, and the base-only inertness
-      where the candidate is missing and the base inert); a material value
-      at a known gap still fails;
+      records a mixed one (``_is_the_gap``, and the base-only inertness on a
+      valueless row where the candidate is missing and the base inert); any
+      candidate value other than £0 at a known gap fails as a contradiction,
+      and any other base value with no candidate value is a lost result;
     - send every other flagged move to review.
 
     Unsupported years are reported, never failed on their own. The gate's
@@ -1287,13 +1288,14 @@ def evaluate_replay_receipt(
             gap is not None
             and gap["candidate"] == "missing"
             and gap["why"] == "inert in the base"
-            and row.base_gbp in (None, 0)
+            and row.base_gbp is None
+            and row.head_gbp is None
         ):
             # The candidate's inert list decides its inertness (a lost response
             # above, or a known gap). Where the candidate is missing and the
-            # base inert, a base-only inertness flag on a row with no value
-            # (as scorecard writes it) is the known gap itself. The row's other
-            # flags are judged as usual.
+            # base inert, a base-only inertness flag on a row with no value on
+            # either side (as scorecard writes it) is the known gap itself.
+            # The row's other flags are judged as usual.
             flags = flags - {"inertness"}
         if gap is not None and flags != set(row.flags):
             # A row the known gap accounts for, in whole or in part.

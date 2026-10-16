@@ -1726,6 +1726,164 @@ def test_three_producer_shaped_gaps_at_once_pass():
     assert len(gate.details["known_gap_rows"]) == 4
 
 
+# Round 5 of #637: the reviewer's probes on the strip and the text.
+_GAP_KINDS = [
+    ("inert", "inert"),
+    ("missing", "missing"),
+    ("inert", "missing"),
+    ("missing", "inert"),
+]
+_SOURCE_ROW = {"level": "source_row", "key": "obr-row-1"}
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        {"flags": ["inertness"], "base_gbp": 0.0, "head_gbp": None, **_SOURCE_ROW},
+        {"flags": ["inertness"], "base_gbp": None, "head_gbp": 0.0, **_SOURCE_ROW},
+        {"flags": ["inertness"], "base_gbp": 0.0, "head_gbp": 0.0, **_SOURCE_ROW},
+        {"flags": ["inertness"], "base_gbp": 0.0, "head_gbp": None},
+        {"flags": ["inertness"], "base_gbp": 5e8, "head_gbp": None, **_SOURCE_ROW},
+        {"flags": ["inertness"], "base_gbp": -5e8, "head_gbp": None, **_SOURCE_ROW},
+    ],
+    ids=[
+        "base £0",
+        "head £0",
+        "both £0",
+        "measure-year base £0",
+        "base £500m",
+        "base -£500m",
+    ],
+)
+def test_only_a_valueless_inertness_row_is_the_gaps_record(row):
+    """At a missing/inert gap scorecard flags inertness only on a row with no
+    value on either side; one with any value, even £0, is judged as usual."""
+
+    gate = _known_gap([row], "missing", "inert")
+    assert gate.status == "needs_review", (gate.status, _kinds(gate))
+    assert _kinds(gate) == ([], ["base_only_inertness"])
+    assert gate.details["known_gap_rows"] == []
+
+
+def test_the_coverage_record_carrying_inertness_too_is_reviewed():
+    gate = _known_gap(
+        [{"flags": ["coverage", "inertness"], "base_gbp": 0.0, "head_gbp": None}],
+        "missing",
+        "inert",
+    )
+    assert gate.status == "needs_review" and _kinds(gate) == (
+        [],
+        ["base_only_inertness"],
+    )
+
+
+@pytest.mark.parametrize("base_gbp,head_gbp", [(None, None), (None, 0.0), (0.0, 0.0)])
+def test_inertness_at_an_inert_missing_gap_is_decided_by_the_inert_list(
+    base_gbp, head_gbp
+):
+    gate = _known_gap(
+        [
+            {
+                "flags": ["inertness"],
+                "base_gbp": base_gbp,
+                "head_gbp": head_gbp,
+                **_SOURCE_ROW,
+            }
+        ],
+        "inert",
+        "missing",
+    )
+    assert gate.status == "pass", (gate.status, _kinds(gate))
+
+
+def test_a_partly_excused_row_is_recorded_and_its_rest_reviewed():
+    rows = copy.deepcopy(PRODUCER_GAP_ROWS["missing", "inert"])
+    rows[0]["flags"].append("construction")
+    gate = _known_gap(rows, "missing", "inert")
+    assert [r["level"] for r in gate.details["known_gap_rows"]] == [
+        "measure_year",
+        "source_row",
+    ]
+    assert _kinds(gate) == ([], ["flagged_move"])
+
+
+def test_a_partly_stripped_inertness_row_is_recorded():
+    rows = [
+        {
+            "flags": ["inertness", "numerical"],
+            "base_gbp": None,
+            "head_gbp": None,
+            **_SOURCE_ROW,
+        }
+    ]
+    gate = _known_gap(rows, "missing", "inert")
+    assert len(gate.details["known_gap_rows"]) == 1
+    assert _kinds(gate) == ([], ["flagged_move"])
+
+
+def test_a_row_the_gap_does_not_account_for_is_not_recorded():
+    gate = _known_gap(
+        [{"flags": ["numerical"], "base_gbp": 0.0, "head_gbp": 0.0}], "inert", "inert"
+    )
+    assert gate.details["known_gap_rows"] == []
+
+
+@pytest.mark.parametrize(
+    ("candidate", "base"), [k for k in _GAP_KINDS if k != ("missing", "inert")]
+)
+@pytest.mark.parametrize("base_gbp", [0.0, 0.4])
+def test_a_base_value_with_no_candidate_value_is_a_lost_result(
+    candidate, base, base_gbp
+):
+    """Even £0, except as the missing/inert gap's own record (the policy text
+    said the opposite at £0 until round 5)."""
+
+    gate = _known_gap(
+        [{"flags": ["coverage"], "base_gbp": base_gbp, "head_gbp": None}],
+        candidate,
+        base,
+    )
+    assert gate.status == "fail" and "lost_result" in _kinds(gate)[0], (
+        gate.status,
+        _kinds(gate),
+    )
+
+
+@pytest.mark.parametrize(("candidate", "base"), _GAP_KINDS)
+@pytest.mark.parametrize("head", [5e8, -5e8, 0.4, -1e-9])
+@pytest.mark.parametrize(
+    ("flags", "level"),
+    [
+        (["inertness"], "source_row"),
+        (["numerical"], "head"),
+        (["construction"], "measure_year"),
+        (["support"], "measure_year"),
+        (["structural"], "head"),
+        (["coverage"], "source_row"),
+    ],
+)
+def test_any_candidate_value_other_than_zero_at_a_known_gap_fails(
+    candidate, base, head, flags, level
+):
+    gate = _known_gap(
+        [
+            {
+                "flags": flags,
+                "base_gbp": None,
+                "head_gbp": head,
+                "level": level,
+                "key": "k",
+            }
+        ],
+        candidate,
+        base,
+    )
+    assert gate.status == "fail" and _kinds(gate) == (["contradiction"], []), (
+        gate.status,
+        _kinds(gate),
+    )
+
+
 # Round 2 of #637: combinations of a known gap with other rules, and
 # evidence that must stay within its own event.
 def test_a_known_gap_never_excuses_a_complete_event_listing_a_gap():
@@ -2137,7 +2295,10 @@ def test_the_replay_policy_with_known_gaps_against_a_reference(rows, candidate, 
         ):
             fail = True
         if (row["year"] == 2026 and candidate == "inert") or (
-            at_gap and (candidate, base) == ("missing", "inert") and b in (None, 0)
+            at_gap
+            and (candidate, base) == ("missing", "inert")
+            and b is None
+            and h is None
         ):
             flags.discard("inertness")
         if flags - {"mapping"}:

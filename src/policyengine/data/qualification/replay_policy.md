@@ -3,9 +3,10 @@
 Decided under cos d1344 by workstream W4 on 15 October 2026, after two
 independent reviews. The pull request that added this file records the
 decision, the reviews and the alternatives considered. Revised on 16
-October 2026, before first use, after the third review of
+October 2026, before first use, after the third to fifth reviews of
 policyengine.py#637: scorecard's own record of a mixed known gap no longer
-blocks, and flag counters must equal the flags the rows carry.
+blocks, flag counters must equal the flags the rows carry, and any
+candidate value other than £0 at a known gap is a contradiction.
 `evaluate_replay_receipt` in `policyengine.provenance.qualification`
 applies this text. Each qualification receipt records the policy id and
 this file's SHA-256 in its `replay` gate details.
@@ -38,7 +39,7 @@ comparison base. It sends every other flagged move to a named reviewer.
 - A receipt that contradicts itself, including a complete event that lists
   an inert, or missing and supported, measure-year; flag counters that
   differ, either way, from the flags its rows carry; and a candidate value
-  for a measure-year that is a known gap.
+  other than £0 for a measure-year that is a known gap.
 
 ## Known gaps
 
@@ -59,8 +60,8 @@ fail nor send the row to review. (Where the candidate is the inert side, its
 inert list already decides that flag.) The gate records every row a known
 gap accounts for, in whole or in part, beside the known gaps; the rest of a
 partly excused row's flags are judged as usual. Any other row at a known gap
-is judged as usual: a base value other than exactly £0 with no candidate
-value is still a lost result, and any candidate value other than £0 at a
+is judged as usual: a coverage row with a base value and no candidate value,
+even £0, is still a lost result, and any candidate value other than £0 at a
 known gap contradicts the candidate's own record, which lists the
 measure-year as inert (exactly £0) or missing (no value).
 
