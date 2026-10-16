@@ -261,6 +261,7 @@ def cmd_resolve(args: argparse.Namespace) -> int:
         "branch": candidate_branch(resolved.pair),
         "action": action,
         "reason": reason,
+        "force": bool(args.force),
         "previous_certificate": previous_certificate(bundle).canonical_payload(),
     }
     if action == "qualify" and args.ledger:
@@ -281,6 +282,26 @@ def cmd_resolve(args: argparse.Namespace) -> int:
         base_commit=base_commit,
         attempt_key=key,
     )
+    return 0
+
+
+def cmd_still_eligible(args: argparse.Namespace) -> int:
+    """Whether a resolved candidate should still be qualified, against the
+    ledger as it is now: run under the preparation lock, so two runs that
+    resolved on different main commits never both stage an attempt."""
+
+    payload = json.loads(Path(args.candidate).read_text())
+    action, reason = candidate_action(
+        CandidatePair.model_validate(payload["pair"]),
+        json.loads(BUNDLE_PATH.read_text()),
+        Path(args.ledger),
+        base_commit=payload["base_commit"],
+        force=bool(payload.get("force")),
+        now=utc_now(),
+        owner_is_failed=owner_run_failed,
+    )
+    print(f"{action}: {reason}")
+    set_output(duplicate="false" if action == "qualify" else "true")
     return 0
 
 
@@ -565,8 +586,7 @@ def cmd_refresh_pr_checks(args: argparse.Namespace) -> int:
             [
                 "gh",
                 "api",
-                f"repos/{LEDGER_REPOSITORY}/actions/runs"
-                f"?head_sha={head}&event=pull_request&per_page=100",
+                f"repos/{LEDGER_REPOSITORY}/actions/runs?head_sha={head}&per_page=100",
                 "--paginate",
                 "--jq",
                 ".workflow_runs[] | {id, head_sha, event, status, conclusion} | tojson",
@@ -579,7 +599,7 @@ def cmd_refresh_pr_checks(args: argparse.Namespace) -> int:
             run = json.loads(line)
             if (
                 run["head_sha"] != head
-                or run["event"] != "pull_request"
+                or run["event"] not in ("pull_request", "workflow_dispatch")
                 or run["status"] != "completed"
                 or run["conclusion"] not in {"failure", "timed_out"}
             ):
@@ -634,50 +654,77 @@ def cmd_promote(args: argparse.Namespace) -> int:
             check=False,
         )
     if plan.ready_branch is not None and plan.ready_commit is not None:
-        subprocess.run(
-            ["gh", "pr", "ready", plan.ready_branch, "--repo", LEDGER_REPOSITORY],
-            check=False,
+        _promote(
+            plan.ready_branch,
+            plan.ready_commit,
+            automatic=config()["promotion"]["automatic"],
         )
-        if config()["promotion"]["automatic"]:
-            _promote_by_fast_forward(plan.ready_branch, plan.ready_commit)
     return 0
 
 
-def _promote_by_fast_forward(branch: str, commit: str) -> bool:
-    """Make main the qualified commit, exactly, once its checks have passed.
+def _set_ready(branch: str, ready: bool) -> None:
+    subprocess.run(
+        ["gh", "pr", "ready", branch, "--repo", LEDGER_REPOSITORY]
+        + ([] if ready else ["--undo"]),
+        check=False,
+    )
 
-    The commit's parent is the main commit it was built on. A push that is
-    not forced succeeds only while main is still that parent, so main becomes
-    exactly the tested tree or nothing changes; when main has moved, the
-    catch-up requalifies the pair on the new main. GitHub then records the
-    candidate pull request as merged.
+
+def _promote(branch: str, commit: str, *, automatic: bool) -> bool:
+    """Make main exactly the qualified commit, or change nothing.
+
+    The qualified commit's parent is the main commit it was built on. Only
+    while main is still that commit does a merge of the candidate equal the
+    qualified tree, so only then is its pull request readied; otherwise it
+    is kept draft (no merge can combine it with other code) and the catch-up
+    requalifies it on current main. With automatic promotion the pull
+    request stays draft until every check on the commit's own tree has
+    passed, and main is then moved to the commit by a push leased on that
+    parent: if main is anything else at that instant, nothing changes.
+    GitHub then records the pull request as merged.
     """
 
-    waiting = _unfinished_checks(commit)
-    if waiting:
-        print(f"automatic promotion waits for {branch}: " + "; ".join(waiting))
-        return False
     fetched = subprocess.run(
         ["git", "fetch", "origin", f"refs/heads/{branch}"],
         check=False,
         capture_output=True,
         text=True,
     )
-    head = subprocess.run(
-        ["git", "rev-parse", "FETCH_HEAD"], check=False, capture_output=True, text=True
-    ).stdout.strip()
-    if fetched.returncode != 0 or head != commit:
-        print(f"automatic promotion skipped: {branch} is not at {commit[:12]}")
+    head = _git_out("rev-parse", "FETCH_HEAD") if fetched.returncode == 0 else ""
+    parent = _git_out("rev-parse", f"{commit}^") if head == commit else ""
+    listed = _git_out("ls-remote", "origin", "refs/heads/main").split()
+    main = listed[0] if listed else ""
+    if head != commit or not parent or parent != main:
+        _set_ready(branch, False)
+        print(
+            f"not promotable now: {branch} is not the qualified commit "
+            f"{commit[:12]} built on current main; it is requalified on current main"
+        )
         return False
+    if not automatic:
+        _set_ready(branch, True)
+        return False
+    waiting = _unfinished_checks(commit)
+    if waiting:
+        print(f"automatic promotion waits for {branch}: " + "; ".join(waiting))
+        return False
+    _set_ready(branch, True)
     pushed = subprocess.run(
-        ["git", "push", "origin", f"{commit}:refs/heads/main"],
+        [
+            "git",
+            "push",
+            f"--force-with-lease=refs/heads/main:{parent}",
+            "origin",
+            f"{commit}:refs/heads/main",
+        ],
         check=False,
         capture_output=True,
         text=True,
     )
     if pushed.returncode != 0:
+        _set_ready(branch, False)
         print(
-            f"automatic promotion skipped: main has moved since {branch}'s base; "
+            f"automatic promotion skipped: main is no longer {parent[:12]}; "
             "the pair is requalified on current main"
         )
         return False
@@ -685,14 +732,22 @@ def _promote_by_fast_forward(branch: str, commit: str) -> bool:
     return True
 
 
-def _unfinished_checks(commit: str) -> list[str]:
-    """Why the qualified commit's pull request checks are not complete.
+def _git_out(*args: str) -> str:
+    result = subprocess.run(["git", *args], check=False, capture_output=True, text=True)
+    return result.stdout.strip() if result.returncode == 0 else ""
 
-    Every check run on the commit must have finished as success, skipped or
-    neutral, and every pull request workflow run for it must have finished
-    successfully, including the code-changes workflow that runs the tests:
-    a run still registering its jobs is unfinished, so one early passing
-    check never lets a merge through. Nothing reported at all also waits.
+
+def _unfinished_checks(commit: str) -> list[str]:
+    """Why the qualified commit's checks do not yet show its own tree passing.
+
+    Pull request runs test the candidate merged with main as it was then;
+    the run of the code-changes workflow that the qualification dispatches on
+    the candidate branch tests the commit's own tree, and must exist. For
+    each workflow and event, the newest run must have finished successfully,
+    and for each check name the newest check must have finished as success,
+    skipped or neutral, so an older cancelled or failed execution that a
+    newer one replaced never blocks. A run still registering its jobs, none
+    reported, or an unreadable list waits.
     """
 
     def listing(path: str, jq: str) -> Optional[list[dict[str, Any]]]:
@@ -711,28 +766,41 @@ def _unfinished_checks(commit: str) -> list[str]:
 
     checks = listing(
         f"repos/{LEDGER_REPOSITORY}/commits/{commit}/check-runs?per_page=100",
-        ".check_runs[] | {name, status, conclusion} | tojson",
+        ".check_runs[] | {id, name, status, conclusion} | tojson",
     )
     runs = listing(
-        f"repos/{LEDGER_REPOSITORY}/actions/runs"
-        f"?head_sha={commit}&event=pull_request&per_page=100",
-        ".workflow_runs[] | {path, status, conclusion} | tojson",
+        f"repos/{LEDGER_REPOSITORY}/actions/runs?head_sha={commit}&per_page=100",
+        ".workflow_runs[] | {id, path, event, status, conclusion} | tojson",
     )
     if checks is None or runs is None:
         return ["the checks could not be read"]
+    newest_runs: dict[tuple[Any, Any], dict[str, Any]] = {}
+    for run in runs:
+        key = (run.get("path"), run.get("event"))
+        if key not in newest_runs or run.get("id", 0) > newest_runs[key].get("id", 0):
+            newest_runs[key] = run
+    newest_checks: dict[Any, dict[str, Any]] = {}
+    for check in checks:
+        name = check.get("name")
+        if name not in newest_checks or check.get("id", 0) > newest_checks[name].get(
+            "id", 0
+        ):
+            newest_checks[name] = check
     problems = [
-        f"check {check.get('name')} is {check.get('conclusion') or check.get('status')}"
-        for check in checks
+        f"workflow {path} ({event}) is {run.get('conclusion') or run.get('status')}"
+        for (path, event), run in newest_runs.items()
+        if run.get("status") != "completed" or run.get("conclusion") != "success"
+    ]
+    problems += [
+        f"check {name} is {check.get('conclusion') or check.get('status')}"
+        for name, check in newest_checks.items()
         if check.get("status") != "completed"
         or check.get("conclusion") not in ("success", "skipped", "neutral")
     ]
-    problems += [
-        f"workflow {run.get('path')} is {run.get('conclusion') or run.get('status')}"
-        for run in runs
-        if run.get("status") != "completed" or run.get("conclusion") != "success"
-    ]
-    if not any(run.get("path") == CODE_CHANGES_WORKFLOW for run in runs):
-        problems.append(f"no {CODE_CHANGES_WORKFLOW} run yet")
+    if (CODE_CHANGES_WORKFLOW, "workflow_dispatch") not in newest_runs:
+        problems.append(
+            f"no {CODE_CHANGES_WORKFLOW} run on the candidate's own tree yet"
+        )
     if not checks:
         problems.append("no checks reported yet")
     return sorted(problems)
@@ -774,6 +842,11 @@ def parser() -> argparse.ArgumentParser:
     resolve.add_argument("--force", action="store_true")
     resolve.add_argument("--out", required=True)
     resolve.set_defaults(func=cmd_resolve)
+
+    still_eligible = commands.add_parser("still-eligible")
+    still_eligible.add_argument("--candidate", required=True)
+    still_eligible.add_argument("--ledger", required=True)
+    still_eligible.set_defaults(func=cmd_still_eligible)
 
     prepare = commands.add_parser("prepare")
     prepare.add_argument("--candidate", required=True)

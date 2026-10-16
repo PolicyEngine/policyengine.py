@@ -434,15 +434,16 @@ def candidate_action(
             return "duplicate", (
                 f"a requalification from base {base_commit[:12]} exists"
             )
-        if _requalification_in_flight(
-            pair_dir, now=now, owner_is_failed=owner_is_failed
-        ):
+        if attempt_in_flight(pair_dir, now=now, owner_is_failed=owner_is_failed):
             return "duplicate", "a requalification is already in flight"
         return "qualify", f"promotable but {stale}; requalifying against current main"
     if receipt is not None and receipt.verdict != "incomplete":
         return "duplicate", f"pair already {receipt.verdict} in the ledger"
     if attempt is not None:
         return "duplicate", f"an attempt from base {base_commit[:12]} exists"
+    if attempt_in_flight(pair_dir, now=now, owner_is_failed=owner_is_failed):
+        # Runs resolved on different main commits must not both stage.
+        return "duplicate", "an attempt for this pair is in flight"
     return "qualify", "new pair, or an incomplete pair on a new base commit"
 
 
@@ -450,14 +451,25 @@ def qualified_base(pair_dir: Path) -> Optional[str]:
     """The main commit prefix the pair's published receipt was built on.
 
     An attempt's key is its base commit's first 12 characters, with ``-<n>``
-    for a repeat on the same base. Pairs published before
-    ``latest_attempt.json`` existed have no recorded base.
+    for a repeat on the same base. Without ``latest_attempt.json`` (pairs
+    published before it existed), the attempt whose own receipt is the
+    published one names it. ``None`` when no attempt does.
     """
 
     pointer = pair_dir / "latest_attempt.json"
-    if not pointer.exists():
+    if pointer.exists():
+        return str(read_json(pointer)["attempt_key"]).split("-")[0]
+    published = pair_dir / "qualification_receipt.json"
+    if not published.exists():
         return None
-    return str(read_json(pointer)["attempt_key"]).split("-")[0]
+    digest = QualificationReceipt.model_validate(read_json(published)).unreviewed_sha256
+    matching = [
+        path.parent.name
+        for path in sorted(pair_dir.glob("attempts/*/qualification_receipt.json"))
+        if QualificationReceipt.model_validate(read_json(path)).unreviewed_sha256
+        == digest
+    ]
+    return matching[-1].split("-")[0] if matching else None
 
 
 def stale_qualification(
@@ -476,18 +488,22 @@ def stale_qualification(
     if receipt.previous_certificate != previous_certificate(bundle):
         return "qualified against a superseded baseline"
     base = qualified_base(pair_dir)
-    if base is not None and base != main_commit[:12]:
+    if base is None:
+        return "qualified on an unrecorded main commit"
+    if base != main_commit[:12]:
         return f"qualified on main {base}, not the current {main_commit[:12]}"
     return None
 
 
-def _requalification_in_flight(
+def attempt_in_flight(
     pair_dir: Path,
     *,
     now: Optional[str],
     owner_is_failed: Optional[Callable[[str], bool]],
 ) -> bool:
-    """A staged attempt newer than the published one that is still running."""
+    """A staged attempt newer than the published one that is still running:
+    it has no receipt yet and is not abandoned (a sent replay request is
+    still running)."""
 
     stages = list((pair_dir / "attempts").glob("*/staging.json"))
     if not stages:
