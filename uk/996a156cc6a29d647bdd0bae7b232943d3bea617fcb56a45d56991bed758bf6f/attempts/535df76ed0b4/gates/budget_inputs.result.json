@@ -1,0 +1,16 @@
+{
+  "details": {
+    "missing_inputs": 164,
+    "newly_missing_inputs": [
+      "additional_residential_property_purchased",
+      "loss_relief",
+      "non_residential_property_purchased",
+      "unused_pension_annual_allowance"
+    ],
+    "unusable_critical": []
+  },
+  "evidence_sha256": "e5b4655fad3f4577f58140926ac0ccfe670955a06fbbb6b79a47940399c8ee68",
+  "gate_id": "budget_inputs",
+  "status": "needs_review",
+  "summary": "4 model inputs are newly missing from the data (additional_residential_property_purchased, loss_relief, non_residential_property_purchased, unused_pension_annual_allowance)"
+}
