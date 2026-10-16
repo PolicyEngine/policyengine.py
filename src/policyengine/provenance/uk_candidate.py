@@ -21,6 +21,7 @@ import io
 import json
 import math
 import re
+import sys
 import traceback
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -56,7 +57,10 @@ def _json_safe(value: Any) -> Any:
     """Evidence as strict JSON: NumPy scalars become the Python numbers they
     hold (never their text), and non-finite numbers become their names."""
 
-    if type(value).__module__ == "numpy" and getattr(value, "ndim", None) == 0:
+    numpy = sys.modules.get("numpy")
+    if numpy is not None and isinstance(
+        value, (numpy.bool_, numpy.integer, numpy.floating)
+    ):
         value = value.item()
     if isinstance(value, float) and not math.isfinite(value):
         return (
@@ -1289,78 +1293,42 @@ def reform_contract(
     )
 
 
-#: The metrics tool's small-cell rule (``privacy.py`` in policyengine-uk's
-#: aggregate-impact tool): a count of 1 to 9 units from the dataset is never
-#: published, and is written as this text instead.
-SUPPRESSED_COUNT = "fewer than 10"
-#: Written in place of a number the ledger does not publish.
+#: Written in place of a value from the survey data that the ledger does
+#: not publish.
 WITHHELD_VALUE = "withheld"
-
-#: Population detail values that are totals, with the counts of the records
-#: each sums over (``budget_reform_population`` in W1's runner). A total over
-#: 1 to 9 records is that handful's alone, so it is withheld with them.
-POPULATION_TOTALS: dict[str, tuple[str, ...]] = {
-    "2027_total_change": ("2027_people_with_lower_tax", "2027_people_with_higher_tax"),
-}
-
-
-def _is_count(value: Any) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool)
-
-
-def _suppress_small_counts(value: Any) -> Any:
-    """``value`` as the ledger may publish it: every whole count from 1 to 9,
-    at any depth, replaced by ``SUPPRESSED_COUNT``; every other number that is
-    not a whole count (a total, a count written as a float) replaced by
-    ``WITHHELD_VALUE``, since nothing says how many records it comes from."""
-
-    if isinstance(value, bool) or value is None or isinstance(value, str):
-        return value
-    if _is_count(value):
-        return SUPPRESSED_COUNT if 0 < value < 10 else value
-    if isinstance(value, Mapping):
-        return {key: _suppress_small_counts(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_suppress_small_counts(item) for item in value]
-    return WITHHELD_VALUE
 
 
 def _publishable_detail(detail: Any) -> Any:
-    """A population row's ``detail`` as the ledger may publish it.
+    """A population row's ``detail`` as the ledger may publish it: its shape
+    and its true/false findings, with every other value withheld.
 
-    A total named in ``POPULATION_TOTALS`` is published only when the counts
-    of the records it sums over are whole counts that add up to 0 or at least
-    10; everything else follows ``_suppress_small_counts``, so a total the
-    runner adds later is withheld until it is listed here.
+    Population rows are computed on the survey data, and their numbers
+    combine: rows of one check on different routes share a subsample, so
+    two routes' totals or counts differ by what a handful of records did
+    (supp-r4 on #574), and two candidates' differ in the same way (cos
+    d1601). No per-value rule can bound every combination, and no gate rule
+    reads ``detail``, so nothing but ``True``, ``False`` and ``None`` is
+    published: not counts, totals, amounts or text.
     """
 
-    if not isinstance(detail, Mapping):
-        return _suppress_small_counts(detail)
-    published = {}
-    for key, value in detail.items():
-        if key in POPULATION_TOTALS and (
-            isinstance(value, (int, float)) and not isinstance(value, bool)
-        ):
-            counts = [detail.get(name) for name in POPULATION_TOTALS[key]]
-            safe = all(_is_count(count) for count in counts) and not (
-                0 < sum(counts) < 10
-            )
-            published[key] = value if safe else WITHHELD_VALUE
-        else:
-            published[key] = _suppress_small_counts(value)
-    return published
+    if isinstance(detail, bool) or detail is None:
+        return detail
+    if isinstance(detail, Mapping):
+        return {key: _publishable_detail(value) for key, value in detail.items()}
+    if isinstance(detail, list):
+        return [_publishable_detail(value) for value in detail]
+    return WITHHELD_VALUE
 
 
 def publishable_contract_report(report: Mapping[str, Any]) -> dict[str, Any]:
     """The reform contract report as the qualification ledger publishes it.
 
     The ledger is a branch of a public repository. Case and property rows
-    come from synthetic households, but population rows are computed on the
-    dataset, so in their ``detail`` a count of 1 to 9 (people whose tax fell,
-    payments that went down) is replaced by ``SUPPRESSED_COUNT``, a total over
-    1 to 9 records and any number that is not a whole count are replaced by
-    ``WITHHELD_VALUE`` (``_publishable_detail``). The gate judges the report as
-    the runner returned it; no rule reads ``detail``.
+    come from synthetic households and are published as reported. Population
+    rows are computed on the survey data, so their ``detail`` keeps only its
+    shape and true/false findings (``_publishable_detail``); their check,
+    route and status, which the gate judges, are published as reported. The
+    gate judges the report as the runner returned it.
     """
 
     published = dict(report)
