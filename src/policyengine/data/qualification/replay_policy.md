@@ -18,21 +18,31 @@ comparison base. It sends every other flagged move to a named reviewer.
   request.
 - A mapping flag.
 - A lost result: a coverage row with a base value and no candidate value.
-- A lost response, unless it is a known gap:
-  - a measure-year the candidate lists as inert;
+- A lost response:
+  - a measure-year the candidate lists as inert, unless it is a known gap;
   - a measure-year total at exactly £0 where the base's absolute value is
     at least the diff's bound, max(£1m, 1% of the base's absolute value),
-    whether the base was positive or negative.
+    whether the base was positive or negative. A known gap never excuses
+    this: a base whose record lists the measure-year as a gap cannot also
+    hold a material value for it.
 - An event whose supported grid is incomplete, unless every inert or
-  missing measure-year in it is a known gap. A receipt whose integrity is
-  `incomplete` with no incomplete event also fails.
+  missing and supported measure-year in it is a known gap. An incomplete
+  event whose receipt does not list its missing measure-years fails, as
+  does one that lists none. A receipt whose integrity is `incomplete` with
+  no incomplete event also fails.
+- A receipt that contradicts itself, including a complete event that lists
+  an inert, or missing and supported, measure-year.
 
 ## Known gaps
 
-A measure-year is a known gap only when the receipt positively records it
-as inert, or missing and supported, in the base, for the same event,
-measure and year. Until the receipt carries that base-side record, there
-are no known gaps.
+A candidate measure-year that is inert, or missing and supported (in the
+event's missing list and not its unsupported list), is a known gap only
+when the receipt's base-side record for the same event (`diff.base_events`,
+taken from the base's verified staging and run manifests) lists the same
+measure and year as inert, or as missing and supported, in the base. The
+gate records each known gap with the base's staging manifest SHA-256. A
+legacy-layout base, or an event the base did not replay, has no record, so
+none of its gaps are known.
 
 ## Review
 

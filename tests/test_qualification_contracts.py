@@ -374,7 +374,104 @@ RECEIPT_MUTATIONS = [
         "rejected",
         lambda r: r.update(integrity={"status": "failed", "failures": []}),
     ),
+    (
+        "empty inert measure key",
+        "complete",
+        lambda r: r["corpus"]["events"]["spring_budget_2023"].update(
+            inert_measure_years=[{"measure_key": "", "year": 2026}]
+        ),
+    ),
+    (
+        "inert measure-year twice",
+        "complete",
+        lambda r: r["corpus"]["events"]["spring_budget_2023"].update(
+            inert_measure_years=[{"measure_key": "m", "year": 2026}] * 2
+        ),
+    ),
+    (
+        "supported year twice",
+        "complete",
+        lambda r: r["corpus"]["events"]["spring_budget_2023"].update(
+            supported_years=[2024, 2024]
+        ),
+    ),
+    (
+        "missing measure-year twice",
+        "complete",
+        lambda r: r["corpus"]["events"]["spring_budget_2023"].update(
+            missing_measure_years=[{"measure_key": "m", "year": 2026}] * 2
+        ),
+    ),
+    (
+        "base event without its unsupported list",
+        "complete",
+        lambda r: r["diff"].update(
+            base_events={
+                "spring_budget_2023": {
+                    k: v
+                    for k, v in _base_event().items()
+                    if k != "unsupported_measure_years"
+                }
+            }
+        ),
+    ),
+    (
+        "base event with a short digest",
+        "complete",
+        lambda r: r["diff"].update(
+            base_events={
+                "spring_budget_2023": {
+                    **_base_event(),
+                    "staging_manifest_sha256": "abc",
+                }
+            }
+        ),
+    ),
+    (
+        "base event with an extra field",
+        "complete",
+        lambda r: r["diff"].update(
+            base_events={"spring_budget_2023": {**_base_event(), "extra": 1}}
+        ),
+    ),
 ]
+
+
+def _base_event(inert=(), missing=(), unsupported=()):
+    """A base-side grid record (scorecard#183) for one event."""
+
+    def measure_years(items):
+        return [{"measure_key": m, "year": y} for m, y in items]
+
+    return {
+        "staging_manifest_sha256": "a" * 64,
+        "run_manifest_sha256": "b" * 64,
+        "supported_years": [2024, 2025, 2026, 2027],
+        "full_supported_grid_complete": not inert
+        and not set(missing) - set(unsupported),
+        "inert_measure_years": measure_years(inert),
+        "missing_measure_years": measure_years(missing),
+        "unsupported_measure_years": measure_years(unsupported),
+    }
+
+
+def test_a_receipt_with_base_events_and_grid_lists_is_accepted_by_both():
+    """scorecard#183's additive fields, valid: the schema and the mirror both
+    accept them, and the digest covers them as received."""
+
+    raw = copy.deepcopy(golden("replay_receipt_golden"))
+    raw["corpus"]["events"]["spring_budget_2023"].update(
+        missing_measure_years=[{"measure_key": "m", "year": 2023}],
+        unsupported_measure_years=[{"measure_key": "m", "year": 2023}],
+    )
+    raw["diff"]["base_events"] = {"spring_budget_2023": _base_event()}
+    raw = _sealed(raw)
+    _validator("replay_receipt.v1.json").validate(raw)
+    receipt = ReplayReceipt.from_document(raw)
+    assert receipt.computed_receipt_sha256 == raw["receipt_sha256"]
+    assert receipt.diff.base_events["spring_budget_2023"].run_manifest_sha256 == (
+        "b" * 64
+    )
 
 
 @pytest.mark.parametrize(
@@ -570,7 +667,8 @@ def test_a_measure_year_the_candidate_lists_as_inert_fails():
     receipt = _edit(
         _clean_receipt(),
         lambda r: r["corpus"]["events"][EVENT].update(
-            inert_measure_years=[{"measure_key": "uc_childcare", "year": 2026}]
+            inert_measure_years=[{"measure_key": "uc_childcare", "year": 2026}],
+            full_supported_grid_complete=False,
         ),
     )
     gate = _gate(receipt)
@@ -578,12 +676,40 @@ def test_a_measure_year_the_candidate_lists_as_inert_fails():
     assert gate.details["known_gaps"] == []
 
 
+def test_a_complete_event_that_lists_a_gap_contradicts_itself():
+    for edit in (
+        {"inert_measure_years": [{"measure_key": "uc_childcare", "year": 2026}]},
+        {
+            "missing_measure_years": [{"measure_key": "uc_childcare", "year": 2026}],
+            "unsupported_measure_years": [],
+        },
+    ):
+        receipt = _edit(
+            _clean_receipt(), lambda r, e=edit: r["corpus"]["events"][EVENT].update(e)
+        )
+        gate = _gate(receipt)
+        assert gate.status == "fail"
+        assert "complete but lists inert or missing" in gate.summary
+
+
 MEASURE = "spring_budget_2023__uc_childcare_cap_increase"
 
 
-def _receipt_with(rows=(), inert=(), complete=True, integrity="complete", counts=None):
+def _receipt_with(
+    rows=(),
+    inert=(),
+    complete=True,
+    integrity="complete",
+    counts=None,
+    missing=None,
+    unsupported=(),
+    base_events=None,
+):
     """The golden receipt with these flagged rows (measure-year totals unless
-    a row says otherwise), counts that match them, and this event state."""
+    a row says otherwise), counts that match them, and this event state.
+    ``missing`` and ``unsupported`` are the event's grid lists (omitted when
+    ``missing`` is None, as before scorecard#183); ``base_events`` is
+    ``diff.base_events``."""
 
     doc = _with_requested_wheels(copy.deepcopy(golden("replay_receipt_golden")))
     template = {
@@ -605,6 +731,15 @@ def _receipt_with(rows=(), inert=(), complete=True, integrity="complete", counts
         {"measure_key": measure, "year": year} for measure, year in inert
     ]
     event["full_supported_grid_complete"] = complete
+    if missing is not None:
+        event["missing_measure_years"] = [
+            {"measure_key": measure, "year": year} for measure, year in missing
+        ]
+        event["unsupported_measure_years"] = [
+            {"measure_key": measure, "year": year} for measure, year in unsupported
+        ]
+    if base_events is not None:
+        doc["diff"]["base_events"] = base_events
     doc["integrity"]["status"] = integrity
     return _sealed(doc)
 
@@ -823,6 +958,160 @@ def test_the_replay_policy_decides_each_case_of_the_decision_record(name):
         for item in gate.details["regressions"] + gate.details["review_items"]
     }
     assert recorded == kinds, (name, recorded)
+
+
+GAP = (MEASURE, 2026)
+UNSUPPORTED = (MEASURE, 2023)
+
+
+# Each: candidate inert, candidate missing, candidate unsupported, the base
+# events, then the expected status and known-gap reasons.
+KNOWN_GAP_CASES = {
+    "inert in both": (
+        [GAP],
+        [],
+        [],
+        {EVENT: _base_event(inert=[GAP])},
+        "pass",
+        ["inert in the base"],
+    ),
+    "missing in both": (
+        [],
+        [GAP],
+        [],
+        {EVENT: _base_event(missing=[GAP])},
+        "pass",
+        ["missing in the base"],
+    ),
+    "inert here, missing in the base": (
+        [GAP],
+        [],
+        [],
+        {EVENT: _base_event(missing=[GAP])},
+        "pass",
+        ["missing in the base"],
+    ),
+    "the base computed it": (
+        [GAP],
+        [],
+        [],
+        {EVENT: _base_event()},
+        "fail",
+        [],
+    ),
+    "missing in the base, but unsupported there": (
+        [GAP],
+        [],
+        [],
+        {EVENT: _base_event(missing=[GAP], unsupported=[GAP])},
+        "fail",
+        [],
+    ),
+    "a legacy base": (
+        [GAP],
+        [],
+        [],
+        {},
+        "fail",
+        [],
+    ),
+    "a record for another event": (
+        [GAP],
+        [],
+        [],
+        {"autumn_budget_2025": _base_event(inert=[GAP])},
+        "fail",
+        [],
+    ),
+    "another year inert in the base": (
+        [GAP],
+        [],
+        [],
+        {EVENT: _base_event(inert=[(MEASURE, 2027)])},
+        "fail",
+        [],
+    ),
+    "incomplete with nothing listed": (
+        [],
+        [UNSUPPORTED],
+        [UNSUPPORTED],
+        {EVENT: _base_event()},
+        "fail",
+        [],
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(KNOWN_GAP_CASES))
+def test_a_gap_is_known_only_on_the_bases_own_record(name):
+    """The decision record's exact test: a candidate measure-year that is
+    inert, or missing and supported, is a known gap only if the base's record
+    for that event lists it as inert, or missing and supported."""
+
+    inert, missing, unsupported, base_events, status, reasons = KNOWN_GAP_CASES[name]
+    receipt = _receipt_with(
+        inert=inert,
+        complete=False,
+        integrity="incomplete",
+        missing=missing,
+        unsupported=unsupported,
+        base_events=base_events,
+    )
+    _validator("replay_receipt.v1.json").validate(receipt)
+    gate = _gate(receipt)
+    assert gate.status == status, (name, gate.summary)
+    assert [gap["why"] for gap in gate.details["known_gaps"]] == reasons
+    for gap in gate.details["known_gaps"]:
+        assert gap["base_staging_manifest_sha256"] == "a" * 64
+        assert (gap["event"], gap["measure_key"], gap["year"]) == (EVENT, *GAP)
+    if status == "fail":
+        assert {r["kind"] for r in gate.details["regressions"]} & {
+            "incomplete",
+            "lost_response",
+        }
+
+
+def test_an_incomplete_event_without_its_missing_list_fails_even_with_base_evidence():
+    """A receipt from before scorecard#183 cannot show what is missing."""
+
+    receipt = _receipt_with(
+        inert=[GAP],
+        complete=False,
+        integrity="incomplete",
+        base_events={EVENT: _base_event(inert=[GAP])},
+    )
+    gate = _gate(receipt)
+    assert gate.status == "fail"
+    assert gate.details["known_gaps"][0]["why"] == "inert in the base"
+    assert [r["kind"] for r in gate.details["regressions"]] == ["incomplete"]
+    assert "does not list its missing" in gate.details["regressions"][0]["why"]
+
+
+def test_a_known_gap_never_excuses_a_material_base_value():
+    """A base whose record lists the measure-year as inert cannot also hold a
+    material value for it, so a £0 against that value still fails."""
+
+    def receipt(base_gbp):
+        rows = (
+            []
+            if base_gbp is None
+            else [{"flags": ["structural"], "base_gbp": base_gbp, "head_gbp": 0.0}]
+        )
+        return _receipt_with(
+            rows=rows,
+            inert=[GAP],
+            complete=False,
+            integrity="incomplete",
+            missing=[],
+            base_events={EVENT: _base_event(inert=[GAP])},
+        )
+
+    known = _gate(receipt(None))
+    assert known.status == "pass" and known.details["regressions"] == []
+    contradicted = _gate(receipt(2.5e8))
+    assert contradicted.status == "fail"
+    assert [r["kind"] for r in contradicted.details["regressions"]] == ["lost_response"]
+    assert "though the base's record" in contradicted.details["regressions"][0]["why"]
 
 
 def test_a_counted_flag_with_no_row_still_needs_review():
