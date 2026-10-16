@@ -12,9 +12,9 @@
   "metrics": {
     "tool": {
       "repository": "PolicyEngine/policyengine-uk",
-      "commit": "9b33fe19f80676fc5b81d2d80b36072e1c2fc1df",
+      "commit": "228a05a3e925beb50da619aa01e68c266e578fc0",
       "path": "policyengine_uk/utils/aggregate_impact",
-      "_comment": "W3's aggregate-impact tool, pinned so both pairs use the same definitions (draft policyengine-uk#2335). Move the pin to the merged commit when it lands."
+      "_comment": "W3's aggregate-impact tool, pinned so both pairs use the same definitions: the approved head of draft policyengine-uk#2335, the first that suppresses figures from fewer than 10 records. #2335 merges after cos d1601; move the pin to the merged commit when it lands, and never to a commit without suppression."
     },
     "years": [2025, 2026, 2027, 2028, 2029, 2030, 2031],
     "bounds": "uk_review_bounds.json"
@@ -30,7 +30,7 @@
     "poll_timeout_minutes": 360
   },
   "reform_responsiveness": {
-    "_comment": "Plan invariant 'Reform responsiveness' (11 Oct 2026): a reform the model silently ignores must fail qualification. The standard set, each reform's target variable, direction and yearly minimum are the metrics tool's own (standard_reforms.yaml in the pinned tool; the minimums are W3's proposals pending cos d1344). The tool costs the set by default and emits reform_runs:<id> and responsive:<id> checks. This gate requires both checks to be present and passing for every standard reform in the candidate's report, and recomputes each responsive verdict from the report's reform_targets.<id> values.",
+    "_comment": "Plan invariant 'Reform responsiveness' (11 Oct 2026): a reform the model silently ignores must fail qualification. The standard set, each reform's target variable, direction and yearly minimum are the metrics tool's own (standard_reforms.yaml in the pinned tool; at 228a05a3e each minimum is a fifth of the reform's smallest yearly effect on the certified pair, adopted under cos d1344). The tool costs the set by default and emits reform_runs:<id> and responsive:<id> checks. This gate requires both checks to be present and passing for every standard reform in the candidate's report, and recomputes each responsive verdict from the report's reform_targets.<id> values.",
     "standard_reforms_file": "standard_reforms.yaml"
   },
   "promotion": {
