@@ -235,8 +235,13 @@ def resolve_candidate(
     hf_file: Callable[[str, str, str], bytes],
     model_version: Optional[str] = None,
     data_version: Optional[str] = None,
+    core_version: Optional[str] = None,
 ) -> ResolvedCandidate:
-    """Resolve the candidate pair from PyPI and Hugging Face."""
+    """Resolve the candidate pair from PyPI and Hugging Face.
+
+    ``core_version`` pins the core, as a requalification of an exact pair
+    must; otherwise the certified core is kept if the model accepts it.
+    """
 
     model_project = pypi_project(UK_MODEL_PACKAGE)
     releases = model_project["releases"]
@@ -248,9 +253,17 @@ def resolve_candidate(
     requires_core = core_requirement(model_release["info"].get("requires_dist") or [])
 
     core_project = pypi_project(CORE_PACKAGE)
-    core_version = choose_core_version(
-        current_core, requires_core, _stable_versions(core_project["releases"])
-    )
+    if core_version is None:
+        core_version = choose_core_version(
+            current_core, requires_core, _stable_versions(core_project["releases"])
+        )
+    elif core_version not in core_project["releases"]:
+        raise ValueError(f"{CORE_PACKAGE} {core_version} is not on PyPI.")
+    elif Version(core_version) not in SpecifierSet(requires_core):
+        raise ValueError(
+            f"{UK_MODEL_PACKAGE} {model_version} requires {CORE_PACKAGE} "
+            f"{requires_core}, not {core_version}."
+        )
     core_wheel = _wheel(
         core_project["releases"][core_version], CORE_PACKAGE, core_version
     )
@@ -371,7 +384,12 @@ def candidate_action(
     now: Optional[str] = None,
     owner_is_failed: Optional[Callable[[str], bool]] = None,
 ) -> tuple[Action, str]:
-    """Whether to qualify ``pair`` now, and why."""
+    """Whether to qualify ``pair`` now, and why.
+
+    A promotable pair that advances main but was qualified against an
+    earlier certificate is requalified once per main commit, so automatic
+    promotion never waits on a manual ``--force``.
+    """
 
     current = certified_order_key(bundle)
     record = bundle["data_releases"]["uk"]
@@ -402,11 +420,121 @@ def candidate_action(
         )
     ):
         return "qualify", "recoverable abandoned staged attempt"
+    stale = (
+        receipt is not None
+        and receipt.promotable
+        and dominates(pair.order_key, current)
+        and stale_qualification(receipt, bundle, pair_dir, base_commit)
+    )
+    if stale:
+        # Promotion fast-forwards main to the qualified commit, so it needs a
+        # qualification built on current main against main's certificate.
+        # Requalify once per main commit, without force, and one at a time.
+        if attempt is not None:
+            return "duplicate", (
+                f"a requalification from base {base_commit[:12]} exists"
+            )
+        if attempt_in_flight(pair_dir, now=now, owner_is_failed=owner_is_failed):
+            return "duplicate", "a requalification is already in flight"
+        return "qualify", f"promotable but {stale}; requalifying against current main"
     if receipt is not None and receipt.verdict != "incomplete":
         return "duplicate", f"pair already {receipt.verdict} in the ledger"
     if attempt is not None:
         return "duplicate", f"an attempt from base {base_commit[:12]} exists"
+    if attempt_in_flight(pair_dir, now=now, owner_is_failed=owner_is_failed):
+        # Runs resolved on different main commits must not both stage.
+        return "duplicate", "an attempt for this pair is in flight"
     return "qualify", "new pair, or an incomplete pair on a new base commit"
+
+
+def qualified_base(pair_dir: Path) -> Optional[str]:
+    """The main commit prefix the pair's published receipt was built on.
+
+    An attempt's key is its base commit's first 12 characters, with ``-<n>``
+    for a repeat on the same base. Without ``latest_attempt.json`` (pairs
+    published before it existed), the attempt whose own receipt is the
+    published one names it. ``None`` when no attempt does.
+    """
+
+    pointer = pair_dir / "latest_attempt.json"
+    if pointer.exists():
+        return str(read_json(pointer)["attempt_key"]).split("-")[0]
+    published = pair_dir / "qualification_receipt.json"
+    if not published.exists():
+        return None
+    digest = QualificationReceipt.model_validate(read_json(published)).unreviewed_sha256
+    matching = [
+        path.parent.name
+        for path in sorted(pair_dir.glob("attempts/*/qualification_receipt.json"))
+        if QualificationReceipt.model_validate(read_json(path)).unreviewed_sha256
+        == digest
+    ]
+    return matching[-1].split("-")[0] if matching else None
+
+
+def stale_qualification(
+    receipt: QualificationReceipt,
+    bundle: Mapping[str, Any],
+    pair_dir: Path,
+    main_commit: str,
+) -> Optional[str]:
+    """Why a promotable receipt cannot be promoted onto current main, if so.
+
+    Promotion fast-forwards main to the qualified commit, which needs the
+    qualification to be built on current main and compared against main's
+    certificate.
+    """
+
+    if receipt.previous_certificate != previous_certificate(bundle):
+        return "qualified against a superseded baseline"
+    base = qualified_base(pair_dir)
+    if base is None:
+        return "qualified on an unrecorded main commit"
+    if base != main_commit[:12]:
+        return f"qualified on main {base}, not the current {main_commit[:12]}"
+    return None
+
+
+def attempt_in_flight(
+    pair_dir: Path,
+    *,
+    now: Optional[str],
+    owner_is_failed: Optional[Callable[[str], bool]],
+) -> bool:
+    """A staged attempt newer than the published one that is still running:
+    it has no receipt yet and is not abandoned (a sent replay request is
+    still running)."""
+
+    stages = list((pair_dir / "attempts").glob("*/staging.json"))
+    if not stages:
+        return False
+    newest = max(stages, key=lambda path: int(read_json(path)["sequence"])).parent
+    pointer = pair_dir / "latest_attempt.json"
+    published = read_json(pointer)["attempt_key"] if pointer.exists() else None
+    return (
+        newest.name != published
+        and not (newest / "qualification_receipt.json").exists()
+        and not attempt_is_recoverable(newest, now=now, owner_is_failed=owner_is_failed)
+    )
+
+
+def requalification_target(
+    receipts: Iterable[QualificationReceipt],
+    bundle: Mapping[str, Any],
+    ledger_root: Path,
+    main_commit: str,
+) -> Optional[CandidatePair]:
+    """The promotion target, when it must be requalified on current main."""
+
+    target = select_promotion_target(list(receipts), certified_order_key(bundle))
+    if target is None:
+        return None
+    pair_dir = pair_directory(ledger_root, "uk", target.pair_id)
+    return (
+        target.pair
+        if stale_qualification(target, bundle, pair_dir, main_commit)
+        else None
+    )
 
 
 # --- Preparing the candidate commit -----------------------------------------
@@ -1207,6 +1335,9 @@ class PromotionPlan:
     reason: str = ""
     #: The qualified commit the ready branch must still be at when promoted.
     ready_commit: Optional[str] = None
+    #: The target, when its qualification compared against an earlier
+    #: certificate than main's: it needs requalifying before promotion.
+    requalify: Optional[CandidatePair] = None
 
 
 def plan_promotion(
@@ -1258,9 +1389,10 @@ def plan_promotion(
             close_branches=sorted(close),
             reason=(
                 f"{target.pair.order_key} advances {current}, but its previous "
-                "certificate differs from current main; requalify with --force "
+                "certificate differs from current main; it is requalified "
                 "against current main before promotion"
             ),
+            requalify=target.pair,
         )
     branch = candidate_branch(target.pair)
     qualified_commit = target.harness.git_commit

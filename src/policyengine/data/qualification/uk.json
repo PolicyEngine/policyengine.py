@@ -34,7 +34,7 @@
     "standard_reforms_file": "standard_reforms.yaml"
   },
   "promotion": {
-    "automatic": false,
-    "decision": "cos d1344: automatic promotion and review bounds are methodology calls; until ruled, promotion is a reviewed PR merge."
+    "automatic": true,
+    "decision": "cos d1344 (15 October 2026): automatic promotion is on once policyengine.py#574 lands on its gates. The promote job fast-forwards main to the newest promotable candidate's qualified commit once every check on it has passed, which succeeds only while main is still the commit the candidate was built on; otherwise the candidate is requalified on current main. A needs-review receipt is promoted only after a named reviewer accepts that exact receipt."
   }
 }

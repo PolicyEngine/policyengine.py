@@ -12,7 +12,10 @@ Invariants:
 - the replay request, status and receipt mirrors agree with the scorecard's
   vendored JSON Schemas and reproduce its golden digests (differential);
 - a replay receipt counts only when bound to this request and these
-  artifacts; blocking flags fail, review flags need review.
+  artifacts;
+- the replay policy (d1344-replay-regressions-v1) fails exactly the
+  regressions it names, sends every other flagged row to review, and is
+  monotone: adding a flagged row never makes the verdict better.
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ from pydantic import ValidationError
 
 from policyengine.provenance.canonical import canonical_sha256
 from policyengine.provenance.qualification import (
+    REPLAY_POLICY_ID,
     REQUIRED_GATES,
     GateResult,
     ReplayQualificationRequest,
@@ -471,11 +475,19 @@ def _with_counts(sealed=True, **counts):
     return _sealed(doc) if sealed else doc
 
 
-def test_golden_receipt_fails_on_its_structural_flag():
+def test_golden_receipt_needs_review_for_its_sign_reversal():
+    """Its structural row moves £0.0000001 to -£123m: a sign reversal, which a
+    model fix can make legitimately, so a named reviewer decides."""
+
     doc = _with_requested_wheels(copy.deepcopy(golden("replay_receipt_golden")))
     gate = _gate(_sealed(doc))
-    assert gate.status == "fail"
-    assert "structural" in gate.summary
+    assert gate.status == "needs_review", gate.summary
+    assert gate.details["regressions"] == []
+    assert sorted(item["level"] for item in gate.details["review_items"]) == [
+        "head",
+        "measure_year",
+        "source_row",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -484,9 +496,12 @@ def test_golden_receipt_fails_on_its_structural_flag():
         ({}, "pass"),
         ({"numerical": 2}, "needs_review"),
         ({"support": 1}, "needs_review"),
-        ({"numerical": 2, "coverage": 1}, "fail"),
-        ({"construction": 1}, "fail"),
-        ({"inertness": 1}, "fail"),
+        # The template row has values on both sides: not a lost result.
+        ({"numerical": 2, "coverage": 1}, "needs_review"),
+        ({"construction": 1}, "needs_review"),
+        # Not in the candidate's inert list: inert in the base only.
+        ({"inertness": 1}, "needs_review"),
+        ({"structural": 1}, "needs_review"),
         ({"mapping": 3}, "fail"),
     ],
 )
@@ -548,7 +563,10 @@ def test_blocking_flags_count_wherever_the_receipt_states_them():
     assert "mapping" in _gate(_sealed(receipt)).summary
 
 
-def test_an_inert_measure_year_without_a_flag_needs_review():
+def test_a_measure_year_the_candidate_lists_as_inert_fails():
+    """No receipt yet records the base's inert measure-years, so no gap is
+    known, and an inert measure-year is a lost response."""
+
     receipt = _edit(
         _clean_receipt(),
         lambda r: r["corpus"]["events"][EVENT].update(
@@ -556,7 +574,474 @@ def test_an_inert_measure_year_without_a_flag_needs_review():
         ),
     )
     gate = _gate(receipt)
-    assert gate.status == "needs_review" and "inert" in gate.summary
+    assert gate.status == "fail" and "lost_response 1" in gate.summary
+    assert gate.details["known_gaps"] == []
+
+
+MEASURE = "spring_budget_2023__uc_childcare_cap_increase"
+
+
+def _receipt_with(rows=(), inert=(), complete=True, integrity="complete", counts=None):
+    """The golden receipt with these flagged rows (measure-year totals unless
+    a row says otherwise), counts that match them, and this event state."""
+
+    doc = _with_requested_wheels(copy.deepcopy(golden("replay_receipt_golden")))
+    template = {
+        "event": EVENT,
+        "measure_key": MEASURE,
+        "year": 2026,
+        "level": "measure_year",
+        "key": "total",
+    }
+    doc["diff"]["flagged_rows"] = [{**template, **row} for row in rows]
+    tally = {key: 0 for key in doc["diff"]["flag_counts"]}
+    for row in doc["diff"]["flagged_rows"]:
+        for kind in row["flags"]:
+            tally[kind] += 1
+    tally.update(counts or {})
+    doc["diff"]["flag_counts"] = tally
+    event = doc["corpus"]["events"][EVENT]
+    event["inert_measure_years"] = [
+        {"measure_key": measure, "year": year} for measure, year in inert
+    ]
+    event["full_supported_grid_complete"] = complete
+    doc["integrity"]["status"] = integrity
+    return _sealed(doc)
+
+
+# The regression table of the d1344 decision record (second review), plus the
+# bound's edges. Each: rows, candidate inert, grid complete, integrity, then
+# the expected status and the kinds the gate must record.
+POLICY_CASES = {
+    "sign reversal": (
+        [{"flags": ["numerical", "structural"], "base_gbp": 1e8, "head_gbp": -1e8}],
+        (),
+        True,
+        "complete",
+        "needs_review",
+        {"flagged_move"},
+    ),
+    "£0 against a material base, distinct worlds": (
+        [{"flags": ["numerical", "structural"], "base_gbp": 1e8, "head_gbp": 0.0}],
+        (),
+        True,
+        "complete",
+        "fail",
+        {"lost_response"},
+    ),
+    "exactly the bound to £0, no numerical flag": (
+        [{"flags": ["structural"], "base_gbp": 1e6, "head_gbp": 0.0}],
+        (),
+        True,
+        "complete",
+        "fail",
+        {"lost_response"},
+    ),
+    "negative material base to £0": (
+        [{"flags": ["structural"], "base_gbp": -2.5e8, "head_gbp": 0.0}],
+        (),
+        True,
+        "complete",
+        "fail",
+        {"lost_response"},
+    ),
+    "just below the bound to £0": (
+        [{"flags": ["structural"], "base_gbp": 999_999.0, "head_gbp": 0.0}],
+        (),
+        True,
+        "complete",
+        "needs_review",
+        {"flagged_move"},
+    ),
+    "£0 head (not a measure-year total)": (
+        [
+            {
+                "flags": ["structural"],
+                "level": "head",
+                "key": "universal_credit",
+                "base_gbp": 1e8,
+                "head_gbp": 0.0,
+            }
+        ],
+        (),
+        True,
+        "complete",
+        "needs_review",
+        {"flagged_move"},
+    ),
+    "£0 source row against a material base (not a measure-year total)": (
+        [
+            {
+                "flags": ["structural"],
+                "level": "source_row",
+                "key": "obr-row-1",
+                "base_gbp": 1e8,
+                "head_gbp": 0.0,
+            }
+        ],
+        (),
+        True,
+        "complete",
+        "needs_review",
+        {"flagged_move"},
+    ),
+    "numeric base result, missing candidate result": (
+        [
+            {
+                "flags": ["coverage"],
+                "level": "source_row",
+                "key": "obr-row-1",
+                "base_gbp": 5e8,
+                "head_gbp": None,
+            }
+        ],
+        (),
+        True,
+        "complete",
+        "fail",
+        {"lost_result"},
+    ),
+    "coverage gain": (
+        [
+            {
+                "flags": ["coverage"],
+                "level": "source_row",
+                "key": "obr-row-1",
+                "base_gbp": None,
+                "head_gbp": 574_999_000.021347,
+            }
+        ],
+        (),
+        True,
+        "complete",
+        "needs_review",
+        {"coverage_gain"},
+    ),
+    "null/null coverage, otherwise complete": (
+        [
+            {
+                "flags": ["coverage"],
+                "level": "source_row",
+                "key": "obr-row-1",
+                "base_gbp": None,
+                "head_gbp": None,
+            }
+        ],
+        (),
+        True,
+        "complete",
+        "needs_review",
+        {"coverage_without_values"},
+    ),
+    "absent base, candidate inert and incomplete": (
+        [
+            {
+                "flags": ["coverage"],
+                "level": "source_row",
+                "key": "obr-row-1",
+                "base_gbp": None,
+                "head_gbp": None,
+            }
+        ],
+        ((MEASURE, 2026),),
+        False,
+        "incomplete",
+        "fail",
+        {"lost_response", "incomplete", "coverage_without_values"},
+    ),
+    # As in the 6.4.1 receipt: a measure-year flag and a source-row flag
+    # whose candidate value is null, for a measure-year the candidate lists.
+    "candidate inert, flagged against the base": (
+        [
+            {"flags": ["inertness"], "base_gbp": 2.641127e8, "head_gbp": 0.0},
+            {
+                "flags": ["inertness"],
+                "level": "source_row",
+                "key": "obr-row-1",
+                "base_gbp": 2.641127e8,
+                "head_gbp": None,
+            },
+        ],
+        ((MEASURE, 2026),),
+        False,
+        "incomplete",
+        "fail",
+        {"lost_response", "incomplete"},
+    ),
+    "inert in the base only": (
+        [{"flags": ["inertness"], "base_gbp": 0.0, "head_gbp": 3e8}],
+        (),
+        True,
+        "complete",
+        "needs_review",
+        {"base_only_inertness"},
+    ),
+    "same supported artifact missing on both sides": (
+        [],
+        (),
+        False,
+        "incomplete",
+        "fail",
+        {"incomplete"},
+    ),
+    "incomplete integrity with no incomplete event": (
+        [],
+        (),
+        True,
+        "incomplete",
+        "fail",
+        {"incomplete"},
+    ),
+    "candidate loses a supported year": (
+        [
+            {
+                "flags": ["support"],
+                "level": "source_row",
+                "key": "obr-row-1",
+                "base_gbp": 1e8,
+                "head_gbp": None,
+            }
+        ],
+        (),
+        True,
+        "complete",
+        "needs_review",
+        {"flagged_move"},
+    ),
+    "construction": (
+        [{"flags": ["construction"], "base_gbp": 1e8, "head_gbp": 1.2e8}],
+        (),
+        True,
+        "complete",
+        "needs_review",
+        {"flagged_move"},
+    ),
+    "mapping": (
+        [{"flags": ["mapping"], "base_gbp": 1e8, "head_gbp": 1e8}],
+        (),
+        True,
+        "complete",
+        "fail",
+        {"mapping"},
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(POLICY_CASES))
+def test_the_replay_policy_decides_each_case_of_the_decision_record(name):
+    rows, inert, complete, integrity, status, kinds = POLICY_CASES[name]
+    receipt = _receipt_with(rows, inert, complete, integrity)
+    _validator("replay_receipt.v1.json").validate(receipt)
+    gate = _gate(receipt)
+    assert gate.status == status, (name, gate.summary)
+    recorded = {
+        item["kind"]
+        for item in gate.details["regressions"] + gate.details["review_items"]
+    }
+    assert recorded == kinds, (name, recorded)
+
+
+def test_a_counted_flag_with_no_row_still_needs_review():
+    gate = _gate(_receipt_with(counts={"numerical": 1}))
+    assert gate.status == "needs_review"
+    assert gate.details["review_items"] == [
+        {"kind": "counted_flag", "flag": "numerical", "count": 1}
+    ]
+
+
+def test_a_counted_mapping_flag_with_no_row_fails():
+    """A blocking flag the counters state still fails, so no reviewer can
+    accept it."""
+
+    receipt = _receipt_with(counts={"mapping": 1})
+    _validator("replay_receipt.v1.json").validate(receipt)
+    gate = _gate(receipt)
+    assert gate.status == "fail"
+    assert gate.details["regressions"] == [
+        {"kind": "counted_flag", "flag": "mapping", "count": 1}
+    ]
+
+
+def test_every_early_failure_carries_the_policy_record():
+    import hashlib
+    from importlib.resources import files
+
+    text = (files("policyengine.data.qualification") / "replay_policy.md").read_bytes()
+    clean = _receipt_with()
+    rejected = _rejected_receipt()
+    contradictory = _edit(
+        _clean_receipt(),
+        lambda r: r["corpus"]["events"][EVENT].update(artifacts=0),
+    )
+    failed = copy.deepcopy(_with_requested_wheels(golden("replay_receipt_golden")))
+    failed["status"] = "failed"
+    failed["integrity"] = {
+        "status": "failed",
+        "failures": [{"code": "construction_inert", "detail": "x"}],
+    }
+    unbound = copy.deepcopy(clean)
+    unbound["execution"]["dataset_sha256"] = "0" * 64
+    cases = {
+        "rejected": _gate(rejected),
+        "contradiction": _gate(contradictory),
+        "failed": _gate(_sealed(failed)),
+        "unbound": _gate(_sealed(unbound)),
+    }
+    for kind, gate in cases.items():
+        assert gate.status == "fail", kind
+        assert gate.details["policy"] == REPLAY_POLICY_ID
+        assert gate.details["policy_sha256"] == hashlib.sha256(text).hexdigest()
+        assert [r["kind"] for r in gate.details["regressions"]] == [kind], kind
+        assert gate.details["review_items"] == [] and gate.details["known_gaps"] == []
+
+
+def test_the_gate_records_the_policy_it_applied():
+    import hashlib
+    from importlib.resources import files
+
+    gate = _gate(_receipt_with())
+    assert gate.status == "pass"
+    text = (files("policyengine.data.qualification") / "replay_policy.md").read_bytes()
+    assert gate.details["policy"] == REPLAY_POLICY_ID
+    assert gate.details["policy_sha256"] == hashlib.sha256(text).hexdigest()
+    assert REPLAY_POLICY_ID.encode() in text
+    assert gate.details["known_gaps"] == []
+
+
+def test_the_first_real_receipt_fails_on_its_inert_uc_measure_years():
+    """policyengine 6.4.1 + policyengine-uk 2.130.1 + uk-data 1.58.1, receipt
+    e3cc6521…: scorecard's construction of spring_statement_2025's UC health
+    element change was inert in 2026-29, where the base computed £264.1m to
+    £626.6m. Those four lost responses and the incomplete grid fail it; its
+    other 346 flagged rows are review items."""
+
+    from collections import Counter
+
+    folder = FIXTURES / "receipt_6.4.1_attempt1"
+    request = ReplayQualificationRequest.model_validate(
+        json.loads((folder / "REQUEST.json").read_text())
+    )
+    document = json.loads((folder / "REPLAY_RECEIPT.json").read_text())
+    receipt = ReplayReceipt.from_document(document)
+    assert receipt.computed_receipt_sha256 == receipt.receipt_sha256
+    gate = evaluate_replay_receipt(
+        request, _status(request.request_id, document), receipt
+    )
+    assert gate.status == "fail"
+    lost = sorted(
+        (item["measure_key"], item["year"])
+        for item in gate.details["regressions"]
+        if item["kind"] == "lost_response"
+    )
+    measure = "spring_statement_2025__uc_health_element_freeze_and_new_claimant_cut"
+    assert lost == [(measure, year) for year in (2026, 2027, 2028, 2029)]
+    assert [
+        item["event"]
+        for item in gate.details["regressions"]
+        if item["kind"] == "incomplete"
+    ] == ["spring_statement_2025"]
+    assert Counter(item["kind"] for item in gate.details["review_items"]) == {
+        "flagged_move": 345,
+        "coverage_gain": 1,
+    }
+
+
+_ROW = st.fixed_dictionaries(
+    {
+        "flags": st.lists(
+            st.sampled_from(
+                [
+                    "numerical",
+                    "structural",
+                    "coverage",
+                    "mapping",
+                    "support",
+                    "inertness",
+                    "construction",
+                ]
+            ),
+            min_size=1,
+            max_size=3,
+            unique=True,
+        ),
+        "level": st.sampled_from(["source_row", "measure_year", "head"]),
+        "year": st.sampled_from([2025, 2026]),
+        "base_gbp": st.one_of(
+            st.none(),
+            st.just(0.0),
+            st.sampled_from([999_999.0, 1e6, -1e6, 2.5e8, -2.5e8]),
+            st.floats(-1e10, 1e10, allow_nan=False),
+        ),
+        "head_gbp": st.one_of(
+            st.none(),
+            st.just(0.0),
+            st.floats(-1e10, 1e10, allow_nan=False),
+        ),
+    }
+)
+_RANK = {"pass": 0, "needs_review": 1, "fail": 2}
+
+
+@settings(max_examples=150, deadline=None)
+@given(
+    rows=st.lists(_ROW, max_size=4),
+    extra=_ROW,
+    inert=st.lists(st.sampled_from([2025, 2026]), max_size=2, unique=True),
+)
+def test_the_replay_policy_is_monotone_and_never_passes_a_flag(rows, extra, inert):
+    """For every receipt: a flagged row never passes; mapping and lost results
+    always fail; fail is exactly "a regression was recorded"; and adding a
+    flagged row never makes the verdict better."""
+
+    listed = tuple((MEASURE, year) for year in inert)
+    complete = not listed
+
+    def judge(these):
+        receipt = _receipt_with(
+            these, listed, complete, "complete" if complete else "incomplete"
+        )
+        return _gate(receipt)
+
+    def oracle(these):
+        """The decision record's outcome, restated independently: a
+        regression fails; any other flagged row needs review."""
+
+        for row in these:
+            base, head = row["base_gbp"], row["head_gbp"]
+            if (
+                "mapping" in row["flags"]
+                or ("coverage" in row["flags"] and base is not None and head is None)
+                or (
+                    row["level"] == "measure_year"
+                    and head == 0
+                    and base is not None
+                    and abs(base) >= 1_000_000
+                )
+            ):
+                return "fail"
+        if listed:
+            return "fail"
+        return "needs_review" if these else "pass"
+
+    before = judge(rows)
+    after = judge([*rows, extra])
+    assert before.status == oracle(rows), (rows, before.summary)
+    assert after.status == oracle([*rows, extra]), (extra, after.summary)
+    assert _RANK[after.status] >= _RANK[before.status]
+    for gate, these in ((before, rows), (after, [*rows, extra])):
+        assert (gate.status == "fail") == bool(gate.details["regressions"])
+        if these or listed:
+            assert gate.status != "pass"
+        if any(
+            "mapping" in row["flags"]
+            or (
+                "coverage" in row["flags"]
+                and row["base_gbp"] is not None
+                and row["head_gbp"] is None
+            )
+            for row in these
+        ):
+            assert gate.status == "fail"
 
 
 def test_the_comparison_base_must_be_the_one_requested():

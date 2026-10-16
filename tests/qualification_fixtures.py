@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
 from policyengine.provenance.qualification import (
@@ -96,6 +98,116 @@ def make_receipt(
         issued_by=ISSUED,
         completed_at=completed_at,
     )
+
+
+def jq(expression: str, data) -> str:
+    """Apply ``expression`` to ``data`` with the real jq, printing strings
+    raw as gh's ``--jq`` does, so fakes of gh evaluate the code's own jq
+    rather than guess at it (round 6 of #635: a fake that picked fields by
+    name let a wrong source path pass). GitHub's ubuntu runners ship jq; a
+    machine without it fails these tests rather than skipping them."""
+
+    binary = shutil.which("jq")
+    assert binary, "jq is required to evaluate the code's jq expressions"
+    return subprocess.run(
+        [binary, "-r", expression],
+        input=json.dumps(data),
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+
+
+def _field(argv, name):
+    """The value of gh's ``-f name=value`` / ``-F name=value`` in ``argv``."""
+
+    for flag, value in zip(argv, argv[1:]):
+        if flag in ("-f", "-F") and value.startswith(f"{name}="):
+            return value.split("=", 1)[1]
+    return None
+
+
+def rest_pulls_output(argv, listing, owner="PolicyEngine") -> str:
+    """What `gh api -X GET repos/<repo>/pulls -f head=<owner>:<branch> ...`
+    prints for ``listing`` (gh pr list-shaped items: number, headRefName,
+    headRefOid, baseRefName (main), state (OPEN, CLOSED or MERGED), isDraft,
+    isCrossRepository): GitHub keeps only pull requests from ``owner``'s
+    branch, then filters by base and state, and the call's --jq runs over
+    REST-shaped objects with the real jq."""
+
+    head = _field(argv, "head")
+    head_owner, _, branch = head.partition(":")
+    base = _field(argv, "base")
+    state = _field(argv, "state") or "open"
+    page = []
+    for pr in listing:
+        pr = {"baseRefName": "main", "state": "OPEN", "isDraft": True, **pr}
+        pr_owner = "someone" if pr.get("isCrossRepository") else owner
+        rest_state = "open" if pr["state"] == "OPEN" else "closed"
+        if (
+            pr_owner != head_owner
+            or pr["headRefName"] != branch
+            or (base is not None and pr["baseRefName"] != base)
+            or (state != "all" and rest_state != state)
+        ):
+            continue
+        page.append(
+            {
+                "number": pr["number"],
+                "state": rest_state,
+                "draft": pr["isDraft"],
+                "merged_at": "2026-10-16T00:00:00Z"
+                if pr["state"] == "MERGED"
+                else None,
+                "base": {"ref": pr["baseRefName"]},
+                "head": {
+                    "ref": pr["headRefName"],
+                    "sha": pr.get("headRefOid"),
+                    "repo": {"full_name": f"{pr_owner}/policyengine.py"},
+                },
+            }
+        )
+    return jq(argv[argv.index("--jq") + 1], page)
+
+
+#: Each kind of base change and the timeline event GitHub records for it.
+BASE_CHANGE_EVENTS = {
+    "manual": ("BASE_REF_CHANGED_EVENT", "BaseRefChangedEvent"),
+    "automatic": (
+        "AUTOMATIC_BASE_CHANGE_SUCCEEDED_EVENT",
+        "AutomaticBaseChangeSucceededEvent",
+    ),
+}
+
+
+def graphql_base_changes_output(argv, changed) -> str:
+    """What the base-change GraphQL query prints for the pull request it
+    names. ``changed`` maps numbers to the kind of base change they had
+    ("manual" or "automatic"; a set of numbers means manual). As in GitHub,
+    a pull request's event is among the nodes only when the query's
+    itemTypes ask for its type (round 8 of #635: an automatic retarget is a
+    separate event type that a query for BASE_REF_CHANGED_EVENT misses)."""
+
+    query = _field(argv, "query")
+    types = set(query[query.index("itemTypes: [") + 12 :].split("]")[0].split(", "))
+    kinds = changed if isinstance(changed, dict) else dict.fromkeys(changed, "manual")
+    number = int(_field(argv, "number"))
+    item_type, typename = BASE_CHANGE_EVENTS.get(kinds.get(number), (None, None))
+    page = {
+        "data": {
+            "repository": {
+                "pullRequest": {
+                    "timelineItems": {
+                        "nodes": [{"__typename": typename}]
+                        if item_type in types
+                        else [],
+                        "pageInfo": {"hasNextPage": False},
+                    }
+                }
+            }
+        }
+    }
+    return jq(argv[argv.index("--jq") + 1], page)
 
 
 def golden(name: str) -> dict:
