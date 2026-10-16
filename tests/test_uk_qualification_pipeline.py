@@ -982,7 +982,7 @@ PROMOTION_CASES = {
         0,
         True,
         False,
-        [],
+        ["undo"],
     ),
     "a test failed": (
         [*CHECKS_PASSED[:1], _check("Test (3.13)", conclusion="failure", id=4)],
@@ -992,7 +992,7 @@ PROMOTION_CASES = {
         0,
         True,
         False,
-        [],
+        ["undo"],
     ),
     "an older cancelled run a newer success replaced": (
         [*CHECKS_PASSED, _check("Test (3.13)", conclusion="cancelled", id=0)],
@@ -1013,7 +1013,7 @@ PROMOTION_CASES = {
         0,
         True,
         False,
-        [],
+        ["undo"],
     ),
     "no run on the candidate's own tree": (
         CHECKS_PASSED,
@@ -1023,7 +1023,7 @@ PROMOTION_CASES = {
         0,
         True,
         False,
-        [],
+        ["undo"],
     ),
     "the own-tree run still registering its jobs": (
         CHECKS_PASSED[:1],
@@ -1033,9 +1033,9 @@ PROMOTION_CASES = {
         0,
         True,
         False,
-        [],
+        ["undo"],
     ),
-    "no checks yet": ([], RUNS_PASSED, True, "parent", 0, True, False, []),
+    "no checks yet": ([], RUNS_PASSED, True, "parent", 0, True, False, ["undo"]),
     # Round 3 of #635: a dispatch cancelled while queued has no jobs and so
     # no checks; the run itself must still block.
     "the own-tree run cancelled with no jobs": (
@@ -1046,7 +1046,7 @@ PROMOTION_CASES = {
         0,
         True,
         False,
-        [],
+        ["undo"],
     ),
     # Round 3 of #635: a replaced run re-run later gets newer check ids; its
     # checks must not count, whatever they conclude.
@@ -1087,7 +1087,7 @@ PROMOTION_CASES = {
         0,
         True,
         False,
-        [],
+        ["undo"],
     ),
     "the checks could not be read": (
         None,
@@ -1097,7 +1097,7 @@ PROMOTION_CASES = {
         0,
         True,
         False,
-        [],
+        ["undo"],
     ),
     "the branch moved": (
         CHECKS_PASSED,
@@ -1204,7 +1204,7 @@ def test_promotion_makes_main_exactly_the_qualified_commit(
     monkeypatch.setattr(cli, "subprocess", SimpleNamespace(run=run))
     monkeypatch.setattr(cli, "config", lambda: {"promotion": {"automatic": automatic}})
     monkeypatch.setattr(cli, "_open_candidate_branches", lambda: {branch: commit})
-    monkeypatch.setattr(cli, "_ready_candidate_branches", lambda: set())
+    monkeypatch.setattr(cli, "_ready_candidate_branches", lambda: {})
     assert cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True)) == 0
     assert [
         "undo" if "--undo" in argv else "ready"
@@ -1241,6 +1241,25 @@ def test_promotion_returns_every_other_ready_candidate_to_draft(
     draft; a failed return to draft fails the run so it is seen."""
 
     import argparse
+
+    cli, calls, branch = _sweep_cli(
+        monkeypatch, path="main moved", failing={"2", "target"} if undo_fails else set()
+    )
+    status = cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True))
+    undone = [argv[3] for argv in calls if argv[:3] == ["gh", "pr", "ready"]]
+    # The stale one by number (the draft and the fork's are left alone), the
+    # target by _promote (main moved).
+    assert undone == ["2", branch]
+    assert status == (1 if undo_fails else 0)
+
+
+def _sweep_cli(monkeypatch, *, path, failing, checks=None, runs=None):
+    """The promote CLI over a real `gh pr list` payload: the target (ready),
+    a stale same-repository candidate (#2, ready), a draft (#3) and a fork's
+    pull request with the stale branch's name (#4, ready). ``failing`` names
+    the undos that fail ("2" for the sweep's, "target" for the target's);
+    ``path`` is "main moved" or "lease rejected"."""
+
     import importlib.util
 
     qualified = _promotion_receipt(pair=_promotable_pair_and_branch())
@@ -1254,31 +1273,129 @@ def test_promotion_returns_every_other_ready_candidate_to_draft(
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
     calls = []
+    listing = [
+        {
+            "number": 1,
+            "headRefName": branch,
+            "headRefOid": commit,
+            "isDraft": False,
+            "isCrossRepository": False,
+        },
+        {
+            "number": 2,
+            "headRefName": stale,
+            "headRefOid": "s" * 40,
+            "isDraft": False,
+            "isCrossRepository": False,
+        },
+        {
+            "number": 3,
+            "headRefName": "candidate/uk/draft",
+            "headRefOid": "d" * 40,
+            "isDraft": True,
+            "isCrossRepository": False,
+        },
+        {
+            "number": 4,
+            "headRefName": stale,
+            "headRefOid": "f" * 40,
+            "isDraft": False,
+            "isCrossRepository": True,
+        },
+    ]
 
     def run(argv, **kwargs):
         calls.append(argv)
         out, code = "", 0
-        if argv[:3] == ["git", "rev-parse", "FETCH_HEAD"]:
+        if argv[:3] == ["gh", "pr", "list"]:
+            out = json.dumps(listing)
+        elif argv[:2] == ["gh", "api"]:
+            items = (
+                (checks or CHECKS_PASSED)
+                if "check-runs" in argv[2]
+                else (runs or RUNS_PASSED)
+            )
+            out = "".join(json.dumps(item) + "\n" for item in items)
+        elif argv[:3] == ["git", "rev-parse", "FETCH_HEAD"]:
             out = commit
         elif argv[:3] == ["git", "rev-parse", f"{commit}^"]:
             out = "p" * 40
         elif argv[:2] == ["git", "ls-remote"]:
-            # Main moved: the target is kept draft too.
-            out = "m" * 40 + "\trefs/heads/main\n"
+            main = "m" * 40 if path == "main moved" else "p" * 40
+            out = main + "\trefs/heads/main\n"
+        elif argv[:2] == ["git", "push"]:
+            code = 1  # the lease is rejected (main moved at the push)
         elif argv[:3] == ["gh", "pr", "ready"] and "--undo" in argv:
-            code = 1 if undo_fails else 0
+            target = "target" if argv[3] == branch else argv[3]
+            code = 1 if target in failing else 0
         return SimpleNamespace(returncode=code, stdout=out, stderr="")
 
     monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: [qualified])
     monkeypatch.setattr(cli, "subprocess", SimpleNamespace(run=run))
     monkeypatch.setattr(cli, "config", lambda: {"promotion": {"automatic": True}})
-    monkeypatch.setattr(cli, "_open_candidate_branches", lambda: {branch: commit})
-    monkeypatch.setattr(cli, "_ready_candidate_branches", lambda: {branch, stale})
+    return cli, calls, branch
+
+
+@pytest.mark.parametrize("path", ["main moved", "lease rejected"])
+@pytest.mark.parametrize("failing", [set(), {"2"}, {"target"}])
+def test_each_failed_return_to_draft_fails_the_run(
+    monkeypatch, tmp_path, path, failing
+):
+    """Round 4 of #635: the sweep's failed undo and the target's failed undo
+    (whether main moved or the lease was rejected) each fail the run alone;
+    the sweep acts by number on same-repository ready pull requests only."""
+
+    import argparse
+
+    cli, calls, branch = _sweep_cli(monkeypatch, path=path, failing=failing)
+    assert cli._ready_candidate_branches() == {branch: 1, "candidate/uk/stale-pair": 2}
     status = cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True))
-    undone = [argv[3] for argv in calls if argv[:3] == ["gh", "pr", "ready"]]
-    # The stale one by the sweep, the target by _promote (main moved).
-    assert undone == [stale, branch]
-    assert status == (1 if undo_fails else 0)
+    readiness = [
+        ("undo" if "--undo" in argv else "ready", argv[3])
+        for argv in calls
+        if argv[:3] == ["gh", "pr", "ready"]
+    ]
+    target = (
+        [("undo", branch)]
+        if path == "main moved"
+        else [("ready", branch), ("undo", branch)]
+    )
+    assert readiness == [("undo", "2"), *target]
+    assert status == (1 if failing else 0)
+
+
+@pytest.mark.parametrize(("attempt", "stranded"), [(3, False), (4, True)])
+def test_a_candidate_waiting_on_runs_past_the_cap_fails_the_run(
+    monkeypatch, tmp_path, capsys, attempt, stranded
+):
+    """Round 4 of #635: refresh re-runs a run until MAX_RUN_ATTEMPTS, then
+    stops; a candidate still waiting on it would otherwise wait unseen, so
+    the promote run fails with an error naming it. Below the cap it waits
+    quietly, kept draft."""
+
+    import argparse
+
+    runs = [
+        _run("pull_request", id=10),
+        {
+            **_run("workflow_dispatch", conclusion="failure", id=11),
+            "run_attempt": attempt,
+        },
+    ]
+    cli, calls, branch = _sweep_cli(
+        monkeypatch, path="main at the parent", failing=set(), runs=runs
+    )
+    assert cli.MAX_RUN_ATTEMPTS == 4
+    status = cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True))
+    output = capsys.readouterr().out
+    assert status == (1 if stranded else 0)
+    assert ("::error::" in output) is stranded
+    assert [argv for argv in calls if argv[:2] == ["git", "push"]] == []
+    # The target waits as a draft (round 4: one a person left ready).
+    assert [argv[3] for argv in calls if argv[:3] == ["gh", "pr", "ready"]] == [
+        "2",
+        branch,
+    ]
 
 
 def test_automatic_promotion_is_on_with_its_basis_recorded():

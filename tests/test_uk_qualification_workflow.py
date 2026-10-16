@@ -339,9 +339,11 @@ elif command == "git" and args[0] == "push":
                 stdout=json.dumps(
                     [
                         {
+                            "number": 1,
                             "headRefName": branch,
                             "headRefOid": state["head"],
                             "isDraft": state["status"] != "ready",
+                            "isCrossRepository": False,
                         }
                     ]
                 )
@@ -486,7 +488,7 @@ else:
 @pytest.mark.parametrize("head_matches", [False, True])
 @pytest.mark.parametrize("verdict", ["qualified", "rejected", "accepted_review"])
 def test_refresh_checks_reruns_only_failed_pr_runs_for_the_qualified_head(
-    monkeypatch, tmp_path, head_matches, verdict
+    monkeypatch, tmp_path, capsys, head_matches, verdict
 ):
     cli = _cli()
     receipt = make_receipt(
@@ -535,8 +537,11 @@ def test_refresh_checks_reruns_only_failed_pr_runs_for_the_qualified_head(
             # The run on the candidate's own tree that promotion requires; a
             # job timeout cancels the run (round 3 of #635).
             (17, head, code, "workflow_dispatch", "completed", "cancelled", 1),
-            # Already run as often as the cap allows.
-            (18, head, docs, "workflow_dispatch", "completed", "failure", 3),
+            # Already run as often as the cap allows (four attempts).
+            (18, head, docs, "workflow_dispatch", "completed", "failure", 4),
+            # Below the cap, but GitHub refuses the re-run (for example a run
+            # older than 30 days): refresh warns and goes on (round 4).
+            (19, head, guard, "workflow_dispatch", "completed", "failure", 3),
         )
     ]
     calls = []
@@ -547,8 +552,8 @@ def test_refresh_checks_reruns_only_failed_pr_runs_for_the_qualified_head(
             assert "--paginate" in argv
             assert f"head_sha={receipt.harness.git_commit}" in argv[2]
             return SimpleNamespace(stdout="\n".join(json.dumps(run) for run in runs))
-        assert argv[:3] == ["gh", "run", "rerun"] and kwargs["check"] is True
-        return SimpleNamespace(returncode=0)
+        assert argv[:3] == ["gh", "run", "rerun"] and kwargs["check"] is False
+        return SimpleNamespace(returncode=1 if argv[3] == "19" else 0)
 
     monkeypatch.setattr(cli, "subprocess", SimpleNamespace(run=fake_run))
     args = cli.parser().parse_args(["refresh-pr-checks", "--ledger", str(tmp_path)])
@@ -558,8 +563,11 @@ def test_refresh_checks_reruns_only_failed_pr_runs_for_the_qualified_head(
         for call in calls
         if call[:3] == ["gh", "run", "rerun"]
     }
+    output = capsys.readouterr().out
     if receipt.promotable and head_matches:
-        # Failed jobs only for the timed-out run; the cancelled one in full.
-        assert reruns == {"16": True, "17": False}
+        # Failed jobs only for failed and timed-out runs; the cancelled one in
+        # full; the one at the cap not at all.
+        assert reruns == {"16": True, "17": False, "19": True}
+        assert "::warning::GitHub did not re-run failure run 19" in output
     else:
         assert calls == []
