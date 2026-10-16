@@ -825,6 +825,12 @@ def _run_contract(
 
 def _run_released_contract(report, *, pending_decisions=()):
     """Gate a fixture through the real runner's declarations and route logic."""
+
+    return _released_contract_outcome(report, pending_decisions=pending_decisions)[0]
+
+
+def _released_contract_outcome(report, *, pending_decisions=()):
+    """``(result, evidence)`` of ``_run_released_contract``."""
     import importlib
     import types
 
@@ -853,7 +859,7 @@ def _run_released_contract(report, *, pending_decisions=()):
         max_examples=20,
         dataset_path=Path("enhanced_frs_2024_25.h5"),
         pending_decisions=pending_decisions,
-    )[0]
+    )
 
 
 def test_the_released_models_full_run_passes_the_runners_own_declarations():
@@ -861,13 +867,109 @@ def test_the_released_models_full_run_passes_the_runners_own_declarations():
 
     result = _run_released_contract(_fixture("full_released_uk_2.130.1.json"))
     assert result.status == "pass", result.summary
-    assert result.details["counts"] == {
-        "pass": 792,
-        "fail": 0,
-        "error": 0,
-        "unsupported": 101,
-        "pending": 25,
+    assert result.details["counts"] == RELEASED_COUNTS
+
+
+RELEASED_COUNTS = {
+    "pass": 792,
+    "fail": 0,
+    "error": 0,
+    "unsupported": 101,
+    "pending": 25,
+}
+
+
+def test_the_released_run_without_assertion_ids_resolves_by_oracle_and_order():
+    """Round 10 of #574: every row of the 1.1.0 run has an assertion_id, so
+    the gate's resolution of rows without one (by oracle, then order) no
+    longer ran on real data, and three mutants of it survived."""
+
+    report = _fixture("full_released_uk_2.130.1.json")
+    for row in report["cases"]:
+        row.pop("assertion_id", None)
+    result = _run_released_contract(report)
+    assert result.status == "pass", result.summary
+    assert result.details["counts"] == RELEASED_COUNTS
+
+
+def test_the_ledger_never_publishes_a_small_count_from_the_dataset():
+    """Round 10 of #574: population rows are computed on the survey data, so
+    a count from 1 to 9 in their detail is suppressed in the evidence the
+    ledger publishes, and the published digest is of that evidence, never
+    of the full report (whose digest would give the count back)."""
+
+    from policyengine.provenance.uk_candidate import SUPPRESSED_COUNT
+
+    report = _fixture("full_released_uk_2.130.1.json")
+    for row in report["population"]:
+        if row["check_id"] == "population_uc_standard_allowance_plus_10":
+            row["detail"]["payments_lower"] = 3  # synthetic small count
+    result, evidence = _released_contract_outcome(report)
+    assert result.status == "pass", result.summary
+    published = [
+        row["detail"]
+        for row in evidence["population"]
+        if row["check_id"] == "population_uc_standard_allowance_plus_10"
+    ]
+    assert {detail["payments_lower"] for detail in published} == {SUPPRESSED_COUNT}
+    assert {detail["payments_higher"] for detail in published} == {102}
+    assert {detail["awards_lower"] for detail in published} == {0}
+    assert result.details["report_sha256"] == gates_module.evidence_sha256(evidence)
+    assert result.evidence_sha256 == gates_module.evidence_sha256(evidence)
+    # Everything but the population details is published as reported.
+    assert {k: v for k, v in evidence.items() if k != "population"} == {
+        k: v for k, v in report.items() if k != "population"
     }
+
+
+@settings(max_examples=200, deadline=None)
+@given(
+    detail=st.recursive(
+        st.one_of(
+            st.integers(-20, 2000),
+            st.booleans(),
+            st.floats(allow_nan=False, allow_infinity=False),
+            st.none(),
+            st.text(max_size=5),
+        ),
+        lambda children: (
+            st.lists(children, max_size=3)
+            | st.dictionaries(st.text(max_size=5), children, max_size=3)
+        ),
+        max_leaves=10,
+    )
+)
+def test_no_count_from_one_to_nine_survives_publication(detail):
+    from policyengine.provenance.uk_candidate import (
+        SUPPRESSED_COUNT,
+        publishable_contract_report,
+    )
+
+    report = {"cases": [{"detail": detail}], "population": [{"detail": detail}]}
+    published = publishable_contract_report(report)
+
+    def leaves(value):
+        if isinstance(value, dict):
+            for item in value.values():
+                yield from leaves(item)
+        elif isinstance(value, list):
+            for item in value:
+                yield from leaves(item)
+        else:
+            yield value
+
+    for leaf in leaves(published["population"][0]["detail"]):
+        assert isinstance(leaf, bool) or not (isinstance(leaf, int) and 0 < leaf < 10)
+    # Synthetic case rows and every other value are left alone.
+    assert published["cases"] == report["cases"]
+    before, after = (
+        list(leaves(detail)),
+        list(leaves(published["population"][0]["detail"])),
+    )
+    assert len(before) == len(after)
+    for old, new in zip(before, after):
+        small = not isinstance(old, bool) and isinstance(old, int) and 0 < old < 10
+        assert new == (SUPPRESSED_COUNT if small else old)
 
 
 @pytest.mark.parametrize("section", ["cases", "population"])
@@ -1061,20 +1163,24 @@ def test_the_runners_own_run_level_row_is_recognised():
 
     from policyengine.tax_benefit_models.uk import budget_reform_contract as runner
 
-    def gated(check):
+    def gated(current):
+        # The runner's whole row, so a renamed case or route fails too
+        # (round 10 of #574).
         report = _passing_report()
-        row = next(
-            row
-            for row in report["cases"]
+        index = next(
+            index
+            for index, row in enumerate(report["cases"])
             if row["case_id"] == "module_parameters_unchanged"
         )
-        row["check"] = check
+        report["cases"][index] = current
         return _run_contract(report)
 
     current = runner.module_parameters_unchanged(runner.shared_state())
     assert current["status"] == "pass"
-    assert gated(current["check"]).status == "pass", gated(current["check"]).summary
-    unrelated = gated("every case's reform digest in policyengine-uk")
+    assert gated(current).status == "pass", gated(current).summary
+    unrelated = gated(
+        {**current, "check": "every case's reform digest in policyengine-uk"}
+    )
     assert unrelated.status == "error"
     assert any(
         "does not identify the shared parameter check" in problem
