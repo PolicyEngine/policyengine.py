@@ -1513,7 +1513,7 @@ def _sweep_cli(
             if shared_fails == "history":
                 code = 1
             else:
-                out = graphql_base_changes_output(argv, set(base_changed))
+                out = graphql_base_changes_output(argv, base_changed)
         elif argv[:2] == ["gh", "api"] and argv[4:5] == [f"{_REPO}/pulls"]:
             if shared_fails == "listing":
                 code = 1
@@ -1682,6 +1682,20 @@ SHARED_BRANCH_CASES = {
         None,
     ),
     "the candidate's own, to main after a base change": ([], (1,), True, 1),
+    # Round 8: GitHub retargets a pull request itself when its base branch is
+    # merged and deleted, and records that as a separate event type.
+    "the candidate's own, to main after an automatic base change": (
+        [],
+        {1: "automatic"},
+        True,
+        1,
+    ),
+    "closed at the commit, to main after an automatic base change": (
+        [_other(state="CLOSED", baseRefName="main")],
+        {7: "automatic"},
+        True,
+        7,
+    ),
     # Round 7: forks' pull requests with the branch's name, however many,
     # neither crowd out nor stand in for this repository's.
     "forty forks', to main, with its branch name": (FORKS, (), False, None),

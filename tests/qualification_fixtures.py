@@ -170,18 +170,36 @@ def rest_pulls_output(argv, listing, owner="PolicyEngine") -> str:
     return jq(argv[argv.index("--jq") + 1], page)
 
 
+#: Each kind of base change and the timeline event GitHub records for it.
+BASE_CHANGE_EVENTS = {
+    "manual": ("BASE_REF_CHANGED_EVENT", "BaseRefChangedEvent"),
+    "automatic": (
+        "AUTOMATIC_BASE_CHANGE_SUCCEEDED_EVENT",
+        "AutomaticBaseChangeSucceededEvent",
+    ),
+}
+
+
 def graphql_base_changes_output(argv, changed) -> str:
     """What the base-change GraphQL query prints for the pull request it
-    names, ``changed`` being the numbers whose base was ever changed."""
+    names. ``changed`` maps numbers to the kind of base change they had
+    ("manual" or "automatic"; a set of numbers means manual). As in GitHub,
+    a pull request's event is among the nodes only when the query's
+    itemTypes ask for its type (round 8 of #635: an automatic retarget is a
+    separate event type that a query for BASE_REF_CHANGED_EVENT misses)."""
 
+    query = _field(argv, "query")
+    types = set(query[query.index("itemTypes: [") + 12 :].split("]")[0].split(", "))
+    kinds = changed if isinstance(changed, dict) else dict.fromkeys(changed, "manual")
     number = int(_field(argv, "number"))
+    item_type, typename = BASE_CHANGE_EVENTS.get(kinds.get(number), (None, None))
     page = {
         "data": {
             "repository": {
                 "pullRequest": {
                     "timelineItems": {
-                        "nodes": [{"__typename": "BaseRefChangedEvent"}]
-                        if number in changed
+                        "nodes": [{"__typename": typename}]
+                        if item_type in types
                         else [],
                         "pageInfo": {"hasNextPage": False},
                     }

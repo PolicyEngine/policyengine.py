@@ -599,14 +599,16 @@ def _candidate_pull_requests() -> list[dict[str, Any]]:
     ]
 
 
-#: Whether a pull request's base was ever changed: GraphQL records each change
-#: as a BaseRefChangedEvent (its timeline's totalCount ignores the type
-#: filter, so the nodes are read).
+#: Whether a pull request's base was ever changed: GraphQL records a change
+#: a person makes as a BaseRefChangedEvent and one GitHub makes when the base
+#: branch is merged and deleted as an AutomaticBaseChangeSucceededEvent
+#: (round 8 of #635). Its timeline's totalCount ignores the type filter, so
+#: the nodes are read.
 BASE_CHANGES_QUERY = (
     "query($owner: String!, $name: String!, $number: Int!) { repository(owner:"
     " $owner, name: $name) { pullRequest(number: $number) { timelineItems("
-    "itemTypes: [BASE_REF_CHANGED_EVENT], first: 1) { nodes { __typename }"
-    " pageInfo { hasNextPage } } } } }"
+    "itemTypes: [BASE_REF_CHANGED_EVENT, AUTOMATIC_BASE_CHANGE_SUCCEEDED_EVENT],"
+    " first: 1) { nodes { __typename } pageInfo { hasNextPage } } } } }"
 )
 
 
