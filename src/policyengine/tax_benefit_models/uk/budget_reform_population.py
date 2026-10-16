@@ -65,7 +65,9 @@ covers counts and totals only, not an error's message or the difference
 between two rows' figures (two routes' rows share a subsample), so the raw
 report is not for publication. The qualification ledger publishes from it
 only the fixed row fields and the top-level findings; the rule here keeps
-what raw copies (test fixtures, local runs) carry to the same standard.
+raw copies (test fixtures, local runs) free of small counts too. A detail
+that cannot be checked turns its row into an error, so the report does not
+hold.
 """
 
 from __future__ import annotations
@@ -118,7 +120,9 @@ def publishable_detail(detail: Any) -> Any:
         return bool(detail)
     if isinstance(detail, numbers.Integral):
         return FEWER_THAN_10 if is_small_cell(int(detail)) else int(detail)
-    if detail is None or isinstance(detail, (float, np.floating, str)):
+    if isinstance(detail, np.floating):
+        return float(detail)
+    if detail is None or isinstance(detail, (float, str)):
         return detail
     if isinstance(detail, dict) and all(isinstance(key, str) for key in detail):
         return {key: publishable_detail(value) for key, value in detail.items()}
@@ -127,9 +131,16 @@ def publishable_detail(detail: Any) -> Any:
     raise TypeError(f"A population detail cannot hold {type(detail).__name__}.")
 
 
-def total_over_records(total: float, records: int) -> float | str:
-    """A total, withheld when fewer than 10 records moved it at all."""
-    return WITHHELD_FEWER_THAN_10 if is_small_cell(records) else total
+def total_over_records(total: float, *records: int) -> float | str:
+    """A total, withheld when any count of the records behind it is 1 to 9.
+
+    Pass each count that bounds how few records the total reflects: those
+    that moved at all, and those that moved by more than a negligible amount
+    (a few large changes among negligible ones are still a few records).
+    """
+    if any(is_small_cell(count) for count in records):
+        return WITHHELD_FEWER_THAN_10
+    return total
 
 
 def matches(names: Sequence[str], different: Sequence[str]) -> dict[str, bool]:
@@ -511,10 +522,11 @@ def run_population_checks(
                         "2026_unchanged": unchanged_2026,
                         "2027_total_rises": total_rises,
                         # Withheld by the records that moved at all, which
-                        # the total sums, not just those past the threshold.
+                        # the total sums, and by those past the threshold.
                         "2027_total_change": total_over_records(
                             float(np.sum(change_2027)),
                             int(np.count_nonzero(change_2027)),
+                            lower + higher,
                         ),
                         "2027_people_with_lower_tax": lower,
                         "2027_people_with_higher_tax": higher,
@@ -606,7 +618,11 @@ def run_population_checks(
         )
     for row in rows:
         if isinstance(row.get("detail"), dict):
-            row["detail"] = publishable_detail(row["detail"])
+            try:
+                row["detail"] = publishable_detail(row["detail"])
+            except TypeError as error:
+                # Fail closed: drop what cannot be checked, and the row errs.
+                row.update(status="error", reason=type(error).__name__, detail=None)
         row.setdefault("subsample_households", SUBSAMPLE_HOUSEHOLDS)
         row.setdefault("seed", seed)
     return rows

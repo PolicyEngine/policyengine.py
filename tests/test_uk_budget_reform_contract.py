@@ -1533,6 +1533,9 @@ def test_a_total_over_fewer_than_10_changed_records_is_withheld():
     assert total_over_records(12.5, 1) == WITHHELD_FEWER_THAN_10
     assert total_over_records(12.5, 9) == WITHHELD_FEWER_THAN_10
     assert total_over_records(12.5, 10) == 12.5
+    # Any small count of the records behind it withholds it.
+    assert total_over_records(300.0, 10, 3) == WITHHELD_FEWER_THAN_10
+    assert total_over_records(300.0, 10, 0) == 300.0
 
 
 def test_uc_findings_agree_with_their_counts_and_the_verdict():
@@ -1650,16 +1653,17 @@ def test_a_detail_of_another_type_is_an_error_not_passed_through():
             publishable_detail({"value": unchecked})
 
 
-def test_every_population_row_publishes_the_findings_that_decide_it(monkeypatch):
-    """On random arrays: no small count, and each row passes when its findings do."""
-    pytest.importorskip("hypothesis")
-    pytest.importorskip("policyengine_uk.utils.scenario")
+def _run_population_with(monkeypatch, array, routes=None):
+    """Run the population checks on arrays from ``array(tag, variable, year)``.
+
+    ``tag`` is None for an unreformed simulation, and otherwise names the
+    route and reform: the reform dict's repr, or a repr containing
+    "scenario" or "from_dict", or one starting "('baseline'" for a reformed
+    simulation's baseline.
+    """
     from types import SimpleNamespace
 
-    import numpy as np
     import policyengine_uk
-    from hypothesis import HealthCheck, given, settings
-    from hypothesis import strategies as st
     from policyengine_core.reforms import Reform
     from policyengine_uk.utils import scenario
 
@@ -1667,7 +1671,55 @@ def test_every_population_row_publishes_the_findings_that_decide_it(monkeypatch)
         budget_reform_population as population,
     )
 
-    routes = list(contract.COUNTRY_ROUTES)
+    class Simulation:
+        def __init__(self, dataset, reform=None, scenario=None):
+            self.tag = (
+                None
+                if reform is None and scenario is None
+                else repr(reform if scenario is None else ("scenario", scenario))
+            )
+
+        @property
+        def baseline(self):
+            baseline = Simulation(dataset=None)
+            if self.tag is not None:
+                baseline.tag = repr(("baseline", self.tag))
+            return baseline
+
+        def calculate(self, variable, year):
+            return array(self.tag, variable, year)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(policyengine_uk, "Microsimulation", Simulation)
+        patch.setattr(
+            scenario, "Scenario", lambda **kwargs: repr(sorted(kwargs.items()))
+        )
+        patch.setattr(
+            Reform,
+            "from_dict",
+            staticmethod(lambda reform, **kwargs: ("from_dict", repr(reform))),
+        )
+        patch.setattr(
+            population, "subsample", lambda *args: SimpleNamespace(copy=lambda: None)
+        )
+        patch.setattr(population, "plus_ten_percent", lambda paths: {"response": paths})
+        return population.run_population_checks(
+            "unused.h5", routes or list(contract.COUNTRY_ROUTES)
+        )
+
+
+def test_every_population_row_publishes_the_findings_that_decide_it(monkeypatch):
+    """On random arrays: no small count, and each row passes when its findings do."""
+    pytest.importorskip("hypothesis")
+    pytest.importorskip("policyengine_uk.utils.scenario")
+    import numpy as np
+    from hypothesis import HealthCheck, given, settings
+    from hypothesis import strategies as st
+
+    from policyengine.tax_benefit_models.uk import (
+        budget_reform_population as population,
+    )
+
     passes = set()
 
     @settings(
@@ -1730,51 +1782,138 @@ def test_every_population_row_publishes_the_findings_that_decide_it(monkeypatch)
             arrays[key] = value
             return value
 
-        class Simulation:
-            def __init__(self, dataset, reform=None, scenario=None):
-                self.tag = (
-                    None
-                    if reform is None and scenario is None
-                    else repr(reform if scenario is None else ("scenario", scenario))
-                )
-
-            @property
-            def baseline(self):
-                # A reformed simulation's baseline, often the unreformed one.
-                baseline = Simulation(dataset=None)
-                if self.tag is not None:
-                    baseline.tag = repr(("baseline", self.tag))
-                return baseline
-
-            def calculate(self, variable, year):
-                return array(self.tag, variable, year)
-
-        with monkeypatch.context() as patch:
-            patch.setattr(policyengine_uk, "Microsimulation", Simulation)
-            patch.setattr(
-                scenario, "Scenario", lambda **kwargs: repr(sorted(kwargs.items()))
-            )
-            patch.setattr(
-                Reform,
-                "from_dict",
-                staticmethod(lambda reform, **kwargs: ("from_dict", repr(reform))),
-            )
-            patch.setattr(
-                population,
-                "subsample",
-                lambda *args: SimpleNamespace(copy=lambda: None),
-            )
-            patch.setattr(
-                population, "plus_ten_percent", lambda paths: {"response": paths}
-            )
-            rows = population.run_population_checks("unused.h5", routes)
+        rows = _run_population_with(monkeypatch, array)
         _assert_publishable_findings(rows)
         passes.update((row["check_id"], row["status"]) for row in rows)
 
     check()
-    # Every check both passed and failed somewhere in the run.
+    # Every country check both passed and failed somewhere in the run.
     for check_id in population.COUNTRY_POPULATION_CHECKS:
         assert {(check_id, "pass"), (check_id, "fail")} <= passes, check_id
+
+
+def _steady(tag, variable, year):
+    """Arrays where every reform moves nothing: one unit at 1."""
+    import numpy as np
+
+    return np.ones(1)
+
+
+def test_routes_that_differ_only_in_2026_disagree(monkeypatch):
+    pytest.importorskip("policyengine_uk.utils.scenario")
+    import numpy as np
+
+    from policyengine.tax_benefit_models.uk import (
+        budget_reform_population as population,
+    )
+
+    def array(tag, variable, year):
+        if variable == "income_tax" and tag is not None and "baseline" not in tag:
+            if year == 2026 and "scenario" in tag:
+                return np.array([5.0])
+            if year == 2027:
+                return np.array([2.0])
+        return _steady(tag, variable, year)
+
+    rows = _run_population_with(monkeypatch, array)
+    _assert_publishable_findings(rows)
+    agree = {
+        row["route"]: row
+        for row in rows
+        if row["check_id"] == population.POPULATION_ROUTES_AGREE
+    }
+    scenario_row = agree["country.reform_dict = country.scenario_parameter_changes"]
+    assert scenario_row["status"] == "fail"
+    assert scenario_row["detail"] == {
+        "income_tax:2026_matches": False,
+        "income_tax:2027_matches": True,
+    }
+    assert agree["country.reform_dict = country.reform_from_dict"]["status"] == "pass"
+
+
+def test_a_state_pension_that_falls_fails_the_pension_check(monkeypatch):
+    pytest.importorskip("policyengine_uk.utils.scenario")
+    import numpy as np
+
+    from policyengine.tax_benefit_models.uk import (
+        budget_reform_population as population,
+    )
+
+    def array(tag, variable, year):
+        if tag is not None and "state_pension" in tag:
+            if variable in ("basic_state_pension", "new_state_pension"):
+                return np.array([1.1, 1.1])
+            if variable == "state_pension":
+                # One higher, one lower: the rates scaled, yet a pension fell.
+                return np.array([1.1, 0.9])
+        return np.ones(2)
+
+    rows = _run_population_with(monkeypatch, array, ["country.reform_dict"])
+    _assert_publishable_findings(rows)
+    pension = next(
+        row
+        for row in rows
+        if row["check_id"] == population.POPULATION_STATE_PENSION_PLUS_10
+    )
+    assert pension["status"] == "fail"
+    assert pension["detail"]["basic_and_new_scaled_10_percent"] is True
+    assert pension["detail"]["some_pension_higher"] is True
+    assert pension["detail"]["no_pension_lower"] is False
+
+
+def test_a_few_large_changes_among_tiny_ones_withhold_the_total(monkeypatch):
+    """Three people's £100 rises with seven negligible changes: three records."""
+    pytest.importorskip("policyengine_uk.utils.scenario")
+    import numpy as np
+
+    from policyengine.tax_benefit_models.uk import (
+        budget_reform_population as population,
+    )
+
+    def array(tag, variable, year):
+        tax = np.ones(10)
+        if (
+            variable == "income_tax"
+            and year == 2027
+            and tag is not None
+            and "baseline" not in tag
+        ):
+            return tax + np.array([100.0] * 3 + [4.77e-7] * 7)
+        return tax
+
+    rows = _run_population_with(monkeypatch, array, ["country.reform_dict"])
+    april = next(
+        row
+        for row in rows
+        if row["check_id"] == population.POPULATION_APRIL_RATE_CHANGE
+    )
+    assert april["detail"]["2027_people_with_higher_tax"] == population.FEWER_THAN_10
+    assert april["detail"]["2027_total_change"] == population.WITHHELD_FEWER_THAN_10
+
+
+def test_a_detail_that_cannot_be_checked_turns_its_row_into_an_error(monkeypatch):
+    pytest.importorskip("policyengine_uk.utils.scenario")
+    import numpy as np
+
+    from policyengine.tax_benefit_models.uk import (
+        budget_reform_population as population,
+    )
+
+    monkeypatch.setattr(
+        population,
+        "uc_allowance_verdict",
+        lambda base, reformed: (True, {"counts": np.array([3, 12])}),
+    )
+    rows = _run_population_with(monkeypatch, _steady, ["country.reform_dict"])
+    uc = next(
+        row
+        for row in rows
+        if row["check_id"] == population.POPULATION_UC_STANDARD_ALLOWANCE_PLUS_10
+    )
+    assert uc["status"] == "error"
+    assert uc["reason"] == "TypeError"
+    assert uc["detail"] is None
+    assert all(row["status"] != "error" for row in rows if row is not uc)
 
 
 def test_a_total_moved_only_by_tiny_changes_in_few_records_is_withheld(
