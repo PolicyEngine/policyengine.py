@@ -1162,12 +1162,17 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
             regional_manifest, _, regional_uri_parts = fetch_release_manifest(
                 regional_manifest_uri, token=token
             )
-            # The regional release serves the same model, so it must make its
-            # own compatibility claim for the pinned version.
+            # The regional release runs on the same model and core, so it must
+            # cover the pinned versions by its own build or claims. A qualified
+            # pair names the primary release only, so it does not extend here.
             try:
                 _, regional_warnings = model_compatibility_basis(
                     regional_manifest, model_package, model_version
                 )
+                if core_version is not None:
+                    _check_core_compatibility(
+                        regional_manifest, core_version, None, regional_warnings
+                    )
             except CertificationError as exc:
                 raise CertificationError(
                     f"Regional release {regional_manifest_uri}: {exc}"
@@ -1309,6 +1314,13 @@ def certify_data_release(
     core and data release when neither the build-time model nor a publisher
     claim covers them; the certificate then names the pair, whose promotable
     qualification receipt must be in the ledger.
+
+    ``regional_manifest_uri`` routes the country's local region types to a
+    regional release, read as ``regional_release_kind``. That release must
+    serve the pinned model, and the pinned core when ``core_version`` is
+    given, by its own build or claims: a qualified pair names the primary
+    release only. While the bundle routes regions, a run without
+    ``regional_manifest_uri`` is refused unless ``drop_regional_release``.
     """
     if country not in COUNTRY_MODEL_PACKAGES:
         raise CertificationError(f"Unknown country {country!r}.")

@@ -1374,6 +1374,43 @@ class TestUKRegionalCertification:
                 regional_release_kind="area_coded_national",
             )
 
+    def test__given_pinned_core__then_the_regional_release_must_cover_it(
+        self, tmp_path
+    ):
+        # A qualified pair names the primary release only, so the regional
+        # release covers the pinned core by its own build or claims.
+        national = _microcosm_uk_national_payload()
+        national["compatible_core_packages"] = [
+            {"name": "policyengine-core", "specifier": "==3.33.0"}
+        ]
+
+        with pytest.raises(
+            CertificationError, match="Regional release .*policyengine-core 3.33.0"
+        ):
+            _certify_uk(
+                _tmp_bundle(tmp_path),
+                [_response(national), _response(_efrs_release_payload())],
+                regional_manifest_uri=EFRS_URI,
+                regional_release_kind="area_coded_national",
+                core_version="3.33.0",
+            )
+
+        efrs = _efrs_release_payload()
+        efrs["compatible_core_packages"] = [
+            {"name": "policyengine-core", "specifier": "==3.33.0"}
+        ]
+        bundle_path = _tmp_bundle(tmp_path)
+        _certify_uk(
+            bundle_path,
+            [_response(national), _response(efrs)],
+            regional_manifest_uri=EFRS_URI,
+            regional_release_kind="area_coded_national",
+            core_version="3.33.0",
+        )
+        release = json.loads(bundle_path.read_text())["data_releases"]["uk"]
+        assert release["certification"]["certified_for_core_version"] == "3.33.0"
+        assert release["regional_release_kind"] == "area_coded_national"
+
     def test__given_unreachable_regional_artifact__then_refuses(self, tmp_path):
         with (
             patch(

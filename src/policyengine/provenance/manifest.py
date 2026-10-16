@@ -493,11 +493,8 @@ def certify_data_release_compatibility(
     # exact-pair certificate beyond the model, core and recorded data build
     # that qualification tested. Check them before any acceptance path returns.
     bundled_certification = country_manifest.certification
-    remote_build_id = (
-        data_release_manifest.build.build_id
-        if data_release_manifest.build is not None
-        else None
-    )
+    # Named as certification names it: the cut tag when the release has one.
+    remote_build_id = release_build_id(data_release_manifest.build)
     if (
         bundled_certification is not None
         and bundled_certification.compatibility_basis == "qualified_exact_pair"
