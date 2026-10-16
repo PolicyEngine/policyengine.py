@@ -9,6 +9,10 @@ from policyengine.provenance.uk_candidate import compare_metric_reports, metrics
 BOUNDS = {"default": {"relative": 0.02, "absolute": 5e8}}
 
 
+#: The small-cell fields every row of the pinned tool's report carries.
+PUBLISHED = {"suppressed": False, "excludes": [], "exclude_signs": {}}
+
+
 def _report():
     return {
         "status": "ok",
@@ -20,12 +24,14 @@ def _report():
                 "year": 2027,
                 "kind": "receipt",
                 "value": 3e11,
+                **PUBLISHED,
             },
             {
                 "metric_id": "relative_poverty",
                 "year": 2027,
                 "kind": "poverty",
                 "value": 0.17,
+                **PUBLISHED,
             },
         ],
         "identities": [{"identity_id": "weights:household", "status": "pass"}],
@@ -554,10 +560,10 @@ def test_unpinned_previous_baselines_are_incomplete(tmp_path, missing):
     assert result.status == "unavailable"
 
 
-@pytest.mark.parametrize("identity_mismatch", [False, True])
-def test_metric_orchestration_uses_the_verified_previous_dataset_before_computing(
-    tmp_path, monkeypatch, identity_mismatch
-):
+def _orchestrate_metrics(tmp_path, monkeypatch, metrics, identity_mismatch=False):
+    """Run ``run_candidate_gates`` with only the metrics gate and ``metrics``
+    standing in for ``run_metrics_report``; ``(results, evidence)``."""
+
     import json
     from pathlib import Path
     from types import SimpleNamespace
@@ -573,7 +579,6 @@ def test_metric_orchestration_uses_the_verified_previous_dataset_before_computin
             Path(__file__).parents[1] / "src/policyengine/data/qualification/uk.json"
         ).read_text()
     )
-    calls = []
     monkeypatch.setattr(uk_candidate, "_previous_pair_pins", lambda *args: previous)
     monkeypatch.setattr(
         uk_candidate, "previous_pair_python", lambda *args: "certified-previous-python"
@@ -600,6 +605,48 @@ def test_metric_orchestration_uses_the_verified_previous_dataset_before_computin
         return [result], {"metrics_review": evidence}
 
     monkeypatch.setattr(uk_candidate, "run_gates", only_metrics)
+    monkeypatch.setattr(uk_candidate, "run_metrics_report", metrics)
+    return uk_candidate.run_candidate_gates(
+        SimpleNamespace(pair=make_pair()),
+        HARNESS,
+        config=config,
+        work_dir=tmp_path,
+        previous_certificate=previous,
+        ledger_root=None,
+    )
+
+
+def test_a_malformed_metrics_report_is_not_written_to_the_ledger(tmp_path, monkeypatch):
+    """The attempt's evidence goes to a public ledger branch: a report that
+    breaks the small-cell format is kept only as its digest and problems."""
+
+    import json
+
+    marker = 987654321.5  # synthetic
+
+    def metrics(python, vendor, **settings):
+        report = _report()
+        report["dataset_path"] = str(settings["dataset_path"])
+        if settings["label"] == "candidate":
+            report["metrics"][0].update(value=marker, suppressed=True)
+        return report
+
+    results, evidence = _orchestrate_metrics(tmp_path, monkeypatch, metrics)
+    assert results[0].status == "fail"
+    assert set(evidence["metrics_report_candidate"]) == {
+        "withheld",
+        "report_sha256",
+        "problems",
+    }
+    assert str(marker) not in json.dumps(evidence["metrics_report_candidate"])
+    assert evidence["metrics_report_previous"]["metrics"] == _report()["metrics"]
+
+
+@pytest.mark.parametrize("identity_mismatch", [False, True])
+def test_metric_orchestration_uses_the_verified_previous_dataset_before_computing(
+    tmp_path, monkeypatch, identity_mismatch
+):
+    calls = []
 
     def metrics(python, vendor, **settings):
         calls.append((python, settings))
@@ -609,15 +656,8 @@ def test_metric_orchestration_uses_the_verified_previous_dataset_before_computin
             report["metrics"][0]["value"] = 1e12
         return report
 
-    monkeypatch.setattr(uk_candidate, "run_metrics_report", metrics)
-    results, _ = uk_candidate.run_candidate_gates(
-        SimpleNamespace(pair=make_pair()),
-        HARNESS,
-        config=config,
-        work_dir=tmp_path,
-        previous_certificate=previous,
-        ledger_root=None,
-    )
+    results, _ = _orchestrate_metrics(tmp_path, monkeypatch, metrics, identity_mismatch)
+    previous_path = tmp_path / "certified-previous.h5"
     if identity_mismatch:
         assert results[0].status == "unavailable"
         assert calls == [], (
