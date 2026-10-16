@@ -1028,7 +1028,9 @@ def test_only_true_false_findings_survive_publication(detail):
 def test_population_rows_publish_only_the_runners_fixed_fields():
     """supp-r5 C04 and C07: the runner's fixed fields, an error row's status
     among them, are published as reported; any other field is withheld,
-    and an error row's text in its detail too. Values synthetic."""
+    true/false ones included (the confirmation review: an unknown field's
+    name is not the runner's, so its finding is not published), and an
+    error row's text in its detail too. Values synthetic."""
 
     from policyengine.provenance.uk_candidate import (
         WITHHELD_VALUE,
@@ -1058,7 +1060,7 @@ def test_population_rows_publish_only_the_runners_fixed_fields():
         "detail": WITHHELD_VALUE,
         "total_change": WITHHELD_VALUE,
         "households": WITHHELD_VALUE,
-        "flag": True,
+        "flag": WITHHELD_VALUE,
     }
 
 

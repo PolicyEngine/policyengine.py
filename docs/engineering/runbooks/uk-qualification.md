@@ -27,12 +27,20 @@ To see them, rerun the contract on a machine with access to the private UK
 dataset, and keep the output local: it holds figures from the survey data,
 some from fewer than 10 records, so never commit, paste or publish it.
 
-1. Install the candidate pair (the attempt's `candidate.json` names the
+1. Check out the candidate commit the attempt ran on (`git_commit` in the
+   attempt's `harness.json` in the ledger): its bundle manifest names the
+   dataset `materialize_dataset` fetches, so an older checkout would fetch
+   older data even with the candidate's wheels installed.
+2. Install the candidate pair (the attempt's `candidate.json` names the
    wheels) and export `HUGGING_FACE_TOKEN` for the private dataset.
-2. Materialize the certified dataset and run the contract with the seed and
-   sample size in `src/policyengine/data/qualification/uk.json`:
+3. Materialize the certified dataset, check its SHA-256 against
+   `data.dataset_sha256` in the pair's `pair.json`, and run the contract
+   with the seed and sample size in
+   `src/policyengine/data/qualification/uk.json`:
 
    ```python
+   import hashlib
+   import json
    from pathlib import Path
 
    from policyengine.provenance.dataset_materialization import materialize_dataset
@@ -41,13 +49,16 @@ some from fewer than 10 records, so never commit, paste or publish it.
    )
 
    dataset = materialize_dataset("uk", data_dir=Path("data")).path
+   pair = json.loads(Path("path/to/ledger/uk/<pair_id>/pair.json").read_text())
+   digest = hashlib.sha256(Path(dataset).read_bytes()).hexdigest()
+   assert digest == pair["data"]["dataset_sha256"], "not the certified dataset"
    report = run_budget_reform_contract(
        routes=None, dataset_path=str(dataset), seed=0, max_examples=20
    )
    failing = [row for row in report["population"] if row["status"] != "pass"]
    ```
 
-3. Read `failing[...]["detail"]` locally. Report only the finding (which
+4. Read `failing[...]["detail"]` locally. Report only the finding (which
    condition failed, on which route), never the figures.
 
 ## A candidate stranded before automatic promotion

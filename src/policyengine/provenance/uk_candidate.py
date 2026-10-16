@@ -1360,9 +1360,7 @@ def publishable_contract_report(report: Mapping[str, Any]) -> dict[str, Any]:
             {
                 key: value
                 if key in POPULATION_ROW_FIELDS
-                else (
-                    _publishable_detail(value) if key == "detail" else _finding(value)
-                )
+                else (_publishable_detail(value) if key == "detail" else WITHHELD_VALUE)
                 for key, value in row.items()
             }
             if isinstance(row, Mapping)
