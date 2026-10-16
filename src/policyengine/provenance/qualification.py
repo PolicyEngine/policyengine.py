@@ -28,7 +28,9 @@ the scorecard computes. W4's own receipts use the receipt-v1 rule of
 
 from __future__ import annotations
 
+import functools
 import hashlib
+import json
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, ClassVar, Literal, Optional
 
@@ -118,6 +120,41 @@ REVIEW_REPLAY_FLAGS: frozenset[str] = frozenset(
 #: base's absolute value) to be flagged.
 REPLAY_ABSOLUTE_BOUND_GBP = 1_000_000.0
 REPLAY_RELATIVE_BOUND = 0.01
+
+
+@functools.cache
+def _vendored_validator(name: str) -> Any:
+    """A validator for one vendored policyengine-scorecard schema."""
+
+    from importlib.resources import files
+
+    import jsonschema
+
+    schema = json.loads(
+        (
+            files("policyengine")
+            / "data"
+            / "schemas"
+            / "vendor"
+            / "policyengine-scorecard"
+            / name
+        ).read_text(encoding="utf-8")
+    )
+    validator = jsonschema.validators.validator_for(schema)
+    validator.check_schema(schema)
+    return validator(schema)
+
+
+def conform_to_vendored_schema(document: Mapping[str, Any], name: str) -> None:
+    """Raise ``ValueError`` unless ``document`` is valid against the vendored
+    scorecard schema ``name``. The mirrors are a typed view; the schema decides
+    what a received document may contain (no nulls where it allows none, no
+    strings where it requires integers)."""
+
+    error = next(iter(_vendored_validator(name).iter_errors(dict(document))), None)
+    if error is not None:
+        where = "/".join(str(part) for part in error.absolute_path) or "the document"
+        raise ValueError(f"{name}: {error.message} (at {where})")
 
 
 def replay_policy_sha256() -> str:
@@ -752,9 +789,13 @@ class ReplayReceipt(_Mirror):
 
     @classmethod
     def from_document(cls, document: Mapping[str, Any]) -> ReplayReceipt:
-        """Parse a received receipt, keeping its bytes for digest checks."""
+        """Parse a received receipt, keeping its bytes for digest checks.
+
+        It must satisfy both the mirror and the vendored schema.
+        """
 
         receipt = cls.model_validate(dict(document))
+        conform_to_vendored_schema(document, "replay_receipt.v1.json")
         receipt._received = dict(document)
         return receipt
 

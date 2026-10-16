@@ -434,6 +434,46 @@ RECEIPT_MUTATIONS = [
             base_events={"spring_budget_2023": {**_base_event(), "extra": 1}}
         ),
     ),
+    # Round-1 review of #637: the schema allows these keys to be absent,
+    # never null, and never coerces a string to an integer.
+    (
+        "null missing list",
+        "complete",
+        lambda r: r["corpus"]["events"]["spring_budget_2023"].update(
+            missing_measure_years=None
+        ),
+    ),
+    (
+        "null unsupported list",
+        "complete",
+        lambda r: r["corpus"]["events"]["spring_budget_2023"].update(
+            unsupported_measure_years=None
+        ),
+    ),
+    (
+        "null base events",
+        "complete",
+        lambda r: r["diff"].update(base_events=None),
+    ),
+    (
+        "base measure-year as a string",
+        "complete",
+        lambda r: r["diff"].update(
+            base_events={
+                "spring_budget_2023": {
+                    **_base_event(),
+                    "inert_measure_years": [{"measure_key": "m", "year": "2026"}],
+                }
+            }
+        ),
+    ),
+    (
+        "supported year as a string",
+        "complete",
+        lambda r: r["corpus"]["events"]["spring_budget_2023"].update(
+            supported_years=["2024", 2025]
+        ),
+    ),
 ]
 
 
@@ -492,7 +532,8 @@ def test_receipt_mirror_and_schema_reject_the_same_receipts(label, base, mutate)
     mutate(raw)
     raw = _sealed(raw)
     assert not _validator("replay_receipt.v1.json").is_valid(raw), label
-    with pytest.raises(ValidationError):
+    # A pydantic ValidationError is a ValueError, as is a schema refusal.
+    with pytest.raises(ValueError):
         ReplayReceipt.from_document(raw)
 
 
@@ -1069,6 +1110,93 @@ def test_a_gap_is_known_only_on_the_bases_own_record(name):
             "incomplete",
             "lost_response",
         }
+
+
+OTHER = "spring_budget_2023__other_measure"
+
+# Round-1 review of #637: eight probes that killed mutants the table missed.
+# Each: receipt arguments, the expected status and number of known gaps.
+GAP_PROBES = {
+    "complete, missing only in unsupported years": (
+        dict(
+            complete=True,
+            integrity="complete",
+            missing=[UNSUPPORTED],
+            unsupported=[UNSUPPORTED],
+            base_events={EVENT: _base_event()},
+        ),
+        "pass",
+        0,
+    ),
+    "missing here, inert in the base": (
+        dict(missing=[GAP], base_events={EVENT: _base_event(inert=[GAP])}),
+        "pass",
+        1,
+    ),
+    "another measure inert in the base, same year": (
+        dict(
+            inert=[GAP],
+            missing=[],
+            base_events={EVENT: _base_event(inert=[(OTHER, 2026)])},
+        ),
+        "fail",
+        0,
+    ),
+    "a known inert gap beside a new missing one": (
+        dict(
+            inert=[GAP],
+            missing=[(MEASURE, 2027)],
+            base_events={EVENT: _base_event(inert=[GAP])},
+        ),
+        "fail",
+        1,
+    ),
+    "a known gap against a negative material base": (
+        dict(
+            rows=[{"flags": ["structural"], "base_gbp": -2.5e8, "head_gbp": 0.0}],
+            inert=[GAP],
+            missing=[],
+            base_events={EVENT: _base_event(inert=[GAP])},
+        ),
+        "fail",
+        1,
+    ),
+    "a known gap against exactly the bound": (
+        dict(
+            rows=[{"flags": ["structural"], "base_gbp": 1e6, "head_gbp": 0.0}],
+            inert=[GAP],
+            missing=[],
+            base_events={EVENT: _base_event(inert=[GAP])},
+        ),
+        "fail",
+        1,
+    ),
+    "unsupported-only missing here, missing in the base": (
+        dict(
+            missing=[UNSUPPORTED],
+            unsupported=[UNSUPPORTED],
+            base_events={EVENT: _base_event(missing=[UNSUPPORTED])},
+        ),
+        "fail",
+        0,
+    ),
+    "another measure missing in the base, same year": (
+        dict(missing=[GAP], base_events={EVENT: _base_event(missing=[(OTHER, 2026)])}),
+        "fail",
+        0,
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(GAP_PROBES))
+def test_the_known_gap_rule_on_the_review_probes(name):
+    arguments, status, known = GAP_PROBES[name]
+    arguments = {"complete": False, "integrity": "incomplete", **arguments}
+    receipt = _receipt_with(**arguments)
+    _validator("replay_receipt.v1.json").validate(receipt)
+    gate = _gate(receipt)
+    assert gate.status == status, (name, gate.summary)
+    assert len(gate.details["known_gaps"]) == known, name
 
 
 def test_an_incomplete_event_without_its_missing_list_fails_even_with_base_evidence():

@@ -27,8 +27,8 @@ comparison base. It sends every other flagged move to a named reviewer.
     hold a material value for it.
 - An event whose supported grid is incomplete, unless every inert or
   missing and supported measure-year in it is a known gap. An incomplete
-  event whose receipt does not list its missing measure-years fails, as
-  does one that lists none. A receipt whose integrity is `incomplete` with
+  event whose receipt does not list its missing measure-years fails, and so
+  does one with no inert and no missing and supported measure-year at all. A receipt whose integrity is `incomplete` with
   no incomplete event also fails.
 - A receipt that contradicts itself, including a complete event that lists
   an inert, or missing and supported, measure-year.

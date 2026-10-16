@@ -64,6 +64,7 @@ from policyengine.provenance.qualification import (
     ReplayReference,
     ReplayStatus,
     ReviewAcceptance,
+    conform_to_vendored_schema,
     dominates,
     evaluate_replay_receipt,
     qualification_verdict,
@@ -830,7 +831,9 @@ def read_replay(
     raw_status = fetch(state_ref, status_path)
     if raw_status is None:
         return replay_gate_while_pending(None), None, None
-    status = ReplayStatus.model_validate_json(raw_status)
+    status_document = json.loads(raw_status)
+    status = ReplayStatus.model_validate(status_document)
+    conform_to_vendored_schema(status_document, "replay_status.v1.json")
     if not status.terminal:
         return replay_gate_while_pending(status), status, None
     assert status.receipt_commit is not None
