@@ -308,7 +308,11 @@ def test_a_promotable_pair_on_a_superseded_baseline_requalifies_once_per_commit(
     assert accepted.promotable
     publish(accepted)
     assert action("c") == "qualify"
-    # Against main's own certificate, or not promotable: nothing to do.
+    # Against main's own certificate, on main's own commit, or not
+    # promotable: nothing to do.
+    write_json(
+        pair_dir / "latest_attempt.json", {"attempt_key": "c" * 12, "sequence": 3}
+    )
     publish(qualified, current)
     assert action("c") == "duplicate"
     for results in (gates(metrics_review="needs_review"), gates(wheel_hashes="fail")):
@@ -389,6 +393,61 @@ def test_a_target_built_on_an_earlier_main_requalifies_one_attempt_at_a_time(
     assert requalification_target([requalified], BUNDLE, tmp_path, "c" * 40) is None
 
 
+def test_a_pair_without_an_attempt_pointer_takes_its_base_from_its_attempt(tmp_path):
+    """Round 2 of #635: a pair published before latest_attempt.json existed
+    must not be stranded. Its base is the attempt whose own receipt is the
+    published one; with no such attempt the base is unknown and stale."""
+
+    from policyengine.provenance.uk_qualification import (
+        qualified_base,
+        requalification_target,
+        stale_qualification,
+    )
+
+    pair = _promotable_pair_and_branch()
+    pair_dir = tmp_path / "uk" / pair.pair_id
+    qualified = _promotion_receipt(pair=pair)
+    write_json(pair_dir / "qualification_receipt.json", qualified.canonical_payload())
+    assert qualified_base(pair_dir) is None
+    assert "unrecorded" in stale_qualification(qualified, BUNDLE, pair_dir, "a" * 40)
+    assert requalification_target([qualified], BUNDLE, tmp_path, "a" * 40) == pair
+    _publish_as_attempt(tmp_path, pair, qualified, "a" * 12 + "-2")
+    assert qualified_base(pair_dir) == "a" * 12
+    assert requalification_target([qualified], BUNDLE, tmp_path, "a" * 40) is None
+    assert requalification_target([qualified], BUNDLE, tmp_path, "b" * 40) == pair
+
+
+def test_runs_resolved_on_different_main_commits_never_both_stage(tmp_path):
+    """Round 2 of #635: one attempt per pair at a time, whatever its base."""
+
+    from policyengine.provenance.qualification_ledger import attempt_directory
+    from policyengine.provenance.uk_qualification import stage_attempt
+
+    pair = make_pair(model="2.200.0")
+    now = "2026-10-16T10:00:00Z"
+    assert (
+        candidate_action(pair, BUNDLE, tmp_path, base_commit="a" * 40, now=now)[0]
+        == "qualify"
+    )
+    stage_attempt(
+        attempt_directory(tmp_path, "uk", pair.pair_id, "a" * 12),
+        {"pair": pair.canonical_payload(), "pair_id": pair.pair_id},
+        HARNESS,
+        owner_run_id="7",
+        staged_at="2026-10-16T09:30:00Z",
+    )
+    verdict, reason = candidate_action(
+        pair, BUNDLE, tmp_path, base_commit="b" * 40, now=now
+    )
+    assert verdict == "duplicate" and "in flight" in reason
+    # Abandoned (past its expiry), it no longer holds the pair.
+    later = "2026-10-16T14:00:00Z"
+    assert (
+        candidate_action(pair, BUNDLE, tmp_path, base_commit="b" * 40, now=later)[0]
+        == "qualify"
+    )
+
+
 def test_requalify_names_the_target_only_while_its_baseline_is_stale(
     monkeypatch, tmp_path, capsys
 ):
@@ -410,6 +469,10 @@ def test_requalify_names_the_target_only_while_its_baseline_is_stale(
         }
     )
     monkeypatch.setattr(cli, "git", lambda *args: "a" * 40)
+    write_json(
+        tmp_path / "uk" / current.pair_id / "latest_attempt.json",
+        {"attempt_key": "a" * 12, "sequence": 1},
+    )
     for receipts, expected in (([stale], [stale.pair]), ([current], []), ([], [])):
         monkeypatch.setattr(cli, "latest_receipts", lambda root, r=receipts, **_: r)
         assert cli.cmd_requalify(argparse.Namespace(ledger=str(tmp_path))) == 0
@@ -873,91 +936,189 @@ def test_a_branch_that_moved_off_the_qualified_commit_is_not_promoted():
     assert plan.ready_branch == branch
 
 
-CHECKS_PASSED = [
-    {"name": "Lint", "status": "completed", "conclusion": "success"},
-    {"name": "Test (3.13)", "status": "completed", "conclusion": "success"},
-    {"name": "Docs", "status": "completed", "conclusion": "skipped"},
-]
-RUNS_PASSED = [
-    {
-        "path": ".github/workflows/pr_code_changes.yaml",
-        "status": "completed",
-        "conclusion": "success",
+CODE = ".github/workflows/pr_code_changes.yaml"
+
+
+def _check(name, status="completed", conclusion="success", id=1):
+    return {"id": id, "name": name, "status": status, "conclusion": conclusion}
+
+
+def _run(event, status="completed", conclusion="success", id=1, path=CODE):
+    return {
+        "id": id,
+        "path": path,
+        "event": event,
+        "status": status,
+        "conclusion": conclusion,
     }
+
+
+CHECKS_PASSED = [
+    _check("Lint", id=1),
+    _check("Test (3.13)", id=2),
+    _check("Docs", conclusion="skipped", id=3),
 ]
+RUNS_PASSED = [_run("pull_request", id=10), _run("workflow_dispatch", id=11)]
 
-
-def _check(name, status="completed", conclusion=None):
-    return {"name": name, "status": status, "conclusion": conclusion}
-
-
+# Each: checks, runs, branch at the commit, main ("parent" or "moved"), the
+# push's exit code, automatic; then whether it is promoted, and the readiness
+# calls made ("ready" or "undo") in order.
 PROMOTION_CASES = {
-    "everything passed": (CHECKS_PASSED, RUNS_PASSED, True, 0, True),
-    "a test still running": (
-        [*CHECKS_PASSED[:1], _check("Test (3.13)", "in_progress")],
+    "everything passed": (
+        CHECKS_PASSED,
         RUNS_PASSED,
         True,
+        "parent",
         0,
+        True,
+        True,
+        ["ready"],
+    ),
+    "a test still running": (
+        [*CHECKS_PASSED[:1], _check("Test (3.13)", "in_progress", None, id=4)],
+        RUNS_PASSED,
+        True,
+        "parent",
+        0,
+        True,
         False,
+        [],
     ),
     "a test failed": (
-        [*CHECKS_PASSED[:1], _check("Test (3.13)", conclusion="failure")],
+        [*CHECKS_PASSED[:1], _check("Test (3.13)", conclusion="failure", id=4)],
         RUNS_PASSED,
         True,
+        "parent",
         0,
+        True,
         False,
+        [],
     ),
-    "a test cancelled": (
-        [_check("Test", conclusion="cancelled")],
+    "an older cancelled run a newer success replaced": (
+        [*CHECKS_PASSED, _check("Test (3.13)", conclusion="cancelled", id=0)],
+        # The API lists newest first.
+        [*RUNS_PASSED, _run("pull_request", conclusion="cancelled", id=9)],
+        True,
+        "parent",
+        0,
+        True,
+        True,
+        ["ready"],
+    ),
+    "a newer failure after an older success": (
+        [*CHECKS_PASSED, _check("Test (3.13)", conclusion="failure", id=9)],
         RUNS_PASSED,
         True,
+        "parent",
         0,
-        False,
-    ),
-    "no checks yet": ([], RUNS_PASSED, True, 0, False),
-    "only lint so far, the test workflow still registering": (
-        CHECKS_PASSED[:1],
-        [{**RUNS_PASSED[0], "status": "in_progress", "conclusion": None}],
         True,
-        0,
         False,
+        [],
     ),
-    "the test workflow never ran": (
+    "no run on the candidate's own tree": (
         CHECKS_PASSED,
-        [
-            {
-                "path": ".github/workflows/pr_docs_changes.yaml",
-                "status": "completed",
-                "conclusion": "success",
-            }
-        ],
+        RUNS_PASSED[:1],
         True,
+        "parent",
+        0,
+        True,
+        False,
+        [],
+    ),
+    "the own-tree run still registering its jobs": (
+        CHECKS_PASSED[:1],
+        [RUNS_PASSED[0], _run("workflow_dispatch", "in_progress", None, id=11)],
+        True,
+        "parent",
+        0,
+        True,
+        False,
+        [],
+    ),
+    "no checks yet": ([], RUNS_PASSED, True, "parent", 0, True, False, []),
+    "the checks could not be read": (
+        None,
+        RUNS_PASSED,
+        True,
+        "parent",
+        0,
+        True,
+        False,
+        [],
+    ),
+    "the branch moved": (
+        CHECKS_PASSED,
+        RUNS_PASSED,
+        False,
+        "parent",
+        0,
+        True,
+        False,
+        ["undo"],
+    ),
+    "main moved since the base": (
+        CHECKS_PASSED,
+        RUNS_PASSED,
+        True,
+        "moved",
+        0,
+        True,
+        False,
+        ["undo"],
+    ),
+    "main moved at the push": (
+        CHECKS_PASSED,
+        RUNS_PASSED,
+        True,
+        "parent",
+        1,
+        True,
+        False,
+        ["ready", "undo"],
+    ),
+    "manual promotion, on the base": (
+        None,
+        None,
+        True,
+        "parent",
         0,
         False,
+        False,
+        ["ready"],
     ),
-    "the checks could not be read": (None, RUNS_PASSED, True, 0, False),
-    "the branch moved": (CHECKS_PASSED, RUNS_PASSED, False, 0, False),
-    "main moved since the base": (CHECKS_PASSED, RUNS_PASSED, True, 1, False),
+    "manual promotion, main moved": (
+        None,
+        None,
+        True,
+        "moved",
+        0,
+        False,
+        False,
+        ["undo"],
+    ),
 }
 
 
 @pytest.mark.parametrize("case", sorted(PROMOTION_CASES))
-def test_promotion_fast_forwards_main_to_exactly_the_qualified_commit(
+def test_promotion_makes_main_exactly_the_qualified_commit(
     monkeypatch, tmp_path, capsys, case
 ):
-    """main is not branch-protected and the repository does not allow
-    auto-merge. Promotion pushes the qualified commit to main without force,
-    once every check and pull request workflow run on it has passed: the
-    push succeeds only while main is still the commit it was built on, so
-    main becomes exactly the tested tree or nothing changes."""
+    """Round 2 of #635. A candidate is readied only while main is still the
+    commit it was built on, so no merge can combine it with other code.
+    Automatic promotion waits for the commit's own tree to pass its checks
+    (the newest run of each workflow, the newest check of each name), then
+    moves main to it with a push leased on that parent."""
 
     import argparse
     import importlib.util
 
-    checks, runs, branch_at_commit, push_code, promotes = PROMOTION_CASES[case]
+    checks, runs, at_commit, main, push_code, automatic, promotes, readiness = (
+        PROMOTION_CASES[case]
+    )
     qualified = _promotion_receipt(pair=_promotable_pair_and_branch())
     branch = candidate_branch(qualified.pair)
     commit = qualified.harness.git_commit
+    parent = "p" * 40
     spec = importlib.util.spec_from_file_location(
         "check_uk_candidate_for_test",
         Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
@@ -968,75 +1129,53 @@ def test_promotion_fast_forwards_main_to_exactly_the_qualified_commit(
 
     def run(argv, **kwargs):
         calls.append(argv)
+        out = ""
+        code = 0
         if argv[:2] == ["gh", "api"]:
             items = checks if "check-runs" in argv[2] else runs
-            if "check-runs" in argv[2]:
-                assert f"commits/{commit}/" in argv[2]
-            else:
-                assert f"head_sha={commit}" in argv[2]
             if items is None:
-                return SimpleNamespace(returncode=1, stdout="")
-            return SimpleNamespace(
-                returncode=0, stdout="".join(json.dumps(i) + "\n" for i in items)
-            )
-        if argv[:2] == ["git", "rev-parse"]:
-            head = commit if branch_at_commit else "f" * 40
-            return SimpleNamespace(returncode=0, stdout=head + "\n")
-        if argv[:2] == ["git", "push"]:
-            return SimpleNamespace(returncode=push_code, stdout="", stderr="")
-        return SimpleNamespace(returncode=0, stdout="", stderr="")
+                code = 1
+            else:
+                out = "".join(json.dumps(item) + "\n" for item in items)
+        elif argv[:3] == ["git", "rev-parse", "FETCH_HEAD"]:
+            out = commit if at_commit else "f" * 40
+        elif argv[:3] == ["git", "rev-parse", f"{commit}^"]:
+            out = parent
+        elif argv[:2] == ["git", "ls-remote"]:
+            out = f"{parent if main == 'parent' else 'm' * 40}\trefs/heads/main\n"
+        elif argv[:2] == ["git", "push"]:
+            code = push_code
+        return SimpleNamespace(returncode=code, stdout=out, stderr="")
 
     monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: [qualified])
     monkeypatch.setattr(cli, "subprocess", SimpleNamespace(run=run))
-    monkeypatch.setattr(cli, "config", lambda: {"promotion": {"automatic": True}})
+    monkeypatch.setattr(cli, "config", lambda: {"promotion": {"automatic": automatic}})
     monkeypatch.setattr(cli, "_open_candidate_branches", lambda: {branch: commit})
     assert cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True)) == 0
-    assert calls[0][:3] == ["gh", "pr", "ready"] and calls[0][3] == branch
+    assert [
+        "undo" if "--undo" in argv else "ready"
+        for argv in calls
+        if argv[:3] == ["gh", "pr", "ready"]
+    ] == readiness
     pushes = [argv for argv in calls if argv[:2] == ["git", "push"]]
-    assert all("--force" not in argv and "-f" not in argv for argv in pushes)
+    reaches_push = "ready" in readiness and automatic
+    assert pushes == (
+        [
+            [
+                "git",
+                "push",
+                f"--force-with-lease=refs/heads/main:{parent}",
+                "origin",
+                f"{commit}:refs/heads/main",
+            ]
+        ]
+        if reaches_push
+        else []
+    )
     assert not [argv for argv in calls if argv[:3] == ["gh", "pr", "merge"]]
-    reached_push = (
-        checks is not None and promotes or case == "main moved since the base"
-    )
-    if reached_push:
-        assert pushes == [["git", "push", "origin", f"{commit}:refs/heads/main"]]
-    else:
-        assert pushes == []
-    out = capsys.readouterr().out
-    assert (f"promoted {branch}" in out) is promotes
-    if case == "main moved since the base":
-        assert "requalified on current main" in out
-
-
-def test_without_automatic_promotion_the_target_is_only_readied(monkeypatch, tmp_path):
-    import argparse
-    import importlib.util
-
-    qualified = _promotion_receipt(pair=_promotable_pair_and_branch())
-    branch = candidate_branch(qualified.pair)
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_candidate_manual",
-        Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
-    )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
-    calls = []
-    monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: [qualified])
-    monkeypatch.setattr(
-        cli,
-        "subprocess",
-        SimpleNamespace(
-            run=lambda argv, **k: (
-                calls.append(argv) or SimpleNamespace(returncode=0, stdout="")
-            )
-        ),
-    )
-    monkeypatch.setattr(cli, "config", lambda: {"promotion": {"automatic": False}})
-    monkeypatch.setattr(
-        cli, "_open_candidate_branches", lambda: {branch: qualified.harness.git_commit}
-    )
-    assert cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True)) == 0
-    assert [argv[:3] for argv in calls] == [["gh", "pr", "ready"]]
+    if not automatic:
+        assert not [argv for argv in calls if argv[:2] == ["gh", "api"]]
+    assert (f"promoted {branch}" in capsys.readouterr().out) is promotes
 
 
 def test_automatic_promotion_is_on_with_its_basis_recorded():

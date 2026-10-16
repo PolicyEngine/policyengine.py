@@ -19,7 +19,7 @@ from policyengine.provenance.uk_qualification import (
     candidate_branch,
     previous_certificate,
 )
-from tests.qualification_fixtures import gates, make_pair, make_receipt
+from tests.qualification_fixtures import HARNESS, gates, make_pair, make_receipt
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/certify-uk-release.yaml"
@@ -146,6 +146,68 @@ def test_every_dispatch_names_the_exact_pair():
         assert 'entry["pair_id"]' in run
 
 
+def test_preparation_rechecks_eligibility_and_tests_the_candidates_own_tree():
+    """Round 2 of #635: under the preparation lock, a run whose pair another
+    run is already qualifying (from any main commit) stops; and the
+    code-changes workflow runs on the candidate branch itself, the tree
+    promotion would put on main."""
+
+    job = _workflow()["jobs"]["prepare"]
+    steps = job["steps"]
+    names = [step.get("name") for step in steps]
+    duplicate = steps[names.index("Check for an attempt staged by another run")]
+    assert "check_uk_candidate.py still-eligible" in duplicate["run"]
+    assert names.index("Install the base environment") < names.index(
+        "Check for an attempt staged by another run"
+    )
+    own_tree = steps[names.index("Test the candidate commit's own tree")]
+    assert own_tree["run"].startswith("gh workflow run pr_code_changes.yaml")
+    assert '--ref "$BRANCH"' in own_tree["run"]
+    assert own_tree["env"]["GH_TOKEN"] == "${{ github.token }}"
+    assert names.index("Commit and push the candidate commit") < names.index(
+        "Test the candidate commit's own tree"
+    )
+    assert job["permissions"]["actions"] == "write"
+    triggers = yaml.safe_load(
+        (REPO_ROOT / ".github/workflows/pr_code_changes.yaml").read_text()
+    )[True]
+    assert "workflow_dispatch" in triggers
+
+
+def test_still_eligible_reports_a_pair_another_run_is_qualifying(monkeypatch, tmp_path):
+    from policyengine.provenance.qualification_ledger import attempt_directory
+    from policyengine.provenance.uk_qualification import stage_attempt
+
+    cli = _cli()
+    pair = make_pair(model="2.200.0")
+    candidate = tmp_path / "candidate.json"
+    candidate.write_text(
+        json.dumps(
+            {
+                "pair": pair.canonical_payload(),
+                "pair_id": pair.pair_id,
+                "base_commit": "b" * 40,
+                "force": False,
+            }
+        )
+    )
+    outputs = []
+    monkeypatch.setattr(cli, "set_output", lambda **kwargs: outputs.append(kwargs))
+    monkeypatch.setattr(cli, "utc_now", lambda: "2026-10-16T10:00:00Z")
+    args = argparse.Namespace(candidate=str(candidate), ledger=str(tmp_path))
+    assert cli.cmd_still_eligible(args) == 0
+    assert outputs[-1] == {"duplicate": "false"}
+    stage_attempt(
+        attempt_directory(tmp_path, "uk", pair.pair_id, "a" * 12),
+        {"pair": pair.canonical_payload(), "pair_id": pair.pair_id},
+        HARNESS,
+        owner_run_id="7",
+        staged_at="2026-10-16T09:30:00Z",
+    )
+    assert cli.cmd_still_eligible(args) == 0
+    assert outputs[-1] == {"duplicate": "true"}
+
+
 def test_preparation_syncs_the_candidate_lock_before_using_it():
     """Snapshots, the bundle check and staging must run in the candidate's
     environment: synced from the lock preparation regenerates, after it is
@@ -270,7 +332,19 @@ elif command == "git" and args[0] == "push":
                     [{"headRefName": branch, "headRefOid": state["head"]}]
                 )
             )
+        # Promotion reads the branch head and checks main is its parent.
+        if argv[:2] == ["git", "fetch"]:
+            return SimpleNamespace(returncode=0, stdout="")
+        if argv[:3] == ["git", "rev-parse", "FETCH_HEAD"]:
+            head = json.loads(state_path.read_text())["head"]
+            return SimpleNamespace(returncode=0, stdout=head)
+        if argv[:2] == ["git", "rev-parse"]:
+            return SimpleNamespace(returncode=0, stdout="p" * 40)
+        if argv[:2] == ["git", "ls-remote"]:
+            return SimpleNamespace(returncode=0, stdout="p" * 40 + "\trefs/heads/main")
         assert argv[:3] == ["gh", "pr", "ready"]
+        if "--undo" in argv:
+            return SimpleNamespace(returncode=0)
         if not prepare_first:
             schedule("prepare", prepare)
         state = json.loads(state_path.read_text())
@@ -435,6 +509,8 @@ def test_refresh_checks_reruns_only_failed_pr_runs_for_the_qualified_head(
             (14, "a" * 40, "pull_request", "completed", "failure"),
             (15, head, "push", "completed", "failure"),
             (16, head, "pull_request", "completed", "timed_out"),
+            # The run on the candidate's own tree that promotion requires.
+            (17, head, "workflow_dispatch", "completed", "failure"),
         )
     ]
     calls = []
@@ -444,7 +520,6 @@ def test_refresh_checks_reruns_only_failed_pr_runs_for_the_qualified_head(
         if argv[:2] == ["gh", "api"]:
             assert "--paginate" in argv
             assert f"head_sha={receipt.harness.git_commit}" in argv[2]
-            assert "event=pull_request" in argv[2]
             return SimpleNamespace(stdout="\n".join(json.dumps(run) for run in runs))
         assert argv[:3] == ["gh", "run", "rerun"]
         assert "--failed" in argv and kwargs["check"] is True
@@ -455,6 +530,6 @@ def test_refresh_checks_reruns_only_failed_pr_runs_for_the_qualified_head(
     assert args.func(args) == 0
     reruns = [call[3] for call in calls if call[:3] == ["gh", "run", "rerun"]]
     if receipt.promotable and head_matches:
-        assert reruns == ["11", "16"]
+        assert reruns == ["11", "16", "17"]
     else:
         assert calls == []

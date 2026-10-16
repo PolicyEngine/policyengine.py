@@ -145,6 +145,10 @@ jobs:
       # promotion can ready a replacement after checking the previous head.
       group: promote-uk
       cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
     outputs:
       candidate_commit: ${{ steps.stage.outputs.candidate_commit }}
       duplicate: ${{ steps.duplicate.outputs.duplicate }}
@@ -164,8 +168,22 @@ jobs:
           ref: ${{ needs.resolve.outputs.base_commit }}
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
-      # Another run may have staged this attempt while this one waited for
-      # the promotion concurrency group; never overwrite its evidence.
+      - uses: actions/download-artifact@v4
+        with:
+          name: candidate
+          path: ${{ runner.temp }}/candidate
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install the base environment
+        run: uv sync --frozen --extra uk --extra dev --python ${{ env.PYTHON_VERSION }}
+      # Another run may have staged this attempt, or another attempt for the
+      # pair from another main commit, while this one waited for the
+      # promotion concurrency group: recheck against the ledger as it is now,
+      # and never overwrite another run's evidence.
       - name: Check for an attempt staged by another run
         id: duplicate
         env:
@@ -176,25 +194,10 @@ jobs:
             echo "duplicate=true" >> "$GITHUB_OUTPUT"
             echo "Attempt already staged by another run; nothing to do."
           else
-            echo "duplicate=false" >> "$GITHUB_OUTPUT"
+            uv run --no-sync python scripts/check_uk_candidate.py still-eligible \
+              --candidate "$RUNNER_TEMP/candidate/candidate.json" --ledger ledger
           fi
           git worktree remove --force ledger
-      - uses: actions/download-artifact@v4
-        if: steps.duplicate.outputs.duplicate == 'false'
-        with:
-          name: candidate
-          path: ${{ runner.temp }}/candidate
-      - uses: astral-sh/setup-uv@v8.1.0
-        if: steps.duplicate.outputs.duplicate == 'false'
-        with:
-          version: ${{ env.UV_VERSION }}
-      - uses: actions/setup-python@v6
-        if: steps.duplicate.outputs.duplicate == 'false'
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install the base environment
-        if: steps.duplicate.outputs.duplicate == 'false'
-        run: uv sync --frozen --extra uk --extra dev --python ${{ env.PYTHON_VERSION }}
       - name: Certify the pair and regenerate pins, lock, TROs and constants
         if: steps.duplicate.outputs.duplicate == 'false'
         env:
@@ -238,6 +241,15 @@ jobs:
               -c user.email="qualification@policyengine.org" \
               commit -q -m "Certify UK candidate pair ${PAIR_ID:0:12} for qualification"
           git push --force origin "HEAD:refs/heads/$BRANCH"
+      # Pull request runs test the candidate merged with main as it was then.
+      # Promotion needs the commit's own tree tested, so run the code-changes
+      # workflow on the candidate branch itself.
+      - name: Test the candidate commit's own tree
+        if: steps.duplicate.outputs.duplicate == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ needs.resolve.outputs.branch }}
+        run: gh workflow run pr_code_changes.yaml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
       - name: Stage the attempt in the ledger
         id: stage
         if: steps.duplicate.outputs.duplicate == 'false'
