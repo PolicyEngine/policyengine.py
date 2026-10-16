@@ -2303,6 +2303,38 @@ def _names_bound_without_import(nodes: Iterable[ast.AST]) -> set[str]:
     return names
 
 
+def _names_mutated_by_attribute(nodes: Iterable[ast.AST]) -> tuple[set[str], bool]:
+    """Names code can rebind without binding a name: attribute stores and
+    deletions (``sys.modules[__name__].Annotated = Tuple`` and
+    ``typing.Annotated = Tuple`` store ``Annotated``) and the literal names
+    passed to ``setattr`` or ``delattr``; and whether it uses any
+    ``modules`` attribute, through which it can swap whole modules."""
+
+    names: set[str] = set()
+    uses_modules = False
+    for node in nodes:
+        if isinstance(node, ast.Attribute):
+            if not isinstance(node.ctx, ast.Load):
+                names.add(node.attr)
+            if node.attr == "modules":
+                uses_modules = True
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in ("setattr", "delattr")
+            and len(node.args) >= 2
+            and isinstance(node.args[1], ast.Constant)
+            and isinstance(node.args[1].value, str)
+        ):
+            names.add(node.args[1].value)
+    return names, uses_modules
+
+
+#: How many nodes the forward references of one function may add before
+#: the receipt stops inspecting them and refuses the function instead.
+_INSPECTED_FORWARD_NODES = 100_000
+
+
 class _Unresolved:
     """What a name stands for when the receipt cannot tell: an import whose
     target is not loaded when the receipt is built, or an attribute of
@@ -2330,11 +2362,25 @@ def _function_bindings(module: Any, nodes: Sequence[ast.AST]) -> dict[str, list[
     for node in nodes:
         if isinstance(node, ast.Import):
             for alias in node.names:
-                name = alias.asname or alias.name.split(".")[0]
-                target = alias.name if alias.asname else name
-                bindings.setdefault(name, []).append(
-                    sys.modules.get(target, _UNRESOLVED)
-                )
+                if not alias.asname:
+                    name = alias.name.split(".")[0]
+                    bindings.setdefault(name, []).append(
+                        sys.modules.get(name, _UNRESOLVED)
+                    )
+                    continue
+                # ``import a.b as c`` binds getattr(a, "b"), as Python does,
+                # with sys.modules only where the attribute is missing.
+                parts = alias.name.split(".")
+                value: Any = sys.modules.get(parts[0], _UNRESOLVED)
+                for depth, part in enumerate(parts[1:], start=2):
+                    if value is _UNRESOLVED:
+                        break
+                    value = getattr(
+                        value,
+                        part,
+                        sys.modules.get(".".join(parts[:depth]), _UNRESOLVED),
+                    )
+                bindings.setdefault(alias.asname, []).append(value)
         elif isinstance(node, ast.ImportFrom):
             try:
                 source_name = (
@@ -2400,24 +2446,33 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
         # not resolved, so they never earn the Literal or Annotated
         # exemption. Past the size limit nothing does.
         rebound = _names_bound_without_import([*ast.walk(statement.args), *nodes])
+        # Names an attribute store or setattr can rebind count as rebound,
+        # wherever they appear in a name's chain; code that touches
+        # sys.modules earns no exemption at all.
+        stored, uses_modules = _names_mutated_by_attribute(nodes)
+        rebound |= stored
+        exemptions_sound = not uses_modules
         strings = [
             node
             for node in nodes
             if isinstance(node, ast.Constant) and isinstance(node.value, str)
         ]
         parsed_nodes = 0
-        exemptions_sound = True
-        while strings:
+        while strings and exemptions_sound:
             text = strings.pop().value
             try:
                 walked = list(ast.walk(ast.parse(text.strip(), mode="eval")))
             except (SyntaxError, ValueError):
                 continue
-            parsed_nodes += len(walked)
-            if parsed_nodes > 100_000:
+            except RecursionError:
                 exemptions_sound = False
                 break
-            rebound |= _names_bound_without_import(walked)
+            parsed_nodes += len(walked)
+            stored, uses_modules = _names_mutated_by_attribute(walked)
+            if parsed_nodes > _INSPECTED_FORWARD_NODES or uses_modules:
+                exemptions_sound = False
+                break
+            rebound |= _names_bound_without_import(walked) | stored
             strings.extend(
                 node
                 for node in walked
@@ -2466,12 +2521,15 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
             """
 
             root = node
+            chain: list[str] = []
             while isinstance(root, ast.Attribute):
+                chain.append(root.attr)
                 root = root.value
             if (
                 not exemptions_sound
                 or not isinstance(root, ast.Name)
                 or root.id in rebound
+                or rebound.intersection(chain)
             ):
                 return False
             values = resolve(node)
@@ -2484,6 +2542,7 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
         # its values before they are reached.
         values: set[int] = set()
         inspected: list[ast.AST] = list(nodes)
+        added = 0
         position = 0
         while position < len(inspected):
             node = inspected[position]
@@ -2500,18 +2559,43 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
                 isinstance(node, ast.Constant)
                 and isinstance(node.value, str)
                 and id(node) not in values
-                and len(inspected) < 100_000
             ):
                 try:
                     parsed = ast.parse(node.value.strip(), mode="eval").body
                 except (SyntaxError, ValueError):
                     continue
-                for child in ast.walk(parsed):
+                except RecursionError:
+                    return (
+                        f"function {statement.name} holds a string too deeply "
+                        "nested for the receipt to inspect as a type"
+                    )
+                walked = list(ast.walk(parsed))
+                # A label or plain name cannot build a type typing caches.
+                if not any(
+                    isinstance(child, ast.Subscript)
+                    or (
+                        isinstance(child, ast.BinOp) and isinstance(child.op, ast.BitOr)
+                    )
+                    or (
+                        isinstance(child, ast.Constant) and isinstance(child.value, str)
+                    )
+                    for child in walked
+                ):
+                    continue
+                added += len(walked)
+                if added > _INSPECTED_FORWARD_NODES:
+                    return (
+                        f"function {statement.name} holds more forward-reference "
+                        "type expressions than the receipt inspects"
+                    )
+                for child in walked:
                     ast.copy_location(child, node)
                     inspected.append(child)
 
-        def holds_union(expression: ast.AST) -> bool:
-            """Whether a type expression holds a union or ``Literal``.
+        def holds_union(expression: ast.AST) -> Optional[str]:
+            """What in a type expression typing may reuse reordered: "a union"
+            (a union or ``Literal``), or "a name the receipt cannot resolve"
+            (which could be either); ``None`` if nothing.
 
             ``Literal`` values and ``Annotated`` metadata are values, not types,
             so a quoted string there is never read as a type, including inside
@@ -2524,10 +2608,17 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
             while pending:
                 node = pending.pop()
                 if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
-                    return True
+                    return "a union"
                 if isinstance(node, ast.Subscript):
                     if is_form(node.value, "Union", "Optional", "Literal"):
-                        return True
+                        return (
+                            "a union"
+                            if any(
+                                _is_typing_form(value, "Union", "Optional", "Literal")
+                                for value in resolve(node.value)
+                            )
+                            else "a name the receipt cannot resolve"
+                        )
                     if is_only_form(node.value, "Annotated"):
                         elements = (
                             node.slice.elts
@@ -2536,11 +2627,19 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
                         )
                         pending.extend(elements[:1])
                         continue
-                if isinstance(node, (ast.Name, ast.Attribute)) and any(
-                    value is _UNRESOLVED or _holds_union(value)
-                    for value in resolve(node)
+                if (
+                    isinstance(node, (ast.Name, ast.Attribute))
+                    and id(node) not in values
                 ):
-                    return True
+                    resolved = resolve(node)
+                    if any(
+                        _holds_union(value)
+                        for value in resolved
+                        if value is not _UNRESOLVED
+                    ):
+                        return "a union"
+                    if _UNRESOLVED in resolved:
+                        return "a name the receipt cannot resolve"
                 if isinstance(node, ast.Constant):
                     if isinstance(node.value, str) and id(node) not in values:
                         try:
@@ -2549,17 +2648,22 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
                             )
                         except (SyntaxError, ValueError):
                             pass
+                        except RecursionError:
+                            return "a string too deeply nested to inspect"
                     continue
                 pending.extend(ast.iter_child_nodes(node))
-            return False
+            return None
 
         for node in inspected:
             if not isinstance(node, ast.Subscript):
                 continue
-            if any(
+            if not any(
                 value is _UNRESOLVED or _subscript_reuses_equal_aliases(value)
                 for value in resolve(node.value)
-            ) and holds_union(node.slice):
+            ):
+                continue
+            held = holds_union(node.slice)
+            if held is not None:
                 line = getattr(node, "lineno", statement.lineno)
                 try:
                     base = ast.unparse(node.value)
@@ -2567,10 +2671,11 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
                     base = "a deeply nested expression"
                 return (
                     f"function {statement.name} subscripts "
-                    f"{base} with a union (line {line}); typing "
+                    f"{base} with {held} (line {line}); typing "
                     "can return an alias it cached for the same members in another "
                     "order, so earlier code decides what runs (use a builtin "
-                    "generic such as list[Decimal | float])"
+                    "generic such as list[Decimal | float], and import what the "
+                    "function uses at module level)"
                 )
     return None
 
