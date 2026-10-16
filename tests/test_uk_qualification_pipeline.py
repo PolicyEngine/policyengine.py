@@ -1660,8 +1660,25 @@ SHARED_BRANCH_CASES = {
         False,
         None,
     ),
-    "closed at the commit, to main": (
+    # Round 9 of #635: a base branch renamed into main records no event, so
+    # a pull request now to main proves nothing about what its runs at the
+    # commit tested; any other pull request from the branch at the commit
+    # counts, whatever its base. (Prepare's own pull request to main is
+    # always at the commit too, so a renamed one sits beside it.)
+    "closed at the commit, to main (a rename leaves no event)": (
         [_other(state="CLOSED", baseRefName="main")],
+        (),
+        True,
+        7,
+    ),
+    "merged at the commit, to main": (
+        [_other(state="MERGED", baseRefName="main")],
+        (),
+        True,
+        7,
+    ),
+    "closed at another commit, to main": (
+        [_other(state="CLOSED", baseRefName="main", headRefOid="a" * 40)],
         (),
         False,
         None,

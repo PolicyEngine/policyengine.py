@@ -791,6 +791,6 @@ def test_refresh_leaves_a_candidate_whose_branch_runs_are_shared(
         assert (
             "#7 (to release, open)"
             if shared == "another base"
-            else "#1 (to main after a base change, open)"
+            else "#1 (the candidate's own, after a base change)"
         ) in output
     assert [call[3] for call in calls if call[:3] == ["gh", "run", "rerun"]] == ["32"]

@@ -642,23 +642,30 @@ def _base_changed(number: Any) -> Optional[bool]:
     return {"true": True, "false": False}.get(answer)
 
 
-def _shared_branch_pull_requests(branch: str, commit: str) -> Optional[list[str]]:
-    """Pull requests from this repository's ``branch`` whose runs at
-    ``commit`` may have tested a base other than main; None if they cannot
-    all be read.
+def _shared_branch_pull_requests(
+    branch: str, commit: str, pull_request: str
+) -> Optional[list[str]]:
+    """Why runs at ``commit`` may not all be the candidate's own pull
+    request's, against main: the pull requests from this repository's
+    ``branch`` that make them ambiguous; None if they cannot all be read.
 
-    A pull request from the candidate branch to another base runs the same
-    workflows with the same commit, branch and repository as the
-    candidate's own (round 6 of #635), and GitHub's run records do not say
-    which pull request started a run, nor which base it tested. So these
-    count: one open to another base, one closed or merged at this commit to
-    another base, and, among those to main, one whose base was ever changed,
-    since a base change does not change what its earlier runs tested
-    (round 7). Every other pull request from the branch to main is the
-    candidate's own: at most one is open, and a closed one's runs test the
-    same merge. The REST listing filtered by ``head=<owner>:<branch>`` holds
-    only this repository's pull requests, all of them (paginated), so a
-    fork's with the same branch name can neither shadow nor crowd them out.
+    Any other pull request from the candidate branch runs the same workflows
+    with the same commit, branch and repository as the candidate's own,
+    ``pull_request`` (round 6 of #635), and GitHub's run records say neither
+    which pull request started a run nor which base it tested. A pull
+    request's current base does not settle it either: a base change keeps
+    the earlier runs (round 7), and a base branch renamed into main records
+    no event at all (round 9). So every other pull request from the branch
+    that is open, or was closed or merged at this commit, counts, whatever
+    its base, and so does the candidate's own if its base was ever changed.
+
+    That covers a rename too. Prepare opens the candidate's pull request to
+    main in the job that pushes the commit, and qualification needs that job
+    to succeed, so a pull request whose base became main by a rename after
+    running at the commit sits beside prepare's at the commit, and one of
+    the two counts. The REST listing filtered by ``head=<owner>:<branch>``
+    holds only this repository's pull requests, all of them (paginated), so
+    a fork's with the same branch name can neither shadow nor crowd them out.
     """
 
     owner = LEDGER_REPOSITORY.split("/")[0]
@@ -690,20 +697,19 @@ def _shared_branch_pull_requests(branch: str, commit: str) -> Optional[list[str]
         listing = [json.loads(line) for line in result.stdout.splitlines() if line]
     except json.JSONDecodeError:
         return None
-    shared = []
-    for pr in listing:
-        if pr.get("state") != "open" and pr.get("head_sha") != commit:
-            continue
-        state = "merged" if pr.get("merged") else str(pr.get("state"))
-        if pr.get("base") != "main":
-            shared.append(f"#{pr.get('number')} (to {pr.get('base')}, {state})")
-            continue
-        changed = _base_changed(pr.get("number"))
-        if changed is None:
-            return None
-        if changed:
-            shared.append(f"#{pr.get('number')} (to main after a base change, {state})")
-    return sorted(shared)
+    shared = sorted(
+        f"#{pr.get('number')} (to {pr.get('base')}, "
+        f"{'merged' if pr.get('merged') else pr.get('state')})"
+        for pr in listing
+        if str(pr.get("number")) != pull_request
+        and (pr.get("state") == "open" or pr.get("head_sha") == commit)
+    )
+    changed = _base_changed(pull_request)
+    if changed is None:
+        return None
+    if changed:
+        shared.append(f"#{pull_request} (the candidate's own, after a base change)")
+    return shared
 
 
 #: A run is re-run until it has made this many attempts in all, so a genuine
@@ -837,7 +843,7 @@ def cmd_refresh_pr_checks(args: argparse.Namespace) -> int:
             or pull_request["headRefOid"] != head
         ):
             continue
-        shared = _shared_branch_pull_requests(branch, head)
+        shared = _shared_branch_pull_requests(branch, head, str(pull_request["number"]))
         if shared is None:
             print(f"::warning::could not read the pull requests from {branch}")
             continue
@@ -1003,7 +1009,7 @@ def _promote(
     if not automatic:
         _set_ready(target, True)
         return True
-    shared = _shared_branch_pull_requests(branch, commit)
+    shared = _shared_branch_pull_requests(branch, commit, target)
     if shared is None:
         print(
             f"automatic promotion waits for {branch}: the pull requests from it "
