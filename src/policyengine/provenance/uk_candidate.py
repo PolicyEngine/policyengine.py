@@ -53,8 +53,11 @@ ENTITY_TABLES = ("person", "benunit", "household")
 
 
 def _json_safe(value: Any) -> Any:
-    """Evidence as strict JSON: non-finite numbers become their names."""
+    """Evidence as strict JSON: NumPy scalars become the Python numbers they
+    hold (never their text), and non-finite numbers become their names."""
 
+    if type(value).__module__ == "numpy" and getattr(value, "ndim", None) == 0:
+        value = value.item()
     if isinstance(value, float) and not math.isfinite(value):
         return (
             "NaN" if math.isnan(value) else ("Infinity" if value > 0 else "-Infinity")
@@ -1290,20 +1293,62 @@ def reform_contract(
 #: aggregate-impact tool): a count of 1 to 9 units from the dataset is never
 #: published, and is written as this text instead.
 SUPPRESSED_COUNT = "fewer than 10"
+#: Written in place of a number the ledger does not publish.
+WITHHELD_VALUE = "withheld"
+
+#: Population detail values that are totals, with the counts of the records
+#: each sums over (``budget_reform_population`` in W1's runner). A total over
+#: 1 to 9 records is that handful's alone, so it is withheld with them.
+POPULATION_TOTALS: dict[str, tuple[str, ...]] = {
+    "2027_total_change": ("2027_people_with_lower_tax", "2027_people_with_higher_tax"),
+}
+
+
+def _is_count(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
 
 
 def _suppress_small_counts(value: Any) -> Any:
-    """``value`` with every integer count from 1 to 9, at any depth, replaced."""
+    """``value`` as the ledger may publish it: every whole count from 1 to 9,
+    at any depth, replaced by ``SUPPRESSED_COUNT``; every other number that is
+    not a whole count (a total, a count written as a float) replaced by
+    ``WITHHELD_VALUE``, since nothing says how many records it comes from."""
 
-    if isinstance(value, bool):
+    if isinstance(value, bool) or value is None or isinstance(value, str):
         return value
-    if isinstance(value, int) and 0 < value < 10:
-        return SUPPRESSED_COUNT
+    if _is_count(value):
+        return SUPPRESSED_COUNT if 0 < value < 10 else value
     if isinstance(value, Mapping):
         return {key: _suppress_small_counts(item) for key, item in value.items()}
     if isinstance(value, list):
         return [_suppress_small_counts(item) for item in value]
-    return value
+    return WITHHELD_VALUE
+
+
+def _publishable_detail(detail: Any) -> Any:
+    """A population row's ``detail`` as the ledger may publish it.
+
+    A total named in ``POPULATION_TOTALS`` is published only when the counts
+    of the records it sums over are whole counts that add up to 0 or at least
+    10; everything else follows ``_suppress_small_counts``, so a total the
+    runner adds later is withheld until it is listed here.
+    """
+
+    if not isinstance(detail, Mapping):
+        return _suppress_small_counts(detail)
+    published = {}
+    for key, value in detail.items():
+        if key in POPULATION_TOTALS and (
+            isinstance(value, (int, float)) and not isinstance(value, bool)
+        ):
+            counts = [detail.get(name) for name in POPULATION_TOTALS[key]]
+            safe = all(_is_count(count) for count in counts) and not (
+                0 < sum(counts) < 10
+            )
+            published[key] = value if safe else WITHHELD_VALUE
+        else:
+            published[key] = _suppress_small_counts(value)
+    return published
 
 
 def publishable_contract_report(report: Mapping[str, Any]) -> dict[str, Any]:
@@ -1311,15 +1356,17 @@ def publishable_contract_report(report: Mapping[str, Any]) -> dict[str, Any]:
 
     The ledger is a branch of a public repository. Case and property rows
     come from synthetic households, but population rows are computed on the
-    dataset, so a count of 1 to 9 in their ``detail`` (people whose tax fell,
-    payments that went down) is replaced by ``SUPPRESSED_COUNT``. The gate
-    judges the report as the runner returned it; no rule reads ``detail``.
+    dataset, so in their ``detail`` a count of 1 to 9 (people whose tax fell,
+    payments that went down) is replaced by ``SUPPRESSED_COUNT``, a total over
+    1 to 9 records and any number that is not a whole count are replaced by
+    ``WITHHELD_VALUE`` (``_publishable_detail``). The gate judges the report as
+    the runner returned it; no rule reads ``detail``.
     """
 
     published = dict(report)
     if isinstance(report.get("population"), list):
         published["population"] = [
-            {**row, "detail": _suppress_small_counts(row.get("detail"))}
+            {**row, "detail": _publishable_detail(row.get("detail"))}
             if isinstance(row, Mapping)
             else row
             for row in report["population"]
@@ -1593,7 +1640,8 @@ def compare_metric_reports(
     - a figure suppressed on one side only is withheld: no change is
       computed (it would come from fewer than 10 records) and the comparison
       needs review;
-    - a total compares directly when both sides exclude the same figures;
+    - a total compares directly when both sides exclude the same figures
+      with the same signs;
     - an additive total (``_additive``) whose sides exclude different
       figures is lined up as the tool's ``compare._aligned`` does: each side
       takes out, at its own published value and the excluding side's sign,
@@ -1793,9 +1841,7 @@ def compare_metric_reports(
             # definitions and could give an excluded figure back, so they are
             # lined up first, from published figures only, or withheld.
             reason = None
-            if not (_additive(row) and _additive(old)):
-                reason = "the reports leave out different suppressed figures"
-            elif any(
+            if any(
                 new_signs[metric_id] != old_signs[metric_id]
                 for metric_id in set(new_signs) & set(old_signs)
             ):
@@ -1803,6 +1849,8 @@ def compare_metric_reports(
                     "a figure both reports leave out enters their totals "
                     "with different signs"
                 )
+            elif not (_additive(row) and _additive(old)):
+                reason = "the reports leave out different suppressed figures"
             else:
                 lined_up = (
                     _aligned(new_value, row, old_signs, current, key[1]),
