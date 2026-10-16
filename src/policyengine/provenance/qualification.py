@@ -1244,14 +1244,10 @@ def evaluate_replay_receipt(
         if "coverage" in flags and row.base_gbp is not None and row.head_gbp is None:
             regressions.append(item("lost_result", row))
             lost = True
-        if (
-            gap is not None
-            and "coverage" in flags
-            and row.base_gbp is None
-            and row.head_gbp not in (None, 0)
-        ):
+        if gap is not None and row.head_gbp not in (None, 0):
             # The candidate's record lists the measure-year as inert or
-            # missing, so it cannot also hold a value for it.
+            # missing, so no row can hold a candidate value for it (an inert
+            # artifact's effects are exactly £0; a missing one has none).
             regressions.append(
                 item(
                     "contradiction",
@@ -1291,11 +1287,13 @@ def evaluate_replay_receipt(
             gap is not None
             and gap["candidate"] == "missing"
             and gap["why"] == "inert in the base"
+            and row.base_gbp in (None, 0)
         ):
             # The candidate's inert list decides its inertness (a lost response
             # above, or a known gap). Where the candidate is missing and the
-            # base inert, the base-only inertness is the known gap itself. The
-            # row's other flags are judged as usual.
+            # base inert, a base-only inertness flag on a row with no value
+            # (as scorecard writes it) is the known gap itself. The row's other
+            # flags are judged as usual.
             flags = flags - {"inertness"}
         if gap is not None and flags != set(row.flags):
             # A row the known gap accounts for, in whole or in part.

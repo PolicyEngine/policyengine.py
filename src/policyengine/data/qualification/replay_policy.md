@@ -53,12 +53,16 @@ none of its gaps are known.
 
 A known gap does not block. Where one side is inert and the other missing,
 scorecard records the gap as a coverage row with exactly £0 on the inert
-side and no value on the other, and, where the base is the inert side, an
-inertness flag on the base only. Those rows are the gap itself: they
-neither fail nor go to review, and the gate records them beside the known
-gaps. Any other row at a known gap is judged as usual: a material base
-value is still a lost result, and a candidate value contradicts the
-candidate's own record.
+side and no value on the other, and an inertness flag on the inert side
+only, on a row with no values. Those flags are the gap itself and neither
+fail nor send the row to review. (Where the candidate is the inert side, its
+inert list already decides that flag.) The gate records every row a known
+gap accounts for, in whole or in part, beside the known gaps; the rest of a
+partly excused row's flags are judged as usual. Any other row at a known gap
+is judged as usual: a base value other than exactly £0 with no candidate
+value is still a lost result, and any candidate value other than £0 at a
+known gap contradicts the candidate's own record, which lists the
+measure-year as inert (exactly £0) or missing (no value).
 
 ## Review
 

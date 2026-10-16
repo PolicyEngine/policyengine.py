@@ -1523,6 +1523,209 @@ def test_the_real_6_5_0_receipt():
     )
 
 
+# Round 4 of #637: where the known-gap rules reach. The reviewer's probes.
+_BESIDE = [
+    {"year": 2027},
+    {"measure_key": MEASURE + "_other"},
+    {"event": "autumn_budget_2025"},
+]
+_BESIDE_IDS = ["another year", "another measure", "another event"]
+
+
+def _kinds(gate):
+    return (
+        [r["kind"] for r in gate.details["regressions"]],
+        [r["kind"] for r in gate.details["review_items"]],
+    )
+
+
+@pytest.mark.parametrize("where", _BESIDE, ids=_BESIDE_IDS)
+def test_a_zero_base_coverage_row_beside_a_missing_inert_gap_is_a_lost_result(where):
+    gate = _known_gap(
+        [{"flags": ["coverage"], "base_gbp": 0.0, "head_gbp": None, **where}],
+        "missing",
+        "inert",
+        second_event=True,
+    )
+    assert gate.status == "fail" and _kinds(gate)[0] == ["lost_result"], gate.summary
+    assert gate.details["known_gap_rows"] == []
+
+
+@pytest.mark.parametrize("where", _BESIDE, ids=_BESIDE_IDS)
+def test_a_zero_head_coverage_row_beside_an_inert_missing_gap_is_a_gain(where):
+    gate = _known_gap(
+        [{"flags": ["coverage"], "base_gbp": None, "head_gbp": 0.0, **where}],
+        "inert",
+        "missing",
+        second_event=True,
+    )
+    assert gate.status == "needs_review" and _kinds(gate)[1] == ["coverage_gain"]
+    assert gate.details["known_gap_rows"] == []
+
+
+@pytest.mark.parametrize("where", _BESIDE, ids=_BESIDE_IDS)
+def test_inertness_beside_a_missing_inert_gap_still_needs_review(where):
+    row = {
+        "flags": ["inertness"],
+        "base_gbp": None,
+        "head_gbp": None,
+        "level": "source_row",
+        "key": "obr-row-1",
+        **where,
+    }
+    gate = _known_gap([row], "missing", "inert", second_event=True)
+    assert gate.status == "needs_review"
+    assert _kinds(gate)[1] == ["base_only_inertness"], gate.summary
+
+
+@pytest.mark.parametrize("where", _BESIDE, ids=_BESIDE_IDS)
+def test_a_candidate_value_beside_a_gap_is_a_gain_not_a_contradiction(where):
+    gate = _known_gap(
+        [{"flags": ["coverage"], "base_gbp": None, "head_gbp": 5e8, **where}],
+        "missing",
+        "missing",
+        second_event=True,
+    )
+    assert gate.status == "needs_review" and _kinds(gate)[1] == ["coverage_gain"]
+
+
+@pytest.mark.parametrize(
+    ("candidate", "base", "row", "status", "kind"),
+    [
+        # exactly £0, not merely immaterial
+        (
+            "inert",
+            "missing",
+            {"base_gbp": None, "head_gbp": 0.4},
+            "fail",
+            "contradiction",
+        ),
+        (
+            "missing",
+            "inert",
+            {"base_gbp": 0.4, "head_gbp": None},
+            "fail",
+            "lost_result",
+        ),
+        # £0 on both sides is not the gap's shape
+        (
+            "inert",
+            "missing",
+            {"base_gbp": 0.0, "head_gbp": 0.0},
+            "needs_review",
+            "flagged_move",
+        ),
+        (
+            "missing",
+            "inert",
+            {"base_gbp": 0.0, "head_gbp": 0.0},
+            "needs_review",
+            "flagged_move",
+        ),
+    ],
+)
+def test_only_exactly_the_gaps_shape_is_excused(candidate, base, row, status, kind):
+    gate = _known_gap([{"flags": ["coverage"], **row}], candidate, base)
+    assert gate.status == status, gate.summary
+    assert kind in _kinds(gate)[0] + _kinds(gate)[1]
+    assert gate.details["known_gap_rows"] == []
+
+
+@pytest.mark.parametrize(
+    ("candidate", "base", "row"),
+    [
+        ("inert", "inert", {"flags": ["numerical"], "base_gbp": 1e8, "head_gbp": 3e8}),
+        ("missing", "inert", {"flags": ["coverage"], "base_gbp": 0.0, "head_gbp": 5e8}),
+        (
+            "missing",
+            "missing",
+            {
+                "flags": ["construction"],
+                "base_gbp": None,
+                "head_gbp": 5e8,
+                "level": "head",
+                "key": "income_tax",
+            },
+        ),
+        (
+            "inert",
+            "missing",
+            {"flags": ["inertness"], "base_gbp": None, "head_gbp": 5e8},
+        ),
+        (
+            "missing",
+            "inert",
+            {
+                "flags": ["inertness"],
+                "base_gbp": None,
+                "head_gbp": 5e8,
+                "level": "source_row",
+                "key": "obr-row-1",
+            },
+        ),
+        ("inert", "inert", {"flags": ["inertness"], "base_gbp": 0.0, "head_gbp": 5e8}),
+    ],
+)
+def test_any_candidate_value_at_a_known_gap_is_a_contradiction(candidate, base, row):
+    """Round 4 of #637: the policy says so for every row, not only coverage
+    rows; before, a missing/inert inertness row with a candidate value passed."""
+
+    gate = _known_gap([row], candidate, base)
+    assert gate.status == "fail", gate.summary
+    assert "contradiction" in _kinds(gate)[0]
+    assert _kinds(gate)[1] == []
+
+
+def test_a_candidate_value_contradiction_is_never_also_reviewed():
+    gate = _known_gap(
+        [{"flags": ["coverage"], "base_gbp": None, "head_gbp": 5e8}], "inert", "missing"
+    )
+    assert _kinds(gate) == (["contradiction"], [])
+
+
+def test_a_counter_above_a_non_gap_row_is_a_contradiction():
+    doc = _receipt_with(
+        rows=[{"flags": ["numerical"], "base_gbp": 1e8, "head_gbp": 3e8}],
+        counts={"numerical": 2},
+    )
+    _validator("replay_receipt.v1.json").validate(doc)
+    gate = _gate(doc)
+    assert gate.status == "fail" and _kinds(gate)[0] == ["contradiction"], gate.summary
+
+
+def test_three_producer_shaped_gaps_at_once_pass():
+    """Gaps of three kinds in one event, with rows as scorecard writes them."""
+
+    gaps = {
+        2025: ("missing", "inert"),
+        2026: ("inert", "missing"),
+        2027: ("inert", "inert"),
+    }
+    rows = []
+    for year, kind in gaps.items():
+        rows += [
+            {**row, "year": year} for row in copy.deepcopy(PRODUCER_GAP_ROWS[kind])
+        ]
+    doc = _receipt_with(
+        rows=rows,
+        inert=[(MEASURE, y) for y, (c, _) in gaps.items() if c == "inert"],
+        missing=[(MEASURE, y) for y, (c, _) in gaps.items() if c == "missing"],
+        complete=False,
+        integrity="incomplete",
+        base_events={
+            EVENT: _base_event(
+                inert=[(MEASURE, y) for y, (_, b) in gaps.items() if b == "inert"],
+                missing=[(MEASURE, y) for y, (_, b) in gaps.items() if b == "missing"],
+            )
+        },
+    )
+    _validator("replay_receipt.v1.json").validate(doc)
+    gate = _gate(doc)
+    assert gate.status == "pass", gate.summary
+    assert len(gate.details["known_gaps"]) == 3
+    assert len(gate.details["known_gap_rows"]) == 4
+
+
 # Round 2 of #637: combinations of a known gap with other rules, and
 # evidence that must stay within its own event.
 def test_a_known_gap_never_excuses_a_complete_event_listing_a_gap():
@@ -1922,7 +2125,9 @@ def test_the_replay_policy_with_known_gaps_against_a_reference(rows, candidate, 
             fail = True
         if "coverage" in flags and b is not None and h is None:
             fail = True
-        if at_gap and "coverage" in flags and b is None and h not in (None, 0):
+        # Any candidate value at a known gap contradicts the candidate's
+        # record (round 4 of #637).
+        if at_gap and h not in (None, 0):
             fail = True
         if (
             row["level"] == "measure_year"
@@ -1932,7 +2137,7 @@ def test_the_replay_policy_with_known_gaps_against_a_reference(rows, candidate, 
         ):
             fail = True
         if (row["year"] == 2026 and candidate == "inert") or (
-            at_gap and (candidate, base) == ("missing", "inert")
+            at_gap and (candidate, base) == ("missing", "inert") and b in (None, 0)
         ):
             flags.discard("inertness")
         if flags - {"mapping"}:
