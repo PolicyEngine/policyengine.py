@@ -95,6 +95,29 @@ def test_every_uv_step_runs_the_environment_its_job_installed():
     ]
 
 
+def test_catch_up_requalifies_a_stale_target_after_finishing_receipts():
+    """The requalification dispatch runs without force, after waiting
+    receipts are finished and published, so it reads the newest ledger."""
+
+    job = _workflow()["jobs"]["catch-up"]
+    runs = [step.get("run", "") for step in job["steps"]]
+    requalify = next(
+        index
+        for index, run in enumerate(runs)
+        if "check_uk_candidate.py requalify" in run
+    )
+    published = next(
+        index
+        for index, run in enumerate(runs)
+        if "qualification-ledger.sh publish" in run
+    )
+    assert published < requalify
+    assert '"-f", "force=false"' in runs[requalify]
+    assert "force=true" not in runs[requalify]
+    assert job["steps"][requalify]["env"]["GH_TOKEN"] == "${{ github.token }}"
+    assert job["permissions"]["actions"] == "write"
+
+
 def test_preparation_syncs_the_candidate_lock_before_using_it():
     """Snapshots, the bundle check and staging must run in the candidate's
     environment: synced from the lock preparation regenerates, after it is

@@ -493,6 +493,20 @@ def cmd_recoverable(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_requalify(args: argparse.Namespace) -> int:
+    """Print the promotion target's pair when its baseline is stale."""
+
+    bundle = json.loads(BUNDLE_PATH.read_text())
+    problems: list[str] = []
+    receipts = latest_receipts(Path(args.ledger), problems=problems)
+    for problem in problems:
+        print(f"::warning::{problem}", file=sys.stderr)
+    plan = plan_promotion(receipts, bundle, {})
+    if plan.requalify is not None:
+        print(json.dumps({"pair": plan.requalify.canonical_payload()}))
+    return 0
+
+
 def _open_candidate_branches() -> dict[str, str]:
     """Open candidate branches and the commit each one's pull request is at."""
 
@@ -708,6 +722,10 @@ def parser() -> argparse.ArgumentParser:
     recoverable = commands.add_parser("recoverable")
     recoverable.add_argument("--ledger", required=True)
     recoverable.set_defaults(func=cmd_recoverable)
+
+    requalify = commands.add_parser("requalify")
+    requalify.add_argument("--ledger", required=True)
+    requalify.set_defaults(func=cmd_requalify)
 
     promote = commands.add_parser("promote")
     promote.add_argument("--ledger", required=True)

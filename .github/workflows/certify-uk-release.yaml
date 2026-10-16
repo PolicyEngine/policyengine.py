@@ -427,6 +427,33 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python scripts/check_uk_candidate.py refresh-pr-checks --ledger ledger
+      # Automatic promotion needs the target qualified against main's current
+      # certificate. A run without force requalifies it once per main commit;
+      # repeated catch-ups on the same commit are deduplicated as duplicates.
+      - name: Requalify a promotable target qualified against an earlier certificate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/check_uk_candidate.py requalify --ledger ledger > requalify.jsonl
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          for line in Path("requalify.jsonl").read_text().splitlines():
+              pair = json.loads(line)["pair"]
+              subprocess.run(
+                  [
+                      "gh", "workflow", "run", "certify-uk-release.yaml",
+                      "--repo", os.environ["GITHUB_REPOSITORY"], "--ref", "main",
+                      "-f", f"model_version={pair['model']['version']}",
+                      "-f", f"data_version={pair['data']['release_version']}",
+                      "-f", "force=false",
+                  ],
+                  check=True,
+              )
+          PY
 
   accept:
     if: github.event_name == 'workflow_dispatch' && inputs.accept_pair_id != ''

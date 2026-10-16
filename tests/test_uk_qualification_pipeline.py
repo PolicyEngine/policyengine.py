@@ -201,6 +201,101 @@ def test_actions(tmp_path):
     )
 
 
+def test_a_promotable_pair_on_a_superseded_baseline_requalifies_once_per_commit(
+    tmp_path,
+):
+    """Automatic promotion needs a qualification against main's current
+    certificate, so a promotable pair that advances main but compared
+    against an earlier one is requalified without force, once per main
+    commit. Nothing else is."""
+
+    pair = _promotable_pair_and_branch()
+    current = previous_certificate(BUNDLE)
+    earlier = current.model_copy(update={"bundle_version": "earlier"})
+    pair_dir = tmp_path / "uk" / pair.pair_id
+
+    def publish(receipt, certificate=earlier):
+        receipt = receipt.model_copy(update={"previous_certificate": certificate})
+        write_json(pair_dir / "qualification_receipt.json", receipt.canonical_payload())
+
+    def action(base):
+        return candidate_action(pair, BUNDLE, tmp_path, base_commit=base * 40)[0]
+
+    qualified = make_receipt(pair=pair)
+    publish(qualified)
+    verdict, reason = candidate_action(pair, BUNDLE, tmp_path, base_commit="b" * 40)
+    assert verdict == "qualify" and "superseded baseline" in reason
+    (pair_dir / "attempts" / ("b" * 12)).mkdir(parents=True)
+    assert action("b") == "duplicate"
+    assert action("c") == "qualify"
+    needs_review = make_receipt(
+        pair=pair, gate_results=gates(metrics_review="needs_review")
+    ).model_copy(update={"previous_certificate": earlier})
+    accepted = accept_review(
+        needs_review,
+        reviewer="reviewer",
+        accepted_receipt_sha256=needs_review.unreviewed_sha256,
+        explanation="expected",
+        accepted_at="2026-10-16T09:00:00Z",
+    )
+    assert accepted.promotable
+    publish(accepted)
+    assert action("c") == "qualify"
+    # Against main's own certificate, or not promotable: nothing to do.
+    publish(qualified, current)
+    assert action("c") == "duplicate"
+    for results in (gates(metrics_review="needs_review"), gates(wheel_hashes="fail")):
+        publish(make_receipt(pair=pair, gate_results=results))
+        assert action("c") == "duplicate"
+    # A pair that does not advance main in every component is never promoted.
+    sideways = make_pair(
+        model="2.200.0",
+        data="1.50.0",
+        core=BUNDLE["packages"]["policyengine-core"]["version"],
+    )
+    write_json(
+        tmp_path / "uk" / sideways.pair_id / "qualification_receipt.json",
+        make_receipt(pair=sideways)
+        .model_copy(update={"previous_certificate": earlier})
+        .canonical_payload(),
+    )
+    assert (
+        candidate_action(sideways, BUNDLE, tmp_path, base_commit="c" * 40)[0]
+        == "duplicate"
+    )
+
+
+def test_requalify_names_the_target_only_while_its_baseline_is_stale(
+    monkeypatch, tmp_path, capsys
+):
+    import argparse
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "check_uk_candidate_requalify",
+        Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
+    )
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    current = _promotion_receipt(pair=_promotable_pair_and_branch())
+    stale = current.model_copy(
+        update={
+            "previous_certificate": current.previous_certificate.model_copy(
+                update={"bundle_version": "earlier"}
+            )
+        }
+    )
+    for receipts, expected in (([stale], [stale.pair]), ([current], []), ([], [])):
+        monkeypatch.setattr(cli, "latest_receipts", lambda root, r=receipts, **_: r)
+        assert cli.cmd_requalify(argparse.Namespace(ledger=str(tmp_path))) == 0
+        printed = [
+            json.loads(line)["pair"]
+            for line in capsys.readouterr().out.splitlines()
+            if line
+        ]
+        assert printed == [pair.canonical_payload() for pair in expected]
+
+
 def test_incomplete_pairs_requalify_on_a_new_base_only(tmp_path):
     pair = make_pair(model="2.200.0")
     incomplete = make_receipt(
@@ -756,7 +851,7 @@ def test_promotion_requires_the_current_supported_years_baseline(monkeypatch):
     plan = plan_promotion([receipt_b, receipt_c], current_b, branches)
     assert plan.target == receipt_c
     assert plan.ready_branch is None and plan.ready_commit is None
-    assert "requalif" in plan.reason and "--force" in plan.reason
+    assert "requalif" in plan.reason and plan.requalify == receipt_c.pair
 
 
 @pytest.mark.parametrize(
@@ -812,6 +907,7 @@ def test_stale_baseline_does_not_close_or_fall_back_to_other_candidates(missing)
     assert plan.target == newest
     assert plan.ready_branch is None and plan.ready_commit is None
     assert plan.close_branches == [candidate_branch(superseded_by_main.pair)]
+    assert plan.requalify == newest.pair
 
 
 def test_promotion_on_an_unrelated_main_commit_keeps_the_same_baseline():
@@ -825,6 +921,7 @@ def test_promotion_on_an_unrelated_main_commit_keeps_the_same_baseline():
     )
     assert plan.ready_branch == branch
     assert plan.ready_commit == qualified.harness.git_commit
+    assert plan.requalify is None
 
 
 def test_a_forced_rerun_stages_a_new_attempt(tmp_path):

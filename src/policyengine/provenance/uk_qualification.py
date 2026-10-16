@@ -371,7 +371,12 @@ def candidate_action(
     now: Optional[str] = None,
     owner_is_failed: Optional[Callable[[str], bool]] = None,
 ) -> tuple[Action, str]:
-    """Whether to qualify ``pair`` now, and why."""
+    """Whether to qualify ``pair`` now, and why.
+
+    A promotable pair that advances main but was qualified against an
+    earlier certificate is requalified once per main commit, so automatic
+    promotion never waits on a manual ``--force``.
+    """
 
     current = certified_order_key(bundle)
     record = bundle["data_releases"]["uk"]
@@ -402,6 +407,22 @@ def candidate_action(
         )
     ):
         return "qualify", "recoverable abandoned staged attempt"
+    if (
+        receipt is not None
+        and receipt.promotable
+        and dominates(pair.order_key, current)
+        and receipt.previous_certificate != previous_certificate(bundle)
+    ):
+        # Promotion needs a qualification against main's current
+        # certificate. Requalify once per main commit, without force.
+        if attempt is not None:
+            return "duplicate", (
+                f"a requalification from base {base_commit[:12]} exists"
+            )
+        return "qualify", (
+            "promotable against a superseded baseline; requalifying against "
+            "current main"
+        )
     if receipt is not None and receipt.verdict != "incomplete":
         return "duplicate", f"pair already {receipt.verdict} in the ledger"
     if attempt is not None:
@@ -1207,6 +1228,9 @@ class PromotionPlan:
     reason: str = ""
     #: The qualified commit the ready branch must still be at when promoted.
     ready_commit: Optional[str] = None
+    #: The target, when its qualification compared against an earlier
+    #: certificate than main's: it needs requalifying before promotion.
+    requalify: Optional[CandidatePair] = None
 
 
 def plan_promotion(
@@ -1258,9 +1282,10 @@ def plan_promotion(
             close_branches=sorted(close),
             reason=(
                 f"{target.pair.order_key} advances {current}, but its previous "
-                "certificate differs from current main; requalify with --force "
+                "certificate differs from current main; it is requalified "
                 "against current main before promotion"
             ),
+            requalify=target.pair,
         )
     branch = candidate_branch(target.pair)
     qualified_commit = target.harness.git_commit
