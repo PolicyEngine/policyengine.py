@@ -860,6 +860,22 @@ class ReplayReceipt(_Mirror):
         return self
 
 
+def _is_the_gap(row: FlaggedRow, gap: Mapping[str, Any]) -> bool:
+    """Whether a coverage row is scorecard's own record of a mixed known gap.
+
+    Where one side is inert and the other missing, scorecard compares an
+    inert artifact (identical worlds, a total of exactly £0) with none, and
+    writes a coverage row with £0 on the inert side and nothing on the
+    other. Any other shape at a known gap is judged as usual.
+    """
+
+    if gap["candidate"] == "inert" and gap["why"] == "missing in the base":
+        return row.base_gbp is None and row.head_gbp == 0
+    if gap["candidate"] == "missing" and gap["why"] == "inert in the base":
+        return row.head_gbp is None and row.base_gbp == 0
+    return False
+
+
 def evaluate_replay_receipt(
     request: ReplayQualificationRequest,
     status: ReplayStatus,
@@ -877,19 +893,22 @@ def evaluate_replay_receipt(
       the candidate lists as inert, or a measure-year total of exactly £0
       against a base at least the diff's bound away) and incomplete grids,
       unless a gap is known: the base's own record (``diff.base_events``)
-      lists the same measure-year as inert, or missing and supported;
+      lists the same measure-year as inert, or missing and supported. A
+      known gap does not block, and neither do the rows by which scorecard
+      records a mixed one (``_is_the_gap``, and the base-only inertness
+      where the candidate is missing and the base inert); a material value
+      at a known gap still fails;
     - send every other flagged move to review.
 
     Unsupported years are reported, never failed on their own. The gate's
-    details record the policy id, the policy text's SHA-256, the known gaps,
-    the regressions and the review items.
+    details record the policy id, the policy text's SHA-256, the known gaps
+    and the rows that record them, the regressions and the review items.
 
-    The receipt is read as a whole, not by its summary counters: a flag
-    counts when either ``flag_counts`` or a flagged row carries it, and a
-    receipt that contradicts itself fails (failures listed under a complete
-    integrity, more flagged rows of a kind than its count, supported years
-    with no artifacts, nothing replayed at all) or contradicts the request
-    (a comparison base other than the ``compare_to`` asked for).
+    The receipt is read as a whole: a receipt that contradicts itself fails
+    (failures listed under a complete integrity, ``flag_counts`` that differ
+    from its rows' flags, supported years with no artifacts, nothing
+    replayed at all) or contradicts the request (a comparison base other
+    than the ``compare_to`` asked for).
     """
 
     request_id = request.request_id
@@ -1073,11 +1092,13 @@ def evaluate_replay_receipt(
     for row in rows:
         for kind in row.flags:
             row_counts[kind] = row_counts.get(kind, 0) + 1
-    for kind, seen in sorted(row_counts.items()):
-        if counts.get(kind, 0) < seen:
+    # Scorecard's counters are tallies of its rows' flags, so any difference,
+    # either way, is a receipt that contradicts itself.
+    for kind in sorted(set(row_counts) | {kind for kind, n in counts.items() if n}):
+        seen, counted = row_counts.get(kind, 0), counts.get(kind, 0)
+        if seen != counted:
             contradictions.append(
-                f"{seen} flagged row(s) carry {kind} but flag_counts says "
-                f"{counts.get(kind, 0)}"
+                f"{seen} flagged row(s) carry {kind} but flag_counts says {counted}"
             )
     details["flag_counts"] = counts
     details["flagged_row_counts"] = row_counts
@@ -1098,10 +1119,6 @@ def evaluate_replay_receipt(
             + "; ".join(contradictions),
             contradictions=contradictions,
         )
-    # Flags come from every place the receipt can state them, never from the
-    # summary counters alone: a flag a counter states but no row carries
-    # still needs review.
-    present = {kind for kind, n in counts.items() if n} | set(row_counts)
     # A gap is known only where the base's own grid record (scorecard#183)
     # lists the same measure-year as inert, or missing and supported, for the
     # same event. A legacy-layout base, or an event the base did not replay,
@@ -1147,7 +1164,10 @@ def evaluate_replay_receipt(
                     "base_staging_manifest_sha256": base.staging_manifest_sha256,
                 }
             )
-    known = {(gap["event"], gap["measure_key"], gap["year"]) for gap in known_gaps}
+    gaps_at = {
+        (gap["event"], gap["measure_key"], gap["year"]): gap for gap in known_gaps
+    }
+    known = set(gaps_at)
     listed_inert = set(inert)
     candidate_inert = {where for where in listed_inert if where not in known}
     regressions: list[dict[str, Any]] = []
@@ -1208,15 +1228,38 @@ def evaluate_replay_receipt(
         regressions.append(
             item("incomplete", why="integrity is incomplete with no incomplete event")
         )
+    gap_rows: list[dict[str, Any]] = []
     for row in rows:
         flags = set(row.flags)
         where = (row.event, row.measure_key, row.year)
+        gap = gaps_at.get(where)
         lost = False
+        if gap is not None and "coverage" in flags and _is_the_gap(row, gap):
+            # Scorecard's own expression of a mixed known gap: one side has no
+            # artifact and the other an inert one (identical worlds, £0).
+            flags.discard("coverage")
         if flags & BLOCKING_REPLAY_FLAGS:
             regressions.append(item("mapping", row))
             lost = True
         if "coverage" in flags and row.base_gbp is not None and row.head_gbp is None:
             regressions.append(item("lost_result", row))
+            lost = True
+        if (
+            gap is not None
+            and "coverage" in flags
+            and row.base_gbp is None
+            and row.head_gbp not in (None, 0)
+        ):
+            # The candidate's record lists the measure-year as inert or
+            # missing, so it cannot also hold a value for it.
+            regressions.append(
+                item(
+                    "contradiction",
+                    row,
+                    why="a candidate value for a measure-year its record lists "
+                    "as a gap",
+                )
+            )
             lost = True
         zero_total = (
             row.level == "measure_year"
@@ -1244,10 +1287,19 @@ def evaluate_replay_receipt(
         elif zero_total:
             regressions.append(item("lost_response", row, why="£0 against the base"))
             lost = True
-        if where in listed_inert:
+        if where in listed_inert or (
+            gap is not None
+            and gap["candidate"] == "missing"
+            and gap["why"] == "inert in the base"
+        ):
             # The candidate's inert list decides its inertness (a lost response
-            # above, or a known gap); the row's other flags are judged as usual.
+            # above, or a known gap). Where the candidate is missing and the
+            # base inert, the base-only inertness is the known gap itself. The
+            # row's other flags are judged as usual.
             flags = flags - {"inertness"}
+        if gap is not None and flags != set(row.flags):
+            # A row the known gap accounts for, in whole or in part.
+            gap_rows.append(item("known_gap_row", row))
         if not lost and flags & REVIEW_REPLAY_FLAGS:
             if "coverage" in flags and row.base_gbp is None:
                 kind = (
@@ -1260,17 +1312,12 @@ def evaluate_replay_receipt(
             else:
                 kind = "flagged_move"
             review_items.append(item(kind, row))
-    for kind in sorted(present - row_counts.keys()):
-        # A flag the counters state but no row carries: a blocking kind still
-        # fails, so a reviewer can never accept it.
-        (regressions if kind in BLOCKING_REPLAY_FLAGS else review_items).append(
-            item("counted_flag", flag=kind, count=counts.get(kind, 0))
-        )
     details.update(
         {
             "policy": REPLAY_POLICY_ID,
             "policy_sha256": replay_policy_sha256(),
             "known_gaps": known_gaps,
+            "known_gap_rows": gap_rows,
             "regressions": regressions,
             "review_items": review_items,
         }

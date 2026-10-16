@@ -2,7 +2,10 @@
 
 Decided under cos d1344 by workstream W4 on 15 October 2026, after two
 independent reviews. The pull request that added this file records the
-decision, the reviews and the alternatives considered.
+decision, the reviews and the alternatives considered. Revised on 16
+October 2026, before first use, after the third review of
+policyengine.py#637: scorecard's own record of a mixed known gap no longer
+blocks, and flag counters must equal the flags the rows carry.
 `evaluate_replay_receipt` in `policyengine.provenance.qualification`
 applies this text. Each qualification receipt records the policy id and
 this file's SHA-256 in its `replay` gate details.
@@ -16,9 +19,9 @@ comparison base. It sends every other flagged move to a named reviewer.
 - A rejected request, `no_supported_years`, integrity `failed` (a crash or
   missing outputs, persistent or not), or a receipt not bound to the
   request.
-- A mapping flag, whether a flagged row carries it or only the receipt's
-  counters state it.
-- A lost result: a coverage row with a base value and no candidate value.
+- A mapping flag.
+- A lost result: a coverage row with a base value and no candidate value,
+  unless it is the record of a known gap (below).
 - A lost response:
   - a measure-year the candidate lists as inert, unless it is a known gap;
   - a measure-year total at exactly £0 where the base's absolute value is
@@ -33,7 +36,9 @@ comparison base. It sends every other flagged move to a named reviewer.
   A receipt whose integrity is `incomplete` with no incomplete event also
   fails.
 - A receipt that contradicts itself, including a complete event that lists
-  an inert, or missing and supported, measure-year.
+  an inert, or missing and supported, measure-year; flag counters that
+  differ, either way, from the flags its rows carry; and a candidate value
+  for a measure-year that is a known gap.
 
 ## Known gaps
 
@@ -45,6 +50,15 @@ measure and year as inert, or as missing and supported, in the base. The
 gate records each known gap with the base's staging manifest SHA-256. A
 legacy-layout base, or an event the base did not replay, has no record, so
 none of its gaps are known.
+
+A known gap does not block. Where one side is inert and the other missing,
+scorecard records the gap as a coverage row with exactly £0 on the inert
+side and no value on the other, and, where the base is the inert side, an
+inertness flag on the base only. Those rows are the gap itself: they
+neither fail nor go to review, and the gate records them beside the known
+gaps. Any other row at a known gap is judged as usual: a material base
+value is still a lost result, and a candidate value contradicts the
+candidate's own record.
 
 ## Review
 
@@ -59,8 +73,9 @@ review:
 - support flags (the separate `supported_years` gate fails a candidate that
   loses a year the previous certificate supported);
 - coverage gains, coverage rows with no value on either side, and any other
-  coverage row that is not a lost result;
-- inertness flags on a measure-year the candidate does not list as inert;
+  coverage row that is not a lost result or the record of a known gap;
+- inertness flags on a measure-year the candidate does not list as inert,
+  other than the record of a known gap;
 - a receipt with no diff against a certified variant.
 
 Unsupported years alone never fail. A move below the diff's bound raises
