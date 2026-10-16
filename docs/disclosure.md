@@ -119,7 +119,12 @@ them like its own.
 
 The check matches areas by their codes, and it raises on a code that matches
 nothing rather than leave areas unchecked. Each value of `parent_of` must be
-an area code of the parent level's estimates.
+an area code of the parent level's estimates. Each cell of `prior_public` at
+a level the release holds must name an area of that level, whatever its
+reform and year, and every cell needs one of the six outcomes. Cells at other
+levels, or for other reforms or years, belong to other publications: the
+release accepts them, but they take no part in the check. A prior cell counts
+only when its level, area code, reform label and year are the release's.
 
 `compute_uk_geography_disclosure` always checks constituencies and local
 authorities against their region, and regions against the nation, also when

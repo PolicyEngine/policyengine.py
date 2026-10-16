@@ -601,6 +601,57 @@ def test_a_prior_with_another_noise_setting_blocks_until_acknowledged():
     assert [f.blocking for f in accepted.check()] == [False]
 
 
+@pytest.mark.parametrize(
+    "order", [("region", "constituency"), ("constituency", "region")]
+)
+def test_a_prior_cell_must_name_an_area_of_a_level_the_release_holds(order):
+    """Regions published under other codes would still count as hidden."""
+    prior = PriorPublic(
+        name="regional table",
+        cells=[
+            ("region", "North", "reform", 2026, "average_change"),
+            ("region", "North", "reform", 2026, "share_gaining"),
+            ("region", "R2", "reform", 2026, "average_change"),
+        ],
+    )
+    data = _records(STRONG)
+    release = Release(prior_public=[prior])
+    for level in order:
+        # The regions are a reference, as in a seat release after a regional one.
+        release.add(_estimates(data, level), publish=level == "constituency")
+    release.add_nesting("constituency", "region")
+
+    with pytest.raises(
+        DisclosureError, match=r"'regional table' that name no region area.*: 2\."
+    ) as raised:
+        release.check()
+    assert "North" not in str(raised.value)
+
+
+def test_a_prior_cell_needs_a_known_outcome():
+    cells = [("constituency", "S1", "reform", 2026, "avg_change")]
+
+    with pytest.raises(DisclosureError, match="'typo table' whose outcome is unknown"):
+        Release(prior_public=[PriorPublic(name="typo table", cells=cells)])
+
+
+def test_prior_cells_of_other_publications_are_allowed():
+    """Cells for other reforms, years or levels take no part in the check."""
+    cells = [
+        ("constituency", "S1", "other reform", 2026, "average_change"),
+        ("constituency", "S1", "reform", 2025, "share_gaining"),
+        ("region", "R1", "reform", 2027, "share_no_change"),
+        ("local_authority", "L9", "reform", 2026, "average_change"),
+    ]
+    prior = PriorPublic(name="other tables", cells=cells)
+    affected = {**STRONG, "S1": 4, "S2": 30}
+
+    findings = _release(affected, prior_public=[prior]).check()
+
+    assert findings == _release(affected).check()
+    assert _blocking(findings, RECOVERABLE_REMAINDER)
+
+
 def test_a_weight_matrix_child_needs_parent_of_under_several_parents():
     data = _records(STRONG)
     n = len(data["seats"])

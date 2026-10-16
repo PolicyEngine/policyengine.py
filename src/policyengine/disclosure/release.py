@@ -27,6 +27,7 @@ from .schema import (
     FAMILY_LOSING,
     NOISE_REFERENCE_PUBLIC,
     OUTCOME_FAMILY,
+    OUTCOMES,
     PRIVATE_SECONDARY,
     REASON_DISCLOSURE_CONTROL,
     REASON_THIN_SUPPORT,
@@ -71,6 +72,17 @@ class Release:
         if unknown:
             raise ValueError(f"These findings cannot be acknowledged: {unknown}")
         self._prior = tuple(prior_public)
+        for prior in self._prior:
+            # A cell with an unknown outcome matches no cell of any release.
+            unknown_outcomes = sum(
+                outcome not in OUTCOMES for *_, outcome in prior.cells
+            )
+            if unknown_outcomes:
+                raise DisclosureError(
+                    f"Cells of prior publication {prior.name!r} whose outcome is "
+                    f"unknown: {unknown_outcomes}. Outcomes are "
+                    f"{', '.join(OUTCOMES)}."
+                )
         self._estimates: dict[_Key, AreaEstimates] = {}
         self._published: dict[_Key, bool] = {}
         self._nestings: list[tuple[str, str, Optional[dict[str, str]]]] = []
@@ -146,6 +158,7 @@ class Release:
 
     def check(self) -> list[Finding]:
         """Report what a reader could recover from the rows as they stand."""
+        self._require_prior_areas()
         tiers = {
             (key, family): self._family_tiers(key, family)
             for key in self._estimates
@@ -267,6 +280,32 @@ class Release:
                 yield record, WITHHELD, PRIVATE_SECONDARY
             else:
                 yield record, record["tier"], reason
+
+    def _require_prior_areas(self) -> None:
+        """Refuse prior cells that name no area of a level the release holds.
+
+        Prior cells match by code. A cell that matched nothing would be
+        ignored, so a cell an earlier publication showed would still count as
+        hidden. A level the release holds is checked whatever the reform and
+        year of the cell; cells at other levels belong to other publications.
+        """
+        areas: dict[str, set[str]] = {}
+        for (level, _, _), estimates in self._estimates.items():
+            areas.setdefault(level, set()).update(estimates.areas.area_codes)
+        for prior in self._prior:
+            unmatched = [
+                level
+                for level, area, _, _, _ in prior.cells
+                if level in areas and area not in areas[level]
+            ]
+            if unmatched:
+                levels = " or ".join(sorted(set(unmatched)))
+                raise DisclosureError(
+                    f"Cells of prior publication {prior.name!r} that name no "
+                    f"{levels} area of the release: {len(unmatched)}. Prior "
+                    "cells match by code: use the area codes of the release's "
+                    "estimates."
+                )
 
     def _known_cells(self) -> set[tuple[str, str, str, int, str]]:
         """Family cells an earlier publication already made public."""
