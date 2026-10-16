@@ -5894,6 +5894,50 @@ RUNTIME_ALIAS_HEAD = (
             id="lambda-parameter-in-a-forward-reference",
         ),
         pytest.param(
+            # Round-19 review: an import not loaded when the receipt is built
+            # binds an unknown object, here in place of typing.
+            "    import w4_receipt_r19_not_loaded as typing\n\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="annotated-through-an-unloaded-import",
+        ),
+        pytest.param(
+            "    import w4_receipt_r19_not_loaded as aliases\n\n"
+            "    shape = aliases.Sequence[Union[Decimal, float]]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "aliases.Sequence",
+            id="subscript-of-an-unloaded-import",
+        ),
+        pytest.param(
+            "    from w4_receipt_r19_not_loaded import MONEY\n\n"
+            "    shape = List[MONEY]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="list-of-a-name-from-an-unloaded-module",
+        ),
+        pytest.param(
+            "    import w4_receipt_r19_not_loaded as MONEY\n\n"
+            "    shape = List[MONEY]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="list-of-an-unloaded-module",
+        ),
+        pytest.param(
+            "    from .w4_receipt_r19_not_loaded import MONEY\n\n"
+            "    shape = List[MONEY]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="list-of-a-name-from-an-unresolvable-relative-import",
+        ),
+        pytest.param(
+            "    from w4_receipt_r15_aliases import Box\n\n"
+            "    shape = Box.Sequence[Union[Decimal, float]]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "Box.Sequence",
+            id="attribute-of-an-imported-class",
+        ),
+        pytest.param(
             "    from typing import Tuple as Literal\n\n"
             "    shape = Literal['List[Union[Decimal, float]]']\n"
             "    simulation.rate = 0.21 if shape else 0.0\n",
@@ -5929,7 +5973,8 @@ def test_typing_aliases_built_with_a_union_inside_functions_are_refused(
         _import_source(
             tmp_path,
             "w4_receipt_r15_aliases",
-            "from decimal import Decimal\n\nMONEY = Decimal | float\n",
+            "import typing\nfrom decimal import Decimal\n\nMONEY = Decimal | float\n\n\n"
+            "class Box:\n    Sequence = typing.Sequence\n",
         )
         module, _ = _import_source(tmp_path, name, source)
         with pytest.raises(
@@ -6023,6 +6068,17 @@ def test_typing_aliases_built_with_a_union_inside_functions_are_refused(
             + "]):\n        return value\n\n"
             "    simulation.rate = 0.21\n",
             id="deeply-quoted-layers-without-a-union",
+        ),
+        pytest.param(
+            "    import w4_receipt_r19_not_loaded as aliases\n\n"
+            "    shape = aliases.Sequence[float]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            id="unloaded-import-without-a-union",
+        ),
+        pytest.param(
+            "    def pick(table, mask):\n        return table.rows[mask | 1]\n\n"
+            "    simulation.rate = 0.21 if pick else 0.0\n",
+            id="parameter-attribute-subscript-with-bitwise-or",
         ),
     ],
 )

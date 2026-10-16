@@ -2303,11 +2303,27 @@ def _names_bound_without_import(nodes: Iterable[ast.AST]) -> set[str]:
     return names
 
 
+class _Unresolved:
+    """What a name stands for when the receipt cannot tell: an import whose
+    target is not loaded when the receipt is built, or an attribute of
+    something other than a loaded module. It could be any object."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "<unresolved>"
+
+
+_UNRESOLVED = _Unresolved()
+
+
 def _function_bindings(module: Any, nodes: Sequence[ast.AST]) -> dict[str, list[Any]]:
     """What each name an import inside a function binds, across all its scopes.
 
     Every binding is kept, so a name one helper imports from typing and
-    another from collections.abc counts as both.
+    another from collections.abc counts as both. An import whose target is
+    not loaded yet binds :data:`_UNRESOLVED`: the import runs when the
+    function does, and could bind anything.
     """
 
     bindings: dict[str, list[Any]] = {}
@@ -2316,7 +2332,9 @@ def _function_bindings(module: Any, nodes: Sequence[ast.AST]) -> dict[str, list[
             for alias in node.names:
                 name = alias.asname or alias.name.split(".")[0]
                 target = alias.name if alias.asname else name
-                bindings.setdefault(name, []).append(sys.modules.get(target))
+                bindings.setdefault(name, []).append(
+                    sys.modules.get(target, _UNRESOLVED)
+                )
         elif isinstance(node, ast.ImportFrom):
             try:
                 source_name = (
@@ -2327,17 +2345,24 @@ def _function_bindings(module: Any, nodes: Sequence[ast.AST]) -> dict[str, list[
                     else node.module or ""
                 )
             except (ImportError, ValueError):
-                continue
-            source = sys.modules.get(source_name)
+                source_name = None
+            source = sys.modules.get(source_name) if source_name else None
             for alias in node.names:
-                if alias.name != "*":
-                    bindings.setdefault(alias.asname or alias.name, []).append(
-                        getattr(
-                            source,
-                            alias.name,
-                            sys.modules.get(f"{source_name}.{alias.name}"),
-                        )
+                if alias.name == "*":
+                    continue
+                if source is None:
+                    value = (
+                        sys.modules.get(f"{source_name}.{alias.name}", _UNRESOLVED)
+                        if source_name
+                        else _UNRESOLVED
                     )
+                else:
+                    value = getattr(
+                        source,
+                        alias.name,
+                        sys.modules.get(f"{source_name}.{alias.name}", _UNRESOLVED),
+                    )
+                bindings.setdefault(alias.asname or alias.name, []).append(value)
     return bindings
 
 
@@ -2355,7 +2380,9 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
     inside them.
 
     Resolution is conservative: a name stands for every object the module
-    or any import inside the function binds it to, and every string in the
+    or any import inside the function binds it to (an import not loaded yet,
+    or an attribute of anything but a loaded module, could be any object),
+    and every string in the
     function's code that parses as an expression is inspected as a type
     (except ``Literal`` values and ``Annotated`` metadata), since a forward
     reference is evaluated when something resolves it. Local aliases of
@@ -2409,19 +2436,26 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
             values = list(local.get(node.id, ()))
             if node.id in namespace:
                 values.append(namespace[node.id])
-            # A builtin (list, dict, type) never reuses equal aliases.
+            # A builtin (list, dict, type) never reuses equal aliases. An
+            # attribute is followed only on a loaded module; on anything else,
+            # or one the module lacks now, it could be any object.
             for attribute in reversed(attributes):
                 values = [
                     getattr(owner, attribute)
-                    for owner in values
                     if isinstance(owner, ModuleType) and hasattr(owner, attribute)
+                    else _UNRESOLVED
+                    for owner in values
                 ]
             return values
 
         def is_form(node: ast.AST, *forms: str) -> bool:
-            """Whether any object the name can stand for is one of ``forms``."""
+            """Whether any object the name can stand for is one of ``forms``
+            (an unresolved one could be)."""
 
-            return any(_is_typing_form(value, *forms) for value in resolve(node))
+            return any(
+                value is _UNRESOLVED or _is_typing_form(value, *forms)
+                for value in resolve(node)
+            )
 
         def is_only_form(node: ast.AST, *forms: str) -> bool:
             """Whether every object the name can stand for is one of ``forms``.
@@ -2503,7 +2537,8 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
                         pending.extend(elements[:1])
                         continue
                 if isinstance(node, (ast.Name, ast.Attribute)) and any(
-                    _holds_union(value) for value in resolve(node)
+                    value is _UNRESOLVED or _holds_union(value)
+                    for value in resolve(node)
                 ):
                     return True
                 if isinstance(node, ast.Constant):
@@ -2522,7 +2557,8 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
             if not isinstance(node, ast.Subscript):
                 continue
             if any(
-                _subscript_reuses_equal_aliases(value) for value in resolve(node.value)
+                value is _UNRESOLVED or _subscript_reuses_equal_aliases(value)
+                for value in resolve(node.value)
             ) and holds_union(node.slice):
                 line = getattr(node, "lineno", statement.lineno)
                 try:
