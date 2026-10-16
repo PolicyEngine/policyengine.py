@@ -364,6 +364,12 @@
          }
         }
        }
+      },
+      "base_events": {
+       "type": "object",
+       "additionalProperties": {
+        "$ref": "#/$defs/base_event"
+       }
       }
      }
     }
@@ -614,23 +620,74 @@
      "type": "boolean"
     },
     "inert_measure_years": {
+     "$ref": "#/$defs/measure_years"
+    },
+    "missing_measure_years": {
+     "$ref": "#/$defs/measure_years"
+    },
+    "unsupported_measure_years": {
+     "$ref": "#/$defs/measure_years"
+    }
+   }
+  },
+  "measure_years": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "measure_key",
+     "year"
+    ],
+    "properties": {
+     "measure_key": {
+      "type": "string",
+      "minLength": 1
+     },
+     "year": {
+      "type": "integer"
+     }
+    }
+   },
+   "uniqueItems": true
+  },
+  "base_event": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "staging_manifest_sha256",
+    "run_manifest_sha256",
+    "supported_years",
+    "full_supported_grid_complete",
+    "inert_measure_years",
+    "missing_measure_years",
+    "unsupported_measure_years"
+   ],
+   "properties": {
+    "staging_manifest_sha256": {
+     "$ref": "#/$defs/sha256"
+    },
+    "run_manifest_sha256": {
+     "$ref": "#/$defs/sha256"
+    },
+    "supported_years": {
      "type": "array",
      "items": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-       "measure_key",
-       "year"
-      ],
-      "properties": {
-       "measure_key": {
-        "type": "string"
-       },
-       "year": {
-        "type": "integer"
-       }
-      }
-     }
+      "type": "integer"
+     },
+     "uniqueItems": true
+    },
+    "full_supported_grid_complete": {
+     "type": "boolean"
+    },
+    "inert_measure_years": {
+     "$ref": "#/$defs/measure_years"
+    },
+    "missing_measure_years": {
+     "$ref": "#/$defs/measure_years"
+    },
+    "unsupported_measure_years": {
+     "$ref": "#/$defs/measure_years"
     }
    }
   }
