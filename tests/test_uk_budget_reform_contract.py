@@ -9,6 +9,10 @@ policyengine-uk has the statutory-timeline reform routes.
 
 import datetime
 import json
+import os
+import subprocess
+import sys
+import textwrap
 
 import pytest
 
@@ -1373,3 +1377,45 @@ def test_every_report_row_has_a_reform_identity_field():
             assert "reform_identity" in row, (section, row)
             if row["reform_identity"] is None:
                 assert row["reform_identity_unavailable"], (section, row)
+
+
+def test_the_household_route_runs_when_country_imports_are_skipped():
+    # scripts/check_uk_candidate.py sets POLICYENGINE_SKIP_COUNTRY_IMPORTS=1
+    # before the qualification gates run this contract, and that leaves
+    # ``policyengine.uk`` as None. Reaching the wrapper through it made every
+    # wrapper.household row an error, so every UK candidate was rejected.
+    code = textwrap.dedent(
+        """
+        import json
+        import os
+
+        os.environ["POLICYENGINE_SKIP_COUNTRY_IMPORTS"] = "1"
+        import policyengine
+
+        assert policyengine.uk is None
+        from policyengine.tax_benefit_models.uk.budget_reform_contract import (
+            CASES,
+            evaluate_case,
+        )
+
+        case = next(case for case in CASES if case.id == "april_rate_change")
+        rows = evaluate_case(case, "wrapper.household")
+        print(json.dumps([[row["status"], row.get("detail")] for row in rows]))
+        """
+    )
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key != "POLICYENGINE_SKIP_COUNTRY_IMPORTS"
+    }
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=900,
+    )
+    assert result.returncode == 0, result.stderr
+    rows = json.loads(result.stdout.strip().splitlines()[-1])
+    assert rows
+    assert [row for row in rows if row[0] == "error"] == [], rows

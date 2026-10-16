@@ -1257,10 +1257,14 @@ class _WrapperHouseholdRoute:
     route = "wrapper.household"
 
     def _call(self, case: Case, year: int, reform, variables: Sequence[str]):
-        import policyengine as pe
+        # Import the country module itself, not ``policyengine.uk``: callers such
+        # as scripts/check_uk_candidate.py set POLICYENGINE_SKIP_COUNTRY_IMPORTS,
+        # which leaves ``policyengine.uk`` as None. It is the same
+        # ``calculate_household`` that ``policyengine.uk`` exposes.
+        from policyengine.tax_benefit_models import uk as pe_uk
 
         household = case.household
-        return pe.uk.calculate_household(
+        return pe_uk.calculate_household(
             people=[dict(person) for person in household.people],
             benunit=dict(household.benunit),
             household=dict(household.household),
