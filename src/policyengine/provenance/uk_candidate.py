@@ -1342,51 +1342,152 @@ def _excludes(row: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(sorted(str(metric_id) for metric_id in row.get("excludes") or ()))
 
 
+#: The fields the pinned tool gives every metric row under its small-cell
+#: rule (``api.to_report`` at policyengine-uk 1191ac5a4). A report without
+#: them comes from a tool that predates suppression and may publish a figure
+#: from fewer than 10 records, so it fails.
+SMALL_CELL_FIELDS = ("suppressed", "excludes", "exclude_signs")
+
+
+def _finite_number(value: Any) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and math.isfinite(value)
+    )
+
+
+def _valid_signs(row: Mapping[str, Any]) -> Optional[dict[str, int]]:
+    """``exclude_signs`` when it gives +1 or -1 for exactly the excluded ids."""
+
+    signs, excludes = row.get("exclude_signs"), row.get("excludes")
+    if not isinstance(signs, Mapping) or not isinstance(excludes, list):
+        return None
+    if set(signs) != set(excludes) or not all(
+        not isinstance(sign, bool) and sign in (1, -1) for sign in signs.values()
+    ):
+        return None
+    return {str(metric_id): int(sign) for metric_id, sign in signs.items()}
+
+
 def _small_cell_problems(name: str, rows: Sequence[Mapping[str, Any]]) -> list[str]:
     """Rows that break the tool's small-cell format, as problems.
 
     The tool publishes a figure from fewer than 10 records with ``value``
-    null and ``suppressed`` true, and lists under ``excludes`` the suppressed
-    figures (by ``metric_id``) a total is rebuilt without that year
-    (``privacy.py`` and ``measure.rebuild_protected`` in the pinned tool). A
-    suppressed row with a value, a ``suppressed`` that is not a boolean, an
-    ``excludes`` that is not a list of ids, or an ``excludes`` entry naming a
-    figure the same report does not suppress in that year is a report this
-    gate cannot read safely.
+    null and ``suppressed`` true. A spending head's caseload is suppressed
+    with it, from the same records. Every total holding a suppressed figure
+    is rebuilt without it; the total lists the figure's ``metric_id`` under
+    ``excludes`` and the sign it enters with, +1 or -1, under
+    ``exclude_signs`` (``privacy.py``, ``measure.measure_year`` and
+    ``measure.rebuild_protected`` in the pinned tool). These are reports this
+    gate cannot read safely:
+
+    - a row without the small-cell fields, or whose year is not an integer;
+    - a suppressed row with a value, or a ``suppressed`` that is not a
+      boolean;
+    - an ``excludes`` that is not a list of ids, or names a figure the same
+      report does not suppress in that year;
+    - ``exclude_signs`` that do not give +1 or -1 for exactly ``excludes``;
+    - a caseload and its spending head that are not suppressed together.
     """
 
-    hidden = {
-        (str(row.get("metric_id")), row.get("year")) for row in rows if _suppressed(row)
-    }
-    with_value, not_boolean, malformed, unmatched = [], [], [], []
+    by_key = {(str(row.get("metric_id")), row.get("year")): row for row in rows}
+    hidden = {key for key, row in by_key.items() if _suppressed(row)}
+    missing_fields, bad_years, with_value, not_boolean = [], [], [], []
+    malformed, bad_signs, unmatched, unpaired = [], [], [], []
     for row in rows:
-        label = f"{row.get('metric_id')} {row.get('year')}"
+        metric_id, year = str(row.get("metric_id")), row.get("year")
+        label = f"{metric_id} {year}"
+        if any(field not in row for field in SMALL_CELL_FIELDS):
+            missing_fields.append(label)
+        if isinstance(year, bool) or not isinstance(year, int):
+            bad_years.append(label)
         flag = row.get("suppressed", False)
         if not isinstance(flag, bool):
             not_boolean.append(label)
         elif flag and row.get("value") is not None:
             with_value.append(label)
+        if metric_id.startswith("caseloads."):
+            head = by_key.get((f"spending.{metric_id.split('.', 1)[1]}", year))
+            if head is not None and _suppressed(head) != _suppressed(row):
+                unpaired.append(label)
         excludes = row.get("excludes", [])
         if not isinstance(excludes, list) or not all(
-            isinstance(metric_id, str) for metric_id in excludes
+            isinstance(excluded, str) for excluded in excludes
         ):
             malformed.append(label)
             continue
+        if "exclude_signs" in row and _valid_signs(row) is None:
+            bad_signs.append(label)
         unmatched.extend(
-            f"{label} excludes {metric_id}"
-            for metric_id in excludes
-            if (metric_id, row.get("year")) not in hidden
+            f"{label} excludes {excluded}"
+            for excluded in excludes
+            if (excluded, year) not in hidden
         )
     problems = []
     for found, what in (
+        (
+            missing_fields,
+            "rows without the small-cell fields (suppressed, excludes, "
+            "exclude_signs), so from a tool that predates suppression",
+        ),
+        (bad_years, "metric rows whose year is not an integer"),
         (with_value, "suppressed figures with a value"),
         (not_boolean, "a suppressed flag that is not true or false"),
         (malformed, "excludes that are not a list of metric ids"),
+        (bad_signs, "exclude_signs that are not +1 or -1 for exactly its excludes"),
         (unmatched, "totals excluding a figure it does not suppress"),
+        (unpaired, "caseloads not suppressed together with their spending head"),
     ):
         if found:
             problems.append(f"the {name} report has {what}: {', '.join(found[:8])}")
     return problems
+
+
+#: Totals that are plain sums of heads in pounds, so a figure can be taken out
+#: by subtraction: the pinned tool's ``compare._additive`` (sections
+#: model_totals and balance, whose rows have kind ``model_total`` and
+#: ``balance``, and household net income). Decile means and the HBAI total
+#: (reset at zero) are not.
+ADDITIVE_KINDS = frozenset({"model_total", "balance"})
+ADDITIVE_METRICS = frozenset({"household.household_net_income"})
+
+
+def _additive(row: Mapping[str, Any]) -> bool:
+    return (
+        row.get("kind") in ADDITIVE_KINDS
+        or str(row.get("metric_id")) in ADDITIVE_METRICS
+    )
+
+
+def _aligned(
+    value: float,
+    own: Mapping[str, Any],
+    other_signs: Mapping[str, int],
+    metrics: Mapping[tuple[str, Optional[int]], Mapping[str, Any]],
+    year: Optional[int],
+) -> Optional[float]:
+    """``own``'s total with every figure only the other side excludes taken out.
+
+    As ``compare._aligned`` in the pinned tool: the figure's value is this
+    side's own published row for the year, and its sign is the one the side
+    that excludes it records. None when a needed figure is not published
+    here (missing, suppressed or not finite).
+    """
+
+    own_excludes = set(_excludes(own))
+    for metric_id, sign in sorted(other_signs.items()):
+        if metric_id in own_excludes:
+            continue
+        published = metrics.get((metric_id, year))
+        if (
+            published is None
+            or _suppressed(published)
+            or not _finite_number(published.get("value"))
+        ):
+            return None
+        value -= sign * float(published["value"])
+    return value
 
 
 def _wider_failure(candidate: Mapping[str, Any], previous: Mapping[str, Any]) -> bool:
@@ -1414,30 +1515,38 @@ def compare_metric_reports(
     checks fail outright; known-defect checks fail only when they worsen
     against the previous pair, meaning the previous pair did not fail them,
     or failed them in fewer scopes (``failing_scopes``, when the tool reports
-    them); ``warn`` is recorded, and a check that newly warns needs review.
-    ``skipped`` means the check was not run, which is neither a pass nor a
-    failure: a skipped hard check, or a check skipped where the previous
-    pair ran it (pass, warn or fail), needs review.
+    them); ``warn`` is recorded, and a check that newly warns (it did not
+    warn in the previous report, as the tool's ``new_warning``) needs
+    review. ``skipped`` means the check was not run, which is neither a pass
+    nor a failure: a skipped hard check, or a check skipped where the
+    previous pair ran it (pass, warn or fail), needs review.
 
     A report with a status other than ``ok``, no metrics or no checks fails,
-    as does any check with a status outside ``CHECK_STATUSES``. A hard check
-    the previous pair ran that is missing from the candidate fails (the two
-    reports share one tool and one set of definitions); other missing checks
-    need review.
+    as does a report that repeats a check, or any check, in either report,
+    with a status outside ``CHECK_STATUSES``. A hard check the previous pair
+    ran that is missing from the candidate fails (the two reports share one
+    tool and one set of definitions); other missing checks need review.
 
     Small cells (W3's tool publishes a figure from fewer than 10 records as
     ``value`` null, ``suppressed`` true, and rebuilds every total that holds
-    one without it, listing it under ``excludes``):
+    one without it, listing it under ``excludes`` with its sign under
+    ``exclude_signs``):
 
     - a suppressed figure is present but never compared, and is not a
       non-finite value; suppressed on both sides, there is nothing to compare;
-    - a figure suppressed on one side only, or a total whose two sides leave
-      out different figures, is withheld: no change is computed (it would
-      give the suppressed figure back) and the comparison needs review. The
-      report lists the excluded ids without the sign each enters its total
-      with, so differing exclusions are never lined up here;
-    - a total compares numerically only when both sides exclude the same
-      figures;
+    - a figure suppressed on one side only is withheld: no change is
+      computed (it would come from fewer than 10 records) and the comparison
+      needs review;
+    - a total compares directly when both sides exclude the same figures;
+    - an additive total (``_additive``) whose sides exclude different
+      figures is lined up as the tool's ``compare._aligned`` does: each side
+      takes out, at its own published value and the excluding side's sign,
+      every figure only the other side excludes. The change between the
+      lined-up totals is held to the bound, whose relative part is taken on
+      the previous report's published total. Any other total with different
+      exclusions, or one that cannot be lined up (a needed figure not
+      published, or a figure both sides exclude with different signs), is
+      withheld for review;
     - a report that breaks the format (``_small_cell_problems``) fails.
     """
 
@@ -1452,6 +1561,27 @@ def compare_metric_reports(
             problems.append(f"the {name} report has no metrics")
         if not report.get("identities"):
             problems.append(f"the {name} report has no checks")
+        # One row per check: a repeated id would let either copy decide.
+        check_counts = Counter(
+            str(row.get("identity_id")) for row in report.get("identities", [])
+        )
+        repeated = sorted(check for check, count in check_counts.items() if count > 1)
+        if repeated:
+            problems.append(
+                f"the {name} report repeats checks: {', '.join(repeated[:8])}"
+            )
+    # The previous report's statuses decide regressions and new warnings, so
+    # an unknown one there is no more a pass than in the candidate.
+    previous_unknown = [
+        f"{row.get('identity_id')} ({row.get('status')!r})"
+        for row in previous.get("identities", [])
+        if row.get("status") not in CHECK_STATUSES
+    ]
+    if previous_unknown:
+        problems.append(
+            "the previous report has checks with an unknown status: "
+            + ", ".join(previous_unknown[:8])
+        )
     previous_rows = {
         str(row.get("identity_id")): row for row in previous.get("identities", [])
     }
@@ -1484,7 +1614,7 @@ def compare_metric_reports(
                 preexisting.append(check_id)
         elif status == "warn":
             warnings_.append(check_id)
-            if before == "pass":
+            if before != "warn":
                 new_warnings.append(check_id)
         elif status == "skipped":
             # Not run: never a pass, whatever the check's class.
@@ -1554,13 +1684,7 @@ def compare_metric_reports(
         nonfinite = [
             f"{row.get('metric_id')} {row.get('year')}"
             for row in rows
-            if not _suppressed(row)
-            and (
-                row.get("value") is None
-                or isinstance(row.get("value"), bool)
-                or not isinstance(row.get("value"), (int, float))
-                or not math.isfinite(float(row["value"]))
-            )
+            if not _suppressed(row) and not _finite_number(row.get("value"))
         ]
         if nonfinite:
             problems.append(
@@ -1577,9 +1701,11 @@ def compare_metric_reports(
         review.append(f"metrics have no baseline: {', '.join(without_baseline[:8])}")
     moves = []
     withheld: list[dict[str, Any]] = []
+    aligned_totals: list[str] = []
     suppressed_on_both = 0
+    # Years sort as text so a malformed year (failed above) cannot crash this.
     for key, row in sorted(
-        current.items(), key=lambda item: (item[0][0], item[0][1] or 0)
+        current.items(), key=lambda item: (item[0][0], str(item[0][1]))
     ):
         old = before_metrics.get(key)
         if old is None:
@@ -1599,47 +1725,83 @@ def compare_metric_reports(
                 }
             )
             continue
+        if not (_finite_number(row.get("value")) and _finite_number(old.get("value"))):
+            continue
+        new_value, old_value = float(row["value"]), float(old["value"])
+        new_compared, old_compared = new_value, old_value
+        aligned_on: Optional[list[str]] = None
         if _excludes(row) != _excludes(old):
-            # Each side leaves out its own suppressed figures; their
-            # difference would mix definitions and could give one back.
-            withheld.append(
-                {
-                    "metric_id": key[0],
-                    "year": key[1],
-                    "reason": "the reports leave out different suppressed figures",
-                    "candidate_excludes": list(_excludes(row)),
-                    "previous_excludes": list(_excludes(old)),
-                }
-            )
-            continue
-        try:
-            new_value, old_value = float(row["value"]), float(old["value"])
-        except (KeyError, TypeError, ValueError):
-            continue
-        if not (math.isfinite(new_value) and math.isfinite(old_value)):
-            continue
+            # Each side leaves out its own suppressed figures. Subtracting
+            # the totals as published would mix definitions and could give
+            # an excluded figure back, so they are lined up first, from
+            # published figures only, or withheld.
+            new_signs, old_signs = _valid_signs(row), _valid_signs(old)
+            reason = None
+            if not (_additive(row) and _additive(old)):
+                reason = "the reports leave out different suppressed figures"
+            elif new_signs is None or old_signs is None:
+                reason = (
+                    "the reports leave out different suppressed figures, "
+                    "without the signs needed to line them up"
+                )
+            elif any(
+                new_signs[metric_id] != old_signs[metric_id]
+                for metric_id in set(new_signs) & set(old_signs)
+            ):
+                reason = (
+                    "a figure both reports leave out enters their totals "
+                    "with different signs"
+                )
+            else:
+                lined_up = (
+                    _aligned(new_value, row, old_signs, current, key[1]),
+                    _aligned(old_value, old, new_signs, before_metrics, key[1]),
+                )
+                if lined_up[0] is None or lined_up[1] is None:
+                    reason = (
+                        "the reports leave out different suppressed figures, "
+                        "and one needed to line them up is not published"
+                    )
+                else:
+                    new_compared, old_compared = lined_up
+                    aligned_on = sorted(set(new_signs) | set(old_signs))
+                    aligned_totals.append(f"{key[0]} {key[1]}")
+            if reason is not None:
+                withheld.append(
+                    {
+                        "metric_id": key[0],
+                        "year": key[1],
+                        "reason": reason,
+                        "candidate_excludes": list(_excludes(row)),
+                        "previous_excludes": list(_excludes(old)),
+                    }
+                )
+                continue
         relative, absolute = _bound(bounds, row.get("kind"))
+        # The relative part is taken on the previous published total, as the
+        # tool's flag threshold is.
         threshold = max(relative * abs(old_value), absolute)
-        change = new_value - old_value
+        change = new_compared - old_compared
         if abs(change) > threshold:
-            moves.append(
-                {
-                    "metric_id": key[0],
-                    "year": key[1],
-                    "kind": row.get("kind"),
-                    "previous": old_value,
-                    "candidate": new_value,
-                    "change": change,
-                    "threshold": threshold,
-                }
-            )
+            move = {
+                "metric_id": key[0],
+                "year": key[1],
+                "kind": row.get("kind"),
+                "previous": old_value,
+                "candidate": new_value,
+                "change": change,
+                "threshold": threshold,
+            }
+            if aligned_on is not None:
+                move["lined_up_without"] = aligned_on
+            moves.append(move)
     if moves:
         review.append(f"{len(moves)} metric move(s) exceed their review bounds")
     if withheld:
         review.append(
             f"{len(withheld)} metric change(s) are withheld because a figure "
             "from fewer than 10 records is suppressed on one side, or the two "
-            "sides leave out different ones"
+            "sides leave out different ones and cannot be lined up"
         )
     evidence = {
         "metrics_version": candidate.get("metrics_version"),
@@ -1661,6 +1823,7 @@ def compare_metric_reports(
         ),
         "suppressed_on_both_sides": suppressed_on_both,
         "withheld_changes": withheld,
+        "lined_up_totals": aligned_totals,
         "moves_beyond_bounds": moves,
         "candidate_report_sha256": evidence_sha256(candidate),
         "previous_report_sha256": evidence_sha256(previous),
@@ -1724,6 +1887,29 @@ def metrics_review(
         evidence,
         details={name: step[0] for name, step in steps.items()},
     )
+
+
+def publishable_metrics_report(report: Mapping[str, Any]) -> dict[str, Any]:
+    """A metrics report as it may be written to the qualification ledger.
+
+    The ledger is a branch of a public repository. A report that breaks the
+    small-cell format (``_small_cell_problems``) may carry a figure from
+    fewer than 10 records, so only its digest and its problems, which name
+    figures but give no values, are kept. A report the tool could not finish
+    has no metrics to check and is kept as it is.
+    """
+
+    problems = _small_cell_problems("metrics", report.get("metrics") or [])
+    if not problems:
+        return dict(report)
+    return {
+        "withheld": (
+            "This report breaks the metrics tool's small-cell format, so it "
+            "is not published."
+        ),
+        "report_sha256": evidence_sha256(report),
+        "problems": problems,
+    }
 
 
 # --- Reform responsiveness -------------------------------------------------------
@@ -1798,6 +1984,24 @@ def reform_responsiveness(
         disagreements.append(
             f"the report covers {report.get('years')}, not the horizon {list(years)}"
         )
+    # A repeated target or check would let either copy decide.
+    repeated = sorted(
+        f"{key[0]} {key[1]}"
+        for key, count in Counter(
+            (str(row.get("metric_id")), row.get("year"))
+            for row in report.get("metrics") or []
+        ).items()
+        if count > 1 and key[0].startswith("reform_targets.")
+    ) + sorted(
+        check
+        for check, count in Counter(
+            str(row.get("identity_id")) for row in report.get("identities") or []
+        ).items()
+        if count > 1 and check.startswith(("reform_runs:", "responsive:"))
+    )
+    if repeated:
+        disagreements.append(f"the report repeats {', '.join(repeated[:8])}")
+    malformed: list[str] = []
     for reform in standard_reforms:
         reform_id = reform["id"]
         sign = 1.0 if reform["direction"] == "up" else -1.0
@@ -1809,10 +2013,16 @@ def reform_responsiveness(
         for year in years:
             target = rows.get((f"reform_targets.{reform_id}", year)) or {}
             value = target.get("value")
-            changes[str(year)] = value
-            if _suppressed(target) and value is None:
-                withheld_years.append(year)
+            if _suppressed(target):
+                # Never copied into evidence, whatever the row carries.
+                changes[str(year)] = None
+                if value is None:
+                    withheld_years.append(year)
+                else:
+                    malformed.append(f"reform_targets.{reform_id} {year}")
+                    recomputed = False
                 continue
+            changes[str(year)] = value
             if (
                 isinstance(value, bool)
                 or not isinstance(value, (int, float))
@@ -1859,6 +2069,10 @@ def reform_responsiveness(
                     f"{responsive['status']} but its reform_targets values "
                     f"{'meet' if recomputed else 'do not meet'} the minimum"
                 )
+    if malformed:
+        disagreements.append(
+            "suppressed reform targets carry a value: " + ", ".join(malformed[:8])
+        )
     evidence = {
         "years": list(years),
         "reforms": table,
@@ -2959,7 +3173,7 @@ def run_candidate_gates(
     results, evidence = run_gates(gates)
     for name, report in (state.get("metrics_reports") or {}).items():
         if report is not None:
-            evidence[f"metrics_report_{name}"] = report
+            evidence[f"metrics_report_{name}"] = publishable_metrics_report(report)
     return results, evidence
 
 
