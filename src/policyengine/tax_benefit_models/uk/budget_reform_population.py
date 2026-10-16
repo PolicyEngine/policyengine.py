@@ -54,11 +54,18 @@ Detail
 Each row's ``detail`` states every condition the check tests as a flat
 true/false finding (``no_award_lower``, ``some_pension_higher``,
 ``income_tax:2027_matches`` and so on), so a failed check can be diagnosed
-from the findings alone. Counts and totals follow them for local reruns,
-under the small-cell rule: the report is published, and the subsample's
-households are survey records, so no count from 1 to 9 appears (it reads
-``"fewer than 10"``), and a total over fewer than 10 changed records is
-withheld.
+from the findings alone. A row passes exactly when its findings all hold;
+one whose name ends ``_informational`` is reported for diagnosis and is not
+a condition. Counts and totals follow the findings for local reruns.
+
+The subsample's households are survey records, so the counts and totals
+also follow the small-cell rule: no count from 1 to 9 (it reads ``"fewer
+than 10"``), and no total over fewer than 10 changed records. The rule
+covers counts and totals only, not an error's message or the difference
+between two rows' figures (two routes' rows share a subsample), so the raw
+report is not for publication. The qualification ledger publishes from it
+only the fixed row fields and the top-level findings; the rule here keeps
+what raw copies (test fixtures, local runs) carry to the same standard.
 """
 
 from __future__ import annotations
@@ -102,21 +109,26 @@ def is_small_cell(count: int) -> bool:
 def publishable_detail(detail: Any) -> Any:
     """``detail`` with every count from 1 to 9, at any depth, suppressed.
 
-    Booleans are findings, not counts, and stay as they are.
+    Booleans are findings, not counts, and stay as they are. A detail holds
+    only booleans, integers, floats, text, None, and lists or text-keyed
+    mappings of them; anything else (an array, a set) is an error rather
+    than passed through unchecked.
     """
     if isinstance(detail, (bool, np.bool_)):
-        return detail
+        return bool(detail)
     if isinstance(detail, numbers.Integral):
-        return FEWER_THAN_10 if is_small_cell(int(detail)) else detail
-    if isinstance(detail, dict):
+        return FEWER_THAN_10 if is_small_cell(int(detail)) else int(detail)
+    if detail is None or isinstance(detail, (float, np.floating, str)):
+        return detail
+    if isinstance(detail, dict) and all(isinstance(key, str) for key in detail):
         return {key: publishable_detail(value) for key, value in detail.items()}
     if isinstance(detail, (list, tuple)):
         return [publishable_detail(value) for value in detail]
-    return detail
+    raise TypeError(f"A population detail cannot hold {type(detail).__name__}.")
 
 
 def total_over_records(total: float, records: int) -> float | str:
-    """A total, withheld when fewer than 10 records moved it."""
+    """A total, withheld when fewer than 10 records moved it at all."""
     return WITHHELD_FEWER_THAN_10 if is_small_cell(records) else total
 
 
@@ -286,7 +298,7 @@ def uc_allowance_verdict(
     return holds, {
         **findings,
         # Lawful (deductions can rise more than the award), so not a condition.
-        "no_payment_lower": payments_lower == 0,
+        "no_payment_lower_informational": payments_lower == 0,
         "awards_lower": awards_lower,
         "payments_lower": payments_lower,
         "payments_higher": payments_higher,
@@ -498,8 +510,11 @@ def run_population_checks(
                     detail={
                         "2026_unchanged": unchanged_2026,
                         "2027_total_rises": total_rises,
+                        # Withheld by the records that moved at all, which
+                        # the total sums, not just those past the threshold.
                         "2027_total_change": total_over_records(
-                            float(np.sum(change_2027)), lower + higher
+                            float(np.sum(change_2027)),
+                            int(np.count_nonzero(change_2027)),
                         ),
                         "2027_people_with_lower_tax": lower,
                         "2027_people_with_higher_tax": higher,

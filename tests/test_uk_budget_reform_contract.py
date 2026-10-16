@@ -1380,8 +1380,10 @@ def test_every_report_row_has_a_reform_identity_field():
 
 # The small-cell rule and flat findings in population rows.
 
-#: A finding reported for diagnosis that the check does not require.
-INFORMATIONAL_FINDINGS = {"no_payment_lower"}
+
+def _is_condition(key, value):
+    """A finding the check requires; ``*_informational`` ones it does not."""
+    return isinstance(value, bool) and not key.endswith("_informational")
 
 
 def _small_counts(value, path="detail"):
@@ -1418,9 +1420,7 @@ def _assert_publishable_findings(rows):
             continue
         assert isinstance(detail, dict), row
         findings = {
-            key: value
-            for key, value in detail.items()
-            if isinstance(value, bool) and key not in INFORMATIONAL_FINDINGS
+            key: value for key, value in detail.items() if _is_condition(key, value)
         }
         assert findings, row
         assert (row["status"] == "pass") == all(findings.values()), row
@@ -1546,26 +1546,29 @@ def test_uc_findings_agree_with_their_counts_and_the_verdict():
     )
 
     amounts = st.one_of(st.floats(0, 2_000), st.just(float("nan")))
+    verdicts = set()
 
+    # From the lawful pair (one capped unit whose payment falls with its
+    # deductions, one that gains), so verdicts that hold are drawn too; each
+    # example changes up to three of its values.
     @settings(max_examples=200, deadline=None, derandomize=True)
-    @given(units=st.integers(1, 4), data=st.data())
-    def check(units, data):
-        def draw():
-            return {
-                name: np.array(
-                    data.draw(st.lists(amounts, min_size=units, max_size=units)),
-                    dtype=float,
-                )
-                for name in UC_ALLOWANCE_VARIABLES
-            }
-
-        holds, detail = _verdict(draw(), draw())
+    @given(data=st.data())
+    def check(data):
+        base, reformed = _lawful_pair()
+        for _ in range(data.draw(st.integers(0, 3))):
+            state = data.draw(st.sampled_from([base, reformed]))
+            name = data.draw(st.sampled_from(UC_ALLOWANCE_VARIABLES))
+            unit = data.draw(st.integers(0, 1))
+            state[name] = np.array(state[name], dtype=float)
+            state[name][unit] = data.draw(amounts)
+        holds, detail = _verdict(base, reformed)
+        verdicts.add(holds)
         counts = {
             "no_award_lower": "awards_lower",
             "payments_are_award_less_deductions": "payments_not_award_less_deductions",
             "no_payment_below_the_payable_floor": "payments_below_the_payable_floor",
             "no_non_finite_units": "units_with_non_finite_values",
-            "no_payment_lower": "payments_lower",
+            "no_payment_lower_informational": "payments_lower",
         }
         for finding, count in counts.items():
             assert detail[finding] is (detail[count] == 0), finding
@@ -1581,6 +1584,7 @@ def test_uc_findings_agree_with_their_counts_and_the_verdict():
         )
 
     check()
+    assert verdicts == {True, False}
 
 
 def test_population_rows_state_each_condition_as_a_flat_finding(stub_population_checks):
@@ -1608,7 +1612,7 @@ def test_population_rows_state_each_condition_as_a_flat_finding(stub_population_
             "no_payment_below_the_payable_floor",
             "some_payment_higher",
             "no_non_finite_units",
-            "no_payment_lower",
+            "no_payment_lower_informational",
         },
         population.POPULATION_STATE_PENSION_PLUS_10: {
             "basic_and_new_scaled_10_percent",
@@ -1629,4 +1633,177 @@ def test_population_rows_state_each_condition_as_a_flat_finding(stub_population_
         if row["check_id"] == population.POPULATION_APRIL_RATE_CHANGE
     )
     assert april["detail"]["2027_people_with_higher_tax"] == population.FEWER_THAN_10
+    assert april["detail"]["2027_total_change"] == population.WITHHELD_FEWER_THAN_10
+
+
+def test_a_detail_of_another_type_is_an_error_not_passed_through():
+    import numpy as np
+
+    from policyengine.tax_benefit_models.uk.budget_reform_population import (
+        publishable_detail,
+    )
+
+    assert publishable_detail({"finding": np.bool_(True)}) == {"finding": True}
+    assert type(publishable_detail(np.bool_(False))) is bool
+    for unchecked in (np.array([3, 12]), {3, 12}, {3: "count key"}):
+        with pytest.raises(TypeError):
+            publishable_detail({"value": unchecked})
+
+
+def test_every_population_row_publishes_the_findings_that_decide_it(monkeypatch):
+    """On random arrays: no small count, and each row passes when its findings do."""
+    pytest.importorskip("hypothesis")
+    pytest.importorskip("policyengine_uk.utils.scenario")
+    from types import SimpleNamespace
+
+    import numpy as np
+    import policyengine_uk
+    from hypothesis import HealthCheck, given, settings
+    from hypothesis import strategies as st
+    from policyengine_core.reforms import Reform
+    from policyengine_uk.utils import scenario
+
+    from policyengine.tax_benefit_models.uk import (
+        budget_reform_population as population,
+    )
+
+    routes = list(contract.COUNTRY_ROUTES)
+    passes = set()
+
+    @settings(
+        max_examples=60,
+        deadline=None,
+        derandomize=True,
+        suppress_health_check=[HealthCheck.function_scoped_fixture],
+    )
+    @given(data=st.data())
+    def check(data):
+        units = data.draw(st.integers(1, 12))
+        amounts = st.floats(0, 1_000, width=32)
+        if data.draw(st.booleans()):
+            amounts = st.one_of(amounts, st.just(float("nan")))
+        # Lawful responses: the Universal Credit and State Pension
+        # simulations move their awards as the law does, so those rows can
+        # pass; otherwise every reformed array is random or unreformed.
+        lawful = data.draw(st.booleans())
+        pensions = ("basic_state_pension", "new_state_pension", "state_pension")
+        arrays = {}
+
+        def drawn(variable):
+            values = amounts
+            if lawful and variable == "uc_standard_allowance":
+                values = st.floats(1, 1_000, width=32)
+            return np.array(
+                data.draw(st.lists(values, min_size=units, max_size=units)),
+                dtype=float,
+            )
+
+        def array(tag, variable, year):
+            key = (tag, variable, year)
+            if key in arrays:
+                return arrays[key]
+            if tag is None:
+                if lawful and variable in ("benefit_cap_reduction", "uc_deductions"):
+                    value = np.zeros(units)
+                elif lawful and variable == "universal_credit_pre_benefit_cap":
+                    value = array(None, "universal_credit", year)
+                else:
+                    value = drawn(variable)
+            elif (
+                lawful
+                and "universal_credit.standard_allowance" in tag
+                and variable in population.UC_ALLOWANCE_VARIABLES
+            ):
+                allowance = array(None, "uc_standard_allowance", year)
+                base = array(None, variable, year)
+                value = {
+                    "uc_standard_allowance": 1.1 * allowance,
+                    "universal_credit_pre_benefit_cap": base + 0.1 * allowance,
+                    "universal_credit": base + 0.1 * allowance,
+                }.get(variable, base)
+            elif lawful and "state_pension" in tag and variable in pensions:
+                value = 1.1 * array(None, variable, year)
+            elif data.draw(st.booleans()):
+                value = array(None, variable, year)
+            else:
+                value = drawn(variable)
+            arrays[key] = value
+            return value
+
+        class Simulation:
+            def __init__(self, dataset, reform=None, scenario=None):
+                self.tag = (
+                    None
+                    if reform is None and scenario is None
+                    else repr(reform if scenario is None else ("scenario", scenario))
+                )
+
+            @property
+            def baseline(self):
+                # A reformed simulation's baseline, often the unreformed one.
+                baseline = Simulation(dataset=None)
+                if self.tag is not None:
+                    baseline.tag = repr(("baseline", self.tag))
+                return baseline
+
+            def calculate(self, variable, year):
+                return array(self.tag, variable, year)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(policyengine_uk, "Microsimulation", Simulation)
+            patch.setattr(
+                scenario, "Scenario", lambda **kwargs: repr(sorted(kwargs.items()))
+            )
+            patch.setattr(
+                Reform,
+                "from_dict",
+                staticmethod(lambda reform, **kwargs: ("from_dict", repr(reform))),
+            )
+            patch.setattr(
+                population,
+                "subsample",
+                lambda *args: SimpleNamespace(copy=lambda: None),
+            )
+            patch.setattr(
+                population, "plus_ten_percent", lambda paths: {"response": paths}
+            )
+            rows = population.run_population_checks("unused.h5", routes)
+        _assert_publishable_findings(rows)
+        passes.update((row["check_id"], row["status"]) for row in rows)
+
+    check()
+    # Every check both passed and failed somewhere in the run.
+    for check_id in population.COUNTRY_POPULATION_CHECKS:
+        assert {(check_id, "pass"), (check_id, "fail")} <= passes, check_id
+
+
+def test_a_total_moved_only_by_tiny_changes_in_few_records_is_withheld(
+    monkeypatch, stub_population_checks
+):
+    """Withheld by the records that moved at all, not just past the threshold."""
+    import numpy as np
+    import policyengine_uk
+
+    population = stub_population_checks
+    stub = policyengine_uk.Microsimulation
+    calculate = stub.calculate
+
+    def three_people(self, variable, year):
+        if variable != "income_tax":
+            return calculate(self, variable, year)
+        tax = np.full(3, 1.0)
+        if year == 2027 and self.reform in (population.APRIL, population.FINITE):
+            # Each below the 1e-6 threshold the counts use; together above it.
+            return tax + 4.77e-7
+        return tax
+
+    monkeypatch.setattr(stub, "calculate", three_people)
+    rows = population.run_population_checks("unused.h5", ["country.reform_dict"])
+    april = next(
+        row
+        for row in rows
+        if row["check_id"] == population.POPULATION_APRIL_RATE_CHANGE
+    )
+    assert april["detail"]["2027_people_with_higher_tax"] == 0
+    assert april["detail"]["2027_total_rises"] is True
     assert april["detail"]["2027_total_change"] == population.WITHHELD_FEWER_THAN_10
