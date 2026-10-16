@@ -7,8 +7,10 @@
 # mandatory gates on that exact commit, replayed by policyengine-scorecard,
 # and recorded in the uk-qualification-ledger branch. Promotion is
 # serialized: it readies the newest promotable candidate PR that advances
-# main, closes superseded ones, and (cos d1344) merges it at its qualified
-# commit once every check on it has passed.
+# main, closes superseded ones, and (cos d1344) fast-forwards main to its
+# qualified commit once every check on it has passed, which succeeds only
+# while main is still the commit it was built on; otherwise the catch-up
+# requalifies it on current main.
 #
 # Triggers: a policyengine-uk publish or uk-data release (repository
 # dispatch), a two-hourly catch-up, or a manual run. A manual run with
@@ -28,6 +30,12 @@ on:
         required: false
       data_version:
         description: uk-data release (default newest)
+        required: false
+      core_version:
+        description: policyengine-core version (default the certified one if the model accepts it)
+        required: false
+      pair_id:
+        description: The exact pair to qualify; the run fails if the versions resolve to another
         required: false
       force:
         description: Qualify even if the ledger already has a terminal receipt
@@ -104,6 +112,8 @@ jobs:
           PAYLOAD_VERSION: ${{ github.event.client_payload.version }}
           INPUT_MODEL: ${{ inputs.model_version }}
           INPUT_DATA: ${{ inputs.data_version }}
+          INPUT_CORE: ${{ inputs.core_version }}
+          INPUT_PAIR_ID: ${{ inputs.pair_id }}
           INPUT_FORCE: ${{ inputs.force }}
         run: |
           model="${INPUT_MODEL:-}"
@@ -116,6 +126,8 @@ jobs:
           args=(resolve --out candidate.json --ledger ledger)
           [[ -n "$model" ]] && args+=(--model-version "$model")
           [[ -n "$data" ]] && args+=(--data-version "$data")
+          [[ -n "${INPUT_CORE:-}" ]] && args+=(--core-version "$INPUT_CORE")
+          [[ -n "${INPUT_PAIR_ID:-}" ]] && args+=(--pair-id "$INPUT_PAIR_ID")
           [[ "${INPUT_FORCE:-false}" == "true" ]] && args+=(--force)
           python scripts/check_uk_candidate.py "${args[@]}"
       - uses: actions/upload-artifact@v4
@@ -400,13 +412,16 @@ jobs:
           from pathlib import Path
 
           for line in Path("recoverable.jsonl").read_text().splitlines():
-              pair = json.loads(line)["pair"]
+              entry = json.loads(line)
+              pair, pair_id = entry["pair"], entry["pair_id"]
               subprocess.run(
                   [
                       "gh", "workflow", "run", "certify-uk-release.yaml",
                       "--repo", os.environ["GITHUB_REPOSITORY"], "--ref", "main",
                       "-f", f"model_version={pair['model']['version']}",
                       "-f", f"data_version={pair['data']['release_version']}",
+                      "-f", f"core_version={pair['core']['version']}",
+                      "-f", f"pair_id={pair_id}",
                       "-f", "force=false",
                   ],
                   check=True,
@@ -427,9 +442,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python scripts/check_uk_candidate.py refresh-pr-checks --ledger ledger
-      # Automatic promotion needs the target qualified against main's current
-      # certificate. A run without force requalifies it once per main commit;
-      # repeated catch-ups on the same commit are deduplicated as duplicates.
+      # Automatic promotion needs the target built on current main and compared
+      # against main's certificate. A run without force requalifies it once per
+      # main commit, one at a time; repeated catch-ups are duplicates.
       - name: Requalify a promotable target qualified against an earlier certificate
         env:
           GH_TOKEN: ${{ github.token }}
@@ -442,13 +457,16 @@ jobs:
           from pathlib import Path
 
           for line in Path("requalify.jsonl").read_text().splitlines():
-              pair = json.loads(line)["pair"]
+              entry = json.loads(line)
+              pair, pair_id = entry["pair"], entry["pair_id"]
               subprocess.run(
                   [
                       "gh", "workflow", "run", "certify-uk-release.yaml",
                       "--repo", os.environ["GITHUB_REPOSITORY"], "--ref", "main",
                       "-f", f"model_version={pair['model']['version']}",
                       "-f", f"data_version={pair['data']['release_version']}",
+                      "-f", f"core_version={pair['core']['version']}",
+                      "-f", f"pair_id={pair_id}",
                       "-f", "force=false",
                   ],
                   check=True,
@@ -502,10 +520,19 @@ jobs:
       group: promote-uk
       cancel-in-progress: false
     steps:
+      # Promotion pushes main as the App, so the push starts main's release
+      # workflow; a push with the job's own token would not.
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
       - uses: actions/checkout@v6
         with:
           ref: main
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
       - uses: astral-sh/setup-uv@v8.1.0
         with:
           version: ${{ env.UV_VERSION }}
@@ -514,12 +541,6 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install policyengine without country models
         run: uv pip install --system -e .
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
       - name: Promote the newest qualified pair that advances main
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}

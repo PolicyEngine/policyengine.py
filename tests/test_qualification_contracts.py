@@ -845,6 +845,22 @@ POLICY_CASES = {
         "needs_review",
         {"flagged_move"},
     ),
+    "£0 source row against a material base (not a measure-year total)": (
+        [
+            {
+                "flags": ["structural"],
+                "level": "source_row",
+                "key": "obr-row-1",
+                "base_gbp": 1e8,
+                "head_gbp": 0.0,
+            }
+        ],
+        (),
+        True,
+        "complete",
+        "needs_review",
+        {"flagged_move"},
+    ),
     "numeric base result, missing candidate result": (
         [
             {
@@ -1250,6 +1266,52 @@ def test_a_counted_flag_with_no_row_still_needs_review():
     ]
 
 
+def test_a_counted_mapping_flag_with_no_row_fails():
+    """A blocking flag the counters state still fails, so no reviewer can
+    accept it."""
+
+    receipt = _receipt_with(counts={"mapping": 1})
+    _validator("replay_receipt.v1.json").validate(receipt)
+    gate = _gate(receipt)
+    assert gate.status == "fail"
+    assert gate.details["regressions"] == [
+        {"kind": "counted_flag", "flag": "mapping", "count": 1}
+    ]
+
+
+def test_every_early_failure_carries_the_policy_record():
+    import hashlib
+    from importlib.resources import files
+
+    text = (files("policyengine.data.qualification") / "replay_policy.md").read_bytes()
+    clean = _receipt_with()
+    rejected = _rejected_receipt()
+    contradictory = _edit(
+        _clean_receipt(),
+        lambda r: r["corpus"]["events"][EVENT].update(artifacts=0),
+    )
+    failed = copy.deepcopy(_with_requested_wheels(golden("replay_receipt_golden")))
+    failed["status"] = "failed"
+    failed["integrity"] = {
+        "status": "failed",
+        "failures": [{"code": "construction_inert", "detail": "x"}],
+    }
+    unbound = copy.deepcopy(clean)
+    unbound["execution"]["dataset_sha256"] = "0" * 64
+    cases = {
+        "rejected": _gate(rejected),
+        "contradiction": _gate(contradictory),
+        "failed": _gate(_sealed(failed)),
+        "unbound": _gate(_sealed(unbound)),
+    }
+    for kind, gate in cases.items():
+        assert gate.status == "fail", kind
+        assert gate.details["policy"] == REPLAY_POLICY_ID
+        assert gate.details["policy_sha256"] == hashlib.sha256(text).hexdigest()
+        assert [r["kind"] for r in gate.details["regressions"]] == [kind], kind
+        assert gate.details["review_items"] == [] and gate.details["known_gaps"] == []
+
+
 def test_the_gate_records_the_policy_it_applied():
     import hashlib
     from importlib.resources import files
@@ -1357,8 +1419,31 @@ def test_the_replay_policy_is_monotone_and_never_passes_a_flag(rows, extra, iner
         )
         return _gate(receipt)
 
+    def oracle(these):
+        """The decision record's outcome, restated independently: a
+        regression fails; any other flagged row needs review."""
+
+        for row in these:
+            base, head = row["base_gbp"], row["head_gbp"]
+            if (
+                "mapping" in row["flags"]
+                or ("coverage" in row["flags"] and base is not None and head is None)
+                or (
+                    row["level"] == "measure_year"
+                    and head == 0
+                    and base is not None
+                    and abs(base) >= 1_000_000
+                )
+            ):
+                return "fail"
+        if listed:
+            return "fail"
+        return "needs_review" if these else "pass"
+
     before = judge(rows)
     after = judge([*rows, extra])
+    assert before.status == oracle(rows), (rows, before.summary)
+    assert after.status == oracle([*rows, extra]), (extra, after.summary)
     assert _RANK[after.status] >= _RANK[before.status]
     for gate, these in ((before, rows), (after, [*rows, extra])):
         assert (gate.status == "fail") == bool(gate.details["regressions"])
