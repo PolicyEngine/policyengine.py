@@ -114,15 +114,11 @@ def _uk_region_gss_codes(values: object, column: str) -> np.ndarray:
 def _assigns_an_area(codes: np.ndarray) -> bool:
     """Whether any household has an area code, rather than a blank."""
     values = pd.Series(codes, dtype=object)
-    present = values[values.notna()]
-    return bool(
-        present.map(
-            lambda code: (
-                code.decode("utf-8") if isinstance(code, bytes) else str(code)
-            ).strip()
-            != UNASSIGNED
-        ).any()
-    )
+    for code in values[values.notna()].unique():
+        text = code.decode("utf-8") if isinstance(code, bytes) else str(code)
+        if text.strip() != UNASSIGNED:
+            return True
+    return False
 
 
 class UKGeographyDisclosure(Output):
