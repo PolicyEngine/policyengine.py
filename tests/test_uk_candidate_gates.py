@@ -922,10 +922,99 @@ def test_the_ledger_never_publishes_a_small_count_from_the_dataset():
     }
 
 
+def _april_detail(lower, higher, total=1234.5):
+    return {
+        "2026_unchanged": True,
+        "2027_total_change": total,
+        "2027_people_with_lower_tax": lower,
+        "2027_people_with_higher_tax": higher,
+    }
+
+
+@pytest.mark.parametrize(
+    ("lower", "higher", "published"),
+    [
+        (2, 3, False),  # a total over five records (supp-r3 Medium 1)
+        (0, 9, False),
+        (4, 1093, True),  # the real run: 1,097 records
+        (0, 10, True),
+        (0, 0, True),  # over no records: nothing to give back
+    ],
+)
+def test_a_population_total_over_fewer_than_ten_records_is_withheld(
+    lower, higher, published
+):
+    from policyengine.provenance.uk_candidate import (
+        SUPPRESSED_COUNT,
+        WITHHELD_VALUE,
+        publishable_contract_report,
+    )
+
+    report = {"population": [{"detail": _april_detail(lower, higher)}]}
+    detail = publishable_contract_report(report)["population"][0]["detail"]
+    assert detail["2027_total_change"] == (1234.5 if published else WITHHELD_VALUE)
+    assert detail["2027_people_with_lower_tax"] == (
+        SUPPRESSED_COUNT if 0 < lower < 10 else lower
+    )
+    # A total whose counts are missing or not whole counts is withheld too.
+    broken = _april_detail(lower, float(higher))
+    detail = publishable_contract_report({"population": [{"detail": broken}]})
+    assert detail["population"][0]["detail"]["2027_total_change"] == WITHHELD_VALUE
+
+
+@pytest.mark.parametrize("outcome", ["pass", "fail", "error"])
+@pytest.mark.parametrize("count", range(12))
+def test_the_ledger_withholds_small_cells_whatever_the_gate_decides(outcome, count):
+    """supp-r3 S02, S11, S12: on a pass, a fail and an error alike, the
+    published evidence holds no count from 1 to 9 and no total over fewer
+    than 10 records, and its digest is the digest recorded. NumPy and float
+    counts (supp-r3 Low 2) are covered too. Values synthetic."""
+
+    import numpy as np
+
+    from policyengine.provenance.uk_candidate import SUPPRESSED_COUNT, WITHHELD_VALUE
+
+    report = _fixture("full_released_uk_2.130.1.json")
+    for row in report["population"]:
+        if row["check_id"] == "population_april_rate_change":
+            row["detail"] = _april_detail(np.int64(count), 0, total=777.25)
+        if row["check_id"] == "population_uc_standard_allowance_plus_10":
+            row["detail"]["payments_lower"] = float(count)
+    if outcome == "fail":
+        case = next(r for r in report["cases"] if r["status"] == "pass")
+        case["status"] = "fail"
+        report = _recount(report)
+    if outcome == "error":
+        report["seed"] = 1
+    result, evidence = _released_contract_outcome(report)
+    assert result.status == outcome, result.summary
+    april = [
+        row["detail"]
+        for row in evidence["population"]
+        if row["check_id"] == "population_april_rate_change"
+    ]
+    assert {d["2027_people_with_lower_tax"] for d in april} == {
+        SUPPRESSED_COUNT if 0 < count < 10 else count
+    }
+    assert {d["2027_total_change"] for d in april} == {
+        WITHHELD_VALUE if 0 < count < 10 else 777.25
+    }
+    uc = [
+        row["detail"]
+        for row in evidence["population"]
+        if row["check_id"] == "population_uc_standard_allowance_plus_10"
+    ]
+    assert {d["payments_lower"] for d in uc} == {WITHHELD_VALUE}
+    assert result.details["report_sha256"] == gates_module.evidence_sha256(evidence)
+    assert result.evidence_sha256 == gates_module.evidence_sha256(evidence)
+
+
 @settings(max_examples=200, deadline=None)
 @given(
     detail=st.recursive(
         st.one_of(
+            # The rule's edges come up often (supp-r3: 9 almost never did).
+            st.sampled_from([0, 1, 9, 10, 11]),
             st.integers(-20, 2000),
             st.booleans(),
             st.floats(allow_nan=False, allow_infinity=False),
@@ -942,6 +1031,7 @@ def test_the_ledger_never_publishes_a_small_count_from_the_dataset():
 def test_no_count_from_one_to_nine_survives_publication(detail):
     from policyengine.provenance.uk_candidate import (
         SUPPRESSED_COUNT,
+        WITHHELD_VALUE,
         publishable_contract_report,
     )
 
@@ -968,8 +1058,15 @@ def test_no_count_from_one_to_nine_survives_publication(detail):
     )
     assert len(before) == len(after)
     for old, new in zip(before, after):
-        small = not isinstance(old, bool) and isinstance(old, int) and 0 < old < 10
-        assert new == (SUPPRESSED_COUNT if small else old)
+        count = isinstance(old, int) and not isinstance(old, bool)
+        if count and 0 < old < 10:
+            assert new == SUPPRESSED_COUNT
+        elif isinstance(old, float):
+            # A number that is not a whole count: how many records it comes
+            # from is unknown (supp-r3).
+            assert new == WITHHELD_VALUE
+        else:
+            assert new == old
 
 
 @pytest.mark.parametrize("section", ["cases", "population"])
