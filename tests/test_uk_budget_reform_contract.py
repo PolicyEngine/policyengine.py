@@ -1946,3 +1946,61 @@ def test_a_total_moved_only_by_tiny_changes_in_few_records_is_withheld(
     assert april["detail"]["2027_people_with_higher_tax"] == 0
     assert april["detail"]["2027_total_rises"] is True
     assert april["detail"]["2027_total_change"] == population.WITHHELD_FEWER_THAN_10
+
+
+def test_an_unreformed_rebuild_that_differs_fails_isolation(monkeypatch):
+    """A later unreformed simulation unlike the first: a reform reached it."""
+    pytest.importorskip("policyengine_uk.utils.scenario")
+    import numpy as np
+
+    from policyengine.tax_benefit_models.uk import (
+        budget_reform_population as population,
+    )
+
+    asked = []
+
+    def array(tag, variable, year):
+        if tag is None and (variable, year) == ("income_tax", 2026):
+            asked.append(1)
+            return np.array([1.0 if len(asked) == 1 else 2.0])
+        return np.ones(1)
+
+    rows = _run_population_with(monkeypatch, array, ["country.reform_dict"])
+    _assert_publishable_findings(rows)
+    status = {(row["check_id"], row["route"]): row for row in rows}
+    isolation = status[(population.POPULATION_BASELINE_ISOLATION, "unreformed")]
+    assert isolation["status"] == "fail"
+    assert isolation["detail"]["income_tax:2026_matches"] is False
+
+
+def test_outputs_that_depend_on_query_order_fail_the_order_check(monkeypatch):
+    """2026 income tax computed right after 2027's (reverse order) comes out different."""
+    pytest.importorskip("policyengine_uk.utils.scenario")
+    import numpy as np
+
+    from policyengine.tax_benefit_models.uk import (
+        budget_reform_population as population,
+    )
+
+    last = []
+
+    def array(tag, variable, year):
+        value = np.ones(1)
+        if tag is None:
+            if (variable, year) == ("income_tax", 2026) and last[-1:] == [
+                ("income_tax", 2027)
+            ]:
+                value = np.array([2.0])
+            last.append((variable, year))
+        return value
+
+    rows = _run_population_with(monkeypatch, array, ["country.reform_dict"])
+    _assert_publishable_findings(rows)
+    status = {(row["check_id"], row["route"]): row for row in rows}
+    assert (
+        status[(population.POPULATION_BASELINE_ISOLATION, "unreformed")]["status"]
+        == "pass"
+    )
+    order = status[(population.POPULATION_QUERY_ORDER, "unreformed")]
+    assert order["status"] == "fail"
+    assert order["detail"]["income_tax:2026_matches"] is False
