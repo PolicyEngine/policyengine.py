@@ -1249,10 +1249,13 @@ def reform_contract(
         and {status: summary.get(status, 0) for status in _CONTRACT_STATUSES} != counts
     ):
         malformed.append("the report's summary disagrees with its rows")
+    published = publishable_contract_report(report)
     details = {
         "contract_id": report.get("contract_id"),
         "contract_version": report.get("contract_version"),
-        "report_sha256": evidence_sha256(report),
+        # The digest of what is published: one of the full report would let
+        # anyone recover a suppressed count by trying the nine values.
+        "report_sha256": evidence_sha256(published),
         "counts": counts,
         "pending": pending,
         "unsupported": unsupported,
@@ -1263,12 +1266,12 @@ def reform_contract(
             "reform_contract",
             "fail",
             f"{len(failures)} contract row(s) failed: {', '.join(failures[:8])}",
-            report,
+            published,
             details,
         )
     if malformed:
         return _result(
-            "reform_contract", "error", "; ".join(malformed[:8]), report, details
+            "reform_contract", "error", "; ".join(malformed[:8]), published, details
         )
     return _result(
         "reform_contract",
@@ -1278,9 +1281,50 @@ def reform_contract(
         + (f"; {len(pending)} pending a methodology call" if pending else "")
         + (f"; {len(unsupported)} unsupported by design" if unsupported else "")
         + ".",
-        report,
+        published,
         details,
     )
+
+
+#: The metrics tool's small-cell rule (``privacy.py`` in policyengine-uk's
+#: aggregate-impact tool): a count of 1 to 9 units from the dataset is never
+#: published, and is written as this text instead.
+SUPPRESSED_COUNT = "fewer than 10"
+
+
+def _suppress_small_counts(value: Any) -> Any:
+    """``value`` with every integer count from 1 to 9, at any depth, replaced."""
+
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and 0 < value < 10:
+        return SUPPRESSED_COUNT
+    if isinstance(value, Mapping):
+        return {key: _suppress_small_counts(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_suppress_small_counts(item) for item in value]
+    return value
+
+
+def publishable_contract_report(report: Mapping[str, Any]) -> dict[str, Any]:
+    """The reform contract report as the qualification ledger publishes it.
+
+    The ledger is a branch of a public repository. Case and property rows
+    come from synthetic households, but population rows are computed on the
+    dataset, so a count of 1 to 9 in their ``detail`` (people whose tax fell,
+    payments that went down) is replaced by ``SUPPRESSED_COUNT``. The gate
+    judges the report as the runner returned it; no rule reads ``detail``.
+    """
+
+    published = dict(report)
+    if isinstance(report.get("population"), list):
+        published["population"] = [
+            {**row, "detail": _suppress_small_counts(row.get("detail"))}
+            if isinstance(row, Mapping)
+            else row
+            for row in report["population"]
+        ]
+    return published
 
 
 # --- 9. Metrics review ---------------------------------------------------------
