@@ -1,3 +1,10 @@
+## [6.7.0] - 2026-10-16
+
+### Added
+
+- Qualification reads policyengine-scorecard#183's receipts. The vendored replay receipt schema and its mirrors now carry the base's own grid record (`diff.base_events`) and the candidate's missing and unsupported measure-years. A gap counts as known only when the base's record lists the same measure-year as inert, or missing and supported.
+
+
 ## [6.6.0] - 2026-10-16
 
 ### Added
