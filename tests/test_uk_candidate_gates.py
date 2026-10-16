@@ -559,27 +559,6 @@ def _declared_coverage(source):
     by_case = {}
     for row in source.get("cases") or []:
         by_case.setdefault(row.get("case_id"), []).append(row)
-    # A historical report came from a runner whose oracle wording may differ
-    # from today's. Checks sharing a label are told apart by oracle, so
-    # declare them as that runner did: one reworded declaration takes the one
-    # recorded oracle no current declaration matches.
-    for (case_id, *label), checks in declared_checks.items():
-        check_label = ":".join(str(part) for part in label)
-        recorded = {
-            row.get("oracle")
-            for row in by_case.get(case_id, ())
-            if row.get("check") == check_label and row.get("oracle") is not None
-        }
-        current = {getattr(check, "oracle", None) for check in checks}
-        reworded = [check for check in checks if check.oracle not in recorded]
-        unmatched = recorded - current
-        if len(checks) > 1 and len(reworded) == 1 and len(unmatched) == 1:
-            declared_checks[(case_id, *label)] = [
-                SimpleNamespace(**{**vars(check), "oracle": next(iter(unmatched))})
-                if check is reworded[0]
-                else check
-                for check in checks
-            ]
     return {
         "ROUTES": tuple(source.get("routes") or ()),
         "CASES": tuple(
@@ -797,7 +776,7 @@ def test_no_contract_configured_is_unavailable():
 
 
 CONTRACT_FIXTURES = Path(__file__).parent / "fixtures" / "uk_contract"
-CERTIFIED_SHA = "5ba399ea5ab9a6c7d4e9aaf6c623080beb34d9ad5f330f6244dbad72b8d960b6"
+CERTIFIED_SHA = "056e80fd8e9151d78f432a25cde863340baee81304c6216a37fb575ce8563784"
 STATUS_RANK = {"pass": 0, "error": 1, "fail": 2}
 
 
@@ -818,9 +797,10 @@ def _recount(report: dict) -> dict:
 
 
 def _passing_report() -> dict:
-    """W1's real full run: every route, 20 examples, the certified dataset."""
+    """A real full run of the runner: every route, 20 examples, the certified
+    pair and dataset."""
 
-    return _fixture("full_released_uk_2.126.12.json")
+    return _fixture("full_released_uk_2.130.1.json")
 
 
 def _run_contract(
@@ -851,9 +831,11 @@ def _run_released_contract(report, *, pending_decisions=()):
     from policyengine.tax_benefit_models.uk import budget_reform_contract as runner
 
     if runner.CONTRACT_VERSION != report["contract_version"]:
-        pytest.skip(
-            f"the runner declares contract {runner.CONTRACT_VERSION}; refresh "
-            "tests/fixtures/uk_contract with a real full run"
+        # Round 9 of #574: skipping hid a gate that rejected every real run.
+        pytest.fail(
+            f"the runner declares contract {runner.CONTRACT_VERSION}, the fixture "
+            f"{report['contract_version']}: refresh tests/fixtures/uk_contract "
+            "with a real full run of the runner"
         )
     proxy = types.ModuleType(runner.__name__)
     proxy.__dict__.update(vars(runner))
@@ -877,20 +859,20 @@ def _run_released_contract(report, *, pending_decisions=()):
 def test_the_released_models_full_run_passes_the_runners_own_declarations():
     """W1's full run remains valid against the real runner's declarations."""
 
-    result = _run_released_contract(_fixture("full_released_uk_2.126.12.json"))
+    result = _run_released_contract(_fixture("full_released_uk_2.130.1.json"))
     assert result.status == "pass", result.summary
     assert result.details["counts"] == {
-        "pass": 673,
+        "pass": 792,
         "fail": 0,
         "error": 0,
-        "unsupported": 79,
-        "pending": 6,
+        "unsupported": 101,
+        "pending": 25,
     }
 
 
 @pytest.mark.parametrize("section", ["cases", "population"])
 def test_supported_failures_cannot_be_relabelled_unsupported(section):
-    report = _fixture("full_released_uk_2.126.12.json")
+    report = _fixture("full_released_uk_2.130.1.json")
     row = next(
         row
         for row in report[section]
@@ -907,7 +889,7 @@ def test_supported_failures_cannot_be_relabelled_unsupported(section):
 
 
 def test_population_cannot_exempt_every_required_check():
-    report = _fixture("full_released_uk_2.126.12.json")
+    report = _fixture("full_released_uk_2.130.1.json")
     assert len(report["population"]) == 19
     for row in report["population"]:
         row.update(status="unsupported", reason="no population support")
@@ -921,7 +903,7 @@ def test_population_cannot_exempt_every_required_check():
 
 @pytest.mark.parametrize("row_index", range(19))
 def test_each_population_route_row_is_required(row_index):
-    report = _fixture("full_released_uk_2.126.12.json")
+    report = _fixture("full_released_uk_2.130.1.json")
     omitted = report["population"].pop(row_index)
     result = _run_released_contract(_recount(report))
     assert result.status == "error", result.summary
@@ -932,7 +914,7 @@ def test_each_population_route_row_is_required(row_index):
 
 
 def test_deleting_a_failed_uc_population_route_cannot_qualify():
-    report = _fixture("full_released_uk_2.126.12.json")
+    report = _fixture("full_released_uk_2.130.1.json")
     omitted = next(
         row
         for row in report["population"]
@@ -955,7 +937,7 @@ def test_deleting_a_failed_uc_population_route_cannot_qualify():
     ],
 )
 def test_population_assertion_cannot_borrow_a_case_pending_decision(override, check_id):
-    report = _fixture("full_released_uk_2.126.12.json")
+    report = _fixture("full_released_uk_2.130.1.json")
     row = next(row for row in report["population"] if row["check_id"] == check_id)
     row["status"] = "fail"
     assert _run_released_contract(_recount(report)).status == "fail"
@@ -968,7 +950,7 @@ def test_population_assertion_cannot_borrow_a_case_pending_decision(override, ch
 
 
 def test_one_population_row_per_check_id_cannot_qualify():
-    report = _fixture("full_released_uk_2.126.12.json")
+    report = _fixture("full_released_uk_2.130.1.json")
     report["population"] = list(
         {row["check_id"]: row for row in report["population"]}.values()
     )
@@ -977,13 +959,13 @@ def test_one_population_row_per_check_id_cannot_qualify():
 
 
 def test_duplicate_population_route_cannot_replace_another_route():
-    report = _fixture("full_released_uk_2.126.12.json")
+    report = _fixture("full_released_uk_2.130.1.json")
     report["population"][1] = dict(report["population"][0])
     assert _run_released_contract(_recount(report)).status == "error"
 
 
 def test_an_unknown_assertion_identity_cannot_qualify():
-    report = _fixture("full_released_uk_2.126.12.json")
+    report = _fixture("full_released_uk_2.130.1.json")
     row = next(
         row
         for row in report["cases"]
@@ -999,13 +981,17 @@ def test_an_unknown_assertion_identity_cannot_qualify():
 
 @pytest.mark.parametrize("override", [(), ("d1344",)])
 def test_mandatory_freeze_assertion_cannot_borrow_pending_authorization(override):
-    report = _fixture("full_released_uk_2.126.12.json")
+    report = _fixture("full_released_uk_2.130.1.json")
     row = next(
         row
         for row in report["cases"]
         if row["case_id"] == "extended_freeze"
         and row["route"] == "country.reform_dict"
-        and row.get("oracle") == "contract 1.0.0: prior law's projected path resumes"
+        and row.get("check")
+        == "parameter:gov.hmrc.income_tax.allowances.personal_allowance.amount:2034"
+        # The mandatory one of the two 2034 checks (the other awaits d1344).
+        and row["status"] == "pass"
+        and row.get("decision_id") is None
     )
     row["status"] = "fail"
     assert _run_released_contract(_recount(report)).status == "fail"
@@ -1016,7 +1002,7 @@ def test_mandatory_freeze_assertion_cannot_borrow_pending_authorization(override
 
 
 def test_swapping_mandatory_and_pending_freeze_statuses_cannot_qualify():
-    report = _fixture("full_released_uk_2.126.12.json")
+    report = _fixture("full_released_uk_2.130.1.json")
     rows = [
         row
         for row in report["cases"]
@@ -1035,7 +1021,7 @@ def test_swapping_mandatory_and_pending_freeze_statuses_cannot_qualify():
 
 @pytest.mark.parametrize("replace_status", ["pass", "pending"])
 def test_duplicate_freeze_assertion_cannot_satisfy_the_other_category(replace_status):
-    report = _fixture("full_released_uk_2.126.12.json")
+    report = _fixture("full_released_uk_2.130.1.json")
     matching = [
         row
         for row in report["cases"]
@@ -1056,7 +1042,7 @@ def test_duplicate_freeze_assertion_cannot_satisfy_the_other_category(replace_st
 
 @pytest.mark.parametrize("route", ["api.sim_api", "wrapper.household"])
 def test_declared_case_exemptions_require_the_runners_reason(route):
-    report = _fixture("full_released_uk_2.126.12.json")
+    report = _fixture("full_released_uk_2.130.1.json")
     row = next(
         row
         for row in report["cases"]
@@ -1068,8 +1054,36 @@ def test_declared_case_exemptions_require_the_runners_reason(route):
     assert any("different reason" in p for p in result.details["problems"])
 
 
+def test_the_runners_own_run_level_row_is_recognised():
+    """Round 9 of #574: contract 1.1.0 reworded the shared parameter check,
+    and a gate fixed to the 1.0.0 wording rejected every candidate. The row
+    the installed runner emits must pass; an unrelated check must not."""
+
+    from policyengine.tax_benefit_models.uk import budget_reform_contract as runner
+
+    def gated(check):
+        report = _passing_report()
+        row = next(
+            row
+            for row in report["cases"]
+            if row["case_id"] == "module_parameters_unchanged"
+        )
+        row["check"] = check
+        return _run_contract(report)
+
+    current = runner.module_parameters_unchanged(runner.shared_state())
+    assert current["status"] == "pass"
+    assert gated(current["check"]).status == "pass", gated(current["check"]).summary
+    unrelated = gated("every case's reform digest in policyengine-uk")
+    assert unrelated.status == "error"
+    assert any(
+        "does not identify the shared parameter check" in problem
+        for problem in unrelated.details["problems"]
+    )
+
+
 def test_deleting_a_failed_run_level_check_cannot_qualify():
-    report = _fixture("full_released_uk_2.126.12.json")
+    report = _fixture("full_released_uk_2.130.1.json")
     row = next(
         row
         for row in report["cases"]
@@ -1098,7 +1112,7 @@ def test_deleting_a_failed_run_level_check_cannot_qualify():
     ],
 )
 def test_each_runner_isolation_row_is_required(route, check_prefix):
-    report = _fixture("full_released_uk_2.126.12.json")
+    report = _fixture("full_released_uk_2.130.1.json")
     omitted = next(
         row
         for row in report["cases"]
@@ -1111,7 +1125,7 @@ def test_each_runner_isolation_row_is_required(route, check_prefix):
 
 
 def test_deleting_all_runner_isolation_rows_cannot_qualify():
-    report = _fixture("full_released_uk_2.126.12.json")
+    report = _fixture("full_released_uk_2.130.1.json")
     report["cases"] = [
         row
         for row in report["cases"]
@@ -1128,7 +1142,7 @@ def test_deleting_all_runner_isolation_rows_cannot_qualify():
     "check_prefix", ["baseline_isolation:", "unreformed_after_reform:"]
 )
 def test_failing_isolation_checks_cannot_be_relabelled_pending(check_prefix):
-    report = _fixture("full_released_uk_2.126.12.json")
+    report = _fixture("full_released_uk_2.130.1.json")
     row = next(
         row
         for row in report["cases"]
@@ -1181,12 +1195,13 @@ def test_w1_population_run_alone_is_incomplete():
 
 
 def test_w1_full_run_passes():
-    """W1's real all-pass report: 673 pass, 6 pending d1344, 79 unsupported."""
+    """The real full run of contract 1.1.0 on the certified pair: 792 pass,
+    25 pending a methodology call, 101 unsupported by design."""
 
     result = _run_contract(_passing_report())
     assert result.status == "pass", result.summary
-    assert "every case, property and population check passed (673)" in result.summary
-    assert "6 pending a methodology call" in result.summary
+    assert "every case, property and population check passed (792)" in result.summary
+    assert "25 pending a methodology call" in result.summary
     assert result.details["problems"] == []
 
 
@@ -1303,7 +1318,7 @@ def test_new_population_route_declaration_is_required_without_a_gate_side_list(
         "population_check_routes",
         lambda routes: (*declared(routes), ("new_population_check", "unreformed")),
     )
-    report = _fixture("full_released_uk_2.126.12.json")
+    report = _fixture("full_released_uk_2.130.1.json")
     result = _run_released_contract(report)
     assert result.status == "error", result.summary
     assert any(
