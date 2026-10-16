@@ -1,0 +1,501 @@
+# Qualify each new policyengine-uk wheel or uk-data release before promotion.
+#
+# A candidate pair (newest model wheel, the core it needs, newest data
+# release) is resolved and deduplicated against the ledger, certified into a
+# candidate commit on candidate/uk/<model>-<data> (manifest, pins, uv.lock,
+# TRO, test constants and snapshots regenerated together), qualified by the
+# mandatory gates on that exact commit, replayed by policyengine-scorecard,
+# and recorded in the uk-qualification-ledger branch. Promotion is
+# serialized: it readies the newest promotable candidate PR that advances
+# main and closes superseded ones. Merging stays a reviewed step until
+# cos d1344 rules on automatic promotion.
+#
+# Triggers: a policyengine-uk publish or uk-data release (repository
+# dispatch), a two-hourly catch-up, or a manual run. A manual run with
+# accept_pair_id records a reviewer's acceptance of a needs-review receipt.
+
+name: Certify UK release candidates
+
+on:
+  repository_dispatch:
+    types: [policyengine-uk-release, policyengine-uk-data-release]
+  schedule:
+    - cron: "23 */2 * * *"
+  workflow_dispatch:
+    inputs:
+      model_version:
+        description: policyengine-uk version (default newest on PyPI)
+        required: false
+      data_version:
+        description: uk-data release (default newest)
+        required: false
+      force:
+        description: Qualify even if the ledger already has a terminal receipt
+        type: boolean
+        default: false
+      accept_pair_id:
+        description: Accept the needs-review receipt of this pair (reviewer = you)
+        required: false
+      accept_receipt_sha256:
+        description: unreviewed_sha256 of the exact receipt being accepted
+        required: false
+      accept_explanation:
+        description: Why the flagged moves are expected
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  LEDGER_BRANCH: uk-qualification-ledger
+  UV_VERSION: "0.12.14"
+  PYTHON_VERSION: "3.13"
+  # Keep equal to PYTHON_VERSION. The repository's .python-version asks for a
+  # newer Python, and every uv command here must use the 3.13 environment the
+  # job installed. For the same reason each `uv run` passes --no-sync: the
+  # environment is synchronized explicitly (with the uk and dev extras), and
+  # a step must run exactly that environment.
+  UV_PYTHON: "3.13"
+  # Run by .github/qualification-ledger.sh, inside the ledger worktree, when a
+  # concurrent publish touched a pair's published files: recompute them from
+  # the attempts rather than let git merge two receipts. This default uses
+  # the system Python that `uv pip install --system` provisions; jobs that
+  # `uv sync` override it with the synchronized environment's interpreter.
+  LEDGER_REDERIVE: >-
+    python ${{ github.workspace }}/scripts/check_uk_candidate.py rederive-ledger
+
+jobs:
+  resolve:
+    if: github.event_name != 'workflow_dispatch' || inputs.accept_pair_id == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      action: ${{ steps.resolve.outputs.action }}
+      pair_id: ${{ steps.resolve.outputs.pair_id }}
+      branch: ${{ steps.resolve.outputs.branch }}
+      base_commit: ${{ steps.resolve.outputs.base_commit }}
+      attempt_key: ${{ steps.resolve.outputs.attempt_key }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install policyengine without country models
+        run: uv pip install --system -e .
+      - name: Check out the ledger
+        run: .github/qualification-ledger.sh checkout ledger
+      - name: Resolve and deduplicate the candidate
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_TYPE: ${{ github.event.action }}
+          PAYLOAD_VERSION: ${{ github.event.client_payload.version }}
+          INPUT_MODEL: ${{ inputs.model_version }}
+          INPUT_DATA: ${{ inputs.data_version }}
+          INPUT_FORCE: ${{ inputs.force }}
+        run: |
+          model="${INPUT_MODEL:-}"
+          data="${INPUT_DATA:-}"
+          if [[ "$EVENT_NAME" == "repository_dispatch" && "$EVENT_TYPE" == "policyengine-uk-release" ]]; then
+            model="$PAYLOAD_VERSION"
+          elif [[ "$EVENT_NAME" == "repository_dispatch" && "$EVENT_TYPE" == "policyengine-uk-data-release" ]]; then
+            data="$PAYLOAD_VERSION"
+          fi
+          args=(resolve --out candidate.json --ledger ledger)
+          [[ -n "$model" ]] && args+=(--model-version "$model")
+          [[ -n "$data" ]] && args+=(--data-version "$data")
+          [[ "${INPUT_FORCE:-false}" == "true" ]] && args+=(--force)
+          python scripts/check_uk_candidate.py "${args[@]}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: candidate
+          path: candidate.json
+
+  prepare:
+    needs: resolve
+    if: needs.resolve.outputs.action == 'qualify'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    concurrency:
+      # Head replacement and readiness must hold the same lock. Otherwise
+      # promotion can ready a replacement after checking the previous head.
+      group: promote-uk
+      cancel-in-progress: false
+    outputs:
+      candidate_commit: ${{ steps.stage.outputs.candidate_commit }}
+      duplicate: ${{ steps.duplicate.outputs.duplicate }}
+    env:
+      LEDGER_REDERIVE: >-
+        ${{ github.workspace }}/.venv/bin/python
+        ${{ github.workspace }}/scripts/check_uk_candidate.py rederive-ledger
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.resolve.outputs.base_commit }}
+          token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+      # Another run may have staged this attempt while this one waited for
+      # the promotion concurrency group; never overwrite its evidence.
+      - name: Check for an attempt staged by another run
+        id: duplicate
+        env:
+          ATTEMPT: ledger/uk/${{ needs.resolve.outputs.pair_id }}/attempts/${{ needs.resolve.outputs.attempt_key }}
+        run: |
+          .github/qualification-ledger.sh checkout ledger
+          if [[ -d "$ATTEMPT" ]]; then
+            echo "duplicate=true" >> "$GITHUB_OUTPUT"
+            echo "Attempt already staged by another run; nothing to do."
+          else
+            echo "duplicate=false" >> "$GITHUB_OUTPUT"
+          fi
+          git worktree remove --force ledger
+      - uses: actions/download-artifact@v4
+        if: steps.duplicate.outputs.duplicate == 'false'
+        with:
+          name: candidate
+          path: ${{ runner.temp }}/candidate
+      - uses: astral-sh/setup-uv@v8.1.0
+        if: steps.duplicate.outputs.duplicate == 'false'
+        with:
+          version: ${{ env.UV_VERSION }}
+      - uses: actions/setup-python@v6
+        if: steps.duplicate.outputs.duplicate == 'false'
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install the base environment
+        if: steps.duplicate.outputs.duplicate == 'false'
+        run: uv sync --frozen --extra uk --extra dev --python ${{ env.PYTHON_VERSION }}
+      - name: Certify the pair and regenerate pins, lock, TROs and constants
+        if: steps.duplicate.outputs.duplicate == 'false'
+        env:
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+          BRANCH: ${{ needs.resolve.outputs.branch }}
+        run: |
+          git switch -C "$BRANCH"
+          uv run --no-sync python scripts/check_uk_candidate.py prepare \
+            --candidate "$RUNNER_TEMP/candidate/candidate.json" \
+            --out "$RUNNER_TEMP/prepared.json" --skip-snapshots
+      - name: Install the candidate environment from the regenerated lock
+        if: steps.duplicate.outputs.duplicate == 'false'
+        run: uv sync --frozen --extra uk --extra dev --python ${{ env.PYTHON_VERSION }}
+      - name: Refresh household snapshots on the candidate pair
+        if: steps.duplicate.outputs.duplicate == 'false'
+        env:
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+          PE_UPDATE_SNAPSHOTS: "1"
+        run: uv run --no-sync pytest tests/test_household_calculator_snapshot.py -q
+      - name: Check the regenerated bundle
+        if: steps.duplicate.outputs.duplicate == 'false'
+        env:
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+        run: uv run --no-sync python scripts/bundle.py check --include-tros --strict-tros
+      - name: Commit and push the candidate commit
+        if: steps.duplicate.outputs.duplicate == 'false'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BRANCH: ${{ needs.resolve.outputs.branch }}
+          PAIR_ID: ${{ needs.resolve.outputs.pair_id }}
+        run: |
+          # A forced attempt may replace an already qualified head. Revoke
+          # its ready status before exposing any new, unqualified commit.
+          ready_pr=$(gh pr list --head "$BRANCH" --state open --json number,isDraft \
+            --jq '.[] | select(.isDraft == false) | .number')
+          if [[ -n "$ready_pr" ]]; then
+            gh pr ready "$ready_pr" --undo
+          fi
+          git add -A
+          git -c user.name="policyengine-qualification[bot]" \
+              -c user.email="qualification@policyengine.org" \
+              commit -q -m "Certify UK candidate pair ${PAIR_ID:0:12} for qualification"
+          git push --force origin "HEAD:refs/heads/$BRANCH"
+      - name: Stage the attempt in the ledger
+        id: stage
+        if: steps.duplicate.outputs.duplicate == 'false'
+        run: |
+          .github/qualification-ledger.sh checkout ledger
+          uv run --no-sync python scripts/check_uk_candidate.py stage \
+            --candidate "$RUNNER_TEMP/candidate/candidate.json" --ledger ledger
+          .github/qualification-ledger.sh publish ledger \
+            "Stage UK candidate ${{ needs.resolve.outputs.pair_id }} attempt ${{ needs.resolve.outputs.attempt_key }}"
+      - name: Open or update the draft candidate PR
+        if: steps.duplicate.outputs.duplicate == 'false'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BRANCH: ${{ needs.resolve.outputs.branch }}
+          PAIR_ID: ${{ needs.resolve.outputs.pair_id }}
+        run: |
+          title="Certify UK candidate ${BRANCH#candidate/uk/}"
+          body="Automated certification candidate for pair \`$PAIR_ID\`. Qualification is running: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+
+          Ledger: https://github.com/${GITHUB_REPOSITORY}/tree/${LEDGER_BRANCH}/uk/${PAIR_ID}
+
+          🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+          if gh pr view "$BRANCH" --json number >/dev/null 2>&1; then
+            gh pr edit "$BRANCH" --body "$body"
+          else
+            gh pr create --draft --base main --head "$BRANCH" --title "$title" --body "$body"
+          fi
+
+  qualify:
+    needs: [resolve, prepare]
+    if: needs.prepare.outputs.duplicate == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    concurrency:
+      group: uk-candidate-${{ needs.resolve.outputs.pair_id }}
+      cancel-in-progress: false
+    env:
+      LEDGER_REDERIVE: >-
+        ${{ github.workspace }}/.venv/bin/python
+        ${{ github.workspace }}/scripts/check_uk_candidate.py rederive-ledger
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.candidate_commit }}
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install the candidate environment
+        run: uv sync --frozen --extra uk --extra dev --python ${{ env.PYTHON_VERSION }}
+      - name: Check out the ledger
+        run: .github/qualification-ledger.sh checkout ledger
+      - name: Run the mandatory local gates
+        env:
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+          ATTEMPT: ledger/uk/${{ needs.resolve.outputs.pair_id }}/attempts/${{ needs.resolve.outputs.attempt_key }}
+        run: uv run --no-sync python scripts/check_uk_candidate.py gates --attempt "$ATTEMPT" --work-dir "$RUNNER_TEMP/qualification"
+      - name: Generate a GitHub App token for the scorecard
+        id: scorecard-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: PolicyEngine
+          repositories: policyengine-scorecard
+      - name: Send the pre-promotion replay request
+        if: steps.scorecard-token.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.scorecard-token.outputs.token }}
+          ATTEMPT: ledger/uk/${{ needs.resolve.outputs.pair_id }}/attempts/${{ needs.resolve.outputs.attempt_key }}
+        run: uv run --no-sync python scripts/check_uk_candidate.py request-replay --attempt "$ATTEMPT" --dispatch
+      - name: Publish the gate evidence
+        if: always()
+        run: |
+          .github/qualification-ledger.sh publish ledger \
+            "Gates for UK candidate ${{ needs.resolve.outputs.pair_id }} attempt ${{ needs.resolve.outputs.attempt_key }}"
+
+  replay:
+    needs: [resolve, prepare, qualify]
+    if: always() && needs.prepare.result == 'success' && needs.prepare.outputs.duplicate == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install policyengine without country models
+        run: uv pip install --system -e .
+      - name: Check out the ledger
+        run: .github/qualification-ledger.sh checkout ledger
+      - name: Wait for the replay receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ATTEMPT: ledger/uk/${{ needs.resolve.outputs.pair_id }}/attempts/${{ needs.resolve.outputs.attempt_key }}
+        run: |
+          if [[ -f "$ATTEMPT/replay/request.json" ]]; then
+            python scripts/check_uk_candidate.py poll-replay --attempt "$ATTEMPT" --wait-minutes 340
+          else
+            echo "No replay request was sent; the replay gate stays unavailable."
+          fi
+      - name: Finalize and publish the qualification receipt
+        id: finalize
+        env:
+          ATTEMPT: ledger/uk/${{ needs.resolve.outputs.pair_id }}/attempts/${{ needs.resolve.outputs.attempt_key }}
+        run: |
+          python scripts/check_uk_candidate.py finalize --attempt "$ATTEMPT" --ledger ledger --pr-body "$RUNNER_TEMP/pr-body.md"
+          .github/qualification-ledger.sh publish ledger \
+            "Qualification receipt for UK candidate ${{ needs.resolve.outputs.pair_id }}"
+      - name: Refresh failed candidate PR checks against the published receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/check_uk_candidate.py refresh-pr-checks --ledger ledger
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - name: Update the candidate PR with the verdict
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BRANCH: ${{ needs.resolve.outputs.branch }}
+        run: gh pr edit "$BRANCH" --body-file "$RUNNER_TEMP/pr-body.md"
+
+  catch-up:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install policyengine without country models
+        run: uv pip install --system -e .
+      - name: Restart abandoned attempts without replay requests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          .github/qualification-ledger.sh checkout ledger
+          python scripts/check_uk_candidate.py recoverable --ledger ledger > recoverable.jsonl
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          for line in Path("recoverable.jsonl").read_text().splitlines():
+              pair = json.loads(line)["pair"]
+              subprocess.run(
+                  [
+                      "gh", "workflow", "run", "certify-uk-release.yaml",
+                      "--repo", os.environ["GITHUB_REPOSITORY"], "--ref", "main",
+                      "-f", f"model_version={pair['model']['version']}",
+                      "-f", f"data_version={pair['data']['release_version']}",
+                      "-f", "force=false",
+                  ],
+                  check=True,
+              )
+          PY
+      - name: Finish attempts whose replay outlasted their run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/check_uk_candidate.py waiting --ledger ledger > waiting.txt
+          while read -r attempt; do
+            [[ -z "$attempt" ]] && continue
+            python scripts/check_uk_candidate.py poll-replay --attempt "$attempt"
+            python scripts/check_uk_candidate.py finalize --attempt "$attempt" --ledger ledger
+          done < waiting.txt
+          .github/qualification-ledger.sh publish ledger "Catch up waiting UK replay receipts"
+      - name: Refresh failed candidate PR checks against the published receipts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/check_uk_candidate.py refresh-pr-checks --ledger ledger
+
+  accept:
+    if: github.event_name == 'workflow_dispatch' && inputs.accept_pair_id != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - name: Install policyengine without country models
+        run: uv pip install --system -e .
+      - name: Record the reviewer's acceptance
+        env:
+          PAIR_ID: ${{ inputs.accept_pair_id }}
+          RECEIPT: ${{ inputs.accept_receipt_sha256 }}
+          EXPLANATION: ${{ inputs.accept_explanation }}
+          REVIEWER: ${{ github.actor }}
+        run: |
+          .github/qualification-ledger.sh checkout ledger
+          python scripts/check_uk_candidate.py accept --ledger ledger \
+            --pair-id "$PAIR_ID" --receipt-sha256 "$RECEIPT" \
+            --explanation "$EXPLANATION" --reviewer "$REVIEWER"
+          .github/qualification-ledger.sh publish ledger "Accept UK candidate $PAIR_ID on review by $REVIEWER"
+      - name: Refresh failed candidate PR checks against the accepted receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/check_uk_candidate.py refresh-pr-checks --ledger ledger
+
+  promote:
+    needs: [resolve, replay, catch-up, accept]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: promote-uk
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install policyengine without country models
+        run: uv pip install --system -e .
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - name: Promote the newest qualified pair that advances main
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          .github/qualification-ledger.sh checkout ledger
+          python scripts/check_uk_candidate.py promote --ledger ledger --apply

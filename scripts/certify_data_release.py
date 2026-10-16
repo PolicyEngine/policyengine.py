@@ -72,6 +72,22 @@ def main(argv=None) -> int:
         default=None,
         help="Model package version to certify for (default: installed).",
     )
+    parser.add_argument(
+        "--core-version",
+        default=None,
+        help=(
+            "policyengine-core version to check against the release's core "
+            "claims and pin in the bundle."
+        ),
+    )
+    parser.add_argument(
+        "--qualified-pair-id",
+        default=None,
+        help=(
+            "Admit the exact model, core and data release on automated "
+            "qualification of this pair (requires --core-version)."
+        ),
+    )
     parser.add_argument("--no-generate", action="store_true")
     parser.add_argument("--no-changelog", action="store_true")
     parser.add_argument(
@@ -102,6 +118,8 @@ def main(argv=None) -> int:
         regional_manifest_uri=args.regional_manifest_uri,
         regional_artifact_prefix=args.regional_artifact_prefix,
         regional_path_template=args.regional_path_template,
+        core_version=args.core_version,
+        qualified_pair_id=args.qualified_pair_id,
     )
     print(result.summary())
 
