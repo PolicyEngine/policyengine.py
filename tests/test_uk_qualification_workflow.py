@@ -510,38 +510,53 @@ def test_refresh_checks_reruns_only_failed_pr_runs_for_the_qualified_head(
     head = receipt.harness.git_commit if head_matches else "f" * 40
     monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: [receipt])
     monkeypatch.setattr(cli, "_open_candidate_branches", lambda: {branch: head})
-    code, docs, guard = (
+    monkeypatch.setattr(cli, "_now", lambda: _instant(NOW))
+    code, docs, guard, old = (
         ".github/workflows/pr_code_changes.yaml",
         ".github/workflows/pr_docs.yaml",
         ".github/workflows/guard.yaml",
+        ".github/workflows/old.yaml",
     )
+    fork = {"head_repository": "someone/policyengine.py"}
+    other = {"head_branch": "candidate/uk/other"}
     runs = [
-        {
-            "id": identifier,
-            "head_sha": sha,
-            "path": path,
-            "event": event,
-            "status": status,
-            "conclusion": conclusion,
-            "run_attempt": attempt,
-        }
-        for identifier, sha, path, event, status, conclusion, attempt in (
+        _listed_run(identifier, sha, branch, path, event, status, conclusion, attempt)
+        | extra
+        for identifier, sha, path, event, status, conclusion, attempt, extra in (
             # Replaced by run 16 of the same workflow and event: left alone,
             # so its checks cannot come back newer (round 3 of #635).
-            (11, head, code, "pull_request", "completed", "failure", 1),
-            (12, head, docs, "pull_request", "completed", "success", 1),
-            (13, head, guard, "pull_request", "in_progress", None, 1),
-            (14, "a" * 40, code, "pull_request", "completed", "failure", 1),
-            (15, head, code, "push", "completed", "failure", 1),
-            (16, head, code, "pull_request", "completed", "timed_out", 1),
+            (11, head, code, "pull_request", "completed", "failure", 1, {}),
+            (12, head, docs, "pull_request", "completed", "success", 1, {}),
+            (13, head, guard, "pull_request", "in_progress", None, 1, {}),
+            (14, "a" * 40, code, "pull_request", "completed", "failure", 1, {}),
+            (15, head, code, "push", "completed", "failure", 1, {}),
+            # GitHub refuses this re-run: refresh warns and the rest still go
+            # (round 4; round 5 lists it first).
+            (16, head, code, "pull_request", "completed", "timed_out", 1, {}),
             # The run on the candidate's own tree that promotion requires; a
             # job timeout cancels the run (round 3 of #635).
-            (17, head, code, "workflow_dispatch", "completed", "cancelled", 1),
+            (17, head, code, "workflow_dispatch", "completed", "cancelled", 1, {}),
             # Already run as often as the cap allows (four attempts).
-            (18, head, docs, "workflow_dispatch", "completed", "failure", 4),
-            # Below the cap, but GitHub refuses the re-run (for example a run
-            # older than 30 days): refresh warns and goes on (round 4).
-            (19, head, guard, "workflow_dispatch", "completed", "failure", 3),
+            (18, head, docs, "workflow_dispatch", "completed", "failure", 4, {}),
+            (19, head, guard, "workflow_dispatch", "completed", "failure", 3, {}),
+            # Round 5 of #635: a fork's newer run at the same commit, and one
+            # of another branch here, are not the candidate's: neither is
+            # re-run, nor replaces the candidate's own runs 16 and 12.
+            (21, head, code, "pull_request", "completed", "failure", 1, fork),
+            (22, head, docs, "pull_request", "completed", "failure", 1, other),
+            # Round 5: GitHub re-runs only within 30 days of the first attempt,
+            # and refresh re-runs only failures, timeouts and cancellations.
+            (
+                23,
+                head,
+                old,
+                "workflow_dispatch",
+                "completed",
+                "failure",
+                1,
+                {"created_at": OLD},
+            ),
+            (24, head, old, "pull_request", "completed", "action_required", 1, {}),
         )
     ]
     calls = []
@@ -551,23 +566,98 @@ def test_refresh_checks_reruns_only_failed_pr_runs_for_the_qualified_head(
         if argv[:2] == ["gh", "api"]:
             assert "--paginate" in argv
             assert f"head_sha={receipt.harness.git_commit}" in argv[2]
-            return SimpleNamespace(stdout="\n".join(json.dumps(run) for run in runs))
+            return SimpleNamespace(
+                returncode=0, stdout="\n".join(json.dumps(run) for run in runs)
+            )
         assert argv[:3] == ["gh", "run", "rerun"] and kwargs["check"] is False
-        return SimpleNamespace(returncode=1 if argv[3] == "19" else 0)
+        return SimpleNamespace(returncode=1 if argv[3] == "16" else 0)
 
     monkeypatch.setattr(cli, "subprocess", SimpleNamespace(run=fake_run))
     args = cli.parser().parse_args(["refresh-pr-checks", "--ledger", str(tmp_path)])
     assert args.func(args) == 0
-    reruns = {
-        call[3]: "--failed" in call
+    reruns = [
+        (call[3], "--failed" in call)
         for call in calls
         if call[:3] == ["gh", "run", "rerun"]
-    }
+    ]
     output = capsys.readouterr().out
     if receipt.promotable and head_matches:
         # Failed jobs only for failed and timed-out runs; the cancelled one in
-        # full; the one at the cap not at all.
-        assert reruns == {"16": True, "17": False, "19": True}
-        assert "::warning::GitHub did not re-run failure run 19" in output
+        # full; the one at the cap, the old one and the fork's not at all.
+        assert reruns == [("16", True), ("17", False), ("19", True)]
+        assert "::warning::GitHub did not re-run timed_out run 16" in output
     else:
         assert calls == []
+
+
+NOW = "2026-10-16T12:00:00Z"
+OLD = "2026-09-15T11:00:00Z"
+
+
+def _instant(text):
+    import datetime
+
+    return datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+
+
+def _listed_run(identifier, sha, branch, path, event, status, conclusion, attempt):
+    """A run as `_commit_runs` reads it: the candidate's own by default."""
+
+    return {
+        "id": identifier,
+        "head_sha": sha,
+        "head_branch": branch,
+        "head_repository": "PolicyEngine/policyengine.py",
+        "path": path,
+        "event": event,
+        "status": status,
+        "conclusion": conclusion,
+        "check_suite_id": 1000 + identifier,
+        "run_attempt": attempt,
+        "created_at": "2026-10-16T06:00:00Z",
+    }
+
+
+def test_refresh_reruns_each_candidate_only_its_own_runs(monkeypatch, tmp_path, capsys):
+    """Round 5 of #635: two candidates qualified at the same commit share its
+    runs listing; each re-runs only its own branch's runs, and one whose runs
+    cannot be read is reported while the other is still refreshed."""
+
+    cli = _cli()
+    first = make_receipt(pair=make_pair(model="2.200.0"))
+    second = make_receipt(pair=make_pair(model="2.201.0"))
+    head = first.harness.git_commit
+    assert second.harness.git_commit == head
+    branches = {candidate_branch(r.pair): head for r in (first, second)}
+    monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: [first, second])
+    monkeypatch.setattr(cli, "_open_candidate_branches", lambda: branches)
+    monkeypatch.setattr(cli, "_now", lambda: _instant(NOW))
+    code = ".github/workflows/pr_code_changes.yaml"
+    first_branch, second_branch = branches
+    runs = [
+        _listed_run(
+            31, head, first_branch, code, "pull_request", "completed", "failure", 1
+        ),
+        _listed_run(
+            32, head, second_branch, code, "pull_request", "completed", "failure", 1
+        ),
+    ]
+    calls = []
+    unreadable = {"once": True}
+
+    def fake_run(argv, **kwargs):
+        calls.append(argv)
+        if argv[:2] == ["gh", "api"]:
+            if unreadable.pop("once", False):
+                return SimpleNamespace(returncode=1, stdout="")
+            return SimpleNamespace(
+                returncode=0, stdout="\n".join(json.dumps(run) for run in runs)
+            )
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(cli, "subprocess", SimpleNamespace(run=fake_run))
+    args = cli.parser().parse_args(["refresh-pr-checks", "--ledger", str(tmp_path)])
+    assert args.func(args) == 0
+    output = capsys.readouterr().out
+    assert f"::warning::could not read the runs of {first_branch}" in output
+    assert [call[3] for call in calls if call[:3] == ["gh", "run", "rerun"]] == ["32"]

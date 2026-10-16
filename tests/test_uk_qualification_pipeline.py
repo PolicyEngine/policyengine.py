@@ -960,6 +960,38 @@ CHECKS_PASSED = [
 ]
 RUNS_PASSED = [_run("pull_request", id=10), _run("workflow_dispatch", id=11)]
 
+
+def _gh_api_output(argv, checks, runs, commit, branch):
+    """What the fake `gh api` prints: one JSON line per item, each run filled
+    in as the candidate's own (its commit, branch and this repository) unless
+    it says otherwise, and every item cut to the fields the call's jq names,
+    as the real projection does (round 5 of #635: fakes that returned every
+    field let a dropped field go unnoticed). None for an unreadable list."""
+
+    items = checks if "check-runs" in argv[2] else runs
+    if items is None:
+        return None
+    jq = argv[argv.index("--jq") + 1]
+    fields = {
+        part.split(":")[0].strip()
+        for part in jq[jq.index("{") + 1 : jq.index("}")].split(",")
+    }
+    if "check-runs" not in argv[2]:
+        items = [
+            {
+                "head_sha": commit,
+                "head_branch": branch,
+                "head_repository": "PolicyEngine/policyengine.py",
+                **item,
+            }
+            for item in items
+        ]
+    return "".join(
+        json.dumps({key: value for key, value in item.items() if key in fields}) + "\n"
+        for item in items
+    )
+
+
 # Each: checks, runs, branch at the commit, main ("parent" or "moved"), the
 # push's exit code, automatic; then whether it is promoted, and the readiness
 # calls made ("ready" or "undo") in order.
@@ -1089,6 +1121,74 @@ PROMOTION_CASES = {
         False,
         ["undo"],
     ),
+    # Round 5 of #635: the runs listed at a commit include any other pull
+    # request's at it, a fork's included. A newer failing run of a fork, or of
+    # another branch here, and its checks neither block the candidate ...
+    "a fork's newer failing run at the commit": (
+        [
+            {**_check("Lint", id=1), "check_suite_id": 100},
+            {**_check("Own tree", id=3), "check_suite_id": 110},
+            {**_check("Lint", conclusion="failure", id=60), "check_suite_id": 200},
+        ],
+        [
+            {**_run("pull_request", id=10), "check_suite_id": 100},
+            {**_run("workflow_dispatch", id=11), "check_suite_id": 110},
+            {
+                **_run("pull_request", conclusion="failure", id=20),
+                "check_suite_id": 200,
+                "head_repository": "someone/policyengine.py",
+            },
+        ],
+        True,
+        "parent",
+        0,
+        True,
+        True,
+        ["ready"],
+    ),
+    "another branch's newer failing run at the commit": (
+        [
+            {**_check("Lint", id=1), "check_suite_id": 100},
+            {**_check("Own tree", id=3), "check_suite_id": 110},
+            {**_check("Lint", conclusion="failure", id=60), "check_suite_id": 200},
+        ],
+        [
+            {**_run("pull_request", id=10), "check_suite_id": 100},
+            {**_run("workflow_dispatch", id=11), "check_suite_id": 110},
+            {
+                **_run("pull_request", conclusion="failure", id=20),
+                "check_suite_id": 200,
+                "head_branch": "candidate/uk/other",
+            },
+        ],
+        True,
+        "parent",
+        0,
+        True,
+        True,
+        ["ready"],
+    ),
+    # ... nor stand in for a run of its own.
+    "only a fork's run on the candidate's tree": (
+        [
+            {**_check("Lint", id=1), "check_suite_id": 100},
+            {**_check("Own tree", id=3), "check_suite_id": 200},
+        ],
+        [
+            {**_run("pull_request", id=10), "check_suite_id": 100},
+            {
+                **_run("workflow_dispatch", id=20),
+                "check_suite_id": 200,
+                "head_repository": "someone/policyengine.py",
+            },
+        ],
+        True,
+        "parent",
+        0,
+        True,
+        False,
+        ["undo"],
+    ),
     "the checks could not be read": (
         None,
         RUNS_PASSED,
@@ -1185,11 +1285,11 @@ def test_promotion_makes_main_exactly_the_qualified_commit(
         out = ""
         code = 0
         if argv[:2] == ["gh", "api"]:
-            items = checks if "check-runs" in argv[2] else runs
-            if items is None:
+            printed = _gh_api_output(argv, checks, runs, commit, branch)
+            if printed is None:
                 code = 1
             else:
-                out = "".join(json.dumps(item) + "\n" for item in items)
+                out = printed
         elif argv[:3] == ["git", "rev-parse", "FETCH_HEAD"]:
             out = commit if at_commit else "f" * 40
         elif argv[:3] == ["git", "rev-parse", f"{commit}^"]:
@@ -1203,8 +1303,19 @@ def test_promotion_makes_main_exactly_the_qualified_commit(
     monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: [qualified])
     monkeypatch.setattr(cli, "subprocess", SimpleNamespace(run=run))
     monkeypatch.setattr(cli, "config", lambda: {"promotion": {"automatic": automatic}})
-    monkeypatch.setattr(cli, "_open_candidate_branches", lambda: {branch: commit})
-    monkeypatch.setattr(cli, "_ready_candidate_branches", lambda: {})
+    monkeypatch.setattr(
+        cli,
+        "_candidate_pull_requests",
+        lambda: [
+            {
+                "number": 1,
+                "headRefName": branch,
+                "headRefOid": commit,
+                "isDraft": True,
+                "isCrossRepository": False,
+            }
+        ],
+    )
     assert cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True)) == 0
     assert [
         "undo" if "--undo" in argv else "ready"
@@ -1243,22 +1354,24 @@ def test_promotion_returns_every_other_ready_candidate_to_draft(
     import argparse
 
     cli, calls, branch = _sweep_cli(
-        monkeypatch, path="main moved", failing={"2", "target"} if undo_fails else set()
+        monkeypatch, path="main moved", failing={"2", "1"} if undo_fails else set()
     )
     status = cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True))
     undone = [argv[3] for argv in calls if argv[:3] == ["gh", "pr", "ready"]]
-    # The stale one by number (the draft and the fork's are left alone), the
-    # target by _promote (main moved).
-    assert undone == ["2", branch]
+    # The stale one (the draft and the fork's are left alone), then the target
+    # by _promote (main moved), each by number.
+    assert undone == ["2", "1"]
     assert status == (1 if undo_fails else 0)
 
 
-def _sweep_cli(monkeypatch, *, path, failing, checks=None, runs=None):
-    """The promote CLI over a real `gh pr list` payload: the target (ready),
-    a stale same-repository candidate (#2, ready), a draft (#3) and a fork's
-    pull request with the stale branch's name (#4, ready). ``failing`` names
-    the undos that fail ("2" for the sweep's, "target" for the target's);
-    ``path`` is "main moved" or "lease rejected"."""
+def _sweep_cli(monkeypatch, *, path, failing, checks=None, runs=None, push_code=1):
+    """The promote CLI over a real `gh pr list` payload: the target (#1,
+    ready), a stale same-repository candidate (#2, ready), a draft (#3), a
+    fork's pull request with the stale branch's name (#4, ready), a fork's
+    with the target's branch name at another commit (#5, ready) and a ready
+    one whose listing lacks the fork field (#6). ``failing`` names the
+    pull request numbers whose undo fails; ``path`` is "main moved", "lease
+    rejected" or "main at the parent"."""
 
     import importlib.util
 
@@ -1302,20 +1415,32 @@ def _sweep_cli(monkeypatch, *, path, failing, checks=None, runs=None):
             "isDraft": False,
             "isCrossRepository": True,
         },
+        {
+            "number": 5,
+            "headRefName": branch,
+            "headRefOid": "c" * 40,
+            "isDraft": False,
+            "isCrossRepository": True,
+        },
+        {
+            "number": 6,
+            "headRefName": "candidate/uk/unknown",
+            "headRefOid": "u" * 40,
+            "isDraft": False,
+        },
     ]
 
     def run(argv, **kwargs):
         calls.append(argv)
         out, code = "", 0
         if argv[:3] == ["gh", "pr", "list"]:
-            out = json.dumps(listing)
+            # gh stops at its limit, 30 unless the call names one.
+            limit = int(argv[argv.index("--limit") + 1]) if "--limit" in argv else 30
+            out = json.dumps(listing[:limit])
         elif argv[:2] == ["gh", "api"]:
-            items = (
-                (checks or CHECKS_PASSED)
-                if "check-runs" in argv[2]
-                else (runs or RUNS_PASSED)
+            out = _gh_api_output(
+                argv, checks or CHECKS_PASSED, runs or RUNS_PASSED, commit, branch
             )
-            out = "".join(json.dumps(item) + "\n" for item in items)
         elif argv[:3] == ["git", "rev-parse", "FETCH_HEAD"]:
             out = commit
         elif argv[:3] == ["git", "rev-parse", f"{commit}^"]:
@@ -1324,10 +1449,9 @@ def _sweep_cli(monkeypatch, *, path, failing, checks=None, runs=None):
             main = "m" * 40 if path == "main moved" else "p" * 40
             out = main + "\trefs/heads/main\n"
         elif argv[:2] == ["git", "push"]:
-            code = 1  # the lease is rejected (main moved at the push)
+            code = push_code  # 1: the lease is rejected (main moved at the push)
         elif argv[:3] == ["gh", "pr", "ready"] and "--undo" in argv:
-            target = "target" if argv[3] == branch else argv[3]
-            code = 1 if target in failing else 0
+            code = 1 if argv[3] in failing else 0
         return SimpleNamespace(returncode=code, stdout=out, stderr="")
 
     monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: [qualified])
@@ -1337,18 +1461,22 @@ def _sweep_cli(monkeypatch, *, path, failing, checks=None, runs=None):
 
 
 @pytest.mark.parametrize("path", ["main moved", "lease rejected"])
-@pytest.mark.parametrize("failing", [set(), {"2"}, {"target"}])
+@pytest.mark.parametrize("failing", [set(), {"2"}, {"1"}])
 def test_each_failed_return_to_draft_fails_the_run(
     monkeypatch, tmp_path, path, failing
 ):
     """Round 4 of #635: the sweep's failed undo and the target's failed undo
-    (whether main moved or the lease was rejected) each fail the run alone;
-    the sweep acts by number on same-repository ready pull requests only."""
+    (whether main moved or the lease was rejected) each fail the run alone.
+    Round 5: every readiness change goes by number, on same-repository pull
+    requests only; a fork's with the target's branch name neither changes the
+    target's commit nor is touched, and one whose listing lacks the fork
+    field counts as a fork's."""
 
     import argparse
 
     cli, calls, branch = _sweep_cli(monkeypatch, path=path, failing=failing)
-    assert cli._ready_candidate_branches() == {branch: 1, "candidate/uk/stale-pair": 2}
+    assert [pr["number"] for pr in cli._candidate_pull_requests()] == [1, 2, 3]
+    assert cli._open_candidate_branches()[branch] != "c" * 40
     status = cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True))
     readiness = [
         ("undo" if "--undo" in argv else "ready", argv[3])
@@ -1356,46 +1484,169 @@ def test_each_failed_return_to_draft_fails_the_run(
         if argv[:3] == ["gh", "pr", "ready"]
     ]
     target = (
-        [("undo", branch)]
-        if path == "main moved"
-        else [("ready", branch), ("undo", branch)]
+        [("undo", "1")] if path == "main moved" else [("ready", "1"), ("undo", "1")]
     )
     assert readiness == [("undo", "2"), *target]
     assert status == (1 if failing else 0)
+    listing = next(argv for argv in calls if argv[:3] == ["gh", "pr", "list"])
+    assert listing[listing.index("--limit") + 1] == str(cli.PULL_REQUEST_LIMIT)
 
 
-@pytest.mark.parametrize(("attempt", "stranded"), [(3, False), (4, True)])
-def test_a_candidate_waiting_on_runs_past_the_cap_fails_the_run(
-    monkeypatch, tmp_path, capsys, attempt, stranded
+@pytest.mark.parametrize(("listed", "refused"), [(999, False), (1000, True)])
+def test_a_candidate_listing_at_its_limit_is_refused(monkeypatch, listed, refused):
+    """Round 5 of #635: gh stops a pull request search at its limit, so a
+    listing that reaches it may have missed the target; promotion refuses to
+    go on rather than act on part of the list."""
+
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "check_uk_candidate_for_test",
+        Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
+    )
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    listing = [
+        {
+            "number": number,
+            "headRefName": f"candidate/uk/pair-{number}",
+            "headRefOid": "a" * 40,
+            "isDraft": True,
+            "isCrossRepository": False,
+        }
+        for number in range(1, 1201)
+    ]
+
+    def run(argv, **kwargs):
+        limit = int(argv[argv.index("--limit") + 1]) if "--limit" in argv else 30
+        return SimpleNamespace(
+            returncode=0, stdout=json.dumps(listing[: min(limit, listed)]), stderr=""
+        )
+
+    monkeypatch.setattr(cli, "subprocess", SimpleNamespace(run=run))
+    assert cli.PULL_REQUEST_LIMIT == 1000
+    if refused:
+        with pytest.raises(SystemExit, match="::error::1000 open pull requests"):
+            cli._candidate_pull_requests()
+    else:
+        assert len(cli._candidate_pull_requests()) == listed
+
+
+NOW = "2026-10-16T12:00:00Z"
+RECENT = "2026-10-16T06:00:00Z"
+OLD = "2026-09-15T11:00:00Z"
+
+# Each: the own-tree run's status, conclusion, attempt and creation time;
+# whether the candidate is stranded (waits on a run refresh will not re-run).
+STRANDED_CASES = {
+    "failed, attempts left": ("completed", "failure", 3, RECENT, False),
+    "failed at the cap": ("completed", "failure", 4, RECENT, True),
+    "timed out, attempts left": ("completed", "timed_out", 1, RECENT, False),
+    "cancelled, attempts left": ("completed", "cancelled", 2, RECENT, False),
+    # Round 5 of #635: refresh re-runs only failed, timed-out and cancelled
+    # runs, and GitHub only within 30 days, so these wait on nothing.
+    "waiting on an approval": ("completed", "action_required", 1, RECENT, True),
+    "skipped": ("completed", "skipped", 1, RECENT, True),
+    "stale": ("completed", "stale", 1, RECENT, True),
+    "failed past GitHub's re-run window": ("completed", "failure", 1, OLD, True),
+    "failed just inside the window": (
+        "completed",
+        "failure",
+        1,
+        "2026-09-16T12:00:01Z",
+        False,
+    ),
+    # Unfinished runs and successes are not stranded at any attempt.
+    "in progress at the cap": ("in_progress", None, 4, OLD, False),
+    "queued past the window": ("queued", None, 1, OLD, False),
+}
+
+
+@pytest.mark.parametrize("case", sorted(STRANDED_CASES))
+def test_a_candidate_waiting_on_runs_refresh_will_not_rerun_fails_the_run(
+    monkeypatch, tmp_path, capsys, case
 ):
     """Round 4 of #635: refresh re-runs a run until MAX_RUN_ATTEMPTS, then
     stops; a candidate still waiting on it would otherwise wait unseen, so
-    the promote run fails with an error naming it. Below the cap it waits
+    the promote run fails with an error naming it. Round 5: the same holds
+    for any finished, unsuccessful run refresh will not re-run (a result it
+    does not re-run, or one past GitHub's 30-day window). Otherwise it waits
     quietly, kept draft."""
 
     import argparse
+    import datetime
 
+    status_, conclusion, attempt, created, stranded = STRANDED_CASES[case]
     runs = [
         _run("pull_request", id=10),
         {
-            **_run("workflow_dispatch", conclusion="failure", id=11),
+            **_run("workflow_dispatch", status_, conclusion, id=11),
             "run_attempt": attempt,
+            "created_at": created,
         },
     ]
     cli, calls, branch = _sweep_cli(
         monkeypatch, path="main at the parent", failing=set(), runs=runs
+    )
+    monkeypatch.setattr(
+        cli,
+        "_now",
+        lambda: datetime.datetime.fromisoformat(NOW.replace("Z", "+00:00")),
     )
     assert cli.MAX_RUN_ATTEMPTS == 4
     status = cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True))
     output = capsys.readouterr().out
     assert status == (1 if stranded else 0)
     assert ("::error::" in output) is stranded
+    if stranded:
+        assert branch in output and "will not re-run" in output
     assert [argv for argv in calls if argv[:2] == ["git", "push"]] == []
     # The target waits as a draft (round 4: one a person left ready).
     assert [argv[3] for argv in calls if argv[:3] == ["gh", "pr", "ready"]] == [
         "2",
-        branch,
+        "1",
     ]
+
+
+def test_a_success_on_the_last_attempt_is_promoted(monkeypatch, tmp_path, capsys):
+    """Round 5 of #635: a run that passes on its last allowed attempt is not
+    stranded; the candidate is promoted."""
+
+    import argparse
+
+    runs = [
+        _run("pull_request", id=10),
+        {**_run("workflow_dispatch", id=11), "run_attempt": 4, "created_at": OLD},
+    ]
+    cli, calls, branch = _sweep_cli(
+        monkeypatch, path="main at the parent", failing=set(), runs=runs, push_code=0
+    )
+    assert cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True)) == 0
+    output = capsys.readouterr().out
+    assert "::error::" not in output and f"promoted {branch}" in output
+
+
+def test_a_failed_return_to_draft_while_waiting_fails_the_run(
+    monkeypatch, tmp_path, capsys
+):
+    """Round 5 of #635: on the waiting path the target goes back to draft;
+    if that fails, a ready pull request is left that a merge could combine
+    with other code, so the run fails (with nothing stranded)."""
+
+    import argparse
+
+    runs = [
+        _run("pull_request", id=10),
+        _run("workflow_dispatch", "in_progress", None, id=11),
+    ]
+    cli, calls, branch = _sweep_cli(
+        monkeypatch, path="main at the parent", failing={"1"}, runs=runs
+    )
+    assert cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True)) == 1
+    output = capsys.readouterr().out
+    assert "::error::could not return 1 to draft" in output
+    assert "will not re-run" not in output
+    assert [argv for argv in calls if argv[:2] == ["git", "push"]] == []
 
 
 def test_automatic_promotion_is_on_with_its_basis_recorded():

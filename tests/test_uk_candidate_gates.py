@@ -942,6 +942,8 @@ def test_the_ledger_publishes_no_value_from_the_survey_data(outcome, variant):
                 Decimal(1093) if variant == "text and decimal" else 1093 + index * 4
             ),
             "nested": [{"count": 5, "ok": False}],
+            "names": ["income_tax:2027", "income_tax:2028"],
+            "total_nan": float("nan"),
         }
     if outcome == "fail":
         case = next(r for r in report["cases"] if r["status"] == "pass")
@@ -967,12 +969,16 @@ def test_the_ledger_publishes_no_value_from_the_survey_data(outcome, variant):
         "2027_total_change": WITHHELD_VALUE,
         "2027_people_with_lower_tax": WITHHELD_VALUE,
         "2027_people_with_higher_tax": WITHHELD_VALUE,
-        "nested": [{"count": WITHHELD_VALUE, "ok": False}],
+        # A nested list or mapping is withheld whole: its length or keys
+        # could be a count (supp-r5), and a NaN reads "withheld" too (P12).
+        "nested": WITHHELD_VALUE,
+        "names": WITHHELD_VALUE,
+        "total_nan": WITHHELD_VALUE,
     }
-    # What the gate judges is published as reported.
+    # Every field but the detail is published as reported (supp-r5 C04).
     assert [
-        (r["check_id"], r["route"], r["status"]) for r in evidence["population"]
-    ] == [(r["check_id"], r["route"], r["status"]) for r in report["population"]]
+        {k: v for k, v in r.items() if k != "detail"} for r in evidence["population"]
+    ] == [{k: v for k, v in r.items() if k != "detail"} for r in report["population"]]
     assert {k: v for k, v in evidence.items() if k != "population"} == {
         k: v for k, v in report.items() if k != "population"
     }
@@ -1007,11 +1013,53 @@ def test_only_true_false_findings_survive_publication(detail):
     published = publishable_contract_report(report)
     # Synthetic case rows are left alone.
     assert published["cases"] == report["cases"]
-    before = list(_population_leaves(detail))
-    after = list(_population_leaves(published["population"][0]["detail"]))
-    assert len(before) == len(after)
-    for old, new in zip(before, after):
-        assert new == (old if old is None or isinstance(old, bool) else WITHHELD_VALUE)
+
+    def finding(value):
+        return value if value is None or isinstance(value, bool) else WITHHELD_VALUE
+
+    expected = (
+        {key: finding(value) for key, value in detail.items()}
+        if isinstance(detail, dict)
+        else finding(detail)
+    )
+    assert published["population"][0]["detail"] == expected
+
+
+def test_population_rows_publish_only_the_runners_fixed_fields():
+    """supp-r5 C04 and C07: the runner's fixed fields, an error row's status
+    among them, are published as reported; any other field is withheld,
+    and an error row's text in its detail too. Values synthetic."""
+
+    from policyengine.provenance.uk_candidate import (
+        WITHHELD_VALUE,
+        publishable_contract_report,
+    )
+
+    fixed = {
+        "check_id": "population_april_rate_change",
+        "route": "country.reform_dict",
+        "status": "error",
+        "reason": None,
+        "seed": 0,
+        "subsample_households": 1000,
+        "reform_identity": None,
+        "reform_identity_unavailable": "population check rows are not bound to a reform identity",
+    }
+    row = {
+        **fixed,
+        "detail": "RuntimeError: total 1234.5 over 4 households\n",
+        "total_change": 1234.5,
+        "households": ["h1", "h2"],
+        "flag": True,
+    }
+    (published,) = publishable_contract_report({"population": [row]})["population"]
+    assert published == {
+        **fixed,
+        "detail": WITHHELD_VALUE,
+        "total_change": WITHHELD_VALUE,
+        "households": WITHHELD_VALUE,
+        "flag": True,
+    }
 
 
 @pytest.mark.parametrize("section", ["cases", "population"])
