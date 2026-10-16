@@ -1036,6 +1036,59 @@ PROMOTION_CASES = {
         [],
     ),
     "no checks yet": ([], RUNS_PASSED, True, "parent", 0, True, False, []),
+    # Round 3 of #635: a dispatch cancelled while queued has no jobs and so
+    # no checks; the run itself must still block.
+    "the own-tree run cancelled with no jobs": (
+        CHECKS_PASSED,
+        [RUNS_PASSED[0], _run("workflow_dispatch", conclusion="cancelled", id=11)],
+        True,
+        "parent",
+        0,
+        True,
+        False,
+        [],
+    ),
+    # Round 3 of #635: a replaced run re-run later gets newer check ids; its
+    # checks must not count, whatever they conclude.
+    "a replaced run's re-run checks": (
+        [
+            {**_check("Lint", id=1), "check_suite_id": 100},
+            {**_check("Test (3.13)", id=2), "check_suite_id": 100},
+            {**_check("Own tree", id=3), "check_suite_id": 110},
+            {
+                **_check("Test (3.13)", conclusion="failure", id=50),
+                "check_suite_id": 90,
+            },
+        ],
+        [
+            {**_run("pull_request", id=10), "check_suite_id": 100},
+            {**_run("workflow_dispatch", id=11), "check_suite_id": 110},
+            {**_run("pull_request", conclusion="failure", id=9), "check_suite_id": 90},
+        ],
+        True,
+        "parent",
+        0,
+        True,
+        True,
+        ["ready"],
+    ),
+    # An app's check outside any workflow run still counts.
+    "an app's failing check": (
+        [
+            {**_check("Lint", id=1), "check_suite_id": 100},
+            {**_check("External", conclusion="failure", id=5), "check_suite_id": 500},
+        ],
+        [
+            {**_run("pull_request", id=10), "check_suite_id": 100},
+            {**_run("workflow_dispatch", id=11), "check_suite_id": 110},
+        ],
+        True,
+        "parent",
+        0,
+        True,
+        False,
+        [],
+    ),
     "the checks could not be read": (
         None,
         RUNS_PASSED,
@@ -1151,6 +1204,7 @@ def test_promotion_makes_main_exactly_the_qualified_commit(
     monkeypatch.setattr(cli, "subprocess", SimpleNamespace(run=run))
     monkeypatch.setattr(cli, "config", lambda: {"promotion": {"automatic": automatic}})
     monkeypatch.setattr(cli, "_open_candidate_branches", lambda: {branch: commit})
+    monkeypatch.setattr(cli, "_ready_candidate_branches", lambda: set())
     assert cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True)) == 0
     assert [
         "undo" if "--undo" in argv else "ready"
@@ -1176,6 +1230,55 @@ def test_promotion_makes_main_exactly_the_qualified_commit(
     if not automatic:
         assert not [argv for argv in calls if argv[:2] == ["gh", "api"]]
     assert (f"promoted {branch}" in capsys.readouterr().out) is promotes
+
+
+@pytest.mark.parametrize("undo_fails", [False, True])
+def test_promotion_returns_every_other_ready_candidate_to_draft(
+    monkeypatch, tmp_path, undo_fails
+):
+    """Round 3 of #635: only the plan's target may be ready, so a candidate
+    left ready by a run whose undo failed, or by older code, is returned to
+    draft; a failed return to draft fails the run so it is seen."""
+
+    import argparse
+    import importlib.util
+
+    qualified = _promotion_receipt(pair=_promotable_pair_and_branch())
+    branch = candidate_branch(qualified.pair)
+    commit = qualified.harness.git_commit
+    stale = "candidate/uk/stale-pair"
+    spec = importlib.util.spec_from_file_location(
+        "check_uk_candidate_for_test",
+        Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
+    )
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        out, code = "", 0
+        if argv[:3] == ["git", "rev-parse", "FETCH_HEAD"]:
+            out = commit
+        elif argv[:3] == ["git", "rev-parse", f"{commit}^"]:
+            out = "p" * 40
+        elif argv[:2] == ["git", "ls-remote"]:
+            # Main moved: the target is kept draft too.
+            out = "m" * 40 + "\trefs/heads/main\n"
+        elif argv[:3] == ["gh", "pr", "ready"] and "--undo" in argv:
+            code = 1 if undo_fails else 0
+        return SimpleNamespace(returncode=code, stdout=out, stderr="")
+
+    monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: [qualified])
+    monkeypatch.setattr(cli, "subprocess", SimpleNamespace(run=run))
+    monkeypatch.setattr(cli, "config", lambda: {"promotion": {"automatic": True}})
+    monkeypatch.setattr(cli, "_open_candidate_branches", lambda: {branch: commit})
+    monkeypatch.setattr(cli, "_ready_candidate_branches", lambda: {branch, stale})
+    status = cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True))
+    undone = [argv[3] for argv in calls if argv[:3] == ["gh", "pr", "ready"]]
+    # The stale one by the sweep, the target by _promote (main moved).
+    assert undone == [stale, branch]
+    assert status == (1 if undo_fails else 0)
 
 
 def test_automatic_promotion_is_on_with_its_basis_recorded():
@@ -1768,6 +1871,8 @@ def test_resolution_preserves_authorization_to_recover_forced_work(
     )
     assert cli.cmd_resolve(args) == 0
     payload = json.loads(out.read_text())
+    # The recheck under the preparation lock reads it (round 3 of #635).
+    assert payload["force"] is True
     assert payload["supersedes_receipt_sha256"] == terminal.unreviewed_sha256
     attempt = attempt_directory(tmp_path, "uk", pair.pair_id, payload["attempt_key"])
     stage_attempt(
@@ -1779,7 +1884,7 @@ def test_resolution_preserves_authorization_to_recover_forced_work(
     args.force = False
     assert cli.cmd_resolve(args) == 0
     recovery = json.loads(out.read_text())
-    assert recovery["action"] == "qualify"
+    assert recovery["action"] == "qualify" and recovery["force"] is False
     assert recovery["base_commit"] == base
     assert recovery["attempt_key"] == (base[:12] if main_advanced else base[:12] + "-2")
     assert recovery["supersedes_receipt_sha256"] == terminal.unreviewed_sha256

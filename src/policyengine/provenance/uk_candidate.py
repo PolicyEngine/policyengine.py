@@ -1418,25 +1418,36 @@ def _small_cell_problems(name: str, rows: Sequence[Mapping[str, Any]]) -> list[s
     """Rows that break the tool's small-cell format, as problems.
 
     The tool publishes a figure from fewer than 10 records with ``value``
-    null and ``suppressed`` true. A spending head's caseload is suppressed
-    with it, from the same records. Every total holding a suppressed figure
-    is rebuilt without it; the total lists the figure's ``metric_id`` under
-    ``excludes`` and the sign it enters with, +1 or -1, under
-    ``exclude_signs`` (``privacy.py``, ``measure.measure_year`` and
+    null and ``suppressed`` true. A suppressed spending head's caseload is
+    suppressed with it; a published head's caseload counts only positive
+    records, so it can be suppressed on its own. Every total holding a
+    suppressed figure is rebuilt without it; the total lists the figure's
+    ``metric_id`` under ``excludes`` and the sign it enters with, +1 or -1,
+    under ``exclude_signs`` (``privacy.py``, ``measure.measure_year`` and
     ``measure.rebuild_protected`` in the pinned tool). These are reports this
-    gate cannot read safely:
+    gate cannot read safely, so neither the gate's evidence nor the ledger
+    records any value from them:
 
     - a row without the small-cell fields, or whose year is not an integer;
+    - two rows for one figure and year (one could publish what the other
+      suppresses);
     - a suppressed row with a value, or a ``suppressed`` that is not a
       boolean;
     - an ``excludes`` that is not a list of ids, or names a figure the same
       report does not suppress in that year;
     - ``exclude_signs`` that do not give +1 or -1 for exactly ``excludes``;
-    - a caseload and its spending head that are not suppressed together.
+    - a published caseload beside its suppressed spending head.
     """
 
     by_key = {(str(row.get("metric_id")), row.get("year")): row for row in rows}
     hidden = {key for key, row in by_key.items() if _suppressed(row)}
+    repeated = sorted(
+        f"{key[0]} {key[1]}"
+        for key, count in Counter(
+            (str(row.get("metric_id")), row.get("year")) for row in rows
+        ).items()
+        if count > 1
+    )
     missing_fields, bad_years, with_value, not_boolean = [], [], [], []
     malformed, bad_signs, unmatched, unpaired = [], [], [], []
     for row in rows:
@@ -1451,9 +1462,9 @@ def _small_cell_problems(name: str, rows: Sequence[Mapping[str, Any]]) -> list[s
             not_boolean.append(label)
         elif flag and row.get("value") is not None:
             with_value.append(label)
-        if metric_id.startswith("caseloads."):
+        if metric_id.startswith("caseloads.") and not _suppressed(row):
             head = by_key.get((f"spending.{metric_id.split('.', 1)[1]}", year))
-            if head is not None and _suppressed(head) != _suppressed(row):
+            if head is not None and _suppressed(head):
                 unpaired.append(label)
         excludes = row.get("excludes", [])
         if not isinstance(excludes, list) or not all(
@@ -1476,12 +1487,13 @@ def _small_cell_problems(name: str, rows: Sequence[Mapping[str, Any]]) -> list[s
             "exclude_signs), so from a tool that predates suppression",
         ),
         (bad_years, "metric rows whose year is not an integer"),
+        (repeated, "duplicate metrics"),
         (with_value, "suppressed figures with a value"),
         (not_boolean, "a suppressed flag that is not true or false"),
         (malformed, "excludes that are not a list of metric ids"),
         (bad_signs, "exclude_signs that are not +1 or -1 for exactly its excludes"),
         (unmatched, "totals excluding a figure it does not suppress"),
-        (unpaired, "caseloads not suppressed together with their spending head"),
+        (unpaired, "caseloads published beside their suppressed spending head"),
     ):
         if found:
             problems.append(f"the {name} report has {what}: {', '.join(found[:8])}")
@@ -1714,16 +1726,8 @@ def compare_metric_reports(
         ("candidate", candidate.get("metrics", [])),
         ("previous", previous.get("metrics", [])),
     )
+    unsafe = False
     for name, rows in report_metric_rows:
-        metric_counts = Counter(_metric_key(row) for row in rows)
-        duplicate_metrics = sorted(
-            f"{key[0]} {key[1]}" for key, count in metric_counts.items() if count > 1
-        )
-        if duplicate_metrics:
-            problems.append(
-                f"the {name} report has duplicate metrics: "
-                + ", ".join(duplicate_metrics[:8])
-            )
         # A suppressed figure is published without a value by design.
         nonfinite = [
             f"{row.get('metric_id')} {row.get('year')}"
@@ -1734,7 +1738,9 @@ def compare_metric_reports(
             problems.append(
                 f"the {name} report has non-finite values: {', '.join(nonfinite[:8])}"
             )
-        problems.extend(_small_cell_problems(name, rows))
+        format_problems = _small_cell_problems(name, rows)
+        problems.extend(format_problems)
+        unsafe = unsafe or bool(format_problems)
     lost = sorted(f"{key[0]} {key[1]}" for key in set(before_metrics) - set(current))
     if lost:
         problems.append(f"metrics disappeared: {', '.join(lost[:8])}")
@@ -1747,9 +1753,13 @@ def compare_metric_reports(
     withheld: list[dict[str, Any]] = []
     aligned_totals: list[str] = []
     suppressed_on_both = 0
+    # A report that breaks the small-cell format may carry a figure from
+    # fewer than 10 records: it fails above, and no value from either report
+    # enters the evidence, which the public ledger publishes.
+    comparable = {} if unsafe else current
     # Years sort as text so a malformed year (failed above) cannot crash this.
     for key, row in sorted(
-        current.items(), key=lambda item: (item[0][0], str(item[0][1]))
+        comparable.items(), key=lambda item: (item[0][0], str(item[0][1]))
     ):
         old = before_metrics.get(key)
         if old is None:
@@ -1774,20 +1784,17 @@ def compare_metric_reports(
         new_value, old_value = float(row["value"]), float(old["value"])
         new_compared, old_compared = new_value, old_value
         aligned_on: Optional[list[str]] = None
-        if _excludes(row) != _excludes(old):
-            # Each side leaves out its own suppressed figures. Subtracting
-            # the totals as published would mix definitions and could give
-            # an excluded figure back, so they are lined up first, from
-            # published figures only, or withheld.
-            new_signs, old_signs = _valid_signs(row), _valid_signs(old)
+        # Both reports passed the format check, so their signs are valid.
+        new_signs, old_signs = _valid_signs(row) or {}, _valid_signs(old) or {}
+        if new_signs != old_signs:
+            # Each side leaves out its own suppressed figures, each with its
+            # sign (the tool compares the signed maps, whose keys are the
+            # excluded ids). Subtracting the totals as published would mix
+            # definitions and could give an excluded figure back, so they are
+            # lined up first, from published figures only, or withheld.
             reason = None
             if not (_additive(row) and _additive(old)):
                 reason = "the reports leave out different suppressed figures"
-            elif new_signs is None or old_signs is None:
-                reason = (
-                    "the reports leave out different suppressed figures, "
-                    "without the signs needed to line them up"
-                )
             elif any(
                 new_signs[metric_id] != old_signs[metric_id]
                 for metric_id in set(new_signs) & set(old_signs)
@@ -1868,6 +1875,9 @@ def compare_metric_reports(
         "suppressed_on_both_sides": suppressed_on_both,
         "withheld_changes": withheld,
         "lined_up_totals": aligned_totals,
+        # True when a report breaks the small-cell format: no value from
+        # either report was compared or recorded.
+        "values_withheld": unsafe,
         "moves_beyond_bounds": moves,
         "candidate_report_sha256": evidence_sha256(candidate),
         "previous_report_sha256": evidence_sha256(previous),
@@ -2045,6 +2055,10 @@ def reform_responsiveness(
     )
     if repeated:
         disagreements.append(f"the report repeats {', '.join(repeated[:8])}")
+    # A report that breaks the small-cell format may carry a figure from
+    # fewer than 10 records: no value from it enters the evidence.
+    format_problems = _small_cell_problems("candidate", report.get("metrics") or [])
+    disagreements.extend(format_problems)
     malformed: list[str] = []
     for reform in standard_reforms:
         reform_id = reform["id"]
@@ -2066,7 +2080,7 @@ def reform_responsiveness(
                     malformed.append(f"reform_targets.{reform_id} {year}")
                     recomputed = False
                 continue
-            changes[str(year)] = value
+            changes[str(year)] = None if format_problems else value
             if (
                 isinstance(value, bool)
                 or not isinstance(value, (int, float))
@@ -2084,7 +2098,8 @@ def reform_responsiveness(
             "withheld_years": withheld_years,
             "reform_runs": ran,
             "responsive": responsive.get("status"),
-            "detail": responsive.get("detail"),
+            # The tool's text can quote amounts; none from an unsafe report.
+            "detail": None if format_problems else responsive.get("detail"),
         }
         table.append(row)
         label = f"{reform['name']} ({reform_id})"
@@ -2093,7 +2108,14 @@ def reform_responsiveness(
         elif responsive.get("status") != "pass":
             problems.append(
                 f"{label} did not respond: "
-                + (responsive.get("detail") or "no responsive check in the report")
+                + (
+                    row["detail"]
+                    or (
+                        "its detail is withheld"
+                        if format_problems and responsive
+                        else "no responsive check in the report"
+                    )
+                )
             )
         if ran == "pass" and responsive.get("status") in ("pass", "fail"):
             passed = responsive["status"] == "pass"

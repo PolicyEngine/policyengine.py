@@ -157,6 +157,8 @@ def test_preparation_rechecks_eligibility_and_tests_the_candidates_own_tree():
     names = [step.get("name") for step in steps]
     duplicate = steps[names.index("Check for an attempt staged by another run")]
     assert "check_uk_candidate.py still-eligible" in duplicate["run"]
+    # It asks gh whether an earlier attempt's run failed (round 3 of #635).
+    assert duplicate["env"]["GH_TOKEN"] == "${{ github.token }}"
     assert names.index("Install the base environment") < names.index(
         "Check for an attempt staged by another run"
     )
@@ -206,6 +208,12 @@ def test_still_eligible_reports_a_pair_another_run_is_qualifying(monkeypatch, tm
     )
     assert cli.cmd_still_eligible(args) == 0
     assert outputs[-1] == {"duplicate": "true"}
+    # A forced run is never turned into a duplicate (round 3 of #635: the
+    # recheck dropped force and still passed every test).
+    payload = json.loads(candidate.read_text())
+    candidate.write_text(json.dumps({**payload, "force": True}))
+    assert cli.cmd_still_eligible(args) == 0
+    assert outputs[-1] == {"duplicate": "false"}
 
 
 def test_preparation_syncs_the_candidate_lock_before_using_it():
@@ -329,7 +337,13 @@ elif command == "git" and args[0] == "push":
             state = json.loads(state_path.read_text())
             return SimpleNamespace(
                 stdout=json.dumps(
-                    [{"headRefName": branch, "headRefOid": state["head"]}]
+                    [
+                        {
+                            "headRefName": branch,
+                            "headRefOid": state["head"],
+                            "isDraft": state["status"] != "ready",
+                        }
+                    ]
                 )
             )
         # Promotion reads the branch head and checks main is its parent.
@@ -494,23 +508,35 @@ def test_refresh_checks_reruns_only_failed_pr_runs_for_the_qualified_head(
     head = receipt.harness.git_commit if head_matches else "f" * 40
     monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: [receipt])
     monkeypatch.setattr(cli, "_open_candidate_branches", lambda: {branch: head})
+    code, docs, guard = (
+        ".github/workflows/pr_code_changes.yaml",
+        ".github/workflows/pr_docs.yaml",
+        ".github/workflows/guard.yaml",
+    )
     runs = [
         {
             "id": identifier,
             "head_sha": sha,
+            "path": path,
             "event": event,
             "status": status,
             "conclusion": conclusion,
+            "run_attempt": attempt,
         }
-        for identifier, sha, event, status, conclusion in (
-            (11, head, "pull_request", "completed", "failure"),
-            (12, head, "pull_request", "completed", "success"),
-            (13, head, "pull_request", "in_progress", "failure"),
-            (14, "a" * 40, "pull_request", "completed", "failure"),
-            (15, head, "push", "completed", "failure"),
-            (16, head, "pull_request", "completed", "timed_out"),
-            # The run on the candidate's own tree that promotion requires.
-            (17, head, "workflow_dispatch", "completed", "failure"),
+        for identifier, sha, path, event, status, conclusion, attempt in (
+            # Replaced by run 16 of the same workflow and event: left alone,
+            # so its checks cannot come back newer (round 3 of #635).
+            (11, head, code, "pull_request", "completed", "failure", 1),
+            (12, head, docs, "pull_request", "completed", "success", 1),
+            (13, head, guard, "pull_request", "in_progress", None, 1),
+            (14, "a" * 40, code, "pull_request", "completed", "failure", 1),
+            (15, head, code, "push", "completed", "failure", 1),
+            (16, head, code, "pull_request", "completed", "timed_out", 1),
+            # The run on the candidate's own tree that promotion requires; a
+            # job timeout cancels the run (round 3 of #635).
+            (17, head, code, "workflow_dispatch", "completed", "cancelled", 1),
+            # Already run as often as the cap allows.
+            (18, head, docs, "workflow_dispatch", "completed", "failure", 3),
         )
     ]
     calls = []
@@ -521,15 +547,19 @@ def test_refresh_checks_reruns_only_failed_pr_runs_for_the_qualified_head(
             assert "--paginate" in argv
             assert f"head_sha={receipt.harness.git_commit}" in argv[2]
             return SimpleNamespace(stdout="\n".join(json.dumps(run) for run in runs))
-        assert argv[:3] == ["gh", "run", "rerun"]
-        assert "--failed" in argv and kwargs["check"] is True
+        assert argv[:3] == ["gh", "run", "rerun"] and kwargs["check"] is True
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(cli, "subprocess", SimpleNamespace(run=fake_run))
     args = cli.parser().parse_args(["refresh-pr-checks", "--ledger", str(tmp_path)])
     assert args.func(args) == 0
-    reruns = [call[3] for call in calls if call[:3] == ["gh", "run", "rerun"]]
+    reruns = {
+        call[3]: "--failed" in call
+        for call in calls
+        if call[:3] == ["gh", "run", "rerun"]
+    }
     if receipt.promotable and head_matches:
-        assert reruns == ["11", "16", "17"]
+        # Failed jobs only for the timed-out run; the cancelled one in full.
+        assert reruns == {"16": True, "17": False}
     else:
         assert calls == []
