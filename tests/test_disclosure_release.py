@@ -629,6 +629,70 @@ def test_a_weight_matrix_child_needs_parent_of_under_several_parents():
     assert release.check() == []
 
 
+def _seat_matrix_release(parent_of):
+    """400 records in two regions and a 4 x 400 seat matrix.
+
+    Three records carry seat M1, so it is withheld. M2 holds the rest of R1;
+    M3 and M4 share R2, and a few records there carry weight in both.
+    """
+    n = 400
+    regions = np.array(["R1"] * 200 + ["R2"] * 200, dtype=object)
+    matrix = np.zeros((4, n))
+    matrix[0, :3] = 100.0
+    matrix[1, 3:200] = 100.0
+    matrix[2, 200:300] = 100.0
+    matrix[3, 300:] = 100.0
+    matrix[2:, 290:300] = 50.0
+    baseline = np.random.default_rng(2).uniform(20_000.0, 60_000.0, n)
+    common = {
+        "reform": "reform",
+        "year": 2026,
+        "source_ids": np.arange(n),
+        "baseline": baseline,
+        "reformed": baseline + 200.0,
+    }
+    release = Release()
+    release.add(
+        estimate_change(
+            level="region",
+            areas=AreaWeights.from_labels(regions, np.full(n, 100.0)),
+            **common,
+        )
+    )
+    release.add(
+        estimate_change(
+            level="constituency",
+            areas=AreaWeights.from_matrix(matrix, ["M1", "M2", "M3", "M4"]),
+            **common,
+        )
+    )
+    release.add_nesting("constituency", "region", parent_of)
+    return release
+
+
+def test_parent_of_must_name_areas_of_the_parent_level():
+    """Regions named another way left every group empty, so nothing was found."""
+    own = {"M1": "R1", "M2": "R1", "M3": "R2", "M4": "R2"}
+
+    findings = _seat_matrix_release(own).check()
+
+    blocking = _blocking(findings, RECOVERABLE_REMAINDER)
+    assert len(blocking) == len(findings) == 3
+    assert {f.family for f in blocking} == {"change", "share_gaining", "share_losing"}
+    assert {(f.relation, f.group, tuple(f.members)) for f in blocking} == {
+        ("nesting", "R1", ("M1",))
+    }
+
+    renamed = {"M1": "North", "M2": "North", "M3": "South", "M4": "South"}
+    with pytest.raises(DisclosureError, match="not region areas: 2") as raised:
+        _seat_matrix_release(renamed).check()
+    assert "North" not in str(raised.value)
+    assert "South" not in str(raised.value)
+
+    with pytest.raises(DisclosureError, match="not region areas: 1"):
+        _seat_matrix_release({**own, "M4": "South"}).check()
+
+
 def test_the_release_refuses_mixed_settings_and_duplicates():
     data = _records(STRONG)
     release = Release()

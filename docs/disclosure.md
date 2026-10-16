@@ -117,6 +117,10 @@ are a reference: the release does not emit their rows, but it treats the rows
 that pass as public elsewhere and the withheld ones as secret, and checks
 them like its own.
 
+The check matches areas by their codes, and it raises on a code that matches
+nothing rather than leave areas unchecked. Each value of `parent_of` must be
+an area code of the parent level's estimates.
+
 `compute_uk_geography_disclosure` always checks constituencies and local
 authorities against their region, and regions against the nation, also when
 you publish one level only. A level given as a weight matrix needs

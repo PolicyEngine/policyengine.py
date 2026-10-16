@@ -107,6 +107,8 @@ class Release:
 
         ``parent_of`` (child area code to parent area code) is needed only when
         the child level is a weight matrix and the parent has several areas.
+        Its parent codes must be area codes of the parent estimates: the check
+        raises on one that is not.
         """
         mapping = dict(parent_of) if parent_of is not None else None
         self._nestings.append((child_level, parent_level, mapping))
@@ -338,6 +340,15 @@ class Release:
             if missing:
                 raise DisclosureError(
                     f"parent_of lacks {len(missing)} {child.level} areas."
+                )
+            # Groups match by code. A code that is no parent area would leave
+            # its child areas in no group, and the check would pass unseen.
+            unknown = {parent_of[c] for c in child.areas.area_codes} - set(parents)
+            if unknown:
+                raise DisclosureError(
+                    f"Codes in parent_of that are not {parent.level} areas: "
+                    f"{len(unknown)}. Map each {child.level} area to an area "
+                    f"code of the {parent.level} estimates."
                 )
             return {
                 code: (
