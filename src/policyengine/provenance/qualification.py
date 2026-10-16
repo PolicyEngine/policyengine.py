@@ -889,16 +889,19 @@ def evaluate_replay_receipt(
     (``data/qualification/replay_policy.md``):
 
     - fail on rejected or failed replays, mapping flags, lost results
-      (a base value with no candidate value), lost responses (a measure-year
-      the candidate lists as inert, or a measure-year total of exactly £0
-      against a base at least the diff's bound away) and incomplete grids,
-      unless a gap is known: the base's own record (``diff.base_events``)
-      lists the same measure-year as inert, or missing and supported. A
-      known gap does not block, and neither do the rows by which scorecard
-      records a mixed one (``_is_the_gap``, and the base-only inertness on a
-      valueless row where the candidate is missing and the base inert); any
-      candidate value other than £0 at a known gap fails as a contradiction,
-      and any other base value with no candidate value is a lost result;
+      (a coverage row with a base value and no candidate value), lost
+      responses (a measure-year total of exactly £0 against a base at least
+      the diff's bound away, which a known gap never excuses, or a
+      measure-year the candidate lists as inert, unless it is a known gap)
+      and incomplete grids (unless every gap in them is known). A gap is
+      known when the base's own record (``diff.base_events``) lists the same
+      measure-year as inert, or missing and supported. A known gap does not
+      block, and neither do the rows by which scorecard records a mixed one
+      (``_is_the_gap``, and the base-only inertness on a valueless row where
+      the candidate is missing and the base inert); any candidate value
+      other than £0 at a known gap fails as a contradiction, and any other
+      coverage row with a base value and no candidate value, even £0, is a
+      lost result;
     - send every other flagged move to review.
 
     Unsupported years are reported, never failed on their own. The gate's

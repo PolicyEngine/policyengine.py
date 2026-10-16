@@ -13,7 +13,8 @@ this file's SHA-256 in its `replay` gate details.
 
 The replay gate fails on the regressions a scorecard replay receipt
 identifies. It calls a gap known only on positive evidence from the
-comparison base. It sends every other flagged move to a named reviewer.
+comparison base, and passes the rows that record a known gap. It sends
+every other flagged move to a named reviewer.
 
 ## Fail
 

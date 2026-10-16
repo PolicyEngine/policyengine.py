@@ -1884,6 +1884,44 @@ def test_any_candidate_value_other_than_zero_at_a_known_gap_fails(
     )
 
 
+# Round 6 of #637: the reviewer's probes.
+@pytest.mark.parametrize(
+    ("level", "key"), [("source_row", "r"), ("measure_year", "total"), ("head", "v")]
+)
+def test_a_valueless_inertness_row_at_a_missing_inert_gap_is_the_gap_at_any_level(
+    level, key
+):
+    gate = _known_gap(
+        [
+            {
+                "flags": ["inertness"],
+                "base_gbp": None,
+                "head_gbp": None,
+                "level": level,
+                "key": key,
+            }
+        ],
+        "missing",
+        "inert",
+    )
+    assert gate.status == "pass" and len(gate.details["known_gap_rows"]) == 1
+
+
+@pytest.mark.parametrize(
+    ("candidate", "base"), [("missing", "inert"), ("inert", "missing")]
+)
+def test_a_valueless_coverage_row_at_a_mixed_gap_is_not_its_record(candidate, base):
+    """The coverage record is £0 on the inert side; a coverage row with no
+    value on either side is reviewed, at that gap too."""
+
+    gate = _known_gap(
+        [{"flags": ["coverage"], "base_gbp": None, "head_gbp": None}], candidate, base
+    )
+    assert gate.status == "needs_review"
+    assert _kinds(gate) == ([], ["coverage_without_values"])
+    assert gate.details["known_gap_rows"] == []
+
+
 # Round 2 of #637: combinations of a known gap with other rules, and
 # evidence that must stay within its own event.
 def test_a_known_gap_never_excuses_a_complete_event_listing_a_gap():
