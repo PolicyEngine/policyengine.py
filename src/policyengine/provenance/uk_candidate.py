@@ -1298,26 +1298,46 @@ def reform_contract(
 WITHHELD_VALUE = "withheld"
 
 
+#: The population row fields W1's runner writes that carry no survey value
+#: (``budget_reform_population._row``, its identity fields and the run's
+#: fixed subsample size); they are published as reported. ``detail`` goes
+#: through ``_publishable_detail``; any other field is withheld.
+POPULATION_ROW_FIELDS = frozenset(
+    {
+        "check_id",
+        "route",
+        "status",
+        "reason",
+        "seed",
+        "subsample_households",
+        "reform_identity",
+        "reform_identity_unavailable",
+    }
+)
+
+
+def _finding(value: Any) -> Any:
+    return value if isinstance(value, bool) or value is None else WITHHELD_VALUE
+
+
 def _publishable_detail(detail: Any) -> Any:
-    """A population row's ``detail`` as the ledger may publish it: its shape
-    and its true/false findings, with every other value withheld.
+    """A population row's ``detail`` as the ledger may publish it: its
+    top-level true/false findings, with every other value withheld.
 
     Population rows are computed on the survey data, and their numbers
     combine: rows of one check on different routes share a subsample, so
     two routes' totals or counts differ by what a handful of records did
     (supp-r4 on #574), and two candidates' differ in the same way (cos
     d1601). No per-value rule can bound every combination, and no gate rule
-    reads ``detail``, so nothing but ``True``, ``False`` and ``None`` is
-    published: not counts, totals, amounts or text.
+    reads ``detail``. So only ``True``, ``False`` and ``None`` at the top of
+    a mapping are published, under the runner's own keys: not counts,
+    totals, amounts or text, and no nested list or mapping, whose length or
+    keys could be a count or name records (supp-r5).
     """
 
-    if isinstance(detail, bool) or detail is None:
-        return detail
-    if isinstance(detail, Mapping):
-        return {key: _publishable_detail(value) for key, value in detail.items()}
-    if isinstance(detail, list):
-        return [_publishable_detail(value) for value in detail]
-    return WITHHELD_VALUE
+    if not isinstance(detail, Mapping):
+        return _finding(detail)
+    return {key: _finding(value) for key, value in detail.items()}
 
 
 def publishable_contract_report(report: Mapping[str, Any]) -> dict[str, Any]:
@@ -1325,16 +1345,26 @@ def publishable_contract_report(report: Mapping[str, Any]) -> dict[str, Any]:
 
     The ledger is a branch of a public repository. Case and property rows
     come from synthetic households and are published as reported. Population
-    rows are computed on the survey data, so their ``detail`` keeps only its
-    shape and true/false findings (``_publishable_detail``); their check,
-    route and status, which the gate judges, are published as reported. The
-    gate judges the report as the runner returned it.
+    rows are computed on the survey data: the fields in
+    ``POPULATION_ROW_FIELDS`` (check, route and status, which the gate
+    judges, among them) are published as reported, ``detail`` keeps only its
+    top-level true/false findings (``_publishable_detail``), and any other
+    field is withheld. The gate judges the report as the runner returned it.
+    To see a failed population check's figures, rerun the contract with
+    access to the dataset (``docs/engineering/runbooks/uk-qualification.md``).
     """
 
     published = dict(report)
     if isinstance(report.get("population"), list):
         published["population"] = [
-            {**row, "detail": _publishable_detail(row.get("detail"))}
+            {
+                key: value
+                if key in POPULATION_ROW_FIELDS
+                else (
+                    _publishable_detail(value) if key == "detail" else _finding(value)
+                )
+                for key, value in row.items()
+            }
             if isinstance(row, Mapping)
             else row
             for row in report["population"]
