@@ -1352,6 +1352,20 @@ def test_promotion_returns_every_other_ready_candidate_to_draft(
     assert status == (1 if undo_fails else 0)
 
 
+def _gh_pr_list_output(argv, listing):
+    """What the fake `gh pr list` prints: gh stops at its limit (30 unless
+    the call names one) and returns only the fields ``--json`` names, so a
+    field the call stops asking for is missing, as it would be."""
+
+    limit = int(argv[argv.index("--limit") + 1]) if "--limit" in argv else 30
+    fields = set(argv[argv.index("--json") + 1].split(","))
+    return json.dumps(
+        [{key: value for key, value in pr.items() if key in fields} for pr in listing][
+            :limit
+        ]
+    )
+
+
 def _sweep_cli(monkeypatch, *, path, failing, checks=None, runs=None, push_code=1):
     """The promote CLI over a real `gh pr list` payload: the target (#1,
     ready), a stale same-repository candidate (#2, ready), a draft (#3), a
@@ -1422,9 +1436,7 @@ def _sweep_cli(monkeypatch, *, path, failing, checks=None, runs=None, push_code=
         calls.append(argv)
         out, code = "", 0
         if argv[:3] == ["gh", "pr", "list"]:
-            # gh stops at its limit, 30 unless the call names one.
-            limit = int(argv[argv.index("--limit") + 1]) if "--limit" in argv else 30
-            out = json.dumps(listing[:limit])
+            out = _gh_pr_list_output(argv, listing)
         elif argv[:2] == ["gh", "api"]:
             out = _gh_api_output(
                 argv, checks or CHECKS_PASSED, runs or RUNS_PASSED, commit, branch
@@ -1506,9 +1518,8 @@ def test_a_candidate_listing_at_its_limit_is_refused(monkeypatch, listed, refuse
     ]
 
     def run(argv, **kwargs):
-        limit = int(argv[argv.index("--limit") + 1]) if "--limit" in argv else 30
         return SimpleNamespace(
-            returncode=0, stdout=json.dumps(listing[: min(limit, listed)]), stderr=""
+            returncode=0, stdout=_gh_pr_list_output(argv, listing[:listed]), stderr=""
         )
 
     monkeypatch.setattr(cli, "subprocess", SimpleNamespace(run=run))
@@ -1596,14 +1607,20 @@ def test_a_candidate_waiting_on_runs_refresh_will_not_rerun_fails_the_run(
     ]
 
 
-def test_a_success_on_the_last_attempt_is_promoted(monkeypatch, tmp_path, capsys):
+@pytest.mark.parametrize("other_waiting", [False, True])
+def test_a_success_on_the_last_attempt_is_not_stranded(
+    monkeypatch, tmp_path, capsys, other_waiting
+):
     """Round 5 of #635: a run that passes on its last allowed attempt is not
-    stranded; the candidate is promoted."""
+    stranded, whether the candidate then promotes or still waits on another
+    run."""
 
     import argparse
 
     runs = [
-        _run("pull_request", id=10),
+        _run("pull_request", "in_progress", None, id=10)
+        if other_waiting
+        else _run("pull_request", id=10),
         {**_run("workflow_dispatch", id=11), "run_attempt": 4, "created_at": OLD},
     ]
     cli, calls, branch = _sweep_cli(
@@ -1611,7 +1628,10 @@ def test_a_success_on_the_last_attempt_is_promoted(monkeypatch, tmp_path, capsys
     )
     assert cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True)) == 0
     output = capsys.readouterr().out
-    assert "::error::" not in output and f"promoted {branch}" in output
+    assert "::error::" not in output
+    assert (f"promoted {branch}" in output) is not other_waiting
+    if other_waiting:
+        assert f"automatic promotion waits for {branch}" in output
 
 
 def test_a_failed_return_to_draft_while_waiting_fails_the_run(
