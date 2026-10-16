@@ -989,9 +989,10 @@ def _promote(
 
     What it guards against: mistakes by people who can write to this
     repository, and anything people who cannot can do (forks' pull requests,
-    whatever branch names they use, and pull requests opened from the
-    candidate branch by anyone who can read it, which make promotion refuse
-    rather than accept). Whatever else happens, main
+    whatever branch names they use, and other pull requests opened from the
+    candidate branch, which make promotion refuse; one to main that
+    prepare's lookup adopts is the candidate's own, and promotion refuses it
+    if its base was ever changed). Whatever else happens, main
     only ever becomes the exact qualified commit, built on main as it is at
     the push, after the dispatched run on that commit's own tree passed.
     It does not try to resist deliberate disguise by people who can write
