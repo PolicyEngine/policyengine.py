@@ -12,9 +12,9 @@
   "metrics": {
     "tool": {
       "repository": "PolicyEngine/policyengine-uk",
-      "commit": "228a05a3e925beb50da619aa01e68c266e578fc0",
+      "commit": "1191ac5a473419f48e0c0643f83d31719da788e1",
       "path": "policyengine_uk/utils/aggregate_impact",
-      "_comment": "W3's aggregate-impact tool, pinned so both pairs use the same definitions: the approved head of draft policyengine-uk#2335, the first that suppresses figures from fewer than 10 records. #2335 merges after cos d1601; move the pin to the merged commit when it lands, and never to a commit without suppression."
+      "_comment": "W3's aggregate-impact tool, pinned so both pairs use the same definitions: the approved head of draft policyengine-uk#2335. It suppresses figures from fewer than 10 records and gives each total's excluded figures with their signs (exclude_signs), which the metrics review requires. #2335 merges after cos d1601; move the pin to the merged commit when it lands, and never to a commit without suppression."
     },
     "years": [2025, 2026, 2027, 2028, 2029, 2030, 2031],
     "bounds": "uk_review_bounds.json"
