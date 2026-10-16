@@ -6166,6 +6166,46 @@ RUNTIME_ALIAS_HEAD = (
             "List",
             id="forward-reference-storing-in-a-comprehension",
         ),
+        # Round 7 of #632: a store to a subscript or attribute runs code
+        # (__setitem__, __setattr__) with no call, so it counts as one.
+        pytest.param(
+            "    first = '[0 for typing.__dict__[\"Annotated\"] in [typing.Tuple]] and int'\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if first and shape else 0.0\n",
+            "List",
+            id="forward-reference-storing-through-a-subscript",
+        ),
+        pytest.param(
+            "    import sys\n\n"
+            "    first = '[0 for sys.modules[\"typing_extensions\"] in [typing]] and int'\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if first and shape else 0.0\n",
+            "List",
+            id="forward-reference-storing-into-modules",
+        ),
+        pytest.param(
+            "    first = '[0 for typing.__class__ in [typing.__class__]] and int'\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if first and shape else 0.0\n",
+            "List",
+            id="forward-reference-storing-a-dunder-attribute",
+        ),
+        # The changelog's examples of an attribute of something other than a
+        # module, inside a typing generic or subscripted with a union.
+        pytest.param(
+            "    import pandas as pd\n\n"
+            "    shape = List[pd.DataFrame.dtypes]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="typing-generic-over-a-class-attribute",
+        ),
+        pytest.param(
+            "    from http import HTTPStatus\n\n"
+            "    shape = HTTPStatus.OK.phrase[0 | 0]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "HTTPStatus.OK.phrase",
+            id="enum-member-attribute-subscripted-with-a-union",
+        ),
         pytest.param(
             "    import w4_receipt_r19_not_loaded as aliases\n\n"
             "    shape = 'aliases.Sequence[Decimal | float]'\n"

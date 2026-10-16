@@ -2320,7 +2320,7 @@ def _names_mutated_by_attribute(nodes: Iterable[ast.AST]) -> tuple[set[str], boo
     Annotated = Tuple`` and ``typing.Annotated = Tuple`` store
     ``Annotated``) and the literal names passed to ``setattr`` or
     ``delattr`` called directly. Unsound (any name could change): any use of
-    ``modules`` (an attribute, a name, an imported name or a string), through
+    ``modules`` (an attribute, an imported name or a string), through
     which code can swap whole modules; ``getattr(x, "modules")``; and
     ``setattr``, ``delattr`` or ``getattr`` used other than as a direct call
     with a literal name (an alias, ``map``, ``partial``, a computed name, or
@@ -2537,9 +2537,10 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
     the function, no use of ``modules`` (an attribute, an imported name or a
     string) or of ``setattr``, ``delattr`` or ``getattr`` other than a direct
     call with a literal name in any module function, and no forward
-    reference of the function that calls something while doing either or
-    naming such a builtin, ``import_module``, a refused name or a dunder. A
-    string that calls nothing (a label such as ``'id'``) runs no code.
+    reference of the function that calls something, or stores to an
+    attribute or subscript, while doing either or naming such a builtin,
+    ``import_module``, a refused name or a dunder. A string that does
+    neither (a label such as ``'id'``) runs no code.
 
     This guards an honest producer, as the receipt does throughout. It is not
     a sandbox: it does not follow local aliases (``L = List``, ``Amount =
@@ -2595,9 +2596,19 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
             ):
                 parsed_nodes += len(walked)
             stored, unsound = _names_mutated_by_attribute(walked)
-            # A string that calls nothing (a label such as 'id' or
-            # '__main__') cannot run code; stores and bindings in it still count.
-            calls = any(isinstance(child, ast.Call) for child in walked)
+            # A string that neither calls anything nor stores to an attribute
+            # or subscript (a label such as 'id' or '__main__') cannot run
+            # code; stores and bindings in it still count. A comprehension
+            # target such as t.__dict__['Annotated'] runs __setitem__ with no
+            # call (round 7 of #632), so such a store counts as a call.
+            calls = any(
+                isinstance(child, ast.Call)
+                or (
+                    isinstance(child, (ast.Attribute, ast.Subscript))
+                    and not isinstance(child.ctx, ast.Load)
+                )
+                for child in walked
+            )
             if parsed_nodes > _INSPECTED_FORWARD_NODES or (
                 calls and (unsound or any(_runs_code(child) for child in walked))
             ):
