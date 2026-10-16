@@ -102,3 +102,16 @@ naming the pull requests, and refresh re-runs none of the candidate's runs.
 Close those pull requests, then requalify the pair as above: the new
 candidate commit leaves their runs behind, and prepare opens a new pull
 request to main if none is open.
+
+### What promotion trusts
+
+Promotion guards against mistakes by people who can write to this
+repository and against anything people who cannot can do (forks' pull
+requests, whatever their branch names). Whatever else happens, main only
+ever becomes the exact qualified commit, built on main as it is at the push,
+after the dispatched `pr_code_changes.yaml` run on that commit's own tree
+passed. It does not try to resist deliberate disguise by people who can
+write here, such as renaming another branch into main to make a run against
+another base look like the candidate's: main is not protected, so they
+could push it directly. Treat any such change as an incident, not as
+something the gate will catch.

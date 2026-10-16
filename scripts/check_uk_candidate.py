@@ -982,10 +982,20 @@ def _promote(
     request that a merge could combine with other code, when the candidate
     waits on runs refresh will not re-run again, or when its runs may have
     tested another base (``_shared_branch_pull_requests``); either way the
-    promote run
-    fails so someone sees it. ``pull_request`` names the
+    promote run fails so someone sees it. ``pull_request`` names the
     candidate's pull request for readiness changes (its number; the branch
     by default).
+
+    What it guards against: mistakes by people who can write to this
+    repository, and anything people who cannot (forks' pull requests,
+    whatever branch names they use) can do. Whatever else happens, main
+    only ever becomes the exact qualified commit, built on main as it is at
+    the push, after the dispatched run on that commit's own tree passed.
+    It does not try to resist deliberate disguise by people who can write
+    here, such as renaming another branch into main or retargeting pull
+    requests so that a run against another base looks like the candidate's:
+    main is not protected, so they could push it directly. The pull request
+    checks it also requires are as trustworthy as those people.
     """
 
     target = pull_request or branch
