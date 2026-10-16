@@ -11,12 +11,9 @@ from policyengine.countries.us.regions import (
 )
 from policyengine.provenance.manifest import CountryReleaseManifest
 
-# Temporary (microcosm#1263, policyengine-sim-api#747): state and district
-# regions filter the certified national file until the ACS-local release
-# supplies source-backed SPM independence, so every SPM unit has a classified
-# adult. Restore the ACS-local URI here when the bundle points back at it.
-US_REGION_DATASET_URI = (
-    "hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-spm-20260915"
+US_LOCAL_AREA_DATASET_URI = (
+    "hf://policyengine/populace-us/populace_us_2024_acs_local.h5"
+    "@populace-us-2024-buildo-acs-local-767312d60-20260923T074941Z"
 )
 
 
@@ -146,7 +143,7 @@ class TestUSRegionRegistry:
         assert ca.label == "California"
         assert ca.region_type == "state"
         assert ca.parent_code == "us"
-        assert ca.dataset_path == US_REGION_DATASET_URI
+        assert ca.dataset_path == US_LOCAL_AREA_DATASET_URI
         assert ca.requires_filter
         assert ca.scoping_strategy is not None
         assert ca.scoping_strategy.variable_name == "state_fips"
@@ -179,7 +176,7 @@ class TestUSRegionRegistry:
         assert "1st" in ca01.label.lower() or "1 " in ca01.label
         assert ca01.region_type == "congressional_district"
         assert ca01.parent_code == "state/ca"
-        assert ca01.dataset_path == US_REGION_DATASET_URI
+        assert ca01.dataset_path == US_LOCAL_AREA_DATASET_URI
         assert ca01.requires_filter
         assert ca01.scoping_strategy is not None
         assert ca01.scoping_strategy.variable_name == "congressional_district_geoid"
@@ -286,7 +283,7 @@ class TestUSRegionRegistry:
 
         assert len(local_regions) == 51 + 436
         assert {region.dataset_path for region in local_regions} == {
-            US_REGION_DATASET_URI
+            US_LOCAL_AREA_DATASET_URI
         }
         assert all(region.requires_filter for region in local_regions)
 
@@ -296,8 +293,8 @@ class TestUSRegionRegistry:
 
         assert dc is not None
         assert dc_al is not None
-        assert dc.dataset_path == US_REGION_DATASET_URI
-        assert dc_al.dataset_path == US_REGION_DATASET_URI
+        assert dc.dataset_path == US_LOCAL_AREA_DATASET_URI
+        assert dc_al.dataset_path == US_LOCAL_AREA_DATASET_URI
         assert dc.scoping_strategy is not None
         assert dc_al.scoping_strategy is not None
 
