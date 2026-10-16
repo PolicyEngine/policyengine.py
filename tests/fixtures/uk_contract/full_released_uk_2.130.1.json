@@ -14715,7 +14715,7 @@
       "detail": {
         "2026_unchanged": true,
         "2027_people_with_higher_tax": 1093,
-        "2027_people_with_lower_tax": 4,
+        "2027_people_with_lower_tax": "fewer than 10",
         "2027_total_change": 205573.0608100891
       },
       "reform_identity": null,
@@ -14730,7 +14730,7 @@
       "detail": {
         "2026_unchanged": true,
         "2027_people_with_higher_tax": 1093,
-        "2027_people_with_lower_tax": 4,
+        "2027_people_with_lower_tax": "fewer than 10",
         "2027_total_change": 205573.0608100891
       },
       "reform_identity": null,
@@ -14745,7 +14745,7 @@
       "detail": {
         "2026_unchanged": true,
         "2027_people_with_higher_tax": 1093,
-        "2027_people_with_lower_tax": 4,
+        "2027_people_with_lower_tax": "fewer than 10",
         "2027_total_change": 205573.0608100891
       },
       "reform_identity": null,
@@ -14788,7 +14788,7 @@
         "awards_lower": 0,
         "payments_below_the_payable_floor": 0,
         "payments_higher": 102,
-        "payments_lower": 1,
+        "payments_lower": "fewer than 10",
         "payments_not_award_less_deductions": 0,
         "standard_allowance_scaled_10_percent": true,
         "units_with_non_finite_values": 0
@@ -14806,7 +14806,7 @@
         "awards_lower": 0,
         "payments_below_the_payable_floor": 0,
         "payments_higher": 102,
-        "payments_lower": 1,
+        "payments_lower": "fewer than 10",
         "payments_not_award_less_deductions": 0,
         "standard_allowance_scaled_10_percent": true,
         "units_with_non_finite_values": 0
@@ -14824,7 +14824,7 @@
         "awards_lower": 0,
         "payments_below_the_payable_floor": 0,
         "payments_higher": 102,
-        "payments_lower": 1,
+        "payments_lower": "fewer than 10",
         "payments_not_award_less_deductions": 0,
         "standard_allowance_scaled_10_percent": true,
         "units_with_non_finite_values": 0
