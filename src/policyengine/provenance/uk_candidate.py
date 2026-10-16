@@ -1330,6 +1330,65 @@ def classify_check(identity_id: str) -> str:
     return "hard"
 
 
+def _suppressed(row: Mapping[str, Any]) -> bool:
+    """Whether the tool published ``row`` as suppressed (fewer than 10 records)."""
+
+    return row.get("suppressed") is True
+
+
+def _excludes(row: Mapping[str, Any]) -> tuple[str, ...]:
+    """The suppressed figures a total is rebuilt without, in ``row``'s year."""
+
+    return tuple(sorted(str(metric_id) for metric_id in row.get("excludes") or ()))
+
+
+def _small_cell_problems(name: str, rows: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Rows that break the tool's small-cell format, as problems.
+
+    The tool publishes a figure from fewer than 10 records with ``value``
+    null and ``suppressed`` true, and lists under ``excludes`` the suppressed
+    figures (by ``metric_id``) a total is rebuilt without that year
+    (``privacy.py`` and ``measure.rebuild_protected`` in the pinned tool). A
+    suppressed row with a value, a ``suppressed`` that is not a boolean, an
+    ``excludes`` that is not a list of ids, or an ``excludes`` entry naming a
+    figure the same report does not suppress in that year is a report this
+    gate cannot read safely.
+    """
+
+    hidden = {
+        (str(row.get("metric_id")), row.get("year")) for row in rows if _suppressed(row)
+    }
+    with_value, not_boolean, malformed, unmatched = [], [], [], []
+    for row in rows:
+        label = f"{row.get('metric_id')} {row.get('year')}"
+        flag = row.get("suppressed", False)
+        if not isinstance(flag, bool):
+            not_boolean.append(label)
+        elif flag and row.get("value") is not None:
+            with_value.append(label)
+        excludes = row.get("excludes", [])
+        if not isinstance(excludes, list) or not all(
+            isinstance(metric_id, str) for metric_id in excludes
+        ):
+            malformed.append(label)
+            continue
+        unmatched.extend(
+            f"{label} excludes {metric_id}"
+            for metric_id in excludes
+            if (metric_id, row.get("year")) not in hidden
+        )
+    problems = []
+    for found, what in (
+        (with_value, "suppressed figures with a value"),
+        (not_boolean, "a suppressed flag that is not true or false"),
+        (malformed, "excludes that are not a list of metric ids"),
+        (unmatched, "totals excluding a figure it does not suppress"),
+    ):
+        if found:
+            problems.append(f"the {name} report has {what}: {', '.join(found[:8])}")
+    return problems
+
+
 def _wider_failure(candidate: Mapping[str, Any], previous: Mapping[str, Any]) -> bool:
     """Whether a check failing in both reports fails in a scope it did not before.
 
@@ -1355,15 +1414,31 @@ def compare_metric_reports(
     checks fail outright; known-defect checks fail only when they worsen
     against the previous pair, meaning the previous pair did not fail them,
     or failed them in fewer scopes (``failing_scopes``, when the tool reports
-    them); ``warn`` is recorded, and a check that newly warns, or is skipped
-    where the previous pair passed it, needs review. ``skipped`` is neither a
-    pass nor a failure.
+    them); ``warn`` is recorded, and a check that newly warns needs review.
+    ``skipped`` means the check was not run, which is neither a pass nor a
+    failure: a skipped hard check, or a check skipped where the previous
+    pair ran it (pass, warn or fail), needs review.
 
     A report with a status other than ``ok``, no metrics or no checks fails,
     as does any check with a status outside ``CHECK_STATUSES``. A hard check
     the previous pair ran that is missing from the candidate fails (the two
     reports share one tool and one set of definitions); other missing checks
     need review.
+
+    Small cells (W3's tool publishes a figure from fewer than 10 records as
+    ``value`` null, ``suppressed`` true, and rebuilds every total that holds
+    one without it, listing it under ``excludes``):
+
+    - a suppressed figure is present but never compared, and is not a
+      non-finite value; suppressed on both sides, there is nothing to compare;
+    - a figure suppressed on one side only, or a total whose two sides leave
+      out different figures, is withheld: no change is computed (it would
+      give the suppressed figure back) and the comparison needs review. The
+      report lists the excluded ids without the sign each enters its total
+      with, so differing exclusions are never lined up here;
+    - a total compares numerically only when both sides exclude the same
+      figures;
+    - a report that breaks the format (``_small_cell_problems``) fails.
     """
 
     problems: list[str] = []
@@ -1385,7 +1460,9 @@ def compare_metric_reports(
     preexisting: list[str] = []
     new_warnings: list[str] = []
     warnings_: list[str] = []
+    skipped: list[str] = []
     newly_skipped: list[str] = []
+    hard_skipped: list[str] = []
     unknown_statuses: list[str] = []
     candidate_checks = set()
     for row in candidate.get("identities", []):
@@ -1409,8 +1486,13 @@ def compare_metric_reports(
             warnings_.append(check_id)
             if before == "pass":
                 new_warnings.append(check_id)
-        elif status == "skipped" and before == "pass":
-            newly_skipped.append(check_id)
+        elif status == "skipped":
+            # Not run: never a pass, whatever the check's class.
+            skipped.append(check_id)
+            if classify_check(check_id) == "hard":
+                hard_skipped.append(check_id)
+            if before in ("pass", "warn", "fail"):
+                newly_skipped.append(check_id)
     if unknown_statuses:
         # A status this gate does not know is not a pass.
         problems.append(
@@ -1439,9 +1521,10 @@ def compare_metric_reports(
         review.append(f"checks newly warn: {', '.join(new_warnings[:8])}")
     if newly_skipped:
         review.append(
-            "checks the previous pair passed were skipped: "
-            + ", ".join(newly_skipped[:8])
+            "checks the previous pair ran were not run: " + ", ".join(newly_skipped[:8])
         )
+    if hard_skipped:
+        review.append(f"hard checks were not run: {', '.join(hard_skipped[:8])}")
     if candidate.get("metrics_version") != previous.get("metrics_version"):
         problems.append(
             "metric definitions differ between the reports "
@@ -1467,17 +1550,23 @@ def compare_metric_reports(
                 f"the {name} report has duplicate metrics: "
                 + ", ".join(duplicate_metrics[:8])
             )
+        # A suppressed figure is published without a value by design.
         nonfinite = [
             f"{row.get('metric_id')} {row.get('year')}"
             for row in rows
-            if row.get("value") is None
-            or not isinstance(row.get("value"), (int, float))
-            or not math.isfinite(float(row["value"]))
+            if not _suppressed(row)
+            and (
+                row.get("value") is None
+                or isinstance(row.get("value"), bool)
+                or not isinstance(row.get("value"), (int, float))
+                or not math.isfinite(float(row["value"]))
+            )
         ]
         if nonfinite:
             problems.append(
                 f"the {name} report has non-finite values: {', '.join(nonfinite[:8])}"
             )
+        problems.extend(_small_cell_problems(name, rows))
     lost = sorted(f"{key[0]} {key[1]}" for key in set(before_metrics) - set(current))
     if lost:
         problems.append(f"metrics disappeared: {', '.join(lost[:8])}")
@@ -1487,11 +1576,41 @@ def compare_metric_reports(
     if without_baseline:
         review.append(f"metrics have no baseline: {', '.join(without_baseline[:8])}")
     moves = []
+    withheld: list[dict[str, Any]] = []
+    suppressed_on_both = 0
     for key, row in sorted(
         current.items(), key=lambda item: (item[0][0], item[0][1] or 0)
     ):
         old = before_metrics.get(key)
         if old is None:
+            continue
+        if _suppressed(row) and _suppressed(old):
+            suppressed_on_both += 1
+            continue
+        if _suppressed(row) or _suppressed(old):
+            # A figure from fewer than 10 records on one side: so is its change.
+            withheld.append(
+                {
+                    "metric_id": key[0],
+                    "year": key[1],
+                    "reason": "suppressed in the "
+                    + ("candidate" if _suppressed(row) else "previous")
+                    + " report",
+                }
+            )
+            continue
+        if _excludes(row) != _excludes(old):
+            # Each side leaves out its own suppressed figures; their
+            # difference would mix definitions and could give one back.
+            withheld.append(
+                {
+                    "metric_id": key[0],
+                    "year": key[1],
+                    "reason": "the reports leave out different suppressed figures",
+                    "candidate_excludes": list(_excludes(row)),
+                    "previous_excludes": list(_excludes(old)),
+                }
+            )
             continue
         try:
             new_value, old_value = float(row["value"]), float(old["value"])
@@ -1516,6 +1635,12 @@ def compare_metric_reports(
             )
     if moves:
         review.append(f"{len(moves)} metric move(s) exceed their review bounds")
+    if withheld:
+        review.append(
+            f"{len(withheld)} metric change(s) are withheld because a figure "
+            "from fewer than 10 records is suppressed on one side, or the two "
+            "sides leave out different ones"
+        )
     evidence = {
         "metrics_version": candidate.get("metrics_version"),
         "partition_version": candidate.get("partition_version"),
@@ -1525,10 +1650,17 @@ def compare_metric_reports(
         "preexisting_check_failures": preexisting,
         "warn_identities": warnings_,
         "new_warnings": new_warnings,
+        "skipped_checks": skipped,
         "newly_skipped_checks": newly_skipped,
+        "hard_checks_not_run": hard_skipped,
         "unknown_status_checks": unknown_statuses,
         "lost_checks": lost_checks,
         "metrics_without_baseline": without_baseline,
+        "suppressed_metrics": sorted(
+            f"{key[0]} {key[1]}" for key, row in current.items() if _suppressed(row)
+        ),
+        "suppressed_on_both_sides": suppressed_on_both,
+        "withheld_changes": withheld,
         "moves_beyond_bounds": moves,
         "candidate_report_sha256": evidence_sha256(candidate),
         "previous_report_sha256": evidence_sha256(previous),
@@ -1537,12 +1669,14 @@ def compare_metric_reports(
         return "fail", "; ".join(problems), evidence
     if review:
         return "needs_review", "; ".join(review), evidence
-    note = (
-        f" ({len(preexisting)} known check failures carried over)"
-        if preexisting
-        else ""
-    )
-    return "pass", f"{len(current)} metrics within their review bounds{note}.", evidence
+    notes = []
+    if suppressed_on_both:
+        notes.append(f"{suppressed_on_both} suppressed on both sides, not compared")
+    if preexisting:
+        notes.append(f"{len(preexisting)} known check failures carried over")
+    note = f" ({'; '.join(notes)})" if notes else ""
+    compared = len(current) - suppressed_on_both
+    return "pass", f"{compared} metrics within their review bounds{note}.", evidence
 
 
 def metrics_review(
@@ -1622,10 +1756,15 @@ def reform_responsiveness(
       ``reform_targets.<id>`` values, and a disagreement is an error
       (differential check of the check).
 
-    Any reform that does not respond fails the gate. There is no review
-    path: a reform the model silently ignores is a defect, never a small
-    number. The gate is monotone: shrinking a reform's response toward zero
-    or flipping its sign never turns a failure into a pass.
+    Any reform that does not respond fails the gate: a reform the model
+    silently ignores is a defect, never a small number. The one review path
+    is a year the tool withholds (``reform_targets.<id>`` published as
+    suppressed, because the change would come from fewer than 10 records):
+    there the tool's verdict, which it takes from the withheld value, cannot
+    be recomputed, so a passing ``responsive`` check needs review rather
+    than passing; a failing one still fails. The gate is monotone: shrinking
+    a reform's response toward zero or flipping its sign never turns a
+    failure into a pass.
     """
 
     if unavailable_reason or report is None:
@@ -1645,12 +1784,13 @@ def reform_responsiveness(
     checks = {
         str(row.get("identity_id")): row for row in report.get("identities") or []
     }
-    values = {
-        (str(row.get("metric_id")), row.get("year")): row.get("value")
+    rows = {
+        (str(row.get("metric_id")), row.get("year")): row
         for row in report.get("metrics") or []
     }
     problems: list[str] = []
     disagreements: list[str] = []
+    unverifiable: list[str] = []
     table: list[dict[str, Any]] = []
     if report.get("status") not in (None, "ok"):
         problems.append(f"the report status is {report.get('status')!r}")
@@ -1662,10 +1802,17 @@ def reform_responsiveness(
         reform_id = reform["id"]
         sign = 1.0 if reform["direction"] == "up" else -1.0
         changes: dict[str, Any] = {}
-        recomputed = True
+        withheld_years: list[int] = []
+        # True: every year meets the minimum; False: a published year does
+        # not; None: every published year does, but a year is withheld.
+        recomputed: Optional[bool] = True
         for year in years:
-            value = values.get((f"reform_targets.{reform_id}", year))
+            target = rows.get((f"reform_targets.{reform_id}", year)) or {}
+            value = target.get("value")
             changes[str(year)] = value
+            if _suppressed(target) and value is None:
+                withheld_years.append(year)
+                continue
             if (
                 isinstance(value, bool)
                 or not isinstance(value, (int, float))
@@ -1673,11 +1820,14 @@ def reform_responsiveness(
                 or not sign * value >= reform["minimum"]
             ):
                 recomputed = False
+        if recomputed and withheld_years:
+            recomputed = None
         ran = (checks.get(f"reform_runs:{reform_id}") or {}).get("status")
         responsive = checks.get(f"responsive:{reform_id}") or {}
         row = {
             **reform,
             "target_changes": changes,
+            "withheld_years": withheld_years,
             "reform_runs": ran,
             "responsive": responsive.get("status"),
             "detail": responsive.get("detail"),
@@ -1692,7 +1842,18 @@ def reform_responsiveness(
                 + (responsive.get("detail") or "no responsive check in the report")
             )
         if ran == "pass" and responsive.get("status") in ("pass", "fail"):
-            if (responsive["status"] == "pass") != recomputed:
+            passed = responsive["status"] == "pass"
+            if recomputed is None:
+                # A failing verdict may come from a withheld year; a passing
+                # one cannot be checked there.
+                if passed:
+                    unverifiable.append(
+                        f"{label}: the tool's responsive check passes but "
+                        + ", ".join(_fiscal_year(year) for year in withheld_years)
+                        + " are withheld (fewer than 10 records), so it cannot "
+                        "be recomputed there"
+                    )
+            elif passed != recomputed:
                 disagreements.append(
                     f"{label}: the tool's responsive check is "
                     f"{responsive['status']} but its reform_targets values "
@@ -1713,6 +1874,13 @@ def reform_responsiveness(
     if disagreements:
         return _result(
             "reform_responsiveness", "error", "; ".join(disagreements[:6]), evidence
+        )
+    if unverifiable:
+        return _result(
+            "reform_responsiveness",
+            "needs_review",
+            "; ".join(unverifiable[:6]),
+            evidence,
         )
     return _result(
         "reform_responsiveness",

@@ -16,10 +16,11 @@ the report; never edit them by hand.
   holds one is rebuilt without it and lists it under `excludes`. It has
   1,484 metric rows (14 suppressed: Disabled Students' Allowance's total and
   caseload in each of the seven years) and 350 checks.
-- `standard_reforms.yaml`: the tool's standard reform set, copied unchanged.
-  Ten reforms, each with the model variable it must move, the direction and
-  the least it must move it in every year. The reform responsiveness gate
-  reads the same file from the vendored tool.
+- `standard_reforms.yaml`: the tool's standard reform set at the same commit,
+  copied unchanged. Ten reforms, each with the model variable it must move,
+  the direction and the least it must move it in every year (a fifth of its
+  smallest yearly effect on the certified pair, adopted under cos d1344).
+  The reform responsiveness gate reads the same file from the vendored tool.
 
 This report replaces a 1.58.0 report from before the tool suppressed small
 cells. That report published Disabled Students' Allowance, which comes from
