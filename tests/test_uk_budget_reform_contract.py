@@ -68,6 +68,25 @@ def test_fiscal_year_average_is_day_weighted():
     assert fiscal_year_average(pieces, 2028) == pytest.approx(0.20)
 
 
+def test_the_response_oracle_is_the_static_one_at_an_elasticity_of_zero():
+    current_law = {
+        contract.CGT_ANNUAL_EXEMPT_AMOUNT: 3_000.0,
+        contract.CGT_BASIC_RATE: 0.18,
+    }
+    context = contract.Context(lambda path, year: current_law[path])
+    # (£10,000 - £3,000) x (20% - 18%).
+    assert contract._gains_uplift(2027, 1.0)(context) == pytest.approx(140.0)
+    assert contract._gains_response_uplift(2027, 0.20, 0.0)(context) == (
+        pytest.approx(140.0)
+    )
+    # At an elasticity of 1 the gains scale by (1 - 20%) / (1 - 18%).
+    realised = 10_000 * 0.8 / 0.82
+    assert contract._realised_gains(2027, 0.20, 1.0)(context) == pytest.approx(realised)
+    assert contract._gains_response_uplift(2027, 0.20, 1.0)(context) == (
+        pytest.approx((realised - 3_000) * 0.20 - 7_000 * 0.18)
+    )
+
+
 def test_expected_annual_for_a_single_change():
     def baseline(path, year):
         return 0.20
@@ -158,14 +177,14 @@ def test_the_extended_freeze_resumes_from_the_frozen_amounts():
     )
 
 
-def test_no_check_waits_on_an_open_decision():
+def test_no_check_waits_on_the_prior_law_decision():
     assert contract.PRIOR_LAW_OPTION == "statutory"
-    assert [
-        (case.id, check.name, check.year)
-        for case in CASES
-        for check in case.checks
-        if check.pending is not None
-    ] == []
+    pending = {
+        check.pending for case in CASES for check in case.checks if check.pending
+    }
+    assert contract.PRIOR_LAW_DECISION not in pending
+    # Only the default capital gains response waits, on policyengine-uk#2396.
+    assert pending <= {contract.DEFAULT_RESPONSE_DECISION}
 
 
 # Representations.
@@ -182,6 +201,18 @@ def test_representations():
     assert wrapper_reform_dict(changes) == {
         RATE: {"2027-04-06.2028-04-05": 0.21, "2028-04-06": 0.22}
     }
+
+
+def test_the_rate_blending_case_holds_realisations_fixed_on_every_route():
+    case = next(case for case in CASES if case.id == "mid_year_blended_rate")
+    static = {
+        contract.CGT_ELASTICITY: [0.0],
+        contract.CGT_MTR_ELASTICITY: [0.0],
+        contract.CGT_SEPARATE_BADR_ELASTICITY: [False],
+    }
+    for route in contract.COUNTRY_ROUTES + contract.WRAPPER_ROUTES:
+        reform = contract.represent(case, route)
+        assert {path: list(reform[path].values()) for path in static} == static
 
 
 def test_case_ids_are_unique_and_every_check_has_an_oracle():
@@ -592,6 +623,54 @@ def test_the_april_rate_case_holds_on_the_country_routes():
     )
 
 
+def test_the_capital_gains_cases_hold_on_every_in_process_route():
+    pytest.importorskip("policyengine_uk.utils.dated_reforms")
+    routes = contract.COUNTRY_ROUTES + contract.WRAPPER_ROUTES
+    report = run_budget_reform_contract(
+        routes=list(routes),
+        cases=["mid_year_blended_rate", "cgt_retention_response"],
+        max_examples=0,
+    )
+    failures = [row for row in report["cases"] if row["status"] in ("fail", "error")]
+    assert failures == []
+    # The response is checked, and passes, on every route.
+    passed = {
+        row["route"]
+        for row in report["cases"]
+        if row["case_id"] == "cgt_retention_response"
+        and row["check"] == "change:capital_gains_tax:2027"
+        and row["status"] == "pass"
+    }
+    assert passed == set(routes)
+
+
+def test_the_default_response_is_reported_without_gating():
+    """The default case's checks all wait on policyengine-uk#2396, so it
+    reports the default response on every route without failing a run. The
+    golden rows cover its rows on every route under fake routes; one real
+    route checks that it runs and reports pending there."""
+    pytest.importorskip("policyengine_uk.utils.dated_reforms")
+    case = next(case for case in CASES if case.id == "cgt_default_response")
+    assert {check.pending for check in case.checks} == {
+        contract.DEFAULT_RESPONSE_DECISION
+    }
+    # No response settings: the case runs on whatever default is installed.
+    assert not any(change.path.startswith("gov.simulation.") for change in case.changes)
+
+    report = run_budget_reform_contract(
+        routes=["country.reform_dict"],
+        cases=["cgt_default_response"],
+        max_examples=0,
+    )
+    rows = [row for row in report["cases"] if row["case_id"] == case.id]
+    assert {row["status"] for row in rows} <= {"pass", "pending"}
+    (response,) = (
+        row for row in rows if row["check"] == "change:capital_gains_tax:2027"
+    )
+    assert response["status"] == "pending"
+    assert response["decision_id"] == contract.DEFAULT_RESPONSE_DECISION
+
+
 def test_a_parameter_modifier_writes_the_annualised_parameters():
     from policyengine_uk import Simulation
 
@@ -719,6 +798,7 @@ def test_population_errors_emit_only_the_declared_diagnostic_after_progress(
         "check_id": population.POPULATION_ERROR_DIAGNOSTIC[0],
         "route": population.POPULATION_ERROR_DIAGNOSTIC[1],
         "status": "error",
+        "reason": "OSError",
         "detail": "OSError: forced population failure",
         "subsample_households": population.SUBSAMPLE_HOUSEHOLDS,
         "seed": 7,
@@ -890,6 +970,7 @@ def test_population_checks_hold_on_a_tiny_dataset(tmp_path):
         seed=0,
     )
     assert rows and all(row["status"] == "pass" for row in rows), rows
+    _assert_publishable_findings(rows)
     from collections import Counter
 
     assert Counter((row["check_id"], row["route"]) for row in rows) == Counter(
@@ -906,6 +987,7 @@ def test_responsiveness_checks_fail_with_no_award_to_move(tmp_path):
     rows = run_population_checks(
         _tiny_dataset_file(tmp_path), ["country.reform_dict"], seed=0
     )
+    _assert_publishable_findings(rows)
     status = {row["check_id"]: row["status"] for row in rows}
     # Earners only: no award to show a reform reaching it.
     assert status["population_state_pension_plus_10"] == "fail"
@@ -1378,3 +1460,631 @@ def test_every_report_row_has_a_reform_identity_field():
             assert "reform_identity" in row, (section, row)
             if row["reform_identity"] is None:
                 assert row["reform_identity_unavailable"], (section, row)
+
+
+# The small-cell rule and flat findings in population rows.
+
+
+def _is_condition(key, value):
+    """A finding the check requires; ``*_informational`` ones it does not."""
+    return isinstance(value, bool) and not key.endswith("_informational")
+
+
+def _small_counts(value, path="detail"):
+    """Where ``value`` holds a count from 1 to 9."""
+    import numbers
+
+    import numpy as np
+
+    if isinstance(value, (bool, np.bool_)):
+        return []
+    if isinstance(value, numbers.Integral):
+        return [path] if 0 < value < 10 else []
+    if isinstance(value, dict):
+        return [
+            found
+            for key, item in value.items()
+            for found in _small_counts(item, f"{path}.{key}")
+        ]
+    if isinstance(value, (list, tuple)):
+        return [
+            found
+            for index, item in enumerate(value)
+            for found in _small_counts(item, f"{path}[{index}]")
+        ]
+    return []
+
+
+def _assert_publishable_findings(rows):
+    """No small count anywhere, and a row passes when all its findings hold."""
+    for row in rows:
+        assert _small_counts(row) == [], row
+        detail = row.get("detail")
+        if row["route"] == "-":
+            continue
+        assert isinstance(detail, dict), row
+        findings = {
+            key: value for key, value in detail.items() if _is_condition(key, value)
+        }
+        assert findings, row
+        assert (row["status"] == "pass") == all(findings.values()), row
+
+
+def test_publishable_detail_suppresses_counts_from_1_to_9_at_any_depth():
+    import numpy as np
+
+    from policyengine.tax_benefit_models.uk.budget_reform_population import (
+        FEWER_THAN_10,
+        publishable_detail,
+    )
+
+    detail = {
+        "none": 0,
+        "one": 1,
+        "nine": 9,
+        "ten": 10,
+        "negative": -3,
+        "finding": True,
+        "other_finding": False,
+        "total": 3.5,
+        "numpy_count": np.int64(5),
+        "nested": {"count": 4, "list": [2, 12, {"deep": 7}]},
+    }
+    assert publishable_detail(detail) == {
+        "none": 0,
+        "one": FEWER_THAN_10,
+        "nine": FEWER_THAN_10,
+        "ten": 10,
+        "negative": -3,
+        "finding": True,
+        "other_finding": False,
+        "total": 3.5,
+        "numpy_count": FEWER_THAN_10,
+        "nested": {
+            "count": FEWER_THAN_10,
+            "list": [FEWER_THAN_10, 12, {"deep": FEWER_THAN_10}],
+        },
+    }
+
+
+def _equal_but_small_counts(original, published):
+    """``published`` is ``original`` with only its small counts suppressed."""
+    import numbers
+
+    from policyengine.tax_benefit_models.uk.budget_reform_population import (
+        FEWER_THAN_10,
+    )
+
+    if isinstance(original, bool):
+        return published is original
+    if isinstance(original, numbers.Integral) and 0 < original < 10:
+        return published == FEWER_THAN_10
+    if isinstance(original, dict):
+        return published.keys() == original.keys() and all(
+            _equal_but_small_counts(value, published[key])
+            for key, value in original.items()
+        )
+    if isinstance(original, (list, tuple)):
+        return len(published) == len(original) and all(
+            _equal_but_small_counts(a, b) for a, b in zip(original, published)
+        )
+    return published == original
+
+
+def test_publication_removes_every_small_count_and_nothing_else():
+    pytest.importorskip("hypothesis")
+    from hypothesis import given, settings
+    from hypothesis import strategies as st
+
+    from policyengine.tax_benefit_models.uk.budget_reform_population import (
+        publishable_detail,
+    )
+
+    leaves = st.one_of(
+        st.booleans(),
+        st.integers(-20, 1_000),
+        st.floats(allow_nan=False),
+        st.text(max_size=5),
+        st.none(),
+    )
+    details = st.recursive(
+        leaves,
+        lambda children: st.one_of(
+            st.lists(children, max_size=4),
+            st.dictionaries(st.text(max_size=5), children, max_size=4),
+        ),
+        max_leaves=20,
+    )
+
+    @settings(max_examples=200, deadline=None, derandomize=True)
+    @given(details)
+    def check(detail):
+        published = publishable_detail(detail)
+        assert _small_counts(published) == []
+        assert _equal_but_small_counts(detail, published)
+        assert publishable_detail(published) == published
+
+    check()
+
+
+def test_a_total_over_fewer_than_10_changed_records_is_withheld():
+    from policyengine.tax_benefit_models.uk.budget_reform_population import (
+        WITHHELD_FEWER_THAN_10,
+        total_over_records,
+    )
+
+    assert total_over_records(12.5, 0) == 12.5
+    assert total_over_records(12.5, 1) == WITHHELD_FEWER_THAN_10
+    assert total_over_records(12.5, 9) == WITHHELD_FEWER_THAN_10
+    assert total_over_records(12.5, 10) == 12.5
+    # Any small count of the records behind it withholds it.
+    assert total_over_records(300.0, 10, 3) == WITHHELD_FEWER_THAN_10
+    assert total_over_records(300.0, 10, 0) == 300.0
+
+
+def test_uc_findings_agree_with_their_counts_and_the_verdict():
+    pytest.importorskip("hypothesis")
+    import numpy as np
+    from hypothesis import given, settings
+    from hypothesis import strategies as st
+
+    from policyengine.tax_benefit_models.uk.budget_reform_population import (
+        UC_ALLOWANCE_VARIABLES,
+    )
+
+    amounts = st.one_of(st.floats(0, 2_000), st.just(float("nan")))
+    verdicts = set()
+
+    # From the lawful pair (one capped unit whose payment falls with its
+    # deductions, one that gains), so verdicts that hold are drawn too; each
+    # example changes up to three of its values.
+    @settings(max_examples=200, deadline=None, derandomize=True)
+    @given(data=st.data())
+    def check(data):
+        base, reformed = _lawful_pair()
+        for _ in range(data.draw(st.integers(0, 3))):
+            state = data.draw(st.sampled_from([base, reformed]))
+            name = data.draw(st.sampled_from(UC_ALLOWANCE_VARIABLES))
+            unit = data.draw(st.integers(0, 1))
+            state[name] = np.array(state[name], dtype=float)
+            state[name][unit] = data.draw(amounts)
+        holds, detail = _verdict(base, reformed)
+        verdicts.add(holds)
+        counts = {
+            "no_award_lower": "awards_lower",
+            "payments_are_award_less_deductions": "payments_not_award_less_deductions",
+            "no_payment_below_the_payable_floor": "payments_below_the_payable_floor",
+            "no_non_finite_units": "units_with_non_finite_values",
+            "no_payment_lower_informational": "payments_lower",
+        }
+        for finding, count in counts.items():
+            assert detail[finding] is (detail[count] == 0), finding
+        assert detail["some_payment_higher"] is (detail["payments_higher"] > 0)
+        # The verdict as it was defined from the counts.
+        assert holds == (
+            detail["units_with_non_finite_values"] == 0
+            and detail["standard_allowance_scaled_10_percent"]
+            and detail["awards_lower"] == 0
+            and detail["payments_not_award_less_deductions"] == 0
+            and detail["payments_below_the_payable_floor"] == 0
+            and detail["payments_higher"] > 0
+        )
+
+    check()
+    assert verdicts == {True, False}
+
+
+def test_population_rows_state_each_condition_as_a_flat_finding(stub_population_checks):
+    population = stub_population_checks
+    rows = population.run_population_checks("unused.h5", list(contract.COUNTRY_ROUTES))
+    _assert_publishable_findings(rows)
+    outputs = {
+        f"{variable}:{year}_matches"
+        for variable in population.OUTPUTS
+        for year in population.YEARS
+    }
+    expected = {
+        population.POPULATION_BASELINE_ISOLATION: outputs,
+        population.POPULATION_QUERY_ORDER: outputs,
+        population.POPULATION_ROUTES_AGREE: {
+            "income_tax:2026_matches",
+            "income_tax:2027_matches",
+        },
+        population.POPULATION_APRIL_RATE_CHANGE: {"2026_unchanged", "2027_total_rises"},
+        population.POPULATION_FINITE_CHANGE_EXPIRES: {"income_tax:2028_matches"},
+        population.POPULATION_UC_STANDARD_ALLOWANCE_PLUS_10: {
+            "standard_allowance_scaled_10_percent",
+            "no_award_lower",
+            "payments_are_award_less_deductions",
+            "no_payment_below_the_payable_floor",
+            "some_payment_higher",
+            "no_non_finite_units",
+            "no_payment_lower_informational",
+        },
+        population.POPULATION_STATE_PENSION_PLUS_10: {
+            "basic_and_new_scaled_10_percent",
+            "no_pension_lower",
+            "some_pension_higher",
+        },
+    }
+    for row in rows:
+        findings = {
+            key for key, value in row["detail"].items() if isinstance(value, bool)
+        }
+        assert findings == expected[row["check_id"]], row
+    # The stub moves one person's tax: one record, so the count reads
+    # "fewer than 10" and the total is withheld.
+    april = next(
+        row
+        for row in rows
+        if row["check_id"] == population.POPULATION_APRIL_RATE_CHANGE
+    )
+    assert april["detail"]["2027_people_with_higher_tax"] == population.FEWER_THAN_10
+    assert april["detail"]["2027_total_change"] == population.WITHHELD_FEWER_THAN_10
+
+
+def test_a_detail_of_another_type_is_an_error_not_passed_through():
+    import numpy as np
+
+    from policyengine.tax_benefit_models.uk.budget_reform_population import (
+        publishable_detail,
+    )
+
+    assert publishable_detail({"finding": np.bool_(True)}) == {"finding": True}
+    assert type(publishable_detail(np.bool_(False))) is bool
+    for unchecked in (np.array([3, 12]), {3, 12}, {3: "count key"}):
+        with pytest.raises(TypeError):
+            publishable_detail({"value": unchecked})
+
+
+def _run_population_with(monkeypatch, array, routes=None):
+    """Run the population checks on arrays from ``array(tag, variable, year)``.
+
+    ``tag`` is None for an unreformed simulation, and otherwise names the
+    route and reform: the reform dict's repr, or a repr containing
+    "scenario" or "from_dict", or one starting "('baseline'" for a reformed
+    simulation's baseline.
+    """
+    from types import SimpleNamespace
+
+    import policyengine_uk
+    from policyengine_core.reforms import Reform
+    from policyengine_uk.utils import scenario
+
+    from policyengine.tax_benefit_models.uk import (
+        budget_reform_population as population,
+    )
+
+    class Simulation:
+        def __init__(self, dataset, reform=None, scenario=None):
+            self.tag = (
+                None
+                if reform is None and scenario is None
+                else repr(reform if scenario is None else ("scenario", scenario))
+            )
+
+        @property
+        def baseline(self):
+            baseline = Simulation(dataset=None)
+            if self.tag is not None:
+                baseline.tag = repr(("baseline", self.tag))
+            return baseline
+
+        def calculate(self, variable, year):
+            return array(self.tag, variable, year)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(policyengine_uk, "Microsimulation", Simulation)
+        patch.setattr(
+            scenario, "Scenario", lambda **kwargs: repr(sorted(kwargs.items()))
+        )
+        patch.setattr(
+            Reform,
+            "from_dict",
+            staticmethod(lambda reform, **kwargs: ("from_dict", repr(reform))),
+        )
+        patch.setattr(
+            population, "subsample", lambda *args: SimpleNamespace(copy=lambda: None)
+        )
+        patch.setattr(population, "plus_ten_percent", lambda paths: {"response": paths})
+        return population.run_population_checks(
+            "unused.h5", routes or list(contract.COUNTRY_ROUTES)
+        )
+
+
+def test_every_population_row_publishes_the_findings_that_decide_it(monkeypatch):
+    """On random arrays: no small count, and each row passes when its findings do."""
+    pytest.importorskip("hypothesis")
+    pytest.importorskip("policyengine_uk.utils.scenario")
+    import numpy as np
+    from hypothesis import HealthCheck, given, settings
+    from hypothesis import strategies as st
+
+    from policyengine.tax_benefit_models.uk import (
+        budget_reform_population as population,
+    )
+
+    passes = set()
+
+    @settings(
+        max_examples=60,
+        deadline=None,
+        derandomize=True,
+        suppress_health_check=[HealthCheck.function_scoped_fixture],
+    )
+    @given(data=st.data())
+    def check(data):
+        units = data.draw(st.integers(1, 12))
+        amounts = st.floats(0, 1_000, width=32)
+        if data.draw(st.booleans()):
+            amounts = st.one_of(amounts, st.just(float("nan")))
+        # Lawful responses: the Universal Credit and State Pension
+        # simulations move their awards as the law does, so those rows can
+        # pass; otherwise every reformed array is random or unreformed.
+        lawful = data.draw(st.booleans())
+        pensions = ("basic_state_pension", "new_state_pension", "state_pension")
+        arrays = {}
+
+        def drawn(variable):
+            values = amounts
+            if lawful and variable == "uc_standard_allowance":
+                values = st.floats(1, 1_000, width=32)
+            return np.array(
+                data.draw(st.lists(values, min_size=units, max_size=units)),
+                dtype=float,
+            )
+
+        def array(tag, variable, year):
+            key = (tag, variable, year)
+            if key in arrays:
+                return arrays[key]
+            if tag is None:
+                if lawful and variable in ("benefit_cap_reduction", "uc_deductions"):
+                    value = np.zeros(units)
+                elif lawful and variable == "universal_credit_pre_benefit_cap":
+                    value = array(None, "universal_credit", year)
+                else:
+                    value = drawn(variable)
+            elif (
+                lawful
+                and "universal_credit.standard_allowance" in tag
+                and variable in population.UC_ALLOWANCE_VARIABLES
+            ):
+                allowance = array(None, "uc_standard_allowance", year)
+                base = array(None, variable, year)
+                value = {
+                    "uc_standard_allowance": 1.1 * allowance,
+                    "universal_credit_pre_benefit_cap": base + 0.1 * allowance,
+                    "universal_credit": base + 0.1 * allowance,
+                }.get(variable, base)
+            elif lawful and "state_pension" in tag and variable in pensions:
+                value = 1.1 * array(None, variable, year)
+            elif data.draw(st.booleans()):
+                value = array(None, variable, year)
+            else:
+                value = drawn(variable)
+            arrays[key] = value
+            return value
+
+        rows = _run_population_with(monkeypatch, array)
+        _assert_publishable_findings(rows)
+        passes.update((row["check_id"], row["status"]) for row in rows)
+
+    check()
+    # Every country check both passed and failed somewhere in the run.
+    for check_id in population.COUNTRY_POPULATION_CHECKS:
+        assert {(check_id, "pass"), (check_id, "fail")} <= passes, check_id
+
+
+def _steady(tag, variable, year):
+    """Arrays where every reform moves nothing: one unit at 1."""
+    import numpy as np
+
+    return np.ones(1)
+
+
+def test_routes_that_differ_only_in_2026_disagree(monkeypatch):
+    pytest.importorskip("policyengine_uk.utils.scenario")
+    import numpy as np
+
+    from policyengine.tax_benefit_models.uk import (
+        budget_reform_population as population,
+    )
+
+    def array(tag, variable, year):
+        if variable == "income_tax" and tag is not None and "baseline" not in tag:
+            if year == 2026 and "scenario" in tag:
+                return np.array([5.0])
+            if year == 2027:
+                return np.array([2.0])
+        return _steady(tag, variable, year)
+
+    rows = _run_population_with(monkeypatch, array)
+    _assert_publishable_findings(rows)
+    agree = {
+        row["route"]: row
+        for row in rows
+        if row["check_id"] == population.POPULATION_ROUTES_AGREE
+    }
+    scenario_row = agree["country.reform_dict = country.scenario_parameter_changes"]
+    assert scenario_row["status"] == "fail"
+    assert scenario_row["detail"] == {
+        "income_tax:2026_matches": False,
+        "income_tax:2027_matches": True,
+    }
+    assert agree["country.reform_dict = country.reform_from_dict"]["status"] == "pass"
+
+
+def test_a_state_pension_that_falls_fails_the_pension_check(monkeypatch):
+    pytest.importorskip("policyengine_uk.utils.scenario")
+    import numpy as np
+
+    from policyengine.tax_benefit_models.uk import (
+        budget_reform_population as population,
+    )
+
+    def array(tag, variable, year):
+        if tag is not None and "state_pension" in tag:
+            if variable in ("basic_state_pension", "new_state_pension"):
+                return np.array([1.1, 1.1])
+            if variable == "state_pension":
+                # One higher, one lower: the rates scaled, yet a pension fell.
+                return np.array([1.1, 0.9])
+        return np.ones(2)
+
+    rows = _run_population_with(monkeypatch, array, ["country.reform_dict"])
+    _assert_publishable_findings(rows)
+    pension = next(
+        row
+        for row in rows
+        if row["check_id"] == population.POPULATION_STATE_PENSION_PLUS_10
+    )
+    assert pension["status"] == "fail"
+    assert pension["detail"]["basic_and_new_scaled_10_percent"] is True
+    assert pension["detail"]["some_pension_higher"] is True
+    assert pension["detail"]["no_pension_lower"] is False
+
+
+def test_a_few_large_changes_among_tiny_ones_withhold_the_total(monkeypatch):
+    """Three people's £100 rises with seven negligible changes: three records."""
+    pytest.importorskip("policyengine_uk.utils.scenario")
+    import numpy as np
+
+    from policyengine.tax_benefit_models.uk import (
+        budget_reform_population as population,
+    )
+
+    def array(tag, variable, year):
+        tax = np.ones(10)
+        if (
+            variable == "income_tax"
+            and year == 2027
+            and tag is not None
+            and "baseline" not in tag
+        ):
+            return tax + np.array([100.0] * 3 + [4.77e-7] * 7)
+        return tax
+
+    rows = _run_population_with(monkeypatch, array, ["country.reform_dict"])
+    april = next(
+        row
+        for row in rows
+        if row["check_id"] == population.POPULATION_APRIL_RATE_CHANGE
+    )
+    assert april["detail"]["2027_people_with_higher_tax"] == population.FEWER_THAN_10
+    assert april["detail"]["2027_total_change"] == population.WITHHELD_FEWER_THAN_10
+
+
+def test_a_detail_that_cannot_be_checked_turns_its_row_into_an_error(monkeypatch):
+    pytest.importorskip("policyengine_uk.utils.scenario")
+    import numpy as np
+
+    from policyengine.tax_benefit_models.uk import (
+        budget_reform_population as population,
+    )
+
+    monkeypatch.setattr(
+        population,
+        "uc_allowance_verdict",
+        lambda base, reformed: (True, {"counts": np.array([3, 12])}),
+    )
+    rows = _run_population_with(monkeypatch, _steady, ["country.reform_dict"])
+    uc = next(
+        row
+        for row in rows
+        if row["check_id"] == population.POPULATION_UC_STANDARD_ALLOWANCE_PLUS_10
+    )
+    assert uc["status"] == "error"
+    assert uc["reason"] == "TypeError"
+    assert uc["detail"] is None
+    assert all(row["status"] != "error" for row in rows if row is not uc)
+
+
+def test_a_total_moved_only_by_tiny_changes_in_few_records_is_withheld(
+    monkeypatch, stub_population_checks
+):
+    """Withheld by the records that moved at all, not just past the threshold."""
+    import numpy as np
+    import policyengine_uk
+
+    population = stub_population_checks
+    stub = policyengine_uk.Microsimulation
+    calculate = stub.calculate
+
+    def three_people(self, variable, year):
+        if variable != "income_tax":
+            return calculate(self, variable, year)
+        tax = np.full(3, 1.0)
+        if year == 2027 and self.reform in (population.APRIL, population.FINITE):
+            # Each below the 1e-6 threshold the counts use; together above it.
+            return tax + 4.77e-7
+        return tax
+
+    monkeypatch.setattr(stub, "calculate", three_people)
+    rows = population.run_population_checks("unused.h5", ["country.reform_dict"])
+    april = next(
+        row
+        for row in rows
+        if row["check_id"] == population.POPULATION_APRIL_RATE_CHANGE
+    )
+    assert april["detail"]["2027_people_with_higher_tax"] == 0
+    assert april["detail"]["2027_total_rises"] is True
+    assert april["detail"]["2027_total_change"] == population.WITHHELD_FEWER_THAN_10
+
+
+def test_an_unreformed_rebuild_that_differs_fails_isolation(monkeypatch):
+    """A later unreformed simulation unlike the first: a reform reached it."""
+    pytest.importorskip("policyengine_uk.utils.scenario")
+    import numpy as np
+
+    from policyengine.tax_benefit_models.uk import (
+        budget_reform_population as population,
+    )
+
+    asked = []
+
+    def array(tag, variable, year):
+        if tag is None and (variable, year) == ("income_tax", 2026):
+            asked.append(1)
+            return np.array([1.0 if len(asked) == 1 else 2.0])
+        return np.ones(1)
+
+    rows = _run_population_with(monkeypatch, array, ["country.reform_dict"])
+    _assert_publishable_findings(rows)
+    status = {(row["check_id"], row["route"]): row for row in rows}
+    isolation = status[(population.POPULATION_BASELINE_ISOLATION, "unreformed")]
+    assert isolation["status"] == "fail"
+    assert isolation["detail"]["income_tax:2026_matches"] is False
+
+
+def test_outputs_that_depend_on_query_order_fail_the_order_check(monkeypatch):
+    """2026 income tax computed right after 2027's (reverse order) comes out different."""
+    pytest.importorskip("policyengine_uk.utils.scenario")
+    import numpy as np
+
+    from policyengine.tax_benefit_models.uk import (
+        budget_reform_population as population,
+    )
+
+    last = []
+
+    def array(tag, variable, year):
+        value = np.ones(1)
+        if tag is None:
+            if (variable, year) == ("income_tax", 2026) and last[-1:] == [
+                ("income_tax", 2027)
+            ]:
+                value = np.array([2.0])
+            last.append((variable, year))
+        return value
+
+    rows = _run_population_with(monkeypatch, array, ["country.reform_dict"])
+    _assert_publishable_findings(rows)
+    status = {(row["check_id"], row["route"]): row for row in rows}
+    assert (
+        status[(population.POPULATION_BASELINE_ISOLATION, "unreformed")]["status"]
+        == "pass"
+    )
+    order = status[(population.POPULATION_QUERY_ORDER, "unreformed")]
+    assert order["status"] == "fail"
+    assert order["detail"]["income_tax:2026_matches"] is False

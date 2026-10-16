@@ -68,7 +68,25 @@ call under cos d1344, taken with independent review:
   2020/371 reg 3). It is open in policyengine-uk#2430; the contract's
   checks on it stay as they were until that is decided.
 
-``Check.pending`` remains for any later open call; no check carries it now.
+``Check.pending`` remains for open calls. No check waits on d1344 now; the
+default capital gains response's checks wait on policyengine-uk#2396 (see
+Behavioural responses).
+
+Behavioural responses
+---------------------
+
+A case about statutory arithmetic holds capital gains realisations fixed: it
+sets both elasticity conventions to zero and the separate Business Asset
+Disposal Relief elasticity off (:func:`capital_gains_response` with an
+elasticity of 0), so its expected values hold whatever response
+policyengine-uk applies by default. A case about the response sets its
+elasticity, and expects realised gains scaled by
+``((1 - t1) / (1 - t0)) ** elasticity``, where ``t0`` and ``t1`` are the
+marginal rates on the gains without and with the reform. Contract 1.1.0
+added both, and a case with no response settings that shows the default
+response policyengine-uk applies. Its checks expect the retention-rate
+elasticity of 1 that policyengine-uk#2396 makes the default, and carry
+``pending`` until policyengine.py pins a release with it.
 
 Report
 ------
@@ -107,7 +125,7 @@ import re
 import sys
 import traceback
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import ROUND_CEILING, Decimal
 from typing import Any, Optional, Union
 
@@ -119,6 +137,9 @@ PRIOR_LAW_DECISION = "d1344"
 # Finance Act 2021 s5, as amended by Finance Act 2026 s10, fixes the
 # personal allowance and basic rate limit for 2022-23 to 2030-31.
 LAST_FROZEN_TAX_YEAR = 2030
+# The capital gains response default: policyengine-uk#2396 makes it a
+# retention-rate elasticity of 1. Its checks gate once policyengine.py pins it.
+DEFAULT_RESPONSE_DECISION = "policyengine-uk#2396"
 FLAT_STOP = datetime.date(2100, 12, 31)
 
 COUNTRY_ROUTES = (
@@ -153,6 +174,10 @@ UC_SINGLE_OLD = "gov.dwp.universal_credit.standard_allowance.amount.SINGLE_OLD"
 NEW_STATE_PENSION = "gov.dwp.state_pension.new_state_pension.amount"
 CGT_BASIC_RATE = "gov.hmrc.cgt.basic_rate"
 CGT_ANNUAL_EXEMPT_AMOUNT = "gov.hmrc.cgt.annual_exempt_amount"
+CGT_RESPONSES = "gov.simulation.capital_gains_responses"
+CGT_ELASTICITY = f"{CGT_RESPONSES}.elasticity"
+CGT_MTR_ELASTICITY = f"{CGT_RESPONSES}.mtr_elasticity"
+CGT_SEPARATE_BADR_ELASTICITY = f"{CGT_RESPONSES}.separate_badr_elasticity"
 VAT_STANDARD_RATE = "gov.hmrc.vat.standard_rate"
 VAT_COVERAGE = "gov.simulation.microdata_vat_coverage"
 PROTECTED_LCWRA = "gov.dwp.universal_credit.rebalancing.protected_health_element"
@@ -396,8 +421,83 @@ def _gains_uplift(year: int, share_of_year: float) -> Callable[[Context], float]
 
 GAINS_UPLIFT_ORACLE = (
     "(£10,000 of gains - the annual exempt amount) x (20% - current rate) x "
-    "the share of the tax year at 20%; the gains sit wholly in the basic rate "
-    "band, and the exempt amount and current rate are read from current law"
+    "the share of the tax year at 20%, with realisations held fixed; the "
+    "gains sit wholly in the basic rate band, and the exempt amount and "
+    "current rate are read from current law"
+)
+
+
+def capital_gains_response(
+    start: datetime.date, elasticity: float = 0.0
+) -> tuple[Change, ...]:
+    """Changes fixing the capital gains realisation response from ``start`` on.
+
+    A retention-rate elasticity of ``elasticity``, no marginal tax rate
+    elasticity and no separate Business Asset Disposal Relief elasticity, so
+    every gain responds with ``elasticity``. An elasticity of 0 holds
+    realisations fixed, whatever response the model applies by default.
+    """
+    return (
+        Change(CGT_ELASTICITY, start, elasticity),
+        Change(CGT_MTR_ELASTICITY, start, 0.0),
+        Change(CGT_SEPARATE_BADR_ELASTICITY, start, False),
+    )
+
+
+def _response_settings_checks(
+    year: int, elasticity: float, oracle: str
+) -> tuple[Check, ...]:
+    """Checks that each response setting reached the built system: the
+    retention-rate elasticity, no marginal tax rate elasticity, and the
+    separate relief elasticity off (a switch reads as 0 when off)."""
+    return (
+        Check("parameter", CGT_ELASTICITY, year, elasticity, oracle),
+        Check("parameter", CGT_MTR_ELASTICITY, year, 0.0, oracle),
+        Check("parameter", CGT_SEPARATE_BADR_ELASTICITY, year, 0.0, oracle),
+    )
+
+
+def _realised_gains(
+    year: int, rate: float, elasticity: float
+) -> Callable[[Context], float]:
+    """Gains after the realisation response to a basic rate of ``rate``.
+
+    The gains sit wholly in the basic rate band, so the marginal rates on
+    them without and with the reform are the two basic rates.
+    """
+
+    def expected(context: Context) -> float:
+        current = context.baseline(CGT_BASIC_RATE, year)
+        return GAINS * ((1 - rate) / (1 - current)) ** elasticity
+
+    return expected
+
+
+def _gains_response_uplift(
+    year: int, rate: float, elasticity: float
+) -> Callable[[Context], float]:
+    """Extra CGT at a basic rate of ``rate`` all year, after the response."""
+
+    def expected(context: Context) -> float:
+        exempt = context.baseline(CGT_ANNUAL_EXEMPT_AMOUNT, year)
+        current = context.baseline(CGT_BASIC_RATE, year)
+        realised = _realised_gains(year, rate, elasticity)(context)
+        return (realised - exempt) * rate - (GAINS - exempt) * current
+
+    return expected
+
+
+REALISED_GAINS_ORACLE = (
+    "£10,000 of gains x ((1 - 20%) / (1 - current rate)) to the power of the "
+    "elasticity: the gains sit wholly in the basic rate band, so the marginal "
+    "rates on them are the basic rates; the current rate is read from "
+    "current law"
+)
+
+GAINS_RESPONSE_UPLIFT_ORACLE = (
+    "(realised gains - the annual exempt amount) x 20% - (£10,000 of gains - "
+    "the annual exempt amount) x current rate, with the realised gains above; "
+    "the exempt amount and current rate are read from current law"
 )
 
 DIVIDENDS = 10_000
@@ -724,8 +824,13 @@ CASES: tuple[Case, ...] = (
     ),
     Case(
         id="mid_year_blended_rate",
-        title="CGT basic rate 20% from 30 October 2027",
-        changes=(Change(CGT_BASIC_RATE, _date("2027-10-30"), 0.20),),
+        title="CGT basic rate 20% from 30 October 2027, realisations held fixed",
+        changes=(
+            Change(CGT_BASIC_RATE, _date("2027-10-30"), 0.20),
+            # The case checks the blending of the rate, so the realisation
+            # response is off.
+            *capital_gains_response(_date("2025-01-01")),
+        ),
         # £20,000 of earnings and £10,000 of gains: the taxable gains sit
         # wholly in the basic rate band.
         household=adult(20_000, capital_gains=GAINS),
@@ -742,6 +847,7 @@ CASES: tuple[Case, ...] = (
             ),
             Check("parameter", CGT_BASIC_RATE, 2028, 0.20, "in force all year"),
             Check("parameter", CGT_BASIC_RATE, 2026, 0.18, "before the change"),
+            *_response_settings_checks(2027, 0.0, "set by the case"),
             Check("change", "capital_gains_tax", 2026, 0.0, "before the change", 0.005),
             Check(
                 "change",
@@ -759,6 +865,83 @@ CASES: tuple[Case, ...] = (
                 GAINS_UPLIFT_ORACLE + "; all of 2028-29",
                 0.005,
             ),
+        ),
+    ),
+    Case(
+        id="cgt_retention_response",
+        title=(
+            "CGT basic rate 20% from 6 April 2027, with a retention-rate "
+            "elasticity of 1"
+        ),
+        changes=(
+            Change(CGT_BASIC_RATE, _date("2027-04-06"), 0.20),
+            *capital_gains_response(_date("2025-01-01"), elasticity=1.0),
+        ),
+        # As above, the gains sit wholly in the basic rate band, before and
+        # after the response.
+        household=adult(20_000, capital_gains=GAINS),
+        checks=(
+            Check("parameter", CGT_BASIC_RATE, 2027, 0.20, "in force all year"),
+            *_response_settings_checks(2027, 1.0, "set by the case"),
+            Check("change", "capital_gains_tax", 2026, 0.0, "before the change", 0.005),
+            Check(
+                "variable",
+                "capital_gains",
+                2026,
+                float(GAINS),
+                "no rate change before 2027-28, so no response",
+                0.01,
+            ),
+            Check(
+                "variable",
+                "capital_gains",
+                2027,
+                _realised_gains(2027, 0.20, 1.0),
+                REALISED_GAINS_ORACLE,
+                0.01,
+            ),
+            Check(
+                "change",
+                "capital_gains_tax",
+                2027,
+                _gains_response_uplift(2027, 0.20, 1.0),
+                GAINS_RESPONSE_UPLIFT_ORACLE,
+                0.005,
+            ),
+        ),
+    ),
+    Case(
+        id="cgt_default_response",
+        title=(
+            "CGT basic rate 20% from 6 April 2027, at policyengine-uk's "
+            "default response"
+        ),
+        # No response settings, so the report shows the default. The expected
+        # values are cgt_retention_response's, the default policyengine-uk#2396
+        # sets; they report without gating until policyengine.py pins it.
+        changes=(Change(CGT_BASIC_RATE, _date("2027-04-06"), 0.20),),
+        household=adult(20_000, capital_gains=GAINS),
+        checks=tuple(
+            replace(check, pending=DEFAULT_RESPONSE_DECISION)
+            for check in (
+                *_response_settings_checks(2027, 1.0, "policyengine-uk's default"),
+                Check(
+                    "variable",
+                    "capital_gains",
+                    2027,
+                    _realised_gains(2027, 0.20, 1.0),
+                    REALISED_GAINS_ORACLE + ", at the default elasticity of 1",
+                    0.01,
+                ),
+                Check(
+                    "change",
+                    "capital_gains_tax",
+                    2027,
+                    _gains_response_uplift(2027, 0.20, 1.0),
+                    GAINS_RESPONSE_UPLIFT_ORACLE + ", at the default elasticity of 1",
+                    0.005,
+                ),
+            )
         ),
     ),
     Case(

@@ -65,6 +65,16 @@ from policyengine.utils.parametric_reforms import (  # noqa: E402
     simulation_modifier_from_parameter_values,
 )
 
+
+@pytest.fixture(autouse=True)
+def _index_install(monkeypatch):
+    """Run as if policyengine-uk came from a package index, however it is
+    installed here: a local directory install refuses every saved output."""
+    from policyengine.tax_benefit_models.uk import capital_gains_responses
+
+    monkeypatch.setattr(capital_gains_responses, "installed_model_source", lambda: None)
+
+
 DATA_YEAR = 2024
 STATE_PENSION = [
     "basic_state_pension",

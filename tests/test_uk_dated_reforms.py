@@ -45,6 +45,11 @@ def test_household_constructor_receives_inclusive_ranges(
         "_default_output_columns",
         lambda extra: {"person": ["income_tax"]},
     )
+    # The stub has no tax-benefit system to resolve a response from.
+    monkeypatch.setattr(
+        "policyengine.tax_benefit_models.uk.capital_gains_responses.resolve",
+        lambda simulation, year: None,
+    )
 
     pe.uk.calculate_household(
         people=[{"age": 40, "employment_income": 30_000}],
@@ -153,6 +158,10 @@ def _run_population_route(monkeypatch, policy, dynamic, events):
 
     monkeypatch.setattr("policyengine_uk.Microsimulation", RecordingMicrosimulation)
     monkeypatch.setattr(uk_model, "_policyengine_uk_input", lambda dataset: None)
+    monkeypatch.setattr(
+        "policyengine.tax_benefit_models.uk.capital_gains_responses.resolve",
+        lambda microsimulation, year: events.append("resolve capital gains response"),
+    )
     monkeypatch.setattr(
         parametric_reforms,
         "simulation_modifier_from_parameter_values",
@@ -302,4 +311,6 @@ def test_population_route_applies_policy_before_dynamic(
         make(Dynamic, dynamic_kind, 0.30, "dynamic modifier"),
         events,
     )
-    assert events == expected
+    # The capital gains response the run records is read after every
+    # modifier and late value has run.
+    assert events == expected + ["resolve capital gains response"]

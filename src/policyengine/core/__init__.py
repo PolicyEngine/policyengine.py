@@ -27,6 +27,7 @@ from .scoping_strategy import (
 )
 from .simulation import Simulation as Simulation
 from .tax_benefit_model import TaxBenefitModel as TaxBenefitModel
+from .tax_benefit_model_version import StaleOutputError as StaleOutputError
 from .tax_benefit_model_version import (
     TaxBenefitModelVersion as TaxBenefitModelVersion,
 )
