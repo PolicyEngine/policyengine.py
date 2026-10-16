@@ -91,10 +91,13 @@ job fails on every scheduled run until one of these clears it:
 
 A pull request from a candidate branch to a base other than main runs the
 same workflows with the same commit and branch as the candidate's own pull
-request, and GitHub's run records do not say which pull request a run is
-for. While such a pull request is open, or after one was closed or merged
-at the candidate's commit, the promote job fails with
-`::error::<branch> is not promoted: pull requests ... from it run on the same commit`,
-and refresh re-runs none of the candidate's runs. Close that pull request,
-then requalify the pair as above: the new candidate commit leaves the other
-pull request's runs behind.
+request, and GitHub's run records do not say which pull request, or which
+base, a run is for. While such a pull request is open, or after one was
+closed or merged at the candidate's commit, or when a pull request from the
+branch now to main ever had another base (the candidate's own included),
+the promote job fails with
+`::error::<branch> is not promoted: runs at its commit may have tested another base`,
+naming the pull requests, and refresh re-runs none of the candidate's runs.
+Close those pull requests, then requalify the pair as above: the new
+candidate commit leaves their runs behind, and prepare opens a new pull
+request to main if none is open.

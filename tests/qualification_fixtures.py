@@ -118,5 +118,79 @@ def jq(expression: str, data) -> str:
     ).stdout
 
 
+def _field(argv, name):
+    """The value of gh's ``-f name=value`` / ``-F name=value`` in ``argv``."""
+
+    for flag, value in zip(argv, argv[1:]):
+        if flag in ("-f", "-F") and value.startswith(f"{name}="):
+            return value.split("=", 1)[1]
+    return None
+
+
+def rest_pulls_output(argv, listing, owner="PolicyEngine") -> str:
+    """What `gh api -X GET repos/<repo>/pulls -f head=<owner>:<branch> ...`
+    prints for ``listing`` (gh pr list-shaped items: number, headRefName,
+    headRefOid, baseRefName (main), state (OPEN, CLOSED or MERGED), isDraft,
+    isCrossRepository): GitHub keeps only pull requests from ``owner``'s
+    branch, then filters by base and state, and the call's --jq runs over
+    REST-shaped objects with the real jq."""
+
+    head = _field(argv, "head")
+    head_owner, _, branch = head.partition(":")
+    base = _field(argv, "base")
+    state = _field(argv, "state") or "open"
+    page = []
+    for pr in listing:
+        pr = {"baseRefName": "main", "state": "OPEN", "isDraft": True, **pr}
+        pr_owner = "someone" if pr.get("isCrossRepository") else owner
+        rest_state = "open" if pr["state"] == "OPEN" else "closed"
+        if (
+            pr_owner != head_owner
+            or pr["headRefName"] != branch
+            or (base is not None and pr["baseRefName"] != base)
+            or (state != "all" and rest_state != state)
+        ):
+            continue
+        page.append(
+            {
+                "number": pr["number"],
+                "state": rest_state,
+                "draft": pr["isDraft"],
+                "merged_at": "2026-10-16T00:00:00Z"
+                if pr["state"] == "MERGED"
+                else None,
+                "base": {"ref": pr["baseRefName"]},
+                "head": {
+                    "ref": pr["headRefName"],
+                    "sha": pr.get("headRefOid"),
+                    "repo": {"full_name": f"{pr_owner}/policyengine.py"},
+                },
+            }
+        )
+    return jq(argv[argv.index("--jq") + 1], page)
+
+
+def graphql_base_changes_output(argv, changed) -> str:
+    """What the base-change GraphQL query prints for the pull request it
+    names, ``changed`` being the numbers whose base was ever changed."""
+
+    number = int(_field(argv, "number"))
+    page = {
+        "data": {
+            "repository": {
+                "pullRequest": {
+                    "timelineItems": {
+                        "nodes": [{"__typename": "BaseRefChangedEvent"}]
+                        if number in changed
+                        else [],
+                        "pageInfo": {"hasNextPage": False},
+                    }
+                }
+            }
+        }
+    }
+    return jq(argv[argv.index("--jq") + 1], page)
+
+
 def golden(name: str) -> dict:
     return json.loads((FIXTURES / f"{name}.json").read_text(encoding="utf-8"))

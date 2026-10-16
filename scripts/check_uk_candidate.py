@@ -599,40 +599,84 @@ def _candidate_pull_requests() -> list[dict[str, Any]]:
     ]
 
 
-#: The most pull requests from one candidate branch the check below reads.
-SAME_BRANCH_LIMIT = 100
+#: Whether a pull request's base was ever changed: GraphQL records each change
+#: as a BaseRefChangedEvent (its timeline's totalCount ignores the type
+#: filter, so the nodes are read).
+BASE_CHANGES_QUERY = (
+    "query($owner: String!, $name: String!, $number: Int!) { repository(owner:"
+    " $owner, name: $name) { pullRequest(number: $number) { timelineItems("
+    "itemTypes: [BASE_REF_CHANGED_EVENT], first: 1) { nodes { __typename }"
+    " pageInfo { hasNextPage } } } } }"
+)
 
 
-def _shared_branch_pull_requests(branch: str, commit: str) -> Optional[list[str]]:
-    """Pull requests from this repository's ``branch`` to a base other than
-    main whose runs can be at ``commit``; None if they cannot all be read.
+def _base_changed(number: Any) -> Optional[bool]:
+    """Whether pull request ``number``'s base was ever changed; None if that
+    cannot be read."""
 
-    Such a pull request runs the same workflows with the same commit, branch
-    and repository as the candidate's own, to main (round 6 of #635), and
-    GitHub's run records do not say which pull request started a run. So
-    while one is open, or after one was closed or merged at this commit,
-    the candidate's own runs cannot be told from its runs. (Pull requests
-    from the branch to main are the candidate's own: at most one is open,
-    and a closed one's runs test the same merge.) A listing without the fork
-    field counts as this repository's, and one that reaches
-    ``SAME_BRANCH_LIMIT`` as unreadable.
-    """
-
+    owner, name = LEDGER_REPOSITORY.split("/")
     result = subprocess.run(
         [
             "gh",
-            "pr",
-            "list",
-            "--repo",
-            LEDGER_REPOSITORY,
-            "--head",
-            branch,
-            "--state",
-            "all",
-            "--limit",
-            str(SAME_BRANCH_LIMIT),
-            "--json",
-            "number,baseRefName,headRefOid,isCrossRepository,state",
+            "api",
+            "graphql",
+            "-f",
+            f"query={BASE_CHANGES_QUERY}",
+            "-F",
+            f"owner={owner}",
+            "-F",
+            f"name={name}",
+            "-F",
+            f"number={number}",
+            "--jq",
+            ".data.repository.pullRequest.timelineItems"
+            " | (.nodes | length > 0) or .pageInfo.hasNextPage",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    answer = result.stdout.strip() if result.returncode == 0 else ""
+    return {"true": True, "false": False}.get(answer)
+
+
+def _shared_branch_pull_requests(branch: str, commit: str) -> Optional[list[str]]:
+    """Pull requests from this repository's ``branch`` whose runs at
+    ``commit`` may have tested a base other than main; None if they cannot
+    all be read.
+
+    A pull request from the candidate branch to another base runs the same
+    workflows with the same commit, branch and repository as the
+    candidate's own (round 6 of #635), and GitHub's run records do not say
+    which pull request started a run, nor which base it tested. So these
+    count: one open to another base, one closed or merged at this commit to
+    another base, and, among those to main, one whose base was ever changed,
+    since a base change does not change what its earlier runs tested
+    (round 7). Every other pull request from the branch to main is the
+    candidate's own: at most one is open, and a closed one's runs test the
+    same merge. The REST listing filtered by ``head=<owner>:<branch>`` holds
+    only this repository's pull requests, all of them (paginated), so a
+    fork's with the same branch name can neither shadow nor crowd them out.
+    """
+
+    owner = LEDGER_REPOSITORY.split("/")[0]
+    result = subprocess.run(
+        [
+            "gh",
+            "api",
+            "-X",
+            "GET",
+            f"repos/{LEDGER_REPOSITORY}/pulls",
+            "-f",
+            f"head={owner}:{branch}",
+            "-f",
+            "state=all",
+            "-f",
+            "per_page=100",
+            "--paginate",
+            "--jq",
+            ".[] | {number, state, merged: (.merged_at != null), base: .base.ref,"
+            " head_sha: .head.sha} | tojson",
         ],
         check=False,
         capture_output=True,
@@ -641,19 +685,23 @@ def _shared_branch_pull_requests(branch: str, commit: str) -> Optional[list[str]
     if result.returncode != 0:
         return None
     try:
-        listing = json.loads(result.stdout)
+        listing = [json.loads(line) for line in result.stdout.splitlines() if line]
     except json.JSONDecodeError:
         return None
-    if not isinstance(listing, list) or len(listing) >= SAME_BRANCH_LIMIT:
-        return None
-    return sorted(
-        f"#{pr.get('number')} (to {pr.get('baseRefName')}, "
-        f"{str(pr.get('state')).lower()})"
-        for pr in listing
-        if pr.get("isCrossRepository") is not True
-        and pr.get("baseRefName") != "main"
-        and (pr.get("state") == "OPEN" or pr.get("headRefOid") == commit)
-    )
+    shared = []
+    for pr in listing:
+        if pr.get("state") != "open" and pr.get("head_sha") != commit:
+            continue
+        state = "merged" if pr.get("merged") else str(pr.get("state"))
+        if pr.get("base") != "main":
+            shared.append(f"#{pr.get('number')} (to {pr.get('base')}, {state})")
+            continue
+        changed = _base_changed(pr.get("number"))
+        if changed is None:
+            return None
+        if changed:
+            shared.append(f"#{pr.get('number')} (to main after a base change, {state})")
+    return sorted(shared)
 
 
 #: A run is re-run until it has made this many attempts in all, so a genuine
@@ -769,9 +817,9 @@ def cmd_refresh_pr_checks(args: argparse.Namespace) -> int:
     ``_rerun_due``: a failed or timed-out one by its failed jobs, a
     cancelled one (a job timeout cancels the run) in full. Older runs a
     newer one replaced are left alone, and so is every run of a candidate
-    whose runs another pull request from its branch shares
-    (``_shared_branch_pull_requests``): promotion refuses it anyway, and
-    re-runs would spend the other pull request's attempts. GITHUB_TOKEN may
+    whose runs may have tested another base (``_shared_branch_pull_requests``):
+    promotion refuses it anyway, and re-runs would retest that base and
+    spend the attempts. GITHUB_TOKEN may
     re-run existing runs with actions: write.
     """
 
@@ -793,8 +841,8 @@ def cmd_refresh_pr_checks(args: argparse.Namespace) -> int:
             continue
         if shared:
             print(
-                f"::warning::not re-running {branch}'s runs: pull requests "
-                f"{', '.join(shared)} from it share them"
+                f"::warning::not re-running {branch}'s runs: they may have "
+                f"tested another base, from pull requests {', '.join(shared)}"
             )
             continue
         listed = _candidate_runs(head, branch)
@@ -924,8 +972,9 @@ def _promote(
 
     Returns False when a return to draft failed, which leaves a ready pull
     request that a merge could combine with other code, when the candidate
-    waits on runs refresh will not re-run again, or when another pull
-    request from its branch shares its runs; either way the promote run
+    waits on runs refresh will not re-run again, or when its runs may have
+    tested another base (``_shared_branch_pull_requests``); either way the
+    promote run
     fails so someone sees it. ``pull_request`` names the
     candidate's pull request for readiness changes (its number; the branch
     by default).
@@ -962,12 +1011,13 @@ def _promote(
     if shared:
         # Their runs and the candidate's cannot be told apart, and they stay
         # at this commit after the pull requests close: only a new candidate
-        # commit leaves them behind.
+        # commit (and, if the candidate's own was one, a new pull request to
+        # main, which prepare opens) leaves them behind.
         print(
-            f"::error::{branch} is not promoted: pull requests "
-            f"{', '.join(shared)} from it run on the same commit, and GitHub "
-            "does not record which pull request a run is for; close them and "
-            "requalify the pair"
+            f"::error::{branch} is not promoted: runs at its commit may have "
+            f"tested another base, from pull requests {', '.join(shared)}, and "
+            "GitHub does not record which pull request or base a run is for; "
+            "close them and requalify the pair"
         )
         _set_ready(target, False)
         return False
