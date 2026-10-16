@@ -10,6 +10,6 @@ run on 11 October 2026. The qualification gate tests in `tests/test_uk_candidate
 
 The edits:
 - `dataset.path` (a local Hugging Face cache path) was replaced with a placeholder in the two files that name a dataset, and every file was re-serialized with sorted keys.
-- Population rows are computed on the survey dataset, so a count from 1 to 9 in their `detail` is a small cell, which the metrics tool's `privacy.py` rule never publishes. In `full_released_uk_2.130.1.json`, `2027_people_with_lower_tax` and `payments_lower` (three rows each) are replaced by `"fewer than 10"`, as `publishable_contract_report` writes them to the qualification ledger. No gate rule reads `detail`. Check any new fixture for such counts before committing it.
+- Population rows are computed on the survey dataset, so a count from 1 to 9 in their `detail` is a small cell, which the metrics tool's `privacy.py` rule never publishes. In `full_released_uk_2.130.1.json`, `2027_people_with_lower_tax` and `payments_lower` (three rows each) are replaced by `"fewer than 10"`. No gate rule reads `detail`, and the qualification ledger (`publishable_contract_report`) publishes none of a population detail's values beyond true/false findings, since rows of one check on different routes share a subsample and their differences would give a handful's figures back. Check any new fixture for such counts before committing it.
 
 The run of contract 1.0.0 on policyengine-uk 2.126.8 (`full_allpass_uk_2.126.8.json`) was removed once no test read it.

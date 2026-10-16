@@ -892,94 +892,57 @@ def test_the_released_run_without_assertion_ids_resolves_by_oracle_and_order():
     assert result.details["counts"] == RELEASED_COUNTS
 
 
-def test_the_ledger_never_publishes_a_small_count_from_the_dataset():
-    """Round 10 of #574: population rows are computed on the survey data, so
-    a count from 1 to 9 in their detail is suppressed in the evidence the
-    ledger publishes, and the published digest is of that evidence, never
-    of the full report (whose digest would give the count back)."""
-
-    from policyengine.provenance.uk_candidate import SUPPRESSED_COUNT
-
-    report = _fixture("full_released_uk_2.130.1.json")
-    for row in report["population"]:
-        if row["check_id"] == "population_uc_standard_allowance_plus_10":
-            row["detail"]["payments_lower"] = 3  # synthetic small count
-    result, evidence = _released_contract_outcome(report)
-    assert result.status == "pass", result.summary
-    published = [
-        row["detail"]
-        for row in evidence["population"]
-        if row["check_id"] == "population_uc_standard_allowance_plus_10"
-    ]
-    assert {detail["payments_lower"] for detail in published} == {SUPPRESSED_COUNT}
-    assert {detail["payments_higher"] for detail in published} == {102}
-    assert {detail["awards_lower"] for detail in published} == {0}
-    assert result.details["report_sha256"] == gates_module.evidence_sha256(evidence)
-    assert result.evidence_sha256 == gates_module.evidence_sha256(evidence)
-    # Everything but the population details is published as reported.
-    assert {k: v for k, v in evidence.items() if k != "population"} == {
-        k: v for k, v in report.items() if k != "population"
-    }
-
-
-def _april_detail(lower, higher, total=1234.5):
-    return {
-        "2026_unchanged": True,
-        "2027_total_change": total,
-        "2027_people_with_lower_tax": lower,
-        "2027_people_with_higher_tax": higher,
-    }
-
-
-@pytest.mark.parametrize(
-    ("lower", "higher", "published"),
-    [
-        (2, 3, False),  # a total over five records (supp-r3 Medium 1)
-        (0, 9, False),
-        (4, 1093, True),  # the real run: 1,097 records
-        (0, 10, True),
-        (0, 0, True),  # over no records: nothing to give back
-    ],
-)
-def test_a_population_total_over_fewer_than_ten_records_is_withheld(
-    lower, higher, published
-):
-    from policyengine.provenance.uk_candidate import (
-        SUPPRESSED_COUNT,
-        WITHHELD_VALUE,
-        publishable_contract_report,
-    )
-
-    report = {"population": [{"detail": _april_detail(lower, higher)}]}
-    detail = publishable_contract_report(report)["population"][0]["detail"]
-    assert detail["2027_total_change"] == (1234.5 if published else WITHHELD_VALUE)
-    assert detail["2027_people_with_lower_tax"] == (
-        SUPPRESSED_COUNT if 0 < lower < 10 else lower
-    )
-    # A total whose counts are missing or not whole counts is withheld too.
-    broken = _april_detail(lower, float(higher))
-    detail = publishable_contract_report({"population": [{"detail": broken}]})
-    assert detail["population"][0]["detail"]["2027_total_change"] == WITHHELD_VALUE
+def _population_leaves(value):
+    if isinstance(value, dict):
+        for item in value.values():
+            yield from _population_leaves(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _population_leaves(item)
+    else:
+        yield value
 
 
 @pytest.mark.parametrize("outcome", ["pass", "fail", "error"])
-@pytest.mark.parametrize("count", range(12))
-def test_the_ledger_withholds_small_cells_whatever_the_gate_decides(outcome, count):
-    """supp-r3 S02, S11, S12: on a pass, a fail and an error alike, the
-    published evidence holds no count from 1 to 9 and no total over fewer
-    than 10 records, and its digest is the digest recorded. NumPy and float
-    counts (supp-r3 Low 2) are covered too. Values synthetic."""
+@pytest.mark.parametrize(
+    "variant", ["small counts", "routes differ", "numpy", "text and decimal"]
+)
+def test_the_ledger_publishes_no_value_from_the_survey_data(outcome, variant):
+    """Rounds 10, supp-r3 and supp-r4 of #574: population rows are computed on
+    the survey data, and their numbers combine (rows of one check on
+    different routes share a subsample, so their difference is a handful's),
+    so the published evidence keeps only each detail's shape and true/false
+    findings, on a pass, a fail and an error alike. Its digest is the digest
+    recorded, never one of the full report. Values synthetic."""
+
+    from decimal import Decimal
 
     import numpy as np
 
-    from policyengine.provenance.uk_candidate import SUPPRESSED_COUNT, WITHHELD_VALUE
+    from policyengine.provenance.uk_candidate import WITHHELD_VALUE
 
     report = _fixture("full_released_uk_2.130.1.json")
-    for row in report["population"]:
-        if row["check_id"] == "population_april_rate_change":
-            row["detail"] = _april_detail(np.int64(count), 0, total=777.25)
-        if row["check_id"] == "population_uc_standard_allowance_plus_10":
-            row["detail"]["payments_lower"] = float(count)
+    april = [
+        r
+        for r in report["population"]
+        if r["check_id"] == "population_april_rate_change"
+    ]
+    for index, row in enumerate(april):
+        row["detail"] = {
+            "2026_unchanged": True,
+            "2027_total_change": 205573.0
+            + (index * 4321.0 if variant == "routes differ" else 0),
+            "2027_people_with_lower_tax": {
+                "small counts": 3,
+                "routes differ": 20,
+                "numpy": np.int64(4),
+                "text and decimal": "4",
+            }[variant],
+            "2027_people_with_higher_tax": (
+                Decimal(1093) if variant == "text and decimal" else 1093 + index * 4
+            ),
+            "nested": [{"count": 5, "ok": False}],
+        }
     if outcome == "fail":
         case = next(r for r in report["cases"] if r["status"] == "pass")
         case["status"] = "fail"
@@ -988,23 +951,31 @@ def test_the_ledger_withholds_small_cells_whatever_the_gate_decides(outcome, cou
         report["seed"] = 1
     result, evidence = _released_contract_outcome(report)
     assert result.status == outcome, result.summary
-    april = [
-        row["detail"]
-        for row in evidence["population"]
-        if row["check_id"] == "population_april_rate_change"
+    for row in evidence["population"]:
+        for leaf in _population_leaves(row.get("detail")):
+            assert leaf is None or isinstance(leaf, bool) or leaf == WITHHELD_VALUE, (
+                row["check_id"],
+                leaf,
+            )
+    published = [
+        r["detail"]
+        for r in evidence["population"]
+        if r["check_id"] == "population_april_rate_change"
     ]
-    assert {d["2027_people_with_lower_tax"] for d in april} == {
-        SUPPRESSED_COUNT if 0 < count < 10 else count
+    assert published[0] == {
+        "2026_unchanged": True,
+        "2027_total_change": WITHHELD_VALUE,
+        "2027_people_with_lower_tax": WITHHELD_VALUE,
+        "2027_people_with_higher_tax": WITHHELD_VALUE,
+        "nested": [{"count": WITHHELD_VALUE, "ok": False}],
     }
-    assert {d["2027_total_change"] for d in april} == {
-        WITHHELD_VALUE if 0 < count < 10 else 777.25
+    # What the gate judges is published as reported.
+    assert [
+        (r["check_id"], r["route"], r["status"]) for r in evidence["population"]
+    ] == [(r["check_id"], r["route"], r["status"]) for r in report["population"]]
+    assert {k: v for k, v in evidence.items() if k != "population"} == {
+        k: v for k, v in report.items() if k != "population"
     }
-    uc = [
-        row["detail"]
-        for row in evidence["population"]
-        if row["check_id"] == "population_uc_standard_allowance_plus_10"
-    ]
-    assert {d["payments_lower"] for d in uc} == {WITHHELD_VALUE}
     assert result.details["report_sha256"] == gates_module.evidence_sha256(evidence)
     assert result.evidence_sha256 == gates_module.evidence_sha256(evidence)
 
@@ -1013,8 +984,6 @@ def test_the_ledger_withholds_small_cells_whatever_the_gate_decides(outcome, cou
 @given(
     detail=st.recursive(
         st.one_of(
-            # The rule's edges come up often (supp-r3: 9 almost never did).
-            st.sampled_from([0, 1, 9, 10, 11]),
             st.integers(-20, 2000),
             st.booleans(),
             st.floats(allow_nan=False, allow_infinity=False),
@@ -1028,45 +997,21 @@ def test_the_ledger_withholds_small_cells_whatever_the_gate_decides(outcome, cou
         max_leaves=10,
     )
 )
-def test_no_count_from_one_to_nine_survives_publication(detail):
+def test_only_true_false_findings_survive_publication(detail):
     from policyengine.provenance.uk_candidate import (
-        SUPPRESSED_COUNT,
         WITHHELD_VALUE,
         publishable_contract_report,
     )
 
     report = {"cases": [{"detail": detail}], "population": [{"detail": detail}]}
     published = publishable_contract_report(report)
-
-    def leaves(value):
-        if isinstance(value, dict):
-            for item in value.values():
-                yield from leaves(item)
-        elif isinstance(value, list):
-            for item in value:
-                yield from leaves(item)
-        else:
-            yield value
-
-    for leaf in leaves(published["population"][0]["detail"]):
-        assert isinstance(leaf, bool) or not (isinstance(leaf, int) and 0 < leaf < 10)
-    # Synthetic case rows and every other value are left alone.
+    # Synthetic case rows are left alone.
     assert published["cases"] == report["cases"]
-    before, after = (
-        list(leaves(detail)),
-        list(leaves(published["population"][0]["detail"])),
-    )
+    before = list(_population_leaves(detail))
+    after = list(_population_leaves(published["population"][0]["detail"]))
     assert len(before) == len(after)
     for old, new in zip(before, after):
-        count = isinstance(old, int) and not isinstance(old, bool)
-        if count and 0 < old < 10:
-            assert new == SUPPRESSED_COUNT
-        elif isinstance(old, float):
-            # A number that is not a whole count: how many records it comes
-            # from is unknown (supp-r3).
-            assert new == WITHHELD_VALUE
-        else:
-            assert new == old
+        assert new == (old if old is None or isinstance(old, bool) else WITHHELD_VALUE)
 
 
 @pytest.mark.parametrize("section", ["cases", "population"])
@@ -2138,6 +2083,10 @@ def test_the_same_figure_excluded_with_opposite_signs_is_withheld(kind):
     assert evidence["moves_beyond_bounds"] == evidence["lined_up_totals"] == []
     (row,) = evidence["withheld_changes"]
     assert row["metric_id"] == "total"
+    # One figure with two signs says so in every section (supp-r4 N01).
+    assert row["reason"] == (
+        "a figure both reports leave out enters their totals with different signs"
+    )
     result, steps = metrics_review(
         candidate_report=candidate,
         previous_report=previous,
@@ -2367,6 +2316,26 @@ def test_a_report_that_breaks_the_small_cell_format_fails(mutate, message, side)
     status, summary, _ = compare_metric_reports(*pair, BOUNDS)
     assert status == "fail", summary
     assert f"the {side} report has" in summary and message in summary
+
+
+def test_numpy_scalars_in_evidence_become_the_numbers_they_hold():
+    """supp-r3 Low 2 and supp-r4 J03 and nit: NumPy bool, integer and float
+    scalars are unwrapped before the non-finite check (a float32 NaN is
+    "NaN", never an error); other NumPy values, such as a 0-d array or a
+    datetime64, are left for strict JSON to refuse."""
+
+    import numpy as np
+
+    safe = gates_module._json_safe
+    assert safe(np.int64(4)) == 4 and type(safe(np.int64(4))) is int
+    assert safe(np.bool_(True)) is True
+    assert safe(np.float32("nan")) == "NaN"
+    assert safe(np.float64("-inf")) == "-Infinity"
+    assert gates_module.evidence_sha256({"x": np.float32("nan")})
+    array = np.array(4)
+    assert safe(array) is array
+    stamp = np.datetime64("2026-10-16T00:00:00", "ns")
+    assert safe(stamp) is stamp
 
 
 def test_a_boolean_metric_value_is_not_a_number():
