@@ -79,8 +79,10 @@ Microcosm national release with one of:
   claim first. Its `frs_2024_25` is not carried, so keep it loadable with a
   `dataset_overlays.uk` entry.
 
-Either way, certification checks the regional release's own model
-compatibility and HEAD-checks every artifact it carries.
+Either way, certification checks that the regional release serves the pinned
+model, and the pinned core when `--core-version` is given, by its own build or
+compatibility claims (a `--qualified-pair-id` names the primary release only),
+and HEAD-checks every artifact it carries.
 
 ### Re-certifying a routed bundle
 

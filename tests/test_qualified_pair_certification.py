@@ -278,6 +278,28 @@ class TestRuntimeAcceptance:
                 remote=_uk_manifest(),
             )
 
+    def test_online_exact_pair_on_a_cut_is_named_by_its_cut_tag(self):
+        """A Microcosm cut keeps its line name as ``build.build_id``.
+
+        Certification names the build by ``build.cut_tag`` (#553), so the
+        runtime check must too: the certified cut passes, and another cut of
+        the same line, which shares the line name, is refused.
+        """
+        line = "microcosm-uk-2024-25-national"
+        certified_cut = f"{line}-20261101T000000Z-aaaaaaaa"
+        remote = _uk_manifest()
+        remote.build.build_id = line
+        remote.build.cut_tag = certified_cut
+
+        certification = self._certify(
+            _qualified(build_id=certified_cut), "2.126.8", remote=remote
+        )
+        assert certification.compatibility_basis == "qualified_exact_pair"
+
+        remote.build.cut_tag = f"{line}-20261102T000000Z-bbbbbbbb"
+        with pytest.raises(ValueError, match="not certified.*data build"):
+            self._certify(_qualified(build_id=certified_cut), "2.126.8", remote=remote)
+
     def test_online_other_core_is_refused(self):
         """Interrupted review of #574: an exact pair was honoured whatever core ran."""
 

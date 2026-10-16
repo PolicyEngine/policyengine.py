@@ -48,7 +48,7 @@ from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
 from packaging.version import InvalidVersion, Version
 
-from policyengine.provenance.manifest import DataReleaseManifest
+from policyengine.provenance.manifest import DataReleaseManifest, release_build_id
 from policyengine.provenance.qualification import (
     REQUIRED_GATES,
     CandidatePair,
@@ -286,9 +286,8 @@ def resolve_candidate(
     artifact = manifest.artifacts[dataset]
     if not artifact.sha256 or not artifact.size_bytes:
         raise ValueError(f"uk-data {data_version} {dataset} has no sha256 or size.")
-    build_id = (
-        manifest.build.build_id if manifest.build and manifest.build.build_id else None
-    )
+    # Named as certification names it: the cut tag when the release has one.
+    build_id = release_build_id(manifest.build)
     if build_id is None:
         raise ValueError(f"uk-data {data_version} records no build id.")
 
