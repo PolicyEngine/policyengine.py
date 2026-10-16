@@ -849,6 +849,10 @@ _CONTRACT_SECTIONS = (
     ("population", "check_id", "population check"),
 )
 _CONTRACT_STATUSES = ("pass", "fail", "error", "unsupported", "pending")
+#: How the runner's run-level row names the shared parameter check. Contract
+#: 1.0.0 continued "in ..."; 1.1.0 added node metadata and band order before
+#: it, so only this stem is fixed.
+RUN_LEVEL_CHECK_PREFIX = "every parameter's dated values and metadata"
 
 
 def reform_contract(
@@ -1135,9 +1139,7 @@ def reform_contract(
                 )
             elif rows[0].get("status") not in ("pass", "fail", "error"):
                 malformed.append(f"run-level check {case}@{route} did not run")
-            elif not (rows[0].get("check") or "").startswith(
-                "every parameter's dated values and metadata in "
-            ):
+            elif not (rows[0].get("check") or "").startswith(RUN_LEVEL_CHECK_PREFIX):
                 malformed.append(
                     f"run-level check {case}@{route} does not identify the shared parameter check"
                 )
