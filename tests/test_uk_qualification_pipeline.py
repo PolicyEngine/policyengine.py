@@ -736,6 +736,18 @@ def test_reading_replay_state():
         state_ref="replay-state",
     )
     assert gate.status == "fail" and "no REPLAY_RECEIPT.json" in gate.summary
+    # The mirror accepts an explicit null the status schema forbids; reading
+    # it refuses rather than trusting it.
+    with pytest.raises(ValueError, match="replay_status.v1.json"):
+        read_replay(
+            request,
+            fetch=lambda ref, path: (
+                json.dumps({**running, "receipt_sha256": None}).encode()
+                if path.endswith("STATUS.json")
+                else None
+            ),
+            state_ref="replay-state",
+        )
 
 
 def test_assembled_receipt_without_replay_is_incomplete():

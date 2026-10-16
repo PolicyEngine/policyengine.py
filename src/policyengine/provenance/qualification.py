@@ -1238,13 +1238,16 @@ def evaluate_replay_receipt(
                 )
             )
             lost = True
-        elif where in listed_inert and (zero_total or "inertness" in flags):
-            # The candidate's own inert list decides: a lost response above,
-            # or a known gap.
+        elif where in listed_inert and zero_total:
+            # The candidate's own inert list decides: a lost response above.
             lost = True
         elif zero_total:
             regressions.append(item("lost_response", row, why="£0 against the base"))
             lost = True
+        if where in listed_inert:
+            # The candidate's inert list decides its inertness (a lost response
+            # above, or a known gap); the row's other flags are judged as usual.
+            flags = flags - {"inertness"}
         if not lost and flags & REVIEW_REPLAY_FLAGS:
             if "coverage" in flags and row.base_gbp is None:
                 kind = (

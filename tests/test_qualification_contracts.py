@@ -745,6 +745,7 @@ def _receipt_with(
     missing=None,
     unsupported=(),
     base_events=None,
+    sealed=True,
 ):
     """The golden receipt with these flagged rows (measure-year totals unless
     a row says otherwise), counts that match them, and this event state.
@@ -782,7 +783,7 @@ def _receipt_with(
     if base_events is not None:
         doc["diff"]["base_events"] = base_events
     doc["integrity"]["status"] = integrity
-    return _sealed(doc)
+    return _sealed(doc) if sealed else doc
 
 
 # The regression table of the d1344 decision record (second review), plus the
@@ -1213,6 +1214,112 @@ def test_the_known_gap_rule_on_the_review_probes(name):
     gate = _gate(receipt)
     assert gate.status == status, (name, gate.summary)
     assert len(gate.details["known_gaps"]) == known, name
+
+
+def test_a_known_inert_gap_excuses_only_its_inertness_flag():
+    """Round 2 of #637: the row's other flags are still judged."""
+
+    def gate(flags):
+        receipt = _receipt_with(
+            rows=[{"flags": flags, "base_gbp": 0.0, "head_gbp": 0.0}],
+            inert=[GAP],
+            complete=False,
+            integrity="incomplete",
+            missing=[],
+            base_events={EVENT: _base_event(inert=[GAP])},
+        )
+        _validator("replay_receipt.v1.json").validate(receipt)
+        return _gate(receipt)
+
+    assert gate(["inertness"]).status == "pass"
+    mixed = gate(["inertness", "construction"])
+    assert mixed.status == "needs_review"
+    assert [item["kind"] for item in mixed.details["review_items"]] == ["flagged_move"]
+
+
+# Round 2 of #637: combinations of a known gap with other rules, and
+# evidence that must stay within its own event.
+def test_a_known_gap_never_excuses_a_complete_event_listing_a_gap():
+    for inert, missing in (([GAP], []), ([], [GAP])):
+        gate = _gate(
+            _receipt_with(
+                inert=inert,
+                missing=missing,
+                base_events={EVENT: _base_event(inert=[GAP])},
+            )
+        )
+        assert gate.status == "fail"
+        assert [r["kind"] for r in gate.details["regressions"]] == ["contradiction"]
+        assert gate.details["policy"] == REPLAY_POLICY_ID
+
+
+def test_a_known_gap_never_excuses_a_counted_mapping_flag_or_a_lost_result():
+    mapping = _gate(
+        _receipt_with(
+            inert=[GAP],
+            missing=[],
+            complete=False,
+            integrity="incomplete",
+            counts={"mapping": 1},
+            base_events={EVENT: _base_event(inert=[GAP])},
+        )
+    )
+    assert mapping.status == "fail" and len(mapping.details["known_gaps"]) == 1
+    assert mapping.details["regressions"] == [
+        {"kind": "counted_flag", "flag": "mapping", "count": 1}
+    ]
+    lost = _gate(
+        _receipt_with(
+            rows=[{"flags": ["coverage"], "base_gbp": 5e8, "head_gbp": None}],
+            missing=[GAP],
+            complete=False,
+            integrity="incomplete",
+            base_events={EVENT: _base_event(inert=[GAP])},
+        )
+    )
+    assert lost.status == "fail"
+    assert [r["kind"] for r in lost.details["regressions"]] == ["lost_result"]
+
+
+@pytest.mark.parametrize("candidate", ["inert", "missing"])
+def test_base_evidence_never_crosses_into_another_event(candidate):
+    """The same measure-year in a second event, which the base did not
+    replay, is not excused by the first event's record."""
+
+    receipt = _receipt_with(
+        inert=[GAP] if candidate == "inert" else [],
+        missing=[] if candidate == "inert" else [GAP],
+        complete=False,
+        integrity="incomplete",
+        base_events={EVENT: _base_event(inert=[GAP])},
+        sealed=False,
+    )
+    receipt["corpus"]["events"]["autumn_budget_2025"] = copy.deepcopy(
+        receipt["corpus"]["events"][EVENT]
+    )
+    gate = _gate(_sealed(receipt))
+    assert gate.status == "fail"
+    assert [(gap["event"], gap["candidate"]) for gap in gate.details["known_gaps"]] == [
+        (EVENT, candidate)
+    ]
+    assert {r["event"] for r in gate.details["regressions"]} == {"autumn_budget_2025"}
+    expected = (
+        ["lost_response", "incomplete"] if candidate == "inert" else ["incomplete"]
+    )
+    assert [r["kind"] for r in gate.details["regressions"]] == expected
+
+
+def test_a_known_missing_gap_never_hides_another_missing_measure_year():
+    gate = _gate(
+        _receipt_with(
+            missing=[GAP, (MEASURE, 2027)],
+            complete=False,
+            integrity="incomplete",
+            base_events={EVENT: _base_event(missing=[GAP])},
+        )
+    )
+    assert gate.status == "fail" and len(gate.details["known_gaps"]) == 1
+    assert gate.details["regressions"][0]["measure_years"] == [[MEASURE, 2027]]
 
 
 def test_an_incomplete_event_without_its_missing_list_fails_even_with_base_evidence():
