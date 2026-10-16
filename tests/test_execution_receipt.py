@@ -29,6 +29,7 @@ Invariants tested here:
 
 from __future__ import annotations
 
+import ast
 import copy
 import datetime
 import decimal
@@ -43,10 +44,11 @@ import os
 import re
 import subprocess
 import sys
+import typing
 from collections.abc import Mapping
 from importlib import metadata
 from pathlib import Path
-from types import CodeType, SimpleNamespace
+from types import CodeType, ModuleType, SimpleNamespace
 from typing import Union, get_args
 from urllib.parse import urlparse
 
@@ -2048,6 +2050,41 @@ def test_builder_rechecks_each_composition_member_after_the_run(
         sys.modules.pop(name, None)
 
 
+@pytest.mark.parametrize("stale_first", [True, False])
+def test_every_composition_member_is_rechecked_wherever_it_sits(
+    dataset_file, tmp_path, stale_first
+):
+    """#579 round-5 review: a stale member is caught in any position."""
+
+    name = "w4_receipt_compose_position"
+    try:
+        module, _ = _import_source(tmp_path, name, MEASURE_SOURCE.format(rate=0.21))
+        live = _measure_identity(module)
+        members = [live, _member(7)] if stale_first else [_member(7), live]
+        identity = composed_reform_identity(members, applied_before_data_load=False)
+        module.RATE = 0.30
+        with pytest.raises(ReceiptError, match="modifier changed after its identity"):
+            _build(dataset_file, reform=identity, baseline=CURRENT_LAW)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize("shape", ["alone", "mixed", "nested"])
+def test_a_current_law_member_that_gains_changes_is_caught(dataset_file, shape):
+    """#579 round-5 review: a member dropped as current law is still rechecked."""
+
+    scenario = _scenario()
+    member = scenario_reform_identity(scenario, code_revision=REVISION)
+    assert member.kind == "current_law"
+    members = [member] if shape == "alone" else [member, _member(7)]
+    identity = composed_reform_identity(members, applied_before_data_load=False)
+    if shape == "nested":
+        identity = composed_reform_identity([identity], applied_before_data_load=False)
+    scenario.parameter_changes = {"gov.hmrc.income_tax.rates.uk[0].rate": 0.21}
+    with pytest.raises(ReceiptError, match="changed after its identity was computed"):
+        _build(dataset_file, reform=identity, baseline=CURRENT_LAW)
+
+
 def test_composing_refuses_a_member_that_changed_since_it_was_bound(tmp_path):
     name = "w4_receipt_compose_stale_member"
     try:
@@ -2073,6 +2110,18 @@ def test_an_unchanged_composition_still_builds_and_ignores_later_list_edits(
     # The handle is process-local: it is not part of equality or the dump.
     loaded = type(identity).model_validate(identity.model_dump())
     assert loaded == identity and loaded._recompute_identity is None
+
+
+def test_a_certificate_for_other_bytes_gives_an_uncertified_receipt(dataset_file):
+    """Round-16 review: a certificate whose dataset hash differs from the bytes
+    run is not an error, just not a certificate for this run."""
+
+    bundle = _bundle_for(dataset_file.read_bytes())
+    bundle["data_releases"]["uk"]["certified_data_artifact"]["sha256"] = "0" * 64
+    receipt = _build(dataset_file, bundle=bundle)
+    assert receipt.certification_status == "uncertified"
+    assert receipt.certificate is None
+    assert receipt.data.dataset_sha256 != "0" * 64
 
 
 def test_unchanged_scenario_still_builds_after_a_run(dataset_file):
@@ -3755,6 +3804,62 @@ def test_aliases_of_refused_names_are_refused(tmp_path, header, body, match):
         sys.modules.pop(name, None)
 
 
+@pytest.mark.parametrize(
+    ("body", "refused"),
+    [
+        pytest.param(
+            "    def helper(id):\n        return id\n\n"
+            "    simulation.rate = helper(0.21)\n",
+            True,
+            id="read-parameter",
+        ),
+        pytest.param(
+            "    for id in [0.21]:\n        simulation.rate = 0.21\n",
+            True,
+            id="assignment-target",
+        ),
+        pytest.param(
+            "    def helper(id):\n        return 0.21\n\n"
+            "    simulation.rate = helper(1)\n",
+            False,
+            id="unread-parameter",
+        ),
+        pytest.param(
+            "    def id():\n        return 0.21\n\n    simulation.rate = 0.21\n",
+            False,
+            id="unread-function-name",
+        ),
+        pytest.param(
+            "    simulation.id = 3\n    simulation.rate = 0.21\n",
+            False,
+            id="attribute",
+        ),
+        pytest.param(
+            "    def helper(**amounts):\n        return 0.21\n\n"
+            "    simulation.rate = helper(id=3)\n",
+            False,
+            id="keyword-argument",
+        ),
+    ],
+)
+def test_refused_names_are_refused_where_code_uses_them_as_variables(
+    tmp_path, body, refused
+):
+    """Round-17 review P3: the guard reads names, as docs/receipts.md says."""
+
+    source = "def raise_rate(simulation):\n" + body
+    name = "w4_receipt_r17_names"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        if refused:
+            with pytest.raises(ReceiptError, match="uses id"):
+                _identity(module.raise_rate)
+        else:
+            assert _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
 def test_an_import_rebound_at_run_time_is_refused(tmp_path):
     """Round-7 review M4: the name must still be what its import binds."""
 
@@ -5018,6 +5123,59 @@ def test_a_quoted_special_form_with_a_flipped_flag_is_refused(tmp_path, quoted):
         sys.modules.pop(name, None)
 
 
+def test_a_flag_poisoned_before_anything_binds_is_refused(tmp_path):
+    """Round-19 review: in a fresh process, poison typing's cached
+    ``Final['_receipt_forward_probe']`` before any binding, then bind a module
+    whose annotation reuses it. The interpreter's own flag still decides."""
+
+    name = "w4_receipt_r19_fresh_poison"
+    path = tmp_path / f"{name}.py"
+    path.write_text(
+        "from typing import Final\n\n\n"
+        "def _helper(value: Final['_receipt_forward_probe']):\n    return value\n\n\n"
+        "def raise_rate(simulation):\n    simulation.rate = 0.21\n"
+    )
+    script = (
+        "import importlib.util, sys\n"
+        "from typing import Final, get_args\n"
+        # Import first: importing policyengine builds enough typing aliases to
+        # evict a poisoned entry from typing's cache before the module reuses it.
+        "from policyengine.provenance.receipt import ReceiptError, _modifier_identity\n"
+        "alias = Final['_receipt_forward_probe']\n"
+        "(ref,) = get_args(alias)\n"
+        "ref.__forward_is_class__ = not ref.__forward_is_class__\n"
+        f"spec = importlib.util.spec_from_file_location({name!r}, {str(path)!r})\n"
+        "module = importlib.util.module_from_spec(spec)\n"
+        f"sys.modules[{name!r}] = module\n"
+        "spec.loader.exec_module(module)\n"
+        "assert module._helper.__annotations__['value'] is alias, 'not poisoned'\n"
+        "try:\n"
+        "    _modifier_identity(module.raise_rate, REVISION)\n"
+        "except ReceiptError as error:\n"
+        "    print('refused:', error)\n"
+        "else:\n"
+        "    print('bound')\n"
+    ).replace("REVISION", repr(dict(REVISION)))
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        env={
+            **os.environ,
+            "POLICYENGINE_SKIP_COUNTRY_IMPORTS": "1",
+            # This process's import path, absolute, so the child imports the
+            # same policyengine whatever its working directory.
+            "PYTHONPATH": os.pathsep.join(
+                str(Path(entry).resolve()) for entry in sys.path if entry
+            ),
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=tmp_path,
+    )
+    assert result.stdout.startswith("refused:"), result.stdout + result.stderr
+    assert "annotation for value" in result.stdout
+
+
 def test_subscripted_annotations_without_typing_origins_are_refused(
     tmp_path, monkeypatch
 ):
@@ -5514,6 +5672,17 @@ def test_generic_type_parameters_must_be_those_the_def_made(tmp_path, change, ma
         sys.modules.pop(name, None)
 
 
+def _deeply_quoted(leaf: str, depth: int = 80, layers: int = 4) -> str:
+    """``leaf`` under ``layers`` quoted forward references, each nesting it in
+    ``depth`` builtin tuples: within the parser's limit per string, and deeper
+    than a recursive walk of the whole expression can go."""
+
+    expression = leaf
+    for _ in range(layers):
+        expression = repr("tuple[int, " * depth + expression + "]" * depth)
+    return expression
+
+
 RUNTIME_ALIAS_HEAD = (
     "import collections.abc\nimport typing\nfrom decimal import Decimal\n"
     "from typing import Annotated, Dict, List, Literal, Optional, Union\n\n\n"
@@ -5583,6 +5752,13 @@ RUNTIME_ALIAS_HEAD = (
             "    simulation.rate = 0.21 if Amounts else 0.0\n",
             "List",
             id="quoted-class-body-annotation",
+        ),
+        pytest.param(
+            # Round-16 review: Optional is a union too.
+            "    shape = List[Optional[Decimal]]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="list-of-an-optional",
         ),
         pytest.param(
             "    shape = Union[Union[Decimal, float], None]\n"
@@ -5663,6 +5839,380 @@ RUNTIME_ALIAS_HEAD = (
             "RootModel",
             id="pydantic-generic-model",
         ),
+        pytest.param(
+            # Round-17 review P2: a helper rebinds Annotated to Tuple, so the
+            # quoted "metadata" may be a type argument.
+            "    from typing import Tuple as Annotated\n\n"
+            "    shape = List['Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="annotated-rebound-to-tuple",
+        ),
+        pytest.param(
+            "    from typing import Tuple as Annotated\n\n"
+            "    shape = List[Annotated[float, 'List[Union[Decimal, float]]']]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="unquoted-annotated-rebound-to-tuple",
+        ),
+        pytest.param(
+            # Round-18 review P2: an assignment rebinds the name too.
+            "    Annotated = typing.Tuple\n\n"
+            "    shape = List['Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="annotated-assigned-a-tuple",
+        ),
+        pytest.param(
+            "    def helper(Annotated):\n"
+            "        return List[Annotated[float, 'List[Union[Decimal, float]]']]\n\n"
+            "    simulation.rate = 0.21 if helper(typing.Tuple) else 0.0\n",
+            "List",
+            id="nested-parameter-named-annotated",
+        ),
+        pytest.param(
+            "    Literal = typing.Tuple\n\n"
+            "    shape = Literal['List[Union[Decimal, float]]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "Literal",
+            id="literal-assigned-a-tuple",
+        ),
+        pytest.param(
+            # A forward reference evaluated without locals binds := targets
+            # in the module, so a later reference reads the new object.
+            "    first = List['(Annotated := typing.Tuple)']\n"
+            "    shape = List['Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if first and shape else 0.0\n",
+            "List",
+            id="walrus-in-a-forward-reference",
+        ),
+        pytest.param(
+            "    shape = List['(lambda Annotated: "
+            'Annotated[float, "List[Union[Decimal, float]]"])(typing.Tuple)\']\n'
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="lambda-parameter-in-a-forward-reference",
+        ),
+        pytest.param(
+            # Round-19 review: an import not loaded when the receipt is built
+            # binds an unknown object, here in place of typing.
+            "    import w4_receipt_r19_not_loaded as typing\n\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="annotated-through-an-unloaded-import",
+        ),
+        pytest.param(
+            "    import w4_receipt_r19_not_loaded as aliases\n\n"
+            "    shape = aliases.Sequence[Union[Decimal, float]]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "aliases.Sequence",
+            id="subscript-of-an-unloaded-import",
+        ),
+        pytest.param(
+            "    from w4_receipt_r19_not_loaded import MONEY\n\n"
+            "    shape = List[MONEY]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="list-of-a-name-from-an-unloaded-module",
+        ),
+        pytest.param(
+            "    import w4_receipt_r19_not_loaded as MONEY\n\n"
+            "    shape = List[MONEY]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="list-of-an-unloaded-module",
+        ),
+        pytest.param(
+            "    from .w4_receipt_r19_not_loaded import MONEY\n\n"
+            "    shape = List[MONEY]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="list-of-a-name-from-an-unresolvable-relative-import",
+        ),
+        # Round 20 (#632 round 4): code that changes what a name resolves to
+        # without binding it earns no exemption.
+        pytest.param(
+            "    import sys\n\n"
+            "    sys.modules[__name__].Annotated = typing.Tuple\n"
+            "    shape = List['Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="module-global-rebound-through-sys-modules",
+        ),
+        pytest.param(
+            "    setattr(typing, 'Annotated', typing.Tuple)\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="attribute-rebound-by-setattr",
+        ),
+        pytest.param(
+            "    typing.Annotated = typing.Tuple\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="typing-attribute-stored",
+        ),
+        pytest.param(
+            "    import sys\n    import typing_extensions as te\n\n"
+            "    sys.modules['typing_extensions'] = typing\n"
+            "    shape = List['te.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="module-swapped-in-sys-modules",
+        ),
+        pytest.param(
+            # The root of an attribute chain rebound locally.
+            "    from types import SimpleNamespace\n\n"
+            "    typing = SimpleNamespace(Annotated=Union)\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="attribute-chain-root-rebound",
+        ),
+        pytest.param(
+            "    import w4_receipt_r19_not_loaded as typing\n\n"
+            "    shape = typing.Annotated[float, 'List[Union[Decimal, float]]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "typing.Annotated",
+            id="annotated-whose-only-binding-is-unresolved",
+        ),
+        pytest.param(
+            "    class Annotated:\n        pass\n\n"
+            "    shape = List['Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="nested-class-named-annotated",
+        ),
+        pytest.param(
+            "    match typing.Tuple:\n"
+            "        case Annotated:\n"
+            "            shape = List['Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="match-capture-named-annotated",
+        ),
+        pytest.param(
+            "    try:\n        shape = None\n"
+            "    except Exception as Annotated:\n"
+            "        shape = List['Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="except-capture-named-annotated",
+        ),
+        pytest.param(
+            # A := inside a string inside a string.
+            "    first = List['\"(Annotated := typing.Tuple)\"']\n"
+            "    shape = List['Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if first and shape else 0.0\n",
+            "List",
+            id="walrus-in-a-nested-forward-reference",
+        ),
+        pytest.param(
+            "    from w4_receipt_r15_aliases import Box\n\n"
+            "    shape = Box.Sequence[Union[Decimal, float]]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "Box.Sequence",
+            id="attribute-of-an-imported-class",
+        ),
+        pytest.param(
+            "    from typing import Tuple as Literal\n\n"
+            "    shape = Literal['List[Union[Decimal, float]]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "Literal",
+            id="literal-rebound-to-tuple",
+        ),
+        pytest.param(
+            # Round-17 review P3: quoted layers nest deeper than the
+            # interpreter's recursion limit allows a recursive walk.
+            "    def helper(value: List["
+            + _deeply_quoted("Union[Decimal, float]")
+            + "]):\n        return value\n\n"
+            "    simulation.rate = 0.21\n",
+            "List",
+            id="union-under-deeply-quoted-layers",
+        ),
+        # Round 21 (#632 round 5): routes that rebind a name the receipt can
+        # see without binding it in the function.
+        pytest.param(
+            "    typing.Annotated = typing.Tuple\n"
+            "    from typing import Annotated as A\n\n"
+            "    shape = List['A[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="import-renaming-a-stored-name",
+        ),
+        pytest.param(
+            "    from sys import modules\n\n"
+            "    modules['typing_extensions'] = typing\n"
+            "    shape = List['Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="modules-imported-by-name",
+        ),
+        pytest.param(
+            "    import sys\n\n"
+            "    found = getattr(sys, 'modules')\n"
+            "    shape = List['Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape and found else 0.0\n",
+            "List",
+            id="modules-read-by-getattr",
+        ),
+        pytest.param(
+            "    put = setattr\n"
+            "    put(typing, 'Annotated', typing.Tuple)\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="setattr-through-an-alias",
+        ),
+        pytest.param(
+            "    list(map(setattr, [typing], ['Annotated'], [typing.Tuple]))\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="setattr-through-map",
+        ),
+        pytest.param(
+            '    first = \'setattr(typing, "Annot" + "ated", typing.Tuple) or int\'\n'
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if first and shape else 0.0\n",
+            "List",
+            id="forward-reference-calling-setattr",
+        ),
+        pytest.param(
+            "    first = 'globals().update(Annotated=typing.Tuple) or int'\n"
+            "    shape = List['Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if first and shape else 0.0\n",
+            "List",
+            id="forward-reference-calling-globals",
+        ),
+        pytest.param(
+            "    first = 'sys.modules.update(typing_extensions=typing) or int'\n"
+            "    shape = List['Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if first and shape else 0.0\n",
+            "List",
+            id="forward-reference-using-modules",
+        ),
+        pytest.param(
+            "    del typing.Annotated\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="attribute-deleted",
+        ),
+        pytest.param(
+            "    delattr(typing, 'Annotated')\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="attribute-deleted-by-delattr",
+        ),
+        pytest.param(
+            # A string that holds only a nested string is inspected.
+            "    shape = \"'List[Union[Decimal, float]]'\"\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="union-in-a-string-inside-a-string",
+        ),
+        pytest.param(
+            # Past the limit in the scan for bindings, no exemption is
+            # granted: 25,001 walrus forward references of 4 nodes each.
+            "    names = [" + ", ".join("'(x := 1)'" for _ in range(25_001)) + "]\n"
+            "    shape = Literal['List[Union[Decimal, float]]']\n"
+            "    simulation.rate = 0.21 if names and shape else 0.0\n",
+            "Literal",
+            id="exemptions-withheld-past-the-scan-limit",
+        ),
+        # Round 22 (#632 round 6): mutants of round 21's rules that moved
+        # money on inputs it refuses.
+        pytest.param(
+            "    import importlib\n\n"
+            "    kit = importlib.import_module('builtins')\n"
+            "    kit.setattr(typing, 'Annotated', typing.Tuple)\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="setattr-reached-as-an-attribute",
+        ),
+        pytest.param(
+            "    from sys import modules as found\n\n"
+            "    found['typing_extensions'] = typing\n"
+            "    shape = List['Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="modules-imported-under-another-name",
+        ),
+        pytest.param(
+            '    first = \'__builtins__.get("set" + "attr")(typing, "Annotated", typing.Tuple) or int\'\n'
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if first and shape else 0.0\n",
+            "List",
+            id="forward-reference-calling-through-builtins",
+        ),
+        pytest.param(
+            "    first = 'typing.__setattr__(\"Annotated\", typing.Tuple) or int'\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if first and shape else 0.0\n",
+            "List",
+            id="forward-reference-calling-a-dunder",
+        ),
+        pytest.param(
+            # A store with no call inside a forward reference still counts.
+            "    first = '[0 for typing.Annotated in [typing.Tuple]] and int'\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if first and shape else 0.0\n",
+            "List",
+            id="forward-reference-storing-in-a-comprehension",
+        ),
+        # Round 7 of #632: a store to a subscript or attribute runs code
+        # (__setitem__, __setattr__) with no call, so it counts as one.
+        pytest.param(
+            "    first = '[0 for typing.__dict__[\"Annotated\"] in [typing.Tuple]] and int'\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if first and shape else 0.0\n",
+            "List",
+            id="forward-reference-storing-through-a-subscript",
+        ),
+        pytest.param(
+            "    import sys\n\n"
+            "    first = '[0 for sys.modules[\"typing_extensions\"] in [typing]] and int'\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if first and shape else 0.0\n",
+            "List",
+            id="forward-reference-storing-into-modules",
+        ),
+        pytest.param(
+            "    first = '[0 for typing.__class__ in [typing.__class__]] and int'\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if first and shape else 0.0\n",
+            "List",
+            id="forward-reference-storing-a-dunder-attribute",
+        ),
+        # The changelog's examples of an attribute of something other than a
+        # module, inside a typing generic or subscripted with a union.
+        pytest.param(
+            "    import pandas as pd\n\n"
+            "    shape = List[pd.DataFrame.dtypes]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="typing-generic-over-a-class-attribute",
+        ),
+        pytest.param(
+            "    from http import HTTPStatus\n\n"
+            "    shape = HTTPStatus.OK.phrase[0 | 0]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "HTTPStatus.OK.phrase",
+            id="enum-member-attribute-subscripted-with-a-union",
+        ),
+        pytest.param(
+            "    import w4_receipt_r19_not_loaded as aliases\n\n"
+            "    shape = 'aliases.Sequence[Decimal | float]'\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "aliases.Sequence",
+            id="forward-reference-to-an-unloaded-module",
+        ),
     ],
 )
 def test_typing_aliases_built_with_a_union_inside_functions_are_refused(
@@ -5682,12 +6232,16 @@ def test_typing_aliases_built_with_a_union_inside_functions_are_refused(
         _import_source(
             tmp_path,
             "w4_receipt_r15_aliases",
-            "from decimal import Decimal\n\nMONEY = Decimal | float\n",
+            "import typing\nfrom decimal import Decimal\n\nMONEY = Decimal | float\n\n\n"
+            "class Box:\n    Sequence = typing.Sequence\n",
         )
         module, _ = _import_source(tmp_path, name, source)
         with pytest.raises(
             ReceiptError,
-            match=rf"function raise_rate subscripts {re.escape(base)} with a union",
+            match=(
+                rf"function raise_rate subscripts {re.escape(base)} with "
+                r"(a union|a name the receipt cannot resolve)"
+            ),
         ) as refused:
             _identity(module.raise_rate)
         assert "cannot be bound" in str(refused.value)
@@ -5757,9 +6311,108 @@ def test_typing_aliases_built_with_a_union_inside_functions_are_refused(
             id="literal-values-and-annotated-metadata",
         ),
         pytest.param(
+            # Round-16 review: metadata inside a quoted Annotated is a value.
+            "    def period(kind: List['Annotated[float, \"weekly | monthly\"]']):\n"
+            "        return kind\n\n"
+            "    def plain(kind: List[Annotated[float, 'weekly | monthly']]):\n"
+            "        return kind\n\n"
+            "    simulation.rate = 0.21 if period([1.0]) and plain([1.0]) else 0.0\n",
+            id="quoted-annotated-metadata",
+        ),
+        pytest.param(
             "    label = 'income_tax'\n    path = 'gov.hmrc.rates[0]'\n"
             "    simulation.rate = 0.21 if label and path else 0.0\n",
             id="ordinary-strings",
+        ),
+        pytest.param(
+            "    def helper(value: List["
+            + _deeply_quoted("float")
+            + "]):\n        return value\n\n"
+            "    simulation.rate = 0.21\n",
+            id="deeply-quoted-layers-without-a-union",
+        ),
+        pytest.param(
+            "    import w4_receipt_r19_not_loaded as aliases\n\n"
+            "    shape = aliases.Sequence[float]\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            id="unloaded-import-without-a-union",
+        ),
+        pytest.param(
+            "    def pick(table, mask):\n        return table.rows[mask | 1]\n\n"
+            "    simulation.rate = 0.21 if pick else 0.0\n",
+            id="parameter-attribute-subscript-with-bitwise-or",
+        ),
+        pytest.param(
+            # Round 20: Literal values and Annotated metadata that are enum
+            # members (attributes of a class) are values.
+            "    from http import HTTPStatus\n\n"
+            "    def accepted(code: Literal[HTTPStatus.OK, HTTPStatus.CREATED]):\n"
+            "        return code\n\n"
+            "    def weight(value: Annotated[float, HTTPStatus.OK]):\n"
+            "        return value\n\n"
+            "    simulation.rate = 0.21 if accepted and weight else 0.0\n",
+            id="enum-members-as-literal-values-and-metadata",
+        ),
+        pytest.param(
+            "    shape = typing.Literal['List[Union[Decimal, float]]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            id="attribute-form-literal-value",
+        ),
+        pytest.param(
+            # A store on the simulation is not a rebinding of a typing name.
+            "    def period(kind: List['Annotated[float, \"weekly | monthly\"]']):\n"
+            "        return kind\n\n"
+            "    simulation.rate = 0.21 if period([1.0]) else 0.0\n"
+            "    simulation.label = 'weekly'\n",
+            id="quoted-metadata-beside-a-simulation-store",
+        ),
+        pytest.param(
+            # Round 21 (#632 round 5): bracketed parameter paths subscript no
+            # name the receipt can resolve, so they are not counted; 7,000 of
+            # them were refused as too many to inspect.
+            "".join(
+                f"    simulation.set_parameter("
+                f"'gov.hmrc.income_tax.rates.uk[0].threshold_{index}', {index})\n"
+                for index in range(7_000)
+            )
+            + "    simulation.rate = 0.21\n",
+            id="many-bracketed-parameter-paths",
+        ),
+        pytest.param(
+            # Labels do not count toward the binding scan's limit either, so
+            # the changelog's quoted metadata keeps its exemption beside them.
+            "    codes = ["
+            + ", ".join(f"'E{index:08d}'" for index in range(34_000))
+            + "]\n"
+            "    def period(kind: List['Annotated[float, \"weekly | monthly\"]']):\n"
+            "        return kind\n\n"
+            "    simulation.rate = 0.21 if codes and period([1.0]) else 0.0\n",
+            id="quoted-metadata-beside-many-labels",
+        ),
+        pytest.param(
+            "    rate = getattr(simulation, 'rate', 0.0)\n"
+            "    def period(kind: List['Annotated[float, \"weekly | monthly\"]']):\n"
+            "        return kind\n\n"
+            "    simulation.rate = rate if period([1.0]) else 0.0\n",
+            id="quoted-metadata-beside-a-literal-getattr",
+        ),
+        pytest.param(
+            # Round 22 (#632 round 6): a label calls nothing, so it cannot
+            # run code, whatever it names.
+            "    import pandas as pd\n\n"
+            "    frame = pd.DataFrame({'id': [1.0], 'person.id': [2.0]})\n"
+            "    guard = ['eval', '__main__']\n"
+            "    def period(amount: Annotated[float, 'weekly | monthly']):\n"
+            "        return amount\n\n"
+            "    simulation.rate = 0.21 if period(frame) is not None and guard else 0.0\n",
+            id="quoted-metadata-beside-labels-naming-builtins",
+        ),
+        pytest.param(
+            "    modules = ['income_tax', 'vat']\n"
+            "    def period(kind: List['Annotated[float, \"weekly | monthly\"]']):\n"
+            "        return kind\n\n"
+            "    simulation.rate = 0.21 if modules and period([1.0]) else 0.0\n",
+            id="quoted-metadata-beside-a-local-named-modules",
         ),
     ],
 )
@@ -5775,6 +6428,374 @@ def test_ordinary_types_and_subscripts_inside_functions_bind(tmp_path, body):
         assert _identity(module.raise_rate)
     finally:
         sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize(
+    "poison",
+    [
+        pytest.param("    typing.Annotated = typing.Tuple\n", id="stores-the-name"),
+        pytest.param(
+            "    import sys\n\n    sys.modules['typing_extensions'] = typing\n",
+            id="uses-modules",
+        ),
+        pytest.param(
+            "    put = setattr\n    put(typing, 'Annotated', typing.Tuple)\n",
+            id="aliases-setattr",
+        ),
+        pytest.param(
+            # Round 22 (#632 round 6, mutant m11).
+            "    import sys\n    from operator import attrgetter\n\n"
+            "    attrgetter('modules')(sys)['typing_extensions'] = typing\n",
+            id="reads-modules-by-name",
+        ),
+    ],
+)
+def test_a_sibling_function_can_withhold_the_exemption(tmp_path, poison):
+    """Round 21 (#632 round 5): a function can call a sibling that rebinds a
+    typing name for it, so stores and unsound routes count module-wide."""
+
+    source = (
+        RUNTIME_ALIAS_HEAD + "def poison():\n" + poison + "\n\n"
+        "def raise_rate(simulation):\n"
+        "    poison()\n"
+        "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+        "    simulation.rate = 0.21 if shape else 0.0\n"
+    )
+    name = "w4_receipt_r21_sibling"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match="function raise_rate subscripts List"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize(
+    ("sibling", "use"),
+    [
+        pytest.param(
+            "async def poison():\n    typing.Annotated = typing.Tuple\n",
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n",
+            id="async-sibling-store",
+        ),
+        pytest.param(
+            "def poison():\n    typing.Annotated = typing.Tuple\n",
+            "    from typing import Annotated as A\n\n"
+            "    shape = List['A[float, \"List[Union[Decimal, float]]\"]']\n",
+            id="sibling-store-then-import-rename",
+        ),
+    ],
+)
+def test_sibling_routes_withhold_the_exemption(tmp_path, sibling, use):
+    """Round 22 (#632 round 6, mutants m17 and m20)."""
+
+    source = (
+        RUNTIME_ALIAS_HEAD + sibling + "\n\n"
+        "def raise_rate(simulation):\n"
+        + use
+        + "    simulation.rate = 0.21 if shape else 0.0\n"
+    )
+    name = "w4_receipt_r22_sibling"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match="function raise_rate subscripts List"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_name_a_module_loads_lazily_is_resolved_as_python_resolves_it(tmp_path):
+    """Round 22 (#632 round 6): numpy 2 and pydantic 2 provide names through
+    a module __getattr__ (np.polynomial, pydantic.HttpUrl). The receipt reads
+    them as Python does, so the verdict does not depend on whether anything
+    has touched the name yet."""
+
+    package = tmp_path / "w4_receipt_r22lazyok"
+    package.mkdir()
+    (package / "__init__.py").write_text(
+        "def __getattr__(name):\n"
+        "    if name == 'Seq':\n"
+        "        import typing\n\n"
+        "        return typing.Sequence\n"
+        "    raise AttributeError(name)\n"
+    )
+    source = (
+        "import w4_receipt_r22lazyok\n"
+        + RUNTIME_ALIAS_HEAD
+        + "def raise_rate(simulation):\n"
+        "    def curve(points: Optional[w4_receipt_r22lazyok.Seq] = None):\n"
+        "        return points\n\n"
+        "    simulation.rate = 0.21 if curve() is None else 0.0\n"
+    )
+    name = "w4_receipt_r22_lazy_ok"
+    sys.path.insert(0, str(tmp_path))
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert "Seq" not in vars(sys.modules["w4_receipt_r22lazyok"])
+        assert _identity(module.raise_rate)
+    finally:
+        sys.path.remove(str(tmp_path))
+        for loaded in (name, "w4_receipt_r22lazyok"):
+            sys.modules.pop(loaded, None)
+
+
+def test_a_store_on_the_middle_of_a_chain_withholds_the_exemption(tmp_path):
+    """Round 21 (#632 round 5, mutant n_chain_last_only): any attribute of
+    the chain, not only its last, counts."""
+
+    package = tmp_path / "w4_receipt_r21pkg"
+    package.mkdir()
+    (package / "__init__.py").write_text("")
+    (package / "real.py").write_text("from typing import Annotated\n")
+    source = (
+        RUNTIME_ALIAS_HEAD + "import w4_receipt_r21pkg.real\n\n\n"
+        "def raise_rate(simulation):\n"
+        "    w4_receipt_r21pkg.real = typing\n"
+        "    shape = List['w4_receipt_r21pkg.real.Annotated"
+        '[float, "List[Union[Decimal, float]]"]\']\n'
+        "    simulation.rate = 0.21 if shape else 0.0\n"
+    )
+    name = "w4_receipt_r21_chain"
+    sys.path.insert(0, str(tmp_path))
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match="function raise_rate subscripts List"):
+            _identity(module.raise_rate)
+    finally:
+        sys.path.remove(str(tmp_path))
+        for loaded in (name, "w4_receipt_r21pkg", "w4_receipt_r21pkg.real"):
+            sys.modules.pop(loaded, None)
+
+
+@pytest.mark.parametrize("form", ["import-as", "from-import", "attribute-chain"])
+def test_a_lazy_loader_that_raises_does_not_crash_the_receipt(tmp_path, form):
+    """Round 21 (#632 round 5) and round 22 (round 6, m35 and L1): a package
+    whose module __getattr__ raises must not make building a receipt raise,
+    whether the name is imported inside the function or reached through a
+    module-level import; its submodule, not loaded yet, could be any object."""
+
+    package = tmp_path / "w4_receipt_r21lazy"
+    package.mkdir()
+    (package / "__init__.py").write_text(
+        "def __getattr__(name):\n    raise RuntimeError('lazy loader ran')\n"
+    )
+    importing = {
+        "import-as": "    import w4_receipt_r21lazy.sub as sub\n",
+        "from-import": "    from w4_receipt_r21lazy import sub\n",
+        "attribute-chain": "    sub = None\n",
+    }[form]
+    shape = (
+        "w4_receipt_r21lazy.sub.Sequence[float] if sub is None else None"
+        if form == "attribute-chain"
+        else "sub.Sequence[float]"
+    )
+    head = (
+        "import w4_receipt_r21lazy\n" + RUNTIME_ALIAS_HEAD
+        if form == "attribute-chain"
+        else RUNTIME_ALIAS_HEAD
+    )
+    source = (
+        head + "def raise_rate(simulation):\n" + importing + "\n"
+        f"    shape = {shape}\n"
+        "    simulation.rate = 0.21 if shape else 0.0\n"
+    )
+    name = "w4_receipt_r21_lazy"
+    sys.path.insert(0, str(tmp_path))
+    try:
+        import w4_receipt_r21lazy  # noqa: F401
+
+        module, _ = _import_source(tmp_path, name, source)
+        assert _identity(module.raise_rate)
+    finally:
+        sys.path.remove(str(tmp_path))
+        for loaded in (name, "w4_receipt_r21lazy"):
+            sys.modules.pop(loaded, None)
+
+
+def test_a_top_level_helpers_parameter_rebinds_the_name(tmp_path):
+    """Round 20: the function's own parameters count, not only nested ones."""
+
+    source = (
+        RUNTIME_ALIAS_HEAD + "def helper(Annotated):\n"
+        "    return List['Annotated[float, \"List[Union[Decimal, float]]\"]']\n\n\n"
+        "def raise_rate(simulation):\n"
+        "    simulation.rate = 0.21 if helper(typing.Tuple) else 0.0\n"
+    )
+    name = "w4_receipt_r20_top_level_parameter"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match="function helper subscripts List"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def _package(tmp_path, name, files):
+    root = tmp_path / name
+    root.mkdir()
+    for file, text in files.items():
+        (root / file).write_text(text)
+    sys.path.insert(0, str(tmp_path))
+    importlib.invalidate_caches()
+    return importlib.import_module(name)
+
+
+def test_import_as_follows_the_package_attribute_as_python_does(tmp_path):
+    """Round 20: ``import pkg.real as aliases`` binds getattr(pkg, "real"),
+    not sys.modules["pkg.real"]; a package that rebinds the attribute must
+    not leave the receipt reading the submodule."""
+
+    names = ["w4r20pkg", "w4r20pkg.real", "w4r20tuple"]
+    (tmp_path / "w4r20tuple.py").write_text("from typing import Tuple as Annotated\n")
+    _package(
+        tmp_path,
+        "w4r20pkg",
+        {
+            "real.py": "from typing import Annotated\n",
+            "__init__.py": "from . import real as _real\nimport w4r20tuple as real\n",
+        },
+    )
+    source = (
+        RUNTIME_ALIAS_HEAD + "def raise_rate(simulation):\n"
+        "    import w4r20pkg.real as aliases\n\n"
+        "    shape = List['aliases.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+        "    simulation.rate = 0.21 if shape else 0.0\n"
+    )
+    module_name = "w4_receipt_r20_import_as"
+    try:
+        module, _ = _import_source(tmp_path, module_name, source)
+        with pytest.raises(ReceiptError, match="subscripts List with"):
+            _identity(module.raise_rate)
+    finally:
+        for name in [*names, module_name]:
+            sys.modules.pop(name, None)
+        sys.path.remove(str(tmp_path))
+
+
+def test_an_attribute_a_loaded_package_lacks_is_unresolved(tmp_path):
+    """Round 20: a submodule not imported yet could be any object."""
+
+    _package(tmp_path, "w4r20bare", {"__init__.py": ""})
+    source = (
+        RUNTIME_ALIAS_HEAD + "def raise_rate(simulation):\n"
+        "    import w4r20bare.aliases\n\n"
+        "    shape = w4r20bare.aliases.Sequence[Union[Decimal, float]]\n"
+        "    simulation.rate = 0.21 if shape else 0.0\n"
+    )
+    module_name = "w4_receipt_r20_missing_attribute"
+    try:
+        module, _ = _import_source(tmp_path, module_name, source)
+        with pytest.raises(
+            ReceiptError, match="subscripts w4r20bare.aliases.Sequence with a union"
+        ):
+            _identity(module.raise_rate)
+    finally:
+        for name in ["w4r20bare", module_name]:
+            sys.modules.pop(name, None)
+        sys.path.remove(str(tmp_path))
+
+
+def test_forward_references_past_the_inspection_limit_are_refused(tmp_path):
+    """Round 20: past the limit the function is refused, not left
+    uninspected."""
+
+    many = "List[" + "int, " * 120_000 + "int]"
+    source = (
+        RUNTIME_ALIAS_HEAD + "def raise_rate(simulation):\n"
+        f"    shape = List['{many}']\n"
+        "    simulation.rate = 0.21 if shape else 0.0\n"
+    )
+    name = "w4_receipt_r20_limit"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(
+            ReceiptError, match="more forward-reference type expressions"
+        ):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_labels_do_not_count_toward_the_inspection_limit(tmp_path):
+    """Strings that parse to no type (codes, labels) are not inspected, so
+    a long table of them leaves a real forward reference checked."""
+
+    codes = ", ".join(f"'E{index:08d}'" for index in range(60_000))
+    source = (
+        RUNTIME_ALIAS_HEAD + "def raise_rate(simulation):\n"
+        f"    codes = [{codes}]\n"
+        "    shape = List['List[Union[Decimal, float]]']\n"
+        "    simulation.rate = 0.21 if codes and shape else 0.0\n"
+    )
+    name = "w4_receipt_r20_labels"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match="subscripts List with a union"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_string_too_deep_to_parse_is_refused(tmp_path):
+    """Round 20: a RecursionError while parsing fails closed."""
+
+    text = "x" + ".x" * 10_000
+    try:
+        ast.parse(text, mode="eval")
+    except RecursionError:
+        pass
+    else:
+        pytest.skip("this Python parses the chain")
+    for statement in (f"shape = Literal['{text}']", f"label = '{text}'"):
+        # Under a typing subscript, and as a plain string, which could be
+        # evaluated as a forward reference elsewhere.
+        source = (
+            RUNTIME_ALIAS_HEAD + "def raise_rate(simulation):\n"
+            f"    {statement}\n"
+            "    simulation.rate = 0.21\n"
+        )
+        name = "w4_receipt_r20_deep_string"
+        try:
+            module, _ = _import_source(tmp_path, name, source)
+            with pytest.raises(ReceiptError, match="too deeply nested"):
+                _identity(module.raise_rate)
+        finally:
+            sys.modules.pop(name, None)
+
+
+def test_a_deep_attribute_chain_is_resolved_and_reported_without_recursion():
+    """Round-18 review: resolution and the refusal message must not recurse
+    once per attribute. The tree is built directly, deeper than the
+    interpreter's recursion limit, as no parse of source could be relied on
+    to produce it."""
+
+    chain = ModuleType("w4_receipt_r18_chain")
+    chain.me = chain
+    chain.List = typing.List
+    sys.modules[chain.__name__] = chain
+    try:
+        base: ast.expr = ast.Name("me", ast.Load())
+        for _ in range(3 * sys.getrecursionlimit()):
+            base = ast.Attribute(base, "me", ast.Load())
+        base = ast.Attribute(base, "List", ast.Load())
+        function = ast.parse(
+            "def raise_rate(simulation):\n"
+            "    from w4_receipt_r18_chain import me\n\n"
+            "    shape = None\n"
+        ).body[0]
+        function.body[1].value = ast.Subscript(
+            base, ast.parse("Union[Decimal, float]", mode="eval").body, ast.Load()
+        )
+        module = ModuleType("w4_receipt_r18_deep")
+        module.Union = typing.Union
+        module.Decimal = decimal.Decimal
+        problem = receipt_module._runtime_alias_problem(
+            module, ast.Module([function], [])
+        )
+        assert problem is not None
+        assert "subscripts a deeply nested expression with a union" in problem
+    finally:
+        sys.modules.pop(chain.__name__, None)
 
 
 @pytest.mark.skipif(
@@ -6316,6 +7337,18 @@ def test_a_main_guard_redefining_a_function_is_refused(tmp_path):
             _identity(module.raise_rate)
     finally:
         sys.modules.pop(name, None)
+
+
+def test_a_string_subclass_hashes_as_its_value_not_its_str():
+    """#588 round-4 review: payload strings are written with str.__str__."""
+
+    class Rendered(str):
+        def __str__(self):
+            return "Infinity"
+
+    assert _reform_digest({CAP: {"2027": Rendered("1e3")}}) == _reform_digest(
+        {CAP: {"2027": "1e3"}}
+    )
 
 
 def test_typed_infinities_are_spelled_by_float_hex():
