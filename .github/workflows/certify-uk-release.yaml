@@ -188,6 +188,9 @@ jobs:
         id: duplicate
         env:
           ATTEMPT: ledger/uk/${{ needs.resolve.outputs.pair_id }}/attempts/${{ needs.resolve.outputs.attempt_key }}
+          # still-eligible asks gh whether an earlier attempt's run failed;
+          # without a token every unexpired failed run would read as live.
+          GH_TOKEN: ${{ github.token }}
         run: |
           .github/qualification-ledger.sh checkout ledger
           if [[ -d "$ATTEMPT" ]]; then

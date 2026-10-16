@@ -569,11 +569,33 @@ def _open_candidate_branches() -> dict[str, str]:
     return {item["headRefName"]: item["headRefOid"] for item in json.loads(listing)}
 
 
-def cmd_refresh_pr_checks(args: argparse.Namespace) -> int:
-    """Re-evaluate failed PR checks now that their exact receipt is published.
+#: A run is re-run until it has made this many attempts in all, so a genuine
+#: failure is not retried until a flaky test happens to pass.
+MAX_RUN_ATTEMPTS = 3
 
-    The PR workflow does not subscribe to edits or ready_for_review events.
-    GITHUB_TOKEN may re-run existing failed runs with actions: write.
+
+def _newest_runs(runs: list[dict[str, Any]]) -> dict[tuple[Any, Any], dict[str, Any]]:
+    """The newest run of each workflow (``path``) and event."""
+
+    newest: dict[tuple[Any, Any], dict[str, Any]] = {}
+    for run in runs:
+        key = (run.get("path"), run.get("event"))
+        if key not in newest or run.get("id", 0) > newest[key].get("id", 0):
+            newest[key] = run
+    return newest
+
+
+def cmd_refresh_pr_checks(args: argparse.Namespace) -> int:
+    """Re-run a candidate's unsuccessful newest runs once its receipt is out.
+
+    The PR workflow does not subscribe to edits or ready_for_review events,
+    and the run of the code-changes workflow on the candidate's own tree is
+    dispatched once, by ``prepare``. So for each workflow and event the
+    newest run on the candidate commit is re-run when it failed, timed out
+    or was cancelled (a job timeout cancels the run): a failed or timed-out
+    one by its failed jobs, a cancelled one in full. Older runs a newer one
+    replaced are left alone, and no run is re-run past ``MAX_RUN_ATTEMPTS``.
+    GITHUB_TOKEN may re-run existing runs with actions: write.
     """
 
     branches = _open_candidate_branches()
@@ -589,34 +611,35 @@ def cmd_refresh_pr_checks(args: argparse.Namespace) -> int:
                 f"repos/{LEDGER_REPOSITORY}/actions/runs?head_sha={head}&per_page=100",
                 "--paginate",
                 "--jq",
-                ".workflow_runs[] | {id, head_sha, event, status, conclusion} | tojson",
+                ".workflow_runs[] | {id, head_sha, path, event, status, conclusion,"
+                " run_attempt} | tojson",
             ],
             check=True,
             capture_output=True,
             text=True,
         ).stdout
-        for line in listing.splitlines():
-            run = json.loads(line)
+        runs = [
+            run
+            for run in (json.loads(line) for line in listing.splitlines() if line)
+            if run["head_sha"] == head
+            and run["event"] in ("pull_request", "workflow_dispatch")
+        ]
+        for run in _newest_runs(runs).values():
             if (
-                run["head_sha"] != head
-                or run["event"] not in ("pull_request", "workflow_dispatch")
-                or run["status"] != "completed"
-                or run["conclusion"] not in {"failure", "timed_out"}
+                run["status"] != "completed"
+                or run["conclusion"] not in {"failure", "timed_out", "cancelled"}
+                or int(run.get("run_attempt") or 1) >= MAX_RUN_ATTEMPTS
             ):
                 continue
             subprocess.run(
-                [
-                    "gh",
-                    "run",
-                    "rerun",
-                    str(run["id"]),
-                    "--repo",
-                    LEDGER_REPOSITORY,
-                    "--failed",
-                ],
+                ["gh", "run", "rerun", str(run["id"]), "--repo", LEDGER_REPOSITORY]
+                + ([] if run["conclusion"] == "cancelled" else ["--failed"]),
                 check=True,
             )
-            print(f"Re-running failed PR checks in run {run['id']} at {head}")
+            print(
+                f"Re-running {run['conclusion']} run {run['id']} "
+                f"({run.get('path')}, {run['event']}) at {head}"
+            )
     return 0
 
 
@@ -653,21 +676,65 @@ def cmd_promote(args: argparse.Namespace) -> int:
             ],
             check=False,
         )
+    # Only the plan's target may be ready, and only while _promote finds it
+    # on current main: any other ready candidate (left by a run that could
+    # not undo it, or by older code) goes back to draft.
+    returned = [
+        _set_ready(branch, False)
+        for branch in sorted(_ready_candidate_branches() - {plan.ready_branch})
+    ]
+    safe = True
     if plan.ready_branch is not None and plan.ready_commit is not None:
-        _promote(
+        safe = _promote(
             plan.ready_branch,
             plan.ready_commit,
             automatic=config()["promotion"]["automatic"],
         )
-    return 0
+    return 0 if all(returned) and safe else 1
 
 
-def _set_ready(branch: str, ready: bool) -> None:
-    subprocess.run(
-        ["gh", "pr", "ready", branch, "--repo", LEDGER_REPOSITORY]
-        + ([] if ready else ["--undo"]),
-        check=False,
+def _set_ready(branch: str, ready: bool) -> bool:
+    """Mark a candidate's pull request ready or draft; whether that worked.
+
+    A draft that stays ready could be merged onto a moved main, so a failed
+    return to draft is reported as an error for the run to fail on.
+    """
+
+    done = (
+        subprocess.run(
+            ["gh", "pr", "ready", branch, "--repo", LEDGER_REPOSITORY]
+            + ([] if ready else ["--undo"]),
+            check=False,
+        ).returncode
+        == 0
     )
+    if not done and not ready:
+        print(f"::error::could not return {branch} to draft")
+    return done
+
+
+def _ready_candidate_branches() -> set[str]:
+    """Open candidate pull requests that are marked ready for review."""
+
+    listing = subprocess.run(
+        [
+            "gh",
+            "pr",
+            "list",
+            "--repo",
+            LEDGER_REPOSITORY,
+            "--state",
+            "open",
+            "--search",
+            "head:candidate/uk/",
+            "--json",
+            "headRefName,isDraft",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    return {item["headRefName"] for item in json.loads(listing) if not item["isDraft"]}
 
 
 def _promote(branch: str, commit: str, *, automatic: bool) -> bool:
@@ -682,6 +749,9 @@ def _promote(branch: str, commit: str, *, automatic: bool) -> bool:
     passed, and main is then moved to the commit by a push leased on that
     parent: if main is anything else at that instant, nothing changes.
     GitHub then records the pull request as merged.
+
+    Returns False only when a return to draft failed, which leaves a ready
+    pull request that a merge could combine with other code.
     """
 
     fetched = subprocess.run(
@@ -695,19 +765,18 @@ def _promote(branch: str, commit: str, *, automatic: bool) -> bool:
     listed = _git_out("ls-remote", "origin", "refs/heads/main").split()
     main = listed[0] if listed else ""
     if head != commit or not parent or parent != main:
-        _set_ready(branch, False)
         print(
             f"not promotable now: {branch} is not the qualified commit "
             f"{commit[:12]} built on current main; it is requalified on current main"
         )
-        return False
+        return _set_ready(branch, False)
     if not automatic:
         _set_ready(branch, True)
-        return False
+        return True
     waiting = _unfinished_checks(commit)
     if waiting:
         print(f"automatic promotion waits for {branch}: " + "; ".join(waiting))
-        return False
+        return True
     _set_ready(branch, True)
     pushed = subprocess.run(
         [
@@ -722,12 +791,11 @@ def _promote(branch: str, commit: str, *, automatic: bool) -> bool:
         text=True,
     )
     if pushed.returncode != 0:
-        _set_ready(branch, False)
         print(
             f"automatic promotion skipped: main is no longer {parent[:12]}; "
             "the pair is requalified on current main"
         )
-        return False
+        return _set_ready(branch, False)
     print(f"promoted {branch} at {commit[:12]} to main")
     return True
 
@@ -746,8 +814,10 @@ def _unfinished_checks(commit: str) -> list[str]:
     each workflow and event, the newest run must have finished successfully,
     and for each check name the newest check must have finished as success,
     skipped or neutral, so an older cancelled or failed execution that a
-    newer one replaced never blocks. A run still registering its jobs, none
-    reported, or an unreadable list waits.
+    newer one replaced never blocks. Checks of a run that a newer run of the
+    same workflow and event replaced are not counted at all, so re-running
+    it cannot block. A run still registering its jobs, none reported, or an
+    unreadable list waits.
     """
 
     def listing(path: str, jq: str) -> Optional[list[dict[str, Any]]]:
@@ -766,21 +836,24 @@ def _unfinished_checks(commit: str) -> list[str]:
 
     checks = listing(
         f"repos/{LEDGER_REPOSITORY}/commits/{commit}/check-runs?per_page=100",
-        ".check_runs[] | {id, name, status, conclusion} | tojson",
+        ".check_runs[] | {id, name, status, conclusion,"
+        " check_suite_id: .check_suite.id} | tojson",
     )
     runs = listing(
         f"repos/{LEDGER_REPOSITORY}/actions/runs?head_sha={commit}&per_page=100",
-        ".workflow_runs[] | {id, path, event, status, conclusion} | tojson",
+        ".workflow_runs[] | {id, path, event, status, conclusion, check_suite_id}"
+        " | tojson",
     )
     if checks is None or runs is None:
         return ["the checks could not be read"]
-    newest_runs: dict[tuple[Any, Any], dict[str, Any]] = {}
-    for run in runs:
-        key = (run.get("path"), run.get("event"))
-        if key not in newest_runs or run.get("id", 0) > newest_runs[key].get("id", 0):
-            newest_runs[key] = run
+    newest_runs = _newest_runs(runs)
+    replaced_suites = {run.get("check_suite_id") for run in runs} - {
+        run.get("check_suite_id") for run in newest_runs.values()
+    }
     newest_checks: dict[Any, dict[str, Any]] = {}
     for check in checks:
+        if check.get("check_suite_id") in replaced_suites:
+            continue
         name = check.get("name")
         if name not in newest_checks or check.get("id", 0) > newest_checks[name].get(
             "id", 0
