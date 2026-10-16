@@ -659,13 +659,14 @@ def _shared_branch_pull_requests(
     that is open, or was closed or merged at this commit, counts, whatever
     its base, and so does the candidate's own if its base was ever changed.
 
-    That covers a rename too. Prepare opens the candidate's pull request to
-    main in the job that pushes the commit, and qualification needs that job
-    to succeed, so a pull request whose base became main by a rename after
-    running at the commit sits beside prepare's at the commit, and one of
-    the two counts. The REST listing filtered by ``head=<owner>:<branch>``
-    holds only this repository's pull requests, all of them (paginated), so
-    a fork's with the same branch name can neither shadow nor crowd them out.
+    What it cannot see: a base renamed into main after running at the
+    commit on the candidate's own pull request, including one prepare's
+    lookup adopted as the candidate's after the rename (round 10). Renaming
+    a branch into main is an admin's deliberate act, outside what promotion
+    guards against (``_promote``). The REST listing filtered by
+    ``head=<owner>:<branch>`` holds only this repository's pull requests,
+    all of them (paginated), so a fork's with the same branch name can
+    neither shadow nor crowd them out.
     """
 
     owner = LEDGER_REPOSITORY.split("/")[0]
@@ -987,8 +988,10 @@ def _promote(
     by default).
 
     What it guards against: mistakes by people who can write to this
-    repository, and anything people who cannot (forks' pull requests,
-    whatever branch names they use) can do. Whatever else happens, main
+    repository, and anything people who cannot can do (forks' pull requests,
+    whatever branch names they use, and pull requests opened from the
+    candidate branch by anyone who can read it, which make promotion refuse
+    rather than accept). Whatever else happens, main
     only ever becomes the exact qualified commit, built on main as it is at
     the push, after the dispatched run on that commit's own tree passed.
     It does not try to resist deliberate disguise by people who can write
