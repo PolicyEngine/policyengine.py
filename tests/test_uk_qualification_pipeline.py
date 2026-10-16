@@ -52,6 +52,7 @@ from tests.qualification_fixtures import (
     VENDORED_SCHEMAS,
     gates,
     golden,
+    jq,
     make_pair,
     make_receipt,
     sha,
@@ -950,34 +951,74 @@ RUNS_PASSED = [_run("pull_request", id=10), _run("workflow_dispatch", id=11)]
 
 
 def _gh_api_output(argv, checks, runs, commit, branch):
-    """What the fake `gh api` prints: one JSON line per item, each run filled
-    in as the candidate's own (its commit, branch and this repository) unless
-    it says otherwise, and every item cut to the fields the call's jq names,
-    as the real projection does (round 5 of #635: fakes that returned every
-    field let a dropped field go unnoticed). None for an unreadable list."""
+    """What the fake `gh api` prints: the call's own jq applied by the real
+    jq to an API-shaped page. Each run is the candidate's own (its commit,
+    branch and this repository) unless it says otherwise, with its repository
+    as the API's object; each check's suite id sits under `check_suite`, as
+    in the API (rounds 5 and 6 of #635: fakes that returned every field, or
+    picked fields by name, let a dropped field or a wrong source path pass).
+    None for an unreadable list."""
 
-    items = checks if "check-runs" in argv[2] else runs
-    if items is None:
-        return None
-    jq = argv[argv.index("--jq") + 1]
-    fields = {
-        part.split(":")[0].strip()
-        for part in jq[jq.index("{") + 1 : jq.index("}")].split(",")
-    }
-    if "check-runs" not in argv[2]:
-        items = [
-            {
-                "head_sha": commit,
-                "head_branch": branch,
-                "head_repository": "PolicyEngine/policyengine.py",
-                **item,
-            }
-            for item in items
-        ]
-    return "".join(
-        json.dumps({key: value for key, value in item.items() if key in fields}) + "\n"
-        for item in items
-    )
+    if "check-runs" in argv[2]:
+        if checks is None:
+            return None
+        page = {
+            "check_runs": [
+                {
+                    **{k: v for k, v in check.items() if k != "check_suite_id"},
+                    "check_suite": {"id": check.get("check_suite_id")},
+                }
+                for check in checks
+            ]
+        }
+    else:
+        if runs is None:
+            return None
+        page = {
+            "workflow_runs": [
+                {
+                    "head_sha": commit,
+                    "head_branch": branch,
+                    **run,
+                    "head_repository": {
+                        "full_name": run.get(
+                            "head_repository", "PolicyEngine/policyengine.py"
+                        )
+                    },
+                }
+                for run in runs
+            ]
+        }
+    return jq(argv[argv.index("--jq") + 1], page)
+
+
+def _gh_pr_list_output(argv, listing):
+    """What the fake `gh pr list` prints, filtering as gh does: by state
+    (open unless the call says), base, head branch, a `head:` search prefix,
+    then the limit (30 unless the call names one); each pull request cut to
+    the `--json` fields, and the call's `--jq` applied by the real jq. A
+    listing item is open and to main unless it says otherwise."""
+
+    def option(name, default=None):
+        return argv[argv.index(name) + 1] if name in argv else default
+
+    state = option("--state", "open")
+    base = option("--base")
+    head = option("--head")
+    search = option("--search", "")
+    prefix = search.removeprefix("head:") if search.startswith("head:") else None
+    fields = set(option("--json").split(","))
+    matched = [
+        pr
+        for pr in ({"state": "OPEN", "baseRefName": "main", **pr} for pr in listing)
+        if (state == "all" or pr["state"] == state.upper())
+        and (base is None or pr["baseRefName"] == base)
+        and (head is None or pr["headRefName"] == head)
+        and (prefix is None or pr["headRefName"].startswith(prefix))
+    ][: int(option("--limit", "30"))]
+    printed = [{k: v for k, v in pr.items() if k in fields} for pr in matched]
+    expression = option("--jq")
+    return jq(expression, printed) if expression else json.dumps(printed)
 
 
 # Each: checks, runs, branch at the commit, main ("parent" or "moved"), the
@@ -1268,6 +1309,14 @@ def test_promotion_makes_main_exactly_the_qualified_commit(
     spec.loader.exec_module(cli)
     calls = []
 
+    target = {
+        "number": 1,
+        "headRefName": branch,
+        "headRefOid": commit,
+        "isDraft": True,
+        "isCrossRepository": False,
+    }
+
     def run(argv, **kwargs):
         calls.append(argv)
         out = ""
@@ -1278,6 +1327,8 @@ def test_promotion_makes_main_exactly_the_qualified_commit(
                 code = 1
             else:
                 out = printed
+        elif argv[:3] == ["gh", "pr", "list"]:
+            out = _gh_pr_list_output(argv, [target])
         elif argv[:3] == ["git", "rev-parse", "FETCH_HEAD"]:
             out = commit if at_commit else "f" * 40
         elif argv[:3] == ["git", "rev-parse", f"{commit}^"]:
@@ -1291,19 +1342,7 @@ def test_promotion_makes_main_exactly_the_qualified_commit(
     monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: [qualified])
     monkeypatch.setattr(cli, "subprocess", SimpleNamespace(run=run))
     monkeypatch.setattr(cli, "config", lambda: {"promotion": {"automatic": automatic}})
-    monkeypatch.setattr(
-        cli,
-        "_candidate_pull_requests",
-        lambda: [
-            {
-                "number": 1,
-                "headRefName": branch,
-                "headRefOid": commit,
-                "isDraft": True,
-                "isCrossRepository": False,
-            }
-        ],
-    )
+    monkeypatch.setattr(cli, "_candidate_pull_requests", lambda: [target])
     assert cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True)) == 0
     assert [
         "undo" if "--undo" in argv else "ready"
@@ -1352,34 +1391,41 @@ def test_promotion_returns_every_other_ready_candidate_to_draft(
     assert status == (1 if undo_fails else 0)
 
 
-def _gh_pr_list_output(argv, listing):
-    """What the fake `gh pr list` prints: gh stops at its limit (30 unless
-    the call names one) and returns only the fields ``--json`` names, so a
-    field the call stops asking for is missing, as it would be."""
-
-    limit = int(argv[argv.index("--limit") + 1]) if "--limit" in argv else 30
-    fields = set(argv[argv.index("--json") + 1].split(","))
-    return json.dumps(
-        [{key: value for key, value in pr.items() if key in fields} for pr in listing][
-            :limit
-        ]
-    )
+SUPERSEDED_PAIR = make_pair(model="2.0.0", data="1.0.0", core="3.0.0")
 
 
-def _sweep_cli(monkeypatch, *, path, failing, checks=None, runs=None, push_code=1):
+def _sweep_cli(
+    monkeypatch,
+    *,
+    path,
+    failing,
+    checks=None,
+    runs=None,
+    push_code=1,
+    extra=(),
+    superseded=False,
+    shared_list_fails=False,
+):
     """The promote CLI over a real `gh pr list` payload: the target (#1,
     ready), a stale same-repository candidate (#2, ready), a draft (#3), a
     fork's pull request with the stale branch's name (#4, ready), a fork's
     with the target's branch name at another commit (#5, ready) and a ready
-    one whose listing lacks the fork field (#6). ``failing`` names the
-    pull request numbers whose undo fails; ``path`` is "main moved", "lease
-    rejected" or "main at the parent"."""
+    one whose listing lacks the fork field (#6), then ``extra`` (each may
+    use "{branch}" and "{commit}" for the target's). ``superseded`` adds a
+    receipt for an older pair with an open pull request (#9), which the plan
+    closes. ``failing`` names the pull request numbers whose undo fails;
+    ``path`` is "main moved", "lease rejected" or "main at the parent";
+    ``shared_list_fails`` fails the listing of the target branch's pull
+    requests."""
 
     import importlib.util
 
     qualified = _promotion_receipt(pair=_promotable_pair_and_branch())
     branch = candidate_branch(qualified.pair)
     commit = qualified.harness.git_commit
+    receipts = [qualified]
+    if superseded:
+        receipts.append(_promotion_receipt(pair=SUPERSEDED_PAIR))
     stale = "candidate/uk/stale-pair"
     spec = importlib.util.spec_from_file_location(
         "check_uk_candidate_for_test",
@@ -1430,13 +1476,35 @@ def _sweep_cli(monkeypatch, *, path, failing, checks=None, runs=None, push_code=
             "headRefOid": "u" * 40,
             "isDraft": False,
         },
+        *(
+            {
+                key: value.format(branch=branch, commit=commit)
+                if isinstance(value, str)
+                else value
+                for key, value in pr.items()
+            }
+            for pr in extra
+        ),
     ]
+    if superseded:
+        listing.append(
+            {
+                "number": 9,
+                "headRefName": candidate_branch(SUPERSEDED_PAIR),
+                "headRefOid": "o" * 40,
+                "isDraft": True,
+                "isCrossRepository": False,
+            }
+        )
 
     def run(argv, **kwargs):
         calls.append(argv)
         out, code = "", 0
         if argv[:3] == ["gh", "pr", "list"]:
-            out = _gh_pr_list_output(argv, listing)
+            if shared_list_fails and "--head" in argv:
+                code = 1
+            else:
+                out = _gh_pr_list_output(argv, listing)
         elif argv[:2] == ["gh", "api"]:
             out = _gh_api_output(
                 argv, checks or CHECKS_PASSED, runs or RUNS_PASSED, commit, branch
@@ -1454,7 +1522,7 @@ def _sweep_cli(monkeypatch, *, path, failing, checks=None, runs=None, push_code=
             code = 1 if argv[3] in failing else 0
         return SimpleNamespace(returncode=code, stdout=out, stderr="")
 
-    monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: [qualified])
+    monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: receipts)
     monkeypatch.setattr(cli, "subprocess", SimpleNamespace(run=run))
     monkeypatch.setattr(cli, "config", lambda: {"promotion": {"automatic": True}})
     return cli, calls, branch
@@ -1475,8 +1543,11 @@ def test_each_failed_return_to_draft_fails_the_run(
     import argparse
 
     cli, calls, branch = _sweep_cli(monkeypatch, path=path, failing=failing)
-    assert [pr["number"] for pr in cli._candidate_pull_requests()] == [1, 2, 3]
-    assert cli._open_candidate_branches()[branch] != "c" * 40
+    candidates = cli._candidate_pull_requests()
+    assert [pr["number"] for pr in candidates] == [1, 2, 3]
+    assert {pr["headRefName"]: pr["headRefOid"] for pr in candidates}[branch] != (
+        "c" * 40
+    )
     status = cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True))
     readiness = [
         ("undo" if "--undo" in argv else "ready", argv[3])
@@ -1531,6 +1602,181 @@ def test_a_candidate_listing_at_its_limit_is_refused(monkeypatch, listed, refuse
         assert len(cli._candidate_pull_requests()) == listed
 
 
+OTHER_BASE = {
+    "number": 7,
+    "headRefName": "{branch}",
+    "headRefOid": "{commit}",
+    "baseRefName": "release",
+    "isDraft": False,
+    "isCrossRepository": False,
+}
+
+# Each: another pull request from the target's branch (over OTHER_BASE);
+# whether promotion refuses the target because its runs are shared.
+SHARED_BRANCH_CASES = {
+    "open, to another base": ({}, True),
+    "open, to another base, its head not yet updated": (
+        {"headRefOid": "a" * 40},
+        True,
+    ),
+    "closed at the commit, to another base": ({"state": "CLOSED"}, True),
+    "merged at the commit, to another base": ({"state": "MERGED"}, True),
+    "open, to another base, without the fork field": (
+        {"isCrossRepository": None},
+        True,
+    ),
+    "closed at another commit, to another base": (
+        {"state": "CLOSED", "headRefOid": "a" * 40},
+        False,
+    ),
+    "a fork's, open, to another base": ({"isCrossRepository": True}, False),
+    "closed at the commit, to main": (
+        {"state": "CLOSED", "baseRefName": "main"},
+        False,
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(SHARED_BRANCH_CASES))
+def test_a_candidate_whose_branch_has_another_pull_request_is_refused(
+    monkeypatch, tmp_path, capsys, case
+):
+    """Round 6 of #635: a pull request from the candidate branch to another
+    base runs the same workflows with the same commit, branch and repository,
+    and GitHub's runs do not say which pull request they are for, so its
+    failure could strand the candidate and its success hide the candidate's
+    failure. While one is open, or after one closed at this commit, the
+    candidate is kept draft and the run fails with an error naming it; the
+    other pull request is never readied, undone or counted as a candidate."""
+
+    import argparse
+
+    overrides, refused = SHARED_BRANCH_CASES[case]
+    other = {**OTHER_BASE, **overrides}
+    if other["isCrossRepository"] is None:
+        del other["isCrossRepository"]
+    cli, calls, branch = _sweep_cli(
+        monkeypatch,
+        path="main at the parent",
+        failing=set(),
+        push_code=0,
+        extra=[other],
+    )
+    assert 7 not in [pr["number"] for pr in cli._candidate_pull_requests()]
+    status = cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True))
+    output = capsys.readouterr().out
+    pushes = [argv for argv in calls if argv[:2] == ["git", "push"]]
+    readiness = [argv[3] for argv in calls if argv[:3] == ["gh", "pr", "ready"]]
+    assert "7" not in readiness
+    if refused:
+        assert status == 1 and not pushes
+        assert f"::error::{branch} is not promoted" in output and "#7" in output
+        assert readiness == ["2", "1"]
+        assert not [argv for argv in calls if argv[:2] == ["gh", "api"]]
+    else:
+        assert status == 0 and len(pushes) == 1
+        assert f"promoted {branch}" in output
+
+
+@pytest.mark.parametrize("how", ["the listing fails", "the listing is full"])
+def test_unreadable_pull_requests_from_the_candidate_branch_wait(
+    monkeypatch, tmp_path, capsys, how
+):
+    """Round 6 of #635: when the candidate branch's pull requests cannot all
+    be read (the call fails, or returns SAME_BRANCH_LIMIT of them), the
+    candidate waits as a draft without reading its runs."""
+
+    import argparse
+
+    extra = (
+        [
+            {
+                "number": 100 + n,
+                "headRefName": "{branch}",
+                "headRefOid": "a" * 40,
+                "state": "CLOSED",
+                "isDraft": True,
+                "isCrossRepository": False,
+            }
+            for n in range(99)
+        ]
+        if how == "the listing is full"
+        else []
+    )
+    cli, calls, branch = _sweep_cli(
+        monkeypatch,
+        path="main at the parent",
+        failing=set(),
+        push_code=0,
+        extra=extra,
+        shared_list_fails=how == "the listing fails",
+    )
+    assert cli.SAME_BRANCH_LIMIT == 100
+    assert cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True)) == 0
+    output = capsys.readouterr().out
+    assert "could not be read" in output and "::error::" not in output
+    assert not [argv for argv in calls if argv[:2] == ["git", "push"]]
+    assert not [argv for argv in calls if argv[:2] == ["gh", "api"]]
+    assert [argv[3] for argv in calls if argv[:3] == ["gh", "pr", "ready"]] == [
+        "2",
+        "1",
+    ]
+
+
+def test_only_pull_requests_to_main_are_candidates(monkeypatch):
+    """Round 6 of #635: the listing asks gh for pull requests to main and
+    drops any other it returns, so two pull requests from one candidate
+    branch cannot collapse into one entry that sends readiness changes to
+    the wrong one."""
+
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "check_uk_candidate_for_test",
+        Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
+    )
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    calls = []
+    listing = [
+        {
+            "number": number,
+            "baseRefName": base,
+            "headRefName": "candidate/uk/2.200.0-1.58.9",
+            "headRefOid": "a" * 40,
+            "isDraft": False,
+            "isCrossRepository": False,
+        }
+        for number, base in ((1, "release"), (2, "main"))
+    ]
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        # A gh that ignored --base: the script still keeps only main's.
+        return SimpleNamespace(returncode=0, stdout=json.dumps(listing), stderr="")
+
+    monkeypatch.setattr(cli, "subprocess", SimpleNamespace(run=run))
+    assert [pr["number"] for pr in cli._candidate_pull_requests()] == [2]
+    assert calls[0][calls[0].index("--base") + 1] == "main"
+
+
+def test_superseded_candidates_are_closed_by_number(monkeypatch, tmp_path):
+    """Round 6 of #635: closing a superseded candidate goes by its number,
+    like every other write to a pull request."""
+
+    import argparse
+
+    cli, calls, branch = _sweep_cli(
+        monkeypatch,
+        path="main at the parent",
+        failing=set(),
+        push_code=0,
+        superseded=True,
+    )
+    assert cli.cmd_promote(argparse.Namespace(ledger=str(tmp_path), apply=True)) == 0
+    assert [argv[3] for argv in calls if argv[:3] == ["gh", "pr", "close"]] == ["9"]
+
+
 NOW = "2026-10-16T12:00:00Z"
 RECENT = "2026-10-16T06:00:00Z"
 OLD = "2026-09-15T11:00:00Z"
@@ -1554,6 +1800,22 @@ STRANDED_CASES = {
         1,
         "2026-09-16T12:00:01Z",
         False,
+    ),
+    # Round 6: GitHub re-runs a run exactly 30 days old, and not one a
+    # second older.
+    "failed exactly 30 days ago": (
+        "completed",
+        "failure",
+        1,
+        "2026-09-16T12:00:00Z",
+        False,
+    ),
+    "failed 30 days and a second ago": (
+        "completed",
+        "failure",
+        1,
+        "2026-09-16T11:59:59Z",
+        True,
     ),
     # Unfinished runs and successes are not stranded at any attempt.
     "in progress at the cap": ("in_progress", None, 4, OLD, False),
@@ -1845,6 +2107,140 @@ def test_a_forced_rerun_stages_a_new_attempt(tmp_path):
     assert attempt_key(pair, tmp_path, base_commit=base, force=True) == f"{base[:12]}-3"
 
 
+#: Source for the fake gh's `pr list`, embedded in the workflow shell tests:
+#: filters the listing by --base, --head (the BRANCH environment variable's
+#: branch unless an item names another) and --state as gh does, cuts each
+#: item to the --json fields and applies the call's --jq with the real jq.
+FAKE_GH_PR_LIST = """
+import shutil
+import subprocess
+
+
+def pr_list(args, listing):
+    def option(name, default=None):
+        return args[args.index(name) + 1] if name in args else default
+
+    base, head, state = option("--base"), option("--head"), option("--state", "open")
+    rows = [
+        {"headRefName": os.environ["BRANCH"], "state": "OPEN", "isDraft": True, **pr}
+        for pr in listing
+    ]
+    rows = [
+        pr
+        for pr in rows
+        if (base is None or pr["baseRefName"] == base)
+        and (head is None or pr["headRefName"] == head)
+        and (state == "all" or pr["state"] == state.upper())
+    ]
+    fields = option("--json").split(",")
+    rows = [{k: pr[k] for k in fields if k in pr} for pr in rows]
+    expression = option("--jq")
+    if expression is None:
+        print(json.dumps(rows))
+        return
+    sys.stdout.write(
+        subprocess.run(
+            [shutil.which("jq"), "-r", expression],
+            input=json.dumps(rows),
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    )
+"""
+
+
+@pytest.mark.parametrize("step_name", ["open", "verdict"])
+@pytest.mark.parametrize("exists", [True, False])
+def test_the_workflow_writes_to_the_candidates_own_pull_request_by_number(
+    tmp_path, step_name, exists
+):
+    """Round 6 of #635: the steps that open or update the candidate's pull
+    request find it among this repository's pull requests to main and write
+    by number; a fork's pull request with the branch's name, or this
+    repository's from the branch to another base, is never edited. With no
+    candidate pull request, the prepare step opens one to main and the
+    verdict step fails."""
+
+    import yaml
+
+    assert shutil.which("jq"), "jq is required to run the workflow's jq"
+    workflow = yaml.safe_load(
+        (REPO_ROOT / ".github/workflows/certify-uk-release.yaml").read_text()
+    )
+    job, name = {
+        "open": ("prepare", "Open or update the draft candidate PR"),
+        "verdict": ("replay", "Update the candidate PR with the verdict"),
+    }[step_name]
+    step = next(s for s in workflow["jobs"][job]["steps"] if s.get("name") == name)
+    log_path = tmp_path / "commands.jsonl"
+    listing = [
+        {"number": 575, "baseRefName": "main", "isCrossRepository": True},
+        {"number": 576, "baseRefName": "release", "isCrossRepository": False},
+        {
+            "number": 577,
+            "baseRefName": "main",
+            "isCrossRepository": False,
+            "state": "CLOSED",
+        },
+    ]
+    if exists:
+        listing.insert(
+            1, {"number": 574, "baseRefName": "main", "isCrossRepository": False}
+        )
+    fake = f"""#!{sys.executable}
+import json
+import os
+import sys
+from pathlib import Path
+
+{FAKE_GH_PR_LIST}
+args = sys.argv[1:]
+with Path(os.environ["COMMAND_LOG"]).open("a") as log:
+    log.write(json.dumps(["gh", *args]) + "\\n")
+if args[:2] == ["pr", "list"]:
+    pr_list(args, {listing!r})
+"""
+    binary_dir = tmp_path / "bin"
+    binary_dir.mkdir()
+    (binary_dir / "gh").write_text(fake)
+    (binary_dir / "gh").chmod(0o755)
+    branch = "candidate/uk/2.126.8-1.58.0"
+    result = subprocess.run(
+        ["bash", "-e", "-o", "pipefail", "-c", step["run"]],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "PATH": f"{binary_dir}{os.pathsep}{os.environ['PATH']}",
+            "BRANCH": branch,
+            "PAIR_ID": "a" * 64,
+            "GITHUB_REPOSITORY": "PolicyEngine/policyengine.py",
+            "GITHUB_RUN_ID": "1",
+            "LEDGER_BRANCH": "uk-qualification-ledger",
+            "RUNNER_TEMP": str(tmp_path),
+            "COMMAND_LOG": str(log_path),
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    commands = [json.loads(line) for line in log_path.read_text().splitlines()]
+    writes = [c for c in commands if c[1:3] in (["pr", "edit"], ["pr", "create"])]
+    if exists:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert [c[:4] for c in writes] == [["gh", "pr", "edit", "574"]]
+    elif step_name == "open":
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert len(writes) == 1 and writes[0][1:3] == ["pr", "create"]
+        create = writes[0]
+        assert create[create.index("--base") + 1] == "main"
+        assert create[create.index("--head") + 1] == branch
+    else:
+        assert result.returncode == 1
+        assert f"no open pull request from {branch} to main" in result.stdout
+        assert writes == []
+
+
 @pytest.mark.parametrize(
     ("pr_state", "reset_fails"),
     [("ready", False), ("draft", False), ("absent", False), ("ready", True)],
@@ -1873,6 +2269,7 @@ import os
 import sys
 from pathlib import Path
 
+{FAKE_GH_PR_LIST}
 command = Path(sys.argv[0]).name
 args = sys.argv[1:]
 state_path = Path(os.environ["PR_STATE"])
@@ -1880,8 +2277,33 @@ state = json.loads(state_path.read_text())
 with Path(os.environ["COMMAND_LOG"]).open("a") as log:
     log.write(json.dumps([command, *args]) + "\\n")
 if command == "gh" and args[:2] == ["pr", "list"]:
-    if state["status"] == "ready":
-        print("574")
+    # A fork's ready pull request with the branch's name, and one of this
+    # repository's from the branch to another base, are never undone.
+    listing = [
+        {{
+            "number": 575,
+            "baseRefName": "main",
+            "isCrossRepository": True,
+            "isDraft": False,
+        }},
+        {{
+            "number": 576,
+            "baseRefName": "release",
+            "isCrossRepository": False,
+            "isDraft": False,
+        }},
+    ]
+    if state["status"] != "absent":
+        listing.insert(
+            0,
+            {{
+                "number": 574,
+                "baseRefName": "main",
+                "isCrossRepository": False,
+                "isDraft": state["status"] != "ready",
+            }},
+        )
+    pr_list(args, listing)
 elif command == "gh" and args[:2] == ["pr", "ready"]:
     assert args[2:] == ["574", "--undo"]
     if os.environ["RESET_FAILS"] == "1":

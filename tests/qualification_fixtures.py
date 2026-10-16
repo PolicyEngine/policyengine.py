@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
 from policyengine.provenance.qualification import (
@@ -96,6 +98,24 @@ def make_receipt(
         issued_by=ISSUED,
         completed_at=completed_at,
     )
+
+
+def jq(expression: str, data) -> str:
+    """Apply ``expression`` to ``data`` with the real jq, printing strings
+    raw as gh's ``--jq`` does, so fakes of gh evaluate the code's own jq
+    rather than guess at it (round 6 of #635: a fake that picked fields by
+    name let a wrong source path pass). GitHub's ubuntu runners ship jq; a
+    machine without it fails these tests rather than skipping them."""
+
+    binary = shutil.which("jq")
+    assert binary, "jq is required to evaluate the code's jq expressions"
+    return subprocess.run(
+        [binary, "-r", expression],
+        input=json.dumps(data),
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
 
 
 def golden(name: str) -> dict:
