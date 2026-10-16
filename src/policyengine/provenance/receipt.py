@@ -2303,31 +2303,112 @@ def _names_bound_without_import(nodes: Iterable[ast.AST]) -> set[str]:
     return names
 
 
-def _names_mutated_by_attribute(nodes: Iterable[ast.AST]) -> tuple[set[str], bool]:
-    """Names code can rebind without binding a name: attribute stores and
-    deletions (``sys.modules[__name__].Annotated = Tuple`` and
-    ``typing.Annotated = Tuple`` store ``Annotated``) and the literal names
-    passed to ``setattr`` or ``delattr``; and whether it uses any
-    ``modules`` attribute, through which it can swap whole modules."""
+#: Builtins that read or write an attribute named at run time.
+_ATTRIBUTE_BUILTINS = ("setattr", "delattr", "getattr")
 
+
+def _names_mutated_by_attribute(nodes: Iterable[ast.AST]) -> tuple[set[str], bool]:
+    """Names code can rebind without binding a name, and whether it can
+    rebind ones the receipt cannot name.
+
+    The names: attribute stores and deletions (``sys.modules[__name__].
+    Annotated = Tuple`` and ``typing.Annotated = Tuple`` store
+    ``Annotated``) and the literal names passed to ``setattr`` or
+    ``delattr`` called directly. Unsound (any name could change): any use of
+    ``modules`` (an attribute, a name, an imported name or a string), through
+    which code can swap whole modules; ``getattr(x, "modules")``; and
+    ``setattr``, ``delattr`` or ``getattr`` used other than as a direct call
+    with a literal name (an alias, ``map``, ``partial``, a computed name, or
+    reached as an attribute).
+    """
+
+    nodes = list(nodes)
     names: set[str] = set()
-    uses_modules = False
+    unsound = False
+    direct: set[int] = set()
     for node in nodes:
-        if isinstance(node, ast.Attribute):
-            if not isinstance(node.ctx, ast.Load):
-                names.add(node.attr)
-            if node.attr == "modules":
-                uses_modules = True
-        elif (
+        if (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
-            and node.func.id in ("setattr", "delattr")
+            and node.func.id in _ATTRIBUTE_BUILTINS
             and len(node.args) >= 2
             and isinstance(node.args[1], ast.Constant)
             and isinstance(node.args[1].value, str)
         ):
-            names.add(node.args[1].value)
-    return names, uses_modules
+            direct.add(id(node.func))
+            if node.func.id != "getattr":
+                names.add(node.args[1].value)
+            elif node.args[1].value == "modules":
+                unsound = True
+    for node in nodes:
+        if isinstance(node, ast.Attribute):
+            if not isinstance(node.ctx, ast.Load):
+                names.add(node.attr)
+            if node.attr == "modules" or node.attr in _ATTRIBUTE_BUILTINS:
+                unsound = True
+        elif isinstance(node, ast.Name):
+            if node.id == "modules" or (
+                node.id in _ATTRIBUTE_BUILTINS and id(node) not in direct
+            ):
+                unsound = True
+        elif isinstance(node, ast.alias) and node.name in (
+            "modules",
+            *_ATTRIBUTE_BUILTINS,
+        ):
+            unsound = True
+        elif isinstance(node, ast.Constant) and node.value == "modules":
+            unsound = True
+    return names, unsound
+
+
+#: Names a forward reference must not use: Pydantic evaluates it, so it runs
+#: whatever it calls (``setattr(...) or int``, ``globals().update(...)``).
+_CODE_RUNNING_NAMES = frozenset({*_ATTRIBUTE_BUILTINS, "import_module"}) | (
+    _REFUSED_NAMES
+)
+
+
+def _runs_code(node: ast.AST) -> bool:
+    """Whether a node in a forward reference names something that could
+    change what other names stand for."""
+
+    if isinstance(node, ast.Name):
+        return node.id in _CODE_RUNNING_NAMES or _is_dunder(node.id)
+    if isinstance(node, ast.Attribute):
+        return node.attr in _CODE_RUNNING_NAMES or _is_dunder(node.attr)
+    return False
+
+
+def _module_mutations(tree: ast.Module) -> tuple[set[str], bool]:
+    """``_names_mutated_by_attribute`` across every top-level function: a
+    function can call a sibling that rebinds a name for it."""
+
+    nodes: list[ast.AST] = []
+    for statement in tree.body:
+        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            nodes.extend(ast.walk(statement.args))
+            for root in statement.body:
+                nodes.extend(ast.walk(root))
+    return _names_mutated_by_attribute(nodes)
+
+
+def _imports_of_stored_names(nodes: Iterable[ast.AST], stored: set[str]) -> set[str]:
+    """Names local imports bind from a module path, or as a name, that code
+    stores to: ``typing.Annotated = Tuple`` then ``from typing import
+    Annotated as A`` rebinds ``A``."""
+
+    rebound: set[str] = set()
+    for node in nodes:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if stored.intersection(alias.name.split(".")):
+                    rebound.add(alias.asname or alias.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            path = set((node.module or "").split("."))
+            for alias in node.names:
+                if stored.intersection(path | {alias.name}):
+                    rebound.add(alias.asname or alias.name)
+    return rebound
 
 
 #: How many nodes the forward references of one function may add before
@@ -2375,11 +2456,7 @@ def _function_bindings(module: Any, nodes: Sequence[ast.AST]) -> dict[str, list[
                 for depth, part in enumerate(parts[1:], start=2):
                     if value is _UNRESOLVED:
                         break
-                    value = getattr(
-                        value,
-                        part,
-                        sys.modules.get(".".join(parts[:depth]), _UNRESOLVED),
-                    )
+                    value = _module_attribute(value, part, ".".join(parts[:depth]))
                 bindings.setdefault(alias.asname, []).append(value)
         elif isinstance(node, ast.ImportFrom):
             try:
@@ -2403,13 +2480,22 @@ def _function_bindings(module: Any, nodes: Sequence[ast.AST]) -> dict[str, list[
                         else _UNRESOLVED
                     )
                 else:
-                    value = getattr(
-                        source,
-                        alias.name,
-                        sys.modules.get(f"{source_name}.{alias.name}", _UNRESOLVED),
+                    value = _module_attribute(
+                        source, alias.name, f"{source_name}.{alias.name}"
                     )
                 bindings.setdefault(alias.asname or alias.name, []).append(value)
     return bindings
+
+
+def _module_attribute(owner: Any, name: str, submodule: str) -> Any:
+    """What ``owner.name`` stands for, read without running any code: a
+    module's own namespace, then the loaded submodule of that name, else
+    :data:`_UNRESOLVED`. A module's ``__getattr__`` (a lazy loader) never
+    runs while the receipt is built."""
+
+    if isinstance(owner, ModuleType) and name in vars(owner):
+        return vars(owner)[name]
+    return sys.modules.get(submodule, _UNRESOLVED)
 
 
 def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
@@ -2428,14 +2514,33 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
     Resolution is conservative: a name stands for every object the module
     or any import inside the function binds it to (an import not loaded yet,
     or an attribute of anything but a loaded module, could be any object),
-    and every string in the
-    function's code that parses as an expression is inspected as a type
-    (except ``Literal`` values and ``Annotated`` metadata), since a forward
-    reference is evaluated when something resolves it. Local aliases of
-    typing objects (``L = List``) are not followed.
+    and every string in the function's code that parses as an expression
+    and could build a cached type (it subscripts something the receipt can
+    name, or holds a nested string) is inspected as a type, except
+    ``Literal`` values and ``Annotated`` metadata, since a forward reference
+    is evaluated when something resolves it. A function whose forward
+    references exceed ``_INSPECTED_FORWARD_NODES``, or hold a string too
+    deeply nested to parse, is refused.
+
+    The ``Literal`` and ``Annotated`` exemptions are granted only where no
+    code the receipt can see could change what those names stand for: no
+    binding of the name, no store or ``setattr``/``delattr`` of it in any
+    module function or forward reference, no use of ``modules``, of
+    ``setattr``, ``delattr`` or ``getattr`` other than a direct call with a
+    literal name, and no forward reference naming such a builtin,
+    ``import_module``, a refused name or a dunder.
+
+    This guards an honest producer, as the receipt does throughout. It is not
+    a sandbox: it does not follow local aliases (``L = List``, ``Amount =
+    Union[Decimal, float]``), ``getattr(typing, "List")``,
+    ``importlib.import_module`` results, ``operator.getitem`` or ``reduce``
+    over typing objects, calls inside forward references, f-string or
+    concatenated forward references, or changes made from other modules.
     """
 
     namespace = vars(module)
+    # A sibling function the code calls can rebind names for it.
+    module_stored, module_unsound = _module_mutations(tree)
     for statement in tree.body:
         if not isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
@@ -2446,12 +2551,14 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
         # not resolved, so they never earn the Literal or Annotated
         # exemption. Past the size limit nothing does.
         rebound = _names_bound_without_import([*ast.walk(statement.args), *nodes])
-        # Names an attribute store or setattr can rebind count as rebound,
-        # wherever they appear in a name's chain; code that touches
-        # sys.modules earns no exemption at all.
-        stored, uses_modules = _names_mutated_by_attribute(nodes)
-        rebound |= stored
-        exemptions_sound = not uses_modules
+        # Names an attribute store or setattr can rebind, here or in any
+        # module function, count as rebound wherever they appear in a name's
+        # chain, as do local imports of them; code that can rebind names the
+        # receipt cannot see earns no exemption at all.
+        stored, unsound = _names_mutated_by_attribute(nodes)
+        stored |= module_stored
+        rebound |= stored | _imports_of_stored_names(nodes, stored)
+        exemptions_sound = not (unsound or module_unsound)
         strings = [
             node
             for node in nodes
@@ -2467,9 +2574,20 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
             except RecursionError:
                 exemptions_sound = False
                 break
-            parsed_nodes += len(walked)
-            stored, uses_modules = _names_mutated_by_attribute(walked)
-            if parsed_nodes > _INSPECTED_FORWARD_NODES or uses_modules:
+            # Every string is inspected; only those that could bind a name
+            # or build a type count toward the limit, so labels never do.
+            if any(
+                isinstance(child, (ast.Subscript, ast.NamedExpr, ast.Lambda))
+                or (isinstance(child, ast.Constant) and isinstance(child.value, str))
+                for child in walked
+            ):
+                parsed_nodes += len(walked)
+            stored, unsound = _names_mutated_by_attribute(walked)
+            if (
+                parsed_nodes > _INSPECTED_FORWARD_NODES
+                or unsound
+                or any(_runs_code(child) for child in walked)
+            ):
                 exemptions_sound = False
                 break
             rebound |= _names_bound_without_import(walked) | stored
@@ -2492,12 +2610,13 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
             if node.id in namespace:
                 values.append(namespace[node.id])
             # A builtin (list, dict, type) never reuses equal aliases. An
-            # attribute is followed only on a loaded module; on anything else,
-            # or one the module lacks now, it could be any object.
+            # attribute is followed only in a loaded module's namespace (no
+            # module __getattr__ runs); on anything else, or one the module
+            # lacks now, it could be any object.
             for attribute in reversed(attributes):
                 values = [
-                    getattr(owner, attribute)
-                    if isinstance(owner, ModuleType) and hasattr(owner, attribute)
+                    vars(owner)[attribute]
+                    if isinstance(owner, ModuleType) and attribute in vars(owner)
                     else _UNRESOLVED
                     for owner in values
                 ]
@@ -2570,12 +2689,13 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
                         "nested for the receipt to inspect as a type"
                     )
                 walked = list(ast.walk(parsed))
-                # A label or plain name cannot build a type typing caches.
+                # Only a subscript of something the receipt can name, or a
+                # nested string that may hold one, can build a type typing
+                # caches; a label, or a subscript of an unbound name such as
+                # a parameter path ('gov.hmrc...rates.uk[0].threshold'),
+                # cannot, and is neither inspected nor counted.
                 if not any(
-                    isinstance(child, ast.Subscript)
-                    or (
-                        isinstance(child, ast.BinOp) and isinstance(child.op, ast.BitOr)
-                    )
+                    (isinstance(child, ast.Subscript) and resolve(child.value))
                     or (
                         isinstance(child, ast.Constant) and isinstance(child.value, str)
                     )
