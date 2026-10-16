@@ -60,13 +60,15 @@ def _records(affected, *, households=120, change=200.0, loose=0):
     }
 
 
-def _estimates(data, level, *, reform="reform", change=None, settings=None, key=None):
+def _estimates(
+    data, level, *, reform="reform", year=2026, change=None, settings=None, key=None
+):
     codes = data["seats"] if level == "constituency" else data[f"{level}s"]
     delta = data["change"] if change is None else change
     return estimate_change(
         level=level,
         reform=reform,
-        year=2026,
+        year=year,
         areas=AreaWeights.from_labels(codes, data["weights"]),
         source_ids=data["source_ids"],
         baseline=data["baseline"],
@@ -601,6 +603,77 @@ def test_a_prior_with_another_noise_setting_blocks_until_acknowledged():
     assert [f.blocking for f in accepted.check()] == [False]
 
 
+@pytest.mark.parametrize(
+    "order", [("region", "constituency"), ("constituency", "region")]
+)
+def test_a_prior_cell_must_name_an_area_of_a_level_the_release_holds(order):
+    """Regions published under other codes would still count as hidden."""
+    prior = PriorPublic(
+        name="regional table",
+        cells=[
+            ("region", "North", "reform", 2026, "average_change"),
+            ("region", "North", "reform", 2026, "share_gaining"),
+            ("region", "R2", "reform", 2026, "average_change"),
+        ],
+    )
+    data = _records(STRONG)
+    release = Release(prior_public=[prior])
+    for level in order:
+        # The regions are a reference, as in a seat release after a regional one.
+        release.add(_estimates(data, level), publish=level == "constituency")
+    release.add_nesting("constituency", "region")
+
+    with pytest.raises(
+        DisclosureError, match=r"'regional table' that name no region area.*: 2\."
+    ) as raised:
+        release.check()
+    assert "North" not in str(raised.value)
+
+
+def test_a_prior_cell_must_name_an_area_of_its_own_reform_and_year():
+    """An area that only another year holds would match nothing."""
+    data = _records(STRONG)
+    later = {**data, "seats": np.char.replace(data["seats"].astype(str), "S", "B")}
+    cells = [("constituency", "B1", "reform", 2026, "average_change")]
+    release = Release(prior_public=[PriorPublic(name="seat table", cells=cells)])
+    release.add(_estimates(data, "constituency"))
+    release.add(_estimates(later, "constituency", year=2027))
+
+    with pytest.raises(DisclosureError, match="name no constituency area.*: 1"):
+        release.check()
+
+    # For a year the release does not hold, any of the level's areas will do.
+    cells = [("constituency", "B1", "reform", 2028, "average_change")]
+    release = Release(prior_public=[PriorPublic(name="seat table", cells=cells)])
+    release.add(_estimates(data, "constituency"))
+    release.add(_estimates(later, "constituency", year=2027))
+    assert release.check() == []
+
+
+def test_a_prior_cell_needs_a_known_outcome():
+    cells = [("constituency", "S1", "reform", 2026, "avg_change")]
+
+    with pytest.raises(DisclosureError, match="'typo table' whose outcome is unknown"):
+        Release(prior_public=[PriorPublic(name="typo table", cells=cells)])
+
+
+def test_prior_cells_of_other_publications_are_allowed():
+    """Cells for other reforms, years or levels take no part in the check."""
+    cells = [
+        ("constituency", "S1", "other reform", 2026, "average_change"),
+        ("constituency", "S1", "reform", 2025, "share_gaining"),
+        ("region", "R1", "reform", 2027, "share_no_change"),
+        ("local_authority", "L9", "reform", 2026, "average_change"),
+    ]
+    prior = PriorPublic(name="other tables", cells=cells)
+    affected = {**STRONG, "S1": 4, "S2": 30}
+
+    findings = _release(affected, prior_public=[prior]).check()
+
+    assert findings == _release(affected).check()
+    assert _blocking(findings, RECOVERABLE_REMAINDER)
+
+
 def test_a_weight_matrix_child_needs_parent_of_under_several_parents():
     data = _records(STRONG)
     n = len(data["seats"])
@@ -627,6 +700,70 @@ def test_a_weight_matrix_child_needs_parent_of_under_several_parents():
     release.add(seats)
     release.add_nesting("constituency", "region", {"M1": "R1", "M2": "R2"})
     assert release.check() == []
+
+
+def _seat_matrix_release(parent_of):
+    """400 records in two regions and a 4 x 400 seat matrix.
+
+    Three records carry seat M1, so it is withheld. M2 holds the rest of R1;
+    M3 and M4 share R2, and a few records there carry weight in both.
+    """
+    n = 400
+    regions = np.array(["R1"] * 200 + ["R2"] * 200, dtype=object)
+    matrix = np.zeros((4, n))
+    matrix[0, :3] = 100.0
+    matrix[1, 3:200] = 100.0
+    matrix[2, 200:300] = 100.0
+    matrix[3, 300:] = 100.0
+    matrix[2:, 290:300] = 50.0
+    baseline = np.random.default_rng(2).uniform(20_000.0, 60_000.0, n)
+    common = {
+        "reform": "reform",
+        "year": 2026,
+        "source_ids": np.arange(n),
+        "baseline": baseline,
+        "reformed": baseline + 200.0,
+    }
+    release = Release()
+    release.add(
+        estimate_change(
+            level="region",
+            areas=AreaWeights.from_labels(regions, np.full(n, 100.0)),
+            **common,
+        )
+    )
+    release.add(
+        estimate_change(
+            level="constituency",
+            areas=AreaWeights.from_matrix(matrix, ["M1", "M2", "M3", "M4"]),
+            **common,
+        )
+    )
+    release.add_nesting("constituency", "region", parent_of)
+    return release
+
+
+def test_parent_of_must_name_areas_of_the_parent_level():
+    """Regions named another way left every group empty, so nothing was found."""
+    own = {"M1": "R1", "M2": "R1", "M3": "R2", "M4": "R2"}
+
+    findings = _seat_matrix_release(own).check()
+
+    blocking = _blocking(findings, RECOVERABLE_REMAINDER)
+    assert len(blocking) == len(findings) == 3
+    assert {f.family for f in blocking} == {"change", "share_gaining", "share_losing"}
+    assert {(f.relation, f.group, tuple(f.members)) for f in blocking} == {
+        ("nesting", "R1", ("M1",))
+    }
+
+    renamed = {"M1": "North", "M2": "North", "M3": "South", "M4": "South"}
+    with pytest.raises(DisclosureError, match="not region areas: 2") as raised:
+        _seat_matrix_release(renamed).check()
+    assert "North" not in str(raised.value)
+    assert "South" not in str(raised.value)
+
+    with pytest.raises(DisclosureError, match="not region areas: 1"):
+        _seat_matrix_release({**own, "M4": "South"}).check()
 
 
 def test_the_release_refuses_mixed_settings_and_duplicates():

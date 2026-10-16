@@ -7,6 +7,7 @@ published.
 """
 
 from collections.abc import Iterable, Mapping, Sequence
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Union
 
@@ -16,6 +17,7 @@ from pydantic import ConfigDict, PrivateAttr
 
 from policyengine.core import Output
 from policyengine.disclosure import (
+    UNASSIGNED,
     AreaWeights,
     DisclosureSettings,
     Finding,
@@ -39,6 +41,84 @@ UK_DISCLOSURE_LEVEL_COLUMNS = {
     "local_authority": ("la_code_oa",),
 }
 UK_SOURCE_HOUSEHOLD_ID_COLUMN = "source_household_id"
+# The ONS GSS code of each region, by every spelling a household output may
+# carry. Regions are always keyed on these codes, so a release from a national
+# dataset and one from a local file publish the same codes, and publishers use
+# them in parent_of and prior_public. England has nine regions; Wales, Scotland
+# and Northern Ireland are one region each, under their country code.
+UK_REGION_GSS_CODES: dict[str, str] = {
+    # GSS codes, as Microcosm writes them in region_code_oa.
+    "E12000001": "E12000001",
+    "E12000002": "E12000002",
+    "E12000003": "E12000003",
+    "E12000004": "E12000004",
+    "E12000005": "E12000005",
+    "E12000006": "E12000006",
+    "E12000007": "E12000007",
+    "E12000008": "E12000008",
+    "E12000009": "E12000009",
+    "W92000004": "W92000004",
+    "S92000003": "S92000003",
+    "N92000002": "N92000002",
+    # The pseudo codes Microcosm writes in region_code_oa for the nations.
+    "W99999999": "W92000004",
+    "S99999999": "S92000003",
+    "N99999999": "N92000002",
+    # The names of the engine's region enum, as the stored region holds them.
+    "NORTH_EAST": "E12000001",
+    "NORTH_WEST": "E12000002",
+    "YORKSHIRE": "E12000003",
+    "EAST_MIDLANDS": "E12000004",
+    "WEST_MIDLANDS": "E12000005",
+    "EAST_OF_ENGLAND": "E12000006",
+    "LONDON": "E12000007",
+    "SOUTH_EAST": "E12000008",
+    "SOUTH_WEST": "E12000009",
+    "WALES": "W92000004",
+    "SCOTLAND": "S92000003",
+    "NORTHERN_IRELAND": "N92000002",
+    "UNKNOWN": UNASSIGNED,
+}
+
+
+def _uk_region_gss_codes(values: object, column: str) -> np.ndarray:
+    """The GSS code of each region value, blank where it is unassigned.
+
+    Values may be strings, bytes or members of the engine's region enum. A
+    missing value is unassigned. Any value outside the table raises: a region
+    under another spelling would match no code that a publisher passes.
+    """
+    index, spellings = pd.factorize(pd.Series(values, dtype=object))
+    codes: list[Optional[str]] = []
+    unknown = 0
+    for spelling in spellings:
+        if isinstance(spelling, Enum):
+            spelling = spelling.name
+        if isinstance(spelling, bytes):
+            spelling = spelling.decode("utf-8")
+        spelling = str(spelling).strip()
+        code = UK_REGION_GSS_CODES.get(spelling) if spelling else UNASSIGNED
+        if code is None:
+            unknown += 1
+        codes.append(code)
+    if unknown:
+        raise ValueError(
+            f"Values in {column} that name no UK region: {unknown}. A region is "
+            "a GSS code, a name of the engine's region enum, or a Microcosm "
+            "pseudo code for a nation; see UK_REGION_GSS_CODES."
+        )
+    # Factorize marks a missing value with -1, which picks the last entry.
+    return np.asarray(np.array([*codes, UNASSIGNED], dtype=object)[index])
+
+
+def _assigns_an_area(codes: np.ndarray) -> bool:
+    """Whether any household has an area code, rather than a blank."""
+    values = pd.Series(codes, dtype=object)
+    for code in values[values.notna()].unique():
+        text = code.decode("utf-8") if isinstance(code, bytes) else str(code)
+        if text.strip() != UNASSIGNED:
+            return True
+    return False
 
 
 class UKGeographyDisclosure(Output):
@@ -47,6 +127,7 @@ class UKGeographyDisclosure(Output):
     Every number passes the disclosure rules of
     :class:`~policyengine.disclosure.DisclosureSettings` and carries a 90%
     interval. ``public`` stays empty while a blocking finding remains.
+    Regions are keyed on their ONS GSS codes; see ``UK_REGION_GSS_CODES``.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -124,6 +205,21 @@ class UKGeographyDisclosure(Output):
         weights = baseline_hh["household_weight"].to_numpy(dtype=float)
         custom = dict(area_weights or {})
         parents = dict(parent_of or {})
+        # A release ignores prior cells at levels it does not hold, since they
+        # may belong to other publications. Every UK level is known here, so a
+        # cell at any other level is a misspelling that would match nothing.
+        known = {UK_NATIONAL_LEVEL, *UK_DISCLOSURE_LEVEL_COLUMNS, *custom}
+        stray = [
+            cell[0]
+            for prior in prior_public
+            for cell in prior.cells
+            if cell[0] not in known
+        ]
+        if stray:
+            raise ValueError(
+                f"Prior cells at levels that are not UK levels: {len(stray)}, "
+                f"at {sorted(set(stray))}. The levels are {sorted(known)}."
+            )
 
         def areas_for(level: str) -> Optional[AreaWeights]:
             if level in custom:
@@ -135,8 +231,15 @@ class UKGeographyDisclosure(Output):
             if columns is None:
                 raise ValueError(f"Unknown level {level!r}")
             for column in columns:
-                if column in baseline_hh.columns:
-                    return AreaWeights.from_labels(baseline_hh[column], weights)
+                if column not in baseline_hh.columns:
+                    continue
+                codes = baseline_hh[column].to_numpy(dtype=object)
+                if level == UK_REGION_LEVEL:
+                    codes = _uk_region_gss_codes(codes, column)
+                # A column that gives no household an area, such as an empty
+                # region_code_oa, says nothing: read the next one.
+                if _assigns_an_area(codes):
+                    return AreaWeights.from_labels(codes, weights)
             return None
 
         settings = self.settings or DisclosureSettings()
@@ -150,8 +253,8 @@ class UKGeographyDisclosure(Output):
                 if level in self.levels:
                     columns = UK_DISCLOSURE_LEVEL_COLUMNS[level]
                     raise ValueError(
-                        f"The household output has none of {list(columns)} for "
-                        f"level {level!r}"
+                        f"The household output gives no household an area in "
+                        f"any of {list(columns)} for level {level!r}"
                     )
                 continue
             estimated[level] = areas
@@ -242,11 +345,13 @@ def compute_uk_geography_disclosure(
             the dataset has no ``source_household_id`` column.
         area_weights: Weights for a level, in place of the level's area code
             column, for example an area x household weight matrix.
-        parent_of: For a level given as a weight matrix, the region code of
-            each of its areas. Required for such a level when the household
-            output carries regions.
+        parent_of: For a level given as a weight matrix, the GSS code of the
+            region of each of its areas (see ``UK_REGION_GSS_CODES``).
+            Required for such a level when the household output carries
+            regions.
         acknowledge: Findings the caller accepts after review.
         prior_public: Earlier publications that count as already public.
+            Their region cells use GSS codes too.
         audit_dir: Private directory, outside any repository, for the exact
             values and counts.
 

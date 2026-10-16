@@ -3,6 +3,7 @@
 All data here is synthetic.
 """
 
+from enum import Enum
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -11,22 +12,55 @@ import pytest
 from microdf import MicroDataFrame
 
 from policyengine import outputs
+from policyengine.countries.uk.regions import ENGLISH_REGIONS
 from policyengine.disclosure import (
     NOISE_KEY_ENV,
     AreaWeights,
     DisclosureError,
     DisclosureKeyError,
     DisclosureSettings,
+    PriorPublic,
     PublicTable,
     validate_public,
 )
 from policyengine.outputs.uk_geography_disclosure import (
+    UK_REGION_GSS_CODES,
     UKGeographyDisclosure,
     compute_uk_geography_disclosure,
 )
 
 TEST_KEY = "test-key-for-unit-tests-only"
 SEATS = {"S1": "NORTH_EAST", "S2": "NORTH_EAST", "S3": "LONDON", "S4": "LONDON"}
+NATIONS = {
+    "S1": "NORTH_EAST",
+    "S2": "WALES",
+    "S3": "SCOTLAND",
+    "S4": "NORTHERN_IRELAND",
+}
+GSS = {
+    "NORTH_EAST": "E12000001",
+    "LONDON": "E12000007",
+    "WALES": "W92000004",
+    "SCOTLAND": "S92000003",
+    "NORTHERN_IRELAND": "N92000002",
+}
+# What Microcosm writes in region_code_oa: GSS codes, pseudo codes for nations.
+MICROCOSM = {
+    **GSS,
+    "WALES": "W99999999",
+    "SCOTLAND": "S99999999",
+    "NORTHERN_IRELAND": "N99999999",
+}
+
+
+class Region(Enum):
+    """Shaped like the engine's region enum: stored names, display values."""
+
+    NORTH_EAST = "North East"
+    WALES = "Wales"
+    SCOTLAND = "Scotland"
+    NORTHERN_IRELAND = "Northern Ireland"
+    UNKNOWN = "Unknown"
 
 
 def _make_sim(household_data: dict) -> MagicMock:
@@ -38,11 +72,11 @@ def _make_sim(household_data: dict) -> MagicMock:
     return sim
 
 
-def _households(affected=None, *, per_seat=150):
-    affected = affected or dict.fromkeys(SEATS, 80)
+def _households(affected=None, *, per_seat=150, region_of=SEATS):
+    affected = affected or dict.fromkeys(region_of, 80)
     rng = np.random.default_rng(0)
     seats, regions, deltas = [], [], []
-    for seat, region in SEATS.items():
+    for seat, region in region_of.items():
         seats += [seat] * per_seat
         regions += [region] * per_seat
         deltas += list(rng.uniform(100.0, 900.0, affected[seat]))
@@ -78,7 +112,7 @@ def test_regions_are_published_with_intervals_and_pass_the_validator():
     assert isinstance(impact, UKGeographyDisclosure)
     assert impact.findings == []
     assert set(frame["level"]) == {"region"}
-    assert set(frame["area_code"]) == {"NORTH_EAST", "LONDON"}
+    assert set(frame["area_code"]) == {"E12000001", "E12000007"}
     averages = frame[frame["outcome"] == "average_change"]
     assert (averages["tier"] == "reported").all()
     assert (averages["lo"] <= averages["value"]).all()
@@ -102,17 +136,168 @@ def test_public_rows_round_trip_through_json():
     }
 
 
+def test_the_region_table_maps_every_stored_region_to_its_gss_code():
+    stored = (*ENGLISH_REGIONS, "WALES", "SCOTLAND", "NORTHERN_IRELAND")
+    codes = [f"E1200000{number}" for number in range(1, 10)]
+    codes += ["W92000004", "S92000003", "N92000002"]
+
+    assert [UK_REGION_GSS_CODES[name] for name in stored] == codes
+    assert [UK_REGION_GSS_CODES[code] for code in codes] == codes
+    assert [
+        UK_REGION_GSS_CODES[code] for code in ("W99999999", "S99999999", "N99999999")
+    ] == codes[-3:]
+    assert UK_REGION_GSS_CODES["UNKNOWN"] == ""
+
+
+def test_regions_are_keyed_on_gss_codes_whatever_the_dataset_stores():
+    stored = {
+        "enum names": ("region", str),
+        "bytes": ("region", str.encode),
+        "enum members": ("region", Region.__getitem__),
+        "GSS codes": ("region_code_oa", GSS.__getitem__),
+        "Microcosm codes": ("region_code_oa", MICROCOSM.__getitem__),
+    }
+    tables = {}
+    for name, (column, spell) in stored.items():
+        baseline, reform = _households(region_of=NATIONS)
+        values = [spell(region) for region in baseline.pop("region")]
+        reform.pop("region")
+        baseline[column] = reform[column] = values
+        tables[name] = _compute(baseline, reform).public.to_frame()
+
+    assert set(tables["enum names"]["area_code"]) == {
+        "E12000001",
+        "W92000004",
+        "S92000003",
+        "N92000002",
+    }
+    for frame in tables.values():
+        pd.testing.assert_frame_equal(frame, tables["enum names"])
+
+
 def test_region_codes_are_preferred_over_the_stored_region():
     baseline, reform = _households()
     codes = [
-        "E12000001" if r == "NORTH_EAST" else "E12000007" for r in baseline["region"]
+        "E12000002" if r == "NORTH_EAST" else "E12000008" for r in baseline["region"]
     ]
     baseline["region_code_oa"] = codes
     reform["region_code_oa"] = codes
 
     impact = _compute(baseline, reform)
 
+    assert set(impact.public.to_frame()["area_code"]) == {"E12000002", "E12000008"}
+
+
+def test_an_unknown_region_is_in_the_nation_but_in_no_region():
+    baseline, reform = _households()
+    # The last households of S4 do not change.
+    regions = [*baseline["region"][:-30], *[Region.UNKNOWN] * 30]
+    baseline["region"] = reform["region"] = regions
+
+    impact = _compute(baseline, reform, levels=("national", "region"))
+
+    assert impact.findings == []
+    frame = impact.public.to_frame()
+    assert set(frame["area_code"]) == {"UK", "E12000001", "E12000007"}
+
+
+@pytest.mark.parametrize(
+    "column, spelling",
+    [
+        ("region", "London"),
+        ("region", "ENGLAND"),
+        ("region", b"Eastern"),
+        ("region_code_oa", "E12000010"),
+        ("region_code_oa", "E92000001"),
+    ],
+)
+def test_a_value_that_names_no_region_raises(column, spelling):
+    baseline, reform = _households()
+    values = list(baseline["region"])
+    if column == "region_code_oa":
+        values = [GSS[name] for name in values]
+    values[0] = spelling
+    baseline[column] = reform[column] = values
+
+    with pytest.raises(
+        ValueError, match=f"in {column} that name no UK region: 1"
+    ) as raised:
+        _compute(baseline, reform)
+    label = spelling.decode() if isinstance(spelling, bytes) else spelling
+    assert label not in str(raised.value)
+
+
+def test_a_regional_release_is_a_prior_for_seats_from_another_dataset():
+    """Regions from a national dataset first, then seats from a local file."""
+    national = _households()
+    regional = _compute(*national).public.to_frame()
+    local_baseline, local_reform = _households()
+    codes = [MICROCOSM[name] for name in local_baseline["region"]]
+    local_baseline["region_code_oa"] = local_reform["region_code_oa"] = codes
+    seats = {"levels": ("constituency",)}
+
+    prior = PriorPublic.from_frame("regional release", regional)
+    impact = _compute(local_baseline, local_reform, prior_public=[prior], **seats)
+
+    assert impact.findings == []
+    # The same table under the engine's names would match no region.
+    names = regional.replace({"area_code": {v: k for k, v in GSS.items()}})
+    stale = PriorPublic.from_frame("regional release", names)
+    with pytest.raises(DisclosureError, match="name no region area of the release"):
+        _compute(local_baseline, local_reform, prior_public=[stale], **seats)
+
+
+def test_a_prior_cell_at_a_level_that_is_not_a_uk_level_raises():
+    """A misspelt level would match nothing, so the cell would count as hidden."""
+    baseline, reform = _households({"S1": 4, "S2": 40, "S3": 80, "S4": 80})
+    cells = [
+        ("constituencies", "S1", "reform", 2026, "average_change"),
+        ("constituencies", "S1", "reform", 2026, "share_gaining"),
+        ("ward", "W1", "reform", 2026, "average_change"),
+    ]
+    prior = PriorPublic(name="seat table", cells=cells)
+
+    with pytest.raises(
+        ValueError, match=r"not UK levels: 3, at \['constituencies', 'ward'\]"
+    ):
+        _compute(baseline, reform, levels=("constituency",), prior_public=[prior])
+
+    # A level given through area_weights is known.
+    n = len(baseline["household_id"])
+    wards = AreaWeights.from_labels(
+        np.asarray(baseline["constituency_code_oa"], dtype=object), np.full(n, 100.0)
+    )
+    ward = PriorPublic(
+        name="ward table", cells=[("ward", "S3", "reform", 2026, "average_change")]
+    )
+    impact = _compute(
+        baseline,
+        reform,
+        levels=("ward",),
+        area_weights={"ward": wards},
+        prior_public=[ward],
+    )
+    assert impact.findings is not None
+
+
+@pytest.mark.parametrize("blank", ["", "  ", None])
+def test_an_empty_region_code_column_falls_back_to_the_stored_region(blank):
+    baseline, reform = _households()
+    empty = [blank] * len(baseline["region"])
+    baseline["region_code_oa"] = reform["region_code_oa"] = empty
+
+    impact = _compute(baseline, reform)
+
     assert set(impact.public.to_frame()["area_code"]) == {"E12000001", "E12000007"}
+
+
+def test_a_level_whose_column_gives_no_household_an_area_raises():
+    baseline, reform = _households()
+    empty = [""] * len(baseline["region"])
+    baseline["constituency_code_oa"] = reform["constituency_code_oa"] = empty
+
+    with pytest.raises(ValueError, match="no household an area"):
+        _compute(baseline, reform, levels=("constituency",))
 
 
 def test_a_dataset_without_a_source_id_is_refused_unless_ids_are_passed():
@@ -197,7 +382,7 @@ def test_seats_and_local_authorities_together_need_an_acknowledgement():
     authorities = [
         "L1" if s in ("S1", "S3") else "L2" for s in baseline["constituency_code_oa"]
     ]
-    regions = ["R"] * len(authorities)
+    regions = ["LONDON"] * len(authorities)
     for frame in (baseline, reform):
         frame["la_code_oa"] = authorities
         frame["region"] = regions
@@ -241,11 +426,15 @@ def test_a_weight_matrix_can_replace_the_area_codes():
 
     with pytest.raises(ValueError, match="parent_of"):
         _compute(baseline, reform, **options)
+    # Regions are keyed on GSS codes, so the engine's names match none.
+    names = {"constituency": {"M1": "NORTH_EAST", "M2": "LONDON"}}
+    with pytest.raises(DisclosureError, match="not region areas: 2"):
+        _compute(baseline, reform, parent_of=names, **options)
 
     impact = _compute(
         baseline,
         reform,
-        parent_of={"constituency": {"M1": "NORTH_EAST", "M2": "LONDON"}},
+        parent_of={"constituency": {"M1": "E12000001", "M2": "E12000007"}},
         **options,
     )
     assert set(impact.public.to_frame()["area_code"]) == {"M1", "M2"}
