@@ -1263,7 +1263,12 @@ def _unwrapped(value: Any, module: Any, filename: str) -> Any:
     for _ in range(16):
         if _from_this_file(value, module, filename):
             return value
-        value = getattr(value, "__wrapped__", None)
+        try:
+            value = getattr(value, "__wrapped__", None)
+        except Exception:
+            # A module whose lazy __getattr__ raises something other than
+            # AttributeError wraps nothing (#632 round 6, L1).
+            return None
         if value is None:
             return None
     return None
@@ -2347,9 +2352,7 @@ def _names_mutated_by_attribute(nodes: Iterable[ast.AST]) -> tuple[set[str], boo
             if node.attr == "modules" or node.attr in _ATTRIBUTE_BUILTINS:
                 unsound = True
         elif isinstance(node, ast.Name):
-            if node.id == "modules" or (
-                node.id in _ATTRIBUTE_BUILTINS and id(node) not in direct
-            ):
+            if node.id in _ATTRIBUTE_BUILTINS and id(node) not in direct:
                 unsound = True
         elif isinstance(node, ast.alias) and node.name in (
             "modules",
@@ -2487,15 +2490,20 @@ def _function_bindings(module: Any, nodes: Sequence[ast.AST]) -> dict[str, list[
     return bindings
 
 
-def _module_attribute(owner: Any, name: str, submodule: str) -> Any:
-    """What ``owner.name`` stands for, read without running any code: a
-    module's own namespace, then the loaded submodule of that name, else
-    :data:`_UNRESOLVED`. A module's ``__getattr__`` (a lazy loader) never
-    runs while the receipt is built."""
+def _module_attribute(owner: Any, name: str, submodule: str = "") -> Any:
+    """What ``owner.name`` stands for, read as Python reads it: the module's
+    attribute (a lazy loader's ``__getattr__`` runs, as it will when the code
+    does), then the loaded submodule of that name. Anything but a module, or a
+    loader that raises, gives :data:`_UNRESOLVED` rather than an error."""
 
-    if isinstance(owner, ModuleType) and name in vars(owner):
-        return vars(owner)[name]
-    return sys.modules.get(submodule, _UNRESOLVED)
+    if not isinstance(owner, ModuleType):
+        return _UNRESOLVED
+    try:
+        return getattr(owner, name)
+    except AttributeError:
+        return sys.modules.get(submodule, _UNRESOLVED) if submodule else _UNRESOLVED
+    except Exception:
+        return _UNRESOLVED
 
 
 def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
@@ -2524,17 +2532,21 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
 
     The ``Literal`` and ``Annotated`` exemptions are granted only where no
     code the receipt can see could change what those names stand for: no
-    binding of the name, no store or ``setattr``/``delattr`` of it in any
-    module function or forward reference, no use of ``modules``, of
-    ``setattr``, ``delattr`` or ``getattr`` other than a direct call with a
-    literal name, and no forward reference naming such a builtin,
-    ``import_module``, a refused name or a dunder.
+    binding of the name in the function, no store or ``setattr``/``delattr``
+    of it in the code of any module function or in a forward reference of
+    the function, no use of ``modules`` (an attribute, an imported name or a
+    string) or of ``setattr``, ``delattr`` or ``getattr`` other than a direct
+    call with a literal name in any module function, and no forward
+    reference of the function that calls something while doing either or
+    naming such a builtin, ``import_module``, a refused name or a dunder. A
+    string that calls nothing (a label such as ``'id'``) runs no code.
 
     This guards an honest producer, as the receipt does throughout. It is not
     a sandbox: it does not follow local aliases (``L = List``, ``Amount =
     Union[Decimal, float]``), ``getattr(typing, "List")``,
     ``importlib.import_module`` results, ``operator.getitem`` or ``reduce``
-    over typing objects, calls inside forward references, f-string or
+    over typing objects, what calls inside forward references do beyond the
+    names above, forward references in other module functions, f-string or
     concatenated forward references, or changes made from other modules.
     """
 
@@ -2583,10 +2595,11 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
             ):
                 parsed_nodes += len(walked)
             stored, unsound = _names_mutated_by_attribute(walked)
-            if (
-                parsed_nodes > _INSPECTED_FORWARD_NODES
-                or unsound
-                or any(_runs_code(child) for child in walked)
+            # A string that calls nothing (a label such as 'id' or
+            # '__main__') cannot run code; stores and bindings in it still count.
+            calls = any(isinstance(child, ast.Call) for child in walked)
+            if parsed_nodes > _INSPECTED_FORWARD_NODES or (
+                calls and (unsound or any(_runs_code(child) for child in walked))
             ):
                 exemptions_sound = False
                 break
@@ -2610,16 +2623,10 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
             if node.id in namespace:
                 values.append(namespace[node.id])
             # A builtin (list, dict, type) never reuses equal aliases. An
-            # attribute is followed only in a loaded module's namespace (no
-            # module __getattr__ runs); on anything else, or one the module
-            # lacks now, it could be any object.
+            # attribute is followed only on a loaded module; on anything else,
+            # or one the module lacks now, it could be any object.
             for attribute in reversed(attributes):
-                values = [
-                    vars(owner)[attribute]
-                    if isinstance(owner, ModuleType) and attribute in vars(owner)
-                    else _UNRESOLVED
-                    for owner in values
-                ]
+                values = [_module_attribute(owner, attribute) for owner in values]
             return values
 
         def is_form(node: ast.AST, *forms: str) -> bool:

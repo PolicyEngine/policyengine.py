@@ -6125,6 +6125,54 @@ RUNTIME_ALIAS_HEAD = (
             "Literal",
             id="exemptions-withheld-past-the-scan-limit",
         ),
+        # Round 22 (#632 round 6): mutants of round 21's rules that moved
+        # money on inputs it refuses.
+        pytest.param(
+            "    import importlib\n\n"
+            "    kit = importlib.import_module('builtins')\n"
+            "    kit.setattr(typing, 'Annotated', typing.Tuple)\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="setattr-reached-as-an-attribute",
+        ),
+        pytest.param(
+            "    from sys import modules as found\n\n"
+            "    found['typing_extensions'] = typing\n"
+            "    shape = List['Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "List",
+            id="modules-imported-under-another-name",
+        ),
+        pytest.param(
+            '    first = \'__builtins__.get("set" + "attr")(typing, "Annotated", typing.Tuple) or int\'\n'
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if first and shape else 0.0\n",
+            "List",
+            id="forward-reference-calling-through-builtins",
+        ),
+        pytest.param(
+            "    first = 'typing.__setattr__(\"Annotated\", typing.Tuple) or int'\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if first and shape else 0.0\n",
+            "List",
+            id="forward-reference-calling-a-dunder",
+        ),
+        pytest.param(
+            # A store with no call inside a forward reference still counts.
+            "    first = '[0 for typing.Annotated in [typing.Tuple]] and int'\n"
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n"
+            "    simulation.rate = 0.21 if first and shape else 0.0\n",
+            "List",
+            id="forward-reference-storing-in-a-comprehension",
+        ),
+        pytest.param(
+            "    import w4_receipt_r19_not_loaded as aliases\n\n"
+            "    shape = 'aliases.Sequence[Decimal | float]'\n"
+            "    simulation.rate = 0.21 if shape else 0.0\n",
+            "aliases.Sequence",
+            id="forward-reference-to-an-unloaded-module",
+        ),
     ],
 )
 def test_typing_aliases_built_with_a_union_inside_functions_are_refused(
@@ -6308,6 +6356,24 @@ def test_typing_aliases_built_with_a_union_inside_functions_are_refused(
             "    simulation.rate = rate if period([1.0]) else 0.0\n",
             id="quoted-metadata-beside-a-literal-getattr",
         ),
+        pytest.param(
+            # Round 22 (#632 round 6): a label calls nothing, so it cannot
+            # run code, whatever it names.
+            "    import pandas as pd\n\n"
+            "    frame = pd.DataFrame({'id': [1.0], 'person.id': [2.0]})\n"
+            "    guard = ['eval', '__main__']\n"
+            "    def period(amount: Annotated[float, 'weekly | monthly']):\n"
+            "        return amount\n\n"
+            "    simulation.rate = 0.21 if period(frame) is not None and guard else 0.0\n",
+            id="quoted-metadata-beside-labels-naming-builtins",
+        ),
+        pytest.param(
+            "    modules = ['income_tax', 'vat']\n"
+            "    def period(kind: List['Annotated[float, \"weekly | monthly\"]']):\n"
+            "        return kind\n\n"
+            "    simulation.rate = 0.21 if modules and period([1.0]) else 0.0\n",
+            id="quoted-metadata-beside-a-local-named-modules",
+        ),
     ],
 )
 def test_ordinary_types_and_subscripts_inside_functions_bind(tmp_path, body):
@@ -6336,6 +6402,12 @@ def test_ordinary_types_and_subscripts_inside_functions_bind(tmp_path, body):
             "    put = setattr\n    put(typing, 'Annotated', typing.Tuple)\n",
             id="aliases-setattr",
         ),
+        pytest.param(
+            # Round 22 (#632 round 6, mutant m11).
+            "    import sys\n    from operator import attrgetter\n\n"
+            "    attrgetter('modules')(sys)['typing_extensions'] = typing\n",
+            id="reads-modules-by-name",
+        ),
     ],
 )
 def test_a_sibling_function_can_withhold_the_exemption(tmp_path, poison):
@@ -6356,6 +6428,75 @@ def test_a_sibling_function_can_withhold_the_exemption(tmp_path, poison):
             _identity(module.raise_rate)
     finally:
         sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize(
+    ("sibling", "use"),
+    [
+        pytest.param(
+            "async def poison():\n    typing.Annotated = typing.Tuple\n",
+            "    shape = List['typing.Annotated[float, \"List[Union[Decimal, float]]\"]']\n",
+            id="async-sibling-store",
+        ),
+        pytest.param(
+            "def poison():\n    typing.Annotated = typing.Tuple\n",
+            "    from typing import Annotated as A\n\n"
+            "    shape = List['A[float, \"List[Union[Decimal, float]]\"]']\n",
+            id="sibling-store-then-import-rename",
+        ),
+    ],
+)
+def test_sibling_routes_withhold_the_exemption(tmp_path, sibling, use):
+    """Round 22 (#632 round 6, mutants m17 and m20)."""
+
+    source = (
+        RUNTIME_ALIAS_HEAD + sibling + "\n\n"
+        "def raise_rate(simulation):\n"
+        + use
+        + "    simulation.rate = 0.21 if shape else 0.0\n"
+    )
+    name = "w4_receipt_r22_sibling"
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        with pytest.raises(ReceiptError, match="function raise_rate subscripts List"):
+            _identity(module.raise_rate)
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_a_name_a_module_loads_lazily_is_resolved_as_python_resolves_it(tmp_path):
+    """Round 22 (#632 round 6): numpy 2 and pydantic 2 provide names through
+    a module __getattr__ (np.polynomial, pydantic.HttpUrl). The receipt reads
+    them as Python does, so the verdict does not depend on whether anything
+    has touched the name yet."""
+
+    package = tmp_path / "w4_receipt_r22lazyok"
+    package.mkdir()
+    (package / "__init__.py").write_text(
+        "def __getattr__(name):\n"
+        "    if name == 'Seq':\n"
+        "        import typing\n\n"
+        "        return typing.Sequence\n"
+        "    raise AttributeError(name)\n"
+    )
+    source = (
+        "import w4_receipt_r22lazyok\n"
+        + RUNTIME_ALIAS_HEAD
+        + "def raise_rate(simulation):\n"
+        "    def curve(points: Optional[w4_receipt_r22lazyok.Seq] = None):\n"
+        "        return points\n\n"
+        "    simulation.rate = 0.21 if curve() is None else 0.0\n"
+    )
+    name = "w4_receipt_r22_lazy_ok"
+    sys.path.insert(0, str(tmp_path))
+    try:
+        module, _ = _import_source(tmp_path, name, source)
+        assert "Seq" not in vars(sys.modules["w4_receipt_r22lazyok"])
+        assert _identity(module.raise_rate)
+    finally:
+        sys.path.remove(str(tmp_path))
+        for loaded in (name, "w4_receipt_r22lazyok"):
+            sys.modules.pop(loaded, None)
 
 
 def test_a_store_on_the_middle_of_a_chain_withholds_the_exemption(tmp_path):
@@ -6386,25 +6527,36 @@ def test_a_store_on_the_middle_of_a_chain_withholds_the_exemption(tmp_path):
             sys.modules.pop(loaded, None)
 
 
-@pytest.mark.parametrize("form", ["import-as", "from-import"])
-def test_a_lazy_loading_package_is_never_run_by_the_receipt(tmp_path, form):
-    """Round 21 (#632 round 5): a package whose module __getattr__ raises
-    must not make building a receipt raise; its submodule, not loaded yet,
-    could be any object."""
+@pytest.mark.parametrize("form", ["import-as", "from-import", "attribute-chain"])
+def test_a_lazy_loader_that_raises_does_not_crash_the_receipt(tmp_path, form):
+    """Round 21 (#632 round 5) and round 22 (round 6, m35 and L1): a package
+    whose module __getattr__ raises must not make building a receipt raise,
+    whether the name is imported inside the function or reached through a
+    module-level import; its submodule, not loaded yet, could be any object."""
 
     package = tmp_path / "w4_receipt_r21lazy"
     package.mkdir()
     (package / "__init__.py").write_text(
         "def __getattr__(name):\n    raise RuntimeError('lazy loader ran')\n"
     )
-    importing = (
-        "    import w4_receipt_r21lazy.sub as sub\n"
-        if form == "import-as"
-        else "    from w4_receipt_r21lazy import sub\n"
+    importing = {
+        "import-as": "    import w4_receipt_r21lazy.sub as sub\n",
+        "from-import": "    from w4_receipt_r21lazy import sub\n",
+        "attribute-chain": "    sub = None\n",
+    }[form]
+    shape = (
+        "w4_receipt_r21lazy.sub.Sequence[float] if sub is None else None"
+        if form == "attribute-chain"
+        else "sub.Sequence[float]"
+    )
+    head = (
+        "import w4_receipt_r21lazy\n" + RUNTIME_ALIAS_HEAD
+        if form == "attribute-chain"
+        else RUNTIME_ALIAS_HEAD
     )
     source = (
-        RUNTIME_ALIAS_HEAD + "def raise_rate(simulation):\n" + importing + "\n"
-        "    shape = sub.Sequence[float]\n"
+        head + "def raise_rate(simulation):\n" + importing + "\n"
+        f"    shape = {shape}\n"
         "    simulation.rate = 0.21 if shape else 0.0\n"
     )
     name = "w4_receipt_r21_lazy"
