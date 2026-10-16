@@ -344,6 +344,7 @@ elif command == "git" and args[0] == "push":
                             "headRefOid": state["head"],
                             "isDraft": state["status"] != "ready",
                             "isCrossRepository": False,
+                            "baseRefName": "main",
                         }
                     ]
                 )
@@ -509,7 +510,9 @@ def test_refresh_checks_reruns_only_failed_pr_runs_for_the_qualified_head(
     branch = candidate_branch(receipt.pair)
     head = receipt.harness.git_commit if head_matches else "f" * 40
     monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: [receipt])
-    monkeypatch.setattr(cli, "_open_candidate_branches", lambda: {branch: head})
+    monkeypatch.setattr(
+        cli, "_candidate_pull_requests", lambda: [_candidate_pr(1, branch, head)]
+    )
     monkeypatch.setattr(cli, "_now", lambda: _instant(NOW))
     code, docs, guard, old = (
         ".github/workflows/pr_code_changes.yaml",
@@ -563,6 +566,11 @@ def test_refresh_checks_reruns_only_failed_pr_runs_for_the_qualified_head(
 
     def fake_run(argv, **kwargs):
         calls.append(argv)
+        if argv[:3] == ["gh", "pr", "list"]:
+            assert argv[argv.index("--head") + 1] == branch
+            return SimpleNamespace(
+                returncode=0, stdout=json.dumps([_candidate_pr(1, branch, head)])
+            )
         if argv[:2] == ["gh", "api"]:
             assert "--paginate" in argv
             assert f"head_sha={receipt.harness.git_commit}" in argv[2]
@@ -592,6 +600,22 @@ def test_refresh_checks_reruns_only_failed_pr_runs_for_the_qualified_head(
 
 NOW = "2026-10-16T12:00:00Z"
 OLD = "2026-09-15T11:00:00Z"
+
+
+def _candidate_pr(number, branch, head, **fields):
+    """A same-repository pull request from ``branch`` to main, open, as
+    `gh pr list` reads it."""
+
+    return {
+        "number": number,
+        "baseRefName": "main",
+        "headRefName": branch,
+        "headRefOid": head,
+        "isDraft": True,
+        "isCrossRepository": False,
+        "state": "OPEN",
+        **fields,
+    }
 
 
 def _instant(text):
@@ -629,8 +653,12 @@ def test_refresh_reruns_each_candidate_only_its_own_runs(monkeypatch, tmp_path, 
     head = first.harness.git_commit
     assert second.harness.git_commit == head
     branches = {candidate_branch(r.pair): head for r in (first, second)}
+    pull_requests = [
+        _candidate_pr(number, name, head)
+        for number, name in enumerate(branches, start=1)
+    ]
     monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: [first, second])
-    monkeypatch.setattr(cli, "_open_candidate_branches", lambda: branches)
+    monkeypatch.setattr(cli, "_candidate_pull_requests", lambda: pull_requests)
     monkeypatch.setattr(cli, "_now", lambda: _instant(NOW))
     code = ".github/workflows/pr_code_changes.yaml"
     first_branch, second_branch = branches
@@ -647,6 +675,14 @@ def test_refresh_reruns_each_candidate_only_its_own_runs(monkeypatch, tmp_path, 
 
     def fake_run(argv, **kwargs):
         calls.append(argv)
+        if argv[:3] == ["gh", "pr", "list"]:
+            head_branch = argv[argv.index("--head") + 1]
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps(
+                    [pr for pr in pull_requests if pr["headRefName"] == head_branch]
+                ),
+            )
         if argv[:2] == ["gh", "api"]:
             if unreadable.pop("once", False):
                 return SimpleNamespace(returncode=1, stdout="")
@@ -660,4 +696,68 @@ def test_refresh_reruns_each_candidate_only_its_own_runs(monkeypatch, tmp_path, 
     assert args.func(args) == 0
     output = capsys.readouterr().out
     assert f"::warning::could not read the runs of {first_branch}" in output
+    assert [call[3] for call in calls if call[:3] == ["gh", "run", "rerun"]] == ["32"]
+
+
+@pytest.mark.parametrize("shared", ["another base", "unreadable"])
+def test_refresh_leaves_a_candidate_whose_branch_runs_are_shared(
+    monkeypatch, tmp_path, capsys, shared
+):
+    """Round 6 of #635: a pull request from the candidate branch to another
+    base runs on the same commit and branch, so the candidate's runs cannot
+    be told from its runs; refresh re-runs none of them (promotion refuses
+    the candidate anyway), and the next candidate is still refreshed. The
+    same holds while that branch's pull requests cannot be read."""
+
+    cli = _cli()
+    first = make_receipt(pair=make_pair(model="2.200.0"))
+    second = make_receipt(pair=make_pair(model="2.201.0"))
+    head = first.harness.git_commit
+    first_branch, second_branch = (candidate_branch(r.pair) for r in (first, second))
+    pull_requests = [
+        _candidate_pr(1, first_branch, head),
+        _candidate_pr(2, second_branch, head),
+    ]
+    other = _candidate_pr(7, first_branch, head, baseRefName="release")
+    monkeypatch.setattr(cli, "latest_receipts", lambda root, **_: [first, second])
+    monkeypatch.setattr(cli, "_candidate_pull_requests", lambda: pull_requests)
+    monkeypatch.setattr(cli, "_now", lambda: _instant(NOW))
+    code = ".github/workflows/pr_code_changes.yaml"
+    runs = [
+        _listed_run(
+            31, head, first_branch, code, "pull_request", "completed", "failure", 1
+        ),
+        _listed_run(
+            32, head, second_branch, code, "pull_request", "completed", "failure", 1
+        ),
+    ]
+    calls = []
+
+    def fake_run(argv, **kwargs):
+        calls.append(argv)
+        if argv[:3] == ["gh", "pr", "list"]:
+            head_branch = argv[argv.index("--head") + 1]
+            if head_branch == first_branch and shared == "unreadable":
+                return SimpleNamespace(returncode=1, stdout="")
+            listing = [pr for pr in pull_requests if pr["headRefName"] == head_branch]
+            if head_branch == first_branch:
+                listing.append(other)
+            return SimpleNamespace(returncode=0, stdout=json.dumps(listing))
+        if argv[:2] == ["gh", "api"]:
+            return SimpleNamespace(
+                returncode=0, stdout="\n".join(json.dumps(run) for run in runs)
+            )
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(cli, "subprocess", SimpleNamespace(run=fake_run))
+    args = cli.parser().parse_args(["refresh-pr-checks", "--ledger", str(tmp_path)])
+    assert args.func(args) == 0
+    output = capsys.readouterr().out
+    if shared == "unreadable":
+        assert f"::warning::could not read the pull requests from {first_branch}" in (
+            output
+        )
+    else:
+        assert f"::warning::not re-running {first_branch}'s runs" in output
+        assert "#7 (to release, open)" in output
     assert [call[3] for call in calls if call[:3] == ["gh", "run", "rerun"]] == ["32"]

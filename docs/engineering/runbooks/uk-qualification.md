@@ -27,12 +27,20 @@ To see them, rerun the contract on a machine with access to the private UK
 dataset, and keep the output local: it holds figures from the survey data,
 some from fewer than 10 records, so never commit, paste or publish it.
 
-1. Install the candidate pair (the attempt's `candidate.json` names the
+1. Check out the candidate commit the attempt ran on (`git_commit` in the
+   attempt's `harness.json` in the ledger): its bundle manifest names the
+   dataset `materialize_dataset` fetches, so an older checkout would fetch
+   older data even with the candidate's wheels installed.
+2. Install the candidate pair (the attempt's `candidate.json` names the
    wheels) and export `HUGGING_FACE_TOKEN` for the private dataset.
-2. Materialize the certified dataset and run the contract with the seed and
-   sample size in `src/policyengine/data/qualification/uk.json`:
+3. Materialize the certified dataset, check its SHA-256 against
+   `data.dataset_sha256` in the pair's `pair.json`, and run the contract
+   with the seed and sample size in
+   `src/policyengine/data/qualification/uk.json`:
 
    ```python
+   import hashlib
+   import json
    from pathlib import Path
 
    from policyengine.provenance.dataset_materialization import materialize_dataset
@@ -41,13 +49,16 @@ some from fewer than 10 records, so never commit, paste or publish it.
    )
 
    dataset = materialize_dataset("uk", data_dir=Path("data")).path
+   pair = json.loads(Path("path/to/ledger/uk/<pair_id>/pair.json").read_text())
+   digest = hashlib.sha256(Path(dataset).read_bytes()).hexdigest()
+   assert digest == pair["data"]["dataset_sha256"], "not the certified dataset"
    report = run_budget_reform_contract(
        routes=None, dataset_path=str(dataset), seed=0, max_examples=20
    )
    failing = [row for row in report["population"] if row["status"] != "pass"]
    ```
 
-3. Read `failing[...]["detail"]` locally. Report only the finding (which
+4. Read `failing[...]["detail"]` locally. Report only the finding (which
    condition failed, on which route), never the figures.
 
 ## A candidate stranded before automatic promotion
@@ -55,8 +66,8 @@ some from fewer than 10 records, so never commit, paste or publish it.
 Automatic promotion moves main to a qualified candidate only once the newest
 run of each workflow and event on the candidate branch, from this repository,
 has passed, including a `pr_code_changes.yaml` run dispatched on the branch
-itself. Runs of other pull requests at the same commit, forks' included, do
-not count. The `refresh-pr-checks` step re-runs a failed, timed-out or
+itself. Runs of pull requests from other branches or forks at the same
+commit do not count. The `refresh-pr-checks` step re-runs a failed, timed-out or
 cancelled run until it has had four attempts, within GitHub's 30 days of its
 first attempt.
 
@@ -69,8 +80,21 @@ job fails on every scheduled run until one of these clears it:
 
 - Fix the cause, then re-run the named run by hand
   (`gh run rerun <run id> --repo PolicyEngine/policyengine.py`); a passing
-  newest attempt clears it.
+  newest attempt clears it. GitHub refuses this for a run whose first
+  attempt is more than 30 days old.
 - For the run on the candidate's own tree, dispatch a new one:
   `gh workflow run pr_code_changes.yaml --repo PolicyEngine/policyengine.py --ref <branch>`.
 - Requalify the pair: run `certify-uk-release` with its versions, `pair_id`
   and `force` set.
+
+### Another pull request from the candidate branch
+
+A pull request from a candidate branch to a base other than main runs the
+same workflows with the same commit and branch as the candidate's own pull
+request, and GitHub's run records do not say which pull request a run is
+for. While such a pull request is open, or after one was closed or merged
+at the candidate's commit, the promote job fails with
+`::error::<branch> is not promoted: pull requests ... from it run on the same commit`,
+and refresh re-runs none of the candidate's runs. Close that pull request,
+then requalify the pair as above: the new candidate commit leaves the other
+pull request's runs behind.

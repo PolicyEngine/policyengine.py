@@ -551,13 +551,15 @@ PULL_REQUEST_LIMIT = 1000
 
 
 def _candidate_pull_requests() -> list[dict[str, Any]]:
-    """Open candidate pull requests from this repository's own branches.
+    """Open candidate pull requests to main from this repository's own branches.
 
     ``head:candidate/uk/`` matches by prefix, and a fork's pull request can
     carry the same branch name, so only same-repository ones are candidates
-    (a listing without the field counts as a fork's). The search reads up to
-    ``PULL_REQUEST_LIMIT`` pull requests, forks included, and refuses to go
-    on if it reaches the limit, since one it did not read could be the
+    (a listing without the field counts as a fork's). Only pull requests to
+    main are (round 6 of #635): GitHub allows one open pull request per head
+    and base, so each candidate branch then has at most one. The search reads
+    up to ``PULL_REQUEST_LIMIT`` pull requests, forks included, and refuses
+    to go on if it reaches the limit, since one it did not read could be the
     target.
     """
 
@@ -571,12 +573,14 @@ def _candidate_pull_requests() -> list[dict[str, Any]]:
                 LEDGER_REPOSITORY,
                 "--state",
                 "open",
+                "--base",
+                "main",
                 "--search",
                 "head:candidate/uk/",
                 "--limit",
                 str(PULL_REQUEST_LIMIT),
                 "--json",
-                "number,headRefName,headRefOid,isDraft,isCrossRepository",
+                "number,baseRefName,headRefName,headRefOid,isDraft,isCrossRepository",
             ],
             check=True,
             capture_output=True,
@@ -588,15 +592,68 @@ def _candidate_pull_requests() -> list[dict[str, Any]]:
             f"::error::{len(listing)} open pull requests match candidate/uk/; "
             "one beyond the listing could be the target"
         )
-    return [item for item in listing if item.get("isCrossRepository") is False]
+    return [
+        item
+        for item in listing
+        if item.get("isCrossRepository") is False and item.get("baseRefName") == "main"
+    ]
 
 
-def _open_candidate_branches() -> dict[str, str]:
-    """Open candidate branches and the commit each one's pull request is at."""
+#: The most pull requests from one candidate branch the check below reads.
+SAME_BRANCH_LIMIT = 100
 
-    return {
-        item["headRefName"]: item["headRefOid"] for item in _candidate_pull_requests()
-    }
+
+def _shared_branch_pull_requests(branch: str, commit: str) -> Optional[list[str]]:
+    """Pull requests from this repository's ``branch`` to a base other than
+    main whose runs can be at ``commit``; None if they cannot all be read.
+
+    Such a pull request runs the same workflows with the same commit, branch
+    and repository as the candidate's own, to main (round 6 of #635), and
+    GitHub's run records do not say which pull request started a run. So
+    while one is open, or after one was closed or merged at this commit,
+    the candidate's own runs cannot be told from its runs. (Pull requests
+    from the branch to main are the candidate's own: at most one is open,
+    and a closed one's runs test the same merge.) A listing without the fork
+    field counts as this repository's, and one that reaches
+    ``SAME_BRANCH_LIMIT`` as unreadable.
+    """
+
+    result = subprocess.run(
+        [
+            "gh",
+            "pr",
+            "list",
+            "--repo",
+            LEDGER_REPOSITORY,
+            "--head",
+            branch,
+            "--state",
+            "all",
+            "--limit",
+            str(SAME_BRANCH_LIMIT),
+            "--json",
+            "number,baseRefName,headRefOid,isCrossRepository,state",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        listing = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(listing, list) or len(listing) >= SAME_BRANCH_LIMIT:
+        return None
+    return sorted(
+        f"#{pr.get('number')} (to {pr.get('baseRefName')}, "
+        f"{str(pr.get('state')).lower()})"
+        for pr in listing
+        if pr.get("isCrossRepository") is not True
+        and pr.get("baseRefName") != "main"
+        and (pr.get("state") == "OPEN" or pr.get("headRefOid") == commit)
+    )
 
 
 #: A run is re-run until it has made this many attempts in all, so a genuine
@@ -662,7 +719,10 @@ def _own_runs(
 
     The runs listing for a commit also holds runs of any other pull request
     at that commit, a fork's included (round 5 of #635); only runs from this
-    repository on the candidate branch are the candidate's.
+    repository on the candidate branch are the candidate's. Runs of another
+    pull request from the candidate branch itself look the same, so refresh
+    and promotion first check there is none
+    (``_shared_branch_pull_requests``).
     """
 
     return [
@@ -708,16 +768,34 @@ def cmd_refresh_pr_checks(args: argparse.Namespace) -> int:
     newest of the candidate's own runs (``_candidate_runs``) is re-run when
     ``_rerun_due``: a failed or timed-out one by its failed jobs, a
     cancelled one (a job timeout cancels the run) in full. Older runs a
-    newer one replaced are left alone. GITHUB_TOKEN may re-run existing runs
-    with actions: write.
+    newer one replaced are left alone, and so is every run of a candidate
+    whose runs another pull request from its branch shares
+    (``_shared_branch_pull_requests``): promotion refuses it anyway, and
+    re-runs would spend the other pull request's attempts. GITHUB_TOKEN may
+    re-run existing runs with actions: write.
     """
 
-    branches = _open_candidate_branches()
+    pull_requests = {pr["headRefName"]: pr for pr in _candidate_pull_requests()}
     now = _now()
     for receipt in latest_receipts(Path(args.ledger)):
         branch = candidate_branch(receipt.pair)
         head = receipt.harness.git_commit
-        if not receipt.promotable or branches.get(branch) != head:
+        pull_request = pull_requests.get(branch)
+        if (
+            not receipt.promotable
+            or pull_request is None
+            or pull_request["headRefOid"] != head
+        ):
+            continue
+        shared = _shared_branch_pull_requests(branch, head)
+        if shared is None:
+            print(f"::warning::could not read the pull requests from {branch}")
+            continue
+        if shared:
+            print(
+                f"::warning::not re-running {branch}'s runs: pull requests "
+                f"{', '.join(shared)} from it share them"
+            )
             continue
         listed = _candidate_runs(head, branch)
         if listed is None:
@@ -845,9 +923,10 @@ def _promote(
     GitHub then records the pull request as merged.
 
     Returns False when a return to draft failed, which leaves a ready pull
-    request that a merge could combine with other code, or when the
-    candidate waits on runs refresh will not re-run again; either way the
-    promote run fails so someone sees it. ``pull_request`` names the
+    request that a merge could combine with other code, when the candidate
+    waits on runs refresh will not re-run again, or when another pull
+    request from its branch shares its runs; either way the promote run
+    fails so someone sees it. ``pull_request`` names the
     candidate's pull request for readiness changes (its number; the branch
     by default).
     """
@@ -873,6 +952,25 @@ def _promote(
     if not automatic:
         _set_ready(target, True)
         return True
+    shared = _shared_branch_pull_requests(branch, commit)
+    if shared is None:
+        print(
+            f"automatic promotion waits for {branch}: the pull requests from it "
+            "could not be read"
+        )
+        return _set_ready(target, False)
+    if shared:
+        # Their runs and the candidate's cannot be told apart, and they stay
+        # at this commit after the pull requests close: only a new candidate
+        # commit leaves them behind.
+        print(
+            f"::error::{branch} is not promoted: pull requests "
+            f"{', '.join(shared)} from it run on the same commit, and GitHub "
+            "does not record which pull request a run is for; close them and "
+            "requalify the pair"
+        )
+        _set_ready(target, False)
+        return False
     waiting, stranded = _unfinished_checks(commit, branch)
     if waiting:
         print(f"automatic promotion waits for {branch}: " + "; ".join(waiting))
@@ -922,9 +1020,11 @@ def _unfinished_checks(commit: str, branch: str) -> tuple[list[str], list[str]]:
     Pull request runs test the candidate merged with main as it was then;
     the run of the code-changes workflow that the qualification dispatches on
     the candidate branch tests the commit's own tree, and must exist. Only
-    the candidate's own runs count (``_own_runs``): a run of another pull
-    request at the same commit, a fork's included, neither blocks nor
-    passes it. For each workflow and event, the newest own run must have
+    the candidate's own runs count (``_own_runs``): a run of a pull request
+    from another branch or a fork at the same commit neither blocks nor
+    passes it (``_promote`` has already refused a candidate whose branch has
+    another pull request sharing its runs). For each workflow and event,
+    the newest own run must have
     finished successfully, and for each check name the newest check must
     have finished as success, skipped or neutral. Checks of any run that is
     not a newest own run (one a newer run replaced, or another pull

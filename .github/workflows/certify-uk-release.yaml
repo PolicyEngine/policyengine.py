@@ -234,8 +234,11 @@ jobs:
         run: |
           # A forced attempt may replace an already qualified head. Revoke
           # its ready status before exposing any new, unqualified commit.
-          ready_pr=$(gh pr list --head "$BRANCH" --state open --json number,isDraft \
-            --jq '.[] | select(.isDraft == false) | .number')
+          # Only this repository's pull request to main is the candidate's:
+          # a fork's can carry the same branch name.
+          ready_pr=$(gh pr list --head "$BRANCH" --base main --state open \
+            --json number,isDraft,isCrossRepository \
+            --jq '.[] | select(.isDraft == false and .isCrossRepository == false) | .number')
           if [[ -n "$ready_pr" ]]; then
             gh pr ready "$ready_pr" --undo
           fi
@@ -275,8 +278,13 @@ jobs:
           Ledger: https://github.com/${GITHUB_REPOSITORY}/tree/${LEDGER_BRANCH}/uk/${PAIR_ID}
 
           🤖 Generated with [Claude Code](https://claude.com/claude-code)"
-          if gh pr view "$BRANCH" --json number >/dev/null 2>&1; then
-            gh pr edit "$BRANCH" --body "$body"
+          # By number: gh looks a branch name up among pull requests a fork's
+          # can shadow.
+          number=$(gh pr list --head "$BRANCH" --base main --state open \
+            --json number,isCrossRepository \
+            --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
+          if [[ -n "$number" ]]; then
+            gh pr edit "$number" --body "$body"
           else
             gh pr create --draft --base main --head "$BRANCH" --title "$title" --body "$body"
           fi
@@ -391,7 +399,15 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           BRANCH: ${{ needs.resolve.outputs.branch }}
-        run: gh pr edit "$BRANCH" --body-file "$RUNNER_TEMP/pr-body.md"
+        run: |
+          number=$(gh pr list --head "$BRANCH" --base main --state open \
+            --json number,isCrossRepository \
+            --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
+          if [[ -z "$number" ]]; then
+            echo "::error::no open pull request from $BRANCH to main"
+            exit 1
+          fi
+          gh pr edit "$number" --body-file "$RUNNER_TEMP/pr-body.md"
 
   catch-up:
     if: github.event_name == 'schedule'
