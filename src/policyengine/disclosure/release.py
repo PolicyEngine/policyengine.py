@@ -27,6 +27,7 @@ from .schema import (
     FAMILY_LOSING,
     NOISE_REFERENCE_PUBLIC,
     OUTCOME_FAMILY,
+    OUTCOMES,
     PRIVATE_SECONDARY,
     REASON_DISCLOSURE_CONTROL,
     REASON_THIN_SUPPORT,
@@ -71,6 +72,17 @@ class Release:
         if unknown:
             raise ValueError(f"These findings cannot be acknowledged: {unknown}")
         self._prior = tuple(prior_public)
+        for prior in self._prior:
+            # A cell with an unknown outcome matches no cell of any release.
+            unknown_outcomes = sum(
+                outcome not in OUTCOMES for *_, outcome in prior.cells
+            )
+            if unknown_outcomes:
+                raise DisclosureError(
+                    f"Cells of prior publication {prior.name!r} whose outcome is "
+                    f"unknown: {unknown_outcomes}. Outcomes are "
+                    f"{', '.join(OUTCOMES)}."
+                )
         self._estimates: dict[_Key, AreaEstimates] = {}
         self._published: dict[_Key, bool] = {}
         self._nestings: list[tuple[str, str, Optional[dict[str, str]]]] = []
@@ -107,6 +119,8 @@ class Release:
 
         ``parent_of`` (child area code to parent area code) is needed only when
         the child level is a weight matrix and the parent has several areas.
+        Its parent codes must be area codes of the parent estimates: the check
+        raises on one that is not.
         """
         mapping = dict(parent_of) if parent_of is not None else None
         self._nestings.append((child_level, parent_level, mapping))
@@ -144,6 +158,7 @@ class Release:
 
     def check(self) -> list[Finding]:
         """Report what a reader could recover from the rows as they stand."""
+        self._require_prior_areas()
         tiers = {
             (key, family): self._family_tiers(key, family)
             for key in self._estimates
@@ -266,6 +281,44 @@ class Release:
             else:
                 yield record, record["tier"], reason
 
+    def _require_prior_areas(self) -> None:
+        """Refuse prior cells that name no area of a level the release holds.
+
+        Prior cells match by code. A cell that matched nothing would be
+        ignored, so a cell an earlier publication showed would still count as
+        hidden. A cell at a level the release holds must name an area of the
+        estimates for its reform and year, or, when the release holds none,
+        of any of the level's estimates. Cells at other levels belong to other
+        publications.
+        """
+        areas: dict[str, set[str]] = {}
+        for (level, _, _), estimates in self._estimates.items():
+            areas.setdefault(level, set()).update(estimates.areas.area_codes)
+        for prior in self._prior:
+            unmatched = [
+                level
+                for level, area, reform, year, _ in prior.cells
+                if level in areas
+                and area not in self._prior_areas(level, reform, year, areas)
+            ]
+            if unmatched:
+                levels = " or ".join(sorted(set(unmatched)))
+                raise DisclosureError(
+                    f"Cells of prior publication {prior.name!r} that name no "
+                    f"{levels} area of the release: {len(unmatched)}. Prior "
+                    "cells match by code: use the area codes of the release's "
+                    "estimates."
+                )
+
+    def _prior_areas(
+        self, level: str, reform: str, year: int, areas: dict[str, set[str]]
+    ) -> set[str]:
+        """The areas a prior cell at a held level may name."""
+        estimates = self._estimates.get((level, reform, int(year)))
+        if estimates is None:
+            return areas[level]
+        return set(estimates.areas.area_codes)
+
     def _known_cells(self) -> set[tuple[str, str, str, int, str]]:
         """Family cells an earlier publication already made public."""
         known = set()
@@ -338,6 +391,15 @@ class Release:
             if missing:
                 raise DisclosureError(
                     f"parent_of lacks {len(missing)} {child.level} areas."
+                )
+            # Groups match by code. A code that is no parent area would leave
+            # its child areas in no group, and the check would pass unseen.
+            unknown = {parent_of[c] for c in child.areas.area_codes} - set(parents)
+            if unknown:
+                raise DisclosureError(
+                    f"Codes in parent_of that are not {parent.level} areas: "
+                    f"{len(unknown)}. Map each {child.level} area to an area "
+                    f"code of the {parent.level} estimates."
                 )
             return {
                 code: (
