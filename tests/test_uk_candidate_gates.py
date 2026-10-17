@@ -2667,6 +2667,11 @@ def test_run_gates_returns_one_result_per_gate(outcomes):
 def _write_previous_receipt(root, pair, evidence, *, attempt="a"):
     from policyengine.provenance.qualification_ledger import write_json
 
+    if "ever_usable_inputs" in evidence.get("budget_inputs", {}):
+        inputs = dict(evidence["budget_inputs"])
+        inputs.setdefault("pair_id", pair.pair_id)
+        inputs.setdefault("attempt_id", f"{pair.pair_id}/{attempt}")
+        evidence = {**evidence, "budget_inputs": inputs}
     receipt = make_receipt(pair)
     receipt = receipt.model_copy(
         update={
@@ -2675,7 +2680,20 @@ def _write_previous_receipt(root, pair, evidence, *, attempt="a"):
                     update={
                         "evidence_sha256": gates_module.evidence_sha256(
                             evidence[gate.gate_id]
-                        )
+                        ),
+                        "details": {
+                            **gate.details,
+                            **(
+                                {
+                                    "ever_usable_inputs": evidence[gate.gate_id][
+                                        "ever_usable_inputs"
+                                    ]
+                                }
+                                if gate.gate_id == "budget_inputs"
+                                and "ever_usable_inputs" in evidence[gate.gate_id]
+                                else {}
+                            ),
+                        },
                     }
                 )
                 if gate.gate_id in evidence
@@ -2851,10 +2869,16 @@ def test_unverified_previous_evidence_is_recomputed(tmp_path, corruption):
     else:
         previous.pop("qualification_pair_id")
         previous.pop("core_wheel_sha256")
-    assert gates_module._previous_gate_evidence(tmp_path, previous) == {}
+    if corruption == "receipt":
+        with pytest.raises(gates_module.PreviousPairUnavailable):
+            gates_module._previous_gate_evidence(tmp_path, previous)
+    else:
+        assert gates_module._previous_gate_evidence(tmp_path, previous) == {}
 
 
-@pytest.mark.parametrize("baseline_kind", ["valid", "corrupt", "legacy"])
+@pytest.mark.parametrize(
+    "baseline_kind", ["valid", "corrupt", "legacy", "legacy_history"]
+)
 def test_orchestration_hashes_every_finalized_gate_evidence(
     tmp_path, monkeypatch, baseline_kind
 ):
@@ -2885,11 +2909,17 @@ def test_orchestration_hashes_every_finalized_gate_evidence(
             "model_variables": 0,
             "model_input_variables": 0,
             "dataset_columns": 0,
+            "ever_usable_inputs": [],
         },
         "supported_years": {"supported_years": [2025]},
     }
     if baseline_kind == "legacy":
         baseline["budget_inputs"].pop("input_status")
+        baseline["budget_inputs"].pop("ever_usable_inputs")
+    elif baseline_kind == "legacy_history":
+        baseline["budget_inputs"].pop("ever_usable_inputs")
+    elif baseline_kind == "corrupt":
+        baseline["budget_inputs"].pop("ever_usable_inputs")
     _, attempt = _write_previous_receipt(tmp_path, pair, baseline)
     if baseline_kind == "corrupt":
         write_json(

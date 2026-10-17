@@ -276,8 +276,50 @@ def _replay_exceptions() -> tuple[ReplayExceptionRegistry, str]:
     ).hexdigest()
 
 
+def _consistent_input_status(state: Any) -> bool:
+    """Validate model membership and usability facts at the evidence boundary."""
+
+    return (
+        isinstance(state, Mapping)
+        and all(
+            type(state.get(key)) is bool
+            for key in ("in_model", "is_input", "in_data", "usable")
+        )
+        and (not state["is_input"] or state["in_model"])
+        and (not state["usable"] or (state["in_model"] and state["in_data"]))
+    )
+
+
+def _input_name_set(value: Any) -> Optional[set[str]]:
+    if (
+        not isinstance(value, list)
+        or any(not isinstance(name, str) or not name for name in value)
+        or len(value) != len(set(value))
+    ):
+        return None
+    return set(value)
+
+
+def _replay_budget_identity_matches(
+    evidence: Mapping[str, Any], attempt_id: Optional[str]
+) -> bool:
+    """The caller supplies the exact pair/attempt identity from the ledger."""
+
+    if not attempt_id or "/" not in attempt_id:
+        return False
+    pair_id = attempt_id.partition("/")[0]
+    return (
+        len(pair_id) == 64
+        and all(character in "0123456789abcdef" for character in pair_id)
+        and evidence.get("pair_id") == pair_id
+        and evidence.get("attempt_id") == attempt_id
+    )
+
+
 def _replay_missing_inputs(
-    result: Optional[GateResult], evidence: Optional[Mapping[str, Any]]
+    result: Optional[GateResult],
+    evidence: Optional[Mapping[str, Any]],
+    attempt_id: Optional[str] = None,
 ) -> set[str]:
     """Absent candidate columns, bound to the same attempt's gate result.
 
@@ -290,29 +332,49 @@ def _replay_missing_inputs(
         result is None
         or result.gate_id != "budget_inputs"
         or result.status in ("error", "unavailable")
-        or evidence is None
-        or result.evidence_sha256 != content_sha256(evidence)
+        or not isinstance(evidence, Mapping)
+        or not _replay_budget_identity_matches(evidence, attempt_id)
     ):
         return set()
-    missing = evidence.get("missing_inputs")
-    newly_missing = evidence.get("newly_missing_inputs")
+    try:
+        if result.evidence_sha256 != content_sha256(evidence):
+            return set()
+    except (TypeError, ValueError):
+        return set()
+    missing = _input_name_set(evidence.get("missing_inputs"))
+    newly_missing = _input_name_set(evidence.get("newly_missing_inputs"))
+    states = evidence.get("input_status")
     if (
-        not isinstance(missing, list)
-        or any(not isinstance(name, str) for name in missing)
-        or not isinstance(newly_missing, list)
-        or any(not isinstance(name, str) for name in newly_missing)
-        or not set(newly_missing) <= set(missing)
+        missing is None
+        or newly_missing is None
+        or not newly_missing <= missing
+        or type(result.details.get("missing_inputs")) is not int
         or result.details.get("missing_inputs") != len(missing)
-        or result.details.get("newly_missing_inputs") != newly_missing
+        or result.details.get("newly_missing_inputs")
+        != evidence["newly_missing_inputs"]
     ):
         return set()
-    return set(missing)
+    if (
+        not isinstance(states, Mapping)
+        or any(
+            not isinstance(name, str) or not name or not _consistent_input_status(state)
+            for name, state in states.items()
+        )
+        or missing
+        != {
+            name
+            for name, state in states.items()
+            if state["is_input"] and not state["in_data"]
+        }
+    ):
+        return set()
+    return missing
 
 
 def _replay_lineage_problem(
     entry: ReplayDataLimitedException, evidence: Optional[Mapping[str, Any]]
 ) -> Optional[str]:
-    """Require an absent previous model input or data column.
+    """Require absence throughout the cumulative certified comparison chain.
 
     The caller first verifies the budget-input evidence's digest. These are
     the previous certified pair's model and data facts, not an inference from
@@ -323,19 +385,30 @@ def _replay_lineage_problem(
     previous = evidence.get("previous_input_status") if evidence is not None else None
     if not isinstance(previous, Mapping):
         return "the previous certified pair's input usability is unknown"
+    if any(not _consistent_input_status(state) for state in previous.values()):
+        return (
+            "the previous certified pair's input usability is unknown or inconsistent; "
+            "a fresh registry decision is required"
+        )
+    previous_ever = _input_name_set(evidence.get("previous_ever_usable_inputs"))
+    ever_usable_inputs = _input_name_set(evidence.get("ever_usable_inputs"))
+    if previous_ever is None or ever_usable_inputs is None:
+        return "the certified chain's cumulative input usability is unknown"
+    current = evidence["input_status"]
+    if not {
+        name for name, state in previous.items() if state["usable"]
+    } <= previous_ever or ever_usable_inputs != previous_ever | {
+        name for name, state in current.items() if state["usable"]
+    }:
+        return (
+            "the certified chain's cumulative input usability is inconsistent; "
+            "a fresh registry decision is required"
+        )
     for name in entry.requires_missing_inputs:
         state = previous.get(name)
-        if not isinstance(state, Mapping) or any(
-            type(state.get(key)) is not bool
-            for key in ("in_model", "in_data", "usable")
-        ):
+        if state is None:
             return f"the previous certified pair's usability of {name} is unknown"
-        if state["usable"]:
-            if not state["in_model"] or not state["in_data"]:
-                return (
-                    f"{name} has inconsistent previous usability evidence; "
-                    "a fresh registry decision is required"
-                )
+        if name in ever_usable_inputs:
             return (
                 f"{name} was previously usable; a fresh registry decision is required"
             )
@@ -361,12 +434,16 @@ def _replay_probe_passes(
         or result.gate_id != "replay_probe"
         or result.status != "pass"
         or evidence is None
-        or result.evidence_sha256 != content_sha256(evidence)
         or not attempt_id
         or evidence.get("attempt_id") != attempt_id
         or evidence.get("candidate_model_version")
         != request.candidate.policyengine_uk.version
     ):
+        return False
+    try:
+        if result.evidence_sha256 != content_sha256(evidence):
+            return False
+    except (TypeError, ValueError):
         return False
     probes = evidence.get("probes")
     if not isinstance(probes, list) or any(
@@ -377,19 +454,35 @@ def _replay_probe_passes(
     if len(matching) != 1:
         return False
     probe = matching[0]
-    if probe.get("status") != "pass" or probe.get("spec_sha256") != content_sha256(
-        entry.probe.model_dump(mode="json")
+    if (
+        probe.get("status") != "pass"
+        or probe.get("installed_model_version")
+        != request.candidate.policyengine_uk.version
+        or probe.get("spec_sha256")
+        != content_sha256(entry.probe.model_dump(mode="json"))
+    ):
+        return False
+    output_fields = (
+        "positive_baseline_gbp",
+        "positive_reform_gbp",
+        "positive_change_gbp",
+        "zero_baseline_gbp",
+        "zero_reform_gbp",
+        "zero_change_gbp",
+    )
+    if any(
+        type(probe.get(field)) not in (int, float) or not math.isfinite(probe[field])
+        for field in output_fields
     ):
         return False
     positive, zero = probe.get("positive_change_gbp"), probe.get("zero_change_gbp")
+    # The producer subtracts these exact recorded outputs to obtain each delta.
     return (
-        type(positive) in (int, float)
-        and math.isfinite(positive)
+        positive == probe["positive_reform_gbp"] - probe["positive_baseline_gbp"]
+        and zero == probe["zero_reform_gbp"] - probe["zero_baseline_gbp"]
         and positive > 0
         and abs(positive - entry.probe.expected_change_gbp)
         <= entry.probe.absolute_tolerance_gbp
-        and type(zero) in (int, float)
-        and math.isfinite(zero)
         and zero == 0
     )
 
@@ -1128,7 +1221,7 @@ def evaluate_replay_receipt(
       the same attempt's digest-bound budget-input evidence reports every
       required input missing and never previously usable, and an exact-model
       positive-input probe demonstrates the reform's response. Excepted
-      measure-years must have zero effects in both totals and source rows.
+      measure-years must have zero effects at every reported fiscal level.
       Every unmatched failure and contradiction retains its ordinary verdict.
 
     Unsupported years are reported, never failed on their own. The gate's
@@ -1149,7 +1242,7 @@ def evaluate_replay_receipt(
             exception_registry.model_dump(mode="json", by_alias=True, exclude_none=True)
         )
     missing_inputs = _replay_missing_inputs(
-        budget_inputs_result, budget_inputs_evidence
+        budget_inputs_result, budget_inputs_evidence, attempt_id
     )
     exceptions = sorted(exception_registry.exceptions, key=lambda entry: entry.id)
     applied: dict[tuple[str, str, str, int], dict[str, Any]] = {}
@@ -1345,8 +1438,8 @@ def evaluate_replay_receipt(
             execution_mismatches=mismatches,
         )
 
-    # An inert construction has identical worlds: every measure total and
-    # source-row effect must be zero. Check before granting any exception,
+    # An inert construction has identical worlds: every reported fiscal-effect
+    # level must be zero. Check before granting any exception,
     # including failures whose corpus omitted its inert list and known gaps.
     exceptable_measure_years: set[tuple[str, str, int]] = set()
     for failure in receipt.integrity.failures:
@@ -1391,7 +1484,6 @@ def evaluate_replay_receipt(
         row
         for row in (receipt.diff.flagged_rows if receipt.diff is not None else [])
         if (row.event, row.measure_key, row.year) in exceptable_measure_years
-        and row.level in ("measure_year", "source_row")
         and row.head_gbp not in (None, 0)
     ]
     if incoherent_rows:

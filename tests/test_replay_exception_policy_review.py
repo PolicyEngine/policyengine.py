@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 
 from policyengine.provenance.qualification import qualification_verdict
+from policyengine.provenance.receipt import content_sha256
 from policyengine.provenance.uk_candidate import budget_inputs
 from tests.qualification_fixtures import gates, make_pair
 from tests.test_qualification_contracts import _base_event, _sealed
@@ -19,6 +20,7 @@ from tests.test_replay_exceptions import (
     EVENT,
     INPUT,
     MEASURE,
+    TEST_ATTEMPT_ID,
     _entry,
     _failed_receipt,
     _judge,
@@ -30,7 +32,7 @@ def _actual_budget(values, *, previously_missing):
     table = pd.DataFrame({"household_weight": [1.0, 2.0]})
     if values is not None:
         table[INPUT] = values
-    return budget_inputs(
+    result, evidence = budget_inputs(
         make_pair(),
         Path("unused.h5"),
         model_input_variables=["household_weight", INPUT],
@@ -40,6 +42,7 @@ def _actual_budget(values, *, previously_missing):
         previous_input_status={
             INPUT: {
                 "in_model": True,
+                "is_input": True,
                 "in_data": not previously_missing,
                 "usable": not previously_missing,
             }
@@ -47,6 +50,10 @@ def _actual_budget(values, *, previously_missing):
         previous_unusable_critical=[],
         tables={"household": table},
     )
+    evidence["attempt_id"] = TEST_ATTEMPT_ID
+    return result.model_copy(
+        update={"evidence_sha256": content_sha256(evidence)}
+    ), evidence
 
 
 def test_exception_cannot_reactivate_after_a_previously_supplied_input_is_dropped():

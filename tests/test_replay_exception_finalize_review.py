@@ -20,6 +20,7 @@ from tests.test_qualification_contracts import _sealed, _status
 from tests.test_replay_exceptions import (
     EVENT,
     INPUT,
+    TEST_ATTEMPT_ID,
     _failed_receipt,
     _judge,
     _legacy_result,
@@ -79,7 +80,7 @@ def test_review_probe_production_registry_rejects_nonzero_inert_effect(level):
         budget_inputs_evidence=budget_evidence,
         probe_result=probe_result,
         probe_evidence=probe_evidence,
-        attempt_id="test-attempt",
+        attempt_id=TEST_ATTEMPT_ID,
     )
     assert _legacy_result(document, request).status == "fail"
     assert actual.status == "fail"
@@ -113,7 +114,9 @@ def _stage_real_failed_attempt(tmp_path):
         HARNESS,
     )
     uk_qualification.write_gate_results(attempt, gates(), {})
-    budget_result, budget_evidence = _real_budget()
+    budget_result, budget_evidence = _real_budget(
+        attempt_id=uk_qualification.attempt_evidence_id(attempt)
+    )
     uk_qualification.write_gate_results(
         attempt, [budget_result], {"budget_inputs": budget_evidence}
     )

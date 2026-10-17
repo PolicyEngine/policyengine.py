@@ -22,7 +22,13 @@ from tests.qualification_fixtures import HARNESS, ISSUED, gates, golden, make_pa
 
 
 def _input_evidence(attempt):
+    if not (attempt / "candidate.json").exists():
+        write_json(
+            attempt / "candidate.json", {"pair": make_pair().canonical_payload()}
+        )
     evidence = {
+        "pair_id": make_pair().pair_id,
+        "attempt_id": uk_qualification.attempt_evidence_id(attempt),
         "missing_inputs": ["additional_residential_property_purchased"],
         "newly_missing_inputs": ["additional_residential_property_purchased"],
     }
@@ -238,7 +244,18 @@ def test_exception_acceptance_requires_publication_designation():
 
 @pytest.mark.parametrize(
     "damage",
-    ["none", "no_result", "no_evidence", "changed_evidence", "wrong_gate", "no_digest"],
+    [
+        "none",
+        "no_result",
+        "no_evidence",
+        "changed_evidence",
+        "wrong_gate",
+        "no_digest",
+        "different_pair",
+        "different_attempt",
+        "missing_identity",
+        "invalid_json",
+    ],
 )
 def test_attempt_input_evidence_is_bound_to_its_result(tmp_path, damage):
     result, evidence = _input_evidence(tmp_path)
@@ -250,6 +267,23 @@ def test_attempt_input_evidence_is_bound_to_its_result(tmp_path, damage):
         evidence_path.unlink()
     elif damage == "changed_evidence":
         write_json(evidence_path, {**evidence, "missing_inputs": []})
+    elif damage == "invalid_json":
+        evidence_path.write_text("invalid JSON")
+    elif damage in {"different_pair", "different_attempt", "missing_identity"}:
+        if damage == "different_pair":
+            evidence["pair_id"] = "f" * 64
+        elif damage == "different_attempt":
+            evidence["attempt_id"] += "-other"
+        else:
+            evidence.pop("attempt_id")
+        write_json(evidence_path, evidence)
+        write_json(
+            result_path,
+            {
+                **result.canonical_payload(),
+                "evidence_sha256": content_sha256(evidence),
+            },
+        )
     elif damage in {"wrong_gate", "no_digest"}:
         write_json(
             result_path,
@@ -264,6 +298,40 @@ def test_attempt_input_evidence_is_bound_to_its_result(tmp_path, damage):
         )
     actual = uk_qualification.load_attempt_budget_inputs(tmp_path)
     assert actual == ((result, evidence) if damage == "none" else (None, None))
+
+
+def test_budget_input_persistence_seals_the_exact_pair_and_attempt(tmp_path):
+    from tests.test_replay_exceptions import _budget_inputs
+
+    write_json(tmp_path / "candidate.json", {"pair": make_pair().canonical_payload()})
+    result, evidence = _budget_inputs()
+    evidence.pop("attempt_id")
+    result = result.model_copy(update={"evidence_sha256": content_sha256(evidence)})
+    uk_qualification.write_gate_results(tmp_path, [result], {"budget_inputs": evidence})
+    stored_result, stored_evidence = uk_qualification.load_attempt_budget_inputs(
+        tmp_path
+    )
+    assert stored_evidence["pair_id"] == make_pair().pair_id
+    assert stored_evidence["attempt_id"] == uk_qualification.attempt_evidence_id(
+        tmp_path
+    )
+    assert stored_result.evidence_sha256 == content_sha256(stored_evidence)
+    assert stored_evidence["ever_usable_inputs"] == evidence["ever_usable_inputs"]
+
+
+@pytest.mark.parametrize("identity", ["pair_id", "attempt_id"])
+def test_budget_input_persistence_cannot_bless_foreign_evidence(tmp_path, identity):
+    from tests.test_replay_exceptions import _budget_inputs
+
+    write_json(tmp_path / "candidate.json", {"pair": make_pair().canonical_payload()})
+    attempt_id = uk_qualification.attempt_evidence_id(tmp_path)
+    result, evidence = _budget_inputs(attempt_id=attempt_id)
+    evidence[identity] = "another-identity"
+    result = result.model_copy(update={"evidence_sha256": content_sha256(evidence)})
+    with pytest.raises(ValueError, match="different pair or attempt"):
+        uk_qualification.write_gate_results(
+            tmp_path, [result], {"budget_inputs": evidence}
+        )
 
 
 def test_input_evidence_does_not_fall_back_to_another_attempt(tmp_path):
@@ -520,7 +588,9 @@ def test_finalize_real_failed_receipt_uses_same_attempt_input_evidence(tmp_path)
         HARNESS,
     )
     uk_qualification.write_gate_results(attempt, gates(), {})
-    budget_result, budget_evidence = _real_budget()
+    budget_result, budget_evidence = _real_budget(
+        attempt_id=uk_qualification.attempt_evidence_id(attempt)
+    )
     uk_qualification.write_gate_results(
         attempt, [budget_result], {"budget_inputs": budget_evidence}
     )

@@ -1126,6 +1126,24 @@ def stage_attempt(
 def write_gate_results(
     attempt_dir: Path, results: Sequence[GateResult], evidence: Mapping[str, Any]
 ) -> None:
+    evidence = dict(evidence)
+    results = list(results)
+    if "budget_inputs" in evidence and (attempt_dir / "candidate.json").exists():
+        item = dict(evidence["budget_inputs"])
+        attempt_id = attempt_evidence_id(attempt_dir)
+        identity = {"pair_id": attempt_id.partition("/")[0], "attempt_id": attempt_id}
+        if any(key in item and item[key] != value for key, value in identity.items()):
+            raise ValueError(
+                "Budget-input evidence belongs to a different pair or attempt."
+            )
+        item.update(identity)
+        evidence["budget_inputs"] = item
+        results = [
+            result.model_copy(update={"evidence_sha256": content_sha256(item)})
+            if result.gate_id == "budget_inputs"
+            else result
+            for result in results
+        ]
     for result in results:
         write_json(
             attempt_dir / "gates" / f"{result.gate_id}.result.json",
@@ -1161,15 +1179,19 @@ def load_attempt_budget_inputs(
 
     result_path = attempt_dir / "gates" / "budget_inputs.result.json"
     evidence_path = attempt_dir / "gates" / "budget_inputs.json"
-    if not result_path.exists() or not evidence_path.exists():
-        return None, None
-    result = GateResult.model_validate(read_json(result_path))
-    evidence = read_json(evidence_path)
-    if (
-        result.gate_id != "budget_inputs"
-        or not isinstance(evidence, Mapping)
-        or result.evidence_sha256 != content_sha256(evidence)
-    ):
+    try:
+        result = GateResult.model_validate(read_json(result_path))
+        evidence = read_json(evidence_path)
+        attempt_id = attempt_evidence_id(attempt_dir)
+        if (
+            result.gate_id != "budget_inputs"
+            or not isinstance(evidence, Mapping)
+            or evidence.get("attempt_id") != attempt_id
+            or evidence.get("pair_id") != attempt_id.partition("/")[0]
+            or result.evidence_sha256 != content_sha256(evidence)
+        ):
+            return None, None
+    except (OSError, ValueError, TypeError, KeyError):
         return None, None
     return result, evidence
 

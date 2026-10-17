@@ -7,8 +7,13 @@ from importlib.metadata import version
 import pytest
 
 import policyengine.provenance.replay_probe as replay_probe
-from policyengine.provenance.qualification import _replay_exceptions
+from policyengine.provenance.qualification import (
+    ReplayQualificationRequest,
+    _replay_exceptions,
+    _replay_probe_passes,
+)
 from policyengine.provenance.receipt import content_sha256
+from tests.qualification_fixtures import golden
 
 
 @pytest.fixture
@@ -41,15 +46,29 @@ def test_sdlt_positive_input_probe_passes_on_installed_candidate(country, regist
     assert evidence["candidate_model_version"] == version("policyengine-uk")
     (probe,) = evidence["probes"]
     assert probe["status"] == "pass"
+    assert probe["installed_model_version"] == evidence["candidate_model_version"]
     assert probe["spec_sha256"] == content_sha256(
         registry.exceptions[0].probe.model_dump(mode="json")
     )
     assert probe["positive_change_gbp"] == pytest.approx(6000, abs=0.1)
+    assert (
+        probe["positive_reform_gbp"] - probe["positive_baseline_gbp"]
+        == probe["positive_change_gbp"]
+    )
     assert probe["zero_change_gbp"] == 0
+    assert probe["zero_reform_gbp"] == probe["zero_baseline_gbp"]
     assert len(probe["rates"]) == 5
     assert all(
         rate["reform"] - rate["baseline"] == pytest.approx(0.02)
         for rate in probe["rates"]
+    )
+    request_document = golden("qualification_request_golden")
+    request_document["candidate"]["policyengine_uk"]["version"] = version(
+        "policyengine-uk"
+    )
+    request = ReplayQualificationRequest.model_validate(request_document)
+    assert _replay_probe_passes(
+        registry.exceptions[0], request, result, evidence, "probe-attempt"
     )
 
 

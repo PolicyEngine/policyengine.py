@@ -32,7 +32,7 @@ from policyengine.provenance.qualification import (
     qualification_verdict,
 )
 from policyengine.provenance.receipt import content_sha256
-from tests.qualification_fixtures import FIXTURES, gates, golden
+from tests.qualification_fixtures import FIXTURES, gates, golden, make_pair
 from tests.test_qualification_contracts import (
     CONTRADICTIONS,
     EVENT,
@@ -51,6 +51,7 @@ from tests.test_qualification_contracts import (
 
 EXCEPTION_FIXTURES = Path(__file__).parent / "fixtures" / "replay_exceptions"
 INPUT = "additional_residential_property_purchased"
+TEST_ATTEMPT_ID = f"{make_pair().pair_id}/test-attempt"
 RANK = {"pass": 0, "needs_review": 1, "unavailable": 2, "fail": 3, "error": 3}
 EXCEPTION_METADATA = {
     "exception_registry_sha256",
@@ -115,17 +116,53 @@ def _registry(*entries):
 
 
 def _budget_inputs(
-    missing=(INPUT,), *, status="needs_review", newly_missing=None, previous_status=None
+    missing=(INPUT,),
+    *,
+    status="needs_review",
+    newly_missing=None,
+    previous_status=None,
+    attempt_id=TEST_ATTEMPT_ID,
+    request=None,
 ):
-    evidence = {
-        "previous_input_status": (
-            {
-                name: {"in_model": False, "in_data": False, "usable": False}
-                for name in {*missing, INPUT}
+    previous = (
+        {
+            name: {
+                "in_model": False,
+                "is_input": False,
+                "in_data": False,
+                "usable": False,
             }
-            if previous_status is None
-            else previous_status
+            for name in {*missing, INPUT}
+        }
+        if previous_status is None
+        else {
+            name: {"is_input": state.get("in_model", False), **state}
+            for name, state in previous_status.items()
+        }
+    )
+    previous_ever = sorted(
+        name for name, state in previous.items() if state.get("usable")
+    )
+    states = {
+        name: {
+            "in_model": True,
+            "is_input": True,
+            "in_data": name not in missing,
+            "usable": name not in missing,
+        }
+        for name in {*missing, INPUT}
+    }
+    evidence = {
+        "pair_id": attempt_id.partition("/")[0],
+        "attempt_id": attempt_id,
+        "input_status": states,
+        "previous_input_status": previous,
+        "previous_ever_usable_inputs": previous_ever,
+        "ever_usable_inputs": sorted(
+            set(previous_ever)
+            | {name for name, state in states.items() if state["usable"]}
         ),
+        "ever_usable_inputs_basis": "seeded from direct predecessor",
         "missing_inputs": sorted(missing),
         "newly_missing_inputs": sorted(
             missing if newly_missing is None else newly_missing
@@ -138,15 +175,13 @@ def _budget_inputs(
         evidence_sha256=content_sha256(evidence),
         details={
             "missing_inputs": len(missing),
-            "newly_missing_inputs": sorted(
-                missing if newly_missing is None else newly_missing
-            ),
+            "newly_missing_inputs": evidence["newly_missing_inputs"],
         },
     )
     return result, evidence
 
 
-def _probe(registry=None, request=None, *, attempt_id="test-attempt"):
+def _probe(registry=None, request=None, *, attempt_id=TEST_ATTEMPT_ID):
     """Build same-attempt evidence matching every registered probe specification."""
     if registry is None:
         registry, _ = qualification._replay_exceptions()
@@ -162,6 +197,11 @@ def _probe(registry=None, request=None, *, attempt_id="test-attempt"):
                 "exception_id": entry.id,
                 "spec_sha256": content_sha256(entry.probe.model_dump(mode="json")),
                 "status": "pass",
+                "installed_model_version": request.candidate.policyengine_uk.version,
+                "positive_baseline_gbp": 0,
+                "positive_reform_gbp": entry.probe.expected_change_gbp,
+                "zero_baseline_gbp": 0,
+                "zero_reform_gbp": 0,
                 "positive_change_gbp": entry.probe.expected_change_gbp,
                 "zero_change_gbp": 0,
             }
@@ -215,7 +255,7 @@ def _judge(
     probe="default",
     request=None,
     evaluator=None,
-    attempt_id="test-attempt",
+    attempt_id=TEST_ATTEMPT_ID,
 ):
     request = request or ReplayQualificationRequest.model_validate(
         golden("qualification_request_golden")
@@ -502,12 +542,35 @@ def _real_receipt():
     return request, _sealed(document)
 
 
-def _real_budget():
+def _real_budget(*, attempt_id=TEST_ATTEMPT_ID, request=None):
     """Add explicit never-usable lineage to copies of the archived evidence."""
     evidence = _json("uk2.134.7_budget_inputs.json")
-    evidence["previous_input_status"] = {
-        INPUT: {"in_model": False, "in_data": False, "usable": False}
-    }
+    evidence.update(
+        {
+            "pair_id": attempt_id.partition("/")[0],
+            "attempt_id": attempt_id,
+            "input_status": {
+                name: {
+                    "in_model": True,
+                    "is_input": True,
+                    "in_data": False,
+                    "usable": False,
+                }
+                for name in evidence["missing_inputs"]
+            },
+            "previous_input_status": {
+                INPUT: {
+                    "in_model": False,
+                    "is_input": False,
+                    "in_data": False,
+                    "usable": False,
+                }
+            },
+            "previous_ever_usable_inputs": [],
+            "ever_usable_inputs": [],
+            "ever_usable_inputs_basis": "seeded from direct predecessor",
+        }
+    )
     result = GateResult.model_validate(_json("uk2.134.7_budget_inputs.result.json"))
     return result.model_copy(
         update={"evidence_sha256": content_sha256(evidence)}
@@ -528,7 +591,7 @@ def test_real_21347_failed_receipt_has_exactly_five_reviewed_measure_years():
         budget_inputs_evidence=budget[1],
         probe_result=probe_result,
         probe_evidence=probe_evidence,
-        attempt_id="test-attempt",
+        attempt_id=TEST_ATTEMPT_ID,
     )
     assert gate.status == "needs_review", gate.summary
     applied = gate.details["applied_exceptions"]
@@ -585,7 +648,7 @@ def test_real_21347_receipt_fails_when_exception_conditions_no_longer_hold(chang
         budget_inputs_evidence=evidence,
         probe_result=probe_result,
         probe_evidence=probe_evidence,
-        attempt_id="test-attempt",
+        attempt_id=TEST_ATTEMPT_ID,
     )
     assert gate.status == "fail"
 
@@ -998,9 +1061,8 @@ def test_real_21347_receipt_fails_without_a_positive_input_probe():
 
 def test_nonzero_effect_invariant_kills_skip_coherence_mutant():
     mutant = _source_mutant(
-        'and row.level in ("measure_year", "source_row")\n'
-        "        and row.head_gbp not in (None, 0)",
-        'and row.level in ("measure_year", "source_row")\n        and False',
+        "        and row.head_gbp not in (None, 0)\n    ]",
+        "        and False\n    ]",
     )
     document = _failed_receipt(
         rows=[

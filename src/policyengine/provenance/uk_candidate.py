@@ -545,6 +545,7 @@ def budget_inputs(
     previous_unusable_critical: Optional[Sequence[str]],
     model_variables: Optional[Iterable[str]] = None,
     previous_input_status: Optional[Mapping[str, Mapping[str, bool]]] = None,
+    previous_ever_usable_inputs: Optional[Sequence[str]] = None,
     tables: Optional[Mapping[str, Any]] = None,
 ) -> GateOutcome:
     """Critical inputs are present and usable; no input goes newly missing."""
@@ -572,7 +573,36 @@ def budget_inputs(
     regressions = [(n, why) for n, why in unusable if n not in previous_bad]
     standing = [(n, why) for n, why in unusable if n in previous_bad]
     unaccepted_standing = [(n, why) for n, why in standing if n not in accepted_gaps]
+    input_status = {
+        name: {
+            "in_model": name in model_names,
+            "is_input": name in inputs,
+            "in_data": name in columns,
+            "usable": name in model_names
+            and name in columns
+            and not _degenerate(tables[columns[name]][name]),
+        }
+        for name in sorted(model_names | set(columns))
+    }
+    # Keep the complete certified history even when an intermediate model
+    # removes a variable or turns it into a formula. Direct-predecessor
+    # coverage alone must never reactivate an expired exception.
+    previous_ever_usable = set(previous_ever_usable_inputs or []) | {
+        name
+        for name, status in (previous_input_status or {}).items()
+        if status.get("usable") is True
+    }
+    ever_usable = previous_ever_usable | {
+        name for name, status in input_status.items() if status["usable"]
+    }
+    if previous_ever_usable_inputs is not None:
+        lineage_basis = "carried from direct predecessor"
+    elif previous_input_status is not None:
+        lineage_basis = "seeded from direct predecessor"
+    else:
+        lineage_basis = "candidate inputs"
     evidence = {
+        "pair_id": pair.pair_id,
         "model_input_variables": len(inputs),
         "model_variables": len(model_names),
         "dataset_columns": len(columns),
@@ -580,23 +610,19 @@ def budget_inputs(
         "newly_missing_inputs": newly_missing,
         "unusable_critical": [list(item) for item in unusable],
         "accepted_gaps": dict(accepted_gaps),
-        "input_status": {
-            name: {
-                "in_model": name in model_names,
-                "is_input": name in inputs,
-                "in_data": name in columns,
-                "usable": name in model_names
-                and name in columns
-                and not _degenerate(tables[columns[name]][name]),
-            }
-            for name in sorted(model_names | set(columns))
-        },
+        "input_status": input_status,
         "previous_input_status": dict(previous_input_status or {}),
+        "previous_ever_usable_inputs": sorted(previous_ever_usable),
+        "ever_usable_inputs": sorted(ever_usable),
+        "ever_usable_inputs_basis": lineage_basis,
     }
     details = {
         "missing_inputs": len(missing),
         "newly_missing_inputs": newly_missing,
         "unusable_critical": [name for name, _ in unusable],
+        # This immutable receipt marker distinguishes legacy evidence from a
+        # damaged modern cache, which must never reset the comparison chain.
+        "ever_usable_inputs": sorted(ever_usable),
     }
     if regressions:
         return _result(
@@ -2930,20 +2956,38 @@ def _previous_gate_evidence(
 ) -> dict[str, Any]:
     """Verified evidence of the exact certified pair and receipt's attempt.
 
-    Legacy certificates that cannot bind every wheel and data pin by pair ID,
-    or incomplete/corrupt evidence, fall back to recomputation by the caller.
+    Legacy certificates can fall back to recomputation. Once a certified
+    receipt records cumulative history, unavailable evidence fails closed.
     """
 
-    if ledger_root is None or not previous:
+    if not previous:
         return {}
     pair_id = previous.get("qualification_pair_id")
     if not isinstance(pair_id, str) or not re.fullmatch(r"[a-f0-9]{64}", pair_id):
         return {}
+    if ledger_root is None:
+        raise PreviousPairUnavailable(
+            "The previous certified pair's receipt is unavailable; a fresh "
+            "registry decision is required."
+        )
     receipt_path = ledger_root / "uk" / pair_id / "qualification_receipt.json"
+    certified_history_recorded = False
+    receipt_loaded = False
     try:
         receipt = QualificationReceipt.model_validate_json(receipt_path.read_text())
+        receipt_loaded = True
         pair = receipt.pair
+        by_gate = {gate.gate_id: gate for gate in receipt.gates}
+        inputs_gate = by_gate.get("budget_inputs")
+        certified_history_recorded = (
+            inputs_gate is not None and "ever_usable_inputs" in inputs_gate.details
+        )
         if not receipt.promotable or receipt.pair_id != pair_id:
+            if certified_history_recorded:
+                raise PreviousPairUnavailable(
+                    "The cumulative input history does not identify the "
+                    "previous certified pair; a fresh registry decision is required."
+                )
             return {}
         expected = (
             (pair.model.version, previous.get("model_version")),
@@ -2952,6 +2996,12 @@ def _previous_gate_evidence(
             (pair.data.dataset_sha256, previous.get("dataset_sha256")),
         )
         if any(actual != certified for actual, certified in expected):
+            if certified_history_recorded:
+                raise PreviousPairUnavailable(
+                    "The cumulative input history does not match the "
+                    "previous certified pair's pins; a fresh registry decision "
+                    "is required."
+                )
             return {}
         # The pair ID binds all wheels and data pins even for certificates
         # whose bundle's package record does not repeat the core wheel hash.
@@ -2960,6 +3010,12 @@ def _previous_gate_evidence(
             ("core_wheel_sha256", pair.core.wheel_sha256),
         ):
             if previous.get(field) is not None and previous[field] != actual:
+                if certified_history_recorded:
+                    raise PreviousPairUnavailable(
+                        "The cumulative input history does not match the "
+                        "previous certified pair's wheel pins; a fresh registry "
+                        "decision is required."
+                    )
                 return {}
         for attempt_receipt in sorted(
             (receipt_path.parent / "attempts").glob("*/qualification_receipt.json")
@@ -2974,26 +3030,75 @@ def _previous_gate_evidence(
             harness = json.loads((attempt_receipt.parent / "harness.json").read_text())
             if harness != receipt.harness.canonical_payload():
                 continue
-            by_gate = {gate.gate_id: gate for gate in receipt.gates}
-            found: dict[str, Any] = {}
-            for name in ("supported_years", "budget_inputs"):
-                gate = by_gate.get(name)
-                evidence = json.loads(
+            found = {
+                name: json.loads(
                     (attempt_receipt.parent / "gates" / f"{name}.json").read_text()
                 )
+                for name in ("budget_inputs", "supported_years")
+            }
+            has_history = (
+                certified_history_recorded
+                or "ever_usable_inputs" in found["budget_inputs"]
+            )
+            for name in ("supported_years", "budget_inputs"):
+                gate = by_gate.get(name)
+                evidence = found[name]
                 if (
                     not gate
                     or gate.status not in ("pass", "needs_review")
                     or gate.evidence_sha256 != evidence_sha256(evidence)
                 ):
+                    if has_history:
+                        raise PreviousPairUnavailable(
+                            "The previous certified pair's cumulative input "
+                            "history could not be verified; a fresh registry "
+                            "decision is required."
+                        )
                     return {}
-                found[name] = evidence
+            if certified_history_recorded and (
+                found["budget_inputs"].get("ever_usable_inputs")
+                != inputs_gate.details["ever_usable_inputs"]
+            ):
+                raise PreviousPairUnavailable(
+                    "The previous certified pair's cumulative input history "
+                    "does not match its receipt; a fresh registry decision "
+                    "is required."
+                )
+            if has_history and (
+                found["budget_inputs"].get("pair_id") != pair_id
+                or found["budget_inputs"].get("attempt_id")
+                != f"{pair_id}/{attempt_receipt.parent.name}"
+            ):
+                raise PreviousPairUnavailable(
+                    "The previous certified pair's cumulative input history "
+                    "belongs to another pair or attempt; a fresh registry "
+                    "decision is required."
+                )
             if _valid_previous_snapshot_evidence(found):
                 return found
+            if "ever_usable_inputs" in found["budget_inputs"]:
+                # A certified cumulative history cannot be replaced by a
+                # fresh direct-predecessor seed when its evidence is damaged.
+                raise PreviousPairUnavailable(
+                    "The previous certified pair's cumulative input history "
+                    "is inconsistent; a fresh registry decision is required."
+                )
             return {}
-    except (OSError, ValueError, TypeError, AttributeError):
+    except PreviousPairUnavailable:
+        raise
+    except (OSError, ValueError, TypeError, AttributeError) as exc:
+        if certified_history_recorded or not receipt_loaded:
+            raise PreviousPairUnavailable(
+                "The previous certified pair's cumulative input history "
+                "could not be read; a fresh registry decision is required."
+            ) from exc
         # An unavailable cache is not qualification evidence; recompute it.
         return {}
+    if certified_history_recorded:
+        raise PreviousPairUnavailable(
+            "The previous certified pair's cumulative input history has no "
+            "matching attempt; a fresh registry decision is required."
+        )
     return {}
 
 
@@ -3003,6 +3108,7 @@ def _valid_previous_snapshot_evidence(evidence: Mapping[str, Any]) -> bool:
     missing = inputs.get("missing_inputs")
     unusable = inputs.get("unusable_critical")
     input_status = inputs.get("input_status")
+    ever_usable = inputs.get("ever_usable_inputs")
     return (
         isinstance(years, list)
         and bool(years)
@@ -3020,6 +3126,20 @@ def _valid_previous_snapshot_evidence(evidence: Mapping[str, Any]) -> bool:
             and len(row) == 2
             and all(isinstance(value, str) and bool(value) for value in row)
             for row in unusable
+        )
+        and (
+            "ever_usable_inputs" not in inputs
+            or (
+                isinstance(ever_usable, list)
+                and all(isinstance(name, str) and bool(name) for name in ever_usable)
+                and len(ever_usable) == len(set(ever_usable))
+                and isinstance(input_status, dict)
+                and {
+                    name
+                    for name, state in input_status.items()
+                    if isinstance(state, dict) and state.get("usable") is True
+                }.issubset(ever_usable)
+            )
         )
         and (
             input_status is None
@@ -3160,6 +3280,7 @@ def run_candidate_gates(
             recorded_inputs
             and recorded_years
             and isinstance(recorded_inputs.get("input_status"), dict)
+            and "ever_usable_inputs" in recorded_inputs
         ):
             snapshot = {
                 "missing_inputs": recorded_inputs.get("missing_inputs"),
@@ -3167,6 +3288,7 @@ def run_candidate_gates(
                 "supported_years": recorded_years.get("supported_years"),
                 "source": "ledger",
                 "input_status": recorded_inputs["input_status"],
+                "ever_usable_inputs": recorded_inputs["ever_usable_inputs"],
             }
         elif previous_certificate:
             previous_python, previous_dataset = previous_environment()
@@ -3203,6 +3325,20 @@ def run_candidate_gates(
             if variable.is_input_variable()
         ]
         previous_status = previous.get("input_status") if previous else None
+        if isinstance(previous_status, dict):
+            # Do not project away variables removed or made formula-backed by
+            # the candidate: they may already have expired an exception.
+            previous_status = dict(previous_status)
+            for name in system.variables:
+                previous_status.setdefault(
+                    name,
+                    {
+                        "in_model": False,
+                        "is_input": False,
+                        "in_data": False,
+                        "usable": False,
+                    },
+                )
         result, evidence = budget_inputs(
             pair,
             dataset(),
@@ -3218,13 +3354,9 @@ def run_candidate_gates(
                 if previous
                 else None
             ),
-            previous_input_status={
-                name: previous_status.get(
-                    name, {"in_model": False, "in_data": False, "usable": False}
-                )
-                for name in input_names
-            }
-            if isinstance(previous_status, dict)
+            previous_input_status=previous_status,
+            previous_ever_usable_inputs=previous.get("ever_usable_inputs")
+            if previous
             else None,
         )
         evidence["previous_source"] = previous.get("source") if previous else None

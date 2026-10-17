@@ -86,18 +86,25 @@ An exception applies only when its code, event, measure key and year all
 match, and the same qualification attempt's `budget_inputs` gate result
 and its evidence report every required input as missing from the
 candidate's data. A degenerate but present input cannot satisfy that
-condition. The same evidence must show that the previous certified pair
-never supplied the input usably: its model did not define the input, or
-its data lacked the input column. A previous pair with both the variable
+condition. The same evidence must carry the cumulative `ever_usable_inputs`
+set from the previous certified pair, adding inputs usable in that pair and
+in the candidate. Removing an input or making it formula-backed never erases
+this history. An exception requires that the input has never been usable in
+this chain and is not usable now. For evidence predating the cumulative field,
+recompute the exact direct predecessor's usable inputs and record
+`ever_usable_inputs_basis: "seeded from direct predecessor"`; the registry's
+approved lineage records the human-verified history before that base.
+A previous pair with both the variable
 and column present requires a fresh reviewed registry decision and fails,
 including when the previous column was degenerate. The approved
 SDLT lineage is that no certified uk-data release through 1.58.2 supplied
 the input. When the data gains an input, or the measure-year falls outside
 the entry's years, the exception stops applying automatically.
 
-Every excepted measure-year must have a candidate effect of exactly £0
-at the measure-total level and on every source row. Any nonzero candidate
-effect is a contradiction and fails, independently of any base known gap.
+Every reported fiscal effect for an excepted measure-year must be exactly £0,
+including fiscal heads, measure totals, source rows and any other reported
+level. Any nonzero candidate effect is a contradiction and fails,
+independently of any base known gap. This checks reported rows only.
 
 The gates job also runs the registry's positive-input probe directly on the
 exact installed candidate model, using one synthetic household and no
@@ -111,6 +118,11 @@ run the probe records failure. An exception requires a passing probe from
 the same attempt (identified by both pair id and attempt key), bound to the
 candidate model version and probe specification by digests. Finalization
 re-reads the evidence and verifies its digest, as it does for `budget_inputs`.
+The consumer also checks the installed model version and verifies that the
+recorded baseline/reform outputs yield the claimed positive and zero deltas.
+Budget-input evidence embeds and checks both pair and attempt identity; its
+candidate status map must agree with the missing list, and its previous
+status flags and cumulative history must be internally consistent.
 
 Matching `construction_inert` integrity failures and `lost_response`
 regressions (candidate inertness or a measure-year total of £0 against a
