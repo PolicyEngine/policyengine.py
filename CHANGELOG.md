@@ -1,3 +1,10 @@
+## [6.7.3] - 2026-10-17
+
+### Changed
+
+- Contract 2.0.0 of the UK Budget reform contract resolves cos d1344: after a freeze ends, the personal allowance, basic rate limit and aligned NICs thresholds are checked against indexation from the frozen amount (ITA 2007 ss21 and 57), and the six pending checks become gating ones; the sampled property uses the same statutory oracle for the allowance.
+
+
 ## [6.7.2] - 2026-10-17
 
 ### Fixed
