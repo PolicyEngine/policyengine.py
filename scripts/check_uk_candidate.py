@@ -66,6 +66,7 @@ from policyengine.provenance.uk_qualification import (  # noqa: E402
     ResolvedCandidate,
     WheelFile,
     accept_review,
+    attempt_evidence_id,
     attempt_is_recoverable,
     attempt_is_waiting_for_replay,
     attempt_key,
@@ -76,6 +77,8 @@ from policyengine.provenance.uk_qualification import (  # noqa: E402
     candidate_pr_body,
     expected_release_bundle,
     finalize_attempt,
+    load_attempt_budget_inputs,
+    load_attempt_replay_probe,
     packaged_manifest_sha256,
     plan_promotion,
     prepare_candidate_commit,
@@ -369,6 +372,16 @@ def cmd_gates(args: argparse.Namespace) -> int:
         ledger_root=ledger_root,
     )
     write_gate_results(attempt, results, evidence)
+    from policyengine.provenance.replay_probe import run_replay_probes
+
+    probe_result, probe_evidence = run_replay_probes(
+        attempt_id=attempt_evidence_id(attempt),
+        candidate_model_version=payload["pair"]["model"]["version"],
+    )
+    write_gate_results(attempt, [probe_result], {"replay_probe": probe_evidence})
+    print(
+        f"{probe_result.gate_id:20s} {probe_result.status:13s} {probe_result.summary}"
+    )
     for result in results:
         print(f"{result.gate_id:20s} {result.status:13s} {result.summary}")
     return 0
@@ -417,10 +430,19 @@ def cmd_poll_replay(args: argparse.Namespace) -> int:
         read_json(attempt / "replay" / "request.json")
     )
     fetch = scorecard_file(settings["repository"])
+    budget_result, budget_evidence = load_attempt_budget_inputs(attempt)
+    probe_result, probe_evidence = load_attempt_replay_probe(attempt)
     deadline = time.monotonic() + 60 * args.wait_minutes
     while True:
         gate, status, receipt = read_replay(
-            request, fetch=fetch, state_ref=settings["state_ref"]
+            request,
+            fetch=fetch,
+            state_ref=settings["state_ref"],
+            budget_inputs_result=budget_result,
+            budget_inputs_evidence=budget_evidence,
+            probe_result=probe_result,
+            probe_evidence=probe_evidence,
+            attempt_id=attempt_evidence_id(attempt),
         )
         if (status is not None and status.terminal) or time.monotonic() >= deadline:
             break

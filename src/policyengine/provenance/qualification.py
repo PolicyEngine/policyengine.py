@@ -31,6 +31,7 @@ from __future__ import annotations
 import functools
 import hashlib
 import json
+import math
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, ClassVar, Literal, Optional
 
@@ -62,6 +63,9 @@ __all__ = [
     "GateResult",
     "QualificationHarness",
     "QualificationReceipt",
+    "ReplayDataLimitedException",
+    "ReplayExceptionRegistry",
+    "ReplayExceptionProbe",
     "ReplayQualificationRequest",
     "ReplayReceipt",
     "ReplayStatus",
@@ -108,8 +112,9 @@ _SEVERITY: dict[str, int] = {
 #: identifies, call a gap known only on base-side evidence, and send every
 #: other flagged move to a named reviewer. Its text ships as
 #: ``data/qualification/replay_policy.md`` and each receipt records its digest.
-REPLAY_POLICY_ID = "d1344-replay-regressions-v1"
+REPLAY_POLICY_ID = "d1344-replay-regressions-v2"
 REPLAY_POLICY_FILE = "replay_policy.md"
+REPLAY_EXCEPTIONS_FILE = "uk_replay_exceptions.json"
 #: Flags that fail whatever the row says.
 BLOCKING_REPLAY_FLAGS: frozenset[str] = frozenset({"mapping"})
 #: Flags that need review unless the row is a lost result or lost response.
@@ -178,6 +183,314 @@ class GateResult(_Contract):
         description="content_sha256 of the evidence JSON stored with the receipt.",
     )
     details: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReplayExceptionProbe(_Contract):
+    """A survey-free causal check on the exact candidate model."""
+
+    input_variable: str = Field(min_length=1)
+    input_entity: Literal["household"]
+    year: int
+    positive_input_gbp: float = Field(gt=0, allow_inf_nan=False)
+    output_variable: str = Field(min_length=1)
+    parameter: str = Field(min_length=1)
+    rate_increment: float = Field(gt=0, allow_inf_nan=False)
+    expected_change_gbp: float = Field(gt=0, allow_inf_nan=False)
+    absolute_tolerance_gbp: float = Field(ge=0, allow_inf_nan=False)
+    region: str = Field(min_length=1)
+
+
+class ReplayDataLimitedException(_Contract):
+    """A reviewed, finite set of data-limited replay losses, never a pass.
+
+    Only construction inertness and lost responses can be excepted. Crashes,
+    lost results, mapping failures and contradictions cannot be registered.
+    """
+
+    id: str = Field(min_length=1)
+    codes: list[Literal["construction_inert", "lost_response"]] = Field(min_length=1)
+    event: str = Field(min_length=1)
+    measure_key: str = Field(min_length=1)
+    years: list[int] = Field(min_length=1)
+    requires_missing_inputs: list[str] = Field(min_length=1)
+    cause: str = Field(min_length=1)
+    issue: str = Field(min_length=1)
+    decided_under: str = Field(min_length=1)
+    review: str = Field(min_length=1)
+    approved_lineage: str = Field(min_length=1)
+    publication: str = Field(min_length=1)
+    probe: ReplayExceptionProbe
+
+    @model_validator(mode="after")
+    def _unique_items(self) -> ReplayDataLimitedException:
+        for name in ("codes", "years", "requires_missing_inputs"):
+            _unique(getattr(self, name), name)
+        if any(not name for name in self.requires_missing_inputs):
+            raise ValueError("Required missing input names must not be empty.")
+        if self.probe.input_variable not in self.requires_missing_inputs:
+            raise ValueError("The probe must exercise a required missing input.")
+        return self
+
+    def matches(
+        self,
+        code: str,
+        event: Optional[str],
+        measure_key: Optional[str],
+        year: Optional[int],
+        missing_inputs: set[str],
+    ) -> bool:
+        return (
+            code in self.codes
+            and event == self.event
+            and measure_key == self.measure_key
+            and year in self.years
+            and set(self.requires_missing_inputs) <= missing_inputs
+        )
+
+
+class ReplayExceptionRegistry(_Contract):
+    """Code-reviewed replay exceptions shipped with the gate's policy."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    comment: Optional[str] = Field(default=None, alias="_comment")
+    exceptions: list[ReplayDataLimitedException] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _unique_ids(self) -> ReplayExceptionRegistry:
+        _unique([entry.id for entry in self.exceptions], "exception ids")
+        return self
+
+    def canonical_payload(self) -> dict[str, Any]:
+        return self.model_dump(mode="json", by_alias=True, exclude_none=True)
+
+
+def _replay_exceptions() -> tuple[ReplayExceptionRegistry, str]:
+    from importlib.resources import files
+
+    raw = (
+        files("policyengine.data.qualification") / REPLAY_EXCEPTIONS_FILE
+    ).read_bytes()
+    return ReplayExceptionRegistry.model_validate_json(raw), hashlib.sha256(
+        raw
+    ).hexdigest()
+
+
+def _consistent_input_status(state: Any) -> bool:
+    """Validate model membership and usability facts at the evidence boundary."""
+
+    return (
+        isinstance(state, Mapping)
+        and all(
+            type(state.get(key)) is bool
+            for key in ("in_model", "is_input", "in_data", "usable")
+        )
+        and (not state["is_input"] or state["in_model"])
+        and (not state["usable"] or (state["in_model"] and state["in_data"]))
+    )
+
+
+def _input_name_set(value: Any) -> Optional[set[str]]:
+    if (
+        not isinstance(value, list)
+        or any(not isinstance(name, str) or not name for name in value)
+        or len(value) != len(set(value))
+    ):
+        return None
+    return set(value)
+
+
+def _replay_budget_identity_matches(
+    evidence: Mapping[str, Any], attempt_id: Optional[str]
+) -> bool:
+    """The caller supplies the exact pair/attempt identity from the ledger."""
+
+    if not attempt_id or "/" not in attempt_id:
+        return False
+    pair_id = attempt_id.partition("/")[0]
+    return (
+        len(pair_id) == 64
+        and all(character in "0123456789abcdef" for character in pair_id)
+        and evidence.get("pair_id") == pair_id
+        and evidence.get("attempt_id") == attempt_id
+    )
+
+
+def _replay_missing_inputs(
+    result: Optional[GateResult],
+    evidence: Optional[Mapping[str, Any]],
+    attempt_id: Optional[str] = None,
+) -> set[str]:
+    """Absent candidate columns, bound to the same attempt's gate result.
+
+    ``details.missing_inputs`` is a count, so persistent missing inputs must
+    come from the evidence it hashes. Degenerate columns are not missing.
+    The attempt loader is responsible for reading only its own gate files.
+    """
+
+    if (
+        result is None
+        or result.gate_id != "budget_inputs"
+        or result.status in ("error", "unavailable")
+        or not isinstance(evidence, Mapping)
+        or not _replay_budget_identity_matches(evidence, attempt_id)
+    ):
+        return set()
+    try:
+        if result.evidence_sha256 != content_sha256(evidence):
+            return set()
+    except (TypeError, ValueError):
+        return set()
+    # Rehashing edited evidence must not erase the producer's history marker.
+    recorded_ever = _input_name_set(result.details.get("ever_usable_inputs"))
+    if recorded_ever is None or recorded_ever != _input_name_set(
+        evidence.get("ever_usable_inputs")
+    ):
+        return set()
+    missing = _input_name_set(evidence.get("missing_inputs"))
+    newly_missing = _input_name_set(evidence.get("newly_missing_inputs"))
+    states = evidence.get("input_status")
+    if (
+        missing is None
+        or newly_missing is None
+        or not newly_missing <= missing
+        or type(result.details.get("missing_inputs")) is not int
+        or result.details.get("missing_inputs") != len(missing)
+        or result.details.get("newly_missing_inputs")
+        != evidence["newly_missing_inputs"]
+    ):
+        return set()
+    if (
+        not isinstance(states, Mapping)
+        or any(
+            not isinstance(name, str) or not name or not _consistent_input_status(state)
+            for name, state in states.items()
+        )
+        or missing
+        != {
+            name
+            for name, state in states.items()
+            if state["is_input"] and not state["in_data"]
+        }
+    ):
+        return set()
+    return missing
+
+
+def _replay_lineage_problem(
+    entry: ReplayDataLimitedException, evidence: Optional[Mapping[str, Any]]
+) -> Optional[str]:
+    """Require absence throughout the cumulative certified comparison chain.
+
+    The caller first verifies the budget-input evidence's digest. These are
+    the previous certified pair's model and data facts, not an inference from
+    the candidate's missing column or from the registry's approval text. A
+    supplied but degenerate column also needs a fresh registry decision.
+    """
+
+    previous = evidence.get("previous_input_status") if evidence is not None else None
+    if not isinstance(previous, Mapping):
+        return "the previous certified pair's input usability is unknown"
+    if any(not _consistent_input_status(state) for state in previous.values()):
+        return (
+            "the previous certified pair's input usability is unknown or inconsistent; "
+            "a fresh registry decision is required"
+        )
+    previous_ever = _input_name_set(evidence.get("previous_ever_usable_inputs"))
+    ever_usable_inputs = _input_name_set(evidence.get("ever_usable_inputs"))
+    if previous_ever is None or ever_usable_inputs is None:
+        return "the certified chain's cumulative input usability is unknown"
+    current = evidence["input_status"]
+    if not {
+        name for name, state in previous.items() if state["usable"]
+    } <= previous_ever or ever_usable_inputs != previous_ever | {
+        name for name, state in current.items() if state["usable"]
+    }:
+        return (
+            "the certified chain's cumulative input usability is inconsistent; "
+            "a fresh registry decision is required"
+        )
+    for name in entry.requires_missing_inputs:
+        state = previous.get(name)
+        if state is None:
+            return f"the previous certified pair's usability of {name} is unknown"
+        if name in ever_usable_inputs:
+            return (
+                f"{name} was previously usable; a fresh registry decision is required"
+            )
+        if state["in_model"] and state["in_data"]:
+            return (
+                f"{name} was supplied by the previous certified pair; "
+                "a fresh registry decision is required"
+            )
+    return None
+
+
+def _replay_probe_passes(
+    entry: ReplayDataLimitedException,
+    request: ReplayQualificationRequest,
+    result: Optional[GateResult],
+    evidence: Optional[Mapping[str, Any]],
+    attempt_id: Optional[str],
+) -> bool:
+    """Validate the exact-attempt, exact-spec positive and zero-input checks."""
+
+    if (
+        result is None
+        or result.gate_id != "replay_probe"
+        or result.status != "pass"
+        or evidence is None
+        or not attempt_id
+        or evidence.get("attempt_id") != attempt_id
+        or evidence.get("candidate_model_version")
+        != request.candidate.policyengine_uk.version
+    ):
+        return False
+    try:
+        if result.evidence_sha256 != content_sha256(evidence):
+            return False
+    except (TypeError, ValueError):
+        return False
+    probes = evidence.get("probes")
+    if not isinstance(probes, list) or any(
+        not isinstance(probe, Mapping) for probe in probes
+    ):
+        return False
+    matching = [probe for probe in probes if probe.get("exception_id") == entry.id]
+    if len(matching) != 1:
+        return False
+    probe = matching[0]
+    if (
+        probe.get("status") != "pass"
+        or probe.get("installed_model_version")
+        != request.candidate.policyengine_uk.version
+        or probe.get("spec_sha256")
+        != content_sha256(entry.probe.model_dump(mode="json"))
+    ):
+        return False
+    output_fields = (
+        "positive_baseline_gbp",
+        "positive_reform_gbp",
+        "positive_change_gbp",
+        "zero_baseline_gbp",
+        "zero_reform_gbp",
+        "zero_change_gbp",
+    )
+    if any(
+        type(probe.get(field)) not in (int, float) or not math.isfinite(probe[field])
+        for field in output_fields
+    ):
+        return False
+    positive, zero = probe.get("positive_change_gbp"), probe.get("zero_change_gbp")
+    # The producer subtracts these exact recorded outputs to obtain each delta.
+    return (
+        positive == probe["positive_reform_gbp"] - probe["positive_baseline_gbp"]
+        and zero == probe["zero_reform_gbp"] - probe["zero_baseline_gbp"]
+        and positive > 0
+        and abs(positive - entry.probe.expected_change_gbp)
+        <= entry.probe.absolute_tolerance_gbp
+        and zero == 0
+    )
 
 
 def qualification_verdict(gates: Iterable[GateResult]) -> Verdict:
@@ -880,12 +1193,19 @@ def evaluate_replay_receipt(
     request: ReplayQualificationRequest,
     status: ReplayStatus,
     receipt: ReplayReceipt,
+    *,
+    budget_inputs_result: Optional[GateResult] = None,
+    budget_inputs_evidence: Optional[Mapping[str, Any]] = None,
+    probe_result: Optional[GateResult] = None,
+    probe_evidence: Optional[Mapping[str, Any]] = None,
+    attempt_id: Optional[str] = None,
+    exception_registry: Optional[ReplayExceptionRegistry] = None,
 ) -> GateResult:
     """The ``replay`` gate for a terminal replay status and its receipt.
 
     The receipt must answer this exact request, be the bytes the status
     names, and report an execution of exactly the requested artifacts. Its
-    contents are then judged by policy ``d1344-replay-regressions-v1``
+    contents are then judged by policy ``d1344-replay-regressions-v2``
     (``data/qualification/replay_policy.md``):
 
     - fail on rejected or failed replays, mapping flags, lost results
@@ -902,7 +1222,13 @@ def evaluate_replay_receipt(
       other than £0 at a known gap fails as a contradiction, and any other
       coverage row with a base value and no candidate value, even £0, is a
       lost result;
-    - send every other flagged move to review.
+    - send every other flagged move to review. A registered data-limited
+      construction failure or lost response also needs review, only while
+      the same attempt's digest-bound budget-input evidence reports every
+      required input missing and never previously usable, and an exact-model
+      positive-input probe demonstrates the reform's response. Excepted
+      measure-years must have zero effects at every reported fiscal level.
+      Every unmatched failure and contradiction retains its ordinary verdict.
 
     Unsupported years are reported, never failed on their own. The gate's
     details record the policy id, the policy text's SHA-256, the known gaps
@@ -915,6 +1241,19 @@ def evaluate_replay_receipt(
     than the ``compare_to`` asked for).
     """
 
+    if exception_registry is None:
+        exception_registry, registry_sha256 = _replay_exceptions()
+    else:
+        registry_sha256 = content_sha256(
+            exception_registry.model_dump(mode="json", by_alias=True, exclude_none=True)
+        )
+    missing_inputs = _replay_missing_inputs(
+        budget_inputs_result, budget_inputs_evidence, attempt_id
+    )
+    exceptions = sorted(exception_registry.exceptions, key=lambda entry: entry.id)
+    applied: dict[tuple[str, str, str, int], dict[str, Any]] = {}
+    exception_reviews: list[dict[str, Any]] = []
+    exception_rejections: dict[str, str] = {}
     request_id = request.request_id
     problems: list[str] = []
     if status.request_id != request_id or receipt.request_id != request_id:
@@ -939,7 +1278,82 @@ def evaluate_replay_receipt(
         "known_gaps": [],
         "regressions": [],
         "review_items": [],
+        "exception_registry_sha256": registry_sha256,
+        "applied_exceptions": [],
+        "budget_inputs_result_sha256": None,
     }
+
+    def matching_exception(
+        code: str, event: Optional[str], measure_key: Optional[str], year: Optional[int]
+    ) -> Optional[ReplayDataLimitedException]:
+        for entry in exceptions:
+            if not entry.matches(code, event, measure_key, year, missing_inputs):
+                continue
+            lineage_problem = _replay_lineage_problem(entry, budget_inputs_evidence)
+            if lineage_problem is not None:
+                exception_rejections[entry.id] = lineage_problem
+                continue
+            if not _replay_probe_passes(
+                entry, request, probe_result, probe_evidence, attempt_id
+            ):
+                exception_rejections[entry.id] = (
+                    "a passing digest-bound probe from this attempt is required"
+                )
+                continue
+            return entry
+        return None
+
+    def except_regression(record: dict[str, Any], code: str) -> bool:
+        entry = matching_exception(
+            code, record.get("event"), record.get("measure_key"), record.get("year")
+        )
+        if entry is None:
+            return False
+        where = (entry.id, record["event"], record["measure_key"], record["year"])
+        if where not in applied:
+            applied[where] = {
+                "id": entry.id,
+                "event": record["event"],
+                "measure_key": record["measure_key"],
+                "year": record["year"],
+                "codes": [],
+                "cause": entry.cause,
+                "requires_missing_inputs": sorted(entry.requires_missing_inputs),
+                "issue": entry.issue,
+                "decided_under": entry.decided_under,
+                "review": entry.review,
+                "approved_lineage": entry.approved_lineage,
+                "publication": entry.publication,
+                "probe_evidence_sha256": (
+                    probe_result.evidence_sha256 if probe_result is not None else None
+                ),
+            }
+        applied[where]["codes"] = sorted(set(applied[where]["codes"]) | {code})
+        details["applied_exceptions"] = [applied[key] for key in sorted(applied)]
+        assert budget_inputs_result is not None
+        details["budget_inputs_result_sha256"] = content_sha256(
+            budget_inputs_result.canonical_payload()
+        )
+        assert probe_result is not None
+        details["probe_result_sha256"] = content_sha256(
+            probe_result.canonical_payload()
+        )
+        details["probe_evidence_sha256"] = probe_result.evidence_sha256
+        exception_reviews.append(
+            {
+                **record,
+                "kind": "data_limited_exception",
+                "code": code,
+                "exception_id": entry.id,
+                "cause": entry.cause,
+                "requires_missing_inputs": sorted(entry.requires_missing_inputs),
+                "approved_lineage": entry.approved_lineage,
+                "publication": entry.publication,
+                "probe_evidence_sha256": probe_result.evidence_sha256,
+            }
+        )
+        details["review_items"] = exception_reviews
+        return True
 
     def fail_early(kind: str, summary: str, **extra: Any) -> GateResult:
         """A failure decided before the receipt's contents are judged; the
@@ -1030,13 +1444,98 @@ def evaluate_replay_receipt(
             execution_mismatches=mismatches,
         )
 
+    # An inert construction has identical worlds: every reported fiscal-effect
+    # level must be zero. Check before granting any exception,
+    # including failures whose corpus omitted its inert list and known gaps.
+    exceptable_measure_years: set[tuple[str, str, int]] = set()
+    for failure in receipt.integrity.failures:
+        if (
+            matching_exception(
+                failure.code, failure.event, failure.measure_key, failure.year
+            )
+            is not None
+        ):
+            assert failure.event is not None
+            assert failure.measure_key is not None
+            assert failure.year is not None
+            exceptable_measure_years.add(
+                (failure.event, failure.measure_key, failure.year)
+            )
+    if receipt.corpus is not None:
+        for event, grid in receipt.corpus.events.items():
+            for inert_year in grid.inert_measure_years:
+                if (
+                    matching_exception(
+                        "lost_response", event, inert_year.measure_key, inert_year.year
+                    )
+                    is not None
+                ):
+                    exceptable_measure_years.add(
+                        (event, inert_year.measure_key, inert_year.year)
+                    )
+    for row in receipt.diff.flagged_rows if receipt.diff is not None else []:
+        if (
+            row.level == "measure_year"
+            and row.head_gbp == 0
+            and row.base_gbp is not None
+            and abs(row.base_gbp)
+            >= max(REPLAY_ABSOLUTE_BOUND_GBP, REPLAY_RELATIVE_BOUND * abs(row.base_gbp))
+            and matching_exception(
+                "lost_response", row.event, row.measure_key, row.year
+            )
+            is not None
+        ):
+            exceptable_measure_years.add((row.event, row.measure_key, row.year))
+    incoherent_rows = [
+        row
+        for row in (receipt.diff.flagged_rows if receipt.diff is not None else [])
+        if (row.event, row.measure_key, row.year) in exceptable_measure_years
+        and row.head_gbp not in (None, 0)
+    ]
+    if incoherent_rows:
+        return fail_early(
+            "contradiction",
+            "Replay receipt contradicts its inert construction: an excepted "
+            "measure-year has a nonzero candidate effect.",
+            contradictions=[row.document() for row in incoherent_rows],
+        )
+
     if receipt.status == "failed" or receipt.integrity.status == "failed":
         codes = sorted({failure.code for failure in receipt.integrity.failures})
-        return fail_early(
-            "failed",
-            "Replay integrity failed: " + (", ".join(codes) or "no failure codes"),
-            integrity_failures=[f.document() for f in receipt.integrity.failures],
+        # Failed receipts may describe an early crash with no corpus or
+        # sealed result. Continue only with complete execution evidence and
+        # a nonempty failure list, all of whose members match exactly.
+        can_review = (
+            receipt.status == "failed"
+            and receipt.integrity.status == "failed"
+            and receipt.corpus is not None
+            and receipt.variant_id is not None
+            and receipt.variant_identity_sha256 is not None
+            and receipt.results.manifest_sha256 is not None
+            and bool(receipt.integrity.failures)
+            and all(
+                f.code == "construction_inert"
+                and matching_exception(f.code, f.event, f.measure_key, f.year)
+                is not None
+                for f in receipt.integrity.failures
+            )
         )
+        if not can_review:
+            rejected_exceptions = "; ".join(
+                f"{entry_id}: {reason}"
+                for entry_id, reason in sorted(exception_rejections.items())
+            )
+            return fail_early(
+                "failed",
+                "Replay integrity failed: "
+                + (", ".join(codes) or "no failure codes")
+                + (f"; {rejected_exceptions}" if rejected_exceptions else ""),
+                integrity_failures=[f.document() for f in receipt.integrity.failures],
+            )
+        for failure in receipt.integrity.failures:
+            except_regression(
+                {"kind": failure.code, **failure.document()}, failure.code
+            )
     corpus = receipt.corpus
     assert corpus is not None
     incomplete_events = sorted(
@@ -1064,7 +1563,7 @@ def evaluate_replay_receipt(
     )
     # A receipt whose parts disagree is not evidence of anything.
     contradictions: list[str] = []
-    if receipt.integrity.failures:
+    if receipt.integrity.failures and receipt.integrity.status != "failed":
         codes = sorted({failure.code for failure in receipt.integrity.failures})
         contradictions.append(
             f"integrity is complete but lists failures ({', '.join(codes)})"
@@ -1193,16 +1692,19 @@ def evaluate_replay_receipt(
         record.update(fields)
         return record
 
+    excepted_inert: set[tuple[str, str, int]] = set()
     for event, measure_key, year in sorted(candidate_inert):
-        regressions.append(
-            item(
-                "lost_response",
-                event=event,
-                measure_key=measure_key,
-                year=year,
-                why="inert in the candidate",
-            )
+        record = item(
+            "lost_response",
+            event=event,
+            measure_key=measure_key,
+            year=year,
+            why="inert in the candidate",
         )
+        if except_regression(record, "lost_response"):
+            excepted_inert.add((event, measure_key, year))
+        else:
+            regressions.append(record)
     for name in incomplete_events:
         event = corpus.events[name]
         missing = missing_supported(event)
@@ -1217,7 +1719,12 @@ def evaluate_replay_receipt(
             )
             continue
         gaps = pairs(event.inert_measure_years) | missing
-        unknown = sorted(gap for gap in gaps if (name, *gap) not in known)
+        unknown = sorted(
+            gap
+            for gap in gaps
+            if (name, *gap) not in known
+            and (gap in missing or (name, *gap) not in excepted_inert)
+        )
         if not gaps or unknown:
             regressions.append(
                 item(
@@ -1285,7 +1792,9 @@ def evaluate_replay_receipt(
             # The candidate's own inert list decides: a lost response above.
             lost = True
         elif zero_total:
-            regressions.append(item("lost_response", row, why="£0 against the base"))
+            record = item("lost_response", row, why="£0 against the base")
+            if not except_regression(record, "lost_response"):
+                regressions.append(record)
             lost = True
         if where in listed_inert or (
             gap is not None
@@ -1315,6 +1824,9 @@ def evaluate_replay_receipt(
             else:
                 kind = "flagged_move"
             review_items.append(item(kind, row))
+    # Include exceptions found in corpus and diff evaluation as well as the
+    # integrity failures. A matched loss always blocks automatic promotion.
+    review_items = exception_reviews + review_items
     details.update(
         {
             "policy": REPLAY_POLICY_ID,
