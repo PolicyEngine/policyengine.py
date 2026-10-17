@@ -1,0 +1,72 @@
+{
+  "action": "qualify",
+  "attempt_key": "6996963edd2a",
+  "base_commit": "6996963edd2a27d996a1ef3d23eeba9746918a69",
+  "branch": "candidate/uk/2.135.3-1.58.2-e436edab61fc",
+  "core_wheel": {
+    "filename": "policyengine_core-3.33.0-py3-none-any.whl",
+    "sha256": "2e32d02a8910ab683a2b7600987904b351d058fc2bd5910a8ea6641438bcd789",
+    "url": "https://files.pythonhosted.org/packages/6d/02/190e06717785ff974120a9136c6c5408a00beaa8cddd792f557a6bf974c4/policyengine_core-3.33.0-py3-none-any.whl"
+  },
+  "force": false,
+  "manifest_uri": "hf://model/policyengine/policyengine-uk-data-private@cd0856d995eeab2757a987ac2452d3cacce839ee/releases/1.58.2/release_manifest.json",
+  "model_requires_core": ">=3.32.27",
+  "model_wheel": {
+    "filename": "policyengine_uk-2.135.3-py3-none-any.whl",
+    "sha256": "66861132cbc773e724cf92e0328be10c33a01f159dedda4ab209b7122d782867",
+    "url": "https://files.pythonhosted.org/packages/6a/1d/f00a81114aa6bc4b0e8a3c83ddfa2a3097f15cfcb1e978bdb72e1b76f71c/policyengine_uk-2.135.3-py3-none-any.whl"
+  },
+  "pair": {
+    "core": {
+      "name": "policyengine-core",
+      "version": "3.33.0",
+      "wheel_sha256": "2e32d02a8910ab683a2b7600987904b351d058fc2bd5910a8ea6641438bcd789"
+    },
+    "country_id": "uk",
+    "data": {
+      "build_id": "policyengine-uk-data-1.58.2",
+      "data_package": "policyengine-uk-data",
+      "dataset": "enhanced_frs_2024_25",
+      "dataset_path": "enhanced_frs_2024_25.h5",
+      "dataset_revision": "1.58.2",
+      "dataset_sha256": "40804ba2540458cb6f3c476d29d3bb4bc88d9ac6b401fa285ed6e4232a55aa52",
+      "release_manifest_path": "releases/1.58.2/release_manifest.json",
+      "release_manifest_revision": "cd0856d995eeab2757a987ac2452d3cacce839ee",
+      "release_manifest_sha256": "6867e8a7bd8be6110816527191b2348f712c4ba2502886696142506bb59fbbff",
+      "release_version": "1.58.2",
+      "repo_id": "policyengine/policyengine-uk-data-private",
+      "repo_type": "model",
+      "size_bytes": 128414344
+    },
+    "model": {
+      "name": "policyengine-uk",
+      "version": "2.135.3",
+      "wheel_sha256": "66861132cbc773e724cf92e0328be10c33a01f159dedda4ab209b7122d782867"
+    }
+  },
+  "pair_id": "e436edab61fcb0c76b20d03b343ddfbdad92461686c7c21c2d2369af602e2ddb",
+  "previous_certificate": {
+    "bundle_version": "6.7.3",
+    "certificate_sha256": "a9c1512399075dd4e16e0a73a2b4abb4f9d87cf8358011f5bc09c11434df1e36",
+    "core_version": "3.33.0",
+    "data_release_version": "1.58.1",
+    "dataset_name": "enhanced_frs_2024_25",
+    "dataset_reference": {
+      "path": "enhanced_frs_2024_25.h5",
+      "repo_id": "policyengine/policyengine-uk-data-private",
+      "repo_type": "model",
+      "revision": "1.58.1",
+      "sha256": "056e80fd8e9151d78f432a25cde863340baee81304c6216a37fb575ce8563784"
+    },
+    "dataset_sha256": "056e80fd8e9151d78f432a25cde863340baee81304c6216a37fb575ce8563784",
+    "model_version": "2.130.1",
+    "model_wheel_sha256": "f8b1b8b917c9297ff66937811dbebd9a62d3b1796ce894c326e98051cac4c873",
+    "release_manifest_reference": {
+      "path": "releases/1.58.1/release_manifest.json",
+      "repo_id": "policyengine/policyengine-uk-data-private",
+      "repo_type": "model",
+      "revision": "89be6b73fc1e6eeba6dae2f9400676d8510bcd51"
+    }
+  },
+  "reason": "recoverable abandoned staged attempt"
+}
