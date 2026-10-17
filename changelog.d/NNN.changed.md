@@ -1,0 +1,1 @@
+The UK replay qualification gate records narrowly scoped data-limited exceptions under policy d1344-replay-regressions-v2. A matching regression requires the same attempt's Budget-input evidence to confirm the required inputs are missing and always needs a named reviewer's acceptance; unmatched failures still fail.

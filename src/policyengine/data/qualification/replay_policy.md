@@ -1,4 +1,4 @@
-# Replay gate policy d1344-replay-regressions-v1
+# Replay gate policy d1344-replay-regressions-v2
 
 Decided under cos d1344 by workstream W4 on 15 October 2026, after two
 independent reviews. The pull request that added this file records the
@@ -7,6 +7,10 @@ October 2026, before first use, after the third to fifth reviews of
 policyengine.py#637: scorecard's own record of a mixed known gap no longer
 blocks, flag counters must equal the flags the rows carry, and any
 candidate value other than £0 at a known gap is a contradiction.
+The data-limited exception amendment below implements the Budget
+coordinator's proposal of 17 October 2026 under cos d1344. The registry
+records its decision and review status; the proposal requires independent
+review agreement before adoption.
 `evaluate_replay_receipt` in `policyengine.provenance.qualification`
 applies this text. Each qualification receipt records the policy id and
 this file's SHA-256 in its `replay` gate details.
@@ -20,23 +24,26 @@ every other flagged move to a named reviewer.
 
 - A rejected request, `no_supported_years`, integrity `failed` (a crash or
   missing outputs, persistent or not), or a receipt not bound to the
-  request.
+  request. Only the narrow data-limited exceptions below can make a failed
+  integrity reviewable.
 - A mapping flag.
 - A lost result: a coverage row with a base value and no candidate value,
   unless it is the record of a known gap (below).
 - A lost response:
-  - a measure-year the candidate lists as inert, unless it is a known gap;
+  - a measure-year the candidate lists as inert, unless it is a known gap
+    or a data-limited exception applies;
   - a measure-year total at exactly £0 where the base's absolute value is
     at least the diff's bound, max(£1m, 1% of the base's absolute value),
-    whether the base was positive or negative. A known gap never excuses
-    this: a base whose record lists the measure-year as a gap cannot also
-    hold a material value for it.
+    whether the base was positive or negative, unless a data-limited
+    exception applies. A known gap never excuses this: a base whose record
+    lists the measure-year as a gap cannot also hold a material value for
+    it, and a data-limited exception never excuses that contradiction.
 - An event whose supported grid is incomplete, unless every inert or
-  missing and supported measure-year in it is a known gap. An incomplete
-  event whose receipt does not list its missing measure-years fails, and so
-  does one with no inert and no missing and supported measure-year at all.
-  A receipt whose integrity is `incomplete` with no incomplete event also
-  fails.
+  missing and supported measure-year in it is a known gap or is accounted
+  for by a data-limited exception. An incomplete event whose receipt does
+  not list its missing measure-years fails, and so does one with no inert
+  and no missing and supported measure-year at all. A receipt whose
+  integrity is `incomplete` with no incomplete event also fails.
 - A receipt that contradicts itself, including a complete event that lists
   an inert, or missing and supported, measure-year; flag counters that
   differ, either way, from the flags its rows carry; and a candidate value
@@ -65,6 +72,39 @@ is judged as usual: a coverage row with a base value and no candidate value,
 even £0, is still a lost result, and any candidate value other than £0 at a
 known gap contradicts the candidate's own record, which lists the
 measure-year as inert (exactly £0) or missing (no value).
+
+## Data-limited exceptions
+
+`uk_replay_exceptions.json` lists narrowly scoped exceptions for regressions
+caused by inputs absent from the candidate's data. The registry is reviewed
+like code. Each entry records an id, failure codes, event, measure key,
+years, required missing inputs, cause, tracking issue, governing decision
+and review status.
+
+An exception applies only when its code, event, measure key and year all
+match, and the same qualification attempt's `budget_inputs` gate result
+and its evidence report every required input as missing from the
+candidate's data. Newly missing inputs and inputs missing in both pairs
+can satisfy that condition; a degenerate but present input cannot. When
+the data gains an input, or the measure-year falls outside the entry's
+years, the exception stops applying automatically.
+
+Matching `construction_inert` integrity failures and `lost_response`
+regressions (candidate inertness or a measure-year total of £0 against a
+material base value) become review items. Each names the exception, cause
+and required missing inputs. A failed receipt proceeds to the ordinary
+corpus and diff checks only if every integrity failure matches an
+exception. Every unmatched failure, mapping flag, lost result and
+contradiction retains its ordinary treatment. An exception accounts only
+for its matched inert measure-years when checking grid completeness; it
+does not excuse a missing result.
+
+An applied exception always requires review and can never qualify a
+candidate automatically. Promotion requires a named reviewer to accept
+the exact qualification receipt. The gate records every applied
+exception's id, event, measure key, year and matched codes, the registry's
+SHA-256, and the digest of the same attempt's `budget_inputs` result it
+relied on. Every result that reads the registry records its digest.
 
 ## Review
 

@@ -76,6 +76,7 @@ from policyengine.provenance.uk_qualification import (  # noqa: E402
     candidate_pr_body,
     expected_release_bundle,
     finalize_attempt,
+    load_attempt_budget_inputs,
     packaged_manifest_sha256,
     plan_promotion,
     prepare_candidate_commit,
@@ -417,10 +418,15 @@ def cmd_poll_replay(args: argparse.Namespace) -> int:
         read_json(attempt / "replay" / "request.json")
     )
     fetch = scorecard_file(settings["repository"])
+    budget_result, budget_evidence = load_attempt_budget_inputs(attempt)
     deadline = time.monotonic() + 60 * args.wait_minutes
     while True:
         gate, status, receipt = read_replay(
-            request, fetch=fetch, state_ref=settings["state_ref"]
+            request,
+            fetch=fetch,
+            state_ref=settings["state_ref"],
+            budget_inputs_result=budget_result,
+            budget_inputs_evidence=budget_evidence,
         )
         if (status is not None and status.terminal) or time.monotonic() >= deadline:
             break

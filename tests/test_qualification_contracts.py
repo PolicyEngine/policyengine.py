@@ -13,7 +13,7 @@ Invariants:
   vendored JSON Schemas and reproduce its golden digests (differential);
 - a replay receipt counts only when bound to this request and these
   artifacts;
-- the replay policy (d1344-replay-regressions-v1) fails exactly the
+- the replay policy (d1344-replay-regressions-v2) fails exactly the
   regressions it names, sends every other flagged row to review, and is
   monotone: adding a flagged row never makes the verdict better.
 """

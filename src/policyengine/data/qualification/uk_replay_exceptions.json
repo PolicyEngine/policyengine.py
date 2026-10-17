@@ -1,0 +1,28 @@
+{
+  "_comment": "Narrow data-limited exceptions for the UK replay qualification gate, reviewed like code under cos d1344. An entry requires the same attempt's budget_inputs result to confirm its required inputs are missing, and always requires a named reviewer's acceptance. The 17 October 2026 decision remains proposed pending independent review agreement; the review metadata records that status.",
+  "exceptions": [
+    {
+      "id": "ab2024-sdlt-hrad-purchase-input",
+      "codes": [
+        "construction_inert",
+        "lost_response"
+      ],
+      "event": "autumn_budget_2024",
+      "measure_key": "autumn_budget_2024__sdlt_additional_dwelling_surcharge_2pp",
+      "years": [
+        2025,
+        2026,
+        2027,
+        2028,
+        2029
+      ],
+      "requires_missing_inputs": [
+        "additional_residential_property_purchased"
+      ],
+      "cause": "policyengine-uk#2241 charges SDLT higher rates on purchases, which uk-data does not yet impute.",
+      "issue": "PolicyEngine/policyengine-uk-data#573 (cos d1354)",
+      "decided_under": "cos d1344; Budget coordinator's data-limited exception proposal of 17 October 2026",
+      "review": "Proposed; the decision record requires independent review agreement before adoption and does not yet record that agreement."
+    }
+  ]
+}

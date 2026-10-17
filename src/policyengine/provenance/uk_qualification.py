@@ -77,7 +77,7 @@ from policyengine.provenance.qualification_ledger import (
     read_json,
     write_json,
 )
-from policyengine.provenance.receipt import certificate_sha256
+from policyengine.provenance.receipt import certificate_sha256, content_sha256
 
 UK_MODEL_PACKAGE = "policyengine-uk"
 CORE_PACKAGE = "policyengine-core"
@@ -927,6 +927,8 @@ def read_replay(
     *,
     fetch: Callable[[str, str], Optional[bytes]],
     state_ref: str,
+    budget_inputs_result: GateResult | None = None,
+    budget_inputs_evidence: Mapping[str, Any] | None = None,
 ) -> tuple[GateResult, Optional[ReplayStatus], Optional[ReplayReceipt]]:
     """Read the scorecard's status and, when terminal, its receipt.
 
@@ -959,7 +961,17 @@ def read_replay(
             None,
         )
     receipt = ReplayReceipt.from_document(json.loads(raw_receipt))
-    return evaluate_replay_receipt(request, status, receipt), status, receipt
+    return (
+        evaluate_replay_receipt(
+            request,
+            status,
+            receipt,
+            budget_inputs_result=budget_inputs_result,
+            budget_inputs_evidence=budget_inputs_evidence,
+        ),
+        status,
+        receipt,
+    )
 
 
 # --- Finalizing ---------------------------------------------------------------
@@ -1117,6 +1129,30 @@ def load_gate_results(attempt_dir: Path) -> list[GateResult]:
     return results
 
 
+def load_attempt_budget_inputs(
+    attempt_dir: Path,
+) -> tuple[GateResult | None, Mapping[str, Any] | None]:
+    """Load digest-bound input evidence from this qualification attempt only.
+
+    Absent or altered evidence cannot authorize a replay exception. Legacy
+    attempts without these files retain the ordinary replay rules.
+    """
+
+    result_path = attempt_dir / "gates" / "budget_inputs.result.json"
+    evidence_path = attempt_dir / "gates" / "budget_inputs.json"
+    if not result_path.exists() or not evidence_path.exists():
+        return None, None
+    result = GateResult.model_validate(read_json(result_path))
+    evidence = read_json(evidence_path)
+    if (
+        result.gate_id != "budget_inputs"
+        or not isinstance(evidence, Mapping)
+        or result.evidence_sha256 != content_sha256(evidence)
+    ):
+        return None, None
+    return result, evidence
+
+
 def finalize_attempt(
     attempt_dir: Path,
     ledger_root: Path,
@@ -1141,6 +1177,7 @@ def finalize_attempt(
         read_json(attempt_dir / "harness.json")
     )
     gates = load_gate_results(attempt_dir)
+    cached_replay = next((gate for gate in gates if gate.gate_id == "replay"), None)
     if not any(gate.gate_id == "replay" for gate in gates):
         gates.append(replay_gate_while_pending(None))
     previous = (
@@ -1149,6 +1186,7 @@ def finalize_attempt(
         else None
     )
     replay_reference = None
+    replay_reevaluated = False
     request_path = attempt_dir / "replay" / "request.json"
     if request_path.exists():
         request = ReplayQualificationRequest.model_validate(read_json(request_path))
@@ -1158,10 +1196,56 @@ def finalize_attempt(
             if status_path.exists()
             else None
         )
+        replay_receipt_path = attempt_dir / "replay" / "receipt.json"
+        if status is not None and status.terminal and replay_receipt_path.exists():
+            # Reevaluate the received bytes with this attempt's input evidence;
+            # a cached replay result must not bypass its missing-input condition.
+            budget_result, budget_evidence = load_attempt_budget_inputs(attempt_dir)
+            replay_gate = evaluate_replay_receipt(
+                request,
+                status,
+                ReplayReceipt.from_document(read_json(replay_receipt_path)),
+                budget_inputs_result=budget_result,
+                budget_inputs_evidence=budget_evidence,
+            )
+            replay_reevaluated = True
+            gates = [gate for gate in gates if gate.gate_id != "replay"]
+            gates.append(replay_gate)
+            write_json(
+                attempt_dir / "replay" / "replay.result.json",
+                replay_gate.canonical_payload(),
+            )
         replay_reference = ReplayReference(
             request_id=request.request_id,
             receipt_sha256=status.receipt_sha256 if status else None,
             receipt_commit=status.receipt_commit if status else None,
+        )
+    if (
+        not replay_reevaluated
+        and cached_replay is not None
+        and cached_replay.details.get("applied_exceptions")
+    ):
+        # Exceptions must be evaluated again against the attempt's current
+        # input evidence; a cached waiver cannot substitute for received bytes.
+        replay_gate = GateResult(
+            gate_id="replay",
+            status="fail",
+            summary=(
+                "Cached replay exceptions cannot be validated without this "
+                "attempt's request, terminal status and receipt."
+            ),
+            details={
+                "cached_applied_exceptions": cached_replay.details[
+                    "applied_exceptions"
+                ],
+                "regressions": [{"kind": "unverifiable_exception"}],
+            },
+        )
+        gates = [gate for gate in gates if gate.gate_id != "replay"]
+        gates.append(replay_gate)
+        write_json(
+            attempt_dir / "replay" / "replay.result.json",
+            replay_gate.canonical_payload(),
         )
     receipt = assemble_receipt(
         pair,
